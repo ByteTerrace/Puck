@@ -10,7 +10,7 @@ namespace Puck.World.Tests;
 public sealed class WorldHistoryLawTests {
     [Fact]
     public void PushesWrapTheRingAndAgesReadNewestFirst() {
-        var ring = new WorldStateRow(Name("taps"), CellKind.Int, Domain: new WorldStateDomain.Ring(3, Empty: -1));
+        var ring = new WorldStateRow(Name("taps"), CellKind.Int, Domain: new StateDomain.Ring(3, Empty: -1));
         var definition = Document([ring, Slot("latest"), Slot("oldest"), Slot("beyond")], [
             new WorldRule(Name("latest"), [new ActionEffect.SetState(State: "latest", FromState: "$history:taps:0")]),
             new WorldRule(Name("oldest"), [new ActionEffect.SetState(State: "oldest", FromState: "$history:taps:2")]),
@@ -22,9 +22,9 @@ public sealed class WorldHistoryLawTests {
         }
         var row = Find(pushed, "taps");
         Assert.Equal(4L, row.HistoryCursor);
-        Assert.Equal(40L, WorldDefinitionRows.FindCell(row.Cells, Name("0"))!.Value);
-        Assert.Equal(20L, WorldDefinitionRows.FindCell(row.Cells, Name("1"))!.Value);
-        Assert.Equal(30L, WorldDefinitionRows.FindCell(row.Cells, Name("2"))!.Value);
+        Assert.Equal(40L, StateRows.FindCell(row.Cells, Name("0"))!.Value);
+        Assert.Equal(20L, StateRows.FindCell(row.Cells, Name("1"))!.Value);
+        Assert.Equal(30L, StateRows.FindCell(row.Cells, Name("2"))!.Value);
 
         using var fixture = Fixtures.FreshServer(definition: pushed);
         fixture.Step();
@@ -43,9 +43,9 @@ public sealed class WorldHistoryLawTests {
 
     [Fact]
     public void APatternReadsTheRingOldestFirstAndTheEffectPushesLikeAWrite() {
-        var ring = new WorldStateRow(Name("taps"), CellKind.Int, Domain: new WorldStateDomain.Ring(4));
-        var combo = new WorldPatternRow(Name("combo"), CellKind.Int, Symbols: [new(Name("a"), 1, 1), new(Name("b"), 2, 2)],
-            Pattern: new WorldPatternNode.Sequence([new WorldPatternNode.Star(new WorldPatternNode.AnySymbol()), new WorldPatternNode.Symbol("a"), new WorldPatternNode.Symbol("a"), new WorldPatternNode.Symbol("b")]));
+        var ring = new WorldStateRow(Name("taps"), CellKind.Int, Domain: new StateDomain.Ring(4));
+        var combo = new PatternRow(Name("combo"), CellKind.Int, Symbols: [new(Name("a"), 1, 1), new(Name("b"), 2, 2)],
+            Pattern: new PatternNode.Sequence([new PatternNode.Star(new PatternNode.AnySymbol()), new PatternNode.Symbol("a"), new PatternNode.Symbol("a"), new PatternNode.Symbol("b")]));
         var definition = Document([ring, Slot("hit"), Slot("tick"), Slot("source", 2)], [
             new WorldRule(Name("hit"), [new ActionEffect.SetState(State: "hit", FromState: "$match:combo:taps")]),
         ], [combo]);
@@ -77,39 +77,39 @@ public sealed class WorldHistoryLawTests {
         fired.Step();
         var after = Find(fired.Server.Definition, "taps");
         Assert.Equal(3L, after.HistoryCursor);
-        Assert.Equal(1L, WorldDefinitionRows.FindCell(after.Cells, Name("0"))!.Value);
-        Assert.Equal(2L, WorldDefinitionRows.FindCell(after.Cells, Name("1"))!.Value);
-        Assert.Equal(6L, WorldDefinitionRows.FindCell(after.Cells, Name("2"))!.Value);
+        Assert.Equal(1L, StateRows.FindCell(after.Cells, Name("0"))!.Value);
+        Assert.Equal(2L, StateRows.FindCell(after.Cells, Name("1"))!.Value);
+        Assert.Equal(6L, StateRows.FindCell(after.Cells, Name("2"))!.Value);
         Assert.Equal(6L, Value(fired, "count"));
     }
 
     [Fact]
     public void TheValidatorRefusesARingThatIsNotAPlainNumericRowAndTheShapeRoundTrips() {
-        var ring = new WorldStateRow(Name("taps"), CellKind.Int, Domain: new WorldStateDomain.Ring(3), HistoryCursor: 5, Cells: [Cell("0", 4), Cell("1", 5), Cell("2", 3)]);
+        var ring = new WorldStateRow(Name("taps"), CellKind.Int, Domain: new StateDomain.Ring(3), HistoryCursor: 5, Cells: [Cell("0", 4), Cell("1", 5), Cell("2", 3)]);
         var parsed = WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: Document([ring], [])));
         var round = Find(parsed, "taps");
-        Assert.Equal(3, ((WorldStateDomain.Ring)round.EffectiveDomain).Capacity);
+        Assert.Equal(3, ((StateDomain.Ring)round.EffectiveDomain).Capacity);
         Assert.Equal(5L, round.HistoryCursor);
         Assert.True(WorldDefinitionValidator.TryValidateLocally(parsed, out var reason), reason);
 
         Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([new WorldStateRow(Name("t"), CellKind.Int, HistoryCursor: 1)], []), out var cursorReason));
         Assert.Contains("historyCursor without a ring domain", cursorReason);
-        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([new WorldStateRow(Name("t"), CellKind.Int, Domain: new WorldStateDomain.Ring(2), HistoryCursor: 1, Cells: [Cell("5", 1)])], []), out var slotReason));
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([new WorldStateRow(Name("t"), CellKind.Int, Domain: new StateDomain.Ring(2), HistoryCursor: 1, Cells: [Cell("5", 1)])], []), out var slotReason));
         Assert.Contains("slots 0..n-1 in order", slotReason);
-        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([new WorldStateRow(Name("t"), CellKind.Int, Domain: new WorldStateDomain.Ring(3), HistoryCursor: 2, Cells: [Cell("1", 1), Cell("0", 1)])], []), out var orderReason));
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([new WorldStateRow(Name("t"), CellKind.Int, Domain: new StateDomain.Ring(3), HistoryCursor: 2, Cells: [Cell("1", 1), Cell("0", 1)])], []), out var orderReason));
         Assert.Contains("in order", orderReason);
-        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([new WorldStateRow(Name("t"), CellKind.Int, Domain: new WorldStateDomain.Ring(3), HistoryCursor: 1, Cells: [Cell("0", 1), Cell("1", 1)])], []), out var cursorCountReason));
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([new WorldStateRow(Name("t"), CellKind.Int, Domain: new StateDomain.Ring(3), HistoryCursor: 1, Cells: [Cell("0", 1), Cell("1", 1)])], []), out var cursorCountReason));
         Assert.Contains("says fewer", cursorCountReason);
-        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([new WorldStateRow(Name("t"), CellKind.Text, Domain: new WorldStateDomain.Ring(2))], []), out var kindReason));
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([new WorldStateRow(Name("t"), CellKind.Text, Domain: new StateDomain.Ring(2))], []), out var kindReason));
         Assert.Contains("integer or fixed", kindReason);
-        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([new WorldStateRow(Name("t"), CellKind.Int, Domain: new WorldStateDomain.Ring(2), Phase: new(0))], []), out var traitReason));
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([new WorldStateRow(Name("t"), CellKind.Int, Domain: new StateDomain.Ring(2), Phase: new(0))], []), out var traitReason));
         Assert.Contains("no other storage", traitReason);
         Assert.False(WorldStateTransforms.TryApply(Document([Slot("plain")], []), new StateTransform.Push("plain", 1), WorldPrincipal.World, 0, "test", out _, out var pushReason));
         Assert.Contains("requires a history row", pushReason);
     }
 
-    private static WorldDefinition Document(WorldStateRow[] rows, WorldRule[] rules, WorldPatternRow[]? patterns = null) => Fixtures.BuildDocument() with {
-        StateRaw = new(World: rows, Lattices: [new WorldStateLatticeTopology.Grid("map", new Puck.Assets.Documents.DocumentVector3(0, 0, 0), 1, 4, 4)]),
+    private static WorldDefinition Document(WorldStateRow[] rows, WorldRule[] rules, PatternRow[]? patterns = null) => Fixtures.BuildDocument() with {
+        StateRaw = new(World: rows, Lattices: [new LatticeTopology.Grid("map", new Puck.Assets.Documents.DocumentVector3(0, 0, 0), 1, 4, 4)]),
         PatternsRaw = patterns ?? [],
         Rules = rules,
     };
@@ -118,9 +118,9 @@ public sealed class WorldHistoryLawTests {
         return candidate!;
     }
     private static CellName Name(string value) => CellName.Parse(value);
-    private static WorldStateCell Cell(string key, long value = 1) => new(Name(key), value);
-    private static WorldStateRow Slot(string name, long value = 0) => new(Name(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, value)]);
+    private static StateCell Cell(string key, long value = 1) => new(Name(key), value);
+    private static WorldStateRow Slot(string name, long value = 0) => new(Name(name), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, value)]);
     private static WorldStateRow Find(WorldDefinition document, string row) => WorldDefinitionRows.FindStateRow(document.State, row)!;
     private static long Value(WorldFixture fixture, string row) =>
-        WorldDefinitionRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
+        StateRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
 }

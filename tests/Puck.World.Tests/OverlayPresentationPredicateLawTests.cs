@@ -36,12 +36,12 @@ public sealed class OverlayPresentationPredicateLawTests {
     private static WorldStateRow IntRow(string name, long value) => new(
         Name: CellName.Parse(candidate: name),
         Kind: CellKind.Int,
-        Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: value)]
+        Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: value)]
     );
     private static WorldStateRow TextRow(string name, string text) => new(
         Name: CellName.Parse(candidate: name),
         Kind: CellKind.Text,
-        Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Text: text)]
+        Cells: [new StateCell(Key: WorldStateRow.SlotKey, Text: text)]
     );
     private static WorldDefinition WithCameras(params WorldCamera[] cameras) => Fixtures.BuildDocument() with { CamerasRaw = cameras };
     private static WorldDefinition WithPanel(OverlayPredicate? visible = null, WorldHudElement? element = null) => (Fixtures.BuildDocument() with {

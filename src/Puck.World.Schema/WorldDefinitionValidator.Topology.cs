@@ -13,8 +13,8 @@ public static partial class WorldDefinitionValidator {
     /// on every seed that does not draw it, so whether the world starts would move with the world seed and the
     /// instance identity. Every reachable token is checked instead — the same reason a numeric site's distribution is
     /// narrowed against its domain rather than against what it happened to roll.</summary>
-    private static void ValidateBackendTokens(WorldDraw draw, IReadOnlyList<WorldGeneratorRow>? generators, List<string> errors) {
-        if (!WorldGeneratorEngine.TryResolveSource(
+    private static void ValidateBackendTokens(Draw draw, IReadOnlyList<GeneratorRow>? generators, List<string> errors) {
+        if (!GeneratorEngine.TryResolveSource(
             draw: draw,
             generator: out var generator,
             generators: generators,
@@ -130,7 +130,7 @@ public static partial class WorldDefinitionValidator {
 
         return names;
     }
-    private static void ValidateHost(WorldHostDefaults host, IReadOnlyList<WorldGeneratorRow>? generators, IReadOnlyList<WorldStateRow> stateRows, List<string> errors) {
+    private static void ValidateHost(WorldHostDefaults host, IReadOnlyList<GeneratorRow>? generators, IReadOnlyList<WorldStateRow> stateRows, List<string> errors) {
         if (!Enum.IsDefined(value: host.Presentation)) {
             errors.Add(item: $"host.presentation '{host.Presentation}' is not a defined WorldHostPresentation.");
         }
@@ -504,13 +504,13 @@ public static partial class WorldDefinitionValidator {
     private static void ValidateFields(WorldDefinition definition, List<string> errors) {
         ValidateDiscreteState(definition, errors);
         var physical = WorldTopologyCompilation.FindPhysical(definition.StateRaw);
-        var physicalCount = (definition.StateRaw?.Lattices ?? []).Count(t => t?.Kind == WorldTopologyKind.Field);
+        var physicalCount = (definition.StateRaw?.Lattices ?? []).Count(t => t?.Kind == TopologyKind.Field);
         if (physicalCount > 1) {
             errors.Add("state.lattices admits at most one physical field topology.");
         }
         foreach (var row in definition.StateRaw?.World ?? []) {
             if (row?.Field is not null) {
-                var topologyName = (row.EffectiveDomain is WorldStateDomain.CellsOf cellsOf ? cellsOf.Topology : null);
+                var topologyName = (row.EffectiveDomain is StateDomain.CellsOf cellsOf ? cellsOf.Topology : null);
 
                 if (physical is null || topologyName != physical.Name) {
                     errors.Add($"state row '{row.Name}' field domain.topology '{topologyName}' names no physical topology.");
@@ -992,9 +992,9 @@ public static partial class WorldDefinitionValidator {
                         errors.Add(item: $"{path} is a second draw fill on field '{row.Field}' — a lattice row draws one whole-field pass at a time through its own cursor and masks, so it carries at most one draw fill.");
                     }
 
-                    if (!WorldGeneratorEngine.TryResolveSource(
+                    if (!GeneratorEngine.TryResolveSource(
                         generators: definition.Generators,
-                        draw: new WorldDraw(Source: draw.Source, Generator: draw.Generator),
+                        draw: new Draw(Source: draw.Source, Generator: draw.Generator),
                         generator: out var drawSource,
                         reason: out var drawReason
                     )) {
@@ -1011,7 +1011,7 @@ public static partial class WorldDefinitionValidator {
                         );
                     }
 
-                    if (!WorldGeneratorEngine.TryCheckTargetKind(
+                    if (!GeneratorEngine.TryCheckTargetKind(
                         source: drawSource.Source,
                         targetKind: CellKind.Fixed,
                         reason: out var kindReason
@@ -1034,7 +1034,7 @@ public static partial class WorldDefinitionValidator {
 
                     if (
                         (latticeSamples > 0L) &&
-                        !WorldGeneratorEngine.TryCheckBatchCapacity(
+                        !GeneratorEngine.TryCheckBatchCapacity(
                             generator: drawSource,
                             masks: drawnMasks,
                             sampleCount: latticeSamples,

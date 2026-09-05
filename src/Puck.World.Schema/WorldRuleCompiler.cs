@@ -765,7 +765,7 @@ public static partial class WorldRuleCompiler {
         // A lattice row painted by a draw fill is a generate target too: one whole-field pass per firing, with no
         // timing of its own, resolved through the same source walk a slot site takes.
         var draw = (row.Draw ?? ((WorldLatticeFill.FindDraw(trait: row.Field) is { } fill)
-            ? new WorldDraw(Source: fill.Source, Generator: fill.Generator, Timing: WorldDrawTiming.Event)
+            ? new Draw(Source: fill.Source, Generator: fill.Generator, Timing: DrawTiming.Event)
             : null));
 
         if (draw is null) {
@@ -776,7 +776,7 @@ public static partial class WorldRuleCompiler {
             );
         }
 
-        if (draw.Timing == WorldDrawTiming.Boot) {
+        if (draw.Timing == DrawTiming.Boot) {
             throw new WorldRuleException(
                 refusal: WorldRuleRefusal.GeneratorUnknown,
                 ruleName: ruleName,
@@ -784,7 +784,7 @@ public static partial class WorldRuleCompiler {
             );
         }
 
-        if (!WorldGeneratorEngine.TryResolveSource(
+        if (!GeneratorEngine.TryResolveSource(
             generators: definition.Generators,
             draw: draw,
             generator: out var generator,
@@ -799,7 +799,7 @@ public static partial class WorldRuleCompiler {
 
         // The ONE kind predicate, asked here at rule COMPILE time so an author sees a mismatch before the effect ever
         // fires — the same call the fire-time door makes, never a second reading of it.
-        if (!WorldGeneratorEngine.TryCheckTargetKind(
+        if (!GeneratorEngine.TryCheckTargetKind(
             source: generator.Source,
             targetKind: row.Kind,
             reason: out var kindReason
@@ -1366,7 +1366,7 @@ public static partial class WorldRuleCompiler {
                 requireKeyed: false,
                 ruleName: ruleName
             );
-            WorldStateHandle filterHandle = default;
+            StateHandle filterHandle = default;
             if (filterRowName is not null) {
                 _ = ResolveNumericRow(
                     channel: name,
@@ -1385,7 +1385,7 @@ public static partial class WorldRuleCompiler {
                 }
                 filterHandle = ResolveWorldStateHandle(definition: definition, name: filterRowName);
             }
-            var reduceValueKind = ((op == WorldStateReduceOp.Count)
+            var reduceValueKind = ((op == StateReduceOp.Count)
                 ? CellKind.Int
                 : reduceRow.Kind
             );
@@ -1451,7 +1451,7 @@ public static partial class WorldRuleCompiler {
                 requireKeyed: true,
                 ruleName: ruleName
             );
-            WorldStateHandle filterHandle = default;
+            StateHandle filterHandle = default;
             if (filterRowName is not null) {
                 _ = ResolveNumericRow(
                     channel: name,
@@ -1468,7 +1468,7 @@ public static partial class WorldRuleCompiler {
                 Operand: new CompiledWorldOperand(new ArgBodyOperand(
                     row: rowName,
                     stateHandle: ResolveWorldStateHandle(definition: definition, name: rowName),
-                    reduce: (isMax ? WorldStateReduceOp.Max : WorldStateReduceOp.Min),
+                    reduce: (isMax ? StateReduceOp.Max : StateReduceOp.Min),
                     filterRow: filterRowName,
                     filterHandle: filterHandle
                 )),
@@ -2108,9 +2108,9 @@ public static partial class WorldRuleCompiler {
             );
         }
     }
-    private static WorldStateHandle ResolveWorldStateHandle(WorldDefinition definition, string name) {
+    private static StateHandle ResolveWorldStateHandle(WorldDefinition definition, string name) {
         if (definition.StateCatalog.TryResolve(
-            lane: WorldStateOwnershipLane.World,
+            lane: StateLane.Document,
             name: name,
             handle: out var handle
         )) {
@@ -2119,16 +2119,16 @@ public static partial class WorldRuleCompiler {
 
         throw new InvalidOperationException(message: $"Validated world state row '{name}' is absent from its compiled catalog.");
     }
-    private static bool TryParseReduceOp(string text, out WorldStateReduceOp op) {
+    private static bool TryParseReduceOp(string text, out StateReduceOp op) {
         op = text switch {
-            "max" => WorldStateReduceOp.Max,
-            "min" => WorldStateReduceOp.Min,
-            "sum" => WorldStateReduceOp.Sum,
-            "count" => WorldStateReduceOp.Count,
-            _ => WorldStateReduceOp.None,
+            "max" => StateReduceOp.Max,
+            "min" => StateReduceOp.Min,
+            "sum" => StateReduceOp.Sum,
+            "count" => StateReduceOp.Count,
+            _ => StateReduceOp.None,
         };
 
-        return (op != WorldStateReduceOp.None);
+        return (op != StateReduceOp.None);
     }
 
     /// <summary>Compiles one rule against a candidate document. Does not check name presence or uniqueness — that is

@@ -12,11 +12,11 @@ public sealed class WorldSymmetryChannelLawTests {
     private static WorldDefinition Definition(params ActionEffect[] effects) => new(
         Simulation: new WorldSimulationDefaults(RateHz: 240),
         StateRaw: new WorldStateSection(World: [
-            new WorldStateRow(Name: CellName.Parse(candidate: "node"), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 5)]),
-            new WorldStateRow(Name: CellName.Parse(candidate: "mirror"), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 17)]),
-            new WorldStateRow(Name: CellName.Parse(candidate: "nodes"), Kind: CellKind.Int, Capacity: 4, Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: 9)]),
-            new WorldStateRow(Name: CellName.Parse(candidate: "out"), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)]),
-            new WorldStateRow(Name: CellName.Parse(candidate: "outFixed"), Kind: CellKind.Fixed, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)]),
+            new WorldStateRow(Name: CellName.Parse(candidate: "node"), Kind: CellKind.Int, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 5)]),
+            new WorldStateRow(Name: CellName.Parse(candidate: "mirror"), Kind: CellKind.Int, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 17)]),
+            new WorldStateRow(Name: CellName.Parse(candidate: "nodes"), Kind: CellKind.Int, Capacity: 4, Cells: [new StateCell(Key: CellName.Parse(candidate: "0"), Value: 9)]),
+            new WorldStateRow(Name: CellName.Parse(candidate: "out"), Kind: CellKind.Int, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0)]),
+            new WorldStateRow(Name: CellName.Parse(candidate: "outFixed"), Kind: CellKind.Fixed, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0)]),
         ]),
         Rules: [new WorldRule(Name: CellName.Parse(candidate: "probe"), Effects: effects, Mode: ActionTriggerMode.Edge)]
     );

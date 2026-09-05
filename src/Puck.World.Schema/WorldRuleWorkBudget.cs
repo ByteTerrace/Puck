@@ -466,7 +466,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         switch (transform) {
             case StateTransform.SetRay ray:
                 var board = WorldDefinitionRows.FindStateRow(definition.State, ray.Row)!;
-                var count = WorldTopologyCompilation.Find(definition, ((WorldStateDomain.CellsOf)board.EffectiveDomain).Topology)!.CellCount;
+                var count = WorldTopologyCompilation.Find(definition, ((StateDomain.CellsOf)board.EffectiveDomain).Topology)!.CellCount;
                 cost += (long)count * (count + 2);
                 break;
             case StateTransform.Transfer transfer:
@@ -487,16 +487,16 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 break;
             case StateTransform.WriteSet writeSet:
                 var written = WorldDefinitionRows.FindStateRow(definition.State, writeSet.Row)!;
-                var writtenCells = WorldTopologyCompilation.Find(definition, ((WorldStateDomain.CellsOf)written.EffectiveDomain).Topology)!.CellCount;
+                var writtenCells = WorldTopologyCompilation.Find(definition, ((StateDomain.CellsOf)written.EffectiveDomain).Topology)!.CellCount;
                 cost += (long)writtenCells * (writtenCells + 1);
                 break;
             case StateTransform.Push push:
                 var ring = WorldDefinitionRows.FindStateRow(definition.State, push.Row)!;
-                cost += 2L * ((ring.EffectiveDomain as WorldStateDomain.Ring)?.Capacity ?? 1);
+                cost += 2L * ((ring.EffectiveDomain as StateDomain.Ring)?.Capacity ?? 1);
                 break;
             case StateTransform.Observe observe:
                 var row = WorldDefinitionRows.FindStateRow(definition.State, observe.Row)!;
-                var cells = WorldTopologyCompilation.Find(definition, ((WorldStateDomain.CellsOf)row.EffectiveDomain).Topology)!.CellCount;
+                var cells = WorldTopologyCompilation.Find(definition, ((StateDomain.CellsOf)row.EffectiveDomain).Topology)!.CellCount;
                 cost += (long)cells * (cells + 3);
                 break;
         }
@@ -547,7 +547,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         }
         if (operand.Value is PatternOperand pattern) {
             // Reached only when pattern.Board is null (a board-sourced pattern already returned above).
-            return WorldPatternCapacity.MaxWord * (1L + (pattern.TokenExpression?.Length ?? 0));
+            return PatternCapacity.MaxWord * (1L + (pattern.TokenExpression?.Length ?? 0));
         }
 
         return 1L;
@@ -559,6 +559,6 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         : ((left > (long.MaxValue / right)) ? long.MaxValue : (left * right));
     private static int RowCapacity(WorldDefinition definition, string name) {
         var row = WorldDefinitionRows.FindStateRow(definition.State, name);
-        return row?.Capacity ?? row?.CellCeiling ?? WorldStateCapacity.MaxCellsPerRow;
+        return row?.Capacity ?? row?.CellCeiling ?? StateCapacity.MaxCellsPerRow;
     }
 }

@@ -3,7 +3,7 @@ using Puck.Maths;
 namespace Puck.World.Server;
 
 public static partial class WorldRuntimeStateHash {
-    private static void AppendVisibility(ref Fnv1aHash hash, WorldStateVisibility? visibility) {
+    private static void AppendVisibility(ref Fnv1aHash hash, StateVisibility? visibility) {
         hash.Add((byte)(visibility is null ? 0 : 1));
         if (visibility is null) { return; }
         hash.Add(visibility.Readers?.Count ?? -1);
@@ -15,23 +15,23 @@ public static partial class WorldRuntimeStateHash {
     private static void AppendDiscreteRow(ref Fnv1aHash hash, WorldStateRow row) {
         var domain = row.EffectiveDomain;
         hash.Add((byte)(domain switch {
-            WorldStateDomain.Slot => 0,
-            WorldStateDomain.Keys => 1,
-            WorldStateDomain.KeysOf => 2,
-            WorldStateDomain.CellsOf => 3,
-            WorldStateDomain.Ring => 4,
+            StateDomain.Slot => 0,
+            StateDomain.Keys => 1,
+            StateDomain.KeysOf => 2,
+            StateDomain.CellsOf => 3,
+            StateDomain.Ring => 4,
             _ => throw new InvalidOperationException($"unknown state domain '{domain.GetType().Name}'"),
         }));
         switch (domain) {
-            case WorldStateDomain.KeysOf keysOf:
+            case StateDomain.KeysOf keysOf:
                 AppendString(ref hash, keysOf.Row.Value);
                 hash.Add((byte)(keysOf.Ordered ? 1 : 0));
                 break;
-            case WorldStateDomain.CellsOf cellsOf:
+            case StateDomain.CellsOf cellsOf:
                 AppendString(ref hash, cellsOf.Topology);
                 hash.Add(cellsOf.Empty);
                 break;
-            case WorldStateDomain.Ring ring:
+            case StateDomain.Ring ring:
                 hash.Add(ring.Capacity);
                 hash.Add(ring.Empty);
                 hash.Add(row.HistoryCursor);
@@ -49,14 +49,22 @@ public static partial class WorldRuntimeStateHash {
         hash.Add(rows?.Count ?? 0);
         for (var index = 0; index < (rows?.Count ?? 0); index++) {
             var row = rows![index];
-            var normalized = WorldTopologyCompilation.Normalize(row);
+            // A physical field normalizes on the same flat terms as the discrete kinds: its footprint, no wrap, no
+            // radius — the same bytes the hash has always folded for it.
+            var (width, depth, layers, wrap, radius) = ((row is WorldFieldTopology field)
+                ? (field.Width, field.Depth, field.Layers, TopologyWrap.None, 0)
+                : Discrete(row));
             AppendString(ref hash, row.Name);
             hash.Add((byte)row.Kind);
-            hash.Add((byte)normalized.Wrap);
-            hash.Add(normalized.Radius);
-            hash.Add(normalized.Width);
-            hash.Add(normalized.Depth);
-            hash.Add(normalized.Layers);
+            hash.Add((byte)wrap);
+            hash.Add(radius);
+            hash.Add(width);
+            hash.Add(depth);
+            hash.Add(layers);
         }
+    }
+    private static (int Width, int Depth, int Layers, TopologyWrap Wrap, int Radius) Discrete(LatticeTopology topology) {
+        var normalized = TopologyCompilation.Normalize(topology);
+        return (normalized.Width, normalized.Depth, normalized.Layers, normalized.Wrap, normalized.Radius);
     }
 }

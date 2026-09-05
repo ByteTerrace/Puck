@@ -18,10 +18,10 @@ public sealed class WorldRuleTraceLawTests {
     }
 
     private static WorldStateRow Slot(string name, long value) =>
-        new(CellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, value)]);
+        new(CellName.Parse(name), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, value)]);
     private static ValueExpression Expr(string text) => ValueExpression.Parse(text);
     private static long Value(WorldFixture fixture, string row) =>
-        WorldDefinitionRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
+        StateRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
 
     // strike: dealt = min(damage, hp); hp -= dealt while hp > 0. The second evaluation binds dealt = 0 and its write
     // cannot move hp, which is the skipped outcome; the third closes the gate.

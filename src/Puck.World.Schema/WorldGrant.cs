@@ -210,7 +210,7 @@ public enum GrantSubjectKind : byte {
     Section,
 
     /// <summary>A single <c>state</c> row, by its stable string name (<see cref="GrantSubject.Id"/>) — the
-    /// <see cref="WorldCapability.Edit"/> subject <see cref="WorldStateRow.Name"/> addresses, whether the row is
+    /// <see cref="WorldCapability.Edit"/> subject <see cref="StateRow.Name"/> addresses, whether the row is
     /// shaped as a scalar slot or a keyed table (a slot is a table with one key — see
     /// <see cref="WorldStateRow"/>'s remarks). Narrows <c>WorldMutation.UpsertStateRow</c>/<c>RemoveStateRow</c>
     /// (the whole-row write), <c>WorldMutation.UpsertStateCell</c>/<c>RemoveStateCell</c> (the per-cell write), and

@@ -9,7 +9,7 @@ namespace Puck.World.Tests;
 /// An in-process substrate law directly against <see cref="WorldServer"/>'s apply pipeline (compose candidate,
 /// revalidate the WHOLE document, swap): a mutation that fails whole-document validation leaves the live
 /// definition BYTE-IDENTICAL, and the same mutation shape with the ONE discriminating fact fixed (a legal row
-/// name in place of the engine-reserved <c>$</c> prefix — <see cref="WorldStateRow.ReservedNamePrefix"/>) changes
+/// name in place of the engine-reserved <c>$</c> prefix — <see cref="StateRow.ReservedNamePrefix"/>) changes
 /// it. <c>WorldServer.ApplyUndo</c>'s journal-replay loop passes every kept entry through this SAME gate
 /// (<c>TryCompose</c> then <c>WorldDefinitionValidator.TryValidateLocally</c>) before installing anything, so this
 /// law covers its all-or-nothing shape too — but replaying a kept journal prefix is a strict re-run of mutations

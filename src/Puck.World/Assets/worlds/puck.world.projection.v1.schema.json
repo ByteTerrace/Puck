@@ -11325,7 +11325,7 @@
                           "null"
                         ],
                         "items": {
-                          "description": "One named context of a WorldGenerator \u2014 the state the walk may be sitting in and the weighted alternatives it may pick while there. A context declaring NO alternatives is TERMINAL: reaching it ends the emission.",
+                          "description": "One named context of a StateGenerator \u2014 the state the walk may be sitting in and the weighted alternatives it may pick while there. A context declaring NO alternatives is TERMINAL: reaching it ends the emission.",
                           "type": [
                             "object",
                             "null"
@@ -11342,7 +11342,7 @@
                                 "null"
                               ],
                               "items": {
-                                "description": "One weighted alternative of a WorldGeneratorContext: the token it emits, its relative weight, and the context the walk moves into after it is picked. The authored Next is what makes this a real Markov process rather than a bag of independent draws \u2014 the context key is the process state, so an author folds exactly as much history into it as the chain needs.",
+                                "description": "One weighted alternative of a GeneratorContext: the token it emits, its relative weight, and the context the walk moves into after it is picked. The authored Next is what makes this a real Markov process rather than a bag of independent draws \u2014 the context key is the process state, so an author folds exactly as much history into it as the chain needs.",
                                 "type": [
                                   "object",
                                   "null"
@@ -11387,7 +11387,7 @@
                         "default": null
                       },
                       "mode": {
-                        "description": "Markov, weighted numeric and symmetry orbit: how the entries are consumed (see WorldGeneratorMode).",
+                        "description": "Markov, weighted numeric and symmetry orbit: how the entries are consumed (see GeneratorMode).",
                         "enum": [
                           "WithReplacement",
                           "WithoutReplacement",
@@ -11418,7 +11418,7 @@
                           "null"
                         ],
                         "items": {
-                          "description": "One numeric outcome of a WeightedNumeric source: the raw value it writes and its relative weight \u2014 the numeric twin of WorldGeneratorAlternative, minus Token (nothing to join into text) and Next (a numeric draw is one terminal pick, never a walk).",
+                          "description": "One numeric outcome of a WeightedNumeric source: the raw value it writes and its relative weight \u2014 the numeric twin of GeneratorAlternative, minus Token (nothing to join into text) and Next (a numeric draw is one terminal pick, never a walk).",
                           "type": [
                             "object",
                             "null"
@@ -11466,7 +11466,7 @@
                         "default": null
                       },
                       "word": {
-                        "description": "SymmetryOrbit beside Node only: the word of reflections (one to eight mirror nodes, applied first to last) the orbit is taken under, or null for the lattice\u0027s own cycle \u2014 the same generator vocabulary a WorldStateCycle authors.",
+                        "description": "SymmetryOrbit beside Node only: the word of reflections (one to eight mirror nodes, applied first to last) the orbit is taken under, or null for the lattice\u0027s own cycle \u2014 the same generator vocabulary a StateCycle authors.",
                         "type": [
                           "array",
                           "null"
@@ -12214,7 +12214,7 @@
                       "additionalProperties": false
                     },
                     {
-                      "description": "Redraws a draw site (a state row declaring a WorldDraw) \u2014 the one effect admissible at both scopes, and the join that makes authored randomness and world rules one arc rather than two: a kit action, a world rule, and the world.generate console verb all reduce to composing the same WorldMutation.Generate and letting it drain through the ordinary tick boundary, so journal/undo cover a draw for free wherever it was fired from. This is also how a draw\u0027s moment is authored: a TickPeriod site redraws on an ordinary $tick-scheduled rule and an Event site on an event-gated one, so timing costs no mutation ordinal. At body scope the firing is staged during the body\u0027s advance and enqueued for the next tick\u0027s drain (an honestly- reported one-tick latency: this is the first ActionEffect to write the document rather than per-body state, so it is the first to pay the pipeline\u0027s own round trip).",
+                      "description": "Redraws a draw site (a state row declaring a Draw) \u2014 the one effect admissible at both scopes, and the join that makes authored randomness and world rules one arc rather than two: a kit action, a world rule, and the world.generate console verb all reduce to composing the same WorldMutation.Generate and letting it drain through the ordinary tick boundary, so journal/undo cover a draw for free wherever it was fired from. This is also how a draw\u0027s moment is authored: a TickPeriod site redraws on an ordinary $tick-scheduled rule and an Event site on an event-gated one, so timing costs no mutation ordinal. At body scope the firing is staged during the body\u0027s advance and enqueued for the next tick\u0027s drain (an honestly- reported one-tick latency: this is the first ActionEffect to write the document rather than per-body state, so it is the first to pay the pipeline\u0027s own round trip).",
                       "properties": {
                         "$type": {
                           "const": "generate"

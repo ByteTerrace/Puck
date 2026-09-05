@@ -16,12 +16,12 @@ public sealed class WorldStateLiteralLawTests {
                 new WorldStateRow(
                     Name: sourceName,
                     Kind: CellKind.Int,
-                    Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: BeyondBinary32ExactInteger)]
+                    Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: BeyondBinary32ExactInteger)]
                 ),
                 new WorldStateRow(
                     Name: destinationName,
                     Kind: CellKind.Int,
-                    Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]
+                    Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0L)]
                 ),
             ]),
             Rules = [new WorldRule(
@@ -55,8 +55,8 @@ public sealed class WorldStateLiteralLawTests {
         var destinationName = CellName.Parse(candidate: "wide-result");
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(Name: sourceName, Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: Value)]),
-                new WorldStateRow(Name: destinationName, Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
+                new WorldStateRow(Name: sourceName, Kind: CellKind.Int, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: Value)]),
+                new WorldStateRow(Name: destinationName, Kind: CellKind.Int, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
             ]),
             Rules = [new WorldRule(
                 Name: CellName.Parse(candidate: "wide-literal"),
@@ -77,8 +77,8 @@ public sealed class WorldStateLiteralLawTests {
         var second = CellName.Parse(candidate: "atomic-second");
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(Name: first, Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
-                new WorldStateRow(Name: second, Kind: CellKind.Int, Min: 0L, Max: 1L, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
+                new WorldStateRow(Name: first, Kind: CellKind.Int, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
+                new WorldStateRow(Name: second, Kind: CellKind.Int, Min: 0L, Max: 1L, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
             ]),
             Rules = [new WorldRule(
                 Name: CellName.Parse(candidate: "atomic-refusal"),
@@ -104,7 +104,7 @@ public sealed class WorldStateLiteralLawTests {
             StateRaw = new WorldStateSection(World: [new WorldStateRow(
                 Name: name,
                 Kind: CellKind.Int,
-                Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]
+                Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0L)]
             )]),
         };
         var rule = new WorldRule(

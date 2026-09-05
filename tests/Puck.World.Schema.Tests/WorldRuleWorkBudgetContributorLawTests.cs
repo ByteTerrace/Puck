@@ -6,9 +6,9 @@ namespace Puck.World.Schema.Tests;
 /// the lines that put it there.</summary>
 public sealed class WorldRuleWorkBudgetContributorLawTests {
     private static WorldStateRow Slot(string name) =>
-        new(CellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
+        new(CellName.Parse(name), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]);
     private static WorldStateRow Keyed(string name, int capacity) =>
-        new(CellName.Parse(name), CellKind.Int, Capacity: capacity, Cells: [new WorldStateCell(CellName.Parse("0"), 0L)]);
+        new(CellName.Parse(name), CellKind.Int, Capacity: capacity, Cells: [new StateCell(CellName.Parse("0"), 0L)]);
     private static ActionPredicate PhaseIs(long value) =>
         new ActionPredicate.CompareState(State: "phase", Comparison: ActionStateComparison.Equal, Value: value);
     private static WorldRule Rule(string name, string? forEach, ActionPredicate? gate = null) =>

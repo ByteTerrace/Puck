@@ -4,12 +4,12 @@ namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
     /// <summary>The most slots a history ring keeps.</summary>
-    public const int MaxHistoryCapacity = WorldStateCapacity.MaxCellsPerRow;
+    public const int MaxHistoryCapacity = StateCapacity.MaxCellsPerRow;
 
     // A history row is a plain numeric ring: its cells are the slots 0..capacity-1 and nothing else, and every
     // other storage or time trait is refused so a push is the one way the ring changes.
     private static void ValidateHistory(WorldStateRow row, string path, List<string> errors) {
-        if (row.EffectiveDomain is not WorldStateDomain.Ring history) {
+        if (row.EffectiveDomain is not StateDomain.Ring history) {
             if (row.HistoryCursor != 0L) {
                 errors.Add(item: $"{path} ('{row.Name}') declares historyCursor without a ring domain — historyCursor is engine bookkeeping for a history ring alone.");
             }

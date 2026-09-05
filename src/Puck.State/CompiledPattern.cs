@@ -1,100 +1,4 @@
-using System.Text.Json.Serialization;
-
-namespace Puck.World;
-
-/// <summary>One symbol of a pattern's alphabet: the cell values in <paramref name="Min"/>..<paramref name="Max"/>
-/// (inclusive, in the pattern's kind) read as this letter. Symbols may overlap; the refined alphabet splits them.</summary>
-/// <param name="Name">The symbol name a pattern node references.</param>
-/// <param name="Min">The least value the symbol accepts.</param>
-/// <param name="Max">The greatest value the symbol accepts.</param>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldPatternSymbol(CellName Name, decimal Min, decimal Max);
-
-/// <summary>The closed pattern vocabulary over a row's cell values, matched against the whole word. Complement and
-/// intersection are first-class, so "no two adjacent kings" and "holds a 2 and a 5" are single patterns rather than
-/// rule arithmetic.</summary>
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
-[JsonDerivedType(typeof(WorldPatternNode.Symbol), "symbol")]
-[JsonDerivedType(typeof(WorldPatternNode.AnySymbol), "any")]
-[JsonDerivedType(typeof(WorldPatternNode.Except), "except")]
-[JsonDerivedType(typeof(WorldPatternNode.Nothing), "empty")]
-[JsonDerivedType(typeof(WorldPatternNode.None), "none")]
-[JsonDerivedType(typeof(WorldPatternNode.Sequence), "sequence")]
-[JsonDerivedType(typeof(WorldPatternNode.Choice), "choice")]
-[JsonDerivedType(typeof(WorldPatternNode.Both), "all")]
-[JsonDerivedType(typeof(WorldPatternNode.Complement), "not")]
-[JsonDerivedType(typeof(WorldPatternNode.Optional), "optional")]
-[JsonDerivedType(typeof(WorldPatternNode.Star), "star")]
-[JsonDerivedType(typeof(WorldPatternNode.Plus), "plus")]
-[JsonDerivedType(typeof(WorldPatternNode.Repeat), "repeat")]
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public abstract record WorldPatternNode {
-    /// <summary>One token whose value falls in the named symbol.</summary>
-    public sealed record Symbol(string Name) : WorldPatternNode;
-    /// <summary>One token of any value, named symbols and the unnamed remainder alike.</summary>
-    public sealed record AnySymbol : WorldPatternNode;
-    /// <summary>One token whose value falls outside the named symbol.</summary>
-    public sealed record Except(string Name) : WorldPatternNode;
-    /// <summary>The empty word.</summary>
-    public sealed record Nothing : WorldPatternNode;
-    /// <summary>The empty language: no word at all, the zero of choice and the annihilator of sequence.</summary>
-    public sealed record None : WorldPatternNode;
-    /// <summary>The items matched one after another.</summary>
-    public sealed record Sequence(IReadOnlyList<WorldPatternNode> Items) : WorldPatternNode;
-    /// <summary>Any one of the items.</summary>
-    public sealed record Choice(IReadOnlyList<WorldPatternNode> Items) : WorldPatternNode;
-    /// <summary>Every item at once: the word is in each item's language.</summary>
-    public sealed record Both(IReadOnlyList<WorldPatternNode> Items) : WorldPatternNode;
-    /// <summary>Every word the item does not match.</summary>
-    public sealed record Complement(WorldPatternNode Item) : WorldPatternNode;
-    /// <summary>The item or nothing.</summary>
-    public sealed record Optional(WorldPatternNode Item) : WorldPatternNode;
-    /// <summary>The item zero or more times.</summary>
-    public sealed record Star(WorldPatternNode Item) : WorldPatternNode;
-    /// <summary>The item one or more times.</summary>
-    public sealed record Plus(WorldPatternNode Item) : WorldPatternNode;
-    /// <summary>The item between <paramref name="Min"/> and <paramref name="Max"/> times.</summary>
-    public sealed record Repeat(WorldPatternNode Item, int Min, int Max) : WorldPatternNode;
-}
-
-/// <summary>One row of the <c>patterns</c> section: a regular language over cell values, compiled once to a
-/// deterministic table the <c>$match:</c> operand runs allocation-free, one indexed step per token.</summary>
-/// <param name="Name">The pattern name a rule references.</param>
-/// <param name="Kind">The numeric kind of the values the word is read from: Int or Fixed.</param>
-/// <param name="Symbols">The alphabet, 1..32 named value ranges.</param>
-/// <param name="Pattern">The language.</param>
-/// <param name="Attribute">For a zone source, the keyed row (over the zone's token domain) whose cell values form the
-/// word, in pile order; null reads the source row's own cell values.</param>
-/// <param name="Value">For a zone source, an expression in the pattern's kind evaluated once per token in pile order,
-/// where a state token keyed <c>$token</c> reads that token's cell of a row keyed over the zone's token domain: the
-/// word over a tuple of attributes (<c>suit * 16 + rank</c>) rather than one. Exclusive with <paramref name="Attribute"/>.</param>
-/// <param name="MaxStates">The machine-state budget the compile refuses past, 1..256.</param>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldPatternRow(
-    CellName Name,
-    CellKind Kind,
-    IReadOnlyList<WorldPatternSymbol> Symbols,
-    WorldPatternNode Pattern,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Attribute = null,
-    int MaxStates = WorldPatternCapacity.DefaultStates,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? Value = null
-);
-
-/// <summary>Representation ceilings for the pattern section.</summary>
-public static class WorldPatternCapacity {
-    /// <summary>The most pattern rows a document declares.</summary>
-    public const int MaxRows = 64;
-    /// <summary>The longest word one read walks: every source row fits, so a read is always decided.</summary>
-    public const int MaxWord = WorldTopologyCompilation.MaxCells;
-    /// <summary>The most named symbols in one alphabet.</summary>
-    public const int MaxSymbols = 32;
-    /// <summary>The most times a <c>repeat</c> node may unroll its item.</summary>
-    public const int MaxRepeat = 64;
-    /// <summary>The state ceiling any row may budget: 256 states over 64 letters is a 64 KiB table.</summary>
-    public const int MaxStates = 256;
-    /// <summary>The state budget a row that declares none gets.</summary>
-    public const int DefaultStates = 64;
-}
+namespace Puck.State;
 
 /// <summary>A compiled pattern: the refined alphabet that numbered its letters and the deterministic machine over
 /// them, built from the pattern's Brzozowski derivatives.</summary>
@@ -102,13 +6,13 @@ public static class WorldPatternCapacity {
 /// far — kept canonical by hash-consing with the classical similarity rules (flattened, sorted, deduplicated unions and
 /// intersections; absorbed empties; merged letter sets). Similarity keeps the state count finite for every pattern,
 /// complement and intersection included, and the row's <c>maxStates</c> bounds it by name at validation.</remarks>
-public sealed class CompiledWorldPattern {
+public sealed class CompiledPattern {
     private readonly RangeAlphabet m_alphabet;
     private readonly ulong[] m_masks;
     private readonly int[] m_transitions;
     private readonly bool[] m_accepting;
 
-    private CompiledWorldPattern(WorldPatternRow source, RangeAlphabet alphabet, ulong[] masks, int[] transitions, bool[] accepting) {
+    private CompiledPattern(PatternRow source, RangeAlphabet alphabet, ulong[] masks, int[] transitions, bool[] accepting) {
         Source = source;
         m_alphabet = alphabet;
         m_masks = masks;
@@ -117,7 +21,7 @@ public sealed class CompiledWorldPattern {
     }
 
     /// <summary>Gets the authored row.</summary>
-    public WorldPatternRow Source { get; }
+    public PatternRow Source { get; }
     /// <summary>Gets the number of letters after refinement, the unnamed remainder included.</summary>
     public int LetterCount => m_alphabet.LetterCount;
     /// <summary>Gets the number of states in the compiled machine.</summary>
@@ -187,7 +91,7 @@ public sealed class CompiledWorldPattern {
     /// <param name="compiled">The machine, on success.</param>
     /// <param name="reason">Why the row refused, on failure.</param>
     /// <returns><see langword="true"/> when the row compiled.</returns>
-    public static bool TryCompile(WorldPatternRow row, out CompiledWorldPattern? compiled, out string reason) {
+    public static bool TryCompile(PatternRow row, out CompiledPattern? compiled, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: row);
 
         compiled = null;
@@ -197,12 +101,12 @@ public sealed class CompiledWorldPattern {
             reason = $"pattern '{row.Name}' kind must be int or fixed";
             return false;
         }
-        if (row.MaxStates is < 1 or > WorldPatternCapacity.MaxStates) {
-            reason = $"pattern '{row.Name}' maxStates must be 1..{WorldPatternCapacity.MaxStates}";
+        if (row.MaxStates is < 1 or > PatternCapacity.MaxStates) {
+            reason = $"pattern '{row.Name}' maxStates must be 1..{PatternCapacity.MaxStates}";
             return false;
         }
-        if (symbols.Count is < 1 or > WorldPatternCapacity.MaxSymbols) {
-            reason = $"pattern '{row.Name}' declares {symbols.Count} symbols; 1..{WorldPatternCapacity.MaxSymbols} are admitted";
+        if (symbols.Count is < 1 or > PatternCapacity.MaxSymbols) {
+            reason = $"pattern '{row.Name}' declares {symbols.Count} symbols; 1..{PatternCapacity.MaxSymbols} are admitted";
             return false;
         }
 
@@ -327,29 +231,29 @@ public sealed class CompiledWorldPattern {
         public int Epsilon { get; }
         public int Universe { get; }
 
-        public bool TryLower(WorldPatternNode? node, ulong[] masks, Dictionary<string, int> names, out int term, out string reason) {
+        public bool TryLower(PatternNode? node, ulong[] masks, Dictionary<string, int> names, out int term, out string reason) {
             term = Empty;
             reason = string.Empty;
 
             switch (node) {
-                case WorldPatternNode.Symbol symbol:
+                case PatternNode.Symbol symbol:
                     if (!names.TryGetValue(symbol.Name ?? string.Empty, out var ordinal)) { reason = $"names no symbol '{symbol.Name}'"; return false; }
                     term = Letters(masks[ordinal]);
                     return true;
-                case WorldPatternNode.Except except:
+                case PatternNode.Except except:
                     if (!names.TryGetValue(except.Name ?? string.Empty, out var excluded)) { reason = $"names no symbol '{except.Name}'"; return false; }
                     term = Letters(m_all & ~masks[excluded]);
                     return true;
-                case WorldPatternNode.AnySymbol:
+                case PatternNode.AnySymbol:
                     term = Letters(m_all);
                     return true;
-                case WorldPatternNode.Nothing:
+                case PatternNode.Nothing:
                     term = Epsilon;
                     return true;
-                case WorldPatternNode.None:
+                case PatternNode.None:
                     term = Empty;
                     return true;
-                case WorldPatternNode.Sequence sequence: {
+                case PatternNode.Sequence sequence: {
                     var items = sequence.Items ?? [];
                     term = Epsilon;
                     for (var index = items.Count - 1; index >= 0; index--) {
@@ -358,7 +262,7 @@ public sealed class CompiledWorldPattern {
                     }
                     return true;
                 }
-                case WorldPatternNode.Choice choice: {
+                case PatternNode.Choice choice: {
                     if (choice.Items is not { Count: > 0 }) { reason = "choice needs at least one item"; return false; }
                     var parts = new int[choice.Items.Count];
                     for (var index = 0; index < parts.Length; index++) {
@@ -367,7 +271,7 @@ public sealed class CompiledWorldPattern {
                     term = Or(parts);
                     return true;
                 }
-                case WorldPatternNode.Both both: {
+                case PatternNode.Both both: {
                     if (both.Items is not { Count: > 0 }) { reason = "all needs at least one item"; return false; }
                     var parts = new int[both.Items.Count];
                     for (var index = 0; index < parts.Length; index++) {
@@ -376,24 +280,24 @@ public sealed class CompiledWorldPattern {
                     term = And(parts);
                     return true;
                 }
-                case WorldPatternNode.Complement complement:
+                case PatternNode.Complement complement:
                     if (!TryLower(complement.Item, masks, names, out var negated, out reason)) { return false; }
                     term = Not(negated);
                     return true;
-                case WorldPatternNode.Optional optional:
+                case PatternNode.Optional optional:
                     if (!TryLower(optional.Item, masks, names, out var maybe, out reason)) { return false; }
                     term = Or([Epsilon, maybe]);
                     return true;
-                case WorldPatternNode.Star star:
+                case PatternNode.Star star:
                     if (!TryLower(star.Item, masks, names, out var starred, out reason)) { return false; }
                     term = Star(starred);
                     return true;
-                case WorldPatternNode.Plus plus:
+                case PatternNode.Plus plus:
                     if (!TryLower(plus.Item, masks, names, out var repeated, out reason)) { return false; }
                     term = Concat(repeated, Star(repeated));
                     return true;
-                case WorldPatternNode.Repeat repeat: {
-                    if (repeat.Min < 0 || repeat.Max < repeat.Min || repeat.Max > WorldPatternCapacity.MaxRepeat) { reason = $"repeat needs 0 <= min <= max <= {WorldPatternCapacity.MaxRepeat}"; return false; }
+                case PatternNode.Repeat repeat: {
+                    if (repeat.Min < 0 || repeat.Max < repeat.Min || repeat.Max > PatternCapacity.MaxRepeat) { reason = $"repeat needs 0 <= min <= max <= {PatternCapacity.MaxRepeat}"; return false; }
                     if (!TryLower(repeat.Item, masks, names, out var unit, out reason)) { return false; }
                     var optionalUnit = Or([Epsilon, unit]);
                     term = Epsilon;
@@ -590,18 +494,18 @@ public sealed class CompiledWorldPattern {
 }
 
 /// <summary>Every compiled pattern of one document, keyed by name.</summary>
-public sealed class CompiledWorldPatterns {
-    private readonly Dictionary<string, CompiledWorldPattern> m_patterns;
+public sealed class CompiledPatterns {
+    private readonly Dictionary<string, CompiledPattern> m_patterns;
 
-    private CompiledWorldPatterns(Dictionary<string, CompiledWorldPattern> patterns) {
+    private CompiledPatterns(Dictionary<string, CompiledPattern> patterns) {
         m_patterns = patterns;
     }
 
     /// <summary>The empty table.</summary>
-    public static CompiledWorldPatterns Empty { get; } = new(new(StringComparer.Ordinal));
+    public static CompiledPatterns Empty { get; } = new(new(StringComparer.Ordinal));
 
     /// <summary>Gets the compiled patterns in declaration order.</summary>
-    public IEnumerable<CompiledWorldPattern> All => m_patterns.Values;
+    public IEnumerable<CompiledPattern> All => m_patterns.Values;
     /// <summary>Gets the number of compiled patterns.</summary>
     public int Count => m_patterns.Count;
 
@@ -609,22 +513,21 @@ public sealed class CompiledWorldPatterns {
     /// <param name="name">The pattern name.</param>
     /// <param name="pattern">The compiled pattern, when declared.</param>
     /// <returns><see langword="true"/> when the document declares it.</returns>
-    public bool TryGet(string name, out CompiledWorldPattern pattern) => m_patterns.TryGetValue(name, out pattern!);
+    public bool TryGet(string name, out CompiledPattern pattern) => m_patterns.TryGetValue(name, out pattern!);
 
     /// <summary>Compiles every row of a document's <c>patterns</c> section.</summary>
-    /// <param name="definition">The document.</param>
+    /// <param name="rows">The pattern rows, or <see langword="null"/> for none.</param>
     /// <param name="patterns">The table, on success.</param>
     /// <param name="errors">Every refusal, by row.</param>
     /// <returns><see langword="true"/> when every row compiled.</returns>
-    public static bool TryCompileAll(WorldDefinition definition, out CompiledWorldPatterns patterns, List<string> errors) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
+    public static bool TryCompileAll(IReadOnlyList<PatternRow>? rows, out CompiledPatterns patterns, List<string> errors) {
         ArgumentNullException.ThrowIfNull(argument: errors);
 
-        var table = new Dictionary<string, CompiledWorldPattern>(StringComparer.Ordinal);
-        var rows = definition.Patterns;
+        var table = new Dictionary<string, CompiledPattern>(StringComparer.Ordinal);
+        rows ??= [];
 
-        if (rows.Count > WorldPatternCapacity.MaxRows) {
-            errors.Add(item: $"patterns declares {rows.Count} rows; the maximum is {WorldPatternCapacity.MaxRows}.");
+        if (rows.Count > PatternCapacity.MaxRows) {
+            errors.Add(item: $"patterns declares {rows.Count} rows; the maximum is {PatternCapacity.MaxRows}.");
         }
 
         for (var index = 0; index < rows.Count; index++) {
@@ -634,7 +537,7 @@ public sealed class CompiledWorldPatterns {
                 errors.Add(item: $"patterns[{index}] is null.");
                 continue;
             }
-            if (!CompiledWorldPattern.TryCompile(row: row, compiled: out var compiled, reason: out var reason)) {
+            if (!CompiledPattern.TryCompile(row: row, compiled: out var compiled, reason: out var reason)) {
                 errors.Add(item: $"patterns[{index}] {reason}.");
                 continue;
             }

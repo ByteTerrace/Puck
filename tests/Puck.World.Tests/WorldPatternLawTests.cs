@@ -10,7 +10,7 @@ namespace Puck.World.Tests;
 public sealed class WorldPatternLawTests {
     [Fact]
     public void ABoardRayIsAWordAndAFlankIsARegularPattern() {
-        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 2), Cell("2", 2), Cell("3", 1)], Domain: new WorldStateDomain.CellsOf("map"));
+        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 2), Cell("2", 2), Cell("3", 1)], Domain: new StateDomain.CellsOf("map"));
         var definition = Document([board, Slot("flank"), Slot("south"), Slot("narrow")],
             [Bracket("bracket"), Bracket("tight", true)],
             [
@@ -37,9 +37,9 @@ public sealed class WorldPatternLawTests {
     public void PrefixAndEveryDirectionFacetsAnswerFlipCountsAndFlankMasks() {
         // Row 0 of the 4x4 grid reads 1 2 2 1 eastward from cell 0, so the flank pattern accepts the 3-cell
         // prefix and no other ray from cell 0 has a them+ run closed by me.
-        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 2), Cell("2", 2), Cell("3", 1)], Domain: new WorldStateDomain.CellsOf("map"));
+        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 2), Cell("2", 2), Cell("3", 1)], Domain: new StateDomain.CellsOf("map"));
         var definition = Document([board, Slot("flips"), Slot("mask"), Slot("count"), Slot("handPrefix"),
-                new(Name("hand"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards")), Cells: [Cell("c1", 2), Cell("c2", 2), Cell("c3", 1), Cell("c4", 2)]),
+                new(Name("hand"), CellKind.Int, Domain: new StateDomain.KeysOf(CellName.Parse("cards")), Cells: [Cell("c1", 2), Cell("c2", 2), Cell("c3", 1), Cell("c4", 2)]),
                 new(Name("cards"), CellKind.Int, Capacity: 4, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4")])],
             [Bracket("bracket")],
             [
@@ -71,8 +71,8 @@ public sealed class WorldPatternLawTests {
         // same value a fixed "first cell not equal to 2" ray query would answer, generalized to any authored run
         // shape (here "them", not merely "not the board's empty sentinel"). Westward off the edge, the ray is empty
         // and the whole (empty) word is still accepted, so there is no blocker: both facets read -1.
-        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 2), Cell("2", 2), Cell("3", 1)], Domain: new WorldStateDomain.CellsOf("map"));
-        var runOfThem = new WorldPatternRow(Name("runOfThem"), CellKind.Int, Symbols: [new(Name("them"), 2, 2)], Pattern: new WorldPatternNode.Star(new WorldPatternNode.Symbol("them")));
+        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 2), Cell("2", 2), Cell("3", 1)], Domain: new StateDomain.CellsOf("map"));
+        var runOfThem = new PatternRow(Name("runOfThem"), CellKind.Int, Symbols: [new(Name("them"), 2, 2)], Pattern: new PatternNode.Star(new PatternNode.Symbol("them")));
         var definition = Document([board, Slot("blockerCell"), Slot("blockerDistance"), Slot("edgeCell"), Slot("edgeDistance")], [runOfThem], [
             Mirror("blockerCell", "$match:runOfThem:board:E:cell", "0"),
             Mirror("blockerDistance", "$match:runOfThem:board:E:distance", "0"),
@@ -101,9 +101,9 @@ public sealed class WorldPatternLawTests {
             new ValueToken.State(Name: "suit", Key: "$token"), new ValueToken.Constant(Value: 16m), new ValueToken.Multiply(),
             new ValueToken.State(Name: "rank", Key: "$token"), new ValueToken.Add(),
         ]);
-        var flush = new WorldPatternRow(Name("hearts"), CellKind.Int, Symbols: [new(Name("h"), 16, 31)], Pattern: new WorldPatternNode.Repeat(new WorldPatternNode.Symbol("h"), 5, 5), Value: Tuple());
-        var straightFlush = new WorldPatternRow(Name("royal"), CellKind.Int, Symbols: [.. Enumerable.Range(5, 5).Select(r => new WorldPatternSymbol(Name($"h{r}"), 16 + r, 16 + r))],
-            Pattern: new WorldPatternNode.Sequence([.. Enumerable.Range(5, 5).Select(r => (WorldPatternNode)new WorldPatternNode.Symbol($"h{r}"))]), Value: Tuple());
+        var flush = new PatternRow(Name("hearts"), CellKind.Int, Symbols: [new(Name("h"), 16, 31)], Pattern: new PatternNode.Repeat(new PatternNode.Symbol("h"), 5, 5), Value: Tuple());
+        var straightFlush = new PatternRow(Name("royal"), CellKind.Int, Symbols: [.. Enumerable.Range(5, 5).Select(r => new PatternSymbol(Name($"h{r}"), 16 + r, 16 + r))],
+            Pattern: new PatternNode.Sequence([.. Enumerable.Range(5, 5).Select(r => (PatternNode)new PatternNode.Symbol($"h{r}"))]), Value: Tuple());
         var suited = Hand() with { StateRaw = Hand().StateRaw! with { World = [.. Hand().State.Where(r => r.Name.Value != "straight").Select(r => r.Name.Value == "suit"
             ? r with { Cells = [Cell("c1", 1), Cell("c2", 1), Cell("c3", 1), Cell("c4", 1), Cell("c5", 1)] }
             : r),
@@ -139,12 +139,12 @@ public sealed class WorldPatternLawTests {
     [Fact]
     public void TheEmptyLanguageIsTheZeroOfChoiceAndTheAnnihilatorOfSequence() {
         var dice = new WorldStateRow(Name("dice"), CellKind.Int, Capacity: 2, Cells: [Cell("d1", 1), Cell("d2", 1)]);
-        WorldPatternRow Row(string name, WorldPatternNode pattern) => new(Name(name), CellKind.Int, Symbols: [new(Name("a"), 1, 1)], Pattern: pattern);
+        PatternRow Row(string name, PatternNode pattern) => new(Name(name), CellKind.Int, Symbols: [new(Name("a"), 1, 1)], Pattern: pattern);
         var definition = Document([dice, Slot("zero"), Slot("choice"), Slot("annihilated"), Slot("everything")], [
-            Row("zero", new WorldPatternNode.None()),
-            Row("choice", new WorldPatternNode.Choice([new WorldPatternNode.None(), new WorldPatternNode.Repeat(new WorldPatternNode.Symbol("a"), 2, 2)])),
-            Row("annihilated", new WorldPatternNode.Sequence([new WorldPatternNode.Star(new WorldPatternNode.AnySymbol()), new WorldPatternNode.None()])),
-            Row("everything", new WorldPatternNode.Complement(new WorldPatternNode.None())),
+            Row("zero", new PatternNode.None()),
+            Row("choice", new PatternNode.Choice([new PatternNode.None(), new PatternNode.Repeat(new PatternNode.Symbol("a"), 2, 2)])),
+            Row("annihilated", new PatternNode.Sequence([new PatternNode.Star(new PatternNode.AnySymbol()), new PatternNode.None()])),
+            Row("everything", new PatternNode.Complement(new PatternNode.None())),
         ], [Mirror("zero", "$match:zero:dice"), Mirror("choice", "$match:choice:dice"), Mirror("annihilated", "$match:annihilated:dice"), Mirror("everything", "$match:everything:dice")]);
 
         using var fixture = Fixtures.FreshServer(definition: definition);
@@ -172,12 +172,12 @@ public sealed class WorldPatternLawTests {
         // An attribute keyed over another token domain never sorts silently as zeroes.
         var foreign = unsorted with { StateRaw = unsorted.StateRaw! with { World = [.. unsorted.State,
             new(Name("seats"), CellKind.Int, Capacity: 2, Cells: [Cell("s1"), Cell("s2")]),
-            new(Name("score"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(CellName.Parse("seats")), Cells: [Cell("s1", 3), Cell("s2", 1)])] } };
+            new(Name("score"), CellKind.Int, Domain: new StateDomain.KeysOf(CellName.Parse("seats")), Cells: [Cell("s1", 3), Cell("s2", 1)])] } };
         Assert.False(WorldStateTransforms.TryApply(foreign, new StateTransform.SortZone("hand", By: [new("score")]), WorldPrincipal.World, 0, "test", out _, out var domainReason));
         Assert.Contains("token domain 'cards'", domainReason);
         Assert.False(WorldDefinitionValidator.TryValidateLocally(foreign with { Rules = [new WorldRule(Name("bad"), [new ActionEffect.TransformState(new StateTransform.SortZone("hand", By: [new("score")]))])] }, out var compileReason));
         Assert.Contains("token domain", compileReason);
-        var foreignPattern = new WorldPatternRow(Name("far"), CellKind.Int, Attribute: "score", Symbols: [new(Name("one"), 1, 1)], Pattern: new WorldPatternNode.Symbol("one"));
+        var foreignPattern = new PatternRow(Name("far"), CellKind.Int, Attribute: "score", Symbols: [new(Name("one"), 1, 1)], Pattern: new PatternNode.Symbol("one"));
         Assert.False(WorldDefinitionValidator.TryValidateLocally(foreign with { PatternsRaw = [.. foreign.Patterns, foreignPattern], Rules = [Mirror("straight", "$match:far:hand")] }, out var attributeReason));
         Assert.Contains("token domain", attributeReason);
 
@@ -193,10 +193,10 @@ public sealed class WorldPatternLawTests {
     [Fact]
     public void ASortedTrayMatchesAChoiceOfSequencesAndAKeyedRowSortsByItsOwnValues() {
         var dice = new WorldStateRow(Name("dice"), CellKind.Int, Capacity: 5, Cells: [Cell("d1", 4), Cell("d2", 2), Cell("d3", 6), Cell("d4", 3), Cell("d5", 5)]);
-        var large = new WorldPatternRow(Name("large"), CellKind.Int, Symbols: Enumerable.Range(1, 6).Select(i => new WorldPatternSymbol(Name($"p{i}"), i, i)).ToArray(),
-            Pattern: new WorldPatternNode.Choice([
-                new WorldPatternNode.Sequence([.. Enumerable.Range(1, 5).Select(i => (WorldPatternNode)new WorldPatternNode.Symbol($"p{i}"))]),
-                new WorldPatternNode.Sequence([.. Enumerable.Range(2, 5).Select(i => (WorldPatternNode)new WorldPatternNode.Symbol($"p{i}"))]),
+        var large = new PatternRow(Name("large"), CellKind.Int, Symbols: Enumerable.Range(1, 6).Select(i => new PatternSymbol(Name($"p{i}"), i, i)).ToArray(),
+            Pattern: new PatternNode.Choice([
+                new PatternNode.Sequence([.. Enumerable.Range(1, 5).Select(i => (PatternNode)new PatternNode.Symbol($"p{i}"))]),
+                new PatternNode.Sequence([.. Enumerable.Range(2, 5).Select(i => (PatternNode)new PatternNode.Symbol($"p{i}"))]),
             ]));
         var definition = Document([dice, Slot("hit")], [large], [Mirror("hit", "$match:large:dice")]);
 
@@ -218,8 +218,8 @@ public sealed class WorldPatternLawTests {
     [Fact]
     public void TheStateBudgetRefusesAtValidationAndMismatchedKindsRefuseAtCompilation() {
         // any* a any{n} needs 2^(n+1) states: the classical witness that a budget is a real refusal, not a formality.
-        WorldPatternRow Tail(int n, int maxStates) => new(Name("tail"), CellKind.Int, Symbols: [new(Name("a"), 1, 1)], MaxStates: maxStates,
-            Pattern: new WorldPatternNode.Sequence([new WorldPatternNode.Star(new WorldPatternNode.AnySymbol()), new WorldPatternNode.Symbol("a"), new WorldPatternNode.Repeat(new WorldPatternNode.AnySymbol(), n, n)]));
+        PatternRow Tail(int n, int maxStates) => new(Name("tail"), CellKind.Int, Symbols: [new(Name("a"), 1, 1)], MaxStates: maxStates,
+            Pattern: new PatternNode.Sequence([new PatternNode.Star(new PatternNode.AnySymbol()), new PatternNode.Symbol("a"), new PatternNode.Repeat(new PatternNode.AnySymbol(), n, n)]));
         var dice = new WorldStateRow(Name("dice"), CellKind.Int, Capacity: 8, Cells: [Cell("d1", 1)]);
 
         Assert.True(WorldDefinitionValidator.TryValidateLocally(Document([dice], [Tail(2, 16)], []), out var narrowReason), narrowReason);
@@ -227,7 +227,7 @@ public sealed class WorldPatternLawTests {
         Assert.Contains("more than 16 states", wideReason);
         Assert.True(WorldDefinitionValidator.TryValidateLocally(Document([dice], [Tail(6, 256)], []), out var roomyReason), roomyReason);
 
-        var fixedPattern = new WorldPatternRow(Name("fx"), CellKind.Fixed, Symbols: [new(Name("half"), 0.5m, 0.5m)], Pattern: new WorldPatternNode.Symbol("half"));
+        var fixedPattern = new PatternRow(Name("fx"), CellKind.Fixed, Symbols: [new(Name("half"), 0.5m, 0.5m)], Pattern: new PatternNode.Symbol("half"));
         Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([dice, Slot("hit")], [fixedPattern], [Mirror("hit", "$match:fx:dice")]), out var kindReason));
         Assert.Contains("kind=Fixed", kindReason);
         Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([dice, Slot("hit")], [Tail(1, 16)], [Mirror("hit", "$match:missing:dice")]), out var missingReason));
@@ -236,14 +236,14 @@ public sealed class WorldPatternLawTests {
 
     [Fact]
     public void AComplementAndAnIntersectionAreSinglePatterns() {
-        WorldPatternNode Contains(string symbol) => new WorldPatternNode.Sequence([new WorldPatternNode.Star(new WorldPatternNode.AnySymbol()), new WorldPatternNode.Symbol(symbol), new WorldPatternNode.Star(new WorldPatternNode.AnySymbol())]);
-        WorldPatternNode Adjacent(string symbol) => new WorldPatternNode.Sequence([new WorldPatternNode.Star(new WorldPatternNode.AnySymbol()), new WorldPatternNode.Symbol(symbol), new WorldPatternNode.Symbol(symbol), new WorldPatternNode.Star(new WorldPatternNode.AnySymbol())]);
-        var symbols = Enumerable.Range(1, 6).Select(i => new WorldPatternSymbol(Name($"p{i}"), i, i)).ToArray();
+        PatternNode Contains(string symbol) => new PatternNode.Sequence([new PatternNode.Star(new PatternNode.AnySymbol()), new PatternNode.Symbol(symbol), new PatternNode.Star(new PatternNode.AnySymbol())]);
+        PatternNode Adjacent(string symbol) => new PatternNode.Sequence([new PatternNode.Star(new PatternNode.AnySymbol()), new PatternNode.Symbol(symbol), new PatternNode.Symbol(symbol), new PatternNode.Star(new PatternNode.AnySymbol())]);
+        var symbols = Enumerable.Range(1, 6).Select(i => new PatternSymbol(Name($"p{i}"), i, i)).ToArray();
         var dice = new WorldStateRow(Name("dice"), CellKind.Int, Capacity: 5, Cells: [Cell("d1", 4), Cell("d2", 2), Cell("d3", 6), Cell("d4", 6), Cell("d5", 5)]);
         var definition = Document([dice, Slot("pair"), Slot("noSix"), Slot("twoAndFive")], [
-            new(Name("pair"), CellKind.Int, Symbols: symbols, Pattern: new WorldPatternNode.Choice([.. Enumerable.Range(1, 6).Select(i => Adjacent($"p{i}"))])),
-            new(Name("noSix"), CellKind.Int, Symbols: symbols, Pattern: new WorldPatternNode.Complement(Contains("p6"))),
-            new(Name("twoAndFive"), CellKind.Int, Symbols: symbols, Pattern: new WorldPatternNode.Both([Contains("p2"), Contains("p5")])),
+            new(Name("pair"), CellKind.Int, Symbols: symbols, Pattern: new PatternNode.Choice([.. Enumerable.Range(1, 6).Select(i => Adjacent($"p{i}"))])),
+            new(Name("noSix"), CellKind.Int, Symbols: symbols, Pattern: new PatternNode.Complement(Contains("p6"))),
+            new(Name("twoAndFive"), CellKind.Int, Symbols: symbols, Pattern: new PatternNode.Both([Contains("p2"), Contains("p5")])),
         ], [Mirror("pair", "$match:pair:dice"), Mirror("noSix", "$match:noSix:dice"), Mirror("twoAndFive", "$match:twoAndFive:dice")]);
 
         using var fixture = Fixtures.FreshServer(definition: definition);
@@ -256,45 +256,45 @@ public sealed class WorldPatternLawTests {
 
     [Fact]
     public void PatternsAndSortRoundTripThroughTheStrictWireShape() {
-        var every = new WorldPatternRow(Name("every"), CellKind.Int, Symbols: [new(Name("a"), 1, 2), new(Name("b"), 2, 3)],
-            Pattern: new WorldPatternNode.Sequence([
-                new WorldPatternNode.Symbol("a"), new WorldPatternNode.AnySymbol(), new WorldPatternNode.Except("b"), new WorldPatternNode.Nothing(),
-                new WorldPatternNode.Choice([new WorldPatternNode.Symbol("a"), new WorldPatternNode.Symbol("b")]),
-                new WorldPatternNode.Optional(new WorldPatternNode.Symbol("a")),
-                new WorldPatternNode.Repeat(new WorldPatternNode.Symbol("b"), 0, 1),
-                new WorldPatternNode.Complement(new WorldPatternNode.Both([new WorldPatternNode.Symbol("a"), new WorldPatternNode.AnySymbol()])),
-                new WorldPatternNode.Optional(new WorldPatternNode.None()),
+        var every = new PatternRow(Name("every"), CellKind.Int, Symbols: [new(Name("a"), 1, 2), new(Name("b"), 2, 3)],
+            Pattern: new PatternNode.Sequence([
+                new PatternNode.Symbol("a"), new PatternNode.AnySymbol(), new PatternNode.Except("b"), new PatternNode.Nothing(),
+                new PatternNode.Choice([new PatternNode.Symbol("a"), new PatternNode.Symbol("b")]),
+                new PatternNode.Optional(new PatternNode.Symbol("a")),
+                new PatternNode.Repeat(new PatternNode.Symbol("b"), 0, 1),
+                new PatternNode.Complement(new PatternNode.Both([new PatternNode.Symbol("a"), new PatternNode.AnySymbol()])),
+                new PatternNode.Optional(new PatternNode.None()),
             ]), MaxStates: 12);
         var definition = Hand() with { PatternsRaw = [.. Hand().Patterns, every], Rules = [.. Hand().Rules!, new WorldRule(Name("order"), [new ActionEffect.TransformState(new StateTransform.SortZone("hand", By: [new("suit"), new("rank", Descending: true)]))])] };
 
         var parsed = WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: definition));
         Assert.Equal(2, parsed.Patterns.Count);
         Assert.Equal(12, parsed.Patterns[1].MaxStates);
-        Assert.IsType<WorldPatternNode.Sequence>(parsed.Patterns[1].Pattern);
+        Assert.IsType<PatternNode.Sequence>(parsed.Patterns[1].Pattern);
         var sort = Assert.IsType<StateTransform.SortZone>(Assert.IsType<ActionEffect.TransformState>(parsed.Rules![1].Effects[0]).Transform);
         Assert.Equal(2, sort.By!.Count);
         Assert.True(sort.By[1].Descending);
         Assert.True(WorldDefinitionValidator.TryValidateLocally(parsed, out var reason), reason);
     }
 
-    private static WorldPatternRow Bracket(string name, bool single = false) => new(Name(name), CellKind.Int,
+    private static PatternRow Bracket(string name, bool single = false) => new(Name(name), CellKind.Int,
         Symbols: [new(Name("me"), 1, 1), new(Name("them"), 2, 2)],
-        Pattern: new WorldPatternNode.Sequence([single ? new WorldPatternNode.Symbol("them") : new WorldPatternNode.Plus(new WorldPatternNode.Symbol("them")), new WorldPatternNode.Symbol("me")]));
+        Pattern: new PatternNode.Sequence([single ? new PatternNode.Symbol("them") : new PatternNode.Plus(new PatternNode.Symbol("them")), new PatternNode.Symbol("me")]));
     private static WorldDefinition Hand() {
-        var straight = new WorldPatternRow(Name("straight"), CellKind.Int, Attribute: "rank",
-            Symbols: Enumerable.Range(5, 5).Select(i => new WorldPatternSymbol(Name($"r{i}"), i, i)).ToArray(),
-            Pattern: new WorldPatternNode.Sequence([.. Enumerable.Range(5, 5).Select(i => (WorldPatternNode)new WorldPatternNode.Symbol($"r{i}"))]));
+        var straight = new PatternRow(Name("straight"), CellKind.Int, Attribute: "rank",
+            Symbols: Enumerable.Range(5, 5).Select(i => new PatternSymbol(Name($"r{i}"), i, i)).ToArray(),
+            Pattern: new PatternNode.Sequence([.. Enumerable.Range(5, 5).Select(i => (PatternNode)new PatternNode.Symbol($"r{i}"))]));
         return Document([
             new(Name("cards"), CellKind.Int, Capacity: 5, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5")]),
-            new(Name("rank"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards")), Cells: [Cell("c1", 9), Cell("c2", 5), Cell("c3", 7), Cell("c4", 6), Cell("c5", 8)]),
-            new(Name("suit"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards")), Cells: [Cell("c1", 1), Cell("c2", 2), Cell("c3", 1), Cell("c4", 2), Cell("c5", 1)]),
-            new(Name("hand"), CellKind.Bool, Capacity: 5, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5")], Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true)),
+            new(Name("rank"), CellKind.Int, Domain: new StateDomain.KeysOf(CellName.Parse("cards")), Cells: [Cell("c1", 9), Cell("c2", 5), Cell("c3", 7), Cell("c4", 6), Cell("c5", 8)]),
+            new(Name("suit"), CellKind.Int, Domain: new StateDomain.KeysOf(CellName.Parse("cards")), Cells: [Cell("c1", 1), Cell("c2", 2), Cell("c3", 1), Cell("c4", 2), Cell("c5", 1)]),
+            new(Name("hand"), CellKind.Bool, Capacity: 5, Cells: [Cell("c1"), Cell("c2"), Cell("c3"), Cell("c4"), Cell("c5")], Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true)),
             Slot("straight"),
         ], [straight], [Mirror("straight", "$match:straight:hand")]);
     }
     private static WorldRule Mirror(string target, string operand, string? key = null) => new(Name(target + "-mirror"), [new ActionEffect.SetState(State: target, FromState: operand, FromKey: key)]);
-    private static WorldDefinition Document(WorldStateRow[] rows, WorldPatternRow[] patterns, WorldRule[] rules) => Fixtures.BuildDocument() with {
-        StateRaw = new(World: rows, Lattices: [new WorldStateLatticeTopology.Grid("map", new DocumentVector3(0, 0, 0), 1, 4, 4)]),
+    private static WorldDefinition Document(WorldStateRow[] rows, PatternRow[] patterns, WorldRule[] rules) => Fixtures.BuildDocument() with {
+        StateRaw = new(World: rows, Lattices: [new LatticeTopology.Grid("map", new DocumentVector3(0, 0, 0), 1, 4, 4)]),
         PatternsRaw = patterns,
         Rules = rules,
     };
@@ -303,9 +303,9 @@ public sealed class WorldPatternLawTests {
         return candidate!;
     }
     private static CellName Name(string value) => CellName.Parse(value);
-    private static WorldStateCell Cell(string key, long value = 1) => new(Name(key), value);
-    private static WorldStateRow Slot(string name) => new(Name(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
+    private static StateCell Cell(string key, long value = 1) => new(Name(key), value);
+    private static WorldStateRow Slot(string name) => new(Name(name), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]);
     private static WorldStateRow Find(WorldDefinition document, string row) => WorldDefinitionRows.FindStateRow(document.State, row)!;
     private static long Value(WorldFixture fixture, string row) =>
-        WorldDefinitionRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
+        StateRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
 }

@@ -17,25 +17,25 @@ public interface IWorldFieldLatticeHost {
     /// <param name="row">The compiled state row handle.</param>
     /// <param name="body">The body index used as the cell's key.</param>
     /// <param name="tick">The stepping tick.</param>
-    long ReadTag(WorldStateHandle row, int body, ulong tick);
+    long ReadTag(StateHandle row, int body, ulong tick);
     /// <summary>Writes a typed keyed int state row's cell for a body index.</summary>
     /// <param name="row">The compiled state row handle.</param>
     /// <param name="body">The body index used as the cell's key.</param>
     /// <param name="value">The value to write.</param>
     /// <param name="tick">The stepping tick.</param>
-    void WriteTag(WorldStateHandle row, int body, long value, ulong tick);
+    void WriteTag(StateHandle row, int body, long value, ulong tick);
     /// <summary>Reads a scalar fixed-kind state row's slot cell for a row-referenced reaction scalar (0 when absent
     /// or unwritten).</summary>
     /// <param name="row">The compiled state row handle.</param>
     /// <param name="tick">The stepping tick.</param>
-    FixedQ4816 ReadScalar(WorldStateHandle row, ulong tick);
+    FixedQ4816 ReadScalar(StateHandle row, ulong tick);
     /// <summary>Adds to a scalar fixed-kind state row's slot cell, clamped to the row's declared envelope (a
     /// <see cref="WorldReaction.Flow"/> spill accumulator) — the host resolves and applies the clamp itself, so this
     /// never refuses.</summary>
     /// <param name="row">The compiled state row handle.</param>
     /// <param name="amount">The raw amount to add.</param>
     /// <param name="tick">The stepping tick.</param>
-    void AddScalar(WorldStateHandle row, FixedQ4816 amount, ulong tick);
+    void AddScalar(StateHandle row, FixedQ4816 amount, ulong tick);
 }
 /// <summary>A field lattice's own free surface at one column — a point on it and the lattice's own frame normal
 /// (always world +Y: the lattice carries no rotation of its own). A medium hold's law projects displacement along

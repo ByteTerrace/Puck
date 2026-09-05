@@ -43,7 +43,7 @@ public sealed class BindingIconReferentialIntegrityLawTests {
     }
     private static WorldDefinition WithBindingDocument(BindingProfileDocument document) => Fixtures.BuildDocument() with {
         StateRaw = new WorldStateSection(World: [
-            new WorldStateRow(Name: CellName.Parse(candidate: "presentation"), Kind: CellKind.Text, Capacity: 8, Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "jump"), Text: KnownIcon)]),
+            new WorldStateRow(Name: CellName.Parse(candidate: "presentation"), Kind: CellKind.Text, Capacity: 8, Cells: [new StateCell(Key: CellName.Parse(candidate: "jump"), Text: KnownIcon)]),
             new WorldStateRow(Name: CellName.Parse(candidate: "numericPresentation"), Kind: CellKind.Int, Capacity: 8),
         ]),
         IconsRaw = new WorldIconographySection(

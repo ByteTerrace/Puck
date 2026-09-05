@@ -51,7 +51,7 @@ public sealed record WorldDefinition(
     [property: JsonPropertyName("host"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHostDefaults? HostRaw = null,
     [property: JsonPropertyName("views"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldViewDefaults? ViewsRaw = null,
     [property: JsonPropertyName("looks"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldLooksSection? LooksRaw = null,
-    [property: JsonPropertyName("dynamics"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldDynamicsRow>? DynamicsRaw = null,
+    [property: JsonPropertyName("dynamics"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<DynamicsRow>? DynamicsRaw = null,
     [property: JsonPropertyName("grants"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldGrant>? GrantsRaw = null,
     [property: JsonPropertyName("hud"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHudSection? HudRaw = null,
     [property: JsonPropertyName("icons"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldIconographySection? IconsRaw = null,
@@ -65,7 +65,7 @@ public sealed record WorldDefinition(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPropertyRegistrySection? Properties = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldInteractionsSection? Interactions = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldGenerationDefaults? Generation = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldGeneratorRow>? Generators = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<GeneratorRow>? Generators = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldReference>? References = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPortalsSection? Portals = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSimulationDefaults? Simulation = null,
@@ -81,7 +81,7 @@ public sealed record WorldDefinition(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCapturesSection? Captures = null,
     [property: JsonPropertyName("curves"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCurveRow>? CurvesRaw = null,
     [property: JsonPropertyName("navigation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldNavigationSection? NavigationRaw = null,
-    [property: JsonPropertyName("patterns"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPatternRow>? PatternsRaw = null,
+    [property: JsonPropertyName("patterns"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<PatternRow>? PatternsRaw = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TableRow>? Tables = null
 ) {
     /// <summary>The document schema version. A loader rejects any other value; the canonical writer always emits it.</summary>
@@ -96,10 +96,10 @@ public sealed record WorldDefinition(
     [JsonIgnore]
     public WorldFieldsSection? Fields => GetCompiledFields();
     /// <summary>Gets the typed descriptor catalog compiled from the authored <c>state</c> section. Runtime processors
-    /// resolve names against this catalog once, retain <see cref="WorldStateHandle"/> values, and then use ordinal
+    /// resolve names against this catalog once, retain <see cref="StateHandle"/> values, and then use ordinal
     /// descriptor access without repeated string lookup.</summary>
     [JsonIgnore]
-    public WorldStateCatalog StateCatalog => GetStateCatalog();
+    public StateCatalog StateCatalog => GetStateCatalog();
     /// <summary>Gets the typed deterministic program compiled from the lattice-shaped state rows and their ordered
     /// reactions, or <see langword="null"/> when the state section declares no lattice topology.</summary>
     [JsonIgnore]
@@ -206,17 +206,17 @@ public sealed record WorldDefinition(
     /// <summary>Gets the stable document id used when this world submits to another document.</summary>
     public string? DocumentId { get; init; }
     /// <summary>Gets the named second-order "personality" rows every follower consumer (looks, camera booms, kit
-    /// planar shaping, state cells) names by <see cref="WorldDynamicsRow.Name"/> — ABSENT resolves to none, so an
+    /// planar shaping, state cells) names by <see cref="DynamicsRow.Name"/> — ABSENT resolves to none, so an
     /// unauthored world is unchanged.</summary>
     [JsonIgnore]
-    public IReadOnlyList<WorldDynamicsRow> Dynamics => (DynamicsRaw ?? []);
+    public IReadOnlyList<DynamicsRow> Dynamics => (DynamicsRaw ?? []);
     /// <summary>Gets the named curvature-first spline rows a camera path op or a sim curve-follow target names by
     /// <see cref="WorldCurveRow.Name"/> — ABSENT resolves to none, so an unauthored world is unchanged.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldCurveRow> Curves => (CurvesRaw ?? []);
     /// <summary>The pattern-language table, or empty when the document declares none.</summary>
     [JsonIgnore]
-    public IReadOnlyList<WorldPatternRow> Patterns => (PatternsRaw ?? []);
+    public IReadOnlyList<PatternRow> Patterns => (PatternsRaw ?? []);
     /// <summary>Gets the unknown top-level members captured during deserialization, declared identically on every versioned
     /// document root here and validated
     /// through the shared <see cref="DocumentExtensionsPolicy"/> regime (see <see cref="WorldDefinitionValidator"/>): a
@@ -471,7 +471,7 @@ public sealed record WorldDefinition(
             return cache.Fields;
         }
     }
-    private WorldStateCatalog GetStateCatalog() {
+    private StateCatalog GetStateCatalog() {
         var cache = GetCompilationCache(state: StateRaw);
 
         lock (cache.SyncRoot) {
@@ -479,7 +479,7 @@ public sealed record WorldDefinition(
                 (cache.StateCatalog is null) ||
                 !cache.StateCatalog.MatchesShape(section: StateRaw)
             ) {
-                cache.StateCatalog = WorldStateCatalog.Compile(section: StateRaw);
+                cache.StateCatalog = StateCatalog.Compile(section: StateRaw);
             }
 
             return cache.StateCatalog;
@@ -539,7 +539,7 @@ public sealed record WorldDefinition(
                 }
 
                 if (sourceCache.StateCatalog is not null) {
-                    var candidate = WorldStateCatalog.Compile(section: target.StateRaw);
+                    var candidate = StateCatalog.Compile(section: target.StateRaw);
 
                     targetCache.StateCatalog = (sourceCache.StateCatalog.HasSameShape(other: candidate)
                         ? sourceCache.StateCatalog
@@ -552,7 +552,7 @@ public sealed record WorldDefinition(
                         ? targetCache.Fields
                         : WorldFieldsSection.Compile(state: target.StateRaw)
                     );
-                    var catalog = (targetCache.StateCatalog ?? WorldStateCatalog.Compile(section: target.StateRaw));
+                    var catalog = (targetCache.StateCatalog ?? StateCatalog.Compile(section: target.StateRaw));
 
                     targetCache.Fields = fields;
                     targetCache.FieldsCompiled = true;
@@ -593,7 +593,7 @@ public sealed record WorldDefinition(
         public object SyncRoot { get; } = new();
         public bool FieldsCompiled { get; set; }
         public WorldFieldsSection? Fields { get; set; }
-        public WorldStateCatalog? StateCatalog { get; set; }
+        public StateCatalog? StateCatalog { get; set; }
         public bool FieldProgramCompiled { get; set; }
         public WorldFieldProgram? FieldProgram { get; set; }
         public WorldFieldsSection? FieldProgramFields { get; set; }

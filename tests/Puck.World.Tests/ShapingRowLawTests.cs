@@ -155,7 +155,7 @@ public sealed class ShapingRowLawTests {
 
         return Fixtures.BuildDocument() with {
             ChannelsRaw = channels,
-            DynamicsRaw = [.. Fixtures.StandardDynamics, new WorldDynamicsRow(Damping: 1f, Frequency: frequency, Name: "stride", Response: 0f)],
+            DynamicsRaw = [.. Fixtures.StandardDynamics, new DynamicsRow(Damping: 1f, Frequency: frequency, Name: "stride", Response: 0f)],
             BodyMotionProgramsRaw = [walker, roam],
             KitRowsRaw = [kit],
             DefaultSeatKitRaw = "glider-test",

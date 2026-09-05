@@ -15,7 +15,7 @@ public sealed class WorldRuleCountdownLawTests {
                     Name: countdownName,
                     Kind: CellKind.Int,
                     NonNegative: true,
-                    Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 1183L)])
+                    Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 1183L)])
             ]),
             Rules = [
                 new WorldRule(
@@ -52,7 +52,7 @@ public sealed class WorldRuleCountdownLawTests {
                     Name: countdownName,
                     Kind: CellKind.Int,
                     NonNegative: true,
-                    Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey)])
+                    Cells: [new StateCell(Key: WorldStateRow.SlotKey)])
             ]),
             Rules = [
                 new WorldRule(

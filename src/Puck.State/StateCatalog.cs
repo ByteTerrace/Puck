@@ -1,21 +1,20 @@
 using System.Collections.ObjectModel;
-using Puck.Physics.Motion;
 
-namespace Puck.World;
+namespace Puck.State;
 
 /// <summary>Identifies which ownership lane declares a compiled state descriptor.</summary>
-public enum WorldStateOwnershipLane : byte {
-    /// <summary>The world document owns the state.</summary>
-    World,
+public enum StateLane : byte {
+    /// <summary>The document owns the state — one of the section's rows.</summary>
+    Document,
 
-    /// <summary>One body owns the ephemeral state.</summary>
-    Body,
+    /// <summary>One participant owns the ephemeral state.</summary>
+    Participant,
 
     /// <summary>One durable identity owns the state.</summary>
     Identity,
 }
 /// <summary>Identifies the storage shape selected by a compiled state descriptor.</summary>
-public enum WorldStateStorageShape : byte {
+public enum StateStorageShape : byte {
     /// <summary>The state is addressed as one scalar slot.</summary>
     Slot,
 
@@ -26,7 +25,7 @@ public enum WorldStateStorageShape : byte {
     Lattice,
 }
 /// <summary>Identifies the deterministic value domain selected by a compiled state descriptor.</summary>
-public enum WorldStateValueKind : byte {
+public enum StateValueKind : byte {
     /// <summary>A whole signed 64-bit integer, carried and compared as a raw <see cref="long"/>.</summary>
     Int = ((byte)CellKind.Int),
 
@@ -39,22 +38,22 @@ public enum WorldStateValueKind : byte {
     /// <summary>A bounded text value.</summary>
     Text = ((byte)CellKind.Text),
 
-    /// <summary>A per-body Q48.16 action-state counter.</summary>
+    /// <summary>A per-participant Q48.16 counter.</summary>
     Counter = 4,
 
-    /// <summary>A per-body action-state duration stored in engine ticks.</summary>
+    /// <summary>A per-participant duration stored in engine ticks.</summary>
     Timer,
 }
-/// <summary>Identifies one descriptor in the <see cref="WorldStateCatalog"/> that minted it.</summary>
+/// <summary>Identifies one descriptor in the <see cref="StateCatalog"/> that minted it.</summary>
 /// <remarks>Handles are bound to one catalog instance. A processor resolves a name during compilation, retains the
 /// handle while that catalog is current, and uses the catalog indexer during execution instead of repeating a string
 /// lookup. Value-only definition updates retain the catalog and its handles; a declaration-shape change produces a
 /// replacement catalog and refuses the old handles. The default value is invalid.</remarks>
-public readonly record struct WorldStateHandle {
+public readonly record struct StateHandle {
     private readonly object? m_catalogIdentity;
     private readonly int m_encodedOrdinal;
 
-    internal WorldStateHandle(int ordinal, object catalogIdentity) {
+    internal StateHandle(int ordinal, object catalogIdentity) {
         m_catalogIdentity = catalogIdentity;
         m_encodedOrdinal = checked((ordinal + 1));
     }
@@ -76,25 +75,26 @@ public readonly record struct WorldStateHandle {
 /// <param name="Storage">The storage shape selected by the authored declaration.</param>
 /// <param name="ValueKind">The deterministic value domain selected by the authored declaration.</param>
 /// <param name="LaneOrdinal">The declaration's zero-based document-order ordinal within <paramref name="Ownership"/>.</param>
-public readonly record struct WorldStateDescriptor(
-    WorldStateHandle Handle,
+public readonly record struct StateDescriptor(
+    StateHandle Handle,
     string Name,
-    WorldStateOwnershipLane Ownership,
-    WorldStateStorageShape Storage,
-    WorldStateValueKind ValueKind,
+    StateLane Ownership,
+    StateStorageShape Storage,
+    StateValueKind ValueKind,
     int LaneOrdinal
 );
-/// <summary>Compiles a <see cref="WorldStateSection"/> into immutable typed descriptors and catalog-instance-relative
-/// handles. Descriptor ordinals are assigned deterministically in world, body, then identity document order.</summary>
+/// <summary>Compiles an <see cref="IStateSection"/> into immutable typed descriptors and catalog-instance-relative
+/// handles. Descriptor ordinals are assigned deterministically in document, participant, then identity declaration
+/// order.</summary>
 /// <remarks>The authored section remains the serialization source. This catalog is a runtime compiler product and
 /// carries no mutable state values.</remarks>
-public sealed class WorldStateCatalog {
+public sealed class StateCatalog {
     private readonly object m_identity;
-    private readonly WorldStateDescriptor[] m_descriptors;
-    private readonly ReadOnlyCollection<WorldStateDescriptor> m_readOnlyDescriptors;
-    private readonly Dictionary<string, WorldStateHandle>[] m_handlesByLane;
+    private readonly StateDescriptor[] m_descriptors;
+    private readonly ReadOnlyCollection<StateDescriptor> m_readOnlyDescriptors;
+    private readonly Dictionary<string, StateHandle>[] m_handlesByLane;
 
-    private WorldStateCatalog(object identity, WorldStateDescriptor[] descriptors, Dictionary<string, WorldStateHandle>[] handlesByLane) {
+    private StateCatalog(object identity, StateDescriptor[] descriptors, Dictionary<string, StateHandle>[] handlesByLane) {
         m_identity = identity;
         m_descriptors = descriptors;
         m_readOnlyDescriptors = Array.AsReadOnly(array: descriptors);
@@ -102,7 +102,7 @@ public sealed class WorldStateCatalog {
     }
 
     /// <summary>Gets the compiled descriptors in stable handle order.</summary>
-    public IReadOnlyList<WorldStateDescriptor> Descriptors => m_readOnlyDescriptors;
+    public IReadOnlyList<StateDescriptor> Descriptors => m_readOnlyDescriptors;
     /// <summary>Gets the number of compiled state declarations.</summary>
     public int Count => m_descriptors.Length;
 
@@ -110,7 +110,7 @@ public sealed class WorldStateCatalog {
     /// <param name="handle">A handle minted by this catalog.</param>
     /// <returns>The compiled descriptor.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="handle"/> is invalid or outside this catalog.</exception>
-    public WorldStateDescriptor this[WorldStateHandle handle] => (TryGetDescriptor(
+    public StateDescriptor this[StateHandle handle] => (TryGetDescriptor(
         descriptor: out var descriptor,
         handle: handle
     )
@@ -126,19 +126,19 @@ public sealed class WorldStateCatalog {
     /// <param name="section">The authored state section, or <see langword="null"/> for an empty catalog.</param>
     /// <returns>The compiled catalog.</returns>
     /// <exception cref="InvalidOperationException"><paramref name="section"/> contains a null declaration or a
-    /// duplicate world-lane name, or a name shared by the body and identity lanes. Whole-document validation
-    /// normally refuses those shapes before runtime compilation.</exception>
-    public static WorldStateCatalog Compile(WorldStateSection? section) {
+    /// duplicate document-lane name, or a name shared by the participant and identity lanes. Whole-document
+    /// validation normally refuses those shapes before runtime compilation.</exception>
+    public static StateCatalog Compile(IStateSection? section) {
         var identity = new object();
-        var descriptors = new List<WorldStateDescriptor>();
-        var handlesByLane = new Dictionary<string, WorldStateHandle>[Enum.GetValues<WorldStateOwnershipLane>().Length];
+        var descriptors = new List<StateDescriptor>();
+        var handlesByLane = new Dictionary<string, StateHandle>[Enum.GetValues<StateLane>().Length];
 
         for (var index = 0; (index < handlesByLane.Length); index++) {
-            handlesByLane[index] = new Dictionary<string, WorldStateHandle>(comparer: StringComparer.Ordinal);
+            handlesByLane[index] = new Dictionary<string, StateHandle>(comparer: StringComparer.Ordinal);
         }
 
-        void Add(string name, WorldStateOwnershipLane ownership, WorldStateStorageShape storage, WorldStateValueKind valueKind, int laneOrdinal) {
-            var handle = new WorldStateHandle(
+        void Add(string name, StateLane ownership, StateStorageShape storage, StateValueKind valueKind, int laneOrdinal) {
+            var handle = new StateHandle(
                 ordinal: descriptors.Count,
                 catalogIdentity: identity
             );
@@ -150,7 +150,7 @@ public sealed class WorldStateCatalog {
                 throw new InvalidOperationException(message: $"State lane '{ownership}' declares duplicate name '{name}'.");
             }
 
-            descriptors.Add(item: new WorldStateDescriptor(
+            descriptors.Add(item: new StateDescriptor(
                 Handle: handle,
                 LaneOrdinal: laneOrdinal,
                 Name: name,
@@ -160,41 +160,37 @@ public sealed class WorldStateCatalog {
             ));
         }
 
-        var worldRows = (section?.World ?? []);
+        var rows = (section?.Rows ?? []);
+        var lattices = section?.Lattices;
 
-        for (var index = 0; (index < worldRows.Count); index++) {
-            var row = (worldRows[index] ?? throw new InvalidOperationException(message: $"State lane 'World' contains a null declaration at ordinal {index}."));
+        for (var index = 0; (index < rows.Count); index++) {
+            var row = (rows[index] ?? throw new InvalidOperationException(message: $"State lane 'Document' contains a null declaration at ordinal {index}."));
 
             Add(
                 name: row.Name,
-                ownership: WorldStateOwnershipLane.World,
-                storage: ((row.Field is not null)
-                    ? WorldStateStorageShape.Lattice
-                    : (row.IsKeyed
-                        ? WorldStateStorageShape.Keyed
-                        : WorldStateStorageShape.Slot
-                )),
+                ownership: StateLane.Document,
+                storage: Storage(row: row, lattices: lattices),
                 valueKind: FromCellKind(kind: row.Kind),
                 laneOrdinal: index
             );
         }
 
-        var perBodyNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var perParticipantNames = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        AddActionState(
-            declarations: (section?.Body ?? []),
-            ownership: WorldStateOwnershipLane.Body,
-            names: perBodyNames,
+        AddSlots(
+            declarations: (section?.ParticipantSlots ?? []),
+            ownership: StateLane.Participant,
+            names: perParticipantNames,
             add: Add
         );
-        AddActionState(
-            declarations: (section?.Identity ?? []),
-            ownership: WorldStateOwnershipLane.Identity,
-            names: perBodyNames,
+        AddSlots(
+            declarations: (section?.IdentitySlots ?? []),
+            ownership: StateLane.Identity,
+            names: perParticipantNames,
             add: Add
         );
 
-        return new WorldStateCatalog(
+        return new StateCatalog(
             identity: identity,
             descriptors: descriptors.ToArray(),
             handlesByLane: handlesByLane
@@ -205,7 +201,7 @@ public sealed class WorldStateCatalog {
     /// <param name="name">The authored stable name.</param>
     /// <param name="handle">The resolved handle, or the invalid default value when no declaration matches.</param>
     /// <returns><see langword="true"/> when the lane declares the name.</returns>
-    public bool TryResolve(WorldStateOwnershipLane lane, string name, out WorldStateHandle handle) {
+    public bool TryResolve(StateLane lane, string name, out StateHandle handle) {
         if (
             !Enum.IsDefined(value: lane) ||
             (name is null)
@@ -225,7 +221,7 @@ public sealed class WorldStateCatalog {
     /// <param name="name">The validated authored name.</param>
     /// <param name="handle">The resolved handle, or the invalid default value when no declaration matches.</param>
     /// <returns><see langword="true"/> when the lane declares the name.</returns>
-    public bool TryResolve(WorldStateOwnershipLane lane, CellName name, out WorldStateHandle handle) => TryResolve(
+    public bool TryResolve(StateLane lane, CellName name, out StateHandle handle) => TryResolve(
         lane: lane,
         name: name.Value,
         handle: out handle
@@ -234,7 +230,7 @@ public sealed class WorldStateCatalog {
     /// <param name="handle">The handle to inspect.</param>
     /// <param name="descriptor">The descriptor on success; otherwise the default descriptor.</param>
     /// <returns><see langword="true"/> when the handle addresses this catalog's current shape.</returns>
-    public bool TryGetDescriptor(WorldStateHandle handle, out WorldStateDescriptor descriptor) {
+    public bool TryGetDescriptor(StateHandle handle, out StateDescriptor descriptor) {
         if (
             handle.IsValid &&
             handle.BelongsTo(catalogIdentity: m_identity) &&
@@ -251,7 +247,10 @@ public sealed class WorldStateCatalog {
     }
 
     /// <summary>Determines whether another catalog carries the same declaration shape, ignoring instance branding.</summary>
-    internal bool HasSameShape(WorldStateCatalog other) {
+    /// <param name="other">The catalog to compare with.</param>
+    public bool HasSameShape(StateCatalog other) {
+        ArgumentNullException.ThrowIfNull(argument: other);
+
         if (m_descriptors.Length != other.m_descriptors.Length) {
             return false;
         }
@@ -274,10 +273,11 @@ public sealed class WorldStateCatalog {
         return true;
     }
     /// <summary>Determines without allocation whether an authored section still carries this catalog's shape.</summary>
-    internal bool MatchesShape(WorldStateSection? section) {
+    /// <param name="section">The section to compare with.</param>
+    public bool MatchesShape(IStateSection? section) {
         var descriptorIndex = 0;
 
-        bool Match(string name, WorldStateOwnershipLane ownership, WorldStateStorageShape storage, WorldStateValueKind valueKind, int laneOrdinal) {
+        bool Match(string name, StateLane ownership, StateStorageShape storage, StateValueKind valueKind, int laneOrdinal) {
             if (((uint)descriptorIndex) >= ((uint)m_descriptors.Length)) {
                 return false;
             }
@@ -293,21 +293,17 @@ public sealed class WorldStateCatalog {
             );
         }
 
-        var worldRows = (section?.World ?? []);
+        var rows = (section?.Rows ?? []);
+        var lattices = section?.Lattices;
 
-        for (var index = 0; (index < worldRows.Count); index++) {
+        for (var index = 0; (index < rows.Count); index++) {
             if (
-                (worldRows[index] is not { } row) ||
+                (rows[index] is not { } row) ||
                 !TryFromCellKind(kind: row.Kind, valueKind: out var valueKind) ||
                 !Match(
                     name: row.Name,
-                    ownership: WorldStateOwnershipLane.World,
-                    storage: ((row.Field is not null)
-                        ? WorldStateStorageShape.Lattice
-                        : (row.IsKeyed
-                            ? WorldStateStorageShape.Keyed
-                            : WorldStateStorageShape.Slot
-                    )),
+                    ownership: StateLane.Document,
+                    storage: Storage(row: row, lattices: lattices),
                     valueKind: valueKind,
                     laneOrdinal: index
                 )
@@ -316,9 +312,9 @@ public sealed class WorldStateCatalog {
             }
         }
 
-        if (!MatchesActionLane(
-            declarations: (section?.Body ?? []),
-            ownership: WorldStateOwnershipLane.Body,
+        if (!MatchesSlotLane(
+            declarations: (section?.ParticipantSlots ?? []),
+            ownership: StateLane.Participant,
             descriptors: m_descriptors,
             descriptorIndex: ref descriptorIndex
         )) {
@@ -326,9 +322,9 @@ public sealed class WorldStateCatalog {
         }
 
         return (
-            MatchesActionLane(
-                declarations: (section?.Identity ?? []),
-                ownership: WorldStateOwnershipLane.Identity,
+            MatchesSlotLane(
+                declarations: (section?.IdentitySlots ?? []),
+                ownership: StateLane.Identity,
                 descriptors: m_descriptors,
                 descriptorIndex: ref descriptorIndex
             ) &&
@@ -336,44 +332,59 @@ public sealed class WorldStateCatalog {
         );
     }
 
-    private static void AddActionState(IReadOnlyList<ActionStateSlot> declarations, WorldStateOwnershipLane ownership, ISet<string> names, Action<string, WorldStateOwnershipLane, WorldStateStorageShape, WorldStateValueKind, int> add) {
+    // A row lying over a dense (field-kind) topology stores one scalar per cell; every other shape is the sparse
+    // slot or keyed store.
+    private static StateStorageShape Storage(StateRow row, IReadOnlyList<LatticeTopology>? lattices) {
+        if (row.EffectiveDomain is StateDomain.CellsOf cellsOf) {
+            for (var index = 0; (index < (lattices?.Count ?? 0)); index++) {
+                var topology = lattices![index];
+
+                if ((topology is not null) && (topology.Kind == TopologyKind.Field) && string.Equals(a: topology.Name, b: cellsOf.Topology, comparisonType: StringComparison.Ordinal)) {
+                    return StateStorageShape.Lattice;
+                }
+            }
+        }
+
+        return (row.IsKeyed ? StateStorageShape.Keyed : StateStorageShape.Slot);
+    }
+    private static void AddSlots(IReadOnlyList<IStateSlot> declarations, StateLane ownership, ISet<string> names, Action<string, StateLane, StateStorageShape, StateValueKind, int> add) {
         for (var index = 0; (index < declarations.Count); index++) {
             var declaration = (declarations[index] ?? throw new InvalidOperationException(message: $"State lane '{ownership}' contains a null declaration at ordinal {index}."));
 
             if (!names.Add(item: declaration.Name)) {
-                throw new InvalidOperationException(message: $"State lanes 'Body' and 'Identity' declare duplicate name '{declaration.Name}'.");
+                throw new InvalidOperationException(message: $"State lanes 'Participant' and 'Identity' declare duplicate name '{declaration.Name}'.");
             }
 
             add(
                 declaration.Name,
                 ownership,
-                WorldStateStorageShape.Slot,
-                declaration.Kind switch {
-                    ActionStateKind.Counter => WorldStateValueKind.Counter,
-                    ActionStateKind.Timer => WorldStateValueKind.Timer,
-                    _ => throw new InvalidOperationException(message: $"State lane '{ownership}' declaration '{declaration.Name}' carries unknown value kind '{declaration.Kind}'."),
+                StateStorageShape.Slot,
+                declaration.ValueKind switch {
+                    StateValueKind.Counter => StateValueKind.Counter,
+                    StateValueKind.Timer => StateValueKind.Timer,
+                    _ => throw new InvalidOperationException(message: $"State lane '{ownership}' declaration '{declaration.Name}' carries unknown value kind '{declaration.ValueKind}'."),
                 },
                 index
             );
         }
     }
-    private static WorldStateValueKind FromCellKind(CellKind kind) => kind switch {
-        CellKind.Int => WorldStateValueKind.Int,
-        CellKind.Fixed => WorldStateValueKind.Fixed,
-        CellKind.Bool => WorldStateValueKind.Bool,
-        CellKind.Text => WorldStateValueKind.Text,
+    private static StateValueKind FromCellKind(CellKind kind) => kind switch {
+        CellKind.Int => StateValueKind.Int,
+        CellKind.Fixed => StateValueKind.Fixed,
+        CellKind.Bool => StateValueKind.Bool,
+        CellKind.Text => StateValueKind.Text,
         _ => throw new InvalidOperationException(message: $"Unknown state cell kind '{kind}'."),
     };
-    private static bool MatchesActionLane(IReadOnlyList<ActionStateSlot> declarations, WorldStateOwnershipLane ownership, IReadOnlyList<WorldStateDescriptor> descriptors, ref int descriptorIndex) {
+    private static bool MatchesSlotLane(IReadOnlyList<IStateSlot> declarations, StateLane ownership, IReadOnlyList<StateDescriptor> descriptors, ref int descriptorIndex) {
         for (var index = 0; (index < declarations.Count); index++) {
             if (declarations[index] is not { } declaration) {
                 return false;
             }
 
-            var valueKind = declaration.Kind switch {
-                ActionStateKind.Counter => WorldStateValueKind.Counter,
-                ActionStateKind.Timer => WorldStateValueKind.Timer,
-                _ => ((WorldStateValueKind?)null),
+            var valueKind = declaration.ValueKind switch {
+                StateValueKind.Counter => StateValueKind.Counter,
+                StateValueKind.Timer => StateValueKind.Timer,
+                _ => ((StateValueKind?)null),
             };
 
             if (
@@ -388,7 +399,7 @@ public sealed class WorldStateCatalog {
             if (
                 !string.Equals(a: descriptor.Name, b: declaration.Name, comparisonType: StringComparison.Ordinal) ||
                 (descriptor.Ownership != ownership) ||
-                (descriptor.Storage != WorldStateStorageShape.Slot) ||
+                (descriptor.Storage != StateStorageShape.Slot) ||
                 (descriptor.ValueKind != kind) ||
                 (descriptor.LaneOrdinal != index)
             ) {
@@ -398,13 +409,13 @@ public sealed class WorldStateCatalog {
 
         return true;
     }
-    private static bool TryFromCellKind(CellKind kind, out WorldStateValueKind valueKind) {
+    private static bool TryFromCellKind(CellKind kind, out StateValueKind valueKind) {
         switch (kind) {
             case CellKind.Int:
             case CellKind.Fixed:
             case CellKind.Bool:
             case CellKind.Text:
-                valueKind = ((WorldStateValueKind)kind);
+                valueKind = ((StateValueKind)kind);
 
                 return true;
             default:

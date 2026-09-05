@@ -324,7 +324,7 @@ public enum HudBindingKind : byte {
 /// for a plain <c>state.&lt;row&gt;</c> token (the row's own slot) and for every other kind.</param>
 /// <param name="Target">For a <see cref="HudBindingKind.StateNamed"/> kind, whether the token carried the trailing
 /// <c>.$target</c> facet — the addressed cell's stored TRUTH rather than its live eased value when it carries a
-/// <see cref="WorldStateDynamics"/> trait. <see langword="false"/> for every other kind.</param>
+/// <see cref="StateDynamics"/> trait. <see langword="false"/> for every other kind.</param>
 public readonly record struct HudBinding(HudBindingKind Kind, int SeatIndex, string? StateName = null, string? StateCellKey = null, bool Target = false);
 /// <summary>
 /// The closed v1 HUD binding vocabulary: <c>world.tick</c>, <c>world.fps</c>, <c>seat.&lt;n&gt;.position.{x,y,z}</c>

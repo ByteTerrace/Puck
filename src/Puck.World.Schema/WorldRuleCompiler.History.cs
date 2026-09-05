@@ -13,7 +13,7 @@ public static partial class WorldRuleCompiler {
             throw Invalid("history read requires $history:<row>:<age> and no key");
         }
         var row = WorldDefinitionRows.FindStateRow(definition.State, tokens[1]) ?? throw Invalid($"'{tokens[1]}' names no state row");
-        if (row.EffectiveDomain is not WorldStateDomain.Ring history) {
+        if (row.EffectiveDomain is not StateDomain.Ring history) {
             throw Invalid($"'{tokens[1]}' is not a history row");
         }
         if (!int.TryParse(tokens[2], NumberStyles.None, CultureInfo.InvariantCulture, out var age) || age >= history.Capacity) {
@@ -32,7 +32,7 @@ public static partial class WorldRuleCompiler {
     private static CompiledWorldEffect ResolvePush(ActionEffect.PushState push, string ruleName, WorldDefinition definition) {
         var row = WorldDefinitionRows.FindStateRow(definition.State, push.State)
             ?? throw new WorldRuleException(WorldRuleRefusal.StateRowUnknown, ruleName, $"'pushState' names no state row '{push.State}'");
-        if (row.EffectiveDomain is not WorldStateDomain.Ring) {
+        if (row.EffectiveDomain is not StateDomain.Ring) {
             throw new WorldRuleException(WorldRuleRefusal.StateCellUnaddressable, ruleName, $"'pushState' requires a history row; '{push.State}' has no history trait");
         }
         var write = ResolveWrite(

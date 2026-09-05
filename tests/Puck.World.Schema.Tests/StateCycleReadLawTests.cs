@@ -4,7 +4,7 @@ using Xunit;
 namespace Puck.World.Schema.Tests;
 
 /// <summary>
-/// CONTRACT UNDER TEST: <see cref="WorldStateCycle"/> — the tick-indexed rotation trait <see cref="WorldStateReader.TryRead"/>
+/// CONTRACT UNDER TEST: <see cref="StateCycle"/> — the tick-indexed rotation trait <see cref="WorldStateReader.TryRead"/>
 /// resolves for a slot row or a keyed cell. Every read is checked against <c>Puck.Maths.CyclicRotation</c> and
 /// <c>Puck.Maths.SymmetryLattice</c> called directly, so the trait's own arithmetic (phase, ticks per step, epoch, the
 /// modular reduction of a tick count) is what is under test; the validator's refusals close the shapes the read side
@@ -15,12 +15,12 @@ public sealed class StateCycleReadLawTests {
         Simulation: new WorldSimulationDefaults(RateHz: 240),
         StateRaw: new WorldStateSection(World: rows)
     );
-    private static WorldStateRow SlotRow(string name, CellKind kind, long value, WorldStateCycle cycle, long? min = null, long? max = null) => new(
+    private static WorldStateRow SlotRow(string name, CellKind kind, long value, StateCycle cycle, long? min = null, long? max = null) => new(
         Name: CellName.Parse(candidate: name),
         Kind: kind,
         Min: min,
         Max: max,
-        Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: value)],
+        Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: value)],
         Cycle: cycle
     );
     private static long Read(WorldDefinition definition, string row, ulong tick, string? key = null) {
@@ -37,7 +37,7 @@ public sealed class StateCycleReadLawTests {
     public void Step_ReadsThePowerTimesStepsPlusPhase_ModuloThePeriod() {
         foreach (var (plane, power) in new[] { (0, 1), (1, 7), (2, 11), (3, 13) }) {
             foreach (var phase in new long[] { 0L, 7L, -1L, 61L }) {
-                var definition = BuildDefinition(SlotRow(name: "spin", kind: CellKind.Int, value: phase, cycle: new WorldStateCycle(Power: power)));
+                var definition = BuildDefinition(SlotRow(name: "spin", kind: CellKind.Int, value: phase, cycle: new StateCycle(Power: power)));
 
                 foreach (var tick in new ulong[] { 0UL, 1UL, 29UL, 30UL, 31UL, 1000UL, 123456789UL }) {
                     var expected = (int)(((long)CyclicRotation.Step(plane: plane, tick: (long)(tick % 30UL))) + phase).FloorModulo(modulus: 30L);
@@ -49,7 +49,7 @@ public sealed class StateCycleReadLawTests {
     }
     [Fact]
     public void TicksPerStepAndEpoch_ScaleAndOffsetTheStepCount() {
-        var definition = BuildDefinition(SlotRow(name: "spin", kind: CellKind.Int, value: 0L, cycle: new WorldStateCycle(EpochTick: 100, Power: 1, TicksPerStep: 20)));
+        var definition = BuildDefinition(SlotRow(name: "spin", kind: CellKind.Int, value: 0L, cycle: new StateCycle(EpochTick: 100, Power: 1, TicksPerStep: 20)));
 
         Assert.Equal(expected: 0L, actual: Read(definition: definition, row: "spin", tick: 0UL));
         Assert.Equal(expected: 0L, actual: Read(definition: definition, row: "spin", tick: 119UL));
@@ -60,9 +60,9 @@ public sealed class StateCycleReadLawTests {
     }
     [Fact]
     public void FixedOutputs_ReadTheRotorTurnsAndComponents() {
-        var turns = BuildDefinition(SlotRow(name: "t", kind: CellKind.Fixed, value: 0L, cycle: new WorldStateCycle(Output: WorldCycleOutput.Turns)));
-        var cos = BuildDefinition(SlotRow(name: "c", kind: CellKind.Fixed, value: 0L, cycle: new WorldStateCycle(Output: WorldCycleOutput.Cos, Power: 11)));
-        var sin = BuildDefinition(SlotRow(name: "s", kind: CellKind.Fixed, value: (3L << FixedQ4816.FractionBitCount), cycle: new WorldStateCycle(Output: WorldCycleOutput.Sin, Power: 13)));
+        var turns = BuildDefinition(SlotRow(name: "t", kind: CellKind.Fixed, value: 0L, cycle: new StateCycle(Output: CycleOutput.Turns)));
+        var cos = BuildDefinition(SlotRow(name: "c", kind: CellKind.Fixed, value: 0L, cycle: new StateCycle(Output: CycleOutput.Cos, Power: 11)));
+        var sin = BuildDefinition(SlotRow(name: "s", kind: CellKind.Fixed, value: (3L << FixedQ4816.FractionBitCount), cycle: new StateCycle(Output: CycleOutput.Sin, Power: 13)));
 
         for (var tick = 0UL; (tick < 90UL); ++tick) {
             Assert.Equal(expected: ((((long)(tick % 30UL)) << FixedQ4816.FractionBitCount) / 30L), actual: Read(definition: turns, row: "t", tick: tick));
@@ -72,9 +72,9 @@ public sealed class StateCycleReadLawTests {
     }
     [Fact]
     public void LatticeOutputs_CarryThePhaseNodeAroundItsRing() {
-        var node = BuildDefinition(SlotRow(name: "n", kind: CellKind.Int, value: 5L, cycle: new WorldStateCycle(Output: WorldCycleOutput.Node, Power: 7)));
-        var x = BuildDefinition(SlotRow(name: "x", kind: CellKind.Fixed, value: (5L << FixedQ4816.FractionBitCount), cycle: new WorldStateCycle(Output: WorldCycleOutput.ProjectionX, Power: 7)));
-        var y = BuildDefinition(SlotRow(name: "y", kind: CellKind.Fixed, value: (5L << FixedQ4816.FractionBitCount), cycle: new WorldStateCycle(Output: WorldCycleOutput.ProjectionY, Power: 7)));
+        var node = BuildDefinition(SlotRow(name: "n", kind: CellKind.Int, value: 5L, cycle: new StateCycle(Output: CycleOutput.Node, Power: 7)));
+        var x = BuildDefinition(SlotRow(name: "x", kind: CellKind.Fixed, value: (5L << FixedQ4816.FractionBitCount), cycle: new StateCycle(Output: CycleOutput.ProjectionX, Power: 7)));
+        var y = BuildDefinition(SlotRow(name: "y", kind: CellKind.Fixed, value: (5L << FixedQ4816.FractionBitCount), cycle: new StateCycle(Output: CycleOutput.ProjectionY, Power: 7)));
 
         for (var tick = 0UL; (tick < 60UL); ++tick) {
             var expected = SymmetryLattice.Cycle(node: 5, steps: CyclicRotation.Step(plane: 1, tick: (long)tick));
@@ -86,7 +86,7 @@ public sealed class StateCycleReadLawTests {
         }
 
         // Power 1 walks one node per step, so thirty steps close the ring on the phase node.
-        var walk = BuildDefinition(SlotRow(name: "n", kind: CellKind.Int, value: 17L, cycle: new WorldStateCycle(Output: WorldCycleOutput.Node)));
+        var walk = BuildDefinition(SlotRow(name: "n", kind: CellKind.Int, value: 17L, cycle: new StateCycle(Output: CycleOutput.Node)));
 
         Assert.Equal(expected: 17L, actual: Read(definition: walk, row: "n", tick: 0UL));
         Assert.Equal(expected: SymmetryLattice.Cycle(node: 17), actual: Read(definition: walk, row: "n", tick: 1UL));
@@ -98,9 +98,9 @@ public sealed class StateCycleReadLawTests {
             Name: CellName.Parse(candidate: "dials"),
             Kind: CellKind.Int,
             Cells: [
-                new WorldStateCell(Key: CellName.Parse(candidate: "a"), Value: 0L, Cycle: new WorldStateCycle(Power: 1)),
-                new WorldStateCell(Key: CellName.Parse(candidate: "b"), Value: 10L, Cycle: new WorldStateCycle(Power: 7, TicksPerStep: 2)),
-                new WorldStateCell(Key: CellName.Parse(candidate: "c"), Value: 4L),
+                new StateCell(Key: CellName.Parse(candidate: "a"), Value: 0L, Cycle: new StateCycle(Power: 1)),
+                new StateCell(Key: CellName.Parse(candidate: "b"), Value: 10L, Cycle: new StateCycle(Power: 7, TicksPerStep: 2)),
+                new StateCell(Key: CellName.Parse(candidate: "c"), Value: 4L),
             ]
         );
         var definition = BuildDefinition(row);
@@ -115,7 +115,7 @@ public sealed class StateCycleReadLawTests {
     }
     [Fact]
     public void Envelope_ClampsTheComputedValue_NeverTheStoredPhase() {
-        var definition = BuildDefinition(SlotRow(name: "spin", kind: CellKind.Int, value: 0L, cycle: new WorldStateCycle(Power: 1), max: 10L, min: 0L));
+        var definition = BuildDefinition(SlotRow(name: "spin", kind: CellKind.Int, value: 0L, cycle: new StateCycle(Power: 1), max: 10L, min: 0L));
 
         Assert.Equal(expected: 9L, actual: Read(definition: definition, row: "spin", tick: 9UL));
         Assert.Equal(expected: 10L, actual: Read(definition: definition, row: "spin", tick: 25UL));
@@ -123,8 +123,8 @@ public sealed class StateCycleReadLawTests {
     }
     [Fact]
     public void SettledPhase_PreservesTheCurrentValueAndNextTransition() {
-        foreach (var output in new[] { WorldCycleOutput.Step, WorldCycleOutput.Node }) {
-            var cycle = new WorldStateCycle(EpochTick: 3, Output: output, Power: 11, TicksPerStep: 4);
+        foreach (var output in new[] { CycleOutput.Step, CycleOutput.Node }) {
+            var cycle = new StateCycle(EpochTick: 3, Output: output, Power: 11, TicksPerStep: 4);
             var live = BuildDefinition(SlotRow(name: "r", kind: CellKind.Int, value: 9L, cycle: cycle));
             var liveRow = SlotRow(name: "r", kind: CellKind.Int, value: 9L, cycle: cycle);
             var settledAt = 205UL;
@@ -145,7 +145,7 @@ public sealed class StateCycleReadLawTests {
     }
     [Fact]
     public void SettledPhase_OnAFixedRow_RidesTheRowsEncoding() {
-        var cycle = new WorldStateCycle(Output: WorldCycleOutput.ProjectionX, Power: 7, TicksPerStep: 3);
+        var cycle = new StateCycle(Output: CycleOutput.ProjectionX, Power: 7, TicksPerStep: 3);
         var row = SlotRow(name: "x", kind: CellKind.Fixed, value: (5L << FixedQ4816.FractionBitCount), cycle: cycle);
         var liveValue = Read(definition: BuildDefinition(row), row: "x", tick: 77UL);
         var settledRaw = cycle.SettledPhase(baseValue: row.Cells![0].Value, currentTick: 77UL, row: row);
@@ -157,32 +157,32 @@ public sealed class StateCycleReadLawTests {
     public void Validator_RefusesTheShapesTheReadSideCannotHonour() {
         static string Refusal(WorldStateRow row) => Validate(definition: BuildDefinition(row));
 
-        Assert.Contains(expectedSubstring: "does not suit", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 0L, cycle: new WorldStateCycle(Output: WorldCycleOutput.Turns))));
-        Assert.Contains(expectedSubstring: "does not suit", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Fixed, value: 0L, cycle: new WorldStateCycle(Output: WorldCycleOutput.Step))));
-        Assert.Contains(expectedSubstring: "only int/fixed cells turn", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Text, value: 0L, cycle: new WorldStateCycle())));
-        Assert.Contains(expectedSubstring: ".cycle.power 30 is outside", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 0L, cycle: new WorldStateCycle(Power: 30))));
-        Assert.Contains(expectedSubstring: ".cycle.power 0 is the identity", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 0L, cycle: new WorldStateCycle(Power: 0))));
-        Assert.Contains(expectedSubstring: ".cycle.ticksPerStep 0", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 0L, cycle: new WorldStateCycle(TicksPerStep: 0))));
-        Assert.Contains(expectedSubstring: ".cycle.substepTicks", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 0L, cycle: new WorldStateCycle(TicksPerStep: 4, SubstepTicks: 4))));
-        Assert.Contains(expectedSubstring: ".cycle.epochTick", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 0L, cycle: new WorldStateCycle(EpochTick: -1))));
-        Assert.Contains(expectedSubstring: "is not a defined WorldCycleOutput", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Fixed, value: 0L, cycle: new WorldStateCycle(Output: unchecked((WorldCycleOutput)byte.MaxValue)))));
-        Assert.Contains(expectedSubstring: "is not a symmetry-lattice node", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 240L, cycle: new WorldStateCycle(Output: WorldCycleOutput.Node))));
-        Assert.Contains(expectedSubstring: "declares both advance and cycle", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 0L, cycle: new WorldStateCycle()) with { Advance = new WorldStateAdvance(RateDenominator: 1, RateNumerator: 1) }));
+        Assert.Contains(expectedSubstring: "does not suit", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 0L, cycle: new StateCycle(Output: CycleOutput.Turns))));
+        Assert.Contains(expectedSubstring: "does not suit", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Fixed, value: 0L, cycle: new StateCycle(Output: CycleOutput.Step))));
+        Assert.Contains(expectedSubstring: "only int/fixed cells turn", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Text, value: 0L, cycle: new StateCycle())));
+        Assert.Contains(expectedSubstring: ".cycle.power 30 is outside", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 0L, cycle: new StateCycle(Power: 30))));
+        Assert.Contains(expectedSubstring: ".cycle.power 0 is the identity", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 0L, cycle: new StateCycle(Power: 0))));
+        Assert.Contains(expectedSubstring: ".cycle.ticksPerStep 0", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 0L, cycle: new StateCycle(TicksPerStep: 0))));
+        Assert.Contains(expectedSubstring: ".cycle.substepTicks", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 0L, cycle: new StateCycle(TicksPerStep: 4, SubstepTicks: 4))));
+        Assert.Contains(expectedSubstring: ".cycle.epochTick", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 0L, cycle: new StateCycle(EpochTick: -1))));
+        Assert.Contains(expectedSubstring: "is not a defined CycleOutput", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Fixed, value: 0L, cycle: new StateCycle(Output: unchecked((CycleOutput)byte.MaxValue)))));
+        Assert.Contains(expectedSubstring: "is not a symmetry-lattice node", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 240L, cycle: new StateCycle(Output: CycleOutput.Node))));
+        Assert.Contains(expectedSubstring: "declares both advance and cycle", actualString: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 0L, cycle: new StateCycle()) with { Advance = new StateAdvance(RateDenominator: 1, RateNumerator: 1) }));
         Assert.Contains(expectedSubstring: "declares cycle on a keyed row", actualString: Refusal(new WorldStateRow(
             Name: CellName.Parse(candidate: "r"),
             Kind: CellKind.Int,
             Capacity: 4,
-            Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: 0L)],
-            Cycle: new WorldStateCycle()
+            Cells: [new StateCell(Key: CellName.Parse(candidate: "0"), Value: 0L)],
+            Cycle: new StateCycle()
         )));
         Assert.Contains(expectedSubstring: "declares cycle beside advance or dynamics", actualString: Refusal(new WorldStateRow(
             Name: CellName.Parse(candidate: "r"),
             Kind: CellKind.Int,
-            Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "k"), Value: 0L, Advance: new WorldStateAdvance(RateDenominator: 1, RateNumerator: 1), Cycle: new WorldStateCycle())]
+            Cells: [new StateCell(Key: CellName.Parse(candidate: "k"), Value: 0L, Advance: new StateAdvance(RateDenominator: 1, RateNumerator: 1), Cycle: new StateCycle())]
         )));
 
         // The well-formed shapes validate clean, so the refusals above are not a validator that refuses everything.
-        Assert.Equal(expected: string.Empty, actual: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 5L, cycle: new WorldStateCycle(Output: WorldCycleOutput.Node, Power: 13, TicksPerStep: 8))));
-        Assert.Equal(expected: string.Empty, actual: Refusal(SlotRow(name: "r", kind: CellKind.Fixed, value: 0L, cycle: new WorldStateCycle(Output: WorldCycleOutput.ProjectionY))));
+        Assert.Equal(expected: string.Empty, actual: Refusal(SlotRow(name: "r", kind: CellKind.Int, value: 5L, cycle: new StateCycle(Output: CycleOutput.Node, Power: 13, TicksPerStep: 8))));
+        Assert.Equal(expected: string.Empty, actual: Refusal(SlotRow(name: "r", kind: CellKind.Fixed, value: 0L, cycle: new StateCycle(Output: CycleOutput.ProjectionY))));
     }
 }

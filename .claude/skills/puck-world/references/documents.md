@@ -290,7 +290,7 @@ remarks); a write failure is caught at the tap and narrated on stderr by name,
 never fatal to the tick. Effects and
 predicates address a (row, KEY) PAIR — an omitted key means the row's slot cell,
 and `WorldStateRow.IsKeyed` is the discriminator: one switch over the row's
-declared `Domain` (`WorldStateDomain` — `Slot`/`Keys`/`KeysOf`/`CellsOf`/`Ring`;
+declared `Domain` (`StateDomain` — `Slot`/`Keys`/`KeysOf`/`CellsOf`/`Ring`;
 an unauthored row infers `Slot` or `Keys` from `cells`/`capacity`/`phase` alone
 (a `phase` row has no single value to read even before its first participant,
 so it infers `Keys`), so a plain row spells nothing new), exhaustive with
@@ -405,8 +405,8 @@ actions, and the runtime never performs document lookups on the action hot path.
 The lane is the lifetime declaration; there is no second `lifetime` field to
 contradict it.
 
-`WorldStateCatalog` (`WorldStateCompilation.cs`) is the typed compiled view of
-that inventory. It assigns catalog-bound `WorldStateHandle` values in
+`StateCatalog` (`Puck.State/StateCatalog.cs`) is the typed compiled view of
+that inventory. It assigns catalog-bound `StateHandle` values in
 world → body → identity document order and records each declaration's ownership
 lane, slot/keyed/lattice storage shape, deterministic value kind, and lane-local
 ordinal. Runtime processors resolve `(lane, name)` once, retain the handle while
@@ -487,7 +487,7 @@ remnant `exp(−fogDensity·far)` at the far plane. Renderer contract:
 
 ### `dynamics` — the personality table
 
-`WorldDynamicsRow` (`WorldDynamics.cs`): named rows of `{name, f, zeta, r}` —
+`DynamicsRow` (`Puck.State/DynamicsRow.cs`): named rows of `{name, f, zeta, r}` —
 a t3ssel8r-style pole-matched second-order response every follower consumer
 names by `name` rather than authoring inline, so one row can drive a look's
 root/part followers, a camera boom, a kit's planar shaping, and a state cell's
@@ -538,7 +538,7 @@ knot counts) catch authoring mistakes; the exact solve itself — chord length,
 tangent/curvature consistency, an unreachable curvature, an interior cusp, Q32
 carrier overflow — is the LAST gate, run once by compiling the row
 (`WorldCurveRow.Compiled`, cached per row instance, the
-`WorldDynamicsRow.Compiled` precedent) rather than duplicated in the
+`DynamicsRow.Compiled` precedent) rather than duplicated in the
 validator. Every reference resolves through `WorldDefinitionRows.FindCurve`
 and refuses a dangling name; removing a still-referenced row is refused naming
 the referrer (`WorldDefinitionRows.EnumerateCurveReferences`). Authored with
@@ -776,7 +776,7 @@ water quenches fire — no interaction names the boundary.
 One primitive, three separable parts. A **source** is a shape, a **site** is a
 place that draws, a **moment** is when.
 
-**Source** (`WorldGenerator`) is the document's whole randomness vocabulary.
+**Source** (`StateGenerator`) is the document's whole randomness vocabulary.
 `source` selects the shape and each shape reads a DISJOINT field set — a foreign
 field refuses BY NAME, including `bound`/`mode`, which are non-nullable and are
 refused against their declared defaults:
@@ -797,14 +797,14 @@ refused against their declared defaults:
 - `streamDraw` — no fields. One raw 32-bit draw; refuses a `mode`.
 
 The alias table over a source's full entry set is compiled once per
-`WorldGenerator` instance (`WorldGeneratorEngine`, a `ConditionalWeakTable`), so
+`StateGenerator` instance (`GeneratorEngine`, a `ConditionalWeakTable`), so
 per-tick draws do not rebuild it; a drawn-down pool is rebuilt allocation-free
 in bounded stack storage per emission, with the identical alias mapping.
 
 A lattice row's paint may carry one `draw` fill (`WorldLatticeFill.Draw`,
 `{ "$type": "draw", "source" | "generator" }`, numeric sources only): the
 per-cell lattice draw. It is one whole-field pass of the row's stream
-(`WorldGeneratorEngine.TryFireBatch`; cell `k` = the sample at
+(`GeneratorEngine.TryFireBatch`; cell `k` = the sample at
 `drawCursor + k`, mask threaded cell to cell), painted at boot by `WorldServer`
 at the pass the row's `drawCursor`/`drawnMasks` name, and advanced one pass plus
 repainted by `world.generate <row>` (`TryComposeGenerate`'s lattice arm, then
@@ -816,7 +816,7 @@ fields. Read law:
 `tests/Puck.World.Schema.Tests/WorldLatticeDrawLawTests.cs`; live proof:
 `tests/Puck.World.Canaries/lattice-draw-fill`.
 
-`WorldGeneratorCapacity`: 32 contexts, 64 alternatives per context (one
+`GeneratorCapacity`: 32 contexts, 64 alternatives per context (one
 drawn-mask bit each), bound ≤ 64, token ≤ 64 UTF-16 units, 64 weighted outcomes,
 64 declared sources, uniform bounds inside int32.
 
@@ -825,7 +825,7 @@ section (`{"name": …, "generator": {…}}`) and reference it from any number o
 sites, or inline it at one site — the two spellings compile to the identical
 record.
 
-**Site** (`WorldDraw`) declares a value is drawn: exactly one of `source` (a
+**Site** (`Draw`) declares a value is drawn: exactly one of `source` (a
 declared row's name) or `generator` (inline), plus `timing`. Three sites:
 
 ```json
@@ -877,7 +877,7 @@ below it; that collapses its domain to a single value until the population lane
 lifts the floor.
 
 **Reserved `$` names are ENGINE-MINTED ONLY.** The
-rule lives in `WorldStateReservedCells.TryValidateReservedCell`
+rule lives in `StateReservedCells.TryValidateReservedCell`
 (`Puck.World.Schema/WorldState.cs`), called from `WorldDefinitionValidator`'s state
 walk — which runs at boot, at every live mutation and on every undo-replay entry
 — AND from the `UpsertStateCell` compose arm, so a hand-authored file and a
@@ -909,7 +909,7 @@ key is the one reserved exception). `nonNegative` is a per-row floor ANY numeric
 declare, enforced regardless of `min`; `int` + `nonNegative` IS a timer, never
 a fifth kind, and the cross-document write-back channel
 (`Server.WorldOwnedWorlds.Decide`) reads that same row trait rather than
-assuming a floor of its own. Capped at `WorldStateCapacity.MaxRows` (256)
+assuming a floor of its own. Capped at `StateCapacity.MaxRows` (256)
 rows, `MaxCellsPerRow` (128) cells per row (which an authored `capacity` may
 only NARROW, never widen), and
 `MaxTextValueLength` (256) text UTF-16 code units, refused by name past any.
@@ -921,7 +921,7 @@ cell instead of refusing (in-place rewrites of an existing key never grow the
 row, so they can never trigger it, and never move that key's age — true
 insertion-order FIFO, not LRU). Requires a declared `capacity` — refused by
 name without one, which also covers a slot row, since a slot never declares
-one. The composition itself (`WorldStateCellWriter.ApplyEviction`, `Puck.World.Schema`,
+one. The composition itself (`StateCellWriter.ApplyEviction`, `Puck.State`,
 2026-08-06) is a SHARED pure function: `WorldServer.TryCompose`'s
 `UpsertStateCell` arm calls it for the running world's own document (so a live
 write and every `world.undo` journal re-composition reproduce the identical
@@ -932,7 +932,7 @@ ordered mutation domain (a self-authored `chat.log`, or a cross-document
 `chat.whisper` landing in a bounded inbox — see `authority.md`'s C-CHAT entry)
 — one composition, never two readings of the eviction rule.
 
-A row may instead declare `advance` (`WorldStateAdvance`, `rateNumerator`/
+A row may instead declare `advance` (`StateAdvance`, `rateNumerator`/
 `rateDenominator`/`epochTick`) — a CONTINUOUS accumulation trait, complementary
 to `rules`' periodicity/cooldown vocabulary above rather than a duplicate of
 it. The stored slot cell is a BASE; the read value is `base +
@@ -965,7 +965,7 @@ back past the old epoch — owner ruling 2026-08-06: **settle at save, in the
 serialized PROJECTION only.** `WorldSessionCapture.Capture` (the `world.save`
 fold, `src/Puck.World/WorldSessionCapture.cs`) writes every advancing row's
 slot cell AND every advancing keyed cell's own base as its LIVE value
-(`WorldStateAdvance.ComputeCurrentValue`) at the server's completed tick, and
+(`StateAdvance.ComputeCurrentValue`) at the server's completed tick, and
 projects `epochTick: 0` — never touching the live in-memory document, exactly
 like the render-lever/population/screens folds this same class already does.
 Tick 0 of the reloaded session therefore already reads what the save
@@ -980,7 +980,7 @@ wildcard — the SAME subject for the whole-row pair (`UpsertStateRow`/
 narrower authority than any other section (see [mutations.md](mutations.md)
 and [authority.md](authority.md)).
 
-A row or a keyed cell may instead declare `dynamics` (`WorldStateDynamics`,
+A row or a keyed cell may instead declare `dynamics` (`StateDynamics`,
 `{row, y0, v0, epochTick}`) — a LIVING trait, mutually exclusive with
 `advance`/`draw`/a slot-row's own bare `value` shape the same way `advance`
 already is. `row` names a `dynamics` section row (below); `y0`/`v0` are the
@@ -1008,7 +1008,7 @@ it settles `advance`: `y0`/`v0` become the live eased sample at the saved
 tick and `epochTick` projects to `0`, so a reloaded session keeps easing with
 no freeze.
 
-A row or a keyed cell may instead declare `cycle` (`WorldStateCycle`,
+A row or a keyed cell may instead declare `cycle` (`StateCycle`,
 `{word?, power, output, ticksPerStep, epochTick, substepTicks?}`) — the
 tick-indexed rotation, mutually exclusive with `advance`/`dynamics`/`draw`/
 `lattice` and scalar-only at the row level the same way they are. The value is
@@ -2262,7 +2262,7 @@ zone, and neutral-grace duration.
   from population capacity. Do not use live instance count to size reserved
   bone storage.
 - `WorldHudCapacity` (`WorldHud.cs`): see [hud.md](hud.md).
-- `WorldStateCapacity` (`WorldState.cs`): `MaxRows = 256`,
+- `StateCapacity` (`Puck.State/StateRow.cs`): `MaxRows = 256`,
   `MaxCellsPerRow = 128` (an authored `capacity` may only narrow it),
   `MaxTextValueLength = 256` (UTF-16 units, a text cell's value), and
   `MaxBodySlots = 128` across the `body` and `identity` lanes (the fixed
@@ -2290,21 +2290,20 @@ zone, and neutral-grace duration.
   list (`Puck.World.Client.WorldCameraRigCompiler` translates it to the
   document-blind IR in `Puck.SdfVm.Views`; see [views.md](views.md)).
 - `WorldViews.cs` — the `views` section (slots, layouts, seat framing).
-- `WorldState.cs` — the `state` section: `WorldStateSection` (world/body/identity ownership lanes),
-  `WorldStateRow` (the document-cell substrate — `kind` int/fixed/bool/text,
-  `value` sugar or `cells`, a `Domain`), `WorldStateCell`, and `WorldStateCapacity`.
-- `WorldStateDomain.cs` — the row's declared cell domain (`Slot`/`Keys`/
-  `KeysOf`/`CellsOf`/`Ring`), a closed union over `UnionPolyfill.cs`'s shared
-  `[Union]` marker.
-- `WorldStateCompilation.cs` — the immutable typed descriptor catalog over the
-  state section: ownership lane, storage shape, value kind, stable handle and
-  lane-local ordinals, plus one-time `(lane, name)` resolution for runtime
-  processors.
+- `WorldState.cs` — the `state` section: `WorldStateSection` (the document's
+  `IStateSection` — `world` rows, `body`/`identity` slot lanes, `lattices`) and
+  `WorldStateRow` (a `Puck.State.StateRow` plus the `gatesDrive` and `field`
+  traits). The row/cell substrate (`StateRow`, `StateCell`, `StateCapacity`), the
+  domains (`StateDomain`, a closed union over `Puck.State/Union.cs`'s `[Union]`
+  marker), the traits, the catalog (`StateCatalog`: ownership lane, storage shape,
+  value kind, stable handle and lane-local ordinals), the topologies, the
+  generators, and the patterns live in `src/Puck.State/`.
 - `WorldDefinitionRows.cs` — the one row-find per section
   (`FindCreation`/`FindPlacement`/`FindKit`/`FindSpawnPoint`/`FindStateRow`),
   ordinal and allocation-free.
-- `WorldStateReader.cs` — the ONE `(definition, rowName, key, tick)` →
-  `(row, rawValue, text)` read over the `state` section. Every live read
+- `WorldStateReader.cs` — the definition-anchored door to `Puck.State.StateReader`,
+  the ONE `(rows, rowName, key, tick)` → `(row, rawValue, text)` read over the
+  `state` section. Every live read
   routes through it: a rule's gate comparand and live copy operand
   (`WorldServer.ReadStateCell`), a rule effect's read-modify-write
   (`FireWorldRuleEffect`), the `world.state` read-backs, the HUD
@@ -2313,7 +2312,7 @@ zone, and neutral-grace duration.
   unknown ROW returns false, a known row missing the cell returns true with a
   null `rawValue`. **The `tick` parameter is what an `advance` row's value is
   computed at** (see the `state` section above) — it returns a RAW value
-  rather than a `WorldStateCell` precisely because a computed value has no
+  rather than a `StateCell` precisely because a computed value has no
   stored cell to hand back, and minting one per read would allocate on the
   per-frame HUD path. The whole-document validator and the durable
   identity-document reads (`WorldIdentity`, `Server/WorldOwnedWorlds`)
@@ -2357,7 +2356,7 @@ remains full authority trust. Test socket observations using authenticated
 submission stamps, and check exact topology and query work bounds at preflight.
 
 A `patterns` section row is a regular language over cell values
-(`WorldPatterns.cs`: symbols as value ranges, a closed node vocabulary with
+(`Puck.State/PatternRow.cs` + `CompiledPattern.cs`: symbols as value ranges, a closed node vocabulary with
 complement and intersection, a derivative machine inside a state budget of at
 most 256) compiled at validation;
 rules read it through `$match:<pattern>:<row>[:<direction>|:any][:prefix|:mask|:count]` over a board

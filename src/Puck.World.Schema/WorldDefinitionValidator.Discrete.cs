@@ -5,8 +5,8 @@ public static partial class WorldDefinitionValidator {
         ValidateTokenAndPhaseRows(definition, errors);
         ValidateStateDisclosure(definition, errors);
         var topologies = definition.StateRaw?.Lattices ?? [];
-        if (topologies.Count > WorldTopologyCompilation.MaxTopologies) {
-            errors.Add($"state.lattices exceeds {WorldTopologyCompilation.MaxTopologies} topologies.");
+        if (topologies.Count > TopologyCompilation.MaxTopologies) {
+            errors.Add($"state.lattices exceeds {TopologyCompilation.MaxTopologies} topologies.");
         }
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var topology in topologies) {
@@ -16,13 +16,13 @@ public static partial class WorldDefinitionValidator {
             }
             // A physical field's case type structurally has no wrap/radius/directions/elementAliases property to
             // author in the first place, so there is nothing left to check for it here.
-            if (topology.Kind != WorldTopologyKind.Field && !WorldTopologyCompilation.TryValidate(topology, out var reason)) {
+            if (topology.Kind != TopologyKind.Field && !TopologyCompilation.TryValidate(topology, out var reason)) {
                 errors.Add($"state.lattices '{topology.Name}': {reason}.");
             }
         }
         var totalCells = 0L;
         foreach (var row in definition.State ?? []) {
-            if (row is null || row.EffectiveDomain is not WorldStateDomain.CellsOf board || row.Field is not null) {
+            if (row is null || row.EffectiveDomain is not StateDomain.CellsOf board || row.Field is not null) {
                 continue;
             }
             if (row.Kind is not (CellKind.Int or CellKind.Bool) || row.Draw is not null ||
@@ -48,8 +48,8 @@ public static partial class WorldDefinitionValidator {
                 }
             }
         }
-        if (totalCells > WorldTopologyCompilation.MaxTotalCells) {
-            errors.Add($"state board storage exceeds the {WorldTopologyCompilation.MaxTotalCells}-cell world budget.");
+        if (totalCells > TopologyCompilation.MaxTotalCells) {
+            errors.Add($"state board storage exceeds the {TopologyCompilation.MaxTotalCells}-cell world budget.");
         }
     }
 
@@ -61,12 +61,12 @@ public static partial class WorldDefinitionValidator {
             // A physical-field row (CellsOf domain + a Field trait) legitimately carries a draw fill inside its own
             // paint (validated separately in WorldDefinitionValidator.State.cs); every OTHER discrete domain (KeysOf,
             // or CellsOf with no Field trait — a plain board) admits none of these continuous or draw traits.
-            var domainTraits = (row.Domain is WorldStateDomain.CellsOf or WorldStateDomain.KeysOf ? 1 : 0) + (row.Phase is null ? 0 : 1);
-            var isPhysicalField = ((row.Domain is WorldStateDomain.CellsOf) && (row.Field is not null));
+            var domainTraits = (row.Domain is StateDomain.CellsOf or StateDomain.KeysOf ? 1 : 0) + (row.Phase is null ? 0 : 1);
+            var isPhysicalField = ((row.Domain is StateDomain.CellsOf) && (row.Field is not null));
             if (domainTraits > 1 || (domainTraits > 0 && !isPhysicalField && (row.Field is not null || row.Draw is not null || row.Advance is not null || row.Dynamics is not null || row.Cycle is not null || row.Evicts || row.GatesDrive))) {
                 errors.Add($"state row '{row.Name}': discrete storage traits are mutually exclusive and cannot carry continuous or draw traits.");
             }
-            var domainName = (row.EffectiveDomain is WorldStateDomain.KeysOf keysOf ? keysOf.Row.Value : null);
+            var domainName = (row.EffectiveDomain is StateDomain.KeysOf keysOf ? keysOf.Row.Value : null);
             if (row.ValuesFrom is { } topologyName) {
                 var topology = WorldTopologyCompilation.Find(definition, topologyName);
                 if (domainName is null || row.Kind != CellKind.Int || topology is null ||
@@ -76,7 +76,7 @@ public static partial class WorldDefinitionValidator {
             }
             if (domainName is not null) {
                 var domain = WorldDefinitionRows.FindStateRow(definition.State, domainName);
-                if (domain is null || domain.EffectiveDomain is not WorldStateDomain.Keys) {
+                if (domain is null || domain.EffectiveDomain is not StateDomain.Keys) {
                     errors.Add($"state row '{row.Name}': '{domainName}' names no token domain.");
                 } else {
                     var keys = new HashSet<CellName>((domain.Cells ?? []).Where(c => c is not null).Select(c => c.Key));
@@ -87,7 +87,7 @@ public static partial class WorldDefinitionValidator {
                     }
                 }
             }
-            if (row.EffectiveDomain is WorldStateDomain.KeysOf { Ordered: true } && (row.Kind != CellKind.Bool || (row.Cells ?? []).Any(c => c is not null && c.Value != 1))) {
+            if (row.EffectiveDomain is StateDomain.KeysOf { Ordered: true } && (row.Kind != CellKind.Bool || (row.Cells ?? []).Any(c => c is not null && c.Value != 1))) {
                 errors.Add($"state row '{row.Name}': an ordered keysOf (pile/zone) row contains boolean membership cells whose value is true.");
             }
             if (row.Phase is { } phase) {
@@ -96,8 +96,8 @@ public static partial class WorldDefinitionValidator {
         }
     }
 
-    private static void ValidatePhase(WorldStateRow row, WorldStatePhase phase, List<string> errors) {
-        if (row.Kind != CellKind.Int || row.EffectiveDomain is WorldStateDomain.Slot || row.Cells is { Count: > 0 } || row.Capacity is not null || phase.Sequence < 0) {
+    private static void ValidatePhase(WorldStateRow row, StatePhase phase, List<string> errors) {
+        if (row.Kind != CellKind.Int || row.EffectiveDomain is StateDomain.Slot || row.Cells is { Count: > 0 } || row.Capacity is not null || phase.Sequence < 0) {
             errors.Add($"state row '{row.Name}': phase requires an integer row without cells/capacity and a nonnegative sequence.");
         }
     }

@@ -1,10 +1,10 @@
 using System.Runtime.CompilerServices;
 using Puck.Maths;
 
-namespace Puck.World;
+namespace Puck.State;
 
 /// <summary>
-/// The one deterministic sampling core behind every <see cref="WorldDraw"/> site — shared by the live <c>Generate</c>
+/// The one deterministic sampling core behind every <see cref="Draw"/> site — shared by the live <c>Generate</c>
 /// mutation (<c>Puck.World.Server.WorldServer</c>) and the boot/first-fill resolver
 /// (<c>Puck.World.WorldDrawBootResolver</c>), which runs before a <c>Server.WorldServer</c> exists at all and
 /// therefore cannot reach into that project. Living here — the lowest layer both reach — is what keeps there from
@@ -22,7 +22,7 @@ namespace Puck.World;
 /// <c>world.instance.start</c> instance's own name. Not document data: it is what lets three instances of one
 /// document draw differently while each stays exactly reproducible from (document, instance name, draw
 /// history);</description></item>
-/// <item><description>the site descriptor (see <see cref="WorldDrawSites"/>) — what separates two sites. An identity,
+/// <item><description>the site descriptor — what separates two sites. An identity,
 /// never a position: a positional ordinal is read off the live document's site set, which moves whenever the boot
 /// resolver clears a settled facet, a <c>world.row.remove state</c> retires a draw row, or an <c>UpsertStateRow</c> adds
 /// one — silently re-pointing a live site's stream while its cursor kept counting.</description></item>
@@ -40,25 +40,25 @@ namespace Puck.World;
 /// <c>Pcg32XshRr.Advance(n * cost)</c>, an O(1) jump, and never a replay of the earlier draws. There is no per-tick
 /// cadence ceiling: a rule redrawing a site on every tick costs the same at cursor 1,000,000 as at cursor 0.</para>
 /// </remarks>
-public static class WorldGeneratorEngine {
+public static class GeneratorEngine {
     /// <summary>The engine-wide constant folded into every site's seed — the ladder's first rung.</summary>
     private const ulong EngineConstant = 0x5075636B44726177UL; // "PuckDraw", ASCII, as a fixed 64-bit constant.
     /// <summary>The largest <c>Pcg32XshRr</c> stream id a site descriptor maps onto — see this type's remarks.</summary>
     private const ulong SiteStreamIdMask = 0xFFFFUL;
 
     /// <summary>One emission's result — exactly one of <see cref="Text"/>/<see cref="Numeric"/> is set, matching the
-    /// firing <see cref="WorldGenerator.Source"/>.</summary>
+    /// firing <see cref="StateGenerator.Source"/>.</summary>
     /// <param name="Text">The space-joined Markov emission, or <see langword="null"/> for a numeric source.</param>
     /// <param name="Numeric">The raw numeric draw, or <see langword="null"/> for a Markov source.</param>
     /// <param name="Samples">How many samples this emission consumed — the amount the site's cursor advances by.
     /// Always <c>1</c> for a numeric source; the walk's own token count for a Markov one.</param>
     /// <param name="Masks">The site's updated drawn masks, or <see langword="null"/> when nothing drawn (a source under
-    /// <see cref="WorldGeneratorMode.WithReplacement"/>, and every source that cannot exhaust). A Markov source carries one
+    /// <see cref="GeneratorMode.WithReplacement"/>, and every source that cannot exhaust). A Markov source carries one
     /// mask per context, by declaration ordinal; a weighted numeric source carries exactly one.</param>
     public readonly record struct FireResult(string? Text, long? Numeric, long Samples, IReadOnlyList<ClosedBitset256>? Masks);
 
     // What a source's declaration determines once: each context's entry set expanded into units, a weighted source's
-    // entry set expanded into units, and the context key → ordinal map. Built once per WorldGenerator instance and
+    // entry set expanded into units, and the context key → ordinal map. Built once per StateGenerator instance and
     // held weakly beside it, so a site drawn every tick pays the table build once rather than per emission. A unit is
     // one draw of one entry: entry i contributes Multiplicity units, each carrying the entry's weight and ordinal,
     // and a drawn mask holds one bit per unit. The full table samples a unit ordinal, so a table over the same
@@ -66,7 +66,7 @@ public static class WorldGeneratorEngine {
     // mode mid-pass) is the site's membership, not the source's, and is rebuilt allocation-free in stack storage for
     // each emission.
     private sealed class CompiledSource {
-        public CompiledSource(WorldGenerator generator) {
+        public CompiledSource(StateGenerator generator) {
             var contexts = (generator.Contexts ?? []);
 
             Ordinals = new Dictionary<CellName, int>(capacity: contexts.Count);
@@ -147,7 +147,7 @@ public static class WorldGeneratorEngine {
                 units += Math.Max(val1: 1, val2: counts[index]);
             }
 
-            if (units > WorldGeneratorCapacity.MaxEntriesPerSet) {
+            if (units > GeneratorCapacity.MaxEntriesPerSet) {
                 return new EntrySet(
                     unitEntries: [],
                     unitWeights: [],
@@ -182,12 +182,12 @@ public static class WorldGeneratorEngine {
         }
     }
 
-    private static readonly ConditionalWeakTable<WorldGenerator, CompiledSource> s_compiled = new();
+    private static readonly ConditionalWeakTable<StateGenerator, CompiledSource> s_compiled = new();
 
-    private static CompiledSource Compiled(WorldGenerator generator) =>
+    private static CompiledSource Compiled(StateGenerator generator) =>
         s_compiled.GetValue(
             key: generator,
-            createValueCallback: static (WorldGenerator source) => new CompiledSource(generator: source)
+            createValueCallback: static (StateGenerator source) => new CompiledSource(generator: source)
         );
 
     // One draw from a unit set under a mode: the full table when nothing is drawn (or the mode never exhausts), else
@@ -195,11 +195,11 @@ public static class WorldGeneratorEngine {
     // RestartOnExhaustion, in the same emission. Exactly two generator advances either way, so cursor seeking
     // stays exact. On success the picked unit's bit is set in `mask` (exhausting modes only) and the unit's ENTRY
     // ordinal is returned; -1 with `reason` set otherwise.
-    private static int DrawEntry(WorldGeneratorMode mode, EntrySet? set, ref ClosedBitset256 mask, ref Pcg32XshRr rng, string what, out string reason) {
+    private static int DrawEntry(GeneratorMode mode, EntrySet? set, ref ClosedBitset256 mask, ref Pcg32XshRr rng, string what, out string reason) {
         reason = string.Empty;
 
-        if (set?.UnitCount > WorldGeneratorCapacity.MaxEntriesPerSet) {
-            reason = $"{what} holds {set.UnitCount} units, more than the {WorldGeneratorCapacity.MaxEntriesPerSet} a drawn mask can hold";
+        if (set?.UnitCount > GeneratorCapacity.MaxEntriesPerSet) {
+            reason = $"{what} holds {set.UnitCount} units, more than the {GeneratorCapacity.MaxEntriesPerSet} a drawn mask can hold";
 
             return -1;
         }
@@ -210,7 +210,7 @@ public static class WorldGeneratorEngine {
             return -1;
         }
 
-        if (mode == WorldGeneratorMode.WithReplacement) {
+        if (mode == GeneratorMode.WithReplacement) {
             return set.UnitEntries[set.Full.Sample(generator: ref rng)];
         }
 
@@ -222,7 +222,7 @@ public static class WorldGeneratorEngine {
             picked = set.Full.Sample(generator: ref rng);
         }
         else {
-            Span<(int Element, ulong Weight)> buffer = stackalloc (int, ulong)[WorldGeneratorCapacity.MaxEntriesPerSet];
+            Span<(int Element, ulong Weight)> buffer = stackalloc (int, ulong)[GeneratorCapacity.MaxEntriesPerSet];
             var pooled = 0;
             var anyWeight = false;
 
@@ -236,7 +236,7 @@ public static class WorldGeneratorEngine {
             if ((pooled == 0) || !anyWeight) {
                 // The mask is drawn out (or only weightless units remain). What happens next is authored, never
                 // inferred.
-                if (mode == WorldGeneratorMode.WithoutReplacement) {
+                if (mode == GeneratorMode.WithoutReplacement) {
                     reason = ((pooled == 0)
                         ? $"{what} is drawn out ({units} units, mode withoutReplacement) — declare mode restartOnExhaustion to draw again from the full set"
                         : $"{what} has only zero-weight units left undrawn (mode withoutReplacement) — declare mode restartOnExhaustion or give every entry weight");
@@ -336,7 +336,7 @@ public static class WorldGeneratorEngine {
 
         return entries[selected].Element;
     }
-    private static bool TryFireMarkov(WorldGenerator generator, ref Pcg32XshRr rng, IReadOnlyList<ClosedBitset256>? masks, out FireResult result, out string reason) {
+    private static bool TryFireMarkov(StateGenerator generator, ref Pcg32XshRr rng, IReadOnlyList<ClosedBitset256>? masks, out FireResult result, out string reason) {
         var contexts = generator.Contexts!;
         var compiled = Compiled(generator: generator);
         var tokens = new List<string>(capacity: generator.Bound);
@@ -392,7 +392,7 @@ public static class WorldGeneratorEngine {
 
             samples++;
 
-            if (generator.Mode != WorldGeneratorMode.WithReplacement) {
+            if (generator.Mode != GeneratorMode.WithReplacement) {
                 working[ordinal] = mask;
                 drawn = true;
             }
@@ -419,14 +419,14 @@ public static class WorldGeneratorEngine {
     // One numeric sample of a non-Markov source at the generator's current position, threading the one mask a
     // weighted source draws through. The single draw TryFire answers and every cell of a TryFireBatch fill share
     // this body, so a fill's cell k is exactly the sample a site at cursor + k would have drawn.
-    private static bool TryDrawNumeric(WorldGenerator generator, CellKind targetKind, ref Pcg32XshRr rng, ref ClosedBitset256 mask, out long value, out string reason) {
+    private static bool TryDrawNumeric(StateGenerator generator, CellKind targetKind, ref Pcg32XshRr rng, ref ClosedBitset256 mask, out long value, out string reason) {
         switch (generator.Source) {
-            case WorldGeneratorSource.UniformRange: {
+            case GeneratorSource.UniformRange: {
                     var span = unchecked((uint)(generator.RangeMax!.Value - generator.RangeMin!.Value));
                     var fraction = rng.NextUnitFraction32();
                     // Multiply-high map of a uniform fraction onto [0, span] — one fixed-cost advance, no rejection, so
                     // cursor seeking stays exact. The at-most-n/2^32 deviation this trades for an unbiased-via-rejection
-                    // draw is the deliberate price of being seekable (see WorldGeneratorSource.UniformRange).
+                    // draw is the deliberate price of being seekable (see GeneratorSource.UniformRange).
                     var offset = ((uint)(((((ulong)span) + 1UL) * fraction.Value) >> 32));
 
                     value = (generator.RangeMin.Value + offset);
@@ -434,7 +434,7 @@ public static class WorldGeneratorEngine {
 
                     return true;
                 }
-            case WorldGeneratorSource.WeightedNumeric: {
+            case GeneratorSource.WeightedNumeric: {
                     var picked = DrawEntry(
                         mask: ref mask,
                         mode: generator.Mode,
@@ -448,12 +448,12 @@ public static class WorldGeneratorEngine {
 
                     return (picked >= 0);
                 }
-            case WorldGeneratorSource.StreamDraw:
+            case GeneratorSource.StreamDraw:
                 value = unchecked((long)rng.NextUInt32());
                 reason = string.Empty;
 
                 return true;
-            case WorldGeneratorSource.SymmetryOrbit: {
+            case GeneratorSource.SymmetryOrbit: {
                     var compiled = Compiled(generator: generator);
                     var picked = DrawEntry(
                         mask: ref mask,
@@ -484,7 +484,7 @@ public static class WorldGeneratorEngine {
     /// <returns>The raw cell value.</returns>
     public static long EncodeNode(int node, CellKind targetKind) =>
         ((targetKind == CellKind.Fixed) ? (((long)node) << FixedQ4816.FractionBitCount) : node);
-    private static bool TryRunBatch(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, int sampleCount, bool writeValues, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason) {
+    private static bool TryRunBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, int sampleCount, bool writeValues, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: generator);
 
         masksAfter = null;
@@ -502,13 +502,13 @@ public static class WorldGeneratorEngine {
         }
 
         if (!Enum.IsDefined(value: generator.Mode)) {
-            reason = $"mode '{generator.Mode}' is not a defined WorldGeneratorMode";
+            reason = $"mode '{generator.Mode}' is not a defined GeneratorMode";
 
             return false;
         }
 
         if (WritesText(source: generator.Source)) {
-            reason = $"source={WorldRefusalSpelling.GeneratorSource(source: generator.Source)} writes text and cannot fill cells";
+            reason = $"source={StateSpelling.GeneratorSource(source: generator.Source)} writes text and cannot fill cells";
 
             return false;
         }
@@ -528,7 +528,7 @@ public static class WorldGeneratorEngine {
 
         rng.Advance(count: unchecked((((ulong)cursor) * AdvancesPerSample(source: generator.Source))));
 
-        var exhausts = (Exhausts(source: generator.Source) && (generator.Mode != WorldGeneratorMode.WithReplacement));
+        var exhausts = (Exhausts(source: generator.Source) && (generator.Mode != GeneratorMode.WithReplacement));
         var mask = ((exhausts && (masks is { Count: > 0 })) ? masks[0] : default(ClosedBitset256));
 
         // A pass that neither writes values nor exhausts has no output at all: its only purpose would be the tail masks,
@@ -575,7 +575,7 @@ public static class WorldGeneratorEngine {
     /// <param name="masksAfter">The site's drawn masks after the fill, or <see langword="null"/> when the source never exhausts.</param>
     /// <param name="reason">Why the fill was refused, on failure.</param>
     /// <returns><see langword="true"/> when every cell was filled.</returns>
-    public static bool TryFireBatch(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason) => TryRunBatch(
+    public static bool TryFireBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason) => TryRunBatch(
         generator: generator,
         targetKind: targetKind,
         seedState: seedState,
@@ -601,7 +601,7 @@ public static class WorldGeneratorEngine {
     /// <param name="masksAfter">The drawn masks after the pass, or <see langword="null"/> when the source never exhausts.</param>
     /// <param name="reason">Why the pass was refused, on failure.</param>
     /// <returns><see langword="true"/> when all samples were consumed.</returns>
-    public static bool TryAdvanceBatch(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, int sampleCount, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason) => TryRunBatch(
+    public static bool TryAdvanceBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, int sampleCount, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason) => TryRunBatch(
         generator: generator,
         targetKind: targetKind,
         seedState: seedState,
@@ -615,22 +615,22 @@ public static class WorldGeneratorEngine {
         reason: out reason
     );
     /// <summary>Checks whether a numeric source can complete one batch from its current drawn masks without
-    /// executing it. Only <see cref="WorldGeneratorMode.WithoutReplacement"/> can run out mid-batch; other modes
+    /// executing it. Only <see cref="GeneratorMode.WithoutReplacement"/> can run out mid-batch; other modes
     /// either never exhaust or restart in the same sample.</summary>
     /// <param name="generator">The resolved source.</param>
     /// <param name="masks">The site's current drawn masks.</param>
     /// <param name="sampleCount">The required batch length.</param>
     /// <param name="reason">Why the source cannot supply the batch.</param>
     /// <returns><see langword="true"/> when batch execution cannot exhaust the source.</returns>
-    public static bool TryCheckBatchCapacity(WorldGenerator generator, IReadOnlyList<ClosedBitset256>? masks, long sampleCount, out string reason) {
+    public static bool TryCheckBatchCapacity(StateGenerator generator, IReadOnlyList<ClosedBitset256>? masks, long sampleCount, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: generator);
 
         reason = string.Empty;
 
         if (
             (sampleCount <= 0L) ||
-            (generator.Source is not (WorldGeneratorSource.WeightedNumeric or WorldGeneratorSource.SymmetryOrbit)) ||
-            (generator.Mode != WorldGeneratorMode.WithoutReplacement)
+            (generator.Source is not (GeneratorSource.WeightedNumeric or GeneratorSource.SymmetryOrbit)) ||
+            (generator.Mode != GeneratorMode.WithoutReplacement)
         ) {
             return true;
         }
@@ -639,7 +639,7 @@ public static class WorldGeneratorEngine {
         var unit = 0;
         var available = 0L;
 
-        if (generator.Source == WorldGeneratorSource.SymmetryOrbit) {
+        if (generator.Source == GeneratorSource.SymmetryOrbit) {
             // Every orbit unit weighs one, so the undrawn count is the orbit length less the drawn bits; an
             // unresolvable orbit is the source-shape validator's refusal, not this one's.
             if (!TryResolveOrbit(generator: generator, nodes: out var orbitNodes, reason: out _)) {
@@ -664,7 +664,7 @@ public static class WorldGeneratorEngine {
 
             // The source-shape validator owns this earlier error. Stop here rather than attempting to enumerate an
             // invalid oversized mask or emitting a misleading second batch-capacity diagnosis.
-            if (units > WorldGeneratorCapacity.MaxEntriesPerSet) {
+            if (units > GeneratorCapacity.MaxEntriesPerSet) {
                 return true;
             }
 
@@ -702,25 +702,25 @@ public static class WorldGeneratorEngine {
         }
     }
     /// <summary>Determines whether a source of <paramref name="source"/> shape may exhaust — carry a
-    /// <see cref="WorldGeneratorMode"/> other than <see cref="WorldGeneratorMode.WithReplacement"/> and persist drawn masks
+    /// <see cref="GeneratorMode"/> other than <see cref="GeneratorMode.WithReplacement"/> and persist drawn masks
     /// on its site.</summary>
     /// <param name="source">The source shape.</param>
-    /// <returns><see langword="true"/> for the three alias-table shapes, <see cref="WorldGeneratorSource.Markov"/>,
-    /// <see cref="WorldGeneratorSource.WeightedNumeric"/> and <see cref="WorldGeneratorSource.SymmetryOrbit"/>.</returns>
-    public static bool Exhausts(WorldGeneratorSource source) => (source is WorldGeneratorSource.Markov or WorldGeneratorSource.WeightedNumeric or WorldGeneratorSource.SymmetryOrbit);
-    /// <summary>Resolves the units of a <see cref="WorldGeneratorSource.SymmetryOrbit"/> source: the nodes of its ring
+    /// <returns><see langword="true"/> for the three alias-table shapes, <see cref="GeneratorSource.Markov"/>,
+    /// <see cref="GeneratorSource.WeightedNumeric"/> and <see cref="GeneratorSource.SymmetryOrbit"/>.</returns>
+    public static bool Exhausts(GeneratorSource source) => (source is GeneratorSource.Markov or GeneratorSource.WeightedNumeric or GeneratorSource.SymmetryOrbit);
+    /// <summary>Resolves the units of a <see cref="GeneratorSource.SymmetryOrbit"/> source: the nodes of its ring
     /// in cycle order, or the orbit of its node under its word in step order.</summary>
     /// <param name="generator">The source.</param>
     /// <param name="nodes">The orbit's nodes, on success; empty otherwise.</param>
     /// <param name="reason">Why the orbit could not be resolved, in the author's vocabulary, or empty on success.</param>
     /// <returns><see langword="true"/> when the source is an orbit source whose fields name one orbit.</returns>
-    public static bool TryResolveOrbit(WorldGenerator generator, out int[] nodes, out string reason) {
+    public static bool TryResolveOrbit(StateGenerator generator, out int[] nodes, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: generator);
 
         nodes = [];
 
-        if (generator.Source != WorldGeneratorSource.SymmetryOrbit) {
-            reason = $"source={WorldRefusalSpelling.GeneratorSource(source: generator.Source)} draws no symmetry orbit";
+        if (generator.Source != GeneratorSource.SymmetryOrbit) {
+            reason = $"source={StateSpelling.GeneratorSource(source: generator.Source)} draws no symmetry orbit";
 
             return false;
         }
@@ -765,7 +765,7 @@ public static class WorldGeneratorEngine {
             return false;
         }
 
-        var cycle = new WorldStateCycle(Word: generator.Word);
+        var cycle = new StateCycle(Word: generator.Word);
 
         if (!cycle.TryResolveGenerator(generator: out var word, reason: out var wordReason)) {
             reason = wordReason;
@@ -790,10 +790,10 @@ public static class WorldGeneratorEngine {
     /// <param name="fired">The emission's drawn masks, or <see langword="null"/>.</param>
     /// <param name="previous">The site's persisted masks before the emission.</param>
     /// <returns>The masks to persist.</returns>
-    public static IReadOnlyList<ClosedBitset256>? MasksAfter(WorldGenerator generator, IReadOnlyList<ClosedBitset256>? fired, IReadOnlyList<ClosedBitset256>? previous) {
+    public static IReadOnlyList<ClosedBitset256>? MasksAfter(StateGenerator generator, IReadOnlyList<ClosedBitset256>? fired, IReadOnlyList<ClosedBitset256>? previous) {
         ArgumentNullException.ThrowIfNull(argument: generator);
 
-        return ((Exhausts(source: generator.Source) && (generator.Mode != WorldGeneratorMode.WithReplacement))
+        return ((Exhausts(source: generator.Source) && (generator.Mode != GeneratorMode.WithReplacement))
             ? (fired ?? previous)
             : null);
     }
@@ -801,11 +801,11 @@ public static class WorldGeneratorEngine {
     /// figure cursor seeking depends on being exact.</summary>
     /// <param name="source">The source shape.</param>
     /// <returns>The per-sample advance cost.</returns>
-    public static ulong AdvancesPerSample(WorldGeneratorSource source) => source switch {
+    public static ulong AdvancesPerSample(GeneratorSource source) => source switch {
         // The alias-table shapes; Puck.Maths documents the cost as exactly two advances per sample.
-        WorldGeneratorSource.Markov or WorldGeneratorSource.WeightedNumeric or WorldGeneratorSource.SymmetryOrbit => 2UL,
+        GeneratorSource.Markov or GeneratorSource.WeightedNumeric or GeneratorSource.SymmetryOrbit => 2UL,
         // One fixed-cost draw each, never a rejection loop.
-        WorldGeneratorSource.UniformRange or WorldGeneratorSource.StreamDraw => 1UL,
+        GeneratorSource.UniformRange or GeneratorSource.StreamDraw => 1UL,
         _ => throw new ArgumentOutOfRangeException(
         paramName: nameof(source),
         actualValue: source,
@@ -814,18 +814,18 @@ public static class WorldGeneratorEngine {
     };
     /// <summary>Folds the seed ladder's four rungs into one <c>Pcg32XshRr</c> starting state — see this type's remarks
     /// for the ladder and why each rung is length-delimited. Allocation-free.</summary>
-    /// <param name="worldSeed">The document's <c>generation.worldSeed</c>.</param>
+    /// <param name="documentSeed">The document's own reroll lever — the one authored value that moves every site at once.</param>
     /// <param name="instanceIdentity">The running instance's own identity.</param>
-    /// <param name="site">The site descriptor (see <see cref="WorldDrawSites"/>).</param>
+    /// <param name="site">The site descriptor.</param>
     /// <returns>The <c>Pcg32XshRr.Create</c> <c>state</c> argument.</returns>
-    public static ulong ComputeSeedState(ulong worldSeed, string instanceIdentity, string site) {
+    public static ulong ComputeSeedState(ulong documentSeed, string instanceIdentity, string site) {
         ArgumentNullException.ThrowIfNull(argument: instanceIdentity);
         ArgumentNullException.ThrowIfNull(argument: site);
 
         var hash = Fnv1aHash.Create();
 
         hash.Add(value: EngineConstant);
-        hash.Add(value: worldSeed);
+        hash.Add(value: documentSeed);
         FoldDelimited(
             hash: ref hash,
             text: instanceIdentity
@@ -860,7 +860,7 @@ public static class WorldGeneratorEngine {
     /// <param name="targetKind">The site's declared cell kind.</param>
     /// <param name="reason">Why the pairing was refused, in the author's own vocabulary, or empty when it holds.</param>
     /// <returns><see langword="true"/> when <paramref name="source"/> may write a <paramref name="targetKind"/> site.</returns>
-    public static bool TryCheckTargetKind(WorldGeneratorSource source, CellKind targetKind, out string reason) {
+    public static bool TryCheckTargetKind(GeneratorSource source, CellKind targetKind, out string reason) {
         if (WritesText(source: source)) {
             if (targetKind == CellKind.Text) {
                 reason = string.Empty;
@@ -868,7 +868,7 @@ public static class WorldGeneratorEngine {
                 return true;
             }
 
-            reason = $"source={WorldRefusalSpelling.GeneratorSource(source: source)} writes text, but the site is kind={WorldRefusalSpelling.Kind(kind: targetKind)}";
+            reason = $"source={StateSpelling.GeneratorSource(source: source)} writes text, but the site is kind={StateSpelling.Kind(kind: targetKind)}";
 
             return false;
         }
@@ -879,7 +879,7 @@ public static class WorldGeneratorEngine {
             return true;
         }
 
-        reason = $"source={WorldRefusalSpelling.GeneratorSource(source: source)} writes a numeric value, but the site is kind={WorldRefusalSpelling.Kind(kind: targetKind)}";
+        reason = $"source={StateSpelling.GeneratorSource(source: source)} writes a numeric value, but the site is kind={StateSpelling.Kind(kind: targetKind)}";
 
         return false;
     }
@@ -895,7 +895,7 @@ public static class WorldGeneratorEngine {
     /// <param name="reason">Why the emission was refused, on failure.</param>
     /// <returns><see langword="true"/> on a successful emission.</returns>
     /// <param name="secret">Optional authority secret; admitted only for integer streamDraw sources.</param>
-    public static bool TryFire(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, out FireResult result, out string reason, ClosedBitset256? secret = null) {
+    public static bool TryFire(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, out FireResult result, out string reason, ClosedBitset256? secret = null) {
         ArgumentNullException.ThrowIfNull(argument: generator);
 
         result = default;
@@ -907,7 +907,7 @@ public static class WorldGeneratorEngine {
         }
 
         if (!Enum.IsDefined(value: generator.Mode)) {
-            reason = $"mode '{generator.Mode}' is not a defined WorldGeneratorMode";
+            reason = $"mode '{generator.Mode}' is not a defined GeneratorMode";
 
             return false;
         }
@@ -921,10 +921,10 @@ public static class WorldGeneratorEngine {
         }
 
         if (secret is { } key) {
-            if (key.IsEmpty || generator.Source != WorldGeneratorSource.StreamDraw || targetKind != CellKind.Int || generator.Mode != WorldGeneratorMode.WithReplacement) {
+            if (key.IsEmpty || generator.Source != GeneratorSource.StreamDraw || targetKind != CellKind.Int || generator.Mode != GeneratorMode.WithReplacement) {
                 reason = "secret draws require a nonzero key and an integer streamDraw source with replacement"; return false;
             }
-            result = new(null, WorldPrivateDraw.Sample(key, seedState, stream, cursor), 1, null); reason = string.Empty; return true;
+            result = new(null, PrivateDraw.Sample(key, seedState, stream, cursor), 1, null); reason = string.Empty; return true;
         }
         var rng = Pcg32XshRr.Create(
             state: seedState,
@@ -935,7 +935,7 @@ public static class WorldGeneratorEngine {
         rng.Advance(count: unchecked((((ulong)cursor) * AdvancesPerSample(source: generator.Source))));
 
         switch (generator.Source) {
-            case WorldGeneratorSource.Markov:
+            case GeneratorSource.Markov:
                 return TryFireMarkov(
                     masks: masks,
                     generator: generator,
@@ -944,7 +944,7 @@ public static class WorldGeneratorEngine {
                     rng: ref rng
                 );
             default: {
-                    var exhausts = (generator.Mode != WorldGeneratorMode.WithReplacement);
+                    var exhausts = (generator.Mode != GeneratorMode.WithReplacement);
                     var mask = ((exhausts && (masks is { Count: > 0 })) ? masks[0] : default(ClosedBitset256));
 
                     if (!TryDrawNumeric(
@@ -978,7 +978,7 @@ public static class WorldGeneratorEngine {
     /// <param name="generator">The resolved source, on success.</param>
     /// <param name="reason">Why resolution was refused, on failure.</param>
     /// <returns><see langword="true"/> when the facet resolves to exactly one source.</returns>
-    public static bool TryResolveSource(IReadOnlyList<WorldGeneratorRow>? generators, WorldDraw draw, out WorldGenerator generator, out string reason) {
+    public static bool TryResolveSource(IReadOnlyList<GeneratorRow>? generators, Draw draw, out StateGenerator generator, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: draw);
 
         generator = null!;
@@ -1015,6 +1015,6 @@ public static class WorldGeneratorEngine {
     /// <summary>Determines whether one emission of <paramref name="source"/> is text rather than a numeric value — the single
     /// fact behind the source/site kind rule (see <see cref="TryCheckTargetKind"/>).</summary>
     /// <param name="source">The source shape.</param>
-    /// <returns><see langword="true"/> for <see cref="WorldGeneratorSource.Markov"/>.</returns>
-    public static bool WritesText(WorldGeneratorSource source) => (source == WorldGeneratorSource.Markov);
+    /// <returns><see langword="true"/> for <see cref="GeneratorSource.Markov"/>.</returns>
+    public static bool WritesText(GeneratorSource source) => (source == GeneratorSource.Markov);
 }

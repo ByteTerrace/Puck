@@ -186,7 +186,7 @@ public sealed class WorldCarryCommandLawTests {
             Min: FixedQ4816.FromDouble(value: 0.05d).Value,
             Max: FixedQ4816.One.Value,
             Capacity: 8,
-            Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: scale.Value)]
+            Cells: [new StateCell(Key: CellName.Parse(candidate: "0"), Value: scale.Value)]
         );
 
         return source with {

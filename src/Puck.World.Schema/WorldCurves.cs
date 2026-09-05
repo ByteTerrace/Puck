@@ -93,7 +93,7 @@ public sealed record WorldCurveRow(
 ) {
     // Keyed on the row instance itself: an authored row is an immutable record and a live retune always installs a
     // fresh instance (never a mutation in place), so the cache can never serve a stale compile and needs no
-    // invalidation of its own — the WorldDynamicsRow.Compiled precedent, exactly. Kept off the record's own
+    // invalidation of its own — the DynamicsRow.Compiled precedent, exactly. Kept off the record's own
     // equality-compared surface for the same reason that precedent gives: a lazily-populated field would make two
     // otherwise-identical rows compare unequal purely because one had been read from and the other had not.
     private static readonly ConditionalWeakTable<WorldCurveRow, StrongBox<CompiledCurvatureSpline>> CompiledCache = new();

@@ -4,14 +4,14 @@ namespace Puck.World.Schema.Tests;
 
 /// <summary>
 /// CONTRACT UNDER TEST: <see cref="WorldStateReader.TryReadEased"/>/<see cref="WorldStateReader.TryEvaluateDynamics"/>
-/// — the closed-form second-order read a <see cref="WorldStateDynamics"/> trait drives. <see cref="WorldStateReader.TryRead"/>
+/// — the closed-form second-order read a <see cref="StateDynamics"/> trait drives. <see cref="WorldStateReader.TryRead"/>
 /// (truth) is proved unaffected by a trait's presence; the mutation-side rebase (<c>Server.WorldServer.RebaseCellTraits</c>)
 /// is out of reach here (this project carries no <c>WorldServer</c>) and is proved by <c>StateDynamicsRebaseLawTests</c>
 /// in <c>Puck.World.Tests</c> instead.
 /// </summary>
 public sealed class StateDynamicsReadLawTests {
-    private static readonly WorldDynamicsRow s_critical = new(Damping: 1f, Frequency: 1f, Name: "critical", Response: 0f);
-    private static readonly WorldDynamicsRow s_ringing = new(Damping: 0f, Frequency: 1f, Name: "ringing", Response: 0f);
+    private static readonly DynamicsRow s_critical = new(Damping: 1f, Frequency: 1f, Name: "critical", Response: 0f);
+    private static readonly DynamicsRow s_ringing = new(Damping: 0f, Frequency: 1f, Name: "ringing", Response: 0f);
 
     // 240 Hz — the repository's fixed simulation rate — so tick counts read directly as seconds/240.
     private static WorldDefinition BuildDefinition(WorldStateRow row) => new(
@@ -24,15 +24,15 @@ public sealed class StateDynamicsReadLawTests {
         Kind: CellKind.Int,
         Min: 0,
         Max: 1000,
-        Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 300)],
-        Dynamics: new WorldStateDynamics(EpochTick: 0, Row: dynamicsRow, V0: 0, Y0: 0)
+        Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 300)],
+        Dynamics: new StateDynamics(EpochTick: 0, Row: dynamicsRow, V0: 0, Y0: 0)
     );
     private static WorldStateRow PlainRow() => new(
         Name: CellName.Parse(candidate: "gauge"),
         Kind: CellKind.Int,
         Min: 0,
         Max: 1000,
-        Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 300)]
+        Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 300)]
     );
 
     [Fact]

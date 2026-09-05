@@ -27,25 +27,25 @@ public sealed partial class WorldServer : IWorldFieldLatticeHost {
     }
 
     FixedVector3? IWorldFieldLatticeHost.BodyPosition(int body) => Body(index: body)?.FixedPosition;
-    long IWorldFieldLatticeHost.ReadTag(WorldStateHandle row, int body, ulong tick) => ReadTagCell(
+    long IWorldFieldLatticeHost.ReadTag(StateHandle row, int body, ulong tick) => ReadTagCell(
         body: body,
         catalog: m_population.Fields!.Program.StateCatalog,
         row: row,
         tick: tick
     );
-    void IWorldFieldLatticeHost.WriteTag(WorldStateHandle row, int body, long value, ulong tick) => WriteTagCell(
+    void IWorldFieldLatticeHost.WriteTag(StateHandle row, int body, long value, ulong tick) => WriteTagCell(
         body: body,
         catalog: m_population.Fields!.Program.StateCatalog,
         row: row,
         tick: tick,
         value: value
     );
-    FixedQ4816 IWorldFieldLatticeHost.ReadScalar(WorldStateHandle row, ulong tick) => ReadScalarSlot(
+    FixedQ4816 IWorldFieldLatticeHost.ReadScalar(StateHandle row, ulong tick) => ReadScalarSlot(
         catalog: m_population.Fields!.Program.StateCatalog,
         row: row,
         tick: tick
     );
-    void IWorldFieldLatticeHost.AddScalar(WorldStateHandle row, FixedQ4816 amount, ulong tick) => AddScalarSlot(
+    void IWorldFieldLatticeHost.AddScalar(StateHandle row, FixedQ4816 amount, ulong tick) => AddScalarSlot(
         catalog: m_population.Fields!.Program.StateCatalog,
         row: row,
         amount: amount,
@@ -54,7 +54,7 @@ public sealed partial class WorldServer : IWorldFieldLatticeHost {
 
     // A reaction scalar's row read: the named row's SLOT cell as Q48.16 raw bits (0 when the row or its slot cell
     // does not exist yet — the slot is minted by its first write).
-    private FixedQ4816 ReadScalarSlot(WorldStateCatalog catalog, WorldStateHandle row, ulong tick) => ((WorldStateReader.TryReadHandle(
+    private FixedQ4816 ReadScalarSlot(StateCatalog catalog, StateHandle row, ulong tick) => ((WorldStateReader.TryReadHandle(
         catalog: catalog,
         definition: m_definition,
         handle: row,
@@ -70,7 +70,7 @@ public sealed partial class WorldServer : IWorldFieldLatticeHost {
     // A clamped-add write to a scalar slot row: precomputes the already-in-envelope sum itself (ClampToEnvelope is
     // documented for reads, not writes -- an explicit write outside a row's envelope is refused, never silently
     // clamped) so the mutation below can never be refused for a value this method already brought into range.
-    private void AddScalarSlot(WorldStateCatalog catalog, WorldStateHandle row, FixedQ4816 amount, ulong tick) {
+    private void AddScalarSlot(StateCatalog catalog, StateHandle row, FixedQ4816 amount, ulong tick) {
         if (amount == FixedQ4816.Zero) {
             return;
         }
@@ -125,7 +125,7 @@ public sealed partial class WorldServer : IWorldFieldLatticeHost {
         ? FixedQ4816.FromRawBits(value: value)
         : FixedQ4816.Zero
     );
-    private long ReadTagCell(WorldStateCatalog catalog, WorldStateHandle row, int body, ulong tick) => ((WorldStateReader.TryReadHandle(
+    private long ReadTagCell(StateCatalog catalog, StateHandle row, int body, ulong tick) => ((WorldStateReader.TryReadHandle(
         catalog: catalog,
         definition: m_definition,
         handle: row,
@@ -138,7 +138,7 @@ public sealed partial class WorldServer : IWorldFieldLatticeHost {
         ? value
         : 0L
     );
-    private void WriteTagCell(WorldStateCatalog catalog, WorldStateHandle row, int body, long value, ulong tick) {
+    private void WriteTagCell(StateCatalog catalog, StateHandle row, int body, long value, ulong tick) {
         if (ReadTagCell(
             body: body,
             catalog: catalog,

@@ -4,13 +4,13 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
-    private CompiledWorldPatterns m_patterns = CompiledWorldPatterns.Empty;
+    private CompiledPatterns m_patterns = CompiledPatterns.Empty;
 
     // Trusted second compile: the validator already refused any document whose patterns do not compile.
     private void ReconcilePatterns(WorldDefinition definition) {
         var errors = new List<string>();
 
-        if (!CompiledWorldPatterns.TryCompileAll(definition: definition, patterns: out var patterns, errors: errors)) {
+        if (!CompiledPatterns.TryCompileAll(rows: definition.Patterns, patterns: out var patterns, errors: errors)) {
             throw new InvalidOperationException($"patterns failed to compile after validation: {string.Join("; ", errors)}");
         }
 
@@ -26,7 +26,7 @@ public sealed partial class WorldServer {
             ceiling = Math.Max(ceiling, row.Capacity ?? row.CellCeiling);
         }
 
-        return Math.Min(ceiling, WorldPatternCapacity.MaxWord);
+        return Math.Min(ceiling, PatternCapacity.MaxWord);
     }
 
     // $match: — the word is read at this tick through compiled row handles (no name scan) and the same per-cell
@@ -62,7 +62,7 @@ public sealed partial class WorldServer {
         // A pattern's board source is compiled only as BoardNeighbourQuery (see WorldRuleCompiler.Pattern.cs) — the
         // Kind it carries is an arbitrary placeholder; only Direction (-1 meaning "every direction") is ever read.
         if (operand.Board is BoardNeighbourQuery query) {
-            if (row.EffectiveDomain is not WorldStateDomain.CellsOf) {
+            if (row.EffectiveDomain is not StateDomain.CellsOf) {
                 return 0L;
             }
 
@@ -119,7 +119,7 @@ public sealed partial class WorldServer {
         if (operand.TokenExpression is { } tokenExpression) {
             wordLength = ReadTupleWord(row, tokenExpression, pattern.Source.Kind, tick, word);
         } else {
-            if (row.EffectiveDomain is WorldStateDomain.KeysOf { Ordered: true } && !WorldStateReader.TryReadHandle(definition: m_definition, catalog: m_definition.StateCatalog, handle: operand.FilterHandle, key: null, tick: tick, row: out source, rawValue: out _, text: out _)) {
+            if (row.EffectiveDomain is StateDomain.KeysOf { Ordered: true } && !WorldStateReader.TryReadHandle(definition: m_definition, catalog: m_definition.StateCatalog, handle: operand.FilterHandle, key: null, tick: tick, row: out source, rawValue: out _, text: out _)) {
                 throw new InvalidOperationException($"pattern attribute '{operand.FilterRow}' outlived its compiled row handle");
             }
 
@@ -133,7 +133,7 @@ public sealed partial class WorldServer {
 
     // The ray from the origin (exclusive) in one direction, stopping at the edge or on return to the origin; an
     // origin that names no cell is the empty word.
-    private static int ReadRay(CompiledWorldTopology topology, ReadOnlySpan<long> values, int origin, int direction, Span<long> word) {
+    private static int ReadRay(CompiledTopology topology, ReadOnlySpan<long> values, int origin, int direction, Span<long> word) {
         var length = 0;
 
         if (origin < 0) {
@@ -160,7 +160,7 @@ public sealed partial class WorldServer {
     private static int ReadWord(WorldStateRow row, WorldStateRow source, ulong tick, Span<long> word) {
         var length = 0;
 
-        if (row.EffectiveDomain is WorldStateDomain.Ring history) {
+        if (row.EffectiveDomain is StateDomain.Ring history) {
             var count = (int)Math.Min(row.HistoryCursor, history.Capacity);
 
             for (var age = count - 1; age >= 0; age--) {
@@ -171,7 +171,7 @@ public sealed partial class WorldServer {
         }
 
         foreach (var cell in (row.Cells ?? [])) {
-            WorldStateReader.ReadCell(row: source, key: cell.Key.Value, tick: tick, rawValue: out var raw, text: out _);
+            StateReader.ReadCell(row: source, key: cell.Key.Value, tick: tick, rawValue: out var raw, text: out _);
             word[length++] = raw ?? 0L;
         }
 
@@ -197,7 +197,7 @@ public sealed partial class WorldServer {
 
     // The slot pushed `age` pushes ago is (cursor - 1 - age) mod capacity, and the ring's cells ARE its slots in
     // order (the validator's invariant), so the value is one index away; a slot never written reads the empty value.
-    private static long ReadHistorySlot(WorldStateRow row, WorldStateDomain.Ring history, long age, ulong tick) {
+    private static long ReadHistorySlot(WorldStateRow row, StateDomain.Ring history, long age, ulong tick) {
         if (age >= Math.Min(row.HistoryCursor, history.Capacity)) {
             return history.Empty;
         }
@@ -212,7 +212,7 @@ public sealed partial class WorldServer {
     // $history:<row>:<age> through the compiled row handle.
     private long ReadHistoryFact(HistoryOperand operand, ulong tick) {
         if (!WorldStateReader.TryReadHandle(definition: m_definition, catalog: m_definition.StateCatalog, handle: operand.StateHandle, key: null, tick: tick, row: out var row, rawValue: out _, text: out _) ||
-            row.EffectiveDomain is not WorldStateDomain.Ring history) {
+            row.EffectiveDomain is not StateDomain.Ring history) {
             throw new InvalidOperationException($"history operand over '{operand.Row}' outlived its compiled row handle");
         }
 
@@ -223,7 +223,7 @@ public sealed partial class WorldServer {
     // slot move in one journaled mutation.
     private bool FirePushState(CompiledWorldEffect effect, string ruleName, ulong tick, bool preflight) {
         var push = (PushStateEffect)effect.Value!;
-        if (WorldDefinitionRows.FindStateRow(rows: m_definition.State, name: push.Row) is not { } row || row.EffectiveDomain is not WorldStateDomain.Ring) {
+        if (WorldDefinitionRows.FindStateRow(rows: m_definition.State, name: push.Row) is not { } row || row.EffectiveDomain is not StateDomain.Ring) {
             return false;
         }
 
@@ -270,10 +270,10 @@ public sealed partial class WorldServer {
             }
 
             var tick = m_lastCompletedTick;
-            var word = new long[WorldPatternCapacity.MaxWord];
+            var word = new long[PatternCapacity.MaxWord];
             var lines = new List<string>();
 
-            if (row.EffectiveDomain is WorldStateDomain.CellsOf board) {
+            if (row.EffectiveDomain is StateDomain.CellsOf board) {
                 if (WorldTopologyCompilation.Find(m_definition, board.Topology) is not { } topology) {
                     return $"[world.match: '{rowName}' names no compiled topology]";
                 }
@@ -300,13 +300,13 @@ public sealed partial class WorldServer {
                 var source = row;
                 int length;
 
-                if (row.EffectiveDomain is WorldStateDomain.KeysOf { Ordered: true } zone && pattern.Source.Value is not null) {
+                if (row.EffectiveDomain is StateDomain.KeysOf { Ordered: true } zone && pattern.Source.Value is not null) {
                     if (!WorldRuleCompiler.TryCompilePatternValue(definition: m_definition, pattern: pattern.Source, tokenDomain: zone.Row.Value, ruleName: "world.match", tokens: out var expression, reason: out var valueReason)) {
                         return $"[world.match: {valueReason}]";
                     }
                     length = ReadTupleWord(row, expression!, pattern.Source.Kind, tick, word);
                 } else {
-                    if (row.EffectiveDomain is WorldStateDomain.KeysOf { Ordered: true }) {
+                    if (row.EffectiveDomain is StateDomain.KeysOf { Ordered: true }) {
                         if (attribute is null || WorldDefinitionRows.FindStateRow(rows: m_definition.State, name: attribute) is not { } attributeRow) {
                             return "[world.match: a zone source needs its attribute row]";
                         }
@@ -322,7 +322,7 @@ public sealed partial class WorldServer {
         }
     }
 
-    private static string Narrate(CompiledWorldPattern pattern, ReadOnlySpan<long> values) {
+    private static string Narrate(CompiledPattern pattern, ReadOnlySpan<long> values) {
         var steps = new List<string>();
         var state = 0;
         var longest = (pattern.Accepts(0) ? 0 : -1);
@@ -368,7 +368,7 @@ public sealed partial class WorldServer {
                 states += pattern.StateCount;
             }
 
-            return $"patterns {m_patterns.Count} compiled, {states} state(s), word <= {WorldPatternCapacity.MaxWord} token(s) per read";
+            return $"patterns {m_patterns.Count} compiled, {states} state(s), word <= {PatternCapacity.MaxWord} token(s) per read";
         }
     }
 

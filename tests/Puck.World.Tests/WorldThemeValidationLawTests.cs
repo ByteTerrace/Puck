@@ -128,7 +128,7 @@ public sealed class WorldThemeValidationLawTests {
             ThemeRaw = theme,
             StateRaw = new WorldStateSection(World: [
                 new WorldStateRow(Name: CellName.Parse(candidate: "lowAlpha"), Kind: CellKind.Fixed, Cells: [
-                    new WorldStateCell(Key: WorldStateRow.SlotKey, Value: Puck.Maths.FixedQ4816.FromDouble(value: 0.2).Value),
+                    new StateCell(Key: WorldStateRow.SlotKey, Value: Puck.Maths.FixedQ4816.FromDouble(value: 0.2).Value),
                 ]),
             ]),
         };

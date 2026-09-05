@@ -78,7 +78,7 @@ public static partial class WorldDefinitionValidator {
                 }
                 if (domain.Kind == WorldNavigationKind.Medium) {
                     var mediumRow = definition.State.FirstOrDefault(predicate: row => string.Equals(a: row.Name, b: domain.Medium, comparisonType: StringComparison.Ordinal));
-                    if (string.IsNullOrWhiteSpace(value: domain.Medium) || mediumRow?.Field?.Medium is null || mediumRow.EffectiveDomain is not WorldStateDomain.CellsOf mediumCellsOf) {
+                    if (string.IsNullOrWhiteSpace(value: domain.Medium) || mediumRow?.Field?.Medium is null || mediumRow.EffectiveDomain is not StateDomain.CellsOf mediumCellsOf) {
                         errors.Add(item: $"{path}.medium '{domain.Medium}' names no lattice field carrying a medium trait.");
                     } else {
                         var topology = definition.StateRaw?.Lattices?.FirstOrDefault(predicate: row => string.Equals(a: row.Name, b: mediumCellsOf.Topology, comparisonType: StringComparison.Ordinal));

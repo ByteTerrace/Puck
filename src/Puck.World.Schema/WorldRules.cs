@@ -77,8 +77,8 @@ namespace Puck.World;
 /// entries. The replay tape records inputs rather than derived rule effects: replay re-executes the rules and checks
 /// the resulting state-system trace, with the pose trace retained separately for inspection.</para>
 /// <para><b>The trait boundary.</b> A <see cref="WorldStateRow"/>'s slot cell may separately declare
-/// <see cref="WorldStateRow.Advance"/>, and a keyed row's own cell may independently declare
-/// <see cref="WorldStateCell.Advance"/> (see <c>WorldState.cs</c>) — a continuous accumulation between observations,
+/// <see cref="StateRow.Advance"/>, and a keyed row's own cell may independently declare
+/// <see cref="StateCell.Advance"/> (see <c>WorldState.cs</c>) — a continuous accumulation between observations,
 /// needing no schedule row and firing no per-tick write. Rules own the discrete half of this vocabulary (a moving
 /// $tick threshold, a decrementing countdown); the two compose, never duplicate: a read operand resolves through
 /// <see cref="WorldStateReader"/> like every other, which computes an advancing cell's live value rather than its
@@ -177,26 +177,6 @@ public enum WorldSymmetryFunction : byte {
     /// <summary>The node's projected Y coordinate, a fixed value.</summary>
     ProjectionY,
 }
-/// <summary>Which aggregate a <see cref="RuleFacts.ReducePrefix"/> operand computes over a row's cells, or which
-/// extremum a <see cref="WorldRuleFacts.ArgMaxPrefix"/>/<see cref="WorldRuleFacts.ArgMinPrefix"/> operand searches
-/// for (only <see cref="Max"/>/<see cref="Min"/> are meaningful there — an arg-reduction never sums or counts).
-/// </summary>
-public enum WorldStateReduceOp : byte {
-    /// <summary>Not a reduction (the default for every operand kind this field does not apply to).</summary>
-    None,
-
-    /// <summary>The largest cell value.</summary>
-    Max,
-
-    /// <summary>The smallest cell value.</summary>
-    Min,
-
-    /// <summary>The sum of every cell value.</summary>
-    Sum,
-
-    /// <summary>The number of cells the row declares.</summary>
-    Count,
-}
 /// <summary>How a rule names one body — the entity-addressable primitive's own vocabulary, shared by
 /// <see cref="WorldRuleFacts.DistancePrefix"/>/<see cref="WorldRuleFacts.LineOfSightPrefix"/>'s two body-reference
 /// tokens.</summary>
@@ -242,7 +222,7 @@ public enum CompiledBodyRefKind : byte {
 /// enclosing rule's <see cref="WorldRule.ForEach"/> row's declared keys, resolved once to placement ordinals in cell
 /// order (position-indexed, matching the SAME order <c>WorldServer.EachKeys</c> walks at runtime); <see langword="null"/>
 /// for a fixed <c>placement:&lt;id&gt;</c> reference or any other kind.</param>
-public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Index, string? Row, string? Key = null, WorldStateHandle Handle = default, IReadOnlyList<int>? PlacementOrdinals = null);
+public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Index, string? Row, string? Key = null, StateHandle Handle = default, IReadOnlyList<int>? PlacementOrdinals = null);
 /// <summary>A state cell address whose integer value is read as a cell KEY at evaluation time
 /// (<see cref="RuleFacts.CellKeyPrefix"/>), OR a live composite (observer, subject) pair key
 /// (<see cref="WorldRuleFacts.PairKeyPrefix"/>) — a keyed row can therefore be keyed by one body index, or by two,
@@ -266,7 +246,7 @@ public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Inde
 /// (left empty in this case). <see cref="RuleBinding.None"/> for an ordinary literal-keyed <c>$cell:</c> indirection.
 /// Distinct from <paramref name="Binding"/>, which spells "the whole key IS the binding, no row at all" — this
 /// spells "the ROW is fixed, only ITS key is bound".</param>
-public readonly record struct CompiledCellRef(string Row, string Key, RuleBinding Binding = RuleBinding.None, WorldStateHandle Handle = default,
+public readonly record struct CompiledCellRef(string Row, string Key, RuleBinding Binding = RuleBinding.None, StateHandle Handle = default,
     CompiledBodyRef? PairBodyA = null, CompiledBodyRef? PairBodyB = null, RuleBinding InnerKeyBinding = RuleBinding.None);
 /// <summary>A name bound during one evaluation of a rule or interaction — the body index a key token
 /// <c>$each</c>/<c>$left</c>/<c>$right</c> or a body-reference token <c>each</c>/<c>left</c>/<c>right</c> reads.</summary>
@@ -592,7 +572,7 @@ public enum WorldRuleRefusal : byte {
     [Refusal(door: "world.rule.compile", condition: "another rule already declares this name", kind: RefusalKind.Verdict)]
     NameDuplicated,
 
-    /// <summary>The rule's name carries the reserved <see cref="WorldStateRow.ReservedNamePrefix"/> prefix, which
+    /// <summary>The rule's name carries the reserved <see cref="StateRow.ReservedNamePrefix"/> prefix, which
     /// marks what the engine mints — and nothing mints a rule.</summary>
     [Refusal(door: "world.rule.compile", condition: "a rule's name carries the reserved '$' prefix, which marks what the engine mints", kind: RefusalKind.Verdict)]
     NameReserved,

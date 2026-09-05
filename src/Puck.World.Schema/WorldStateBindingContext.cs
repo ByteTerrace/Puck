@@ -193,7 +193,7 @@ public static class WorldStateBindingContext {
             if (row.Kind == CellKind.Text) {
                 continue;
             }
-            if (!WorldStateCellWriter.TryParseNumericToken(
+            if (!StateCellWriter.TryParseNumericToken(
                 kind: row.Kind,
                 token: context.State,
                 value: out var parsed,

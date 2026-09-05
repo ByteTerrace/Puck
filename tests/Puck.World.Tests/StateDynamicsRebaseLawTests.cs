@@ -5,15 +5,15 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Tests;
 
-/// <summary>Proves an explicit write against a cell carrying a <see cref="WorldStateDynamics"/> easing trait
+/// <summary>Proves an explicit write against a cell carrying a <see cref="StateDynamics"/> easing trait
 /// rebases the trait to the applying tick (<c>Server.WorldServer.RebaseCellTraits</c>) rather than replacing it
 /// wholesale: the follower keeps chasing from wherever it actually was, receives a velocity kick signed by the
 /// referenced <c>dynamics</c> row's own <c>r</c>, and <c>world.undo</c> rebases the same way.</summary>
 public sealed class StateDynamicsRebaseLawTests {
     private static readonly WorldPrincipal Actor = WorldPrincipal.Seat(slot: 0);
-    private static readonly WorldDynamicsRow KickPositive = new(Damping: 1f, Frequency: 1f, Name: "kickPos", Response: 1f);
-    private static readonly WorldDynamicsRow KickZero = new(Damping: 1f, Frequency: 1f, Name: "kickZero", Response: 0f);
-    private static readonly WorldDynamicsRow KickNegative = new(Damping: 1f, Frequency: 1f, Name: "kickNeg", Response: -1f);
+    private static readonly DynamicsRow KickPositive = new(Damping: 1f, Frequency: 1f, Name: "kickPos", Response: 1f);
+    private static readonly DynamicsRow KickZero = new(Damping: 1f, Frequency: 1f, Name: "kickZero", Response: 0f);
+    private static readonly DynamicsRow KickNegative = new(Damping: 1f, Frequency: 1f, Name: "kickNeg", Response: -1f);
 
     private static WorldDefinition BuildDocument(string dynamicsRow) {
         var row = new WorldStateRow(
@@ -21,7 +21,7 @@ public sealed class StateDynamicsRebaseLawTests {
             Kind: CellKind.Int,
             Capacity: 8,
             Cells: [
-                new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: 0, Dynamics: new WorldStateDynamics(EpochTick: 0, Row: dynamicsRow, V0: 0, Y0: 0)),
+                new StateCell(Key: CellName.Parse(candidate: "0"), Value: 0, Dynamics: new StateDynamics(EpochTick: 0, Row: dynamicsRow, V0: 0, Y0: 0)),
             ]
         );
 
@@ -29,7 +29,7 @@ public sealed class StateDynamicsRebaseLawTests {
             DynamicsRaw = [.. Fixtures.StandardDynamics, KickPositive, KickZero, KickNegative],
         });
     }
-    private static WorldStateDynamics ReadTrait(WorldDefinition definition) {
+    private static StateDynamics ReadTrait(WorldDefinition definition) {
         var row = WorldDefinitionRows.FindStateRow(rows: definition.State, name: "gauge")!;
 
         foreach (var cell in row.Cells!) {
@@ -124,11 +124,11 @@ public sealed class StateDynamicsRebaseLawTests {
             Kind: CellKind.Int,
             Capacity: 8,
             Cells: [
-                new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: 0, Dynamics: new WorldStateDynamics(EpochTick: 0, Row: "kickPos", V0: 0, Y0: 0)),
+                new StateCell(Key: CellName.Parse(candidate: "0"), Value: 0, Dynamics: new StateDynamics(EpochTick: 0, Row: "kickPos", V0: 0, Y0: 0)),
             ]
         );
         var trigger = new WorldStateRow(Name: CellName.Parse(candidate: "trigger"), Kind: CellKind.Int,
-            Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)]);
+            Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0)]);
         var document = (Fixtures.BuildDocument().WithWorldState(rows: [gauge, trigger]) with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, KickPositive, KickZero, KickNegative],
             Rules = [new WorldRule(

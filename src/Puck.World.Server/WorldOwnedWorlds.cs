@@ -319,10 +319,10 @@ public sealed class WorldOwnedWorlds {
                     reason: $"{subject.Describe()} is text — Add refuses by name (text is Set-only; no concatenation-by-stealth)"
                 );
             }
-            if (text.Length > WorldStateCapacity.MaxTextValueLength) {
+            if (text.Length > StateCapacity.MaxTextValueLength) {
                 return Refuse(
                     submission: submission,
-                    reason: $"text is {text.Length} UTF-16 code units, past {subject.Describe()}'s {WorldStateCapacity.MaxTextValueLength}-unit cap"
+                    reason: $"text is {text.Length} UTF-16 code units, past {subject.Describe()}'s {StateCapacity.MaxTextValueLength}-unit cap"
                 );
             }
 
@@ -334,7 +334,7 @@ public sealed class WorldOwnedWorlds {
             // (never wire-supplied), so a foreign document can never choose or collide a key.
             if (row.IsSlot) {
                 owner.WriteState(row: row with {
-                    Cells = [new WorldStateCell(
+                    Cells = [new StateCell(
                         Key: WorldStateRow.SlotKey,
                         Text: text
                     )],
@@ -420,7 +420,7 @@ public sealed class WorldOwnedWorlds {
             }
 
             owner.WriteState(row: row with {
-                Cells = [new WorldStateCell(
+                Cells = [new StateCell(
                     Key: WorldStateRow.SlotKey,
                     Value: value
                 )],
@@ -770,7 +770,7 @@ public sealed class WorldOwnedWorlds {
         profile.WriteState(row: new WorldStateRow(
             Name: slots.MachineState,
             Kind: CellKind.Text,
-            Cells: [new WorldStateCell(
+            Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
                     Text: MachineId.ToString(format: "D")
                 )]
@@ -778,7 +778,7 @@ public sealed class WorldOwnedWorlds {
         profile.WriteState(row: new WorldStateRow(
             Name: slots.DeviceState,
             Kind: CellKind.Text,
-            Cells: [new WorldStateCell(
+            Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
                     Text: device.Value.ToString(format: "D")
                 )]

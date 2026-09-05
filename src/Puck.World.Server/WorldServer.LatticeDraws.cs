@@ -29,9 +29,9 @@ public sealed partial class WorldServer {
             return;
         }
 
-        if (!WorldGeneratorEngine.TryResolveSource(
+        if (!GeneratorEngine.TryResolveSource(
             generators: definition.Generators,
-            draw: new WorldDraw(Source: fill.Source, Generator: fill.Generator),
+            draw: new Draw(Source: fill.Source, Generator: fill.Generator),
             generator: out var generator,
             reason: out var resolveReason
         )) {
@@ -45,15 +45,15 @@ public sealed partial class WorldServer {
         try {
             var pass = values.AsSpan(start: 0, length: lattice.CellCount);
 
-            if (!WorldGeneratorEngine.TryFireBatch(
+            if (!GeneratorEngine.TryFireBatch(
                 generator: generator,
                 targetKind: CellKind.Fixed,
-                seedState: WorldGeneratorEngine.ComputeSeedState(
-                    worldSeed: worldSeed,
+                seedState: GeneratorEngine.ComputeSeedState(
+                    documentSeed: worldSeed,
                     instanceIdentity: InstanceIdentity,
                     site: site
                 ),
-                stream: WorldGeneratorEngine.ComputeStreamId(site: site),
+                stream: GeneratorEngine.ComputeStreamId(site: site),
                 cursor: row.DrawCursor,
                 masks: row.DrawnMasks,
                 values: pass,

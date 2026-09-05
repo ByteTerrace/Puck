@@ -708,7 +708,7 @@ public sealed partial class WorldStampPool {
     // simply carries no follower for that entry, mirroring the camera compiler's own dangling-op rule. Called on
     // every Reconcile (both the same-content-edit branch and right after a fresh RegisterBody), so a live dynamics-
     // row retune takes effect on the same rebuild while every follower's Value/Velocity/Seeded state survives.
-    private static void ApplyMotion(Registration live, WorldLookMotion motion, IReadOnlyList<WorldDynamicsRow> dynamics) {
+    private static void ApplyMotion(Registration live, WorldLookMotion motion, IReadOnlyList<DynamicsRow> dynamics) {
         live.HasRootDynamics = WorldDynamicsResponse.TryResolveResponse(
             name: motion.Dynamics,
             response: out live.RootResponse,
@@ -1232,7 +1232,7 @@ public sealed partial class WorldStampPool {
     /// <param name="dynamics">The delivered <c>dynamics</c> rows — resolves each body-rooted registration's root/part
     /// followers against its look's <see cref="WorldLookMotion.Dynamics"/>/<see cref="WorldLookMotion.PartDynamics"/>.</param>
     /// <param name="bodyStamps">The resolved body-rooted stamps (inhabitants + crowd creation-looks) this frame.</param>
-    public void Reconcile(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldDynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps) {
+    public void Reconcile(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<DynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps) {
         // Diff-by-stable-key, shared by both root kinds a slot can hold (KeyedReconciler.Reconcile): the entry's
         // current row resolves the fate — gone releases the slot, changed content releases+recreates, otherwise the
         // entry updates in place (clock preserved, and the refreshed Row/Creation carries any edited offset).

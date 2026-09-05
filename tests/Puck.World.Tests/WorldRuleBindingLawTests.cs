@@ -7,11 +7,11 @@ namespace Puck.World.Tests;
 /// only the bindings declared before it; and a binding that cannot evaluate closes the gate and is reported.</summary>
 public sealed class WorldRuleBindingLawTests {
     private static WorldStateRow Slot(string name, long value) =>
-        new(CellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, value)]);
+        new(CellName.Parse(name), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, value)]);
     private static ValueToken State(string row) => new ValueToken.State(row);
     private static ValueExpression Expr(params ValueToken[] tokens) => new(tokens);
     private static long Value(WorldFixture fixture, string row) =>
-        WorldDefinitionRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
+        StateRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
 
     // dealt = min(damage, hp); hp -= dealt; recoil -= dealt / 4. Without the binding the second effect would recompute
     // min(damage, hp) against the already-reduced hp.

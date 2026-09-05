@@ -55,12 +55,12 @@ public sealed class StateDisclosureLawTests {
     }
 
     private static CellName Name(string value) => CellName.Parse(value);
-    private static WorldStateCell Cell(string key, long value) => new(Name(key), value);
+    private static StateCell Cell(string key, long value) => new(Name(key), value);
     private static WorldDefinition Cards(string first = "seat1", string second = "seat2") => Fixtures.BuildDocument() with {
         StateRaw = new(World: [
             new(Name("cards"), CellKind.Int, Cells: [Cell("ace", 101), Cell("king", 202)], Visibility: new()),
-            new(Name("handA"), CellKind.Bool, Cells: [Cell("ace", 1)], Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), Visibility: new([first])),
-            new(Name("handB"), CellKind.Bool, Cells: [Cell("king", 1)], Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), Visibility: new([second]))
+            new(Name("handA"), CellKind.Bool, Cells: [Cell("ace", 1)], Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), Visibility: new([first])),
+            new(Name("handB"), CellKind.Bool, Cells: [Cell("king", 1)], Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), Visibility: new([second]))
         ])
     };
 
@@ -84,11 +84,11 @@ public sealed class StateDisclosureLawTests {
     [Fact]
     public void KnowledgeRetainsLastSeenValueWhenSightIsLostAndRoundTrips() {
         var definition = Fixtures.BuildDocument() with { StateRaw = new(
-            Lattices: [new WorldStateLatticeTopology.Grid("map", new DocumentVector3(0,0,0), 1, 2, 1)],
+            Lattices: [new LatticeTopology.Grid("map", new DocumentVector3(0,0,0), 1, 2, 1)],
             World: [
-                new(Name("truth"), CellKind.Int, Cells: [Cell("0", 7), Cell("1", 9)], Domain: new WorldStateDomain.CellsOf("map"), Visibility: new([])),
-                new(Name("sight"), CellKind.Bool, Cells: [Cell("0", 1)], Domain: new WorldStateDomain.CellsOf("map"), Visibility: new([])),
-                new(Name("known"), CellKind.Int, Cells: [], Domain: new WorldStateDomain.CellsOf("map"), Visibility: new(["seat1"]), Knowledge: new("truth", "sight"))
+                new(Name("truth"), CellKind.Int, Cells: [Cell("0", 7), Cell("1", 9)], Domain: new StateDomain.CellsOf("map"), Visibility: new([])),
+                new(Name("sight"), CellKind.Bool, Cells: [Cell("0", 1)], Domain: new StateDomain.CellsOf("map"), Visibility: new([])),
+                new(Name("known"), CellKind.Int, Cells: [], Domain: new StateDomain.CellsOf("map"), Visibility: new(["seat1"]), Knowledge: new("truth", "sight"))
             ]) };
         Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var reason), reason);
         Assert.False(WorldStateTransforms.TryApply(definition, new StateTransform.Observe("known"), WorldPrincipal.Seat(0), 8, "test", out _, out _));
@@ -101,7 +101,7 @@ public sealed class StateDisclosureLawTests {
         Assert.True(WorldStateTransforms.TryApply(changed, new StateTransform.Observe("known"), WorldPrincipal.World, 12, "test", out var remembered, out reason), reason);
         var cell = Assert.Single(Assert.Single(WorldStateDisclosure.Compose(remembered, WorldPrincipal.Seat(0))!).Cells);
         Assert.Equal(7, cell.Value);
-        Assert.Equal(new WorldStateObservation(8, false), cell.Observation);
+        Assert.Equal(new StateObservation(8, false), cell.Observation);
         var bytes = WorldDefinitionSerialization.Serialize(remembered);
         var reloaded = System.Text.Json.JsonSerializer.Deserialize(bytes, WorldJsonContext.Default.WorldDefinition)!;
         Assert.Equal(bytes, WorldDefinitionSerialization.Serialize(reloaded));
@@ -111,12 +111,12 @@ public sealed class StateDisclosureLawTests {
     [Fact]
     public void SecretStreamsResumeAndRefuseIncompatibleSources() {
         var key = new ClosedBitset256(1, 2, 3, 4);
-        var generator = new WorldGenerator(Source: WorldGeneratorSource.StreamDraw);
-        Assert.True(WorldGeneratorEngine.TryFire(generator, CellKind.Int, 8, 9, 100, null, out var a, out _, key));
-        Assert.True(WorldGeneratorEngine.TryFire(generator, CellKind.Int, 8, 9, 100, null, out var b, out _, key));
+        var generator = new StateGenerator(Source: GeneratorSource.StreamDraw);
+        Assert.True(GeneratorEngine.TryFire(generator, CellKind.Int, 8, 9, 100, null, out var a, out _, key));
+        Assert.True(GeneratorEngine.TryFire(generator, CellKind.Int, 8, 9, 100, null, out var b, out _, key));
         Assert.Equal(a, b);
-        Assert.True(WorldGeneratorEngine.TryFire(generator, CellKind.Int, 8, 9, 101, null, out var c, out _, key));
+        Assert.True(GeneratorEngine.TryFire(generator, CellKind.Int, 8, 9, 101, null, out var c, out _, key));
         Assert.NotEqual(a.Numeric, c.Numeric);
-        Assert.False(WorldGeneratorEngine.TryFire(generator, CellKind.Fixed, 8, 9, 100, null, out _, out _, key));
+        Assert.False(GeneratorEngine.TryFire(generator, CellKind.Fixed, 8, 9, 100, null, out _, out _, key));
     }
 }

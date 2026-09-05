@@ -1,27 +1,27 @@
 using System.Globalization;
 using Puck.Maths;
 
-namespace Puck.World;
+namespace Puck.State;
 
 /// <summary>
-/// The shared pure composition for one <see cref="WorldStateRow"/> cell write — upsert-or-append plus the row's own
-/// <see cref="WorldStateRow.Evicts"/> overflow policy. Extracted so the running world's own ordered mutation
+/// The shared pure composition for one <see cref="StateRow"/> cell write — upsert-or-append plus the row's own
+/// <see cref="StateRow.Evicts"/> overflow policy. Extracted so the running world's own ordered mutation
 /// pipeline (<c>Server.WorldServer</c>'s <c>UpsertStateCell</c> compose arm) and any owned-identity document write
 /// outside that pipeline (<c>WorldIdentity.TryAppendEvictingText</c>, and through it the cross-document text
 /// delivery door, <c>Server.WorldOwnedWorlds.Decide</c>) run the identical rule and can never disagree about a
 /// victim, a duplicate key, or a reserved-cell refusal.
 /// </summary>
-public static class WorldStateCellWriter {
+public static class StateCellWriter {
     /// <summary>Returns the row's own overflow policy, applied after a write already appended-or-replaced a cell — the one
-    /// eviction seam (see <see cref="WorldStateRow.Evicts"/>). A no-op (returns <paramref name="cells"/> unchanged,
+    /// eviction seam (see <see cref="StateRow.Evicts"/>). A no-op (returns <paramref name="cells"/> unchanged,
     /// <paramref name="evictedKey"/> null) unless the row opts in, the write added a new key, and the addition
     /// pushed the row past its declared capacity.</summary>
-    /// <param name="row">The carrying row (for its <see cref="WorldStateRow.Evicts"/>/<see cref="WorldStateRow.Capacity"/>).</param>
+    /// <param name="row">The carrying row (for its <see cref="StateRow.Evicts"/>/<see cref="StateRow.Capacity"/>).</param>
     /// <param name="cells">The cells after the triggering write already applied.</param>
     /// <param name="addedNewKey">Whether the triggering write minted a brand-new key rather than rewriting an existing one.</param>
     /// <param name="evictedKey">The evicted key, or <see langword="null"/> when nothing was evicted.</param>
     /// <returns>The post-eviction cell list.</returns>
-    public static IReadOnlyList<WorldStateCell> ApplyEviction(WorldStateRow row, IReadOnlyList<WorldStateCell> cells, bool addedNewKey, out CellName? evictedKey) {
+    public static IReadOnlyList<StateCell> ApplyEviction(StateRow row, IReadOnlyList<StateCell> cells, bool addedNewKey, out CellName? evictedKey) {
         evictedKey = null;
 
         if (
@@ -47,7 +47,7 @@ public static class WorldStateCellWriter {
         // was last written — an in-place rewrite never moves a key to the back.
         evictedKey = cells[0].Key;
 
-        var trimmed = new List<WorldStateCell>(capacity: (cells.Count - 1));
+        var trimmed = new List<StateCell>(capacity: (cells.Count - 1));
 
         for (var index = 1; (index < cells.Count); index++) {
             trimmed.Add(item: cells[index]);
@@ -62,7 +62,7 @@ public static class WorldStateCellWriter {
     /// <param name="cells">The row's current cells.</param>
     /// <param name="key">The key to look for.</param>
     /// <returns><see langword="true"/> when a cell already carries <paramref name="key"/>.</returns>
-    public static bool ContainsKey(IReadOnlyList<WorldStateCell> cells, CellName key) {
+    public static bool ContainsKey(IReadOnlyList<StateCell> cells, CellName key) {
         foreach (var cell in cells) {
             if (cell.Key == key) {
                 return true;
@@ -72,7 +72,7 @@ public static class WorldStateCellWriter {
         return false;
     }
     /// <summary>Composes one text-cell write onto <paramref name="row"/> — upsert-or-append plus eviction — running
-    /// the same reserved-cell rule (<see cref="WorldStateReservedCells.TryValidateReservedCell"/>) the running world's
+    /// the same reserved-cell rule (<see cref="StateReservedCells.TryValidateReservedCell"/>) the running world's
     /// own mutation pipeline runs, so a hand-typed <c>world.state.cell.set</c> text write and an owned-identity document write
     /// are refused by the identical rule rather than two readings of it.</summary>
     /// <param name="row">The carrying row (must declare <see cref="CellKind.Text"/>).</param>
@@ -82,7 +82,7 @@ public static class WorldStateCellWriter {
     /// <param name="evictedKey">The evicted key, or <see langword="null"/> when nothing was evicted.</param>
     /// <param name="reason">Why the write was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the write composed.</returns>
-    public static bool TryComposeTextCell(WorldStateRow row, CellName key, string text, out IReadOnlyList<WorldStateCell> cells, out CellName? evictedKey, out string reason) {
+    public static bool TryComposeTextCell(StateRow row, CellName key, string text, out IReadOnlyList<StateCell> cells, out CellName? evictedKey, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: row);
 
         cells = (row.Cells ?? []);
@@ -94,7 +94,7 @@ public static class WorldStateCellWriter {
             return false;
         }
 
-        if (!WorldStateReservedCells.TryValidateReservedCell(
+        if (!StateReservedCells.TryValidateReservedCell(
             key: key,
             reason: out reason,
             row: row
@@ -108,14 +108,14 @@ public static class WorldStateCellWriter {
             key: key
         );
         var replaced = false;
-        var next = new List<WorldStateCell>(capacity: (existing.Count + 1));
+        var next = new List<StateCell>(capacity: (existing.Count + 1));
 
         foreach (var cell in existing) {
             if (
                 !replaced &&
                 (cell.Key == key)
             ) {
-                next.Add(item: new WorldStateCell(
+                next.Add(item: new StateCell(
                     Key: key,
                     Text: text,
                     Visibility: cell.Visibility
@@ -127,7 +127,7 @@ public static class WorldStateCellWriter {
         }
 
         if (!replaced) {
-            next.Add(item: new WorldStateCell(
+            next.Add(item: new StateCell(
                 Key: key,
                 Text: text
             ));
@@ -148,7 +148,7 @@ public static class WorldStateCellWriter {
     /// why the interpretation cannot happen any earlier). Mirrors the console's former per-verb parse exactly: decimal
     /// text for <see cref="CellKind.Fixed"/> (never raw <see cref="FixedQ4816"/> bits), <c>true</c>/<c>false</c> for
     /// <see cref="CellKind.Bool"/>, and a plain integer literal otherwise. Never called for <see cref="CellKind.Text"/>
-    /// — a text write carries its operand through <see cref="WorldStateCell.Text"/> and never reaches this parser.</summary>
+    /// — a text write carries its operand through <see cref="StateCell.Text"/> and never reaches this parser.</summary>
     /// <param name="kind">The destination row's declared kind (never <see cref="CellKind.Text"/>).</param>
     /// <param name="token">The raw wire token exactly as typed.</param>
     /// <param name="value">The parsed raw-encoded operand on success.</param>

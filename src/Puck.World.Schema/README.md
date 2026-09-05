@@ -20,8 +20,9 @@ process that composes everything is [`Puck.World`](../Puck.World/README.md).
 ## Discrete boards, cards, and turns
 
 The discrete substrate shares `state.lattices` with physical fields. Declare a
-`state.lattices` entry `$type: "grid"`, `"ring"`, or `"hex"` (`WorldStateLatticeTopology`'s own
-closed union — a `"box"` case exists too, for a 3-layer discrete board) and bind an
+`state.lattices` entry `$type: "grid"`, `"ring"`, or `"hex"` (`Puck.State.LatticeTopology`'s
+discrete cases — a `"box"` case exists too, for a 3-layer discrete board; the document's own
+`"field"` case is `WorldFieldTopology`, registered through `WorldJsonVocabulary`) and bind an
 integer/boolean row through `domain: { "$type": "cellsOf", "topology": "map", "empty": 0 }`. Only
 a `"field"` lattice creates physical field storage. A world may declare at most 16 topologies, including
 at most one physical field topology. Each discrete topology admits 4096 cells;
@@ -71,7 +72,7 @@ Rule operands accept these bounded channels:
 | `$board:attacks:<row>:<min>:<max>:<directions>` | 1 when walking any of 1..4 comma-separated directions from the key cell finds, before any other occupied cell, one whose value lies in min..max; 0 otherwise. A single-direction first-blocker rule, unioned over the authored directions and filtered to a range — a slider's reach at one square in one call |
 | `$match:<pattern>:<row>:<direction>:cell` | The first cell one step past the longest accepted prefix of the ray from the key cell in `direction` — the first cell the pattern REJECTS — or -1 when the whole ray is accepted |
 | `$match:<pattern>:<row>:<direction>:distance` | The step count to that cell, or -1 on the same terms |
-| `$phase:<row>` | The row's own generation — the same value a `WorldPhaseGuard` checks against it |
+| `$phase:<row>` | The row's own generation — the same value a `PhaseGuard` checks against it |
 | `$clock:<music>:phaseError` | Signed tick distance from the world's musical clock's current position to the nearest beat: `elapsed mod ticksPerBeat`, or that minus `ticksPerBeat` past half a beat (tied toward "past"). `music` must name the document's declared `music` row. |
 
 A ray's first-blocker cell/distance is a `$match:` facet, not a `$board:`
@@ -88,7 +89,7 @@ key — it takes a `bodyRef` in its place, the same `body:<n>`/
 `argmax:<row>`/`argmin:<row>`/`cell:<row>:<key>` vocabulary `$distance:`/
 `$los:`/`$nearest:` read. Both `cellOf` and `offset` require a `Grid`
 topology — the only kind carrying a rectangular world-space frame
-(`CompiledWorldTopology.Origin`/`CellSize`, the same origin/cellSize every
+(`CompiledTopology.Origin`/`CellSize`, the same origin/cellSize every
 topology declares); a `Hex`/`Ring` row refuses them by name at compile.
 A `Box` topology is `width` by `layers` by `depth` cells with the 26 space
 directions: the grid's eight compass names in the layer, each prefixed `U`
@@ -132,7 +133,7 @@ nodes settle by ordinal; the visit bound counts settled nodes. A path budget
 refusal is distinct from proof that no route exists.
 
 A plain keyed row with a declared `capacity` IS the stable token-identity
-domain — no dedicated facet, just `WorldStateDomain.Keys` (`Domain` omitted or
+domain — no dedicated facet, just `StateDomain.Keys` (`Domain` omitted or
 `{"$type": "keys"}`). Another row's `domain: {"$type": "keysOf", "row":
 "cards"}` restricts its keys to that domain's; `valuesFrom` additionally
 restricts integer positions to a named topology. A `domain: {"$type": "keysOf",
@@ -184,7 +185,7 @@ Every written row requires edit authority. Transaction preflight leaves no
 partial transfer, ray, cursor, allowance, or phase change after refusal.
 
 A `phase` row is a guarded submission stamp: nothing but its own generation
-(`sequence`, read back by `$phase:<row>`). `WorldPhaseGuard` (`row`,
+(`sequence`, read back by `$phase:<row>`). `PhaseGuard` (`row`,
 `sequence`, `participant`) is checked against a `TransformState` mutation's
 declared phase row before the transform composes, and a guarded mutation's
 success advances that row's generation by one in the same step — the guard
@@ -260,7 +261,7 @@ is a ring of the last pushed values, the temporal twin of a ray: `push`
 oldest first, so a combo, a rhythm window, or "three claims then silence" is
 one pattern. `world.state <row>` echoes capacity, cursor, and how much of
 the ring is held. `sortZone` puts a zone in canonical order by `by`, up to
-`MaxSortKeys` (`WorldStateCapacity`, derived from `MaxRows` -- a sort key
+`MaxSortKeys` (`StateCapacity`, derived from `MaxRows` -- a sort key
 names a declared row, so a sort can never carry more keys than a section can
 hold) attribute keys (`row`, `descending`) in precedence order; `sortKeyed`
 orders a keyed row by its own values under one `descending` flag. Both sort
@@ -283,7 +284,7 @@ payloads. Publicly authored seeds alone are unsuitable for hidden deals.
 anchors a discrete `Grid` topology's own world-space frame (its declared
 `origin`/`cellSize` — no separate frame member) to a physical row/body-based
 game. `cellSize` is the divisor `$board:cellOf` resolves world positions
-against, so `WorldTopologyCompilation.TryValidate` refuses a `Grid` whose
+against, so `TopologyCompilation.TryValidate` refuses a `Grid` whose
 `cellSize` does not quantize to a positive Q48.16 value, or whose `origin`
 does not fit one, at document validation rather than at the per-tick rule
 path. `topology` names the anchored Grid; `occupancy` names the board row the
@@ -375,13 +376,27 @@ an addon concern; these operators introduce no scripts, recursion, or open loops
 
 `Puck.World.Schema` references only `Puck.Abstractions`, `Puck.Assets`,
 `Puck.Attestation`, `Puck.Commands`, `Puck.Hosting`, `Puck.Maths`,
-`Puck.Physics`, `Puck.Text`, and `Puck.World.Authoring` (see
+`Puck.Physics`, `Puck.State`, `Puck.Text`, and `Puck.World.Authoring` (see
 `Puck.World.Schema.csproj`). An architecture lane profile in
 `build/Architecture.props` enforces the absences that matter: no GPU backend,
 no presentation project, no `Puck.Overlays`, no `Puck.Input`, no
 `Puck.World.Protocol`, and no `Puck.World.Server`. Adding a forbidden
 reference fails the build with a `PUCKARCH` diagnostic naming the arrival
 path.
+
+The state and rule engine beneath the document is
+[`Puck.State`](../Puck.State/README.md): the section contract (`IStateSection`),
+the row/cell substrate, the traits, the domains, the topologies, the generators,
+the patterns, the catalog, and the reader all live there with no world name.
+What stays here is what names a world: the document's own section and row
+(`WorldStateSection`/`WorldStateRow` — the `body`/`identity` slot lanes and the
+`gatesDrive`/`field` traits), the physical lattice case (`WorldFieldTopology`),
+the placement-anchored topology find (`WorldTopologyCompilation`), the
+definition-anchored reader (`WorldStateReader`), the disclosure composer over
+principals (`WorldStateDisclosure`), the boot-only draw sites
+(`WorldDrawSites`), the table asset loader (`WorldTables`), and the JSON seam
+that adds the document's arms to the engine's polymorphic bases
+(`WorldJsonContext` over `WorldJsonSourceContext`, `WorldJsonVocabulary`).
 
 Several validation/serialization paths genuinely need knowledge this project is
 denied. Each crosses through a static injection point every composition root
@@ -796,10 +811,12 @@ grant subject — boot-authored data, read back with `world.metadata`.
 
 ## The `state` document — genre-neutral game state, one CELL substrate
 
-`WorldState.cs` holds the `state` section: named rows (`WorldStateRow`) over
-one typed-value CELL substrate (`WorldStateCell`, `CellKind` —
+`WorldState.cs` holds the `state` section (`WorldStateSection`, the document's
+`IStateSection`): named rows (`WorldStateRow` — a `Puck.State.StateRow` plus the
+`gatesDrive` and `field` traits only a world reads) over one typed-value CELL
+substrate (`StateCell`, `CellKind` —
 `int`/`fixed`/`bool`/`text`, never float, the determinism contract), capped
-at `WorldStateCapacity.MaxRows` rows and `MaxTextValueLength` characters per
+at `StateCapacity.MaxRows` rows and `MaxTextValueLength` characters per
 text cell. A SLOT (the common one-value case) is a row with exactly one
 cell keyed by the reserved `WorldStateRow.SlotKey`; a KEYED row carries
 author-chosen keys — **a slot is a table with one key**, one mechanism under
@@ -813,11 +830,12 @@ ONE authored spelling (`WorldStateRowJsonConverter` in
  "min":.., "max":.., "capacity":.., "nonNegative":..}
 ```
 
-`WorldStateCatalog.Compile` turns this authored inventory into immutable typed
+`StateCatalog.Compile` turns this authored inventory into immutable typed
 descriptors for runtime processors. Each descriptor records its ownership lane
-(`world`, `body`, or `identity`), storage shape (`slot`, `keyed`, or `lattice`),
+(`Document`, `Participant`, or `Identity` — the document's `world`, `body`, and
+`identity` lanes), storage shape (`slot`, `keyed`, or `lattice`),
 value kind, one stable catalog ordinal, and its document-order ordinal within
-the lane. A processor resolves `(lane, name)` once to a `WorldStateHandle`, then
+the lane. A processor resolves `(lane, name)` once to a `StateHandle`, then
 indexes that same catalog by the catalog-bound handle instead of repeating
 string lookup during execution. `WorldDefinition.StateCatalog` is the
 non-serialized compiled view. Definitions sharing one `StateRaw` share that
@@ -883,7 +901,7 @@ the instant the read answers AS OF (the server's completed tick authoritatively,
 the last delivered snapshot's tick on the client — which is itself a SERVER
 tick, so it is comparable to an epoch) and it is what an ADVANCE row's value is
 computed at (below). The reader hands back a RAW value rather than a
-`WorldStateCell` for exactly that reason: a computed value has no stored cell to
+`StateCell` for exactly that reason: a computed value has no stored cell to
 hand back, and minting one per read would allocate on the per-frame HUD path.
 The whole-document validator
 deliberately stays off this seam: it builds a name-keyed map once per walk, and
@@ -896,8 +914,8 @@ consolidation.
 
 ## `state.lattices` — fields folded into state
 
-A lattice is not a separate section: `state.lattices` (`WorldStateLatticeTopology`
-— name, origin, `cellSize`, `width`×`depth`×`layers`, `stepEveryTicks`,
+A lattice is not a separate section: `state.lattices` (`LatticeTopology`, whose
+physical case is the document's `WorldFieldTopology` — name, origin, `cellSize`, `width`×`depth`×`layers`, `stepEveryTicks`,
 `reactions`) plus a `domain: {"$type": "cellsOf", "topology": …}` and a
 `field` trait on ordinary `fixed`-kind `state.world` rows
 (`WorldStateFieldTrait` — `initial`/`min`/`max`, optional
@@ -961,7 +979,7 @@ something writes it. A row-driven `diffuse`/`decay`/`flow` rate clamps to
 `WorldFieldProgram.Compile` is the typed reaction-program view over that same
 spelling, not a second graph language. It resolves lattice rows and
 scalar/tag/output state dependencies once into
-`WorldFieldHandle`/`WorldStateHandle` values, exposes its canonical
+`WorldFieldHandle`/`StateHandle` values, exposes its canonical
 `StateCatalog`, quantizes literal scalars to `FixedQ4816` at the compiler
 boundary, preserves reaction order as stable node order, and exposes immutable
 canonical read/write sets plus the dependency DAG they imply and exact
@@ -998,7 +1016,7 @@ Everything random in a document is one primitive with three parts, and they are
 deliberately separable: a **source** is a shape, a **site** is a place that
 draws, and a **moment** is when.
 
-**The SOURCE family** (`WorldGenerator`) is the document's whole randomness
+**The SOURCE family** (`StateGenerator`) is the document's whole randomness
 vocabulary. `source` selects the shape: `markov` walks weighted alternatives per
 context, each naming the context it moves INTO (that authored `next` is what
 makes it a Markov process rather than independent draws — the context key IS the
@@ -1023,20 +1041,20 @@ declared defaults. A markov emission is one walk from `start` to a TERMINAL
 context (one declaring no alternatives), refusing BY NAME at `bound` rather than
 truncating; `mode` is `withReplacement`, `withoutReplacement` (drawn out →
 refuse by name) or `restartOnExhaustion`; `uniformRange` and `streamDraw` refuse
-a `mode`, having no entry set to exhaust. Caps live in `WorldGeneratorCapacity`.
+a `mode`, having no entry set to exhaust. Caps live in `GeneratorCapacity`.
 The alias table over a source's full entry set is built once per source instance
-and held weakly beside it (`WorldGeneratorEngine`'s compiled cache), so a site
+and held weakly beside it (`GeneratorEngine`'s compiled cache), so a site
 drawn every tick pays the build once; a drawn-down pool mid-pass is rebuilt in
 bounded stack storage per emission, with no heap table allocation and the same
 exact alias mapping.
 
 **A source holds no position.** It may be declared once in the optional
-`generators` section (`WorldGeneratorRow`: `name` + `generator`) and referenced
+`generators` section (`GeneratorRow`: `name` + `generator`) and referenced
 by any number of sites, or inlined at one site as sugar — the two spellings
 compile to the identical record, so nothing is expressible one way and not the
 other.
 
-**The SITE facet** (`WorldDraw`) declares that a value is drawn. It carries
+**The SITE facet** (`Draw`) declares that a value is drawn. It carries
 exactly one of `source` (naming a declared row) or `generator` (an inline
 source), plus `timing`. **One site type exists: `WorldStateRow.Draw`** — the
 draw facet's single home. `bodies.capacityRow`/`host.backendRow` are plain
@@ -1052,14 +1070,14 @@ first. Living in the DOCUMENT is the point: `WorldMutation.Generate` is a pure
 function of (candidate, instance identity), so `world.undo` rewinds a draw
 bit-identically with nothing to reconcile.
 
-**The MOMENT** (`WorldDrawTiming`) is `boot` (drawn once at first fill; a later
+**The MOMENT** (`DrawTiming`) is `boot` (drawn once at first fill; a later
 `generate` refuses by name), `tickPeriod`, or `event`. The latter two both stay
 redrawable through the SAME `Generate` mutation (ordinal 51); the actual cadence
 or gate is spelled with the ordinary `rules` vocabulary (a `$tick`-scheduled Edge
 rule, an event-flag-gated one), so timing costs NO mutation ordinal — the catalog
 stays 64/64.
 
-**The seed ladder is four rungs** (`WorldGeneratorEngine.ComputeSeedState`), each
+**The seed ladder is four rungs** (`GeneratorEngine.ComputeSeedState`), each
 LENGTH-DELIMITED before its bytes so no two rung sequences can fold to one
 pre-image: the engine constant (so this system's streams cannot collide with any
 other seeded system by accident), `generation.worldSeed` (the author's one
@@ -1117,7 +1135,7 @@ resolved document — so whether the world boots would depend on what it rolled,
 refusal moving with the world seed and the instance identity. Refusing the
 authoring mismatch makes the door the type rather than the outcome.
 
-**A row may instead declare an ADVANCE** (`WorldStateAdvance`): `rateNumerator`/
+**A row may instead declare an ADVANCE** (`StateAdvance`): `rateNumerator`/
 `rateDenominator` (an exact per-tick rate, in the row's own DISPLAYED unit — for
 a `fixed` row `1/1` is `1.0` per tick, and a rate far slower than one raw Q48.16
 tick still accumulates exactly; may be negative for decay, which mirrors the
@@ -1138,8 +1156,8 @@ CLAMPS the computed value on every read without rewriting the stored base — th
 read side of the envelope duality (a computed value clamps; an explicit write
 refuses).
 
-`WorldStateAdvance.ComputeCurrentValue` has one application site,
-`WorldStateReader`'s known-cell computation, and that is the whole design: both
+`StateAdvance.ComputeCurrentValue` has one application site,
+`StateReader`'s known-cell computation, and that is the whole design: both
 the name and compiled-handle read entrances, a rule's
 `compareState`, a HUD gauge, `world.state`'s read-backs and the
 `UpsertStateCell` **Add compose arm** all resolve through it, so a reader and a
@@ -1165,8 +1183,8 @@ immediately. The LIVE in-memory document is never touched (a save is a
 snapshot, not a mutation, exactly like every other session dimension this
 fold folds) — only the bytes written to disk carry the settled base/epoch.
 
-**A KEYED row's own cells advance INDEPENDENTLY** through `WorldStateCell.Advance`
-— the same `WorldStateAdvance` shape, authored per cell instead of per row:
+**A KEYED row's own cells advance INDEPENDENTLY** through `StateCell.Advance`
+— the same `StateAdvance` shape, authored per cell instead of per row:
 
 ```json
 {"name":"threat","kind":"fixed","capacity":8,
@@ -1184,12 +1202,12 @@ row. Legitimate only on a NON-reserved cell key: the reserved slot key
 never a cell-level one — the two never both name the same cell, so "which
 advance governs this cell" is never an open question. A DRAW SITE's own
 bookkeeping is not reachable here at all: `drawCursor`/`drawnMasks` are typed row
-FIELDS, never cells, so nothing can name them as an accumulator. `WorldStateReader.TryRead` checks the row's own trait first
+FIELDS, never cells, so nothing can name them as an accumulator. `StateReader.TryRead` checks the row's own trait first
 (only relevant for the slot cell) and falls back to the CELL's own trait
 otherwise, so a scalar row's behavior is untouched. Because
-`WorldStateReader.Reduce`/`ArgExtremum` resolve the row once and each candidate
+`StateReader.Reduce`/`ArgExtremum` resolve the row once and each candidate
 cell once through that identical known-cell computation rather than repeating
-row/key scans or reading `WorldStateCell.Value` directly. A
+row/key scans or reading `StateCell.Value` directly. A
 `$reduce:sum`/`$argmax:`/`$argmin:` rule operand over a table of independently
 advancing cells therefore sees every cell's LIVE value in one linear pass. A per-cell VALUE write
 (`world.state.cell.set`, `UpsertStateCell`) carries no advance payload of its
@@ -1204,7 +1222,7 @@ own trait the same way the row line echoes the row's:
 `advance=<num>/<den>@epoch<n>`. A value that must wrap is a `cycle` row
 (below), never an advance.
 
-**A row or keyed cell may instead declare `dynamics`** (`WorldStateDynamics`
+**A row or keyed cell may instead declare `dynamics`** (`StateDynamics`
 — `row`, `y0`, `v0`, `epochTick`), `advance`'s closed-form sibling: mutually
 exclusive with `advance`/`draw`/a bare `value`, naming a `dynamics` section
 row whose pole-matched second-order response `WorldStateReader.TryReadEased`
@@ -1220,7 +1238,7 @@ stored cell value stays the TRUTH the target; a write rebases the trait
 continuous state, not the row's unit). `world.state` echoes
 `dynamics=<row> y0=<v> v0=<v>@epoch<n> eased=<v>` beside `value=`.
 
-**A row or keyed cell may instead declare `cycle`** (`WorldStateCycle` —
+**A row or keyed cell may instead declare `cycle`** (`StateCycle` —
 `word`, `power`, `output`, `ticksPerStep`, `epochTick`, `substepTicks`): the
 tick-indexed rotation, mutually exclusive with `advance`/`dynamics`/`draw`/
 `lattice` and scalar-only at the row level the same way those are. The value
@@ -1786,7 +1804,7 @@ float anywhere. An out-of-carrier literal refuses by the rule's name. An
 computed as a raw `long` (a bitboard's bit 63 is an ordinary value); the few
 readers that need a continuous quantity from an `int` cell (a symmetry node, a
 dynamics target, a body-reference key) lift it through
-`WorldStateReader.LiftSaturating`, clamping at `FixedQ4816`'s integer band
+`StateReader.LiftSaturating`, clamping at `FixedQ4816`'s integer band
 rather than faulting.
 
 Ordering is declaration order, on both sides: a later rule's copy operand reads
@@ -2133,7 +2151,7 @@ probes` refuses by name enumerating siblings — though it does carry its own
 
 ## The `dynamics` section — the second-order personality table
 
-`WorldDynamicsRow` (`WorldDynamics.cs`): named `{name, f, zeta, r}` rows — the
+`DynamicsRow` (`Puck.State/DynamicsRow.cs`): named `{name, f, zeta, r}` rows — the
 t3ssel8r-style pole-matched second-order response every follower consumer
 (a look's root/part followers, a camera boom, a grounded kit's planar
 shaping, a `state` cell's eased read) names by `name` rather than authoring
@@ -2143,7 +2161,7 @@ inline. `f` (Hz, positive), `zeta` (damping ratio, non-negative), and `r`
 optional and every reference is nullable, so an unauthored world is
 unchanged; every reference resolves through `WorldDefinitionRows.FindDynamics`
 and refuses a dangling name, and removing a still-referenced row is refused
-naming the referrer. `WorldDynamicsRow.Compiled` caches the row's
+naming the referrer. `DynamicsRow.Compiled` caches the row's
 `Puck.Maths.SecondOrderDynamics` derivation per row instance
 (`ConditionalWeakTable`) for the HUD's per-frame eased read; every other
 consumer compiles its own follower from the same authored triple. Authored
@@ -2168,7 +2186,7 @@ unchanged; every reference resolves through `WorldDefinitionRows.FindCurve`
 and refuses a dangling name, and removing a still-referenced row is refused
 naming the referrer. `WorldCurveRow.Compiled` caches the row's
 `Puck.Maths.CurvatureSpline.Compile` derivation per row instance
-(`ConditionalWeakTable`, the `WorldDynamicsRow.Compiled` precedent) — the SAME
+(`ConditionalWeakTable`, the `DynamicsRow.Compiled` precedent) — the SAME
 derivation `WorldDefinitionValidator` runs at the door as its own last
 compile-refusal gate, so a validated row always compiles again for free.
 Authored with `world.row.set curves <row-json>` /

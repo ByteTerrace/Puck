@@ -5,7 +5,7 @@ namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
     // Composes Generate as a PURE function of (candidate document, instance identity): the site's source resolves
-    // from the document, WorldGeneratorEngine SEEKS the stream to the position the site's own DrawCursor records, and
+    // from the document, GeneratorEngine SEEKS the stream to the position the site's own DrawCursor records, and
     // BOTH the drawn value and the advanced cursor/masks land in the SAME candidate. Nothing lives outside the
     // document, which is what makes world.undo rewind a draw bit-identically with no bookkeeping to reconcile. The
     // sampling itself lives in Puck.World.Schema because the BOOT resolver — which runs before this server exists —
@@ -32,9 +32,9 @@ public sealed partial class WorldServer {
                 return false;
             }
 
-            if (!WorldGeneratorEngine.TryResolveSource(
+            if (!GeneratorEngine.TryResolveSource(
                 generators: current.Generators,
-                draw: new WorldDraw(Source: fill.Source, Generator: fill.Generator),
+                draw: new Draw(Source: fill.Source, Generator: fill.Generator),
                 generator: out var fillSource,
                 reason: out var fillResolveReason
             )) {
@@ -47,15 +47,15 @@ public sealed partial class WorldServer {
             var cellCount = ((shape.Width * shape.Layers) * shape.Depth);
             var fillSite = WorldDrawSites.StateRow(rowName: siteRow.Name);
 
-            if (!WorldGeneratorEngine.TryAdvanceBatch(
+            if (!GeneratorEngine.TryAdvanceBatch(
                 generator: fillSource,
                 targetKind: CellKind.Fixed,
-                seedState: WorldGeneratorEngine.ComputeSeedState(
-                    worldSeed: (current.Generation?.WorldSeed ?? 0UL),
+                seedState: GeneratorEngine.ComputeSeedState(
+                    documentSeed: (current.Generation?.WorldSeed ?? 0UL),
                     instanceIdentity: instanceIdentity,
                     site: fillSite
                 ),
-                stream: WorldGeneratorEngine.ComputeStreamId(site: fillSite),
+                stream: GeneratorEngine.ComputeStreamId(site: fillSite),
                 cursor: siteRow.DrawCursor,
                 masks: siteRow.DrawnMasks,
                 sampleCount: cellCount,
@@ -69,7 +69,7 @@ public sealed partial class WorldServer {
 
             candidate = current.WithWorldState(rows: Upsert(
                 list: current.State,
-                item: (siteRow with { DrawCursor = (siteRow.DrawCursor + cellCount), DrawnMasks = WorldGeneratorEngine.MasksAfter(generator: fillSource, fired: masksAfter, previous: siteRow.DrawnMasks) }),
+                item: (siteRow with { DrawCursor = (siteRow.DrawCursor + cellCount), DrawnMasks = GeneratorEngine.MasksAfter(generator: fillSource, fired: masksAfter, previous: siteRow.DrawnMasks) }),
                 keyOf: static (WorldStateRow row) => row.Name
             ));
             reason = string.Empty;
@@ -83,7 +83,7 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        if (draw.Timing == WorldDrawTiming.Boot) {
+        if (draw.Timing == DrawTiming.Boot) {
             reason = $"state row '{mutation.Row}' declares timing=boot — it draws once at first fill and is never redrawn";
 
             return false;
@@ -116,7 +116,7 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        if (!WorldGeneratorEngine.TryResolveSource(
+        if (!GeneratorEngine.TryResolveSource(
             generators: current.Generators,
             draw: draw,
             generator: out var generator,
@@ -129,15 +129,15 @@ public sealed partial class WorldServer {
 
         var site = WorldDrawSites.StateRow(rowName: siteRow.Name);
 
-        if (!WorldGeneratorEngine.TryFire(
+        if (!GeneratorEngine.TryFire(
             generator: generator,
             targetKind: siteRow.Kind,
-            seedState: WorldGeneratorEngine.ComputeSeedState(
-                worldSeed: (current.Generation?.WorldSeed ?? 0UL),
+            seedState: GeneratorEngine.ComputeSeedState(
+                documentSeed: (current.Generation?.WorldSeed ?? 0UL),
                 instanceIdentity: instanceIdentity,
                 site: site
             ),
-            stream: WorldGeneratorEngine.ComputeStreamId(site: site),
+            stream: GeneratorEngine.ComputeStreamId(site: site),
             cursor: siteRow.DrawCursor,
             masks: siteRow.DrawnMasks,
             result: out var fired,
@@ -151,19 +151,19 @@ public sealed partial class WorldServer {
 
         if (
             (fired.Text is { } emission) &&
-            (emission.Length > WorldStateCapacity.MaxTextValueLength)
+            (emission.Length > StateCapacity.MaxTextValueLength)
         ) {
-            reason = $"state row '{mutation.Row}' emission length {emission.Length} exceeds the {WorldStateCapacity.MaxTextValueLength}-unit text bound";
+            reason = $"state row '{mutation.Row}' emission length {emission.Length} exceeds the {StateCapacity.MaxTextValueLength}-unit text bound";
 
             return false;
         }
 
         var cell = ((fired.Text is { } text)
-            ? new WorldStateCell(
+            ? new StateCell(
                 Key: WorldStateRow.SlotKey,
                 Text: text
             )
-            : new WorldStateCell(
+            : new StateCell(
                 Key: WorldStateRow.SlotKey,
                 // A numeric draw is already in the site's own encoding — raw FixedQ4816 bits on a fixed row — the
                 // contract the source's range/outcome values, the validator's domain narrowing and a lattice fill all
@@ -173,7 +173,7 @@ public sealed partial class WorldServer {
         );
         var state = Upsert(
             list: current.State,
-            item: (siteRow with { Cells = [cell], DrawCursor = (siteRow.DrawCursor + fired.Samples), DrawnMasks = WorldGeneratorEngine.MasksAfter(generator: generator, fired: fired.Masks, previous: siteRow.DrawnMasks) }),
+            item: (siteRow with { Cells = [cell], DrawCursor = (siteRow.DrawCursor + fired.Samples), DrawnMasks = GeneratorEngine.MasksAfter(generator: generator, fired: fired.Masks, previous: siteRow.DrawnMasks) }),
             keyOf: static (WorldStateRow row) => row.Name
         );
 

@@ -550,7 +550,7 @@ public static partial class WorldDefinitionValidator {
             ) {
                 errors.Add(item: $"{path}.drivers[{index}].signal '{signal}' names no declared state row.");
             } else if (row.Kind is not (CellKind.Int or CellKind.Fixed)) {
-                errors.Add(item: $"{path}.drivers[{index}].signal '{signal}' names a {WorldRefusalSpelling.Kind(kind: row.Kind)} row; a signal reads an int or fixed cell.");
+                errors.Add(item: $"{path}.drivers[{index}].signal '{signal}' names a {StateSpelling.Kind(kind: row.Kind)} row; a signal reads an int or fixed cell.");
             }
         }
 
@@ -588,7 +588,7 @@ public static partial class WorldDefinitionValidator {
             ) {
                 errors.Add(item: $"{path}.effectors[{index}].target.reference '{target.Reference}' names no declared state row.");
             } else if (cell.Kind != CellKind.Text) {
-                errors.Add(item: $"{path}.effectors[{index}].target.reference '{target.Reference}' names a {WorldRefusalSpelling.Kind(kind: cell.Kind)} row; a state target reads a text cell spelling [x, y, z].");
+                errors.Add(item: $"{path}.effectors[{index}].target.reference '{target.Reference}' names a {StateSpelling.Kind(kind: cell.Kind)} row; a state target reads a text cell spelling [x, y, z].");
             }
         }
 

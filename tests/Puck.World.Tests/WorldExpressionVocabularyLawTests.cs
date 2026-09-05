@@ -389,12 +389,12 @@ public sealed class WorldExpressionVocabularyLawTests {
         StateRaw = new WorldStateSection(World: state),
         Rules = rules,
     };
-    private static WorldStateRow Slot(string name, long value) => new(Name: Name(name), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: value)]);
-    private static WorldStateRow FixedSlot(string name, long value) => new(Name: Name(name), Kind: CellKind.Fixed, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: value)]);
+    private static WorldStateRow Slot(string name, long value) => new(Name: Name(name), Kind: CellKind.Int, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: value)]);
+    private static WorldStateRow FixedSlot(string name, long value) => new(Name: Name(name), Kind: CellKind.Fixed, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: value)]);
     private static CellName Name(string value) => CellName.Parse(candidate: value);
     private static long Value(WorldFixture fixture, string row) {
         var declared = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: row)!;
 
-        return WorldDefinitionRows.FindCell(cells: declared.Cells, key: WorldStateRow.SlotKey)!.Value;
+        return StateRows.FindCell(cells: declared.Cells, key: WorldStateRow.SlotKey)!.Value;
     }
 }

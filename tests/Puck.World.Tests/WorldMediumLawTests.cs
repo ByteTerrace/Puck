@@ -147,7 +147,7 @@ public sealed class WorldMediumLawTests {
         + "00000000000000000000000000025eb70000000000000000000000000000000000000000000261470000000000000000"
         + "000000000000000000000000000263d60000000000000000000000000000000000000000000266660000000000000000";
 
-    private static WorldStateLatticeTopology.Field Topology(int width = 4, int depth = 4) => new(
+    private static WorldFieldTopology Topology(int width = 4, int depth = 4) => new(
         Name: "world",
         Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
         CellSize: 1f,
@@ -164,7 +164,7 @@ public sealed class WorldMediumLawTests {
                     new WorldStateRow(
                         Name: CellName.Parse(candidate: "medium"),
                         Kind: CellKind.Fixed,
-                        Domain: new WorldStateDomain.CellsOf(Topology: "world"), Field: new WorldStateFieldTrait(Medium: new WorldLatticeMedium())
+                        Domain: new StateDomain.CellsOf(Topology: "world"), Field: new WorldStateFieldTrait(Medium: new WorldLatticeMedium())
                     ),
                 ],
                 Lattices: [Topology()]
@@ -184,7 +184,7 @@ public sealed class WorldMediumLawTests {
                     new WorldStateRow(
                         Name: CellName.Parse(candidate: "medium"),
                         Kind: CellKind.Fixed,
-                        Domain: new WorldStateDomain.CellsOf(Topology: "world"), Field: new WorldStateFieldTrait(HeightScale: 5f, Color: "#3B7BD6")
+                        Domain: new StateDomain.CellsOf(Topology: "world"), Field: new WorldStateFieldTrait(HeightScale: 5f, Color: "#3B7BD6")
                     ),
                 ],
                 Lattices: [Topology()]
@@ -204,7 +204,7 @@ public sealed class WorldMediumLawTests {
 
     // The medium spelled as a hold row on an ordinary grounded kit — the one authoring spelling of the law, and the
     // document MediumTrace240 was recorded against.
-    private static WorldDefinition BuildMediumHoldDocument(WorldStateLatticeTopology topology, float idleDrift = 0.5f, float settleRate = 6f) {
+    private static WorldDefinition BuildMediumHoldDocument(LatticeTopology topology, float idleDrift = 0.5f, float settleRate = 6f) {
         var channels = new WorldChannel[] {
             new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance),
             new(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe),
@@ -409,7 +409,7 @@ public sealed class WorldMediumLawTests {
             Medium: new WorldLatticeMedium()
         );
         var state = new WorldStateSection(
-            World: [new WorldStateRow(Name: CellName.Parse(candidate: "medium"), Kind: CellKind.Fixed, Domain: new WorldStateDomain.CellsOf(Topology: "world"), Field: trait)],
+            World: [new WorldStateRow(Name: CellName.Parse(candidate: "medium"), Kind: CellKind.Fixed, Domain: new StateDomain.CellsOf(Topology: "world"), Field: trait)],
             Lattices: [Topology()]
         );
         var compiled = WorldFieldsSection.Compile(state: state)!;
@@ -432,7 +432,7 @@ public sealed class WorldMediumLawTests {
         );
         var document = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(
-                World: [new WorldStateRow(Name: CellName.Parse(candidate: "medium"), Kind: CellKind.Fixed, Domain: new WorldStateDomain.CellsOf(Topology: "world"), Field: trait)],
+                World: [new WorldStateRow(Name: CellName.Parse(candidate: "medium"), Kind: CellKind.Fixed, Domain: new StateDomain.CellsOf(Topology: "world"), Field: trait)],
                 Lattices: [Topology()]
             ),
         };
@@ -485,7 +485,7 @@ public sealed class WorldMediumLawTests {
         // Wide and centered: reaching equilibrium mixes a horizontal excursion into the settle (the vertical
         // channel integrates along the body's own tilted up, not literally world Y — see IntegratePlanarAndVerticalVelocity),
         // so the spawn needs room on every side, not just headroom above the pool.
-        var topology = new WorldStateLatticeTopology.Field(
+        var topology = new WorldFieldTopology(
             Name: "world",
             Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
             CellSize: 1f,
@@ -550,7 +550,7 @@ public sealed class WorldMediumLawTests {
     // their own BuildSpawnPoints() corners) and the medium row's own settle rate and envelope overridden, so the
     // envelope/settle-rate law tests below can place the body on either side of the equilibrium band without
     // touching BuildMediumHoldDocument's own recorded-trace shape.
-    private static WorldDefinition BuildMediumEnvelopeDocument(WorldStateLatticeTopology topology, float spawnY, float idleDrift, float settleRate, float riseSpeed, float sinkSpeed) {
+    private static WorldDefinition BuildMediumEnvelopeDocument(LatticeTopology topology, float spawnY, float idleDrift, float settleRate, float riseSpeed, float sinkSpeed) {
         var document = BuildMediumHoldDocument(topology: topology, idleDrift: idleDrift, settleRate: settleRate);
         var motion = document.Kits[0].Motion!;
         var water = motion.Holds![0] with {
@@ -685,7 +685,7 @@ public sealed class WorldMediumLawTests {
             Min: FixedQ4816.FromDouble(value: 0.05).Value,
             Max: FixedQ4816.One.Value,
             Capacity: 8,
-            Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: cellValue.Value)]
+            Cells: [new StateCell(Key: CellName.Parse(candidate: "0"), Value: cellValue.Value)]
         );
 
         return document with {

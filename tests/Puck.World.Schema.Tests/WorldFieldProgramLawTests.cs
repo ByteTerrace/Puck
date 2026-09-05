@@ -11,7 +11,7 @@ public sealed class WorldFieldProgramLawTests {
     public void Compile_LowersOrderedReactionsToTypedNodesAndCanonicalDependencies() {
         var state = BuildState();
         var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
-        var catalog = WorldStateCatalog.Compile(section: state);
+        var catalog = StateCatalog.Compile(section: state);
 
         var program = WorldFieldProgram.Compile(
             document: fields,
@@ -34,7 +34,7 @@ public sealed class WorldFieldProgramLawTests {
                 Assert.Equal(expected: 0, actual: field.Handle.Ordinal);
                 Assert.Equal(expected: "heat", actual: field.Name);
                 Assert.Equal(expected: FixedQ4816.FromInteger(value: 10), actual: field.Maximum);
-                Assert.Equal(expected: WorldStateStorageShape.Lattice, actual: catalog[field.State].Storage);
+                Assert.Equal(expected: StateStorageShape.Lattice, actual: catalog[field.State].Storage);
             }
         );
 
@@ -74,7 +74,7 @@ public sealed class WorldFieldProgramLawTests {
         );
         var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
 
-        var program = WorldFieldProgram.Compile(document: fields, state: WorldStateCatalog.Compile(section: state));
+        var program = WorldFieldProgram.Compile(document: fields, state: StateCatalog.Compile(section: state));
         var decay = Assert.IsType<WorldFieldNode.Decay>(@object: Assert.Single(collection: program.Nodes));
 
         Assert.False(condition: decay.Rate.IsState);
@@ -119,11 +119,11 @@ public sealed class WorldFieldProgramLawTests {
         var catalog = original.StateCatalog;
         var program = Assert.IsType<WorldFieldProgram>(@object: original.FieldProgram);
 
-        Assert.True(condition: catalog.TryResolve(handle: out var season, lane: WorldStateOwnershipLane.World, name: "season"));
+        Assert.True(condition: catalog.TryResolve(handle: out var season, lane: StateLane.Document, name: "season"));
 
         var rows = original.StateRaw!.World!.Select(selector: row => (
             string.Equals(a: row.Name, b: "season", comparisonType: StringComparison.Ordinal)
-                ? row with { Cells = [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 123L)] }
+                ? row with { Cells = [new StateCell(Key: WorldStateRow.SlotKey, Value: 123L)] }
                 : row
         )).ToArray();
         var updated = original.WithWorldState(rows: rows);
@@ -201,7 +201,7 @@ public sealed class WorldFieldProgramLawTests {
         var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
 
         var transform = Assert.IsType<WorldFieldNode.Transform>(@object: Assert.Single(
-            collection: WorldFieldProgram.Compile(document: fields, state: WorldStateCatalog.Compile(section: state)).Nodes
+            collection: WorldFieldProgram.Compile(document: fields, state: StateCatalog.Compile(section: state)).Nodes
         ));
 
         Assert.Equal(expected: [0], actual: transform.FieldReads.Select(selector: static handle => handle.Ordinal));
@@ -215,7 +215,7 @@ public sealed class WorldFieldProgramLawTests {
         var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
 
         var emit = Assert.IsType<WorldFieldNode.Emit>(@object: Assert.Single(
-            collection: WorldFieldProgram.Compile(document: fields, state: WorldStateCatalog.Compile(section: state)).Nodes
+            collection: WorldFieldProgram.Compile(document: fields, state: StateCatalog.Compile(section: state)).Nodes
         ));
 
         Assert.Equal(expected: [0], actual: emit.FieldReads.Select(selector: static handle => handle.Ordinal));
@@ -225,7 +225,7 @@ public sealed class WorldFieldProgramLawTests {
     public void Compile_NodeCollectionsAreImmutableAfterDependencyAnalysis() {
         var state = BuildState();
         var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
-        var program = WorldFieldProgram.Compile(document: fields, state: WorldStateCatalog.Compile(section: state));
+        var program = WorldFieldProgram.Compile(document: fields, state: StateCatalog.Compile(section: state));
         var transform = Assert.IsType<WorldFieldNode.Transform>(@object: program.Nodes[1]);
         var originalWrite = transform.FieldWrites[0];
         var alteredWrites = transform.FieldWrites.SetItem(index: 0, item: default);
@@ -248,14 +248,14 @@ public sealed class WorldFieldProgramLawTests {
                 new WorldStateRow(
                     Name: CellName.Parse(candidate: "cold"),
                     Kind: CellKind.Fixed,
-                    Domain: new WorldStateDomain.CellsOf(Topology: "ground"),
+                    Domain: new StateDomain.CellsOf(Topology: "ground"),
                     Field: new WorldStateFieldTrait()
                 ),
             ],
         };
         var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
 
-        var program = WorldFieldProgram.Compile(document: fields, state: WorldStateCatalog.Compile(section: state));
+        var program = WorldFieldProgram.Compile(document: fields, state: StateCatalog.Compile(section: state));
         var dependency = Assert.Single(collection: program.Dependencies);
 
         Assert.Equal(expected: 0, actual: dependency.Before.Ordinal);
@@ -270,7 +270,7 @@ public sealed class WorldFieldProgramLawTests {
         var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
 
         var transform = Assert.IsType<WorldFieldNode.Transform>(@object: Assert.Single(
-            collection: WorldFieldProgram.Compile(document: fields, state: WorldStateCatalog.Compile(section: state)).Nodes
+            collection: WorldFieldProgram.Compile(document: fields, state: StateCatalog.Compile(section: state)).Nodes
         ));
 
         Assert.Empty(collection: transform.FieldReads);
@@ -334,7 +334,7 @@ public sealed class WorldFieldProgramLawTests {
         );
         var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
 
-        var program = WorldFieldProgram.Compile(document: fields, state: WorldStateCatalog.Compile(section: state));
+        var program = WorldFieldProgram.Compile(document: fields, state: StateCatalog.Compile(section: state));
 
         Assert.Empty(collection: program.Dependencies);
     }
@@ -342,7 +342,7 @@ public sealed class WorldFieldProgramLawTests {
     public void AFieldHandleFromAnotherProgramIsRejectedEvenWhenItsOrdinalFits() {
         var state = BuildState();
         var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
-        var catalog = WorldStateCatalog.Compile(section: state);
+        var catalog = StateCatalog.Compile(section: state);
         var first = WorldFieldProgram.Compile(document: fields, state: catalog);
         var second = WorldFieldProgram.Compile(document: fields, state: catalog);
         var firstHeat = Assert.Single(collection: first.Fields).Handle;
@@ -367,7 +367,7 @@ public sealed class WorldFieldProgramLawTests {
 
         var exception = Assert.Throws<InvalidOperationException>(testCode: () => WorldFieldProgram.Compile(
             document: fields,
-            state: WorldStateCatalog.Compile(section: state)
+            state: StateCatalog.Compile(section: state)
         ));
 
         Assert.Contains(
@@ -382,7 +382,7 @@ public sealed class WorldFieldProgramLawTests {
         IReadOnlyList<WorldReaction>? reactions = null,
         string fieldName = "heat"
     ) => new(
-        Lattices: [new WorldStateLatticeTopology.Field(
+        Lattices: [new WorldFieldTopology(
             Name: "ground",
             Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
             CellSize: 1f,
@@ -405,7 +405,7 @@ public sealed class WorldFieldProgramLawTests {
             new WorldStateRow(
                 Name: CellName.Parse(candidate: fieldName),
                 Kind: CellKind.Fixed,
-                Domain: new WorldStateDomain.CellsOf(Topology: "ground"),
+                Domain: new StateDomain.CellsOf(Topology: "ground"),
                 Field: new WorldStateFieldTrait(
                     Initial: 0f,
                     Min: 0f,
@@ -415,7 +415,7 @@ public sealed class WorldFieldProgramLawTests {
             (season ?? new WorldStateRow(
                 Name: CellName.Parse(candidate: "season"),
                 Kind: CellKind.Fixed,
-                Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]
+                Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0L)]
             )),
             new WorldStateRow(
                 Name: CellName.Parse(candidate: "burning"),

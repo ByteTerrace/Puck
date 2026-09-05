@@ -273,7 +273,7 @@ public sealed partial class WorldServer {
             return 0L;
         }
         if (operand.FilterRow is null) {
-            return WorldStateReader.ReduceRaw(row: declared, op: operand.Reduce, tick: tick);
+            return StateReader.ReduceRaw(row: declared, op: operand.Reduce, tick: tick);
         }
 
         var hasValue = false;
@@ -294,7 +294,7 @@ public sealed partial class WorldServer {
             ) {
                 continue;
             }
-            if (operand.Reduce == WorldStateReduceOp.Count) {
+            if (operand.Reduce == StateReduceOp.Count) {
                 accumulator++;
                 continue;
             }
@@ -313,8 +313,8 @@ public sealed partial class WorldServer {
             accumulator = (!hasValue
                 ? raw.Value
                 : operand.Reduce switch {
-                    WorldStateReduceOp.Sum => unchecked(accumulator + raw.Value),
-                    WorldStateReduceOp.Max => Math.Max(accumulator, raw.Value),
+                    StateReduceOp.Sum => unchecked(accumulator + raw.Value),
+                    StateReduceOp.Max => Math.Max(accumulator, raw.Value),
                     _ => Math.Min(accumulator, raw.Value),
                 }
             );
@@ -346,13 +346,13 @@ public sealed partial class WorldServer {
 
         return ((declared.Kind == CellKind.Fixed)
             ? FixedQ4816.FromRawBits(value: raw)
-            : WorldStateReader.LiftSaturating(raw: raw)
+            : StateReader.LiftSaturating(raw: raw)
         );
     }
-    // The compiled-handle sibling of ReadStateCell — every per-tick reader that already carries a WorldStateHandle
+    // The compiled-handle sibling of ReadStateCell — every per-tick reader that already carries a StateHandle
     // (StateHandle on a CompiledWorldOperand, or Handle on a CompiledCellRef/CompiledBodyRef) reads through here
     // instead of a row-name scan. Never called with an invalid handle: see WorldStateReader.TryReadHandle's remarks.
-    private FixedQ4816 ReadStateCellByHandle(WorldStateHandle handle, string key, ulong tick) {
+    private FixedQ4816 ReadStateCellByHandle(StateHandle handle, string key, ulong tick) {
         if (
             !WorldStateReader.TryReadHandle(
             definition: m_definition,
@@ -371,7 +371,7 @@ public sealed partial class WorldServer {
 
         return ((declared.Kind == CellKind.Fixed)
             ? FixedQ4816.FromRawBits(value: raw)
-            : WorldStateReader.LiftSaturating(raw: raw)
+            : StateReader.LiftSaturating(raw: raw)
         );
     }
     // $symmetry: — the source cell read through the same resolver as an ordinary cell, its whole part taken as a
@@ -517,7 +517,7 @@ public sealed partial class WorldServer {
         _ => throw new InvalidOperationException($"unhandled compiled world operand case '{operand.Value?.GetType().Name}'"),
     };
 
-    private WorldFact ReadStateFact(WorldStateHandle handle, string key, ulong tick) {
+    private WorldFact ReadStateFact(StateHandle handle, string key, ulong tick) {
         if (
             !WorldStateReader.TryReadHandle(
                 definition: m_definition,
@@ -548,7 +548,7 @@ public sealed partial class WorldServer {
     // reader itself; the row can gain a non-numeric-keyed cell after compile via an ordinary world.state.cell.set,
     // and compile-time already proved the row is keyed, not that every future key will parse). Ties resolve to the
     // LOWEST eligible index, deterministically. Returns -1 ("no body") when no cell is eligible.
-    private int ResolveArgBody(WorldStateHandle handle, WorldStateReduceOp op, ulong tick, WorldStateHandle filterHandle = default, bool hasFilter = false) {
+    private int ResolveArgBody(StateHandle handle, StateReduceOp op, ulong tick, StateHandle filterHandle = default, bool hasFilter = false) {
         var winner = WorldStateReader.ArgExtremum(
             catalog: m_definition.StateCatalog,
             definition: m_definition,
@@ -598,11 +598,11 @@ public sealed partial class WorldServer {
     };
     // The static tables the definition references, in tables-row order; a validated document's rows are proven to
     // load, so a failure here is an invariant violation, never a reachable case.
-    private static CompiledWorldTable[] CompileTables(WorldDefinition definition) {
+    private static CompiledTable[] CompileTables(WorldDefinition definition) {
         var rows = (definition.Tables ?? []);
-        var compiled = new CompiledWorldTable[rows.Count];
+        var compiled = new CompiledTable[rows.Count];
         for (var index = 0; index < compiled.Length; index++) {
-            if (!CompiledWorldTable.TryCompile(row: rows[index], table: out var table, error: out var error)) {
+            if (!WorldTables.TryCompile(row: rows[index], table: out var table, error: out var error)) {
                 throw new InvalidOperationException(message: $"tables[{rows[index].Name}]: {error} (a validated document must still resolve at construction)");
             }
             compiled[index] = table!;
@@ -698,7 +698,7 @@ public sealed partial class WorldServer {
         return pairKey;
     }
     // The nearest active body to 'from' (itself excluded) whose cell in the keyed tag row reads nonzero, or -1.
-    private int ResolveNearestBody(CompiledBodyRef from, WorldStateHandle tagRowHandle, ulong tick) {
+    private int ResolveNearestBody(CompiledBodyRef from, StateHandle tagRowHandle, ulong tick) {
         var origin = Body(index: ResolveBodyRef(
             bodyRef: from,
             tick: tick
@@ -763,8 +763,8 @@ public sealed partial class WorldServer {
         _ => ResolveArgBody(
         handle: bodyRef.Handle,
         op: ((bodyRef.Kind == CompiledBodyRefKind.ArgMax)
-        ? WorldStateReduceOp.Max
-        : WorldStateReduceOp.Min),
+        ? StateReduceOp.Max
+        : StateReduceOp.Min),
         tick: tick
     ),
     });
@@ -801,9 +801,9 @@ public sealed partial class WorldServer {
         return true;
     }
 
-    // ContainsKey/ApplyEviction moved to Puck.World.Schema's WorldStateCellWriter (public, cross-project)
+    // ContainsKey/ApplyEviction moved to Puck.World.Schema's StateCellWriter (public, cross-project)
     // so an owned-identity document write — which has no ordered mutation domain of its own — runs the IDENTICAL
-    // pure composition rather than a second reading of it. See WorldStateCellWriter's own remarks.
+    // pure composition rather than a second reading of it. See StateCellWriter's own remarks.
 
     /// <summary>Composes the authoritative answer to a read-back query.</summary>
     /// <param name="query">The read-back query.</param>

@@ -12,7 +12,7 @@ public sealed class StateCellOperand : WorldOperandFact, IStateAddressedOperand 
     /// <param name="keyFrom">The live key indirection, or <see langword="null"/> for a literal <paramref name="key"/>.</param>
     /// <param name="stateHandle">The compiled row handle.</param>
     /// <param name="valueKind">The row's own cell kind.</param>
-    public StateCellOperand(string row, string? key, CompiledCellRef? keyFrom, WorldStateHandle stateHandle, CellKind valueKind)
+    public StateCellOperand(string row, string? key, CompiledCellRef? keyFrom, StateHandle stateHandle, CellKind valueKind)
         : base(WorldRuleFactKind.StateCell, valueKind) {
         Row = row;
         Key = key;
@@ -27,7 +27,7 @@ public sealed class StateCellOperand : WorldOperandFact, IStateAddressedOperand 
     /// <inheritdoc/>
     public CompiledCellRef? KeyFrom { get; }
     /// <summary>The compiled row handle.</summary>
-    public WorldStateHandle StateHandle { get; }
+    public StateHandle StateHandle { get; }
 }
 
 /// <summary>A value the enclosing rule bound for this evaluation (<see cref="RuleFacts.BindPrefix"/>).</summary>
@@ -146,8 +146,8 @@ public sealed class ReductionOperand : WorldOperandFact {
     /// <param name="reduce">The aggregate.</param>
     /// <param name="filterRow">The optional keyed row whose nonzero cells admit candidates.</param>
     /// <param name="filterHandle">The compiled handle for <paramref name="filterRow"/>.</param>
-    /// <param name="valueKind">Int for <see cref="WorldStateReduceOp.Count"/>, else the aggregated row's own kind.</param>
-    public ReductionOperand(string row, WorldStateHandle stateHandle, WorldStateReduceOp reduce, string? filterRow, WorldStateHandle filterHandle, CellKind valueKind)
+    /// <param name="valueKind">Int for <see cref="StateReduceOp.Count"/>, else the aggregated row's own kind.</param>
+    public ReductionOperand(string row, StateHandle stateHandle, StateReduceOp reduce, string? filterRow, StateHandle filterHandle, CellKind valueKind)
         : base(WorldRuleFactKind.Reduction, valueKind) {
         Row = row;
         StateHandle = stateHandle;
@@ -159,23 +159,23 @@ public sealed class ReductionOperand : WorldOperandFact {
     /// <summary>The aggregated row.</summary>
     public string Row { get; }
     /// <summary>The compiled row handle.</summary>
-    public WorldStateHandle StateHandle { get; }
+    public StateHandle StateHandle { get; }
     /// <summary>The aggregate.</summary>
-    public WorldStateReduceOp Reduce { get; }
+    public StateReduceOp Reduce { get; }
     /// <summary>The optional keyed row whose nonzero cells admit candidates.</summary>
     public string? FilterRow { get; }
     /// <summary>The compiled handle for <see cref="FilterRow"/>.</summary>
-    public WorldStateHandle FilterHandle { get; }
+    public StateHandle FilterHandle { get; }
 }
 
 /// <summary>The body naming a row's extremal cell (<see cref="WorldRuleFacts.ArgMaxPrefix"/>/<see cref="WorldRuleFacts.ArgMinPrefix"/>).</summary>
 public sealed class ArgBodyOperand : WorldOperandFact {
     /// <param name="row">The keyed row searched.</param>
     /// <param name="stateHandle">The compiled row handle.</param>
-    /// <param name="reduce"><see cref="WorldStateReduceOp.Max"/> or <see cref="WorldStateReduceOp.Min"/>.</param>
+    /// <param name="reduce"><see cref="StateReduceOp.Max"/> or <see cref="StateReduceOp.Min"/>.</param>
     /// <param name="filterRow">The optional keyed row whose nonzero cells admit candidates.</param>
     /// <param name="filterHandle">The compiled handle for <paramref name="filterRow"/>.</param>
-    public ArgBodyOperand(string row, WorldStateHandle stateHandle, WorldStateReduceOp reduce, string? filterRow, WorldStateHandle filterHandle)
+    public ArgBodyOperand(string row, StateHandle stateHandle, StateReduceOp reduce, string? filterRow, StateHandle filterHandle)
         : base(WorldRuleFactKind.ArgBody, CellKind.Int) {
         Row = row;
         StateHandle = stateHandle;
@@ -187,13 +187,13 @@ public sealed class ArgBodyOperand : WorldOperandFact {
     /// <summary>The keyed row searched.</summary>
     public string Row { get; }
     /// <summary>The compiled row handle.</summary>
-    public WorldStateHandle StateHandle { get; }
-    /// <summary><see cref="WorldStateReduceOp.Max"/> or <see cref="WorldStateReduceOp.Min"/>.</summary>
-    public WorldStateReduceOp Reduce { get; }
+    public StateHandle StateHandle { get; }
+    /// <summary><see cref="StateReduceOp.Max"/> or <see cref="StateReduceOp.Min"/>.</summary>
+    public StateReduceOp Reduce { get; }
     /// <summary>The optional keyed row whose nonzero cells admit candidates.</summary>
     public string? FilterRow { get; }
     /// <summary>The compiled handle for <see cref="FilterRow"/>.</summary>
-    public WorldStateHandle FilterHandle { get; }
+    public StateHandle FilterHandle { get; }
 }
 
 /// <summary>The live distance between two named bodies (<see cref="WorldRuleFacts.DistancePrefix"/>).</summary>
@@ -271,7 +271,7 @@ public sealed class NearestOperand : WorldOperandFact {
     /// <param name="bodyA">The reference body.</param>
     /// <param name="row">The keyed tag row.</param>
     /// <param name="stateHandle">The compiled handle for <paramref name="row"/>.</param>
-    public NearestOperand(CompiledBodyRef bodyA, string row, WorldStateHandle stateHandle) : base(WorldRuleFactKind.Nearest, CellKind.Int) {
+    public NearestOperand(CompiledBodyRef bodyA, string row, StateHandle stateHandle) : base(WorldRuleFactKind.Nearest, CellKind.Int) {
         BodyA = bodyA;
         Row = row;
         StateHandle = stateHandle;
@@ -282,7 +282,7 @@ public sealed class NearestOperand : WorldOperandFact {
     /// <summary>The keyed tag row.</summary>
     public string Row { get; }
     /// <summary>The compiled handle for <see cref="Row"/>.</summary>
-    public WorldStateHandle StateHandle { get; }
+    public StateHandle StateHandle { get; }
 }
 
 /// <summary>One body's navigation status or remaining waypoint count (<see cref="WorldRuleFacts.NavigationPrefix"/>).</summary>
@@ -314,7 +314,7 @@ public sealed class SymmetryOperand : WorldOperandFact, IStateAddressedOperand {
     /// <param name="symmetryOtherCell">The cell the other node is read from live, or <see langword="null"/> for the
     /// literal <paramref name="symmetryArgument"/>.</param>
     /// <param name="valueKind">Fixed for the two projection functions, else Int.</param>
-    public SymmetryOperand(string row, string? key, CompiledCellRef? keyFrom, WorldStateHandle stateHandle, WorldSymmetryFunction symmetry, long symmetryArgument, CompiledCellRef? symmetryOtherCell, CellKind valueKind)
+    public SymmetryOperand(string row, string? key, CompiledCellRef? keyFrom, StateHandle stateHandle, WorldSymmetryFunction symmetry, long symmetryArgument, CompiledCellRef? symmetryOtherCell, CellKind valueKind)
         : base(WorldRuleFactKind.Symmetry, valueKind) {
         Row = row;
         Key = key;
@@ -343,7 +343,7 @@ public sealed class SymmetryOperand : WorldOperandFact, IStateAddressedOperand {
     /// <inheritdoc/>
     public CompiledCellRef? KeyFrom { get; }
     /// <summary>The compiled row handle.</summary>
-    public WorldStateHandle StateHandle { get; }
+    public StateHandle StateHandle { get; }
     /// <summary>The lattice map applied to the source node.</summary>
     public WorldSymmetryFunction Symmetry { get; }
     /// <summary>The literal argument, when <see cref="SymmetryOtherCell"/> is <see langword="null"/>.</summary>
@@ -363,7 +363,7 @@ public sealed class BoardOperand : WorldOperandFact, IStateAddressedOperand {
     /// <param name="stateHandle">The compiled row handle.</param>
     /// <param name="board">The compiled query.</param>
     /// <param name="bodyA">The referenced body for <see cref="WorldBoardQueryKind.CellOf"/>; <see langword="null"/> otherwise.</param>
-    public BoardOperand(string row, string? key, CompiledCellRef? keyFrom, WorldStateHandle stateHandle, CompiledWorldBoardQuery board, CompiledBodyRef? bodyA)
+    public BoardOperand(string row, string? key, CompiledCellRef? keyFrom, StateHandle stateHandle, CompiledWorldBoardQuery board, CompiledBodyRef? bodyA)
         : base(WorldRuleFactKind.Board, CellKind.Int) {
         Row = row;
         Key = key;
@@ -381,7 +381,7 @@ public sealed class BoardOperand : WorldOperandFact, IStateAddressedOperand {
     /// <inheritdoc/>
     public CompiledCellRef? KeyFrom { get; }
     /// <summary>The compiled row handle.</summary>
-    public WorldStateHandle StateHandle { get; }
+    public StateHandle StateHandle { get; }
     /// <summary>The compiled query.</summary>
     public CompiledWorldBoardQuery Board { get; }
     /// <summary>The referenced body for <see cref="WorldBoardQueryKind.CellOf"/>; <see langword="null"/> otherwise.</summary>
@@ -393,7 +393,7 @@ public sealed class BoardOperand : WorldOperandFact, IStateAddressedOperand {
 public sealed class PhaseOperand : WorldOperandFact {
     /// <param name="row">The phase row.</param>
     /// <param name="stateHandle">The compiled row handle.</param>
-    public PhaseOperand(string row, WorldStateHandle stateHandle) : base(WorldRuleFactKind.Phase, CellKind.Int) {
+    public PhaseOperand(string row, StateHandle stateHandle) : base(WorldRuleFactKind.Phase, CellKind.Int) {
         Row = row;
         StateHandle = stateHandle;
     }
@@ -401,7 +401,7 @@ public sealed class PhaseOperand : WorldOperandFact {
     /// <summary>The phase row.</summary>
     public string Row { get; }
     /// <summary>The compiled row handle.</summary>
-    public WorldStateHandle StateHandle { get; }
+    public StateHandle StateHandle { get; }
 }
 
 /// <summary>A pattern-language match over a row's word (<see cref="RuleFacts.MatchPrefix"/>).</summary>
@@ -417,7 +417,7 @@ public sealed class PatternOperand : WorldOperandFact, IStateAddressedOperand {
     /// <param name="filterHandle">The compiled handle for <paramref name="filterRow"/>.</param>
     /// <param name="matchFacet">What this operand answers about its word.</param>
     /// <param name="tokenExpression">The zone's per-token value expression, when the pattern carries one.</param>
-    public PatternOperand(string row, string? key, CompiledCellRef? keyFrom, WorldStateHandle stateHandle, string pattern, CompiledWorldBoardQuery? board, string? filterRow, WorldStateHandle filterHandle, WorldMatchFacet matchFacet, CompiledWorldExpressionToken[]? tokenExpression)
+    public PatternOperand(string row, string? key, CompiledCellRef? keyFrom, StateHandle stateHandle, string pattern, CompiledWorldBoardQuery? board, string? filterRow, StateHandle filterHandle, WorldMatchFacet matchFacet, CompiledWorldExpressionToken[]? tokenExpression)
         : base(WorldRuleFactKind.Pattern, CellKind.Int) {
         Row = row;
         Key = key;
@@ -439,7 +439,7 @@ public sealed class PatternOperand : WorldOperandFact, IStateAddressedOperand {
     /// <inheritdoc/>
     public CompiledCellRef? KeyFrom { get; }
     /// <summary>The compiled handle for <see cref="Row"/>.</summary>
-    public WorldStateHandle StateHandle { get; }
+    public StateHandle StateHandle { get; }
     /// <summary>The pattern name.</summary>
     public string Pattern { get; }
     /// <summary>The board ray descriptor, for a board source; <see langword="null"/> otherwise.</summary>
@@ -447,7 +447,7 @@ public sealed class PatternOperand : WorldOperandFact, IStateAddressedOperand {
     /// <summary>The zone's attribute row name, for a zone source; <see langword="null"/> otherwise.</summary>
     public string? FilterRow { get; }
     /// <summary>The compiled handle for <see cref="FilterRow"/>.</summary>
-    public WorldStateHandle FilterHandle { get; }
+    public StateHandle FilterHandle { get; }
     /// <summary>What this operand answers about its word.</summary>
     public WorldMatchFacet MatchFacet { get; }
     /// <summary>The zone's per-token value expression, when the pattern carries one.</summary>
@@ -460,7 +460,7 @@ public sealed class HistoryOperand : WorldOperandFact {
     /// <param name="stateHandle">The compiled row handle.</param>
     /// <param name="age">0 is the latest push; an age the ring no longer holds reads the trait's empty value.</param>
     /// <param name="valueKind">The row's own cell kind.</param>
-    public HistoryOperand(string row, WorldStateHandle stateHandle, long age, CellKind valueKind) : base(WorldRuleFactKind.History, valueKind) {
+    public HistoryOperand(string row, StateHandle stateHandle, long age, CellKind valueKind) : base(WorldRuleFactKind.History, valueKind) {
         Row = row;
         StateHandle = stateHandle;
         Age = age;
@@ -469,7 +469,7 @@ public sealed class HistoryOperand : WorldOperandFact {
     /// <summary>The history row.</summary>
     public string Row { get; }
     /// <summary>The compiled row handle.</summary>
-    public WorldStateHandle StateHandle { get; }
+    public StateHandle StateHandle { get; }
     /// <summary>0 is the latest push; an age the ring no longer holds reads the trait's empty value.</summary>
     public long Age { get; }
 }

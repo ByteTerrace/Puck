@@ -100,7 +100,7 @@ public sealed class WorldRuleCompilerAdversarialLawTests {
                 Name: CellName.Parse(candidate: Property),
                 Kind: CellKind.Int,
                 Capacity: 1,
-                Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: 1L)]
+                Cells: [new StateCell(Key: CellName.Parse(candidate: "0"), Value: 1L)]
             )]),
             Properties = new WorldPropertyRegistrySection(Names: [Property]),
             Interactions = new WorldInteractionsSection(Interactions: [new WorldInteraction(

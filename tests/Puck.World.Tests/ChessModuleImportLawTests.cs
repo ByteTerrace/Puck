@@ -64,7 +64,7 @@ public sealed class ChessModuleImportLawTests {
     private static long Slot(WorldFixture fixture, string name) => Cell(Row(fixture, name), WorldStateRow.SlotKey);
 
     // Restated tabletop world origin: [20, -0.5, -12] (composed position) + the fragment's own LOCAL chessBoard
-    // origin [-0.8, 1.25, -0.8] = [19.2, 0.75, -12.8] — the SAME resolution WorldTopologyCompilation.Find(WorldDefinition,
+    // origin [-0.8, 1.25, -0.8] = [19.2, 0.75, -12.8] — the SAME resolution TopologyCompilation.Find(WorldDefinition,
     // string) performs at runtime; recomputed by hand here as the test's own control on the anchor math.
     private const float OriginX = 19.2f;
     private const float OriginZ = -12.8f;

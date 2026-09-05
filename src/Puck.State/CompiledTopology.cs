@@ -1,6 +1,192 @@
-namespace Puck.World;
+using System.Globalization;
+using Puck.Maths;
 
-public sealed partial class CompiledWorldTopology {
+namespace Puck.State;
+
+/// <summary>A compiled immutable adjacency table. Absent neighbours are -1. Direction names come from the
+/// topology's own <see cref="IDiscreteLatticeTopology.Directions"/> when authored; the unauthored default matches
+/// what every kind carried before that field existed — Grid N, NE, E, SE, S, SW, W, NW; Hex E, NE, NW, W, SW, SE;
+/// Box the 26 in <see cref="BoxDirectionNames"/>; Ring forward and backward.</summary>
+public sealed partial class CompiledTopology {
+    private readonly int[] m_neighbours;
+    private readonly int[] m_opposite;
+    private readonly string[] m_keys;
+    private readonly CellName[] m_names;
+    private readonly string[] m_directionNames;
+    private readonly int m_width;
+    private readonly int m_depth;
+    private readonly int m_layers;
+    private readonly FixedQ4816 m_layerHeight;
+    private readonly TopologyWrap m_wrap;
+    private readonly FixedVector3 m_origin;
+    private readonly FixedQ4816 m_cellSize;
+    private readonly FixedQ4816 m_band;
+
+    internal CompiledTopology(TopologyKind kind, int count, int directions, int[] neighbours, int[] opposite,
+        int width, int depth, TopologyWrap wrap, FixedVector3 origin, FixedQ4816 cellSize, FixedQ4816 band,
+        int[][] images, string[] elementNames, int layers, FixedQ4816 layerHeight, string[] directionNames) {
+        m_band = band;
+        m_layers = layers;
+        m_layerHeight = layerHeight;
+        m_images = images;
+        m_elementNames = elementNames;
+        Kind = kind;
+        CellCount = count;
+        DirectionCount = directions;
+        m_neighbours = neighbours;
+        m_opposite = opposite;
+        m_directionNames = directionNames;
+        m_width = width;
+        m_depth = depth;
+        m_wrap = wrap;
+        m_origin = origin;
+        m_cellSize = cellSize;
+        m_keys = new string[count];
+        m_names = new CellName[count];
+        for (var cell = 0; cell < count; cell++) {
+            m_keys[cell] = cell.ToString(CultureInfo.InvariantCulture);
+            m_names[cell] = CellName.Parse(m_keys[cell]);
+        }
+    }
+
+    /// <summary>Gets a cell's key as a parsed cell name, without re-parsing.</summary>
+    /// <param name="cell">The cell ordinal.</param>
+    public CellName NameOf(int cell) => m_names[cell];
+
+    /// <summary>Gets the shape.</summary>
+    public TopologyKind Kind { get; }
+    /// <summary>Gets the number of cells.</summary>
+    public int CellCount { get; }
+    /// <summary>Gets the number of directions at each cell.</summary>
+    public int DirectionCount { get; }
+    /// <summary>Gets the declared minimum corner — the spatial frame a <see cref="Kind"/> of
+    /// <see cref="TopologyKind.Grid"/> resolves <see cref="TryCellOf"/>/<see cref="TryOffset"/> against.</summary>
+    public FixedVector3 Origin => m_origin;
+    /// <summary>Gets the declared cell edge, world units.</summary>
+    public FixedQ4816 CellSize => m_cellSize;
+    /// <summary>Gets the cell count along +X.</summary>
+    public int Width => m_width;
+    /// <summary>Gets the cell count along +Z.</summary>
+    public int Depth => m_depth;
+
+    /// <summary>Resolves the grid cell a world position falls in, X/Z only — a board carries one layer, so no
+    /// height test applies. Only <see cref="TopologyKind.Grid"/> carries a rectangular X/Z frame; every other
+    /// kind answers <see langword="false"/>.</summary>
+    /// <param name="position">The world position (a body's resolved pose).</param>
+    /// <param name="cell">The resolved cell ordinal.</param>
+    /// <returns>Whether the position lies over a declared cell.</returns>
+    public bool TryCellOf(in FixedVector3 position, out int cell) {
+        cell = -1;
+        if (Kind is not (TopologyKind.Grid or TopologyKind.Box)) {
+            return false;
+        }
+        var layer = 0;
+        if (Kind == TopologyKind.Box) {
+            var localY = ((Int128)position.Y.Value) - m_origin.Y.Value;
+            if (localY < Int128.Zero) {
+                return false;
+            }
+            var y = localY / m_layerHeight.Value;
+            if (y >= m_layers) {
+                return false;
+            }
+            layer = (int)y;
+        } else if (m_band > FixedQ4816.Zero) {
+            var localY = ((Int128)position.Y.Value) - m_origin.Y.Value;
+            if (localY > m_band.Value || localY < -(Int128)m_band.Value) {
+                return false;
+            }
+        }
+        var localX = ((Int128)position.X.Value) - m_origin.X.Value;
+        var localZ = ((Int128)position.Z.Value) - m_origin.Z.Value;
+        if (localX < Int128.Zero || localZ < Int128.Zero) {
+            return false;
+        }
+        var x = localX / m_cellSize.Value;
+        var z = localZ / m_cellSize.Value;
+        if (x >= m_width || z >= m_depth) {
+            return false;
+        }
+        cell = (((layer * m_depth) + (int)z) * m_width) + (int)x;
+        return true;
+    }
+
+    /// <summary>The 26 space directions of a <see cref="TopologyKind.Box"/>: the grid's eight compass names in
+    /// the layer, then each prefixed <c>U</c> (up one layer) and <c>D</c> (down one), with <c>U</c> and <c>D</c> alone
+    /// for the vertical.</summary>
+    public static readonly string[] BoxDirectionNames = [
+        "N", "NE", "E", "SE", "S", "SW", "W", "NW",
+        "U", "UN", "UNE", "UE", "USE", "US", "USW", "UW", "UNW",
+        "D", "DN", "DNE", "DE", "DSE", "DS", "DSW", "DW", "DNW",
+    ];
+
+    /// <summary>Resolves the cell reached by moving <paramref name="dx"/>/<paramref name="dz"/> grid steps from
+    /// <paramref name="cell"/>, wrapping the axes this topology declares — the arbitrary-offset sibling of
+    /// <see cref="Neighbour"/>'s fixed eight directions, what a leaper (a knight, or a chess-variant piece with no
+    /// ray shape) authors its reach against. Only <see cref="TopologyKind.Grid"/> carries rectangular
+    /// coordinates; every other kind answers <see langword="false"/>.</summary>
+    /// <param name="cell">The source cell ordinal.</param>
+    /// <param name="dx">The signed step along +X.</param>
+    /// <param name="dz">The signed step along +Z.</param>
+    /// <param name="result">The resolved cell ordinal.</param>
+    /// <returns>Whether the offset lands on a declared cell.</returns>
+    public bool TryOffset(int cell, int dx, int dz, out int result) {
+        result = -1;
+        if (Kind != TopologyKind.Grid || (uint)cell >= (uint)CellCount) {
+            return false;
+        }
+        var x = (cell % m_width) + dx;
+        var z = (cell / m_width) + dz;
+        if (m_wrap is TopologyWrap.X or TopologyWrap.Both) {
+            x = ((x % m_width) + m_width) % m_width;
+        }
+        if (m_wrap is TopologyWrap.Y or TopologyWrap.Both) {
+            z = ((z % m_depth) + m_depth) % m_depth;
+        }
+        if ((uint)x >= (uint)m_width || (uint)z >= (uint)m_depth) {
+            return false;
+        }
+        result = (z * m_width) + x;
+        return true;
+    }
+    /// <summary>Reads one precomputed neighbour.</summary>
+    /// <param name="cell">The source cell ordinal.</param>
+    /// <param name="direction">The direction ordinal in this shape's vocabulary.</param>
+    /// <returns>The neighbour, or -1 for an edge or invalid address.</returns>
+    public int Neighbour(int cell, int direction) => (uint)cell < CellCount && (uint)direction < DirectionCount
+        ? m_neighbours[cell * DirectionCount + direction] : -1;
+
+    /// <summary>Reads the direction ordinal whose step vector is the negation of <paramref name="direction"/>'s —
+    /// compiled once from each direction's own offset rather than assumed from ordinal arithmetic, so an
+    /// asymmetrically-ordered direction table (a <see cref="TopologyKind.Box"/>'s 26) still resolves correctly.</summary>
+    /// <param name="direction">The direction ordinal.</param>
+    /// <returns>The opposite direction ordinal, or -1 for an invalid address.</returns>
+    public int Opposite(int direction) => (uint)direction < DirectionCount ? m_opposite[direction] : -1;
+
+    /// <summary>Returns a precompiled canonical cell key.</summary>
+    /// <param name="cell">The cell ordinal.</param>
+    /// <returns>The decimal key.</returns>
+    public string Key(int cell) => m_keys[cell];
+
+    /// <summary>Resolves a canonical decimal cell key without allocation.</summary>
+    /// <param name="key">The key.</param>
+    /// <param name="cell">The ordinal.</param>
+    /// <returns>Whether the key names a cell.</returns>
+    public bool TryCell(string key, out int cell) => int.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out cell)
+        && (uint)cell < CellCount && string.Equals(key, m_keys[cell], StringComparison.Ordinal);
+
+    /// <summary>Resolves a direction token for this topology — this topology's own authored names when
+    /// <see cref="IDiscreteLatticeTopology.Directions"/> was declared, its kind's default names otherwise.</summary>
+    /// <param name="token">The case-sensitive direction name.</param>
+    /// <returns>The direction ordinal or -1.</returns>
+    public int Direction(string token) => Array.IndexOf(m_directionNames, token);
+    /// <summary>Gets a direction's own name.</summary>
+    /// <param name="direction">The direction ordinal.</param>
+    /// <returns>The name, or <see langword="null"/> for an invalid ordinal.</returns>
+    public string? DirectionName(int direction) => ((uint)direction < (uint)m_directionNames.Length) ? m_directionNames[direction] : null;
+}
+
+public sealed partial class CompiledTopology {
     private readonly int[][] m_images = [];
     private readonly string[] m_elementNames = [];
     private readonly Dictionary<string, int> m_elementAliases = new(StringComparer.Ordinal);
@@ -35,15 +221,14 @@ public sealed partial class CompiledWorldTopology {
     public int Image(int element, int cell) => m_images[element][cell];
 
     // Every point-group element — Grid's, Hex's, and Box's alike — is a signed-axis permutation: it carries source
-    // axis A to output position k with sign S, spelled "+x-y+z" (letter per axis, sign first). A Box already needed
-    // this to name 48 cube elements by hand; Grid (2 planar axes, letters "xz") and Hex (3 cube coordinates q/r/s
-    // summing to zero, letters "qrs") read the SAME AxisMap/Spell mechanism instead of the hand-picked
-    // "mirrorMain"/"mirror3" names they used to carry. Element 0 is always the identity, so a caller may fold over
-    // all elements and rely on the untransformed board being among the images.
-    internal static (int[][] Images, string[] Names) BuildSymmetry(WorldTopologyKind kind, int width, int depth, int layers,
+    // axis A to output position k with sign S, spelled "+x-y+z" (letter per axis, sign first). A Box names 48 cube
+    // elements this way; Grid (2 planar axes, letters "xz") and Hex (3 cube coordinates q/r/s summing to zero,
+    // letters "qrs") read the same AxisMap/Spell mechanism. Element 0 is always the identity, so a caller may fold
+    // over all elements and rely on the untransformed board being among the images.
+    internal static (int[][] Images, string[] Names) BuildSymmetry(TopologyKind kind, int width, int depth, int layers,
         IReadOnlyList<(int X, int Y, int Z)> coordinates, Dictionary<(int, int, int), int> indices) {
         var group = EnumerateGroup(kind, width, depth, layers);
-        return (kind == WorldTopologyKind.Hex)
+        return (kind == TopologyKind.Hex)
             ? MaterializeHex(group.Elements, coordinates, indices)
             : MaterializeAxis(group.Elements, group.AxisCount, group.Letters, group.Extents, coordinates, indices);
     }
@@ -56,7 +241,7 @@ public sealed partial class CompiledWorldTopology {
     /// <param name="depth">Cells along +Z.</param>
     /// <param name="layers">Cells along +Y.</param>
     /// <returns>Every element's canonical signed-axis name, identity first.</returns>
-    internal static string[] ElementNames(WorldTopologyKind kind, int width, int depth, int layers) {
+    internal static string[] ElementNames(TopologyKind kind, int width, int depth, int layers) {
         var group = EnumerateGroup(kind, width, depth, layers);
         var names = new string[group.Elements.Count];
         for (var element = 0; element < names.Length; element++) {
@@ -67,10 +252,10 @@ public sealed partial class CompiledWorldTopology {
 
     private readonly record struct Group(List<AxisMap> Elements, int AxisCount, string Letters, int[] Extents);
 
-    private static Group EnumerateGroup(WorldTopologyKind kind, int width, int depth, int layers) => kind switch {
-        WorldTopologyKind.Grid => EnumerateAxisGroup(axisCount: 2, extents: [width, depth, 1], letters: "xz"),
-        WorldTopologyKind.Box => EnumerateAxisGroup(axisCount: 3, extents: [width, depth, layers], letters: "xyz"),
-        WorldTopologyKind.Hex => EnumerateHexGroup(),
+    private static Group EnumerateGroup(TopologyKind kind, int width, int depth, int layers) => kind switch {
+        TopologyKind.Grid => EnumerateAxisGroup(axisCount: 2, extents: [width, depth, 1], letters: "xz"),
+        TopologyKind.Box => EnumerateAxisGroup(axisCount: 3, extents: [width, depth, layers], letters: "xyz"),
+        TopologyKind.Hex => EnumerateHexGroup(),
         _ => new([AxisMap.Identity], 3, "xyz", [width, depth, layers]),
     };
 
@@ -219,7 +404,7 @@ public sealed partial class CompiledWorldTopology {
     // through Element(string) alongside the canonical spelling; ElementName always answers the canonical form. The
     // validator already proved every alias names a real element, so a miss here can only mean the alias outlived
     // its topology's own recompile — install it defensively rather than throw.
-    internal void InstallElementAliases(IReadOnlyList<WorldTopologyElementAlias>? aliases) {
+    internal void InstallElementAliases(IReadOnlyList<TopologyElementAlias>? aliases) {
         m_elementAliases.Clear();
         foreach (var alias in aliases ?? []) {
             var canonical = Array.IndexOf(m_elementNames, alias.Element);

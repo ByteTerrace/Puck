@@ -75,7 +75,7 @@ public static partial class WorldRuleCompiler {
         if (ordinal < 0) {
             throw new WorldRuleException(refusal: WorldRuleRefusal.StateRowUnknown, ruleName: ruleName, detail: $"'{name}' names table '{tokens[0]}', which the document's tables do not declare");
         }
-        if (!CompiledWorldTable.TryCompile(row: tables[ordinal], table: out var table, error: out var error)) {
+        if (!WorldTables.TryCompile(row: tables[ordinal], table: out var table, error: out var error)) {
             throw new WorldRuleException(refusal: WorldRuleRefusal.StateRowUnknown, ruleName: ruleName, detail: $"'{name}': table '{tokens[0]}' cannot load — {error}");
         }
         var spelledKey = tokens[1];

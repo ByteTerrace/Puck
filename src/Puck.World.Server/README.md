@@ -13,7 +13,9 @@ presentation and backend assembly. The composition root that hosts it is
 [`Puck.World`](../Puck.World/README.md).
 
 Project references: `Puck.World.Schema`, `Puck.World.Protocol`, `Puck.Networking`,
-`Puck.Storage`, and `Puck.Hosting`. The addon guest runtime itself is
+`Puck.Storage`, `Puck.Hosting`, and — through the schema — `Puck.State`, whose
+reader, catalog, and topologies the tick reads through; the rule evaluator,
+effect firing, the trace, interactions, and decisions stay here. The addon guest runtime itself is
 [`Puck.World.Addons`](../Puck.World.Addons/README.md), which references this
 project rather than the reverse — see `IWorldAddonHost` below.
 
@@ -262,7 +264,8 @@ after the rules (so a tag a rule wrote this tick is what an `emit`/`expose`
 reaction reads this same step) and before the snapshot (so the step's cell
 writes ride this tick's delivery), on the topology's own `stepEveryTicks`
 cadence. A reaction scalar (literal or `{"row": "name"}`) resolves through
-`ReadScalarSlot`, the SAME `WorldStateReader.TryRead` seam every other state
+`ReadScalarSlot`, the SAME `WorldStateReader.TryRead` seam (`Puck.State.StateReader`
+over the live document) every other state
 read uses — a season row a rule writes and a reaction reads can never
 disagree about the value. `expose` writes land through the ordinary
 `UpsertStateCell` mutation (`WorldPrincipal.World`, journaled, undoable), never
@@ -274,7 +277,7 @@ document rows, so nothing journals them directly.
 the already-compiled `WorldFieldProgram`: the companion remains authoritative
 for topology, cadence, paint, and presentation, while the typed program is the
 one executable reaction IR. `StepFields` reads and writes reaction state by
-`WorldStateHandle`, not by repeating row-name lookup. A whole-document rebuild
+`StateHandle`, not by repeating row-name lookup. A whole-document rebuild
 may replace compatible reactions in place without resetting cells, deltas,
 revision, or checkpoint shape; adding/removing a lattice or changing topology,
 cadence, or a field envelope refuses and asks for a host restart. The

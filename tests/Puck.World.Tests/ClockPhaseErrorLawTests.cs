@@ -161,7 +161,7 @@ public sealed class ClockPhaseErrorLawTests {
         };
     }
     private static CellName Name(string value) => CellName.Parse(value);
-    private static WorldStateRow Slot(string name) => new(Name(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
+    private static WorldStateRow Slot(string name) => new(Name(name), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]);
     private static long Value(WorldFixture fixture, string row) =>
-        WorldDefinitionRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
+        StateRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
 }

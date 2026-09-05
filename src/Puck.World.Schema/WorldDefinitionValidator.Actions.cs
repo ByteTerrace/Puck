@@ -166,8 +166,8 @@ public static partial class WorldDefinitionValidator {
         var stateSlots = new Dictionary<string, ActionStateSlot>(comparer: StringComparer.Ordinal);
         var count = (definition.BodyState.Count + definition.IdentityState.Count);
 
-        if (count > WorldStateCapacity.MaxBodySlots) {
-            errors.Add(item: $"state body and identity lanes declare {count} slots; the combined maximum is {WorldStateCapacity.MaxBodySlots}.");
+        if (count > StateCapacity.MaxBodySlots) {
+            errors.Add(item: $"state body and identity lanes declare {count} slots; the combined maximum is {StateCapacity.MaxBodySlots}.");
         }
 
         void Add(IReadOnlyList<ActionStateSlot> rows, ActionStateLifetime lifetime, string lane) {
@@ -463,7 +463,7 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        if (draw.Timing == WorldDrawTiming.Boot) {
+        if (draw.Timing == DrawTiming.Boot) {
             errors.Add(item: $"{path}.row '{row}' declares timing=boot — it draws once at first fill and is never redrawn.");
         }
 

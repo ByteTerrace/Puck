@@ -1291,14 +1291,14 @@ internal static class WorldAddonMutationDecoder {
     // A fixed-kind value is DECIMAL TEXT here, exactly as the document and the console verb spell it — the addon
     // wire's raw-bits convention covers the ABI's numeric channel cells (WorldMutation.UpsertStateCell.Value), never
     // this JSON payload, which is the SAME grammar world.row.set state takes and must not fork from it.
-    private static WorldStateCell DecodeStateCell(CellName key, JsonElement element, CellKind kind, string context) {
+    private static StateCell DecodeStateCell(CellName key, JsonElement element, CellKind kind, string context) {
         switch (kind) {
             case CellKind.Text:
                 if (element.ValueKind != JsonValueKind.String) {
                     throw new AddonMutationDecodeException(message: $"{context}: must be a string");
                 }
 
-                return new WorldStateCell(
+                return new StateCell(
                     Key: key,
                     Text: (element.GetString() ?? string.Empty)
                 );
@@ -1307,14 +1307,14 @@ internal static class WorldAddonMutationDecoder {
                     throw new AddonMutationDecodeException(message: $"{context}: must be a boolean");
                 }
 
-                return new WorldStateCell(
+                return new StateCell(
                     Key: key,
                     Value: (element.GetBoolean()
                     ? 1
                     : 0)
                 );
             default:
-                return new WorldStateCell(
+                return new StateCell(
                     Key: key,
                     Value: RequireStateNumber(
                         context: context,
@@ -1324,12 +1324,12 @@ internal static class WorldAddonMutationDecoder {
                 );
         }
     }
-    private static List<WorldStateCell> DecodeStateCells(JsonElement element, CellKind kind, string context) {
+    private static List<StateCell> DecodeStateCells(JsonElement element, CellKind kind, string context) {
         if (element.ValueKind != JsonValueKind.Array) {
             throw new AddonMutationDecodeException(message: $"{context}: must be an array of {{\"key\", \"value\"}} objects");
         }
 
-        var cells = new List<WorldStateCell>();
+        var cells = new List<StateCell>();
         var index = 0;
 
         foreach (var entry in element.EnumerateArray()) {

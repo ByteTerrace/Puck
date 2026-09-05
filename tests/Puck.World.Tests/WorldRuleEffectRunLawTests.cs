@@ -7,12 +7,12 @@ namespace Puck.World.Tests;
 /// Only a transaction groups effects atomically.</summary>
 public sealed class WorldRuleEffectRunLawTests {
     private static WorldStateRow Slot(string name, long value, long max) =>
-        new(CellName.Parse(name), CellKind.Int, Min: 0, Max: max, Cells: [new WorldStateCell(WorldStateRow.SlotKey, value)]);
+        new(CellName.Parse(name), CellKind.Int, Min: 0, Max: max, Cells: [new StateCell(WorldStateRow.SlotKey, value)]);
     private static ActionEffect.SetState Set(string state, params ValueToken[] tokens) => new(State: state, Expression: new ValueExpression(tokens));
     private static WorldTransactionStep.SetCell Step(string state, params ValueToken[] tokens) => new(State: state, Expression: new ValueExpression(tokens));
     private static ValueToken[] Tz(string row) => [new ValueToken.State(row), new ValueToken.TrailingZeroCount()];
     private static long Value(WorldFixture fixture, string row) =>
-        WorldDefinitionRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
+        StateRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
 
     private static WorldDefinition Document(long capturedMax, bool asTransaction) {
         ActionEffect[] writes = [Set("fromCell", Tz("ownVac")), Set("toCell", Tz("ownOcc")), Set("capturedCell", Tz("otherVac"))];

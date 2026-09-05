@@ -216,7 +216,7 @@ public sealed partial class WorldServer {
 
                 for (var position = 0; position < m_eachKeyScratch.Count; position++) {
                     var key = m_eachKeyScratch[position];
-                    var numeric = WorldStateReader.TryParseCandidateIndex(index: out var index, key: key);
+                    var numeric = StateReader.TryParseCandidateIndex(index: out var index, key: key);
                     m_boundEach = numeric ? index : -1;
                     m_boundEachKey = key.Value;
                     m_boundEachPosition = position;
@@ -448,7 +448,7 @@ public sealed partial class WorldServer {
         ) is { Cells: { } cells }) {
             for (var index = 0; index < cells.Count; index++) {
                 var cell = cells[index];
-                if (WorldStateReader.TryParseCandidateIndex(
+                if (StateReader.TryParseCandidateIndex(
                     index: out var key,
                     key: cell.Key
                 )) {
@@ -474,7 +474,7 @@ public sealed partial class WorldServer {
         for (var cellIndex = 0; cellIndex < cells.Count; cellIndex++) {
             var cell = cells[cellIndex];
             if (
-                !WorldStateReader.TryParseCandidateIndex(
+                !StateReader.TryParseCandidateIndex(
                 index: out var index,
                 key: cell.Key
             ) ||
@@ -737,7 +737,7 @@ public sealed partial class WorldServer {
             // rotation the trait carried it to this tick.
             if (
                 CellName.TryParse(candidate: destinationKey, name: out var destinationCell, reason: out _) &&
-                (WorldDefinitionRows.FindCell(cells: row.Cells, key: destinationCell) is { } storedCell) &&
+                (StateRows.FindCell(cells: row.Cells, key: destinationCell) is { } storedCell) &&
                 ((storedCell.Cycle is not null) || ((storedCell.Key == WorldStateRow.SlotKey) && (row.Cycle is not null)))
             ) {
                 current = storedCell.Value;

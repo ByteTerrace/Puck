@@ -40,7 +40,7 @@ public enum WorldBoardQueryKind : byte {
 /// type-pattern switch (see <c>WorldBoardQueries.Evaluate</c>) or the shared <see cref="Kind"/>/<see cref="Topology"/>
 /// every case carries.</summary>
 public abstract class CompiledWorldBoardQuery {
-    private protected CompiledWorldBoardQuery(WorldBoardQueryKind kind, CompiledWorldTopology topology) {
+    private protected CompiledWorldBoardQuery(WorldBoardQueryKind kind, CompiledTopology topology) {
         Kind = kind;
         Topology = topology;
     }
@@ -48,7 +48,7 @@ public abstract class CompiledWorldBoardQuery {
     /// <summary>The query operation.</summary>
     public WorldBoardQueryKind Kind { get; }
     /// <summary>The immutable adjacency table.</summary>
-    public CompiledWorldTopology Topology { get; }
+    public CompiledTopology Topology { get; }
 }
 
 /// <summary>The adjacent cell in a topology-specific direction (<see cref="WorldBoardQueryKind.Neighbour"/>) — also
@@ -58,7 +58,7 @@ public abstract class CompiledWorldBoardQuery {
 public sealed class BoardNeighbourQuery : CompiledWorldBoardQuery {
     /// <param name="topology">The immutable adjacency table.</param>
     /// <param name="direction">The topology-specific direction (or symmetry element) ordinal.</param>
-    public BoardNeighbourQuery(CompiledWorldTopology topology, int direction) : base(WorldBoardQueryKind.Neighbour, topology) => Direction = direction;
+    public BoardNeighbourQuery(CompiledTopology topology, int direction) : base(WorldBoardQueryKind.Neighbour, topology) => Direction = direction;
 
     /// <summary>The topology-specific direction (or symmetry element) ordinal.</summary>
     public int Direction { get; }
@@ -74,7 +74,7 @@ public sealed class BoardPathCostQuery : CompiledWorldBoardQuery {
     /// <param name="targetFrom">A live indirection naming another declared row's cell whose integer value is the
     /// destination ordinal at evaluation time, or <see langword="null"/> for the compile-time literal
     /// <paramref name="target"/> — the same (row, key) cell-indirection every other dynamic key resolves through.</param>
-    public BoardPathCostQuery(CompiledWorldTopology topology, int target, long maxCost, int maxVisits, CompiledCellRef? targetFrom = null) : base(WorldBoardQueryKind.PathCost, topology) {
+    public BoardPathCostQuery(CompiledTopology topology, int target, long maxCost, int maxVisits, CompiledCellRef? targetFrom = null) : base(WorldBoardQueryKind.PathCost, topology) {
         Target = target;
         MaxCost = maxCost;
         MaxVisits = maxVisits;
@@ -97,7 +97,7 @@ public sealed class BoardMaskQuery : CompiledWorldBoardQuery {
     /// <param name="topology">The immutable adjacency table.</param>
     /// <param name="lower">The inclusive range lower bound.</param>
     /// <param name="upper">The inclusive range upper bound.</param>
-    public BoardMaskQuery(CompiledWorldTopology topology, long lower, long upper) : base(WorldBoardQueryKind.Mask, topology) {
+    public BoardMaskQuery(CompiledTopology topology, long lower, long upper) : base(WorldBoardQueryKind.Mask, topology) {
         Lower = lower;
         Upper = upper;
     }
@@ -111,13 +111,13 @@ public sealed class BoardMaskQuery : CompiledWorldBoardQuery {
 /// <summary>The least 64-bit fingerprint of the board's values over every point-group element (<see cref="WorldBoardQueryKind.Canonical"/>).</summary>
 public sealed class BoardCanonicalQuery : CompiledWorldBoardQuery {
     /// <param name="topology">The immutable adjacency table.</param>
-    public BoardCanonicalQuery(CompiledWorldTopology topology) : base(WorldBoardQueryKind.Canonical, topology) { }
+    public BoardCanonicalQuery(CompiledTopology topology) : base(WorldBoardQueryKind.Canonical, topology) { }
 }
 
 /// <summary>The grid cell a referenced body's world position falls in (<see cref="WorldBoardQueryKind.CellOf"/>).</summary>
 public sealed class BoardCellOfQuery : CompiledWorldBoardQuery {
     /// <param name="topology">The immutable adjacency table.</param>
-    public BoardCellOfQuery(CompiledWorldTopology topology) : base(WorldBoardQueryKind.CellOf, topology) { }
+    public BoardCellOfQuery(CompiledTopology topology) : base(WorldBoardQueryKind.CellOf, topology) { }
 }
 
 /// <summary>The cell reached by an arbitrary (dx, dz) grid step from the key cell (<see cref="WorldBoardQueryKind.Offset"/>).</summary>
@@ -125,7 +125,7 @@ public sealed class BoardOffsetQuery : CompiledWorldBoardQuery {
     /// <param name="topology">The immutable adjacency table.</param>
     /// <param name="dx">The signed +X grid step.</param>
     /// <param name="dz">The signed +Z grid step.</param>
-    public BoardOffsetQuery(CompiledWorldTopology topology, int dx, int dz) : base(WorldBoardQueryKind.Offset, topology) {
+    public BoardOffsetQuery(CompiledTopology topology, int dx, int dz) : base(WorldBoardQueryKind.Offset, topology) {
         Dx = dx;
         Dz = dz;
     }
@@ -143,7 +143,7 @@ public sealed class BoardAttacksQuery : CompiledWorldBoardQuery {
     /// <param name="upper">The inclusive range upper bound.</param>
     /// <param name="directions">The 1..4 direction ordinals walked — a concrete array so the per-evaluation walk
     /// indexes it directly rather than boxing an interface enumerator.</param>
-    public BoardAttacksQuery(CompiledWorldTopology topology, long lower, long upper, int[] directions) : base(WorldBoardQueryKind.Attacks, topology) {
+    public BoardAttacksQuery(CompiledTopology topology, long lower, long upper, int[] directions) : base(WorldBoardQueryKind.Attacks, topology) {
         Lower = lower;
         Upper = upper;
         Directions = directions;
@@ -171,7 +171,7 @@ public static partial class WorldRuleCompiler {
             throw Invalid("board query requires $board:<operation>:<row>:<arguments>");
         }
         var row = WorldDefinitionRows.FindStateRow(definition.State, tokens[2]);
-        if (row?.EffectiveDomain is not WorldStateDomain.CellsOf board || WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology) {
+        if (row?.EffectiveDomain is not StateDomain.CellsOf board || WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology) {
             throw Invalid($"'{tokens[2]}' names no discrete board row");
         }
         var kind = tokens[1] switch {
@@ -187,7 +187,7 @@ public static partial class WorldRuleCompiler {
         if (kind is WorldBoardQueryKind.Mask && topology.CellCount > WorldBoardMask.MaxCells) {
             throw Invalid($"{tokens[1]} reads at most {WorldBoardMask.MaxCells} cells as bits; '{board.Topology}' has {topology.CellCount}");
         }
-        if (kind is WorldBoardQueryKind.CellOf or WorldBoardQueryKind.Offset && topology.Kind != WorldTopologyKind.Grid) {
+        if (kind is WorldBoardQueryKind.CellOf or WorldBoardQueryKind.Offset && topology.Kind != TopologyKind.Grid) {
             throw Invalid($"'{tokens[1]}' requires a Grid topology, not {topology.Kind}");
         }
         CompiledCellRef? keyFrom = null;

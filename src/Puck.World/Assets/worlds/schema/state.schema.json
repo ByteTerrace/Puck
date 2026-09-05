@@ -35,13 +35,13 @@
       "default": null
     },
     "lattices": {
-      "description": "The lattice topologies the section\u0027s lattice-shaped rows lie over (see WorldStateLatticeTopology).",
+      "description": "The lattice topologies the section\u0027s lattice-shaped rows lie over (see LatticeTopology; the document adds the physical WorldFieldTopology case).",
       "type": [
         "array",
         "null"
       ],
       "items": {
-        "description": "One state.lattices topology -- the footprint every lattice-shaped state row referencing it shares. At most one physical field topology and bounded discrete topologies may coexist. A closed union over WorldTopologyKind, one case per kind, each carrying only its own parameters \u2014 Radius, Band, and LayerHeight exist nowhere else, and only Field carries Reactions. Kind is never authored directly; it is the discriminant every case\u0027s own JSON $type already carries, exposed as a property because so much of the compiler still branches on it.",
+        "description": "One state.lattices topology \u2014 the footprint every lattice-shaped state row referencing it shares. The discrete cases are declared here, one per kind, each carrying only its own parameters \u2014 Radius, Band, and LayerHeight exist nowhere else. A host registers its dense Field case as a further derived record under the same $type discriminator. Kind is never authored directly; it is the discriminant every case\u0027s own JSON $type already carries, exposed as a property because so much of the compiler branches on it.",
         "type": [
           "object",
           "null"
@@ -51,7 +51,250 @@
         ],
         "anyOf": [
           {
-            "description": "A physical scalar field over the lattice\u0027s footprint, evolved by reactions each StepEveryTicks.",
+            "description": "A rectangular board, indexed by y times width plus x.",
+            "properties": {
+              "$type": {
+                "const": "grid"
+              },
+              "width": {
+                "description": "Cells along \u002BX.",
+                "type": "integer"
+              },
+              "depth": {
+                "description": "Cells along \u002BZ.",
+                "type": "integer"
+              },
+              "wrap": {
+                "description": "Wrapped axes.",
+                "enum": [
+                  "None",
+                  "X",
+                  "Y",
+                  "Both"
+                ],
+                "default": "None"
+              },
+              "band": {
+                "description": "The vertical half-extent about the origin\u0027s Y a position must lie within to resolve to a cell (cellOf); 0 resolves any height, so a piece on the floor beneath a table still reads as on its square.",
+                "type": "number",
+                "default": 0
+              },
+              "directions": {
+                "description": "See Directions.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/TopologyDirection"
+                },
+                "default": null
+              },
+              "elementAliases": {
+                "description": "See ElementAliases.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/TopologyElementAlias"
+                },
+                "default": null
+              },
+              "name": {
+                "description": "The topology\u0027s name \u2014 what a row\u0027s cellsOf domain references.",
+                "type": "string"
+              },
+              "origin": {
+                "description": "The minimum corner, world units."
+              },
+              "cellSize": {
+                "description": "The cubic cell edge, world units.",
+                "type": "number"
+              }
+            },
+            "required": [
+              "width",
+              "depth",
+              "name",
+              "origin",
+              "cellSize"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "description": "A cyclic sequence, indexed from zero \u2014 always wraps.",
+            "properties": {
+              "$type": {
+                "const": "ring"
+              },
+              "width": {
+                "description": "The cycle length.",
+                "type": "integer"
+              },
+              "directions": {
+                "description": "See Directions.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/TopologyDirection"
+                },
+                "default": null
+              },
+              "elementAliases": {
+                "description": "See ElementAliases.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/TopologyElementAlias"
+                },
+                "default": null
+              },
+              "name": {
+                "description": "The topology\u0027s name \u2014 what a row\u0027s cellsOf domain references.",
+                "type": "string"
+              },
+              "origin": {
+                "description": "The minimum corner, world units."
+              },
+              "cellSize": {
+                "description": "The cubic cell edge, world units.",
+                "type": "number"
+              }
+            },
+            "required": [
+              "width",
+              "name",
+              "origin",
+              "cellSize"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "description": "An axial hexagon, indexed in ascending r then q order.",
+            "properties": {
+              "$type": {
+                "const": "hex"
+              },
+              "radius": {
+                "description": "The axial hexagon radius.",
+                "type": "integer"
+              },
+              "directions": {
+                "description": "See Directions.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/TopologyDirection"
+                },
+                "default": null
+              },
+              "elementAliases": {
+                "description": "See ElementAliases.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/TopologyElementAlias"
+                },
+                "default": null
+              },
+              "name": {
+                "description": "The topology\u0027s name \u2014 what a row\u0027s cellsOf domain references.",
+                "type": "string"
+              },
+              "origin": {
+                "description": "The minimum corner, world units."
+              },
+              "cellSize": {
+                "description": "The cubic cell edge, world units.",
+                "type": "number"
+              }
+            },
+            "required": [
+              "radius",
+              "name",
+              "origin",
+              "cellSize"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "description": "A box of width by layers by depth cells with the 26 space directions, indexed by (layer times depth plus z) times width plus x.",
+            "properties": {
+              "$type": {
+                "const": "box"
+              },
+              "width": {
+                "description": "Cells along \u002BX.",
+                "type": "integer"
+              },
+              "depth": {
+                "description": "Cells along \u002BZ.",
+                "type": "integer"
+              },
+              "layers": {
+                "description": "Cells along \u002BY.",
+                "type": "integer"
+              },
+              "layerHeight": {
+                "description": "The world-space height of one layer, so a position\u0027s Y above the origin resolves to a layer the way X and Z resolve to a column; positive.",
+                "type": "number"
+              },
+              "directions": {
+                "description": "See Directions.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/TopologyDirection"
+                },
+                "default": null
+              },
+              "elementAliases": {
+                "description": "See ElementAliases.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/TopologyElementAlias"
+                },
+                "default": null
+              },
+              "name": {
+                "description": "The topology\u0027s name \u2014 what a row\u0027s cellsOf domain references.",
+                "type": "string"
+              },
+              "origin": {
+                "description": "The minimum corner, world units."
+              },
+              "cellSize": {
+                "description": "The cubic cell edge, world units.",
+                "type": "number"
+              }
+            },
+            "required": [
+              "width",
+              "depth",
+              "layers",
+              "layerHeight",
+              "name",
+              "origin",
+              "cellSize"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "description": "The physical state.lattices topology: a scalar field over the lattice\u0027s footprint, evolved by reactions each StepEveryTicks \u2014 the document\u0027s own case of LatticeTopology, registered under the field discriminator beside the engine\u0027s discrete cases.",
             "properties": {
               "$type": {
                 "const": "field"
@@ -308,7 +551,7 @@
                 "default": null
               },
               "name": {
-                "description": "The topology\u0027s name -- what a row\u0027s lattice.topology references.",
+                "description": "The topology\u0027s name \u2014 what a row\u0027s cellsOf domain references.",
                 "type": "string"
               },
               "origin": {
@@ -322,249 +565,6 @@
             "required": [
               "width",
               "depth",
-              "name",
-              "origin",
-              "cellSize"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "description": "A rectangular board, indexed by y times width plus x.",
-            "properties": {
-              "$type": {
-                "const": "grid"
-              },
-              "width": {
-                "description": "Cells along \u002BX.",
-                "type": "integer"
-              },
-              "depth": {
-                "description": "Cells along \u002BZ.",
-                "type": "integer"
-              },
-              "wrap": {
-                "description": "Wrapped axes.",
-                "enum": [
-                  "None",
-                  "X",
-                  "Y",
-                  "Both"
-                ],
-                "default": "None"
-              },
-              "band": {
-                "description": "The vertical half-extent about the origin\u0027s Y a position must lie within to resolve to a cell (cellOf); 0 resolves any height, so a piece on the floor beneath a table still reads as on its square.",
-                "type": "number",
-                "default": 0
-              },
-              "directions": {
-                "description": "See Directions.",
-                "type": [
-                  "array",
-                  "null"
-                ],
-                "items": {
-                  "$ref": "./common.schema.json#/$defs/WorldTopologyDirection"
-                },
-                "default": null
-              },
-              "elementAliases": {
-                "description": "See ElementAliases.",
-                "type": [
-                  "array",
-                  "null"
-                ],
-                "items": {
-                  "$ref": "./common.schema.json#/$defs/WorldTopologyElementAlias"
-                },
-                "default": null
-              },
-              "name": {
-                "description": "The topology\u0027s name -- what a row\u0027s lattice.topology references.",
-                "type": "string"
-              },
-              "origin": {
-                "description": "The minimum corner, world units."
-              },
-              "cellSize": {
-                "description": "The cubic cell edge, world units.",
-                "type": "number"
-              }
-            },
-            "required": [
-              "width",
-              "depth",
-              "name",
-              "origin",
-              "cellSize"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "description": "A cyclic sequence, indexed from zero \u2014 always wraps.",
-            "properties": {
-              "$type": {
-                "const": "ring"
-              },
-              "width": {
-                "description": "The cycle length.",
-                "type": "integer"
-              },
-              "directions": {
-                "description": "See Directions.",
-                "type": [
-                  "array",
-                  "null"
-                ],
-                "items": {
-                  "$ref": "./common.schema.json#/$defs/WorldTopologyDirection"
-                },
-                "default": null
-              },
-              "elementAliases": {
-                "description": "See ElementAliases.",
-                "type": [
-                  "array",
-                  "null"
-                ],
-                "items": {
-                  "$ref": "./common.schema.json#/$defs/WorldTopologyElementAlias"
-                },
-                "default": null
-              },
-              "name": {
-                "description": "The topology\u0027s name -- what a row\u0027s lattice.topology references.",
-                "type": "string"
-              },
-              "origin": {
-                "description": "The minimum corner, world units."
-              },
-              "cellSize": {
-                "description": "The cubic cell edge, world units.",
-                "type": "number"
-              }
-            },
-            "required": [
-              "width",
-              "name",
-              "origin",
-              "cellSize"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "description": "An axial hexagon, indexed in ascending r then q order.",
-            "properties": {
-              "$type": {
-                "const": "hex"
-              },
-              "radius": {
-                "description": "The axial hexagon radius.",
-                "type": "integer"
-              },
-              "directions": {
-                "description": "See Directions.",
-                "type": [
-                  "array",
-                  "null"
-                ],
-                "items": {
-                  "$ref": "./common.schema.json#/$defs/WorldTopologyDirection"
-                },
-                "default": null
-              },
-              "elementAliases": {
-                "description": "See ElementAliases.",
-                "type": [
-                  "array",
-                  "null"
-                ],
-                "items": {
-                  "$ref": "./common.schema.json#/$defs/WorldTopologyElementAlias"
-                },
-                "default": null
-              },
-              "name": {
-                "description": "The topology\u0027s name -- what a row\u0027s lattice.topology references.",
-                "type": "string"
-              },
-              "origin": {
-                "description": "The minimum corner, world units."
-              },
-              "cellSize": {
-                "description": "The cubic cell edge, world units.",
-                "type": "number"
-              }
-            },
-            "required": [
-              "radius",
-              "name",
-              "origin",
-              "cellSize"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "description": "A box of width by layers by depth cells with the 26 space directions, indexed by (layer times depth plus z) times width plus x.",
-            "properties": {
-              "$type": {
-                "const": "box"
-              },
-              "width": {
-                "description": "Cells along \u002BX.",
-                "type": "integer"
-              },
-              "depth": {
-                "description": "Cells along \u002BZ.",
-                "type": "integer"
-              },
-              "layers": {
-                "description": "Cells along \u002BY.",
-                "type": "integer"
-              },
-              "layerHeight": {
-                "description": "The world-space height of one layer, so a position\u0027s Y above the origin resolves to a layer the way X and Z resolve to a column; positive.",
-                "type": "number"
-              },
-              "directions": {
-                "description": "See Directions.",
-                "type": [
-                  "array",
-                  "null"
-                ],
-                "items": {
-                  "$ref": "./common.schema.json#/$defs/WorldTopologyDirection"
-                },
-                "default": null
-              },
-              "elementAliases": {
-                "description": "See ElementAliases.",
-                "type": [
-                  "array",
-                  "null"
-                ],
-                "items": {
-                  "$ref": "./common.schema.json#/$defs/WorldTopologyElementAlias"
-                },
-                "default": null
-              },
-              "name": {
-                "description": "The topology\u0027s name -- what a row\u0027s lattice.topology references.",
-                "type": "string"
-              },
-              "origin": {
-                "description": "The minimum corner, world units."
-              },
-              "cellSize": {
-                "description": "The cubic cell edge, world units.",
-                "type": "number"
-              }
-            },
-            "required": [
-              "width",
-              "depth",
-              "layers",
-              "layerHeight",
               "name",
               "origin",
               "cellSize"

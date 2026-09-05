@@ -1,10 +1,10 @@
 namespace Puck.World;
 
 /// <summary>
-/// Resolves every FIRST-FILL <see cref="WorldDraw"/> site in a freshly loaded document — the ONE choke point that
+/// Resolves every FIRST-FILL <see cref="Draw"/> site in a freshly loaded document — the ONE choke point that
 /// turns an authored draw declaration into the value the rest of the engine ever sees. Runs once per fresh load
 /// (process boot, and each <c>world.instance.start</c>), never on a live mutation: a live redraw rides the existing
-/// <c>generate</c> mutation instead, through the SAME <c>WorldGeneratorEngine</c> core, so the two can never disagree
+/// <c>generate</c> mutation instead, through the SAME <c>GeneratorEngine</c> core, so the two can never disagree
 /// about what a site's cursor position means.
 /// </summary>
 /// <remarks>
@@ -13,7 +13,7 @@ namespace Puck.World;
 /// resolver draws it, writes the settled value into the ordinary literal field, CLEARS the facet, and NARRATES the
 /// settlement on stderr. The narration is not decoration: settling erases the only evidence the value was random, so
 /// without it nothing anywhere could say the census or the backend was drawn, or which site decided it. A STATE site
-/// (a <see cref="WorldStateRow"/>'s own <see cref="WorldStateRow.Draw"/>) is different — the facet is NEVER cleared
+/// (a <see cref="WorldStateRow"/>'s own <see cref="StateRow.Draw"/>) is different — the facet is NEVER cleared
 /// (it stays redrawable), the fill applies ONLY while the row carries no cell yet, and the site's cursor and drawn
 /// masks persist. That is what makes an authored <c>value</c> a deliberate override, and what keeps a save/reload from
 /// re-rolling a value the player has already seen: a reloaded site already holds a cell, so nothing refills it, and
@@ -51,7 +51,7 @@ public static class WorldDrawBootResolver {
             return false;
         }
 
-        if (!WorldGeneratorEngine.TryResolveSource(generators: definition.Generators, draw: draw, generator: out var generator, reason: out var resolveReason)) {
+        if (!GeneratorEngine.TryResolveSource(generators: definition.Generators, draw: draw, generator: out var generator, reason: out var resolveReason)) {
             reason = $"{site} {resolveReason}";
 
             return false;
@@ -86,11 +86,11 @@ public static class WorldDrawBootResolver {
 
         var values = new long[selected.Count];
 
-        if (!WorldGeneratorEngine.TryFireBatch(
+        if (!GeneratorEngine.TryFireBatch(
             generator: generator,
             targetKind: row.Kind,
-            seedState: WorldGeneratorEngine.ComputeSeedState(instanceIdentity: instanceIdentity, site: site, worldSeed: worldSeed),
-            stream: WorldGeneratorEngine.ComputeStreamId(site: site),
+            seedState: GeneratorEngine.ComputeSeedState(instanceIdentity: instanceIdentity, site: site, documentSeed: worldSeed),
+            stream: GeneratorEngine.ComputeStreamId(site: site),
             cursor: row.DrawCursor,
             masks: row.DrawnMasks,
             values: values,
@@ -106,15 +106,15 @@ public static class WorldDrawBootResolver {
             cells[selected[slot]] = cells[selected[slot]] with { Value = values[slot] };
         }
 
-        filled = row with { Cells = cells, DrawCursor = checked(row.DrawCursor + selected.Count), DrawnMasks = WorldGeneratorEngine.MasksAfter(generator: generator, fired: masksAfter, previous: row.DrawnMasks) };
+        filled = row with { Cells = cells, DrawCursor = checked(row.DrawCursor + selected.Count), DrawnMasks = GeneratorEngine.MasksAfter(generator: generator, fired: masksAfter, previous: row.DrawnMasks) };
         reason = string.Empty;
 
         return true;
     }
-    private static bool TryDrawSite(WorldDefinition definition, ulong worldSeed, string instanceIdentity, string site, WorldDraw draw, CellKind targetKind, out WorldGeneratorEngine.FireResult fired, out string reason, long cursor = 0L, IReadOnlyList<ClosedBitset256>? masks = null) {
+    private static bool TryDrawSite(WorldDefinition definition, ulong worldSeed, string instanceIdentity, string site, Draw draw, CellKind targetKind, out GeneratorEngine.FireResult fired, out string reason, long cursor = 0L, IReadOnlyList<ClosedBitset256>? masks = null) {
         fired = default;
 
-        if (!WorldGeneratorEngine.TryResolveSource(
+        if (!GeneratorEngine.TryResolveSource(
             generators: definition.Generators,
             draw: draw,
             generator: out var generator,
@@ -125,15 +125,15 @@ public static class WorldDrawBootResolver {
             return false;
         }
 
-        if (!WorldGeneratorEngine.TryFire(
+        if (!GeneratorEngine.TryFire(
             generator: generator,
             targetKind: targetKind,
-            seedState: WorldGeneratorEngine.ComputeSeedState(
+            seedState: GeneratorEngine.ComputeSeedState(
                 instanceIdentity: instanceIdentity,
                 site: site,
-                worldSeed: worldSeed
+                documentSeed: worldSeed
             ),
-            stream: WorldGeneratorEngine.ComputeStreamId(site: site),
+            stream: GeneratorEngine.ComputeStreamId(site: site),
             cursor: cursor,
             masks: masks,
             result: out fired,
@@ -211,11 +211,11 @@ public static class WorldDrawBootResolver {
             }
 
             var cell = ((fired.Text is { } text)
-                ? new WorldStateCell(
+                ? new StateCell(
                     Key: WorldStateRow.SlotKey,
                     Text: text
                 )
-                : new WorldStateCell(
+                : new StateCell(
                     Key: WorldStateRow.SlotKey,
                     // A numeric draw is already in the site's own encoding — raw FixedQ4816 bits on a fixed row — the
                     // contract the source's range/outcome values, the validator's domain narrowing and a lattice fill
@@ -224,13 +224,13 @@ public static class WorldDrawBootResolver {
                 )
             );
 
-            _ = WorldGeneratorEngine.TryResolveSource(
+            _ = GeneratorEngine.TryResolveSource(
                 generators: definition.Generators,
                 draw: draw,
                 generator: out var generator,
                 reason: out _
             );
-            state.Add(item: (row with { Cells = [cell], DrawCursor = (row.DrawCursor + fired.Samples), DrawnMasks = WorldGeneratorEngine.MasksAfter(generator: generator, fired: fired.Masks, previous: row.DrawnMasks) }));
+            state.Add(item: (row with { Cells = [cell], DrawCursor = (row.DrawCursor + fired.Samples), DrawnMasks = GeneratorEngine.MasksAfter(generator: generator, fired: fired.Masks, previous: row.DrawnMasks) }));
             changed = true;
         }
 

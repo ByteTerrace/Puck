@@ -2,12 +2,12 @@ using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using Puck.Maths;
 
-namespace Puck.World;
+namespace Puck.State;
 
-/// <summary>The admitted authored ranges for a <see cref="WorldDynamicsRow"/> triple — the ceilings
-/// <see cref="WorldDefinitionValidator"/> enforces (widened only alongside a <c>maths-laws</c> law covering the wider
+/// <summary>The admitted authored ranges for a <see cref="DynamicsRow"/> triple — the ceilings
+/// the document validator enforces (widened only alongside a <c>maths-laws</c> law covering the wider
 /// domain).</summary>
-public static class WorldDynamics {
+public static class DynamicsLimits {
     /// <summary>The greatest admitted damping ratio ζ. Zero is admitted (a system that rings forever); there is no
     /// floor beyond non-negative.</summary>
     public const float MaxDamping = 16f;
@@ -37,7 +37,7 @@ public static class WorldDynamics {
 /// immediately to the target's own motion; <c>&gt;1</c> overshoots the target's motion before settling; <c>&lt;0</c>
 /// anticipates by initially moving opposite the target's motion.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldDynamicsRow(
+public sealed record DynamicsRow(
     string Name,
     [property: JsonPropertyName("f")] float Frequency,
     [property: JsonPropertyName("zeta")] float Damping,
@@ -48,9 +48,9 @@ public sealed record WorldDynamicsRow(
     // invalidation of its own. Kept off the record's own equality-compared surface (a lazily-populated field would
     // make two otherwise-identical rows compare unequal purely because one had been read from and the other had
     // not), which is also why this is a table rather than a plain private field.
-    private static readonly ConditionalWeakTable<WorldDynamicsRow, StrongBox<SecondOrderDynamics>> CompiledCache = new();
+    private static readonly ConditionalWeakTable<DynamicsRow, StrongBox<SecondOrderDynamics>> CompiledCache = new();
 
-    /// <summary>Gets this row's triple as the plain <see cref="WorldDynamics"/> shape every consumer's own compile
+    /// <summary>Gets this row's triple as the plain <see cref="DynamicsLimits"/> shape every consumer's own compile
     /// step reads (fixed-point simulation paths through <c>Puck.Maths.SecondOrderDynamics.Create</c>, the
     /// presentation float twin through <c>Puck.SdfVm.Views.SecondOrderResponse.Create</c> — both from this SAME
     /// authored triple, never a second derivation).</summary>

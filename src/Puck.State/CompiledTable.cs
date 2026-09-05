@@ -1,13 +1,13 @@
-namespace Puck.World;
+namespace Puck.State;
 
 /// <summary>A loaded table: keys sorted ascending, one value column per declared column (a single-value table has
 /// one unnamed column), values in the row's raw cell encoding, read by binary search.</summary>
-public sealed class CompiledWorldTable {
+public sealed class CompiledTable {
     private readonly long[] m_keys;
     private readonly long[][] m_columns;
     private readonly string[] m_columnNames;
 
-    private CompiledWorldTable(string name, CellKind kind, long[] keys, long[][] columns, string[] columnNames) {
+    private CompiledTable(string name, CellKind kind, long[] keys, long[][] columns, string[] columnNames) {
         Name = name;
         Kind = kind;
         m_keys = keys;
@@ -45,21 +45,20 @@ public sealed class CompiledWorldTable {
         return true;
     }
 
-    /// <summary>Loads and compiles a table row's document.</summary>
-    /// <param name="row">The reference row.</param>
+    /// <summary>Compiles a loaded table document under the name a rule reads it by.</summary>
+    /// <param name="name">The table's authored name.</param>
+    /// <param name="document">The loaded table document.</param>
     /// <param name="table">The compiled table, when this method returns <see langword="true"/>.</param>
     /// <param name="error">The failure reason, when this method returns <see langword="false"/>.</param>
-    public static bool TryCompile(TableRow row, out CompiledWorldTable? table, out string? error) {
+    public static bool TryCompile(string name, TableDocument document, out CompiledTable? table, out string? error) {
+        ArgumentNullException.ThrowIfNull(argument: document);
         table = null;
-        if (!WorldAssetRowLoader.TryLoadTable(row: row, document: out var document, error: out error)) {
-            return false;
-        }
-        var violations = TableCanonicalizer.Validate(document: document!);
+        var violations = TableCanonicalizer.Validate(document: document);
         if (violations.Count > 0) {
             error = $"{violations[0].Path}: {violations[0].Message}";
             return false;
         }
-        var normalized = TableCanonicalizer.Normalize(document: document!);
+        var normalized = TableCanonicalizer.Normalize(document: document);
         var isFixed = string.Equals(a: normalized.Kind, b: TableDocument.FixedKind, comparisonType: StringComparison.Ordinal);
         var columnNames = (normalized.Columns ?? []).ToArray();
         var columnCount = Math.Max(columnNames.Length, 1);
@@ -84,7 +83,7 @@ public sealed class CompiledWorldTable {
                 }
             }
         }
-        table = new CompiledWorldTable(name: row.Name, kind: isFixed ? CellKind.Fixed : CellKind.Int, keys: keys, columns: columns, columnNames: columnNames);
+        table = new CompiledTable(name: name, kind: isFixed ? CellKind.Fixed : CellKind.Int, keys: keys, columns: columns, columnNames: columnNames);
         error = null;
         return true;
     }

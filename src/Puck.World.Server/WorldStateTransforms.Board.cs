@@ -7,10 +7,10 @@ public static partial class WorldStateTransforms {
         }
         var row = rows[index];
         var setRow = rows[setIndex];
-        if (row.EffectiveDomain is not WorldStateDomain.CellsOf board || WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology || topology.CellCount > WorldBoardMask.MaxCells) {
+        if (row.EffectiveDomain is not StateDomain.CellsOf board || WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology || topology.CellCount > WorldBoardMask.MaxCells) {
             return Refuse($"writeSet requires a board row over a topology of at most {WorldBoardMask.MaxCells} cells", out reason);
         }
-        if (setRow.Kind != CellKind.Int || WorldDefinitionRows.FindCell(setRow.Cells, CellName.Parse(writeSet.SetKey ?? WorldStateRow.SlotKey)) is not { } setCell) {
+        if (setRow.Kind != CellKind.Int || StateRows.FindCell(setRow.Cells, CellName.Parse(writeSet.SetKey ?? WorldStateRow.SlotKey)) is not { } setCell) {
             return Refuse("writeSet reads its cell set from an integer cell", out reason);
         }
         if (row.ClampToEnvelope(writeSet.Value) != writeSet.Value || (row.Kind == CellKind.Bool && writeSet.Value is not (0 or 1))) {
@@ -47,7 +47,7 @@ public static partial class WorldStateTransforms {
             return false;
         }
         var row = rows[index];
-        if (row.EffectiveDomain is not WorldStateDomain.Ring history) {
+        if (row.EffectiveDomain is not StateDomain.Ring history) {
             return Refuse("push requires a history row", out reason);
         }
         if (row.ClampToEnvelope(push.Value) != push.Value) {
@@ -55,12 +55,12 @@ public static partial class WorldStateTransforms {
         }
         var slot = (int)(row.HistoryCursor % history.Capacity);
         var cells = (row.Cells ?? []).ToArray();
-        WorldStateCell[] written;
+        StateCell[] written;
         if (slot < cells.Length) {
             written = cells;
             written[slot] = written[slot] with { Value = push.Value };
         } else if (slot == cells.Length) {
-            written = new WorldStateCell[cells.Length + 1];
+            written = new StateCell[cells.Length + 1];
             cells.CopyTo(written, 0);
             written[slot] = new(CellName.Parse(slot.ToString(System.Globalization.CultureInfo.InvariantCulture)), push.Value);
         } else {

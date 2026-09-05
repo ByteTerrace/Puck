@@ -2196,6 +2196,7 @@
       "additionalProperties": false
     },
     "ActionStateComparison": {
+      "description": "A fixed comparison admitted by a compiled state predicate.",
       "enum": [
         "Equal",
         "NotEqual",
@@ -4213,7 +4214,7 @@
       "additionalProperties": false
     },
     "ActionEffectGenerate": {
-      "description": "Redraws a draw site (a state row declaring a WorldDraw) \u2014 the one effect admissible at both scopes, and the join that makes authored randomness and world rules one arc rather than two: a kit action, a world rule, and the world.generate console verb all reduce to composing the same WorldMutation.Generate and letting it drain through the ordinary tick boundary, so journal/undo cover a draw for free wherever it was fired from. This is also how a draw\u0027s moment is authored: a TickPeriod site redraws on an ordinary $tick-scheduled rule and an Event site on an event-gated one, so timing costs no mutation ordinal. At body scope the firing is staged during the body\u0027s advance and enqueued for the next tick\u0027s drain (an honestly- reported one-tick latency: this is the first ActionEffect to write the document rather than per-body state, so it is the first to pay the pipeline\u0027s own round trip).",
+      "description": "Redraws a draw site (a state row declaring a Draw) \u2014 the one effect admissible at both scopes, and the join that makes authored randomness and world rules one arc rather than two: a kit action, a world rule, and the world.generate console verb all reduce to composing the same WorldMutation.Generate and letting it drain through the ordinary tick boundary, so journal/undo cover a draw for free wherever it was fired from. This is also how a draw\u0027s moment is authored: a TickPeriod site redraws on an ordinary $tick-scheduled rule and an Event site on an event-gated one, so timing costs no mutation ordinal. At body scope the firing is staged during the body\u0027s advance and enqueued for the next tick\u0027s drain (an honestly- reported one-tick latency: this is the first ActionEffect to write the document rather than per-body state, so it is the first to pay the pipeline\u0027s own round trip).",
       "properties": {
         "$type": {
           "const": "generate"
@@ -6494,8 +6495,8 @@
       ],
       "additionalProperties": false
     },
-    "WorldTopologyDirection": {
-      "description": "One authored direction of a discrete WorldStateLatticeTopology: the (X, Y, Z) cell step a neighbour walk, ray, or leaper offset takes, and the case-sensitive token a rule or $board:/$match: channel names it by. X/Y are the topology\u0027s own planar axes (a Grid\u0027s column/row, a Hex\u0027s q/r); Z is a Box\u0027s layer step and must be zero on every other kind.",
+    "TopologyDirection": {
+      "description": "One authored direction of a discrete LatticeTopology: the (X, Y, Z) cell step a neighbour walk, ray, or leaper offset takes, and the case-sensitive token a rule or $board:/$match: channel names it by. X/Y are the topology\u0027s own planar axes (a Grid\u0027s column/row, a Hex\u0027s q/r); Z is a Box\u0027s layer step and must be zero on every other kind.",
       "type": [
         "object",
         "null"
@@ -6526,7 +6527,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldTopologyElementAlias": {
+    "TopologyElementAlias": {
       "description": "A friendlier name for one point-group element, resolved by Element alongside its canonical signed-axis spelling (ElementName always answers the canonical form).",
       "type": [
         "object",
@@ -6609,7 +6610,7 @@
       },
       "additionalProperties": false
     },
-    "WorldPatternNodeSymbol": {
+    "PatternNodeSymbol": {
       "description": "One token whose value falls in the named symbol.",
       "properties": {
         "$type": {
@@ -6624,7 +6625,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldPatternNodeAnySymbol": {
+    "PatternNodeAnySymbol": {
       "description": "One token of any value, named symbols and the unnamed remainder alike.",
       "properties": {
         "$type": {
@@ -6633,7 +6634,7 @@
       },
       "additionalProperties": false
     },
-    "WorldPatternNodeExcept": {
+    "PatternNodeExcept": {
       "description": "One token whose value falls outside the named symbol.",
       "properties": {
         "$type": {
@@ -6648,7 +6649,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldPatternNodeNothing": {
+    "PatternNodeNothing": {
       "description": "The empty word.",
       "properties": {
         "$type": {
@@ -6657,14 +6658,14 @@
       },
       "additionalProperties": false
     },
-    "WorldPatternNodeSequence": {
+    "PatternNodeSequence": {
       "description": "The items matched one after another.",
       "properties": {
         "$type": {
           "const": "sequence"
         },
         "items": {
-          "$ref": "#/$defs/WorldPatternNodeListNonNullable"
+          "$ref": "#/$defs/PatternNodeListNonNullable"
         }
       },
       "required": [
@@ -6672,20 +6673,20 @@
       ],
       "additionalProperties": false
     },
-    "WorldPatternNodeList": {
+    "PatternNodeList": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/WorldPatternNodeNullable"
+        "$ref": "#/$defs/PatternNodeNullable"
       }
     },
-    "WorldPatternNodeChoice": {
+    "PatternNodeChoice": {
       "description": "Any one of the items.",
       "properties": {
         "$type": {
           "const": "choice"
         },
         "items": {
-          "$ref": "#/$defs/WorldPatternNodeList"
+          "$ref": "#/$defs/PatternNodeList"
         }
       },
       "required": [
@@ -6693,14 +6694,14 @@
       ],
       "additionalProperties": false
     },
-    "WorldPatternNodeBoth": {
+    "PatternNodeBoth": {
       "description": "Every item at once: the word is in each item\u0027s language.",
       "properties": {
         "$type": {
           "const": "all"
         },
         "items": {
-          "$ref": "#/$defs/WorldPatternNodeList"
+          "$ref": "#/$defs/PatternNodeList"
         }
       },
       "required": [
@@ -6708,14 +6709,14 @@
       ],
       "additionalProperties": false
     },
-    "WorldPatternNodeComplement": {
+    "PatternNodeComplement": {
       "description": "Every word the item does not match.",
       "properties": {
         "$type": {
           "const": "not"
         },
         "item": {
-          "$ref": "#/$defs/WorldPatternNode"
+          "$ref": "#/$defs/PatternNode"
         }
       },
       "required": [
@@ -6723,14 +6724,14 @@
       ],
       "additionalProperties": false
     },
-    "WorldPatternNodeOptional": {
+    "PatternNodeOptional": {
       "description": "The item or nothing.",
       "properties": {
         "$type": {
           "const": "optional"
         },
         "item": {
-          "$ref": "#/$defs/WorldPatternNode"
+          "$ref": "#/$defs/PatternNode"
         }
       },
       "required": [
@@ -6738,14 +6739,14 @@
       ],
       "additionalProperties": false
     },
-    "WorldPatternNodeStar": {
+    "PatternNodeStar": {
       "description": "The item zero or more times.",
       "properties": {
         "$type": {
           "const": "star"
         },
         "item": {
-          "$ref": "#/$defs/WorldPatternNode"
+          "$ref": "#/$defs/PatternNode"
         }
       },
       "required": [
@@ -6753,14 +6754,14 @@
       ],
       "additionalProperties": false
     },
-    "WorldPatternNodePlus": {
+    "PatternNodePlus": {
       "description": "The item one or more times.",
       "properties": {
         "$type": {
           "const": "plus"
         },
         "item": {
-          "$ref": "#/$defs/WorldPatternNode"
+          "$ref": "#/$defs/PatternNode"
         }
       },
       "required": [
@@ -6768,14 +6769,14 @@
       ],
       "additionalProperties": false
     },
-    "WorldPatternNodeRepeat": {
+    "PatternNodeRepeat": {
       "description": "The item between Min and Max times.",
       "properties": {
         "$type": {
           "const": "repeat"
         },
         "item": {
-          "$ref": "#/$defs/WorldPatternNode"
+          "$ref": "#/$defs/PatternNode"
         },
         "min": {
           "type": "integer"
@@ -6791,7 +6792,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldPatternNode": {
+    "PatternNode": {
       "description": "The closed pattern vocabulary over a row\u0027s cell values, matched against the whole word. Complement and intersection are first-class, so \u0022no two adjacent kings\u0022 and \u0022holds a 2 and a 5\u0022 are single patterns rather than rule arithmetic.",
       "type": "object",
       "required": [
@@ -6799,48 +6800,48 @@
       ],
       "anyOf": [
         {
-          "$ref": "#/$defs/WorldPatternNodeSymbol"
+          "$ref": "#/$defs/PatternNodeSymbol"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeAnySymbol"
+          "$ref": "#/$defs/PatternNodeAnySymbol"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeExcept"
+          "$ref": "#/$defs/PatternNodeExcept"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeNothing"
+          "$ref": "#/$defs/PatternNodeNothing"
         },
         {
           "$ref": "#/$defs/WorldScreenSourceNone",
           "description": "The empty language: no word at all, the zero of choice and the annihilator of sequence."
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeSequence"
+          "$ref": "#/$defs/PatternNodeSequence"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeChoice"
+          "$ref": "#/$defs/PatternNodeChoice"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeBoth"
+          "$ref": "#/$defs/PatternNodeBoth"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeComplement"
+          "$ref": "#/$defs/PatternNodeComplement"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeOptional"
+          "$ref": "#/$defs/PatternNodeOptional"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeStar"
+          "$ref": "#/$defs/PatternNodeStar"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodePlus"
+          "$ref": "#/$defs/PatternNodePlus"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeRepeat"
+          "$ref": "#/$defs/PatternNodeRepeat"
         }
       ]
     },
-    "WorldPatternNodeNullable": {
+    "PatternNodeNullable": {
       "description": "The closed pattern vocabulary over a row\u0027s cell values, matched against the whole word. Complement and intersection are first-class, so \u0022no two adjacent kings\u0022 and \u0022holds a 2 and a 5\u0022 are single patterns rather than rule arithmetic.",
       "type": [
         "object",
@@ -6851,51 +6852,51 @@
       ],
       "anyOf": [
         {
-          "$ref": "#/$defs/WorldPatternNodeSymbol"
+          "$ref": "#/$defs/PatternNodeSymbol"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeAnySymbol"
+          "$ref": "#/$defs/PatternNodeAnySymbol"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeExcept"
+          "$ref": "#/$defs/PatternNodeExcept"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeNothing"
+          "$ref": "#/$defs/PatternNodeNothing"
         },
         {
           "$ref": "#/$defs/WorldScreenSourceNone",
           "description": "The empty language: no word at all, the zero of choice and the annihilator of sequence."
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeSequence"
+          "$ref": "#/$defs/PatternNodeSequence"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeChoice"
+          "$ref": "#/$defs/PatternNodeChoice"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeBoth"
+          "$ref": "#/$defs/PatternNodeBoth"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeComplement"
+          "$ref": "#/$defs/PatternNodeComplement"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeOptional"
+          "$ref": "#/$defs/PatternNodeOptional"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeStar"
+          "$ref": "#/$defs/PatternNodeStar"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodePlus"
+          "$ref": "#/$defs/PatternNodePlus"
         },
         {
-          "$ref": "#/$defs/WorldPatternNodeRepeat"
+          "$ref": "#/$defs/PatternNodeRepeat"
         }
       ]
     },
-    "WorldPatternNodeListNonNullable": {
+    "PatternNodeListNonNullable": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/WorldPatternNodeNullable"
+        "$ref": "#/$defs/PatternNodeNullable"
       }
     }
   }

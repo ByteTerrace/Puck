@@ -274,7 +274,7 @@ public abstract record ActionEffect {
     /// through its own accumulator on top of the body's compiled motion — integration itself is untouched.</summary>
     public sealed record PlanarImpulse(DocumentVector3 BodyDirection, float Speed, float DurationSeconds, ActionTarget Target = ActionTarget.Self) : ActionEffect;
     /// <summary>World scope only: pushes one numeric value into a history row's ring (see
-    /// <see cref="WorldStateDomain.Ring"/>), the same source spellings as <see cref="SetState"/> minus text: exactly one
+    /// <see cref="StateDomain.Ring"/>), the same source spellings as <see cref="SetState"/> minus text: exactly one
     /// of <paramref name="Value"/>, <paramref name="FromState"/>, or <paramref name="Expression"/>.</summary>
     /// <param name="State">The history row.</param>
     /// <param name="Value">An exact decimal literal in the row's kind.</param>
@@ -458,13 +458,13 @@ public abstract record ActionEffect {
     /// <param name="Register">The authored target-register name.</param>
     /// <param name="Target">The subject source.</param>
     public sealed record Designate(string Register, ActionTarget Target = ActionTarget.AffectingSubject) : ActionEffect;
-    /// <summary>Redraws a draw site (a <c>state</c> row declaring a <see cref="WorldDraw"/>) — the one effect
+    /// <summary>Redraws a draw site (a <c>state</c> row declaring a <see cref="Draw"/>) — the one effect
     /// admissible at both scopes, and the join that makes authored randomness and world rules one arc rather than
     /// two: a kit action, a world rule, and the <c>world.generate</c> console verb all reduce to composing the same
     /// <c>WorldMutation.Generate</c> and letting it drain through the ordinary tick boundary, so journal/undo cover a
     /// draw for free wherever it was fired from. This is also how a draw's moment is authored: a
-    /// <see cref="WorldDrawTiming.TickPeriod"/> site redraws on an ordinary <c>$tick</c>-scheduled rule and an
-    /// <see cref="WorldDrawTiming.Event"/> site on an event-gated one, so timing costs no mutation ordinal. At body
+    /// <see cref="DrawTiming.TickPeriod"/> site redraws on an ordinary <c>$tick</c>-scheduled rule and an
+    /// <see cref="DrawTiming.Event"/> site on an event-gated one, so timing costs no mutation ordinal. At body
     /// scope the firing is staged during the body's advance and enqueued for the next tick's drain (an honestly-
     /// reported one-tick latency: this is the first <see cref="ActionEffect"/> to write the document rather than
     /// per-body state, so it is the first to pay the pipeline's own round trip).</summary>

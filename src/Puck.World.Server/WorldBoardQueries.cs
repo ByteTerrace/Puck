@@ -6,8 +6,8 @@ public static class WorldBoardQueries {
     /// <param name="row">The validated board row.</param>
     /// <param name="topology">The compiled addressing.</param>
     /// <param name="values">Scratch storage with at least CellCount entries.</param>
-    public static void Read(WorldStateRow row, CompiledWorldTopology topology, Span<long> values) {
-        values[..topology.CellCount].Fill(((WorldStateDomain.CellsOf)row.EffectiveDomain).Empty);
+    public static void Read(WorldStateRow row, CompiledTopology topology, Span<long> values) {
+        values[..topology.CellCount].Fill(((StateDomain.CellsOf)row.EffectiveDomain).Empty);
         var cells = row.Cells;
         for (var cellIndex = 0; cellIndex < (cells?.Count ?? 0); cellIndex++) {
             var cell = cells![cellIndex];
@@ -75,7 +75,7 @@ public static class WorldBoardQueries {
 
     // The least FNV-1a fingerprint of the board's values over every element: the same number for every board in
     // one symmetry orbit, so a ring of fingerprints answers repetition up to symmetry.
-    private static long CanonicalFingerprint(CompiledWorldTopology topology, ReadOnlySpan<long> values) {
+    private static long CanonicalFingerprint(CompiledTopology topology, ReadOnlySpan<long> values) {
         var least = ulong.MaxValue;
         for (var element = 0; element < topology.ElementCount; element++) {
             // The image board holds value[c] at image(c). The fold is a commutative sum of per-pair mixes, so it
@@ -99,7 +99,7 @@ public static class WorldBoardQueries {
     /// <param name="element">The element ordinal.</param>
     /// <param name="mask">Bit c set for cell ordinal c.</param>
     /// <returns>The image mask.</returns>
-    public static long ImageOfMask(CompiledWorldTopology topology, int element, long mask) {
+    public static long ImageOfMask(CompiledTopology topology, int element, long mask) {
         var bits = (ulong)mask;
         var image = 0UL;
         while (bits != 0UL) {
@@ -267,7 +267,7 @@ public sealed partial class WorldServer {
             text: out _,
             tick: tick
         ) ||
-            (row.EffectiveDomain is not WorldStateDomain.CellsOf rowBoard)
+            (row.EffectiveDomain is not StateDomain.CellsOf rowBoard)
         ) {
             return -1;
         }

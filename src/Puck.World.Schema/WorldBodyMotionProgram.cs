@@ -35,7 +35,9 @@ public sealed record ActionStateSlot(
     ActionFact? ResetFact = null,
     bool PlayerWritable = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionStateEnvelope? Envelope = null
-);
+) : IStateSlot {
+    StateValueKind IStateSlot.ValueKind => ((Kind == ActionStateKind.Timer) ? StateValueKind.Timer : StateValueKind.Counter);
+}
 /// <summary>An authored fixed-phase body motion program.</summary>
 /// <param name="Name">The stable name kits use to select the program.</param>
 /// <param name="Version">The instruction-set version.</param>

@@ -11,7 +11,7 @@ namespace Puck.World.Tests;
 /// resolved part, an empty part id), a root and a part dynamics reference coexisting, and
 /// <see cref="WorldLookMotion.Default"/>'s literal shape.</summary>
 public sealed class WorldLookDynamicsLawTests {
-    private static WorldDynamicsRow Chase => new(Damping: 1f, Frequency: 1f, Name: "chase", Response: 0f);
+    private static DynamicsRow Chase => new(Damping: 1f, Frequency: 1f, Name: "chase", Response: 0f);
 
     private static WorldPrototype BuildPartedCreation() {
         var shape = new ShapeDocument(

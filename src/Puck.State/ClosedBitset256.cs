@@ -3,7 +3,7 @@ using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Puck.World;
+namespace Puck.State;
 
 /// <summary>A fixed 256-bit membership set. Bit zero is the least significant bit of word zero.
 /// Canonical JSON is one 64-digit hexadecimal string, most significant word first.</summary>

@@ -16,7 +16,7 @@ public sealed class WorldPairKeyLawTests {
         Rules = rules,
     };
     private static long? CellValue(WorldDefinition definition, string key) =>
-        WorldDefinitionRows.FindCell(WorldDefinitionRows.FindStateRow(definition.State, "trust")!.Cells, Name(key))?.Value;
+        StateRows.FindCell(WorldDefinitionRows.FindStateRow(definition.State, "trust")!.Cells, Name(key))?.Value;
 
     [Fact]
     public void APairKeyAddressesTheDirectedCellAndTheReversedPairIsADifferentOne() {
@@ -36,9 +36,9 @@ public sealed class WorldPairKeyLawTests {
     public void APairKeyResolvesThroughAForEachBindingAndACellIndirectionSubject() {
         // The garden's own shape: an observer bound by forEach ($each) forms a pair with a SUBJECT read live off
         // another row's cell (cell:holder:0) — the exact grammar boneHolderTrust re-authors on.
-        var holder = new WorldStateRow(Name("holder"), CellKind.Int, Capacity: 1, Cells: [new WorldStateCell(Name("0"), 1)]);
+        var holder = new WorldStateRow(Name("holder"), CellKind.Int, Capacity: 1, Cells: [new StateCell(Name("0"), 1)]);
         var observers = new WorldStateRow(Name("hound"), CellKind.Int, Capacity: 4,
-            Cells: [new WorldStateCell(Name("0"), 1), new WorldStateCell(Name("2"), 1)]);
+            Cells: [new StateCell(Name("0"), 1), new StateCell(Name("2"), 1)]);
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new(World: [holder, observers, Trust()]),
             Rules = [new WorldRule(

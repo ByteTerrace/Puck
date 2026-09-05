@@ -156,7 +156,7 @@ public enum OwnershipOwnerKind : byte {
 /// <param name="Recipient">The principal named to accept the subject — the sole accept beneficiary. Never equal to
 /// <paramref name="Offerer"/> (refused by name — an offer to oneself is not a trade).</param>
 /// <param name="DeadlineTick">The server tick at or after which <c>WorldMutation.SettleOwnership</c>'s reclaim
-/// admits — the same tick unit <see cref="WorldStateAdvance.EpochTick"/> already rides. Before this tick, only an
+/// admits — the same tick unit <see cref="StateAdvance.EpochTick"/> already rides. Before this tick, only an
 /// accept by <see cref="Recipient"/> can resolve the escrow.</param>
 public readonly record struct OwnershipEscrow(
     WorldPrincipal Offerer,

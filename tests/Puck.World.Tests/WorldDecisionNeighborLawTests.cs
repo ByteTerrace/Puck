@@ -12,7 +12,7 @@ public sealed class WorldDecisionNeighborLawTests {
     private static CellName Name(string value) => CellName.Parse(value);
     private static ValueExpression Constant(decimal value) => new([new ValueToken.Constant(value)]);
     private static WorldStateRow Row(string name, params long[] values) => new(Name(name), CellKind.Int, Capacity: Math.Max(1, values.Length),
-        Cells: values.Select((value, index) => new WorldStateCell(Name(index.ToString()), value)).ToArray());
+        Cells: values.Select((value, index) => new StateCell(Name(index.ToString()), value)).ToArray());
     private static WorldDecision Policy(WorldDecisionNeighbors? neighbors = null) => new([
         new(Name("companion"), new([new ValueToken.State("appeal", "$right")]),
             [new ActionEffect.AddState("entries", Value: 1)], Neighbors: neighbors ?? new(20, 4, 3)),

@@ -28,7 +28,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Kind: CellKind.Int,
         Capacity: 4,
         NonNegative: nonNegative,
-        Cells: [.. balances.Select(selector: static (value, index) => new WorldStateCell(
+        Cells: [.. balances.Select(selector: static (value, index) => new StateCell(
             Key: CellName.Parse(candidate: index.ToString(System.Globalization.CultureInfo.InvariantCulture)),
             Value: value
         ))]
@@ -37,7 +37,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Name: CellName.Parse(candidate: name),
         Kind: CellKind.Int,
         NonNegative: nonNegative,
-        Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: initial)]
+        Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: initial)]
     );
     private static ActionEffect.SetState Set(string state, decimal value, string? key = null) => new(State: state, Value: value, Key: key);
     private static ActionEffect.SetState Copy(string state, string fromState, string? key = null) => new(State: state, FromState: fromState, Key: key);
@@ -83,7 +83,7 @@ public sealed class EscrowedTransferRuleLawTests {
             Slot(name: "auctionDeadline", initial: 0, nonNegative: true),
             Slot(name: "auctionBidRequest1", initial: -1),
             Slot(name: "auctionBidRequest2", initial: -1),
-            new(Name: CellName.Parse(candidate: "auctionBidHistory"), Kind: CellKind.Int, Domain: new WorldStateDomain.Ring(Capacity: 8, Empty: -1)),
+            new(Name: CellName.Parse(candidate: "auctionBidHistory"), Kind: CellKind.Int, Domain: new StateDomain.Ring(Capacity: 8, Empty: -1)),
             Slot(name: "feeReserve", initial: 0, nonNegative: true),
             Slot(name: "buyoutListRequest", initial: -1),
             Slot(name: "buyoutActive", initial: 0),
@@ -225,14 +225,14 @@ public sealed class EscrowedTransferRuleLawTests {
         var found = WorldDefinitionRows.FindStateRow(rows: definition.State, name: row)!;
         var cellKey = CellName.Parse(candidate: key);
 
-        return WorldDefinitionRows.FindCell(cells: found.Cells, key: cellKey)!.Value;
+        return StateRows.FindCell(cells: found.Cells, key: cellKey)!.Value;
     }
     private static long ReadSlot(WorldDefinition definition, string row) => Read(definition: definition, row: row, key: WorldStateRow.SlotKey.Value);
     // The value pushed most recently (age 0): slot = (cursor - 1) mod capacity, the same walk WorldServer.Patterns'
     // own ReadHistorySlot performs for a $history: read.
     private static long ReadHistoryTop(WorldDefinition definition, string row) {
         var found = WorldDefinitionRows.FindStateRow(rows: definition.State, name: row)!;
-        var capacity = ((WorldStateDomain.Ring)found.EffectiveDomain).Capacity;
+        var capacity = ((StateDomain.Ring)found.EffectiveDomain).Capacity;
         var slot = (int)((found.HistoryCursor - 1L) % capacity);
 
         return found.Cells![slot].Value;

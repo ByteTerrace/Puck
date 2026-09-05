@@ -3,7 +3,7 @@ namespace Puck.World;
 public static partial class WorldDefinitionValidator {
     // Every pattern compiles here, so a $match: operand only ever names a machine that exists inside its budget.
     private static void ValidatePatterns(WorldDefinition definition, List<string> errors) {
-        _ = CompiledWorldPatterns.TryCompileAll(definition: definition, patterns: out _, errors: errors);
+        _ = CompiledPatterns.TryCompileAll(rows: definition.Patterns, patterns: out _, errors: errors);
 
         for (var index = 0; index < definition.Patterns.Count; index++) {
             var row = definition.Patterns[index];

@@ -7,7 +7,7 @@ namespace Puck.World.Schema.Tests;
 /// tick, and never a pair of plain adds.</summary>
 public sealed class WorldRuleHazardLawTests {
     private static WorldStateRow Slot(string name) =>
-        new(CellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 5L)]);
+        new(CellName.Parse(name), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 5L)]);
     private static ActionPredicate PhaseIs(long value) =>
         new ActionPredicate.CompareState(State: "phase", Comparison: ActionStateComparison.Equal, Value: value);
     private static ActionPredicate HpAtMost(long value) =>

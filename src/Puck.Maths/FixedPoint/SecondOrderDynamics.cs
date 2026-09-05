@@ -249,7 +249,7 @@ public readonly record struct SecondOrderDynamics {
     }
 
     /// <summary>Evaluates the closed-form response at an elapsed duration from stated initial conditions — the
-    /// no-per-tick-work form <c>WorldStateAdvance</c>-style epoch reads use.</summary>
+    /// no-per-tick-work form <c>StateAdvance</c>-style epoch reads use.</summary>
     /// <param name="initialValue">The value at the epoch.</param>
     /// <param name="initialVelocity">The velocity at the epoch.</param>
     /// <param name="target">The (piecewise-constant) target held over the interval.</param>

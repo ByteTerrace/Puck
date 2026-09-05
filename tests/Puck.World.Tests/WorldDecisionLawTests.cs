@@ -314,7 +314,7 @@ public sealed class WorldDecisionLawTests {
     [InlineData(32)]
     public void DenseDecisionsAndHashesAddNoSteadyStateAllocation(int policyCount) {
         var carriers = new WorldStateRow(Name("carriers"), CellKind.Int, Capacity: 128,
-            Cells: Enumerable.Range(0, 128).Select(i => new WorldStateCell(Name(i.ToString()), 1)).ToArray());
+            Cells: Enumerable.Range(0, 128).Select(i => new StateCell(Name(i.ToString()), 1)).ToArray());
         var policy = Policy(Enumerable.Range(0, 32).Select(i => Option($"option-{i}", i + 1)).ToArray()) with { Mode = WorldDecisionMode.Weighted };
         var document = Document(Rule(policy, forEach: "carriers"), carriers) with {
             Rules = Enumerable.Range(0, policyCount).Select(i => Rule(policy, $"policy-{i}", "carriers")).ToArray(),

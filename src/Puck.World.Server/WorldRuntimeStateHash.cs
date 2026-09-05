@@ -75,7 +75,7 @@ public static partial class WorldRuntimeStateHash {
     private static ulong HashCapture(WorldServer server, ulong tick) {
         var hash = Fnv1aHash.Create();
         var catalog = server.Definition.StateCatalog;
-        Span<byte> utf8 = stackalloc byte[Encoding.UTF8.GetMaxByteCount(charCount: WorldStateCapacity.MaxTextValueLength)];
+        Span<byte> utf8 = stackalloc byte[Encoding.UTF8.GetMaxByteCount(charCount: StateCapacity.MaxTextValueLength)];
 
         hash.Add(value: WorldReplaySnapshot.HashState(population: server.Population));
 
@@ -83,7 +83,7 @@ public static partial class WorldRuntimeStateHash {
             var cells = row.Cells ?? [];
 
             if (!catalog.TryResolve(
-                lane: WorldStateOwnershipLane.World,
+                lane: StateLane.Document,
                 name: row.Name,
                 handle: out var handle
             )) {
@@ -125,7 +125,7 @@ public static partial class WorldRuntimeStateHash {
         return hash.Value;
     }
 
-    private static void AppendAdvance(ref Fnv1aHash hash, WorldStateAdvance? advance) {
+    private static void AppendAdvance(ref Fnv1aHash hash, StateAdvance? advance) {
         hash.Add(value: ((byte)(advance is null ? 0 : 1)));
 
         if (advance is not null) {
@@ -134,7 +134,7 @@ public static partial class WorldRuntimeStateHash {
             hash.Add(value: advance.EpochTick);
         }
     }
-    private static void AppendCycle(ref Fnv1aHash hash, WorldStateCycle? cycle) {
+    private static void AppendCycle(ref Fnv1aHash hash, StateCycle? cycle) {
         hash.Add(value: ((byte)(cycle is null ? 0 : 1)));
 
         if (cycle is not null) {
@@ -153,7 +153,7 @@ public static partial class WorldRuntimeStateHash {
             hash.Add(value: cycle.SubstepTicks);
         }
     }
-    private static void AppendDynamics(ref Fnv1aHash hash, WorldStateDynamics? dynamics) {
+    private static void AppendDynamics(ref Fnv1aHash hash, StateDynamics? dynamics) {
         hash.Add(value: ((byte)(dynamics is null ? 0 : 1)));
 
         if (dynamics is not null) {
@@ -163,7 +163,7 @@ public static partial class WorldRuntimeStateHash {
             hash.Add(value: dynamics.EpochTick);
         }
     }
-    private static void AppendDraw(ref Fnv1aHash hash, WorldDraw? draw) {
+    private static void AppendDraw(ref Fnv1aHash hash, Draw? draw) {
         hash.Add(value: ((byte)(draw is null ? 0 : 1)));
 
         if (draw is not null) {
@@ -174,7 +174,7 @@ public static partial class WorldRuntimeStateHash {
             if (draw.Secret is { } secret) { hash.Add(secret.Word0); hash.Add(secret.Word1); hash.Add(secret.Word2); hash.Add(secret.Word3); }
         }
     }
-    private static void AppendGenerator(ref Fnv1aHash hash, WorldGenerator? generator) {
+    private static void AppendGenerator(ref Fnv1aHash hash, StateGenerator? generator) {
         hash.Add(value: ((byte)(generator is null ? 0 : 1)));
 
         if (generator is null) {
@@ -301,7 +301,7 @@ public static partial class WorldRuntimeStateHash {
             var row = rows[rowIndex];
             var cells = row.Cells ?? [];
             var hasHandle = catalog.TryResolve(
-                lane: WorldStateOwnershipLane.World,
+                lane: StateLane.Document,
                 name: row.Name,
                 handle: out var handle
             );

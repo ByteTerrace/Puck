@@ -35,24 +35,6 @@ public static class WorldDefinitionRows {
         name: name,
         selector: static adjacency => adjacency.Name.Value
     );
-    /// <summary>Finds a state cell by key in a (possibly absent) cell list.</summary>
-    /// <param name="cells">The row's cells, or <see langword="null"/> for a row declaring none.</param>
-    /// <param name="key">The cell key to find.</param>
-    /// <returns>The cell, or <see langword="null"/> when none carries that key.</returns>
-    public static WorldStateCell? FindCell(IReadOnlyList<WorldStateCell>? cells, CellName key) {
-        if (cells is null) {
-            return null;
-        }
-
-        for (var index = 0; index < cells.Count; index++) {
-            var cell = cells[index];
-            if (cell.Key == key) {
-                return cell;
-            }
-        }
-
-        return null;
-    }
     /// <summary>Finds a creation by stable id.</summary>
     /// <param name="creations">The section's creations.</param>
     /// <param name="id">The creation id to find.</param>
@@ -71,15 +53,6 @@ public static class WorldDefinitionRows {
         rows: destinations,
         name: name,
         selector: static destination => destination.Name.Value
-    );
-    /// <summary>Finds a dynamics row by stable name.</summary>
-    /// <param name="dynamics">The section's dynamics rows.</param>
-    /// <param name="name">The dynamics row name to find.</param>
-    /// <returns>The row, or <see langword="null"/> when the section declares none by that name.</returns>
-    public static WorldDynamicsRow? FindDynamics(IReadOnlyList<WorldDynamicsRow>? dynamics, string name) => Find(
-        rows: dynamics,
-        name: name,
-        selector: static row => row.Name
     );
     /// <summary>Finds a curves row by stable name.</summary>
     /// <param name="curves">The section's curve rows.</param>
@@ -183,11 +156,7 @@ public static class WorldDefinitionRows {
     /// <remarks>Allocation-free and ordinal, like its siblings: the HUD path runs this per frame. The whole-document
     /// validator deliberately does NOT route here — it builds a name-keyed map once per walk and asks it O(1), which
     /// a linear scan per lookup would turn quadratic.</remarks>
-    public static WorldStateRow? FindStateRow(IReadOnlyList<WorldStateRow>? rows, string name) => Find(
-        rows: rows,
-        name: name,
-        selector: static row => row.Name
-    );
+    public static WorldStateRow? FindStateRow(IReadOnlyList<WorldStateRow>? rows, string name) => StateRows.FindStateRow(rows: rows, name: name);
     /// <summary>Enumerates every declared reference to a <c>dynamics</c> row across the document: a camera's own rig
     /// and the world's <c>views.seatRig</c>/<c>views.cameraRig</c> (<c>Section</c> <c>"cameras"</c>), a look's root
     /// follower (<c>"looks"</c>) and per-part followers (<c>"parts"</c>), a kit's planar shaping (<c>"kits"</c>), and

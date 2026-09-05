@@ -16,7 +16,7 @@ public enum WorldContributionTenure : byte {
 
     /// <summary>The piece persists; the sweep never touches the row. <see cref="WorldPlacementContribution.Link"/>
     /// and a positive <see cref="WorldPlacementContribution.GraceSeconds"/> are refused beside this tenure — the
-    /// disjoint-field-set rule <c>WorldGenerator</c>'s <c>source</c> arms follow.</summary>
+    /// disjoint-field-set rule <c>StateGenerator</c>'s <c>source</c> arms follow.</summary>
     Endowed,
 }
 /// <summary>

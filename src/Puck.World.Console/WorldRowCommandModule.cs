@@ -281,9 +281,9 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         )
     ),
         ["dynamics"] = new RowSection(
-        RowType: typeof(WorldDynamicsRow),
+        RowType: typeof(DynamicsRow),
         Upsert: Upsert(
-            info: WorldJsonContext.Default.WorldDynamicsRow,
+            info: WorldJsonContext.Default.DynamicsRow,
             toMutation: static (principal, row) => new WorldMutation.UpsertDynamics(
                 Principal: principal,
                 Row: row
@@ -294,7 +294,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             Principal: principal
         )),
         Read: ReadRowByKey(
-            info: WorldJsonContext.Default.WorldDynamicsRow,
+            info: WorldJsonContext.Default.DynamicsRow,
             keyOf: static row => row.Name,
             select: static server => server.Definition.Dynamics
         )

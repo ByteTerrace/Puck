@@ -61,14 +61,14 @@ public sealed class WorldFieldLatticeLawTests {
                     Name: CellName.Parse(candidate: "drawn"),
                     Kind: CellKind.Fixed,
                     DrawCursor: cursor,
-                    Domain: new WorldStateDomain.CellsOf(Topology: "grid"),
+                    Domain: new StateDomain.CellsOf(Topology: "grid"),
                     Field: new WorldStateFieldTrait(
                         Min: 0f,
                         Max: 1f,
-                        Paint: [new WorldLatticeFill.Draw(Generator: new WorldGenerator(Source: WorldGeneratorSource.UniformRange, RangeMin: 0L, RangeMax: FixedQ4816.One.Value))]
+                        Paint: [new WorldLatticeFill.Draw(Generator: new StateGenerator(Source: GeneratorSource.UniformRange, RangeMin: 0L, RangeMax: FixedQ4816.One.Value))]
                     )
                 )],
-                Lattices: [new WorldStateLatticeTopology.Field(
+                Lattices: [new WorldFieldTopology(
                     Name: "grid",
                     Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
                     CellSize: 1f,
@@ -130,7 +130,7 @@ public sealed class WorldFieldLatticeLawTests {
             Fields: [new WorldFieldRow(Name: "heat", Min: 0f, Max: 10f)],
             Paint: [
                 new WorldLatticeFill.Rect(MinX: 0f, MaxX: 1f, MinZ: 0f, MaxZ: 1f, Value: 9f) { Field = "heat" },
-                new WorldLatticeFill.Draw(Generator: new WorldGenerator(Source: WorldGeneratorSource.UniformRange, RangeMin: 1L, RangeMax: 1L)) { Field = "heat" },
+                new WorldLatticeFill.Draw(Generator: new StateGenerator(Source: GeneratorSource.UniformRange, RangeMin: 1L, RangeMax: 1L)) { Field = "heat" },
                 new WorldLatticeFill.Rect(MinX: 1f, MaxX: 2f, MinZ: 0f, MaxZ: 1f, Value: 7f) { Field = "heat" },
             ]
         );
@@ -380,7 +380,7 @@ public sealed class WorldFieldLatticeLawTests {
 
         lattice.Restore(checkpoint: new WorldFieldLattice.WorldFieldCheckpoint(Raw: [[FixedQ4816.FromInteger(value: 2).Value]]));
         var expose = Assert.IsType<WorldFieldNode.Expose>(@object: Assert.Single(collection: lattice.Program.Nodes));
-        WorldStateHandle written = default;
+        StateHandle written = default;
         var value = -1L;
 
         lattice.Step(
@@ -447,7 +447,7 @@ public sealed class WorldFieldLatticeLawTests {
         var state = WorldFieldsSection.ToStateSection(composite: other);
         var program = WorldFieldProgram.Compile(
             document: other,
-            state: WorldStateCatalog.Compile(section: state)
+            state: StateCatalog.Compile(section: state)
         );
 
         Assert.Throws<ArgumentException>(testCode: () => new WorldFieldLattice(
@@ -477,7 +477,7 @@ public sealed class WorldFieldLatticeLawTests {
         var state = WorldFieldsSection.ToStateSection(composite: replacement);
         var program = WorldFieldProgram.Compile(
             document: replacement,
-            state: WorldStateCatalog.Compile(section: state)
+            state: StateCatalog.Compile(section: state)
         );
 
         Assert.True(condition: lattice.CanInstallProgram(document: replacement, program: program, reason: out var reason), userMessage: reason);
@@ -502,7 +502,7 @@ public sealed class WorldFieldLatticeLawTests {
         var state = WorldFieldsSection.ToStateSection(composite: incompatible);
         var program = WorldFieldProgram.Compile(
             document: incompatible,
-            state: WorldStateCatalog.Compile(section: state)
+            state: StateCatalog.Compile(section: state)
         );
 
         Assert.False(condition: lattice.CanInstallProgram(document: incompatible, program: program, reason: out var reason));

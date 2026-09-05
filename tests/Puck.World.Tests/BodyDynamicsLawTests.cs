@@ -17,7 +17,7 @@ public sealed class BodyDynamicsLawTests {
         var motion = kit.Motion;
 
         return document with {
-            DynamicsRaw = [.. Fixtures.StandardDynamics, new WorldDynamicsRow(Damping: damping, Frequency: 2f, Name: dynamicsRow, Response: 0f)],
+            DynamicsRaw = [.. Fixtures.StandardDynamics, new DynamicsRow(Damping: damping, Frequency: 2f, Name: dynamicsRow, Response: 0f)],
             KitRowsRaw = [kit with { Motion = motion with { Shaping = [motion.Shaping![0] with { Along = null, Dynamics = dynamicsRow }] } }],
         };
     }

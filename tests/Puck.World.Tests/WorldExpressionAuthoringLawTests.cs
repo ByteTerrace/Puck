@@ -64,7 +64,7 @@ public sealed class WorldExpressionAuthoringLawTests {
     [Fact]
     public void ARuleAuthoredInfixCompilesToTheSameProgramAsItsTokens() {
         var infix = Fixtures.BuildDocument() with {
-            StateRaw = new WorldStateSection(World: [new WorldStateRow(CellName.Parse("hp"), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 5L)])]),
+            StateRaw = new WorldStateSection(World: [new WorldStateRow(CellName.Parse("hp"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 5L)])]),
             Rules = [new WorldRule(CellName.Parse("r"), [new ActionEffect.SetState(State: "hp", Expression: ValueExpression.Parse("max(hp - 1, 0)"))])],
         };
         var tokens = infix with {

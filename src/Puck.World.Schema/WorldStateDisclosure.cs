@@ -3,87 +3,14 @@ using Puck.World.Protocol;
 
 namespace Puck.World;
 
-/// <summary>What an observer learns about a row's cells it may not read.</summary>
-[JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldHiddenCells>))]
-public enum WorldHiddenCells : byte {
-    /// <summary>Hidden cells leave no trace: neither their count nor their positions.</summary>
-    Omit,
-    /// <summary>The observed row reports how many cells were hidden and nothing else about them.</summary>
-    Count,
-    /// <summary>Every hidden cell appears in pile order as an anonymous placeholder (a card back): no key, no
-    /// value, no text, no observation stamp.</summary>
-    Placeholder,
-}
-
-/// <summary>Opt-in observation policy. Null readers means public; an empty list means authority only.
-/// Row and cell policies intersect. Replica-tier authorities remain fully trusted.</summary>
-/// <param name="Readers">Canonical authenticated principal tokens; no seat or peer identity comes from the request payload.</param>
-/// <param name="Hidden">What an observer who may read the row learns about the cells it may not.</param>
-/// <param name="ReadersFrom">A keyed text row whose cell texts are principal tokens admitted beside
-/// <paramref name="Readers"/>: the live audience a rule widens by writing a token (a showdown reveals a hand) or
-/// narrows by clearing one. Either list alone, or both, keeps the row private; neither makes it public.</param>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldStateVisibility(IReadOnlyList<string>? Readers = null, WorldHiddenCells Hidden = WorldHiddenCells.Omit,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ReadersFrom = null) {
-    /// <summary>Gets a value indicating whether the policy admits the public observer: no reader list of either kind.</summary>
-    public bool IsPublic => Readers is null && ReadersFrom is null;
-
-    /// <summary>Whether this observation policy admits the recipient named by its canonical token, or the public
-    /// observer when the token is null.</summary>
-    public bool Allows(string? recipient) {
-        if (IsPublic) {
-            return true;
-        }
-        if (recipient is null || Readers is null) {
-            return false;
-        }
-        for (var index = 0; index < Readers.Count; index++) {
-            if (string.Equals(Readers[index], recipient, StringComparison.Ordinal)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /// <summary>Whether the policy admits the recipient through its static list or the live text row.</summary>
-    /// <param name="recipient">The canonical token, or null for the public observer.</param>
-    /// <param name="definition">The document the live row is read from.</param>
-    public bool Allows(string? recipient, WorldDefinition definition) {
-        if (Allows(recipient)) {
-            return true;
-        }
-        if (recipient is null || ReadersFrom is null || WorldDefinitionRows.FindStateRow(definition.State, ReadersFrom) is not { Cells: { } cells }) {
-            return false;
-        }
-        for (var index = 0; index < cells.Count; index++) {
-            if (string.Equals(cells[index].Text, recipient, StringComparison.Ordinal)) {
-                return true;
-            }
-        }
-        return false;
-    }
-}
-
-/// <summary>A persisted knowledge layer refreshed explicitly by the authority.</summary>
-/// <param name="Source">The integer/boolean board observed.</param>
-/// <param name="Mask">A boolean board over the same topology; true cells are currently observed.</param>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldStateKnowledge(string Source, string Mask);
-
-/// <summary>When a stored knowledge value was last seen and whether the latest observation still sees it.</summary>
-/// <param name="Tick">The last observation tick.</param>
-/// <param name="Visible">Whether the latest explicit refresh sees this cell.</param>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldStateObservation(long Tick, bool Visible);
-
-/// <summary>A disclosed literal cell, or, under <see cref="WorldHiddenCells.Placeholder"/>, an anonymous card back
+/// <summary>A disclosed literal cell, or, under <see cref="HiddenCells.Placeholder"/>, an anonymous card back
 /// (<see cref="Hidden"/> true, empty key, zero value, no text, no observation).</summary>
-public sealed record WorldObservedCell(string Key, long Value, string? Text = null, WorldStateObservation? Observation = null,
+public sealed record WorldObservedCell(string Key, long Value, string? Text = null, StateObservation? Observation = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Hidden = false);
 
 /// <summary>A presentation observation, without draw seeds, cursors, masks, grants, or executable traits.
-/// <see cref="HiddenCount"/> counts the cells the row's <see cref="WorldStateVisibility.Hidden"/> policy withheld
-/// from this observer (placeholders included), zero under <see cref="WorldHiddenCells.Omit"/>.</summary>
+/// <see cref="HiddenCount"/> counts the cells the row's <see cref="StateVisibility.Hidden"/> policy withheld
+/// from this observer (placeholders included), zero under <see cref="HiddenCells.Omit"/>.</summary>
 public sealed record WorldObservedRow(string Name, CellKind Kind, IReadOnlyList<WorldObservedCell> Cells,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int HiddenCount = 0);
 
@@ -98,23 +25,23 @@ public static class WorldStateDisclosure {
                 continue;
             }
 
-            if (row.Visibility is { } policy && !policy.Allows(observer.Name, definition)) {
+            if (row.Visibility is { } policy && !policy.Allows(observer.Name, definition.State)) {
                 continue;
             }
 
             var cells = new List<WorldObservedCell>();
             var hidden = 0;
-            var hiddenPolicy = row.Visibility?.Hidden ?? WorldHiddenCells.Omit;
+            var hiddenPolicy = row.Visibility?.Hidden ?? HiddenCells.Omit;
             foreach (var cell in row.Cells ?? []) {
                 if (observer.CanRead(row, cell)) {
                     cells.Add(new(cell.Key.Value, cell.Value, cell.Text, cell.Observation));
                     continue;
                 }
-                if (hiddenPolicy == WorldHiddenCells.Omit) {
+                if (hiddenPolicy == HiddenCells.Omit) {
                     continue;
                 }
                 hidden++;
-                if (hiddenPolicy == WorldHiddenCells.Placeholder) {
+                if (hiddenPolicy == HiddenCells.Placeholder) {
                     cells.Add(new(string.Empty, 0L, Hidden: true));
                 }
             }
@@ -124,14 +51,14 @@ public static class WorldStateDisclosure {
     }
 
     /// <summary>Whether the recipient may read a value, including its containing zone's policy.</summary>
-    public static bool CanRead(WorldDefinition definition, WorldStateRow row, WorldStateCell cell, WorldPrincipal? recipient) =>
+    public static bool CanRead(WorldDefinition definition, WorldStateRow row, StateCell cell, WorldPrincipal? recipient) =>
         new Observer(definition, recipient).CanRead(row, cell);
 
     /// <summary>Refuses flattening a presentation binding that could disclose a restricted value.</summary>
     public static void ValidateBindings(WorldDefinition definition, object graph, WorldPrincipal? recipient) {
         var observer = new Observer(definition, recipient);
         foreach (var row in definition.State) {
-            if (!(row.Cells ?? []).Any(c => !observer.CanRead(row, c)) && (row.Visibility is null || row.Visibility.Allows(observer.Name, definition))) {
+            if (!(row.Cells ?? []).Any(c => !observer.CanRead(row, c)) && (row.Visibility is null || row.Visibility.Allows(observer.Name, definition.State))) {
                 continue;
             }
 
@@ -152,7 +79,7 @@ public static class WorldStateDisclosure {
             Name = recipient?.Describe();
             m_zonesByDomain = new(StringComparer.Ordinal);
             foreach (var row in definition.State) {
-                if (row.EffectiveDomain is not WorldStateDomain.KeysOf { Ordered: true } zoneDomain) {
+                if (row.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } zoneDomain) {
                     continue;
                 }
                 var domain = zoneDomain.Row.Value;
@@ -166,12 +93,12 @@ public static class WorldStateDisclosure {
 
         public string? Name { get; }
 
-        public bool CanRead(WorldStateRow row, WorldStateCell cell) {
-            if ((row.Visibility is { } policy && !policy.Allows(Name, m_definition)) || (cell.Visibility is { } cellPolicy && !cellPolicy.Allows(Name, m_definition))) {
+        public bool CanRead(WorldStateRow row, StateCell cell) {
+            if ((row.Visibility is { } policy && !policy.Allows(Name, m_definition.State)) || (cell.Visibility is { } cellPolicy && !cellPolicy.Allows(Name, m_definition.State))) {
                 return false;
             }
 
-            var domain = (row.EffectiveDomain is WorldStateDomain.KeysOf keysOf) ? keysOf.Row.Value : row.Name.Value;
+            var domain = (row.EffectiveDomain is StateDomain.KeysOf keysOf) ? keysOf.Row.Value : row.Name.Value;
             if (domain is null || !m_zonesByDomain.TryGetValue(domain, out var zones)) {
                 return true;
             }
@@ -182,7 +109,7 @@ public static class WorldStateDisclosure {
                         continue;
                     }
 
-                    if ((zone.Visibility is { } zonePolicy && !zonePolicy.Allows(Name, m_definition)) || (member.Visibility is { } memberPolicy && !memberPolicy.Allows(Name, m_definition))) {
+                    if ((zone.Visibility is { } zonePolicy && !zonePolicy.Allows(Name, m_definition.State)) || (member.Visibility is { } memberPolicy && !memberPolicy.Allows(Name, m_definition.State))) {
                         return false;
                     }
                 }
