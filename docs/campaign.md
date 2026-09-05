@@ -1382,6 +1382,44 @@ the graph path with edge normals as its directions — boot-time geometry in
 doubles whose vertex merge quantizes to a fine grid, so the graph is the same
 on every machine. The two snub tilings wait on a vertex-configuration grower.
 
+**A rule can ask what a board would be; the `search` section is that question,
+chartered.** The one gap the four-brick-walls
+critique found that a rule cannot close is the hypothetical: checkmate,
+stalemate, and a CPU opponent all need a board that is not the document's.
+The design is a value-typed *board frame* — one bit plane per element over
+the topology's cells packed into words, a copy is a fixed memcpy and an undo
+restores the plane words a move touched — and a second `IRuleHost` over such
+a frame, so the document's own interactions, gates, and effects run unchanged
+on the hypothetical board and no second rule language exists for the bot.
+Legality is written once, as the gate: *enforcement* is the author's choice
+per table — the diegetic tabletop records an illegal move and lets the
+players fix the board, a teaching world refuses it or
+highlights the legal squares — and every world's search reads the same total
+gate. A move is a turn, derived: search enumerates interaction sequences from
+the side to move until the document's turn key changes, so castling,
+promotion, and a jump chain are one ply with no new authoring surface. The
+search is a *job* across ticks, never a query that must answer in its tick:
+the section names the algorithm and the turn key, the job spends a fixed node
+quota per tick from the work sheet, runs its recursion on an explicit stack
+the checkpoint hashes, and lands its verdict as a state fact when it
+completes; a bot body then issues the same command a human would through the
+player command path, and a dog may knock the table while it thinks. Two
+algorithms, on the general-game precedent (Ludii ships both and picks per
+game): iterative-deepening alpha-beta with a transposition table for games
+with an authored score expression, and UCT for games with only a terminal
+outcome, its playouts drawn from a hash of tick and node — never an RNG in
+sim state. Checkmate detection is the same job at depth one with no legal
+move. Every limit derives: plane words from the topology's cell count,
+planes from the row's element count, stack memory from depth times frame
+size, the node quota from the budget the work sheet has left; an authored
+`depth` or `nodes` exists only for a world that has something specific in
+mind. Tokens-on-a-cell is the same frame seen from the other side: a token
+row (keys are identities, the value is a cell) and a cell row (keys are the
+topology's cells through `keysOf`, the value is an element) are one mapping
+the engine keeps consistent on every write, and a count is already a value.
+Refused: a mate detector unrolled into per-piece rules, a privileged bot
+mutation, a search that blocks a tick.
+
 **Placements compose, and a game addresses its bodies by placement.** A
 placement may name a `parent`: its position and yaw become a local offset and
 heading in the parent's resolved frame (rotation and translation only, resolved
