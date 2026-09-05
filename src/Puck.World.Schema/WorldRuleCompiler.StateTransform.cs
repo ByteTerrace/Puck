@@ -11,18 +11,6 @@ public static partial class WorldRuleCompiler {
                 }
 
                 break;
-            case WorldStateTransform.MoveToken move:
-                var positions = Row(move.Positions);
-                var allowance = Row(move.Allowance);
-                var terrain = Row(move.Terrain);
-                if (positions.EffectiveDomain is not WorldStateDomain.KeysOf posKeysOf || allowance.EffectiveDomain is not WorldStateDomain.KeysOf allowKeysOf || allowKeysOf.Row != posKeysOf.Row ||
-                    terrain.EffectiveDomain is not WorldStateDomain.CellsOf terrainBoard ||
-                    positions.ValuesFrom != terrainBoard.Topology || positions.Kind != CellKind.Int || allowance.Kind != CellKind.Int || terrain.Kind != CellKind.Int ||
-                    WorldTopologyCompilation.Find(definition.StateRaw, terrainBoard.Topology) is not { } map ||
-                    (uint)move.Destination >= map.CellCount || move.MaxVisits < 1 || move.MaxVisits > map.CellCount) {
-                    throw Invalid("moveToken requires bounded addressing and compatible position, allowance, and terrain rows");
-                }
-                break;
             case WorldStateTransform.Transfer transfer:
                 if (Row(transfer.From).EffectiveDomain is not WorldStateDomain.KeysOf { Ordered: true } source || Row(transfer.To).EffectiveDomain is not WorldStateDomain.KeysOf { Ordered: true } destination || source.Row != destination.Row ||
                     !Enum.IsDefined(transfer.Selector) || (transfer.Selector == WorldZoneSelector.Key) != (transfer.Key is not null) ||
@@ -88,7 +76,6 @@ public static partial class WorldRuleCompiler {
             default:
                 throw Invalid("unknown or null state transform");
         }
-        return new(WorldRuleEffectKind.TransformState, string.Empty, string.Empty, default, 0, null,
-            $"transformState {transform.GetType().Name}", Transform: transform);
+        return new CompiledWorldEffect(new TransformStateEffect(transform: transform, describe: $"transformState {transform.GetType().Name}"));
     }
 }

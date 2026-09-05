@@ -68,7 +68,7 @@ public sealed class WorldFieldLatticeLawTests {
                         Paint: [new WorldLatticeFill.Draw(Generator: new WorldGenerator(Source: WorldGeneratorSource.UniformRange, RangeMin: 0L, RangeMax: FixedQ4816.One.Value))]
                     )
                 )],
-                Lattices: [new WorldStateLatticeTopology(
+                Lattices: [new WorldStateLatticeTopology.Field(
                     Name: "grid",
                     Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
                     CellSize: 1f,

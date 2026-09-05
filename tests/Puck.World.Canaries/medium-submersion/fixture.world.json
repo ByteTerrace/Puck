@@ -67,6 +67,7 @@
     ],
     "lattices": [
       {
+        "$type": "field",
         "name": "pool",
         "origin": [
           0,

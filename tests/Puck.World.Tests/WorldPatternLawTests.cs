@@ -294,7 +294,7 @@ public sealed class WorldPatternLawTests {
     }
     private static WorldRule Mirror(string target, string operand, string? key = null) => new(Name(target + "-mirror"), [new ActionEffect.SetState(State: target, FromState: operand, FromKey: key)]);
     private static WorldDefinition Document(WorldStateRow[] rows, WorldPatternRow[] patterns, WorldRule[] rules) => Fixtures.BuildDocument() with {
-        StateRaw = new(World: rows, Lattices: [new WorldStateLatticeTopology("map", new DocumentVector3(0, 0, 0), 1, 4, 4, Kind: WorldTopologyKind.Grid)]),
+        StateRaw = new(World: rows, Lattices: [new WorldStateLatticeTopology.Grid("map", new DocumentVector3(0, 0, 0), 1, 4, 4)]),
         PatternsRaw = patterns,
         Rules = rules,
     };

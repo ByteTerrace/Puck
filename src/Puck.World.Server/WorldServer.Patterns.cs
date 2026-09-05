@@ -49,8 +49,8 @@ public sealed partial class WorldServer {
         return m_boardScratch.AsSpan(0, count);
     }
 
-    private long ReadPatternFact(CompiledWorldOperand operand, ulong tick) {
-        if (!m_patterns.TryGet(name: operand.Pattern!, pattern: out var pattern)) {
+    private long ReadPatternFact(PatternOperand operand, ulong tick) {
+        if (!m_patterns.TryGet(name: operand.Pattern, pattern: out var pattern)) {
             throw new InvalidOperationException($"pattern operand '{operand.Pattern}' outlived the compiled rules");
         }
         if (!WorldStateReader.TryReadHandle(definition: m_definition, catalog: m_definition.StateCatalog, handle: operand.StateHandle, key: null, tick: tick, row: out var row, rawValue: out _, text: out _)) {
@@ -59,7 +59,9 @@ public sealed partial class WorldServer {
 
         Span<long> word = m_patternWord;
 
-        if (operand.Board is { } query) {
+        // A pattern's board source is compiled only as BoardNeighbourQuery (see WorldRuleCompiler.Pattern.cs) — the
+        // Kind it carries is an arbitrary placeholder; only Direction (-1 meaning "every direction") is ever read.
+        if (operand.Board is BoardNeighbourQuery query) {
             if (row.EffectiveDomain is not WorldStateDomain.CellsOf) {
                 return 0L;
             }
@@ -208,33 +210,34 @@ public sealed partial class WorldServer {
     }
 
     // $history:<row>:<age> through the compiled row handle.
-    private long ReadHistoryFact(CompiledWorldOperand operand, ulong tick) {
+    private long ReadHistoryFact(HistoryOperand operand, ulong tick) {
         if (!WorldStateReader.TryReadHandle(definition: m_definition, catalog: m_definition.StateCatalog, handle: operand.StateHandle, key: null, tick: tick, row: out var row, rawValue: out _, text: out _) ||
             row.EffectiveDomain is not WorldStateDomain.Ring history) {
             throw new InvalidOperationException($"history operand over '{operand.Row}' outlived its compiled row handle");
         }
 
-        return ReadHistorySlot(row, history, operand.SymmetryArgument, tick);
+        return ReadHistorySlot(row, history, operand.Age, tick);
     }
 
     // pushState: the value is resolved the way a write's is, then lands as a Push transform so the ring's cursor and
     // slot move in one journaled mutation.
-    private bool FirePushState(in CompiledWorldEffect effect, string ruleName, ulong tick, bool preflight) {
-        if (WorldDefinitionRows.FindStateRow(rows: m_definition.State, name: effect.Row) is not { } row || row.EffectiveDomain is not WorldStateDomain.Ring) {
+    private bool FirePushState(CompiledWorldEffect effect, string ruleName, ulong tick, bool preflight) {
+        var push = (PushStateEffect)effect.Value!;
+        if (WorldDefinitionRows.FindStateRow(rows: m_definition.State, name: push.Row) is not { } row || row.EffectiveDomain is not WorldStateDomain.Ring) {
             return false;
         }
 
         long raw;
 
-        if (effect.Expression is { } expression) {
+        if (push.Expression is { } expression) {
             if (!TryEvaluateExpression(program: expression, kind: row.Kind, tick: tick, value: out raw)) {
                 if (preflight) {
                     m_ruleStatePreflightRejected = true;
                 }
-                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.Arithmetic, ruleName: ruleName, effect: in effect, tick: tick, detail: "the pushed expression overflowed, divided by zero, or shifted out of range");
+                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.Arithmetic, ruleName: ruleName, effect: effect, tick: tick, detail: "the pushed expression overflowed, divided by zero, or shifted out of range");
                 return false;
             }
-        } else if (effect.From is { } from) {
+        } else if (push.From is { } from) {
             var fact = ReadWorldFact(operand: from, tick: tick);
 
             if (fact.IsForever) {
@@ -243,10 +246,10 @@ public sealed partial class WorldServer {
 
             raw = ConvertWorldFactToRaw(value: fact, kind: row.Kind);
         } else {
-            raw = effect.RawValue;
+            raw = push.RawValue;
         }
 
-        return ApplyWorldRuleMutation(effect: in effect, ruleName: ruleName, mutation: new WorldMutation.TransformState(WorldPrincipal.World, new WorldStateTransform.Push(row.Name.Value, raw)), tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false, preflight: preflight);
+        return ApplyWorldRuleMutation(effect: effect, ruleName: ruleName, mutation: new WorldMutation.TransformState(WorldPrincipal.World, new WorldStateTransform.Push(row.Name.Value, raw)), tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false, preflight: preflight);
     }
 
     /// <summary>Walks one word through a pattern at the console and narrates every step: the raw values, the letter

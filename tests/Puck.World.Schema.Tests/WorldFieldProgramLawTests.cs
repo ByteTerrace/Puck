@@ -382,7 +382,7 @@ public sealed class WorldFieldProgramLawTests {
         IReadOnlyList<WorldReaction>? reactions = null,
         string fieldName = "heat"
     ) => new(
-        Lattices: [new WorldStateLatticeTopology(
+        Lattices: [new WorldStateLatticeTopology.Field(
             Name: "ground",
             Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
             CellSize: 1f,

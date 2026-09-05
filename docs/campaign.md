@@ -778,20 +778,34 @@ neutral value it should never need to. This is a pure representation change: the
 300-tick garden replay and the frozen world's 720-tick replay both hash identically before and
 after. The case-type/union rewrite below is unstarted; this only clears its stated first step.
 
-**Compiled rule operands are a closed union, built to the union pattern before the compiler
-has it (owner decision).** `CompiledWorldOperand` and `CompiledWorldEffect` are flattened
-structs carrying every fact kind's parameters at once, copied by value into every predicate,
-expression token, and reader; the shape is wrong, not merely large. The replacement is one
-sealed record per fact kind as the case types and an eight-byte carrier written to the C# 15
-basic union pattern by hand — a `[Union]` struct holding one `object?`, a constructor per
-case, `Value`, `HasValue`, and a `TryGetValue` per case — with the two attribute and
-interface types polyfilled internally until .NET 11 supplies them. Dispatch is a type-pattern
-switch over the cases; a law enumerates every fact kind against it until the compiler's
-exhaustiveness takes over. The day the toolchain moves, the flip is deleting the polyfills and
-switching on the carrier instead of its `Value`; nothing else moves. Case types stay classes,
-never structs, because a union boxes value cases on store. Row and key names leave the hot
-object for compiled handles, kept only in the refusal text. Sequenced after `garden/w3`
-merges, since it rewrites the compiler arms the lanes are producing operands in.
+**Compiled rule operands and effects are closed unions, built to the union pattern before the
+compiler has it (owner decision). Both halves have landed.**
+`CompiledWorldOperand` and `CompiledWorldEffect` were flattened structs carrying every fact
+kind's parameters at once, copied by value into every predicate, expression token, and
+reader — the shape was wrong, not merely large. `CompiledWorldOperand` is now a carrier
+struct (`WorldOperandUnion.cs`) over one sealed CLASS per `WorldRuleFactKind`
+(`WorldOperandKinds.cs`, 22 cases — never records or structs, since a union boxes a value
+case on store and nothing at runtime compares two operands for equality or identity), written
+to the C# 15 basic union pattern by hand: a `[Union]` struct holding one `object?`, a
+constructor per case, `Value`, `HasValue`, and a generic `TryGetValue<T>` — with the two
+attribute and interface types (`UnionAttribute`/`IUnion`) polyfilled internally until .NET 11
+supplies them. Dispatch is a type-pattern switch over the cases at `WorldServer.ReadWorldFact`
+and `WorldRuleWorkBudget.OperandCost`; `WorldOperandUnionLawTests` enumerates every fact kind
+against the case-type table until the compiler's exhaustiveness takes over. The day the
+toolchain moves, the flip is deleting the polyfills and switching on the carrier instead of its
+`Value`; nothing else moves. `Kind`/`ValueKind` are the only members every case carries
+(`WorldOperandFact`'s base, set once by each case's own constructor); everything else lives on
+the concrete case, reached by the type-pattern switch or, for the four cases that share a
+(row, key-indirection) address (`StateCellOperand`/`BoardOperand`/`PatternOperand`/
+`SymmetryOperand`), through the narrow `IStateAddressedOperand` interface. Row and key names
+still leave the hot object for compiled handles, kept only in the refusal text. This is a pure
+representation change — the passive 300-tick garden replay hashes identically before and after
+(`0x397968B8F541A2C4`). `CompiledWorldEffect` followed the identical shape: a carrier struct
+(`WorldEffectUnion.cs`) over one sealed class per `WorldRuleEffectKind` (`WorldEffectKinds.cs`),
+firing/preflight/transaction switched on the case types via `effect.Value`, factories replacing
+the compiler's `with` clones. Both carriers share one `UnionPolyfill.cs` (`UnionAttribute`/
+`IUnion`, attributed for either a struct carrier or a class/record hierarchy) rather than each
+declaring its own copy.
 
 **Cellset-domain unification, the 64-cell half (landed).** The forked
 vocabulary was never a type-system problem: `$board:mask` already reads a
@@ -902,10 +916,24 @@ carrying two authoring surfaces that refused each other's fields only at validat
 two `$type`s let the shape refuse at the type level instead. The garden's two `sort`
 rules move to `sortKeyed` (pure rename: the passive 300-tick replay hash is unchanged);
 no shipped world or canary declared `completePhase`, `turnOrder`, `setRay`, `moveToken`,
-or `shuffle`, so no other document migrates. `moveToken` is left as its own transform:
-composing it from `$board:pathCost` plus a transaction needs that fact's target cell to
-read a just-written value rather than the compile-time literal it takes today, which is
-new expressive power the fact does not carry yet, not a rewrite of what it already has.
+or `shuffle`, so no other document migrates.
+
+**`moveToken` is retired; `$board:pathCost` gains a dynamic target (owner decision, closed
+union follow-on).** The opaque transform (pathfind, allowance debit, and occupancy baked
+into one C# compose arm) is deleted; `$board:pathCost:<terrain>:cell:<row>:<key>:<maxCost>:<maxVisits>`
+reads its destination ordinal live from another declared row's cell — the same `cell:<row>:<key>`
+indirection `$distance:`/`$los:` already spend their own body-reference grammar on — instead of
+only the compile-time literal ordinal it took before. A world now authors "move a token" as
+ordinary rules: an affordability gate comparing the live path cost against a live allowance row,
+and a `transaction` that debits the allowance by that same live expression, clears the token's old
+occupancy and terrain cells, writes the new position, and sets the new occupancy and terrain
+cells — nothing atomic left for the engine to own on the token's behalf.
+`tests/Puck.World.Tests/DiscreteStateLawTests.cs`'s
+`APathCostTransactionMovesATokenUnderAnAllowanceAndRefusesWhenCostExceedsIt` proves the gate reads
+the cost live rather than baking a stale one at compile time (the control: raising the allowance
+alone flips an unaffordable request to affordable). `tests/Puck.World.Canaries/tabletop-state`
+re-authors its guarded move the same way; the passive 300-tick garden replay hash and the frozen
+720-tick replay hash are both unaffected (`moveToken` was never shipped in either world).
 
 **The local auction house dissolved into an escrowed conditional transfer over ordinary keyed
 rows, authored entirely as rules — no bespoke market mutation kinds, no market-only C# compose
@@ -939,9 +967,16 @@ gate and keeps re-blending every tick, by
 in a bespoke parallel store, it never had a federation-transfer story to dissolve either: an
 ordinary keyed row is local to its world, exactly like every other `state` row, so an individual's
 beliefs simply do not travel with it across a transfer — a real behavior change from the old
-system's frozen-observer export/import, and a deliberate one (nothing shipped exercised it). The
-garden re-authors `witness-claim`/`rumor`/`choose-companion` and the pack kit's `alignmentAffinity`
-onto a `boneHolderTrust` row keyed by observer, moving its hash. `hounds-meet` and its `affection`
+system's frozen-observer export/import, and a deliberate one (nothing shipped exercised it). An
+impression keyed by observer alone conflates every subject it has ever concerned — a hound's trust
+in whoever holds the bone right now silently becomes its trust in whoever holds it next the moment
+the bone changes hands. `$pair:<bodyRefA>:<bodyRefB>` (`WorldRuleFacts.PairKeyPrefix`) is the
+composite-key indirection that fixes it: on the same terms as `$cell:`, it resolves to a directed
+`"<a>_<b>"` cell key (`(a, b)` and `(b, a)` name different cells), so a keyed row holds one cell per
+(observer, subject) pair instead of one per observer. The garden re-authors `witness-claim`/`rumor`/
+`choose-companion` and the pack kit's `alignmentAffinity` onto `boneHolderTrust` keyed by
+`$pair:<observer>:cell:boneHolder:0` — each hound's own trust in whichever specific body it has
+witnessed holding the bone — moving its hash. `hounds-meet` and its `affection`
 dimension are retired rather than re-keyed: it was a Distance interaction (`O(population²)`
 worst-case reach) whose only effect was a delivery an ordinary `AddState` now prices at the
 engine's real conservative per-write cost — at this population size that product alone exceeds the
@@ -1198,6 +1233,28 @@ rule sets share no data flow through anything but the engine's own
 `$physics:quiescent` source. A future rule that reaches across that boundary
 must account for the new order rather than assume the substrate still runs
 first.
+
+**The operand/effect unions, the row-domain union, and the garden split land together
+(`tower/unions`, integrator ruling).** Three lanes built independently against the same
+`ca29ca5e` base — compiled operands and effects becoming closed unions, `WorldStateRow`'s five
+facets collapsing into one `Domain` union, and the garden splitting into imported game
+fragments — then a fourth (the `$pair` composite key indirection, `moveToken`'s retirement into
+a live `$board:pathCost` target plus a transaction) landed inside the operand/effect lane after
+the split lane had already forked. Combining all four moves the passive 300-tick garden replay
+hash to `0xE65582BEA0A09549` (from `0x397968B8F541A2C4` at `ca29ca5e`) and the frozen world's
+720-tick replay to `0xFD0790057330914F` (from `0x1B21350FE4B50E0B`): every one of the four
+changes is independently a pure representation or a deliberate, already-recorded content change,
+and their sum is not separately re-provable against the pre-integration number — the doctrine's
+guarantee is that the replay stays self-consistent (rule-failure-free, MATCH) at the new mapping,
+never that combining independently-correct changes leaves a historical hash standing. Two
+integration-only fixes rode along: `games/chess.world.json` and `games/tictactoe.world.json`
+authored their `state.lattices` entries against the pre-union `WorldStateLatticeTopology` shape
+(a `kind` discriminator field) since the split fork predates the lattice-topology union landing
+in the other lane — migrated to the union's own `$type` discriminator, the one shape the type
+now parses; and the two lanes' independently-declared `UnionPolyfill.cs` (one `[AttributeUsage(Struct)]`
+for the operand/effect carriers, one `[AttributeUsage(Class)]` for the row-domain union) collapsed
+into the one file `docs/campaign.md`'s row-domain paragraph already named as the shared destination,
+attributed for both shapes.
 
 ## After this arc
 

@@ -41,389 +41,537 @@
         "null"
       ],
       "items": {
-        "description": "One state.lattices topology -- the footprint, cadence, and reactions every lattice-shaped state row referencing it shares. At most one physical field topology and bounded discrete topologies may coexist.",
+        "description": "One state.lattices topology -- the footprint every lattice-shaped state row referencing it shares. At most one physical field topology and bounded discrete topologies may coexist. A closed union over WorldTopologyKind, one case per kind, each carrying only its own parameters \u2014 Radius, Band, and LayerHeight exist nowhere else, and only Field carries Reactions. Kind is never authored directly; it is the discriminant every case\u0027s own JSON $type already carries, exposed as a property because so much of the compiler still branches on it.",
         "type": [
           "object",
           "null"
         ],
-        "properties": {
-          "name": {
-            "description": "The topology\u0027s name -- what a row\u0027s lattice.topology references.",
-            "type": "string"
-          },
-          "origin": {
-            "description": "The minimum corner, world units."
-          },
-          "cellSize": {
-            "description": "The cubic cell edge, world units.",
-            "type": "number"
-          },
-          "width": {
-            "description": "Cells along \u002BX.",
-            "type": "integer"
-          },
-          "depth": {
-            "description": "Cells along \u002BZ.",
-            "type": "integer"
-          },
-          "layers": {
-            "description": "Cells along \u002BY -- 1 is a ground lattice.",
-            "type": "integer",
-            "default": 1
-          },
-          "stepEveryTicks": {
-            "description": "Simulation ticks between reaction steps.",
-            "type": "integer",
-            "default": 8
-          },
-          "reactions": {
-            "description": "The per-step reactions over a physical field topology, applied in document order.",
-            "type": [
-              "array",
-              "null"
-            ],
-            "items": {
-              "description": "One reaction \u2014 a local rule every cell (or every tagged body) applies each lattice step. Reactions run in document order; Diffuse reads the previous step\u0027s values for the whole field, every other kind reads and writes cells in place, row-major.",
-              "type": [
-                "object",
-                "null"
-              ],
-              "required": [
-                "$type"
-              ],
-              "anyOf": [
-                {
-                  "description": "Moves each cell a fraction of the way toward the mean of its face neighbours (four on a ground lattice, six in a volume).",
-                  "properties": {
-                    "$type": {
-                      "const": "diffuse"
-                    },
-                    "field": {
-                      "description": "The field diffused.",
-                      "type": "string"
-                    },
-                    "rate": {
-                      "description": "The fraction per step, in [0, 1]."
-                    }
-                  },
-                  "required": [
-                    "field",
-                    "rate"
+        "required": [
+          "$type"
+        ],
+        "anyOf": [
+          {
+            "description": "A physical scalar field over the lattice\u0027s footprint, evolved by reactions each StepEveryTicks.",
+            "properties": {
+              "$type": {
+                "const": "field"
+              },
+              "width": {
+                "description": "Cells along \u002BX.",
+                "type": "integer"
+              },
+              "depth": {
+                "description": "Cells along \u002BZ.",
+                "type": "integer"
+              },
+              "layers": {
+                "description": "Cells along \u002BY -- 1 is a ground lattice.",
+                "type": "integer",
+                "default": 1
+              },
+              "stepEveryTicks": {
+                "description": "Simulation ticks between reaction steps.",
+                "type": "integer",
+                "default": 8
+              },
+              "reactions": {
+                "description": "The per-step reactions, applied in document order.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "description": "One reaction \u2014 a local rule every cell (or every tagged body) applies each lattice step. Reactions run in document order; Diffuse reads the previous step\u0027s values for the whole field, every other kind reads and writes cells in place, row-major.",
+                  "type": [
+                    "object",
+                    "null"
                   ],
-                  "additionalProperties": false
-                },
-                {
-                  "description": "Scales each cell toward zero: v -= v\u00B7rate.",
-                  "properties": {
-                    "$type": {
-                      "const": "decay"
-                    },
-                    "field": {
-                      "description": "The field decayed.",
-                      "type": "string"
-                    },
-                    "rate": {
-                      "description": "The fraction per step, in [0, 1]."
-                    }
-                  },
                   "required": [
-                    "field",
-                    "rate"
+                    "$type"
                   ],
-                  "additionalProperties": false
-                },
-                {
-                  "description": "Where every condition holds at a cell, applies every write at that cell \u2014 ignition, melting, evaporation, freezing are rows of this shape.",
-                  "properties": {
-                    "$type": {
-                      "const": "transform"
+                  "anyOf": [
+                    {
+                      "description": "Moves each cell a fraction of the way toward the mean of its face neighbours (four on a ground lattice, six in a volume).",
+                      "properties": {
+                        "$type": {
+                          "const": "diffuse"
+                        },
+                        "field": {
+                          "description": "The field diffused.",
+                          "type": "string"
+                        },
+                        "rate": {
+                          "description": "The fraction per step, in [0, 1]."
+                        }
+                      },
+                      "required": [
+                        "field",
+                        "rate"
+                      ],
+                      "additionalProperties": false
                     },
-                    "when": {
-                      "description": "The conditions, all of which must hold.",
-                      "type": "array",
-                      "items": {
-                        "description": "One per-cell condition of a Transform.",
-                        "type": [
-                          "object",
-                          "null"
-                        ],
-                        "properties": {
-                          "field": {
-                            "description": "The field read at the cell.",
-                            "type": "string"
-                          },
-                          "comparison": {
-                            "$ref": "./common.schema.json#/$defs/ActionStateComparison",
-                            "description": "The comparison."
-                          },
-                          "value": {
-                            "description": "The scalar compared against (literal or state-row reference)."
+                    {
+                      "description": "Scales each cell toward zero: v -= v\u00B7rate.",
+                      "properties": {
+                        "$type": {
+                          "const": "decay"
+                        },
+                        "field": {
+                          "description": "The field decayed.",
+                          "type": "string"
+                        },
+                        "rate": {
+                          "description": "The fraction per step, in [0, 1]."
+                        }
+                      },
+                      "required": [
+                        "field",
+                        "rate"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Where every condition holds at a cell, applies every write at that cell \u2014 ignition, melting, evaporation, freezing are rows of this shape.",
+                      "properties": {
+                        "$type": {
+                          "const": "transform"
+                        },
+                        "when": {
+                          "description": "The conditions, all of which must hold.",
+                          "type": "array",
+                          "items": {
+                            "description": "One per-cell condition of a Transform.",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "field": {
+                                "description": "The field read at the cell.",
+                                "type": "string"
+                              },
+                              "comparison": {
+                                "$ref": "./common.schema.json#/$defs/ActionStateComparison",
+                                "description": "The comparison."
+                              },
+                              "value": {
+                                "description": "The scalar compared against (literal or state-row reference)."
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "comparison",
+                              "value"
+                            ],
+                            "additionalProperties": false
                           }
                         },
-                        "required": [
-                          "field",
-                          "comparison",
-                          "value"
-                        ],
-                        "additionalProperties": false
-                      }
+                        "then": {
+                          "description": "The writes, applied in order.",
+                          "type": "array",
+                          "items": {
+                            "description": "One per-cell write of a Transform.",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "field": {
+                                "description": "The field written at the cell.",
+                                "type": "string"
+                              },
+                              "op": {
+                                "description": "Set or add.",
+                                "enum": [
+                                  "Set",
+                                  "Add"
+                                ]
+                              },
+                              "value": {
+                                "description": "The constant written or added; the result clamps to the field\u0027s range."
+                              }
+                            },
+                            "required": [
+                              "field",
+                              "op",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "when",
+                        "then"
+                      ],
+                      "additionalProperties": false
                     },
-                    "then": {
-                      "description": "The writes, applied in order.",
-                      "type": "array",
-                      "items": {
-                        "description": "One per-cell write of a Transform.",
-                        "type": [
-                          "object",
-                          "null"
-                        ],
-                        "properties": {
-                          "field": {
-                            "description": "The field written at the cell.",
-                            "type": "string"
-                          },
-                          "op": {
-                            "description": "Set or add.",
-                            "enum": [
-                              "Set",
-                              "Add"
+                    {
+                      "description": "Every active body whose cell in the keyed state row Tag reads nonzero adds Amount to Field at the cell it occupies \u2014 a burning body is a heat source.",
+                      "properties": {
+                        "$type": {
+                          "const": "emit"
+                        },
+                        "tag": {
+                          "description": "The keyed int state row whose nonzero cells name the emitting bodies.",
+                          "type": "string"
+                        },
+                        "field": {
+                          "description": "The field deposited into.",
+                          "type": "string"
+                        },
+                        "amount": {
+                          "description": "The amount per step; the cell clamps to the field\u0027s range."
+                        }
+                      },
+                      "required": [
+                        "tag",
+                        "field",
+                        "amount"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Writes 1 or 0 into Row\u0027s cell for every active body, by whether Field at the body\u0027s cell satisfies the comparison \u2014 a body standing in a burning cell becomes tagged, and body-level chemistry takes it from there.",
+                      "properties": {
+                        "$type": {
+                          "const": "expose"
+                        },
+                        "field": {
+                          "description": "The field sampled at the body.",
+                          "type": "string"
+                        },
+                        "comparison": {
+                          "$ref": "./common.schema.json#/$defs/ActionStateComparison",
+                          "description": "The comparison."
+                        },
+                        "value": {
+                          "description": "The constant compared against."
+                        },
+                        "row": {
+                          "description": "The keyed int state row written, keyed by body index.",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "field",
+                        "comparison",
+                        "value",
+                        "row"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Moves Field downhill, cell to cell, over the combined surface height of Over plus Field\u0027s own value -- mass-conserving except where a cell\u0027s clamp to its declared [min, max] binds. Every cell donates an equal share of its previous-step value to each of the lattice\u0027s active-axis directions (four on a ground lattice, six in a volume -- the SAME count for every cell, whether a direction reaches a neighbour or the lattice edge), and sends that share only along a direction that is strictly downhill; a level or uphill direction moves nothing.",
+                      "properties": {
+                        "$type": {
+                          "const": "flow"
+                        },
+                        "field": {
+                          "description": "The field transported.",
+                          "type": "string"
+                        },
+                        "rate": {
+                          "description": "The fraction of a cell\u0027s per-direction share that actually moves each step, in [0, 1]."
+                        },
+                        "over": {
+                          "description": "The other lattice rows forming the terrain basis a downhill direction is measured against; empty or omitted means the field flows over its own height alone.",
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "type": [
+                              "string",
+                              "null"
                             ]
                           },
-                          "value": {
-                            "description": "The constant written or added; the result clamps to the field\u0027s range."
-                          }
+                          "default": null
                         },
-                        "required": [
-                          "field",
-                          "op",
-                          "value"
-                        ],
-                        "additionalProperties": false
-                      }
-                    }
-                  },
-                  "required": [
-                    "when",
-                    "then"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "description": "Every active body whose cell in the keyed state row Tag reads nonzero adds Amount to Field at the cell it occupies \u2014 a burning body is a heat source.",
-                  "properties": {
-                    "$type": {
-                      "const": "emit"
-                    },
-                    "tag": {
-                      "description": "The keyed int state row whose nonzero cells name the emitting bodies.",
-                      "type": "string"
-                    },
-                    "field": {
-                      "description": "The field deposited into.",
-                      "type": "string"
-                    },
-                    "amount": {
-                      "description": "The amount per step; the cell clamps to the field\u0027s range."
-                    }
-                  },
-                  "required": [
-                    "tag",
-                    "field",
-                    "amount"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "description": "Writes 1 or 0 into Row\u0027s cell for every active body, by whether Field at the body\u0027s cell satisfies the comparison \u2014 a body standing in a burning cell becomes tagged, and body-level chemistry takes it from there.",
-                  "properties": {
-                    "$type": {
-                      "const": "expose"
-                    },
-                    "field": {
-                      "description": "The field sampled at the body.",
-                      "type": "string"
-                    },
-                    "comparison": {
-                      "$ref": "./common.schema.json#/$defs/ActionStateComparison",
-                      "description": "The comparison."
-                    },
-                    "value": {
-                      "description": "The constant compared against."
-                    },
-                    "row": {
-                      "description": "The keyed int state row written, keyed by body index.",
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "field",
-                    "comparison",
-                    "value",
-                    "row"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "description": "Moves Field downhill, cell to cell, over the combined surface height of Over plus Field\u0027s own value -- mass-conserving except where a cell\u0027s clamp to its declared [min, max] binds. Every cell donates an equal share of its previous-step value to each of the lattice\u0027s active-axis directions (four on a ground lattice, six in a volume -- the SAME count for every cell, whether a direction reaches a neighbour or the lattice edge), and sends that share only along a direction that is strictly downhill; a level or uphill direction moves nothing.",
-                  "properties": {
-                    "$type": {
-                      "const": "flow"
-                    },
-                    "field": {
-                      "description": "The field transported.",
-                      "type": "string"
-                    },
-                    "rate": {
-                      "description": "The fraction of a cell\u0027s per-direction share that actually moves each step, in [0, 1]."
-                    },
-                    "over": {
-                      "description": "The other lattice rows forming the terrain basis a downhill direction is measured against; empty or omitted means the field flows over its own height alone.",
-                      "type": [
-                        "array",
-                        "null"
-                      ],
-                      "items": {
-                        "type": [
-                          "string",
-                          "null"
-                        ]
+                        "spillRow": {
+                          "description": "The scalar fixed-kind state row an edge cell\u0027s outward share accumulates into each step (a clamped add), or null to treat every lattice edge as a wall.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        }
                       },
-                      "default": null
-                    },
-                    "spillRow": {
-                      "description": "The scalar fixed-kind state row an edge cell\u0027s outward share accumulates into each step (a clamped add), or null to treat every lattice edge as a wall.",
-                      "type": [
-                        "string",
-                        "null"
+                      "required": [
+                        "field",
+                        "rate"
                       ],
-                      "default": null
+                      "additionalProperties": false
                     }
-                  },
-                  "required": [
-                    "field",
-                    "rate"
-                  ],
-                  "additionalProperties": false
-                }
-              ]
-            },
-            "default": null
-          },
-          "kind": {
-            "description": "Physical fields or a discrete grid, ring, or axial hexagon.",
-            "enum": [
-              "Field",
-              "Grid",
-              "Ring",
-              "Hex",
-              "Box"
-            ],
-            "default": "Field"
-          },
-          "wrap": {
-            "description": "Wrapped axes for a discrete grid; rings always wrap.",
-            "enum": [
-              "None",
-              "X",
-              "Y",
-              "Both"
-            ],
-            "default": "None"
-          },
-          "radius": {
-            "description": "The axial hexagon radius; zero for other kinds.",
-            "type": "integer",
-            "default": 0
-          },
-          "band": {
-            "description": "For a Grid, the vertical half-extent about the origin\u0027s Y a position must lie within to resolve to a cell (cellOf); 0 resolves any height, so a piece on the floor beneath a table still reads as on its square.",
-            "type": "number",
-            "default": 0
-          },
-          "layerHeight": {
-            "description": "For a Box, the world-space height of one layer, so a position\u0027s Y above the origin resolves to a layer the way X and Z resolve to a column; positive, and only on a box.",
-            "type": "number",
-            "default": 0
-          },
-          "directions": {
-            "description": "The topology\u0027s own direction vocabulary \u2014 its neighbour steps and the compass/element names a rule, $board:/$match: token, or leaper reach spells them with. null (the unauthored default) compiles to exactly the fixed set every WorldTopologyKind carried before this field existed \u2014 Grid\u0027s eight compass points, Hex\u0027s six, Box\u0027s 26, Ring\u0027s forward/backward \u2014 so no shipped world\u0027s behavior moves. An authored list replaces that default WHOLESALE: it becomes the topology\u0027s only directions, its only compass names, and the only vocabulary Direction resolves \u2014 the seam a 4-connected grid (orthogonal steps only) or a custom leaper reach declares without inventing a parallel mechanism.",
-            "type": [
-              "array",
-              "null"
-            ],
-            "items": {
-              "description": "One authored direction of a discrete WorldStateLatticeTopology: the (X, Y, Z) cell step a neighbour walk, ray, or leaper offset takes, and the case-sensitive token a rule or $board:/$match: channel names it by. X/Y are the topology\u0027s own planar axes (a Grid\u0027s column/row, a Hex\u0027s q/r); Z is a Box\u0027s layer step and must be zero on every other kind.",
-              "type": [
-                "object",
-                "null"
-              ],
-              "properties": {
-                "name": {
-                  "description": "The direction\u0027s token \u2014 dot-free, distinct within the topology, matched case-sensitively.",
-                  "type": "string"
+                  ]
                 },
-                "x": {
-                  "description": "The signed planar column step.",
-                  "type": "integer"
-                },
-                "y": {
-                  "description": "The signed planar row step.",
-                  "type": "integer"
-                },
-                "z": {
-                  "description": "The signed layer step; zero except on a Box.",
-                  "type": "integer",
-                  "default": 0
-                }
+                "default": null
               },
-              "required": [
-                "name",
-                "x",
-                "y"
-              ],
-              "additionalProperties": false
-            },
-            "default": null
-          },
-          "elementAliases": {
-            "description": "Friendlier names for this topology\u0027s point-group elements (\u0022rot90\u0022 for whatever signed-axis permutation a square grid\u0027s quarter turn spells) \u2014 Element resolves an alias alongside the canonical name; ElementName always answers the canonical spelling.",
-            "type": [
-              "array",
-              "null"
-            ],
-            "items": {
-              "description": "A friendlier name for one point-group element, resolved by Element alongside its canonical signed-axis spelling (ElementName always answers the canonical form).",
-              "type": [
-                "object",
-                "null"
-              ],
-              "properties": {
-                "name": {
-                  "description": "The alias token a rule or console verb may use instead of Element.",
-                  "type": "string"
-                },
-                "element": {
-                  "description": "The canonical element name (a ElementName value) this alias resolves to.",
-                  "type": "string"
-                }
+              "name": {
+                "description": "The topology\u0027s name -- what a row\u0027s lattice.topology references.",
+                "type": "string"
               },
-              "required": [
-                "name",
-                "element"
-              ],
-              "additionalProperties": false
+              "origin": {
+                "description": "The minimum corner, world units."
+              },
+              "cellSize": {
+                "description": "The cubic cell edge, world units.",
+                "type": "number"
+              }
             },
-            "default": null
+            "required": [
+              "width",
+              "depth",
+              "name",
+              "origin",
+              "cellSize"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "description": "A rectangular board, indexed by y times width plus x.",
+            "properties": {
+              "$type": {
+                "const": "grid"
+              },
+              "width": {
+                "description": "Cells along \u002BX.",
+                "type": "integer"
+              },
+              "depth": {
+                "description": "Cells along \u002BZ.",
+                "type": "integer"
+              },
+              "wrap": {
+                "description": "Wrapped axes.",
+                "enum": [
+                  "None",
+                  "X",
+                  "Y",
+                  "Both"
+                ],
+                "default": "None"
+              },
+              "band": {
+                "description": "The vertical half-extent about the origin\u0027s Y a position must lie within to resolve to a cell (cellOf); 0 resolves any height, so a piece on the floor beneath a table still reads as on its square.",
+                "type": "number",
+                "default": 0
+              },
+              "directions": {
+                "description": "See Directions.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/WorldTopologyDirection"
+                },
+                "default": null
+              },
+              "elementAliases": {
+                "description": "See ElementAliases.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/WorldTopologyElementAlias"
+                },
+                "default": null
+              },
+              "name": {
+                "description": "The topology\u0027s name -- what a row\u0027s lattice.topology references.",
+                "type": "string"
+              },
+              "origin": {
+                "description": "The minimum corner, world units."
+              },
+              "cellSize": {
+                "description": "The cubic cell edge, world units.",
+                "type": "number"
+              }
+            },
+            "required": [
+              "width",
+              "depth",
+              "name",
+              "origin",
+              "cellSize"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "description": "A cyclic sequence, indexed from zero \u2014 always wraps.",
+            "properties": {
+              "$type": {
+                "const": "ring"
+              },
+              "width": {
+                "description": "The cycle length.",
+                "type": "integer"
+              },
+              "directions": {
+                "description": "See Directions.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/WorldTopologyDirection"
+                },
+                "default": null
+              },
+              "elementAliases": {
+                "description": "See ElementAliases.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/WorldTopologyElementAlias"
+                },
+                "default": null
+              },
+              "name": {
+                "description": "The topology\u0027s name -- what a row\u0027s lattice.topology references.",
+                "type": "string"
+              },
+              "origin": {
+                "description": "The minimum corner, world units."
+              },
+              "cellSize": {
+                "description": "The cubic cell edge, world units.",
+                "type": "number"
+              }
+            },
+            "required": [
+              "width",
+              "name",
+              "origin",
+              "cellSize"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "description": "An axial hexagon, indexed in ascending r then q order.",
+            "properties": {
+              "$type": {
+                "const": "hex"
+              },
+              "radius": {
+                "description": "The axial hexagon radius.",
+                "type": "integer"
+              },
+              "directions": {
+                "description": "See Directions.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/WorldTopologyDirection"
+                },
+                "default": null
+              },
+              "elementAliases": {
+                "description": "See ElementAliases.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/WorldTopologyElementAlias"
+                },
+                "default": null
+              },
+              "name": {
+                "description": "The topology\u0027s name -- what a row\u0027s lattice.topology references.",
+                "type": "string"
+              },
+              "origin": {
+                "description": "The minimum corner, world units."
+              },
+              "cellSize": {
+                "description": "The cubic cell edge, world units.",
+                "type": "number"
+              }
+            },
+            "required": [
+              "radius",
+              "name",
+              "origin",
+              "cellSize"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "description": "A box of width by layers by depth cells with the 26 space directions, indexed by (layer times depth plus z) times width plus x.",
+            "properties": {
+              "$type": {
+                "const": "box"
+              },
+              "width": {
+                "description": "Cells along \u002BX.",
+                "type": "integer"
+              },
+              "depth": {
+                "description": "Cells along \u002BZ.",
+                "type": "integer"
+              },
+              "layers": {
+                "description": "Cells along \u002BY.",
+                "type": "integer"
+              },
+              "layerHeight": {
+                "description": "The world-space height of one layer, so a position\u0027s Y above the origin resolves to a layer the way X and Z resolve to a column; positive.",
+                "type": "number"
+              },
+              "directions": {
+                "description": "See Directions.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/WorldTopologyDirection"
+                },
+                "default": null
+              },
+              "elementAliases": {
+                "description": "See ElementAliases.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "./common.schema.json#/$defs/WorldTopologyElementAlias"
+                },
+                "default": null
+              },
+              "name": {
+                "description": "The topology\u0027s name -- what a row\u0027s lattice.topology references.",
+                "type": "string"
+              },
+              "origin": {
+                "description": "The minimum corner, world units."
+              },
+              "cellSize": {
+                "description": "The cubic cell edge, world units.",
+                "type": "number"
+              }
+            },
+            "required": [
+              "width",
+              "depth",
+              "layers",
+              "layerHeight",
+              "name",
+              "origin",
+              "cellSize"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "name",
-          "origin",
-          "cellSize",
-          "width",
-          "depth"
-        ],
-        "additionalProperties": false
+        ]
       },
       "default": null
     }

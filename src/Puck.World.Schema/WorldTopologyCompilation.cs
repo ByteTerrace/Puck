@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
+using Puck.Assets.Documents;
 using Puck.Maths;
 
 namespace Puck.World;
@@ -36,7 +37,7 @@ public enum WorldTopologyWrap : byte {
 }
 
 /// <summary>A compiled immutable adjacency table. Absent neighbours are -1. Direction names come from the
-/// topology's own <see cref="WorldStateLatticeTopology.Directions"/> when authored; the unauthored default matches
+/// topology's own <see cref="IDiscreteLatticeTopology.Directions"/> when authored; the unauthored default matches
 /// what every kind carried before that field existed — Grid N, NE, E, SE, S, SW, W, NW; Hex E, NE, NW, W, SW, SE;
 /// Box the 26 in <see cref="BoxDirectionNames"/>; Ring forward and backward.</summary>
 public sealed partial class CompiledWorldTopology {
@@ -208,7 +209,7 @@ public sealed partial class CompiledWorldTopology {
         && (uint)cell < CellCount && string.Equals(key, m_keys[cell], StringComparison.Ordinal);
 
     /// <summary>Resolves a direction token for this topology — this topology's own authored names when
-    /// <see cref="WorldStateLatticeTopology.Directions"/> was declared, its kind's default names otherwise.</summary>
+    /// <see cref="IDiscreteLatticeTopology.Directions"/> was declared, its kind's default names otherwise.</summary>
     /// <param name="token">The case-sensitive direction name.</param>
     /// <returns>The direction ordinal or -1.</returns>
     public int Direction(string token) => Array.IndexOf(m_directionNames, token);
@@ -229,7 +230,7 @@ public static class WorldTopologyCompilation {
     /// <summary>The greatest axial hexagon radius whose cell count (<c>1 + 3r(r + 1)</c>) still fits
     /// <see cref="MaxCells"/>, computed rather than authored so the two bounds can never drift apart.</summary>
     public static readonly int MaxHexRadius = ComputeMaxHexRadius();
-    /// <summary>The most directions an authored <see cref="WorldStateLatticeTopology.Directions"/> list may declare —
+    /// <summary>The most directions an authored <see cref="IDiscreteLatticeTopology.Directions"/> list may declare —
     /// the bit width of the <c>long</c> mask <c>$match:</c>'s direction-mask facet packs one bit per direction into
     /// (<c>1L &lt;&lt; direction</c>), above a Box's unauthored 26 (the largest default set) so a custom vocabulary is
     /// never narrower than what every kind already carries.</summary>
@@ -247,12 +248,11 @@ public static class WorldTopologyCompilation {
     /// <summary>Finds the physical topology, if any. Discrete boards never allocate a fluid field.</summary>
     /// <param name="state">The state section.</param>
     /// <returns>The first physical topology or null.</returns>
-    public static WorldStateLatticeTopology? FindPhysical(WorldStateSection? state) {
+    public static WorldStateLatticeTopology.Field? FindPhysical(WorldStateSection? state) {
         var topologies = state?.Lattices;
         for (var index = 0; index < (topologies?.Count ?? 0); index++) {
-            var topology = topologies![index];
-            if (topology?.Kind == WorldTopologyKind.Field) {
-                return topology;
+            if (topologies![index] is WorldStateLatticeTopology.Field field) {
+                return field;
             }
         }
         return null;
@@ -277,43 +277,85 @@ public static class WorldTopologyCompilation {
     /// <param name="topology">The declaration.</param>
     /// <param name="reason">The refusal reason.</param>
     /// <returns>Whether this is a valid discrete topology.</returns>
-    public static bool TryValidate(WorldStateLatticeTopology topology, out string reason) {
-        reason = "a discrete topology requires a defined kind, at most 4096 cells, one layer (a box any number), and no physical reactions";
-        if (topology.Kind is not (WorldTopologyKind.Grid or WorldTopologyKind.Ring or WorldTopologyKind.Hex or WorldTopologyKind.Box) ||
-            !Enum.IsDefined(topology.Wrap) || (topology.Layers != 1 && topology.Kind != WorldTopologyKind.Box) || topology.Layers < 1 || topology.Reactions is { Count: > 0 } ||
-            topology.Width < 1 || topology.Depth < 1 || topology.Width > MaxCells || topology.Depth > MaxCells || topology.Layers > MaxCells) {
+    public static bool TryValidate(WorldStateLatticeTopology topology, out string reason) => topology switch {
+        WorldStateLatticeTopology.Grid grid => TryValidateGrid(grid, out reason),
+        WorldStateLatticeTopology.Ring ring => TryValidateRing(ring, out reason),
+        WorldStateLatticeTopology.Hex hex => TryValidateHex(hex, out reason),
+        WorldStateLatticeTopology.Box box => TryValidateBox(box, out reason),
+        _ => Refuse(out reason, "a discrete topology requires kind grid, ring, hex, or box"),
+    };
+
+    private static bool Refuse(out string reason, string detail) {
+        reason = detail;
+        return false;
+    }
+
+    private static bool TryValidateFootprint(int width, int depth, int layers, out string reason) {
+        if (width < 1 || depth < 1 || layers < 1 || width > MaxCells || depth > MaxCells || layers > MaxCells || ((long)width * depth * layers) > MaxCells) {
+            reason = $"a discrete topology requires 1..{MaxCells} cells along each declared axis and at most {MaxCells} cells total";
             return false;
         }
-        var count = (long)topology.Width * topology.Depth * topology.Layers;
-        if (topology.Kind == WorldTopologyKind.Box) {
-            if (topology.Wrap != WorldTopologyWrap.None || topology.Band != 0f || !float.IsFinite(topology.LayerHeight) || FixedQ4816.FromDouble(topology.LayerHeight) <= FixedQ4816.Zero) {
-                reason = "box requires no wrapping, no band, and a positive layerHeight";
-                return false;
-            }
-        } else if (topology.LayerHeight != 0f) {
-            reason = "layerHeight belongs to a box";
+        reason = string.Empty;
+        return true;
+    }
+
+    private static bool TryValidateGrid(WorldStateLatticeTopology.Grid grid, out string reason) {
+        if (!Enum.IsDefined(grid.Wrap)) {
+            reason = $"grid.wrap '{grid.Wrap}' is not a defined WorldTopologyWrap";
             return false;
         }
-        if (topology.Kind == WorldTopologyKind.Hex) {
-            if (topology.Radius < 0 || topology.Radius > MaxHexRadius || topology.Wrap != WorldTopologyWrap.None || topology.Width != 1 || topology.Depth != 1) {
-                reason = $"hex requires radius 0..{MaxHexRadius}, default width/depth, and no wrapping";
-                return false;
-            }
-            count = 1L + 3L * topology.Radius * (topology.Radius + 1);
-        } else if (topology.Radius != 0 || (topology.Kind == WorldTopologyKind.Ring && (topology.Depth != 1 || topology.Wrap != WorldTopologyWrap.None))) {
-            reason = "radius belongs to hex; rings require depth 1 and wrap implicitly";
+        if (!TryValidateFootprint(grid.Width, grid.Depth, 1, out reason)) {
             return false;
         }
-        if (count > MaxCells) {
+        if (!TryValidateFrame(grid.CellSize, grid.Origin, out reason)) {
             return false;
         }
-        if (topology.Kind is WorldTopologyKind.Grid or WorldTopologyKind.Box && !TryValidateFrame(topology, out reason)) {
+        if (!FitsFixed(grid.Band) || grid.Band < 0f) {
+            reason = $"grid.band must be a nonnegative Q48.16 half-extent (was {grid.Band})";
             return false;
         }
-        if (topology.Directions is not null && !TryValidateDirections(topology, out reason)) {
+        return TryValidateDiscreteVocabulary(grid, grid.Width, grid.Depth, 1, grid.Wrap, out reason);
+    }
+
+    private static bool TryValidateRing(WorldStateLatticeTopology.Ring ring, out string reason) {
+        if (!TryValidateFootprint(ring.Width, 1, 1, out reason)) {
             return false;
         }
-        if (topology.ElementAliases is not null && !TryValidateElementAliases(topology, out reason)) {
+        return TryValidateDiscreteVocabulary(ring, ring.Width, 1, 1, WorldTopologyWrap.None, out reason);
+    }
+
+    private static bool TryValidateHex(WorldStateLatticeTopology.Hex hex, out string reason) {
+        if (hex.Radius < 0 || hex.Radius > MaxHexRadius) {
+            reason = $"hex requires radius 0..{MaxHexRadius}";
+            return false;
+        }
+        if ((1L + (3L * hex.Radius * (hex.Radius + 1))) > MaxCells) {
+            reason = $"a discrete topology requires at most {MaxCells} cells total";
+            return false;
+        }
+        return TryValidateDiscreteVocabulary(hex, 1, 1, 1, WorldTopologyWrap.None, out reason);
+    }
+
+    private static bool TryValidateBox(WorldStateLatticeTopology.Box box, out string reason) {
+        if (!TryValidateFootprint(box.Width, box.Depth, box.Layers, out reason)) {
+            return false;
+        }
+        if (!TryValidateFrame(box.CellSize, box.Origin, out reason)) {
+            return false;
+        }
+        if (!float.IsFinite(box.LayerHeight) || FixedQ4816.FromDouble(box.LayerHeight) <= FixedQ4816.Zero) {
+            reason = $"box requires a positive layerHeight (was {box.LayerHeight})";
+            return false;
+        }
+        return TryValidateDiscreteVocabulary(box, box.Width, box.Depth, box.Layers, WorldTopologyWrap.None, out reason);
+    }
+
+    private static bool TryValidateDiscreteVocabulary<T>(T topology, int width, int depth, int layers, WorldTopologyWrap wrap, out string reason)
+        where T : WorldStateLatticeTopology, IDiscreteLatticeTopology {
+        if (topology.Directions is not null && !TryValidateDirections(topology.Kind, topology.Directions, width, depth, wrap, out reason)) {
+            return false;
+        }
+        if (topology.ElementAliases is not null && !TryValidateElementAliases(topology.Kind, topology.ElementAliases, width, depth, layers, out reason)) {
             return false;
         }
         reason = string.Empty;
@@ -323,13 +365,12 @@ public static class WorldTopologyCompilation {
     /// <summary>Checks an authored element-alias list: 1..<see cref="MaxDirections"/> entries, distinct alias names
     /// that are not themselves a canonical element name, and an <see cref="WorldTopologyElementAlias.Element"/> that
     /// names a real element of this kind's point group.</summary>
-    private static bool TryValidateElementAliases(WorldStateLatticeTopology topology, out string reason) {
-        var aliases = topology.ElementAliases!;
+    private static bool TryValidateElementAliases(WorldTopologyKind kind, IReadOnlyList<WorldTopologyElementAlias> aliases, int width, int depth, int layers, out string reason) {
         if (aliases.Count is < 1 or > MaxDirections) {
             reason = $"elementAliases declares {aliases.Count} entries; 1..{MaxDirections} are admitted";
             return false;
         }
-        var canonical = CompiledWorldTopology.ElementNames(topology.Kind, topology.Width, topology.Depth, topology.Layers);
+        var canonical = CompiledWorldTopology.ElementNames(kind, width, depth, layers);
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var alias in aliases) {
             if (alias is null || !WorldCellName.TryParse(alias.Name, out _, out _) || Array.IndexOf(canonical, alias.Name) >= 0 || !names.Add(alias.Name)) {
@@ -351,8 +392,7 @@ public static class WorldTopologyCompilation {
     /// own width or depth (a Ring always wraps X) so <see cref="CompiledWorldTopology"/>'s modulo wrap never folds a
     /// step past the origin or onto itself, and every step's negation present as another entry — the closure
     /// <see cref="CompiledWorldTopology.Opposite"/> derivation requires so it never throws.</summary>
-    private static bool TryValidateDirections(WorldStateLatticeTopology topology, out string reason) {
-        var directions = topology.Directions!;
+    private static bool TryValidateDirections(WorldTopologyKind kind, IReadOnlyList<WorldTopologyDirection> directions, int width, int depth, WorldTopologyWrap wrap, out string reason) {
         if (directions.Count is < 1 or > MaxDirections) {
             reason = $"directions declares {directions.Count} entries; 1..{MaxDirections} are admitted";
             return false;
@@ -364,20 +404,20 @@ public static class WorldTopologyCompilation {
                 reason = "directions requires a distinct, valid name per entry";
                 return false;
             }
-            if (direction.Z != 0 && topology.Kind != WorldTopologyKind.Box) {
+            if (direction.Z != 0 && kind != WorldTopologyKind.Box) {
                 reason = $"direction '{direction.Name}' declares a layer step outside a box";
                 return false;
             }
-            if (topology.Kind == WorldTopologyKind.Ring && direction.Y != 0) {
+            if (kind == WorldTopologyKind.Ring && direction.Y != 0) {
                 reason = $"direction '{direction.Name}' declares a row step on a ring, which has no second axis";
                 return false;
             }
-            if ((topology.Kind == WorldTopologyKind.Ring || topology.Wrap is WorldTopologyWrap.X or WorldTopologyWrap.Both) && Math.Abs(direction.X) >= topology.Width) {
-                reason = $"direction '{direction.Name}' steps {direction.X} on a wrapped axis {topology.Width} wide; magnitude must be under the width";
+            if ((kind == WorldTopologyKind.Ring || wrap is WorldTopologyWrap.X or WorldTopologyWrap.Both) && Math.Abs(direction.X) >= width) {
+                reason = $"direction '{direction.Name}' steps {direction.X} on a wrapped axis {width} wide; magnitude must be under the width";
                 return false;
             }
-            if (topology.Wrap is WorldTopologyWrap.Y or WorldTopologyWrap.Both && Math.Abs(direction.Y) >= topology.Depth) {
-                reason = $"direction '{direction.Name}' steps {direction.Y} on a wrapped axis {topology.Depth} deep; magnitude must be under the depth";
+            if (wrap is WorldTopologyWrap.Y or WorldTopologyWrap.Both && Math.Abs(direction.Y) >= depth) {
+                reason = $"direction '{direction.Name}' steps {direction.Y} on a wrapped axis {depth} deep; magnitude must be under the depth";
                 return false;
             }
             if ((direction.X == 0 && direction.Y == 0 && direction.Z == 0) || !steps.Add((direction.X, direction.Y, direction.Z))) {
@@ -395,47 +435,59 @@ public static class WorldTopologyCompilation {
         return true;
     }
 
-    /// <summary>Checks the spatial frame a <see cref="WorldTopologyKind.Grid"/> resolves <see cref="CompiledWorldTopology.TryCellOf"/>
-    /// against — <see cref="CompiledWorldTopology.TryCellOf"/> divides world-local coordinates by <c>cellSize</c>, so a
-    /// non-positive or unrepresentable edge is load-bearing, not cosmetic, and must be refused here rather than crashing or
-    /// resolving garbage cells on the per-tick rule path.</summary>
-    private static bool TryValidateFrame(WorldStateLatticeTopology topology, out string reason) {
-        static bool FitsFixed(float value) => (
-            float.IsFinite(f: value) &&
-            (value >= (((double)long.MinValue) / 65536.0)) &&
-            (value <= (((double)long.MaxValue) / 65536.0))
-        );
-        if (!FitsFixed(topology.CellSize) || FixedQ4816.FromDouble(topology.CellSize) <= FixedQ4816.Zero) {
-            reason = $"grid.cellSize must quantize to a positive Q48.16 value (was {topology.CellSize})";
+    private static bool FitsFixed(float value) => (
+        float.IsFinite(f: value) &&
+        (value >= (((double)long.MinValue) / 65536.0)) &&
+        (value <= (((double)long.MaxValue) / 65536.0))
+    );
+
+    /// <summary>Checks the spatial frame <see cref="CompiledWorldTopology.TryCellOf"/> resolves positions against —
+    /// it divides world-local coordinates by <c>cellSize</c>, so a non-positive or unrepresentable edge is
+    /// load-bearing, not cosmetic, and must be refused here rather than crashing or resolving garbage cells on the
+    /// per-tick rule path.</summary>
+    private static bool TryValidateFrame(float cellSize, DocumentVector3 origin, out string reason) {
+        if (!FitsFixed(cellSize) || FixedQ4816.FromDouble(cellSize) <= FixedQ4816.Zero) {
+            reason = $"cellSize must quantize to a positive Q48.16 value (was {cellSize})";
             return false;
         }
-        if (!FitsFixed(topology.Origin.X) || !FitsFixed(topology.Origin.Y) || !FitsFixed(topology.Origin.Z)) {
-            reason = "grid.origin must fit Q48.16";
-            return false;
-        }
-        if (!FitsFixed(topology.Band) || topology.Band < 0f) {
-            reason = $"grid.band must be a nonnegative Q48.16 half-extent (was {topology.Band})";
+        if (!FitsFixed(origin.X) || !FitsFixed(origin.Y) || !FitsFixed(origin.Z)) {
+            reason = "origin must fit Q48.16";
             return false;
         }
         reason = string.Empty;
         return true;
     }
 
+    /// <summary>Every case normalizes to the same (width, depth, layers, wrap, band, layerHeight, radius, directions,
+    /// elementAliases) tuple <see cref="CompiledWorldTopology"/>'s own flat, kind-agnostic representation already
+    /// expects (and <c>WorldRuntimeStateHash.AppendDiscreteTopologies</c> hashes on the same terms the flat record
+    /// this split replaces always did) — the seam between the per-kind authored union above and every kind-agnostic
+    /// reader below, which this split does not otherwise touch.</summary>
+    public static (int Width, int Depth, int Layers, WorldTopologyWrap Wrap, float Band, float LayerHeight, int Radius,
+        IReadOnlyList<WorldTopologyDirection>? Directions, IReadOnlyList<WorldTopologyElementAlias>? ElementAliases) Normalize(WorldStateLatticeTopology topology) => topology switch {
+        WorldStateLatticeTopology.Field field => (field.Width, field.Depth, field.Layers, WorldTopologyWrap.None, 0f, 0f, 0, null, null),
+        WorldStateLatticeTopology.Grid grid => (grid.Width, grid.Depth, 1, grid.Wrap, grid.Band, 0f, 0, grid.Directions, grid.ElementAliases),
+        WorldStateLatticeTopology.Ring ring => (ring.Width, 1, 1, WorldTopologyWrap.None, 0f, 0f, 0, ring.Directions, ring.ElementAliases),
+        WorldStateLatticeTopology.Hex hex => (1, 1, 1, WorldTopologyWrap.None, 0f, 0f, hex.Radius, hex.Directions, hex.ElementAliases),
+        WorldStateLatticeTopology.Box box => (box.Width, box.Depth, box.Layers, WorldTopologyWrap.None, 0f, box.LayerHeight, 0, box.Directions, box.ElementAliases),
+        _ => throw new InvalidOperationException($"'{topology.Kind}' is not a defined WorldTopologyKind"),
+    };
+
     // Cells are (X, Y, Z) triples: a grid or ring keeps Z at 0 and Y as its depth axis, a hex uses (q, r), a box
     // fills layers along Z. Every kind's directions are steps in the same triple, so one neighbour loop serves all.
     private static CompiledWorldTopology Compile(WorldStateLatticeTopology topology) {
+        var (width, depth, layers, wrap, band, layerHeight, radius, authoredDirections, elementAliases) = Normalize(topology);
         var coordinates = new List<(int X, int Y, int Z)>();
         if (topology.Kind == WorldTopologyKind.Hex) {
-            var radius = topology.Radius;
             for (var r = -radius; r <= radius; r++) {
                 for (var q = Math.Max(-radius, -r - radius); q <= Math.Min(radius, -r + radius); q++) {
                     coordinates.Add((q, r, 0));
                 }
             }
         } else {
-            for (var layer = 0; layer < topology.Layers; layer++) {
-                for (var y = 0; y < topology.Depth; y++) {
-                    for (var x = 0; x < topology.Width; x++) {
+            for (var layer = 0; layer < layers; layer++) {
+                for (var y = 0; y < depth; y++) {
+                    for (var x = 0; x < width; x++) {
                         coordinates.Add((x, y, layer));
                     }
                 }
@@ -443,7 +495,7 @@ public static class WorldTopologyCompilation {
         }
         (int X, int Y, int Z)[] directions;
         string[] directionNames;
-        if (topology.Directions is { Count: > 0 } authored) {
+        if (authoredDirections is { Count: > 0 } authored) {
             directions = new (int, int, int)[authored.Count];
             directionNames = new string[authored.Count];
             for (var index = 0; index < authored.Count; index++) {
@@ -469,11 +521,11 @@ public static class WorldTopologyCompilation {
                 var x = coordinates[cell].X + directions[direction].X;
                 var y = coordinates[cell].Y + directions[direction].Y;
                 var z = coordinates[cell].Z + directions[direction].Z;
-                if (topology.Kind == WorldTopologyKind.Ring || topology.Wrap is WorldTopologyWrap.X or WorldTopologyWrap.Both) {
-                    x = (x + topology.Width) % topology.Width;
+                if (topology.Kind == WorldTopologyKind.Ring || wrap is WorldTopologyWrap.X or WorldTopologyWrap.Both) {
+                    x = (x + width) % width;
                 }
-                if (topology.Wrap is WorldTopologyWrap.Y or WorldTopologyWrap.Both) {
-                    y = (y + topology.Depth) % topology.Depth;
+                if (wrap is WorldTopologyWrap.Y or WorldTopologyWrap.Both) {
+                    y = (y + depth) % depth;
                 }
                 neighbours[cell * directions.Length + direction] = indices.TryGetValue((x,y,z), out var next) ? next : -1;
             }
@@ -487,21 +539,21 @@ public static class WorldTopologyCompilation {
             }
             opposite[direction] = found;
         }
-        var (images, elementNames) = CompiledWorldTopology.BuildSymmetry(topology.Kind, topology.Width, topology.Depth, topology.Layers, coordinates, indices);
-        var compiled = new CompiledWorldTopology(topology.Kind, coordinates.Count, directions.Length, neighbours, opposite, topology.Width, topology.Depth, topology.Wrap,
+        var (images, elementNames) = CompiledWorldTopology.BuildSymmetry(topology.Kind, width, depth, layers, coordinates, indices);
+        var compiled = new CompiledWorldTopology(topology.Kind, coordinates.Count, directions.Length, neighbours, opposite, width, depth, wrap,
             new FixedVector3(
                 X: FixedQ4816.FromDouble(topology.Origin.X),
                 Y: FixedQ4816.FromDouble(topology.Origin.Y),
                 Z: FixedQ4816.FromDouble(topology.Origin.Z)
             ),
             FixedQ4816.FromDouble(topology.CellSize),
-            FixedQ4816.FromDouble(topology.Band),
+            FixedQ4816.FromDouble(band),
             images,
             elementNames,
-            topology.Layers,
-            FixedQ4816.FromDouble(topology.LayerHeight),
+            layers,
+            FixedQ4816.FromDouble(layerHeight),
             directionNames);
-        compiled.InstallElementAliases(topology.ElementAliases);
+        compiled.InstallElementAliases(elementAliases);
         return compiled;
     }
 }

@@ -984,7 +984,7 @@
                 "tokens": [
                   {
                     "$type": "state",
-                    "key": "$left",
+                    "key": "$pair:left:cell:boneHolder:0",
                     "name": "boneHolderTrust"
                   }
                 ]
@@ -6935,7 +6935,7 @@
               },
               {
                 "$type": "state",
-                "key": "$each",
+                "key": "$pair:each:cell:boneHolder:0",
                 "name": "boneHolderTrust"
               },
               {
@@ -6950,7 +6950,7 @@
               }
             ]
           },
-          "key": "$each",
+          "key": "$pair:each:cell:boneHolder:0",
           "state": "boneHolderTrust"
         }
       ],
@@ -7062,7 +7062,7 @@
               },
               {
                 "$type": "state",
-                "key": "$each",
+                "key": "$pair:each:cell:boneHolder:0",
                 "name": "boneHolderTrust"
               },
               {
@@ -7077,7 +7077,7 @@
               }
             ]
           },
-          "key": "$each",
+          "key": "$pair:each:cell:boneHolder:0",
           "state": "boneHolderTrust"
         },
         {
@@ -7269,7 +7269,7 @@
               "tokens": [
                 {
                   "$type": "state",
-                  "key": "$left",
+                  "key": "$pair:left:cell:boneHolder:0",
                   "name": "boneHolderTrust"
                 },
                 {
@@ -7576,6 +7576,7 @@
     ],
     "lattices": [
       {
+        "$type": "field",
         "cellSize": 0.5,
         "depth": 16,
         "layers": 1,
@@ -7975,7 +7976,7 @@
         "name": "wren"
       },
       {
-        "capacity": 64,
+        "capacity": 128,
         "kind": "fixed",
         "max": "1",
         "min": "0",

@@ -14,11 +14,10 @@ public static partial class WorldDefinitionValidator {
                 errors.Add("state.lattices requires unique valid topology names.");
                 continue;
             }
+            // A physical field's case type structurally has no wrap/radius/directions/elementAliases property to
+            // author in the first place, so there is nothing left to check for it here.
             if (topology.Kind != WorldTopologyKind.Field && !WorldTopologyCompilation.TryValidate(topology, out var reason)) {
                 errors.Add($"state.lattices '{topology.Name}': {reason}.");
-            }
-            if (topology.Kind == WorldTopologyKind.Field && (topology.Wrap != WorldTopologyWrap.None || topology.Radius != 0 || topology.Directions is not null || topology.ElementAliases is not null)) {
-                errors.Add($"state.lattices '{topology.Name}': physical fields do not admit discrete wrapping, radius, a direction vocabulary, or element aliases.");
             }
         }
         var totalCells = 0L;

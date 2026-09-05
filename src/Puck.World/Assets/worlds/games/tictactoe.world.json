@@ -3640,9 +3640,9 @@
   "state": {
     "lattices": [
       {
+        "$type": "box",
         "cellSize": 1,
         "depth": 4,
-        "kind": "Box",
         "layerHeight": 1,
         "layers": 4,
         "name": "tttCube",

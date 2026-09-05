@@ -50,7 +50,8 @@ public sealed partial class WorldStateCommandModule {
                     var names = (compiled is null)
                         ? "none"
                         : string.Join(",", Enumerable.Range(0, directionCount).Select(compiled.DirectionName));
-                    lines.Add($"[world.topology '{topology.Name}' kind={topology.Kind} cells={compiled?.CellCount ?? topology.Width * topology.Depth * topology.Layers} directions={directionCount} names={names} wrap={topology.Wrap}]");
+                    var normalized = WorldTopologyCompilation.Normalize(topology);
+                    lines.Add($"[world.topology '{topology.Name}' kind={topology.Kind} cells={compiled?.CellCount ?? normalized.Width * normalized.Depth * normalized.Layers} directions={directionCount} names={names} wrap={normalized.Wrap}]");
                 }
                 return new CommandResult(Output: string.Join(Environment.NewLine, lines));
             });

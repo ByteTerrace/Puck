@@ -975,7 +975,7 @@
                 "tokens": [
                   {
                     "$type": "state",
-                    "key": "$left",
+                    "key": "$pair:left:cell:boneHolder:0",
                     "name": "boneHolderTrust"
                   }
                 ]
@@ -13468,7 +13468,7 @@
               },
               {
                 "$type": "state",
-                "key": "$each",
+                "key": "$pair:each:cell:boneHolder:0",
                 "name": "boneHolderTrust"
               },
               {
@@ -13483,7 +13483,7 @@
               }
             ]
           },
-          "key": "$each",
+          "key": "$pair:each:cell:boneHolder:0",
           "state": "boneHolderTrust"
         }
       ],
@@ -13595,7 +13595,7 @@
               },
               {
                 "$type": "state",
-                "key": "$each",
+                "key": "$pair:each:cell:boneHolder:0",
                 "name": "boneHolderTrust"
               },
               {
@@ -13610,7 +13610,7 @@
               }
             ]
           },
-          "key": "$each",
+          "key": "$pair:each:cell:boneHolder:0",
           "state": "boneHolderTrust"
         },
         {
@@ -13802,7 +13802,7 @@
               "tokens": [
                 {
                   "$type": "state",
-                  "key": "$left",
+                  "key": "$pair:left:cell:boneHolder:0",
                   "name": "boneHolderTrust"
                 },
                 {
@@ -26211,6 +26211,7 @@
     ],
     "lattices": [
       {
+        "$type": "field",
         "cellSize": 0.5,
         "depth": 16,
         "layers": 1,
@@ -26224,6 +26225,7 @@
         "width": 16
       },
       {
+        "$type": "grid",
         "band": 0.3,
         "cellSize": 0.2,
         "depth": 8,
@@ -26277,15 +26279,12 @@
             "z": 0
           }
         ],
-        "kind": "Grid",
-        "layers": 1,
         "name": "chessBoard",
         "origin": [
           -8.8,
           0.75,
           11.2
         ],
-        "stepEveryTicks": 8,
         "width": 8,
         "wrap": "None"
       }
@@ -30417,7 +30416,7 @@
         "visibility": {}
       },
       {
-        "capacity": 64,
+        "capacity": 128,
         "kind": "fixed",
         "max": "1",
         "min": "0",

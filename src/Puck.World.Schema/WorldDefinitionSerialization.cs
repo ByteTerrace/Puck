@@ -197,6 +197,9 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldDraw))]
 [JsonSerializable(typeof(WorldStateFieldTrait))]
 [JsonSerializable(typeof(WorldStateDomain))]
+// Disambiguates the generated type-info property name from WorldStateLatticeTopology.Ring, an unrelated type
+// sharing the simple name "Ring" (see SYSLIB1031).
+[JsonSerializable(typeof(WorldStateDomain.Ring), TypeInfoPropertyName = "WorldStateDomainRing")]
 [JsonSerializable(typeof(WorldStateTransform))]
 [JsonSerializable(typeof(WorldObservedRow[]))]
 [JsonSerializable(typeof(WorldStatePhase))]
@@ -204,6 +207,9 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldStateKnowledge))]
 [JsonSerializable(typeof(WorldStateObservation))]
 [JsonSerializable(typeof(WorldStateLatticeTopology))]
+// Disambiguates the generated type-info property name from WorldCollider.Box, an unrelated type sharing the simple
+// name "Box" (see SYSLIB1031).
+[JsonSerializable(typeof(WorldStateLatticeTopology.Box), TypeInfoPropertyName = "WorldStateLatticeTopologyBox")]
 // The continuous-accumulation trait a state row's SLOT cell, or (independently) any of a keyed row's OWN cells, may
 // declare — read/written by WorldStateRowJsonConverter through this typed accessor, the same "hand-written row,
 // ordinary strict-parsed nested object" split the generator table above already uses, at either grain.

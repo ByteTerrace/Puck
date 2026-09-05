@@ -147,7 +147,7 @@ public sealed class WorldMediumLawTests {
         + "00000000000000000000000000025eb70000000000000000000000000000000000000000000261470000000000000000"
         + "000000000000000000000000000263d60000000000000000000000000000000000000000000266660000000000000000";
 
-    private static WorldStateLatticeTopology Topology(int width = 4, int depth = 4) => new(
+    private static WorldStateLatticeTopology.Field Topology(int width = 4, int depth = 4) => new(
         Name: "world",
         Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
         CellSize: 1f,
@@ -485,7 +485,7 @@ public sealed class WorldMediumLawTests {
         // Wide and centered: reaching equilibrium mixes a horizontal excursion into the settle (the vertical
         // channel integrates along the body's own tilted up, not literally world Y — see IntegratePlanarAndVerticalVelocity),
         // so the spawn needs room on every side, not just headroom above the pool.
-        var topology = new WorldStateLatticeTopology(
+        var topology = new WorldStateLatticeTopology.Field(
             Name: "world",
             Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
             CellSize: 1f,

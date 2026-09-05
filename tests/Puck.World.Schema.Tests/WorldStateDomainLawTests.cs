@@ -12,7 +12,7 @@ public sealed class WorldStateDomainLawTests {
     private static WorldDefinition Document(params WorldStateRow[] rows) => new(
         Simulation: new WorldSimulationDefaults(RateHz: 240),
         StateRaw: new WorldStateSection(World: rows, Lattices: [
-            new WorldStateLatticeTopology(Name: "board", Origin: new Puck.Assets.Documents.DocumentVector3(0, 0, 0), CellSize: 1, Width: 2, Depth: 2, Kind: WorldTopologyKind.Grid),
+            new WorldStateLatticeTopology.Grid(Name: "board", Origin: new Puck.Assets.Documents.DocumentVector3(0, 0, 0), CellSize: 1, Width: 2, Depth: 2),
         ])
     );
     private static string Validate(WorldDefinition definition) =>

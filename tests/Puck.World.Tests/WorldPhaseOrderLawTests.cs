@@ -86,7 +86,7 @@ public sealed class WorldPhaseOrderLawTests {
         Cells: [new(WorldCellName.Parse("0"), 1), new(WorldCellName.Parse("1"), 2), new(WorldCellName.Parse("2"), 2), new(WorldCellName.Parse("3"), 1)], Domain: new WorldStateDomain.CellsOf("map"));
     private static WorldStateTransform.SetRay Ray() => new("board", "0", "E", "capture", 1);
     private static WorldDefinition Document(params WorldStateRow[] rows) => Fixtures.BuildDocument() with {
-        StateRaw = new(World: rows, Lattices: rows.Any(row => row.EffectiveDomain is WorldStateDomain.CellsOf) ? [new("map", new(0, 0, 0), 1, 4, 4, Kind: WorldTopologyKind.Grid)] : []),
+        StateRaw = new(World: rows, Lattices: rows.Any(row => row.EffectiveDomain is WorldStateDomain.CellsOf) ? [new WorldStateLatticeTopology.Grid("map", new(0, 0, 0), 1, 4, 4)] : []),
         PatternsRaw = [new(WorldCellName.Parse("capture"), CellKind.Int,
             [new(WorldCellName.Parse("through"), 2, 2), new(WorldCellName.Parse("until"), 1, 1)],
             new WorldPatternNode.Sequence([new WorldPatternNode.Plus(new WorldPatternNode.Symbol("through")), new WorldPatternNode.Symbol("until")]))],

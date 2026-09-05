@@ -50,6 +50,7 @@
     ],
     "lattices": [
       {
+        "$type": "field",
         "name": "parityLattice",
         "origin": [280, 0, -8],
         "cellSize": 1.0,

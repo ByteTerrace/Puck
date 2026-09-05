@@ -49,13 +49,14 @@ public static partial class WorldRuntimeStateHash {
         hash.Add(rows?.Count ?? 0);
         for (var index = 0; index < (rows?.Count ?? 0); index++) {
             var row = rows![index];
+            var normalized = WorldTopologyCompilation.Normalize(row);
             AppendString(ref hash, row.Name);
             hash.Add((byte)row.Kind);
-            hash.Add((byte)row.Wrap);
-            hash.Add(row.Radius);
-            hash.Add(row.Width);
-            hash.Add(row.Depth);
-            hash.Add(row.Layers);
+            hash.Add((byte)normalized.Wrap);
+            hash.Add(normalized.Radius);
+            hash.Add(normalized.Width);
+            hash.Add(normalized.Depth);
+            hash.Add(normalized.Layers);
         }
     }
 }

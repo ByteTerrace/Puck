@@ -84,7 +84,7 @@ public sealed class StateDisclosureLawTests {
     [Fact]
     public void KnowledgeRetainsLastSeenValueWhenSightIsLostAndRoundTrips() {
         var definition = Fixtures.BuildDocument() with { StateRaw = new(
-            Lattices: [new("map", new DocumentVector3(0,0,0), 1, 2, 1, Kind: WorldTopologyKind.Grid)],
+            Lattices: [new WorldStateLatticeTopology.Grid("map", new DocumentVector3(0,0,0), 1, 2, 1)],
             World: [
                 new(Name("truth"), CellKind.Int, Cells: [Cell("0", 7), Cell("1", 9)], Domain: new WorldStateDomain.CellsOf("map"), Visibility: new([])),
                 new(Name("sight"), CellKind.Bool, Cells: [Cell("0", 1)], Domain: new WorldStateDomain.CellsOf("map"), Visibility: new([])),
