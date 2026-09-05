@@ -819,6 +819,7 @@ internal static partial class LawRegistry {
         .. SymmetryLatticeCases(),
         .. HilbertCurveCases(),
         .. HexagonalCoordinateCases(),
+        .. HexagonalIndexCases(),
         .. ScalarSpecificationCases(),
         .. BinaryFieldCrcCases(),
         .. MetallicQuasicrystalAccessCases(),

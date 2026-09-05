@@ -10246,6 +10246,150 @@
       "State": "uncovered"
     },
     {
+      "Id": "Puck.Maths.HexagonalIndex..ctor(System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.hexagonal-index-boundaries",
+        "integer.hexagonal-index-perimeter"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.HexagonalIndex.AdditiveIdentity",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.hexagonal-index-arithmetic"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.HexagonalIndex.Conjugate()",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.hexagonal-index-boundaries",
+        "integer.hexagonal-index-geometry"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.HexagonalIndex.Distance(Puck.Maths.HexagonalIndex,Puck.Maths.HexagonalIndex)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.hexagonal-index-boundaries",
+        "integer.hexagonal-index-geometry"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.HexagonalIndex.FromCoordinate(Puck.Maths.HexagonalCoordinate)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.hexagonal-index-boundaries",
+        "integer.hexagonal-index-geometry",
+        "integer.hexagonal-index-perimeter"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.HexagonalIndex.MaxRadius",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.hexagonal-index-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.HexagonalIndex.MaxValue",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.hexagonal-index-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.HexagonalIndex.MultiplicativeIdentity",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.hexagonal-index-arithmetic"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.HexagonalIndex.Neighbor(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.hexagonal-index-boundaries",
+        "integer.hexagonal-index-geometry"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.HexagonalIndex.Norm",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.hexagonal-index-geometry"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.HexagonalIndex.Radius",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.hexagonal-index-geometry",
+        "integer.hexagonal-index-perimeter"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.HexagonalIndex.Rotate(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.hexagonal-index-boundaries",
+        "integer.hexagonal-index-geometry"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.HexagonalIndex.ToCoordinate()",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.hexagonal-index-boundaries",
+        "integer.hexagonal-index-geometry",
+        "integer.hexagonal-index-perimeter"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.HexagonalIndex.Translate(Puck.Maths.HexagonalCoordinate)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.hexagonal-index-arithmetic"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.HexagonalIndex.Value",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.hexagonal-index-boundaries",
+        "integer.hexagonal-index-perimeter"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.HexagonalIndex.op_Addition(Puck.Maths.HexagonalIndex,Puck.Maths.HexagonalIndex)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.hexagonal-index-arithmetic"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.HexagonalIndex.op_Multiply(Puck.Maths.HexagonalIndex,Puck.Maths.HexagonalIndex)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.hexagonal-index-arithmetic"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.HexagonalIndex.op_Subtraction(Puck.Maths.HexagonalIndex,Puck.Maths.HexagonalIndex)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.hexagonal-index-arithmetic"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.HexagonalIndex.op_UnaryNegation(Puck.Maths.HexagonalIndex)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.hexagonal-index-arithmetic"
+      ]
+    },
+    {
       "Id": "Puck.Maths.HilbertCurve.Decode(System.Int32,System.UInt64)",
       "State": "covered",
       "CoveredBy": [

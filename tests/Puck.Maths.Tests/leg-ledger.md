@@ -13,7 +13,7 @@ adversarial review's job, not this file's.
 
 | leg kind | flavor | legs | statements |
 | --- | --- | --- | --- |
-| classical | — | 778 | 499 |
+| classical | — | 783 | 504 |
 | presented-twin | — | 9 | 8 |
 | in-tree-independent | — | 31 | 25 |
 | shared-substrate | fused-substrate | 36 | 34 |
@@ -23,15 +23,15 @@ adversarial review's job, not this file's.
 | shared-substrate | intra-presented | 82 | 47 |
 | shared-substrate | shared-upstream | 22 | 15 |
 | relative-canary | — | 18 | 17 |
-| structural | — | 1158 | 573 |
-| **total** | | **2224** | **711** |
+| structural | — | 1161 | 576 |
+| **total** | | **2232** | **716** |
 
 ## Counts by surface
 
 | surface | statements | agreement legs | structural legs | statements with no independent leg |
 | --- | --- | --- | --- | --- |
-| law: Deep | 106 | 142 | 123 | 21 |
-| law: Default | 576 | 853 | 1034 | 175 |
+| law: Deep | 107 | 143 | 123 | 21 |
+| law: Default | 580 | 857 | 1037 | 175 |
 | law: Exhaustive | 7 | 23 | 11 | 1 |
 | law: Smoke | 22 | 30 | 8 | 2 |
 
@@ -369,6 +369,7 @@ adversarial review's job, not this file's.
 | deep.fixed-transcendental-envelope | law: Deep | classical | — | FixedQ4816.Log2 and FixedQ4816.Exp2 over the same stream | Oracles.EncloseLog2 and Oracles.EncloseExp2, each widened by its own committed envelope. MIRROR of scalar.log2-vs-series and scalar.exp2-vs-series at strictly stronger operands | — | — |
 | deep.fixed-transcendental-envelope | law: Deep | classical | — | FixedQ4816.SinCos and FixedQ4816.Atan2 over the same stream, with the two one-line projections read alongside the pair | Oracles.EncloseSinCos under its three-band envelope and Oracles.EncloseAtan2 under 0.75 raw ULP. MIRROR of scalar.sincos-vs-series and scalar.atan2-vs-series at strictly stronger operands | — | — |
 | deep.fractional-mul-vs-oracle | law: Deep | classical | — | QuadraticAlgebra<FixedQ4816>.Multiply at (0, ½), the fractional lane, over the exhaustive four-operand edge cross product | Oracles.QuadraticMultiply — the Q48 expression in BigInteger, one Oracles.RoundDyadic at shift 32. MIRROR of algebra.fractional-mul-vs-oracle | — | — |
+| deep.hexagonal-index-geometry | law: Deep | classical | — | MIRROR of integer.hexagonal-index-geometry with 4096 random draws instead of Default's 256, alongside the same vector edge battery and frontier block. | The same independent BigInteger ring bracketing, perimeter interpolation and coordinate arithmetic. ENVELOPE: the same nonnegative-long fold; stronger sampling, not a whole-domain proof. | — | — |
 | deep.polynomial-divrem-vs-monomial-oracle | law: Deep | classical | — | BinaryPolynomial.DivRem over the Deep tier's sixteen-fold random batch | Oracles.BinaryPolynomialDivRem's bottom-up monomial route. MIRROR of polynomial.divrem-vs-monomial-oracle at strictly stronger operands: the 4096-draw batch is where near-equal dividend and divisor degrees (one loop iteration) and maximal degree gaps (sixty-three iterations) both appear in volume | — | — |
 | deep.polynomial-divrem-vs-monomial-oracle | law: Deep | structural | — | the division identity, the remainder's degree bound, the operator projections, the zero-divisor refusals and the four poles, all as polynomial.divrem-vs-monomial-oracle states them. MIRROR of polynomial.divrem-vs-monomial-oracle at strictly stronger operands | — | — | — |
 | deep.polynomial-factor-odd-cycle-vs-cyclotomic-cosets | law: Deep | classical | — | BinaryPolynomial.FactorOddCycle at ALL SIXTEEN odd orders the member admits, 1 through 31 | Oracles.BinaryCyclotomicFactorDegrees, Oracles.CarrylessProduct and Oracles.BinaryPolynomialIsIrreducible, exactly as at Default. MIRROR of polynomial.factor-odd-cycle-vs-cyclotomic-cosets at strictly stronger operands: order 29 is the worst row — its factors are degree 1 and degree 28, so the search sweeps every candidate through degree 14 and the oracle then trial-divides a degree-28 factor | — | — |
@@ -576,6 +577,13 @@ adversarial review's job, not this file's.
 | integer.floor-divide-vs-oracle | law: Default | structural | — | the two substituted pairs are REFUSED rather than answered, at all three floored members: DivideByZeroException at divisor zero and OverflowException at the signed minimum over minus one, which are the documented throws (worklist O1) | — | — | — |
 | integer.floor-divrem-quotient | law: Default | classical | — | BinaryIntegerFunctions.FloorDivRem<long>.Quotient — the pair's quotient half | Oracles.FloorQuotient — BigInteger.Divide plus a Sign-comparison correction; both sides exact integers. The borrow is textually identical to FloorDivide's, so what this adds over integer.floor-divide-vs-oracle is that the pair-returning member's quotient half is not mis-wired, not fresh evidence about the correction rule | — | — |
 | integer.floor-divrem-remainder | law: Default | classical | — | BinaryIntegerFunctions.FloorDivRem<long>.Remainder — the truncated remainder with the divisor added back under the shared borrow | Subjects.FloorDivRemRemainderOracle — a − FloorQuotient(a,b)·b in BigInteger, derived from the quotient rather than from the remainder; both sides exact | — | — |
+| integer.hexagonal-index-arithmetic | law: Default | classical | — | Encoded sum, difference, negation, translation and Eisenstein product, including overflow refusals. | Independent BigInteger coordinate arithmetic and six-edge encoding. Product uses polynomial convolution followed by reduction of omega squared. ENVELOPE: sampled full-domain indices; additional signed coordinates folded into [-128, 128] exercise non-overflowing products. | — | — |
+| integer.hexagonal-index-arithmetic | law: Default | structural | — | Additive and multiplicative identities, inverse addition, commutativity, distributivity and rotation equivariance on a bounded band where intermediate results fit. | — | — | — |
+| integer.hexagonal-index-boundaries | law: Default | classical | — | The maximum complete ring, ring starts and ends, every outer corner and adjacent edge cell, and distances exceeding int.MaxValue. | BigInteger cardinalities, independent bracketed ring lookup, barycentric coordinates and cube-distance arithmetic. Proves that the next complete ring exceeds long.MaxValue. | — | — |
+| integer.hexagonal-index-boundaries | law: Default | structural | — | Default is zero; out-of-domain indices refuse with ArgumentOutOfRangeException naming value; out-of-domain coordinates and outward moves refuse with OverflowException. Signed minimum and maximum turn/direction counts normalize modulo six. | — | — | — |
+| integer.hexagonal-index-geometry | law: Default | classical | — | Decoding, encoding, radius, norm, distance, signed rotation, reflection and all six neighbour moves across sampled complete-domain indices. | BigInteger ring bracketing and barycentric interpolation of independent unit coordinates; cube-distance and coordinate transformations, with six-edge parameter solving to encode expected results. No Puck.Maths calls. The separate perimeter walk pins the enumeration. ENVELOPE: nonnegative long raws folded modulo MaxValue + 1; no exhaustive full-width claim. | — | — |
+| integer.hexagonal-index-geometry | law: Default | structural | — | Rotation has order six, conjugation has order two, and conjugation reverses a rotation. | — | — | — |
+| integer.hexagonal-index-perimeter | law: Default | classical | — | The origin and every index through ring 32 encode and decode in the declared order, with the declared radius. | An independent BigInteger perimeter walk accumulating the six unit directions, without square roots, side classification, or Puck.Maths calls. ENVELOPE: the complete disk of radius 32. | — | — |
 | integer.hilbert-curve-bijection-and-locality | law: Deep | structural | — | Decode is a bijection onto the grid at every order one through nine: each cell is visited exactly once, tested at the DECODED point | — | — | — |
 | integer.hilbert-curve-bijection-and-locality | law: Deep | shared-substrate | delegation-twin | HilbertCurve.Encode | HilbertCurve.Decode, as its exact inverse over the full curve at orders one through nine | the round trip calls BOTH members and nothing else, and both route through the private rotation helper, so a compensating error in Encode and Decode together — or a wrong-but-shared rotation — would survive it alone | the locality leg below is what actually discriminates a wrong rotation: consecutive curve distances must land on grid neighbours, which a shared-but-wrong reflection breaks even though the round trip stays green |
 | integer.hilbert-curve-bijection-and-locality | law: Deep | structural | — | consecutive curve distances map to grid neighbours at Manhattan distance exactly one at every step of the full curve, orders one through nine — the defining locality property, and the leg that discriminates the rotation helper | — | — | — |

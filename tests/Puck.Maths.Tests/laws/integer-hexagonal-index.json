@@ -1,0 +1,233 @@
+[
+  {
+    "Id": "integer.hexagonal-index-perimeter",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "FromCoordinate"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "ToCoordinate"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Radius"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "The origin and every index through ring 32 encode and decode in the declared order, with the declared radius.",
+        "Against": "An independent BigInteger perimeter walk accumulating the six unit directions, without square roots, side classification, or Puck.Maths calls. ENVELOPE: the complete disk of radius 32.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.hexagonal-index-geometry",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "FromCoordinate"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "ToCoordinate"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Radius"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Rotate"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Conjugate"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Norm"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Distance"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Neighbor"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Decoding, encoding, radius, norm, distance, signed rotation, reflection and all six neighbour moves across sampled complete-domain indices.",
+        "Against": "BigInteger ring bracketing and barycentric interpolation of independent unit coordinates; cube-distance and coordinate transformations, with six-edge parameter solving to encode expected results. No Puck.Maths calls. The separate perimeter walk pins the enumeration. ENVELOPE: nonnegative long raws folded modulo MaxValue + 1; no exhaustive full-width claim.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Rotation has order six, conjugation has order two, and conjugation reverses a rotation.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.hexagonal-index-arithmetic",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Translate"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "MultiplicativeIdentity"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Encoded sum, difference, negation, translation and Eisenstein product, including overflow refusals.",
+        "Against": "Independent BigInteger coordinate arithmetic and six-edge encoding. Product uses polynomial convolution followed by reduction of omega squared. ENVELOPE: sampled full-domain indices; additional signed coordinates folded into [-128, 128] exercise non-overflowing products.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Additive and multiplicative identities, inverse addition, commutativity, distributivity and rotation equivariance on a bounded band where intermediate results fit.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.hexagonal-index-boundaries",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "MaxRadius"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "MaxValue"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "FromCoordinate"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "ToCoordinate"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Rotate"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Conjugate"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Distance"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Neighbor"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "The maximum complete ring, ring starts and ends, every outer corner and adjacent edge cell, and distances exceeding int.MaxValue.",
+        "Against": "BigInteger cardinalities, independent bracketed ring lookup, barycentric coordinates and cube-distance arithmetic. Proves that the next complete ring exceeds long.MaxValue.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Default is zero; out-of-domain indices refuse with ArgumentOutOfRangeException naming value; out-of-domain coordinates and outward moves refuse with OverflowException. Signed minimum and maximum turn/direction counts normalize modulo six.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.hexagonal-index-geometry",
+    "Tier": "Deep",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of integer.hexagonal-index-geometry with 4096 random draws instead of Default's 256, alongside the same vector edge battery and frontier block.",
+        "Against": "The same independent BigInteger ring bracketing, perimeter interpolation and coordinate arithmetic. ENVELOPE: the same nonnegative-long fold; stronger sampling, not a whole-domain proof.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]
