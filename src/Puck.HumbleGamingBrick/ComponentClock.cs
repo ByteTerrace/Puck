@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Puck.HumbleGamingBrick.Interfaces;
 
 namespace Puck.HumbleGamingBrick.Timing;
@@ -42,6 +43,8 @@ public sealed class ComponentClock {
     private readonly Ppu m_ppu;
 
     private bool m_isDoubleSpeed;
+    // Whether a stretch may be absorbed at all: normal speed, and no timed cartridge to tick per dot.
+    private bool m_canAbsorb;
     // Cycles every component has agreed to absorb as plain counting, not yet spent. Valid only until some component's
     // state changes by a path other than absorbing: a register write into any component, a restore, or a ticked
     // cycle, each of which clears it.
@@ -147,6 +150,7 @@ public sealed class ComponentClock {
         m_oamDma = oamDma;
         m_hdma = hdma;
         m_cartridgeClock = cartridgeClock;
+        m_canAbsorb = (m_cartridgeClock is null);
         m_ppu = ppu;
     }
 
@@ -161,6 +165,7 @@ public sealed class ComponentClock {
         get => m_isDoubleSpeed;
         set {
             m_isDoubleSpeed = value;
+            m_canAbsorb = (!value && (m_cartridgeClock is null));
             m_quietRemaining = 0;
         }
     }
@@ -192,26 +197,31 @@ public sealed class ComponentClock {
     /// and the display's dot advance arithmetically — and only the cycle on which some component has an event is
     /// ticked one by one. The result is bit-identical to ticking every cycle.</summary>
     /// <param name="count">The T-cycles to advance.</param>
+    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     public void AdvanceCpuTCycles(int count) {
+        if (
+            m_canAbsorb &&
+            (m_quietRemaining >= count)
+        ) {
+            m_quietRemaining -= count;
+            m_pendingAbsorb += count;
+            m_clock.AdvanceCycles(cycles: ((ulong)count));
+
+            return;
+        }
+
+        AdvanceCpuTCyclesSlow(count: count);
+    }
+
+    private void AdvanceCpuTCyclesSlow(int count) {
         if (count <= 0) {
             return;
         }
 
-        if (
-            m_isDoubleSpeed ||
-            (m_cartridgeClock is not null)
-        ) {
+        if (!m_canAbsorb) {
             for (var remaining = count; (remaining > 0); --remaining) {
                 AdvanceCpuTCycle();
             }
-
-            return;
-        }
-
-        if (m_quietRemaining >= count) {
-            m_quietRemaining -= count;
-            m_pendingAbsorb += count;
-            m_clock.AdvanceCycles(cycles: ((ulong)count));
 
             return;
         }

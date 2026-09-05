@@ -31,8 +31,11 @@ public sealed partial class Sm83 {
     private int m_busCycleDebt;
 
     private byte ReadCycle(ushort address) {
-        FlushBusCycles();
-        AdvanceTCycles(count: LeadingTCyclesBeforeRead);
+        // The deferred cycles and the latch lead are one advance: the same cycles in the same order, settled once.
+        var debt = m_busCycleDebt;
+
+        m_busCycleDebt = 0;
+        AdvanceTCycles(count: (debt + LeadingTCyclesBeforeRead));
 
         if (TouchesTimedState(address: address)) {
             m_componentClock.Settle();
