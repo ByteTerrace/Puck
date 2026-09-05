@@ -49,10 +49,10 @@ public sealed class StateCellToggleLawTests {
     [Fact]
     public void CycleTokens_TextRow_CyclesByTextAtTheDestination() {
         var row = new WorldStateRow(
-            Name: WorldCellName.Parse(candidate: RowName),
+            Name: CellName.Parse(candidate: RowName),
             Kind: CellKind.Text,
             Capacity: 1,
-            Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: CellKey), Text: "crossbar")]
+            Cells: [new WorldStateCell(Key: CellName.Parse(candidate: CellKey), Text: "crossbar")]
         );
         using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocument().WithWorldState(rows: [row]));
         var transport = new LoopbackTransport(server: fixture.Server);
@@ -76,10 +76,10 @@ public sealed class StateCellToggleLawTests {
     }
 
     private static WorldStateRow NumericRow(long initial) => new(
-        Name: WorldCellName.Parse(candidate: RowName),
+        Name: CellName.Parse(candidate: RowName),
         Kind: CellKind.Int,
         Capacity: 1,
-        Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: CellKey), Value: initial)]
+        Cells: [new WorldStateCell(Key: CellName.Parse(candidate: CellKey), Value: initial)]
     );
     private static long ReadNumeric(WorldFixture fixture) {
         Assert.True(condition: WorldStateReader.TryRead(

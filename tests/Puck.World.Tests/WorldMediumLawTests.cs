@@ -162,7 +162,7 @@ public sealed class WorldMediumLawTests {
             StateRaw = new WorldStateSection(
                 World: [
                     new WorldStateRow(
-                        Name: WorldCellName.Parse(candidate: "medium"),
+                        Name: CellName.Parse(candidate: "medium"),
                         Kind: CellKind.Fixed,
                         Domain: new WorldStateDomain.CellsOf(Topology: "world"), Field: new WorldStateFieldTrait(Medium: new WorldLatticeMedium())
                     ),
@@ -182,7 +182,7 @@ public sealed class WorldMediumLawTests {
             StateRaw = new WorldStateSection(
                 World: [
                     new WorldStateRow(
-                        Name: WorldCellName.Parse(candidate: "medium"),
+                        Name: CellName.Parse(candidate: "medium"),
                         Kind: CellKind.Fixed,
                         Domain: new WorldStateDomain.CellsOf(Topology: "world"), Field: new WorldStateFieldTrait(HeightScale: 5f, Color: "#3B7BD6")
                     ),
@@ -409,7 +409,7 @@ public sealed class WorldMediumLawTests {
             Medium: new WorldLatticeMedium()
         );
         var state = new WorldStateSection(
-            World: [new WorldStateRow(Name: WorldCellName.Parse(candidate: "medium"), Kind: CellKind.Fixed, Domain: new WorldStateDomain.CellsOf(Topology: "world"), Field: trait)],
+            World: [new WorldStateRow(Name: CellName.Parse(candidate: "medium"), Kind: CellKind.Fixed, Domain: new WorldStateDomain.CellsOf(Topology: "world"), Field: trait)],
             Lattices: [Topology()]
         );
         var compiled = WorldFieldsSection.Compile(state: state)!;
@@ -432,7 +432,7 @@ public sealed class WorldMediumLawTests {
         );
         var document = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(
-                World: [new WorldStateRow(Name: WorldCellName.Parse(candidate: "medium"), Kind: CellKind.Fixed, Domain: new WorldStateDomain.CellsOf(Topology: "world"), Field: trait)],
+                World: [new WorldStateRow(Name: CellName.Parse(candidate: "medium"), Kind: CellKind.Fixed, Domain: new WorldStateDomain.CellsOf(Topology: "world"), Field: trait)],
                 Lattices: [Topology()]
             ),
         };
@@ -680,12 +680,12 @@ public sealed class WorldMediumLawTests {
     // pattern, so seat-1's live Scale reads the cell's value while every other seat stays at the unauthored default.
     private static WorldDefinition WithScaleRow(WorldDefinition document, FixedQ4816 cellValue) {
         var scaleRow = new WorldStateRow(
-            Name: WorldCellName.Parse(candidate: "scale"),
+            Name: CellName.Parse(candidate: "scale"),
             Kind: CellKind.Fixed,
             Min: FixedQ4816.FromDouble(value: 0.05).Value,
             Max: FixedQ4816.One.Value,
             Capacity: 8,
-            Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: cellValue.Value)]
+            Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: cellValue.Value)]
         );
 
         return document with {

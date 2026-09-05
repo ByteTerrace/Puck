@@ -13,13 +13,13 @@ public sealed class WorldSymmetryChannelLawTests {
     private static WorldDefinition Definition(params ActionEffect[] effects) => new(
         Simulation: new WorldSimulationDefaults(RateHz: 240),
         StateRaw: new WorldStateSection(World: [
-            new WorldStateRow(Name: WorldCellName.Parse(candidate: "node"), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 5)]),
-            new WorldStateRow(Name: WorldCellName.Parse(candidate: "mirror"), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 17)]),
-            new WorldStateRow(Name: WorldCellName.Parse(candidate: "nodes"), Kind: CellKind.Int, Capacity: 4, Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: 9)]),
-            new WorldStateRow(Name: WorldCellName.Parse(candidate: "out"), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)]),
-            new WorldStateRow(Name: WorldCellName.Parse(candidate: "outFixed"), Kind: CellKind.Fixed, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)]),
+            new WorldStateRow(Name: CellName.Parse(candidate: "node"), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 5)]),
+            new WorldStateRow(Name: CellName.Parse(candidate: "mirror"), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 17)]),
+            new WorldStateRow(Name: CellName.Parse(candidate: "nodes"), Kind: CellKind.Int, Capacity: 4, Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: 9)]),
+            new WorldStateRow(Name: CellName.Parse(candidate: "out"), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)]),
+            new WorldStateRow(Name: CellName.Parse(candidate: "outFixed"), Kind: CellKind.Fixed, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)]),
         ]),
-        Rules: [new WorldRule(Name: WorldCellName.Parse(candidate: "probe"), Effects: effects, Mode: ActionTriggerMode.Edge)]
+        Rules: [new WorldRule(Name: CellName.Parse(candidate: "probe"), Effects: effects, Mode: ActionTriggerMode.Edge)]
     );
     private static SymmetryOperand Compile(string channel, string? key = null, string destination = "out") {
         var compiled = WorldRuleCompiler.CompileAll(definition: Definition(new ActionEffect.SetState(State: destination, FromState: channel, FromKey: key)));

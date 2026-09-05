@@ -65,7 +65,7 @@ public sealed class ChannelWorldRuleFactLawTests {
     // always which STRING names the gate.
     private static WorldDefinition ChannelGatedDocument(string gate) {
         var document = Fixtures.BuildDocument();
-        var beacon = WorldCellName.Parse(candidate: BeaconRow);
+        var beacon = CellName.Parse(candidate: BeaconRow);
 
         return document with {
             ChannelsRaw = [.. document.Channels, new WorldChannel(Name: PortalChannel, Shape: ChannelShape.Unipolar, Composition: true)],
@@ -78,7 +78,7 @@ public sealed class ChannelWorldRuleFactLawTests {
             ]),
             Rules = [
                 new WorldRule(
-                    Name: WorldCellName.Parse(candidate: "channel-beacon"),
+                    Name: CellName.Parse(candidate: "channel-beacon"),
                     Gate: new ActionPredicate.CompareState(
                         State: gate,
                         Comparison: ActionStateComparison.GreaterOrEqual,

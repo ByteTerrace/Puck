@@ -276,7 +276,7 @@ public static class BodyActionSpecFactory {
                         name: compare.State,
                         stateSlots: stateSlots
                     ),
-                    Value: WorldStateNumericLiteral.ToFixed(value: constant),
+                    Value: NumericLiteral.ToFixed(value: constant),
                     Comparison: compare.Comparison,
                     Kind: CompiledPredicateKind.CompareState
                 ));
@@ -333,7 +333,7 @@ public static class BodyActionSpecFactory {
         ),
             ActionEffect.SetState set => new CompiledBodyInstruction(
             Operation: BodyMotionOp.SetState,
-            Value: WorldStateNumericLiteral.ToFixed(value: RequireBodyEffectValue(
+            Value: NumericLiteral.ToFixed(value: RequireBodyEffectValue(
                 value: set.Value,
                 fromState: set.FromState,
                 fromKey: set.FromKey,
@@ -356,7 +356,7 @@ public static class BodyActionSpecFactory {
         ),
             ActionEffect.AddState add => new CompiledBodyInstruction(
             Operation: BodyMotionOp.AddState,
-            Value: WorldStateNumericLiteral.ToFixed(value: RequireBodyEffectValue(
+            Value: NumericLiteral.ToFixed(value: RequireBodyEffectValue(
                 value: add.Value,
                 fromState: add.FromState,
                 fromKey: add.FromKey,
@@ -477,7 +477,7 @@ public static class BodyActionSpecFactory {
     // A per-body action-state slot has no world state row to copy from — setState/addState's live 'fromState'/
     // 'fromKey' spelling is legitimate only in a world rule (WorldRuleCompiler); a body-scope effect always writes an
     // authored constant, so 'value' is required here on the same terms compareState's own body-scope 'value' is.
-    private static decimal RequireBodyEffectValue(decimal? value, string? fromState, string? fromKey, decimal? valueSeconds, WorldValueExpression? expression, string actionName, string effectName, string state) {
+    private static decimal RequireBodyEffectValue(decimal? value, string? fromState, string? fromKey, decimal? valueSeconds, ValueExpression? expression, string actionName, string effectName, string state) {
         if (
             (fromState is not null) ||
             (fromKey is not null)

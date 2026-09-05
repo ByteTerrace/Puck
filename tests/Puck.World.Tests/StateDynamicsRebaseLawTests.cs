@@ -18,11 +18,11 @@ public sealed class StateDynamicsRebaseLawTests {
 
     private static WorldDefinition BuildDocument(string dynamicsRow) {
         var row = new WorldStateRow(
-            Name: WorldCellName.Parse(candidate: "gauge"),
+            Name: CellName.Parse(candidate: "gauge"),
             Kind: CellKind.Int,
             Capacity: 8,
             Cells: [
-                new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: 0, Dynamics: new WorldStateDynamics(EpochTick: 0, Row: dynamicsRow, V0: 0, Y0: 0)),
+                new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: 0, Dynamics: new WorldStateDynamics(EpochTick: 0, Row: dynamicsRow, V0: 0, Y0: 0)),
             ]
         );
 
@@ -121,19 +121,19 @@ public sealed class StateDynamicsRebaseLawTests {
     [Fact]
     public void RuleAddState_FromRest_AlsoRebasesAndKicksTheVelocity() {
         var gauge = new WorldStateRow(
-            Name: WorldCellName.Parse(candidate: "gauge"),
+            Name: CellName.Parse(candidate: "gauge"),
             Kind: CellKind.Int,
             Capacity: 8,
             Cells: [
-                new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: 0, Dynamics: new WorldStateDynamics(EpochTick: 0, Row: "kickPos", V0: 0, Y0: 0)),
+                new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: 0, Dynamics: new WorldStateDynamics(EpochTick: 0, Row: "kickPos", V0: 0, Y0: 0)),
             ]
         );
-        var trigger = new WorldStateRow(Name: WorldCellName.Parse(candidate: "trigger"), Kind: CellKind.Int,
+        var trigger = new WorldStateRow(Name: CellName.Parse(candidate: "trigger"), Kind: CellKind.Int,
             Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)]);
         var document = (Fixtures.BuildDocument().WithWorldState(rows: [gauge, trigger]) with {
             DynamicsRaw = [.. Fixtures.StandardDynamics, KickPositive, KickZero, KickNegative],
             Rules = [new WorldRule(
-                Name: WorldCellName.Parse(candidate: "bump"),
+                Name: CellName.Parse(candidate: "bump"),
                 Gate: new ActionPredicate.CompareState(State: "trigger", Comparison: ActionStateComparison.Equal, Value: 1),
                 Mode: ActionTriggerMode.Edge,
                 Effects: [new ActionEffect.AddState(State: "gauge", Value: 300, Key: "0")]

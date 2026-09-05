@@ -44,10 +44,10 @@ public sealed partial class WorldPopulation {
                 if (producer.Flock is not { } flock) { continue; }
                 rows.Add(FormattableString.Invariant($"kit {kit}/{name}: {flock.Source.Space}, range {flock.Source.Range}, candidates {flock.Source.CandidateBudget}, neighbors {flock.Source.MaxNeighbors}, period {flock.PeriodEngineTicks} engine ticks, cone {flock.Source.HalfAngleDegrees}, sight {flock.Source.RequiresLineOfSight}, movementDomain {flock.Source.MovementDomain ?? "none"}, weights separation={flock.Source.Separation} alignment={flock.Source.Alignment} cohesion={flock.Source.Cohesion} goal={flock.Source.Goal} inertia={flock.Source.Inertia}"));
                 if (flock.Source.CohesionAffinity is { } cohesion) {
-                    rows.Add($"cohesionAffinity={System.Text.Json.JsonSerializer.Serialize(cohesion, WorldJsonContext.Default.WorldValueExpression)}");
+                    rows.Add($"cohesionAffinity={System.Text.Json.JsonSerializer.Serialize(cohesion, WorldJsonContext.Default.ValueExpression)}");
                 }
                 if (flock.Source.AlignmentAffinity is { } alignment) {
-                    rows.Add($"alignmentAffinity={System.Text.Json.JsonSerializer.Serialize(alignment, WorldJsonContext.Default.WorldValueExpression)}");
+                    rows.Add($"alignmentAffinity={System.Text.Json.JsonSerializer.Serialize(alignment, WorldJsonContext.Default.ValueExpression)}");
                 }
             }
         }

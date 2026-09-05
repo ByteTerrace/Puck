@@ -37,7 +37,7 @@ public static class WorldSiloDefinitionValidator {
 
         return true;
     }
-    private static bool TryValidateFederationKey(WorldSafeName world, WorldSiloFederation federation, out string reason) {
+    private static bool TryValidateFederationKey(SafeName world, WorldSiloFederation federation, out string reason) {
         if (string.IsNullOrWhiteSpace(value: federation.KeyFile)) {
             reason = $"world '{world}' names no federation.keyFile";
 
@@ -154,7 +154,7 @@ public static class WorldSiloDefinitionValidator {
         }
 
         var worldIds = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var keyFiles = new Dictionary<string, WorldSafeName>(comparer: StringComparer.OrdinalIgnoreCase);
+        var keyFiles = new Dictionary<string, SafeName>(comparer: StringComparer.OrdinalIgnoreCase);
         var pinnedCount = 0;
 
         foreach (var world in definition.Worlds) {

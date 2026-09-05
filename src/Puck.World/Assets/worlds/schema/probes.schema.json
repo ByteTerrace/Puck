@@ -11,7 +11,7 @@
     ],
     "properties": {
       "id": {
-        "description": "The probe\u0027s own name \u2014 WorldSafeName-shaped, unique among the rows; probe.status and probe.record address it.",
+        "description": "The probe\u0027s own name \u2014 SafeName-shaped, unique among the rows; probe.status and probe.record address it.",
         "type": "string"
       },
       "kind": {

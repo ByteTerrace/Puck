@@ -308,10 +308,10 @@ public sealed class PaintFieldEffect : WorldEffectFact {
 public sealed class TransformStateEffect : WorldEffectFact {
     /// <param name="transform">The discrete state transform.</param>
     /// <param name="describe">The authored spelling, for the <c>world.rules</c> read-back.</param>
-    public TransformStateEffect(WorldStateTransform transform, string describe) : base(WorldRuleEffectKind.TransformState, describe) => Transform = transform;
+    public TransformStateEffect(StateTransform transform, string describe) : base(WorldRuleEffectKind.TransformState, describe) => Transform = transform;
 
     /// <summary>The discrete state transform.</summary>
-    public WorldStateTransform Transform { get; }
+    public StateTransform Transform { get; }
 }
 
 /// <summary>Pushes one evaluated value into a history row's ring (<see cref="WorldRuleEffectKind.PushState"/>).</summary>

@@ -75,7 +75,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// toggle itself — upsert and remove differ by a single bit, not by payload, so one kind covers both shapes
     /// naturally (unlike <see cref="UpsertInteraction"/>/<see cref="RemoveInteraction"/>, whose two payloads do not
     /// fit one shape). Upsert (<see cref="Remove"/> = <see langword="false"/>) is rejected loudly at whole-document
-    /// validation if <see cref="Name"/> is not a legitimate <see cref="WorldCellName"/> spelling, or names no
+    /// validation if <see cref="Name"/> is not a legitimate <see cref="CellName"/> spelling, or names no
     /// declared keyed <c>int</c> <c>state</c> row of the same name (a property's per-carrier tags are stored there —
     /// see <see cref="WorldPropertyRegistrySection"/>'s remarks). Remove (<see cref="Remove"/> =
     /// <see langword="true"/>) is rejected loudly if no property declares that name, or if a live
@@ -448,11 +448,11 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     public sealed record UpsertWorldRule(WorldPrincipal Principal, WorldRule Rule) : WorldMutation(Principal);
     /// <summary>Removes the world rule named <paramref name="Name"/>. Rejected if no rule declares that name.</summary>
     /// <param name="Principal">The acting identity.</param>
-    /// <param name="Name">The rule name to remove — a <see cref="WorldCellName"/>, the same validated-identifier type
+    /// <param name="Name">The rule name to remove — a <see cref="CellName"/>, the same validated-identifier type
     /// <see cref="WorldRule.Name"/> itself rides, so a name this mutation could never match is refused at the verb
     /// (or the JSON converter) instead of travelling as a miss.</param>
     [MutationKind(ordinal: 53, section: WorldSection.Rules)]
-    public sealed record RemoveWorldRule(WorldPrincipal Principal, WorldCellName Name) : WorldMutation(Principal);
+    public sealed record RemoveWorldRule(WorldPrincipal Principal, CellName Name) : WorldMutation(Principal);
     /// <summary>Upserts an interaction row addressed by <see cref="WorldInteraction.Name"/> — replaces the matching
     /// row or appends a new one. The authoring door for the <c>interactions</c> section, never the firing one: an
     /// interaction evaluating and its effects applying both ride <see cref="WorldPrincipal.World"/> and never submit
@@ -466,11 +466,11 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <summary>Removes the interaction named <paramref name="Name"/>. Rejected if no interaction declares that
     /// name.</summary>
     /// <param name="Principal">The acting identity.</param>
-    /// <param name="Name">The interaction name to remove — a <see cref="WorldCellName"/>, the same
+    /// <param name="Name">The interaction name to remove — a <see cref="CellName"/>, the same
     /// validated-identifier type <see cref="WorldInteraction.Name"/> itself rides, so a name this mutation could
     /// never match is refused at the verb (or the JSON converter) instead of travelling as a miss.</param>
     [MutationKind(ordinal: 55, section: WorldSection.Interactions)]
-    public sealed record RemoveInteraction(WorldPrincipal Principal, WorldCellName Name) : WorldMutation(Principal);
+    public sealed record RemoveInteraction(WorldPrincipal Principal, CellName Name) : WorldMutation(Principal);
     /// <summary>Upserts a group kind addressed by <see cref="WorldGroupKind.Name"/> — replaces the matching row or
     /// appends a new one. Rejected loudly if the resulting kind set contains two kinds identical in every
     /// behavior-bearing field except <see cref="WorldGroupKind.Capacity"/> (a capacity-only difference is a value, not
@@ -600,5 +600,5 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Transform">The typed operation.</param>
     /// <param name="Guard">Optional admission against a phase generation and the stamped actor.</param>
     [MutationKind(ordinal: 75, section: WorldSection.State)]
-    public sealed record TransformState(WorldPrincipal Principal, WorldStateTransform Transform, WorldPhaseGuard? Guard = null) : WorldMutation(Principal);
+    public sealed record TransformState(WorldPrincipal Principal, StateTransform Transform, WorldPhaseGuard? Guard = null) : WorldMutation(Principal);
 }

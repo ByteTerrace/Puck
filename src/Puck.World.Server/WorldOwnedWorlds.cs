@@ -6,7 +6,7 @@ namespace Puck.World.Server;
 
 /// <summary>The owned world documents available as player identities.</summary>
 /// <remarks>Every id in this catalog addresses exactly one storage location, and that rests on TWO rules, not one.
-/// The character rule is carried by the type: every id here is a <see cref="WorldSafeName"/>, so
+/// The character rule is carried by the type: every id here is a <see cref="SafeName"/>, so
 /// <see cref="WorldOwnedWorldFileName"/> escapes nothing and distinct ids map to distinct file-name strings. The
 /// second rule is this catalog's own, because a file-name string is not a storage location: the directory is stored
 /// on a case-insensitive filesystem, so ids are unique IGNORING CASE and every comparison here that addresses the
@@ -22,8 +22,8 @@ public sealed class WorldOwnedWorlds {
     /// document is never enumerated again.</summary>
     public const string QuarantineDirectoryName = "unloadable";
 
-    private static readonly WorldCellName MoveSpeedState = WorldCellName.Parse(candidate: "identity-move-speed");
-    private static readonly WorldCellName TurnSpeedState = WorldCellName.Parse(candidate: "identity-turn-speed");
+    private static readonly CellName MoveSpeedState = CellName.Parse(candidate: "identity-move-speed");
+    private static readonly CellName TurnSpeedState = CellName.Parse(candidate: "identity-turn-speed");
 
     private readonly string m_directory;
     private readonly List<WorldOwnedWorldDisposal> m_discarded = [];
@@ -650,7 +650,7 @@ public sealed class WorldOwnedWorlds {
         );
     }
 
-    /// <summary>Creates and persists one owned world. <paramref name="name"/> is a <see cref="WorldSafeName"/>, so
+    /// <summary>Creates and persists one owned world. <paramref name="name"/> is a <see cref="SafeName"/>, so
     /// what is left to refuse here is a collision, in either of the two places one can live: an id or display name
     /// this catalog already holds (<c>FindById</c>/<c>Find</c>, both ignoring case), or an entry occupying the id's
     /// catalog path that this boot did not admit — a refused document, a failed disposal, or a directory. The second
@@ -661,7 +661,7 @@ public sealed class WorldOwnedWorlds {
     /// <param name="colorHex">The avatar color.</param>
     /// <param name="reason">Why creation was refused, or empty on success.</param>
     /// <returns>The created identity, or <see langword="null"/> with <paramref name="reason"/> set.</returns>
-    public WorldIdentity? Create(WorldSafeName name, string colorHex, out string reason) {
+    public WorldIdentity? Create(SafeName name, string colorHex, out string reason) {
         if (
             (Find(name: name) is not null) ||
             (FindById(id: name) is not null)
@@ -763,8 +763,8 @@ public sealed class WorldOwnedWorlds {
         }
         var key = device.Value.ToString(format: "N");
         var slots = new WorldControllerStateSlots(
-            MachineState: WorldCellName.Parse(candidate: $"controller-{key}-machine"),
-            DeviceState: WorldCellName.Parse(candidate: $"controller-{key}-device")
+            MachineState: CellName.Parse(candidate: $"controller-{key}-machine"),
+            DeviceState: CellName.Parse(candidate: $"controller-{key}-device")
         );
 
         profile.WriteState(row: new WorldStateRow(
@@ -788,7 +788,7 @@ public sealed class WorldOwnedWorlds {
     }
     /// <summary>Adopts a pulled cloud copy of an owned world: replaces the in-memory identity that shares its id (or
     /// adds a new one), then persists it locally through the ordinary save path. The caller has already validated the
-    /// document through the boot loader's gate — which means its id already survived <see cref="WorldSafeName"/>'s
+    /// document through the boot loader's gate — which means its id already survived <see cref="SafeName"/>'s
     /// JSON parse — so what is left to refuse here is a document without an identity section at all, and a document
     /// whose id collides with a local id in case only. The cloud namespace is case-SENSITIVE and this catalog's
     /// directory is not, so <c>Amber</c> and <c>amber</c> are two blobs that would adopt onto one local file:

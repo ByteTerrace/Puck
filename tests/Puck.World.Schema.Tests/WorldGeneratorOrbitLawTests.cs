@@ -41,7 +41,7 @@ public sealed class WorldGeneratorOrbitLawTests {
             Simulation: new WorldSimulationDefaults(RateHz: 240),
             StateRaw: new WorldStateSection(World: [
                 new WorldStateRow(
-                    Name: WorldCellName.Parse(candidate: "slot"),
+                    Name: CellName.Parse(candidate: "slot"),
                     Kind: kind,
                     Max: max,
                     Min: ((max is null) ? null : 0L),

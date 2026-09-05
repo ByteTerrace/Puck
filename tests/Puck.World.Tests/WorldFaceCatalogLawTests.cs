@@ -82,8 +82,8 @@ public sealed class WorldFaceCatalogLawTests {
         return Fixtures.BuildDocument() with {
             CreationsRaw = [creation],
             PlacementRowsRaw = [placement],
-            References = [new WorldReference(Name: WorldSafeName.Parse(candidate: ReferenceName), Document: "worlds/dest.world.json")],
-            Destinations = [new WorldDestination(Name: WorldSafeName.Parse(candidate: DestinationName), Reference: ReferenceName, Durability: WorldDestinationDurability.Ephemeral)],
+            References = [new WorldReference(Name: SafeName.Parse(candidate: ReferenceName), Document: "worlds/dest.world.json")],
+            Destinations = [new WorldDestination(Name: SafeName.Parse(candidate: DestinationName), Reference: ReferenceName, Durability: WorldDestinationDurability.Ephemeral)],
         };
     }
     private static WorldFaceRow DoorRow(WorldDefinition definition) {

@@ -112,7 +112,7 @@
         ],
         "properties": {
           "id": {
-            "description": "The group\u0027s stable id, unique within Groups \u2014 the token Group carries as a grant principal. WorldSafeName-typed (the For precedent: a scoped session\u0027s process-local instance name is composed from this id, literal separators and all, in WorldSessionResolver.MintInstanceName \u2014 typing it here is what makes that composition injective by construction rather than by an escaping step downstream that could collapse two distinct ids onto one name).",
+            "description": "The group\u0027s stable id, unique within Groups \u2014 the token Group carries as a grant principal. SafeName-typed (the For precedent: a scoped session\u0027s process-local instance name is composed from this id, literal separators and all, in WorldSessionResolver.MintInstanceName \u2014 typing it here is what makes that composition injective by construction rather than by an escaping step downstream that could collapse two distinct ids onto one name).",
             "type": "string"
           },
           "kindName": {

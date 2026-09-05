@@ -54,7 +54,7 @@ public enum WorldContributionTenure : byte {
 public sealed record WorldPlacementContribution(
     WorldContributionTenure Tenure,
     string SlotCreationId,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSafeName? Link = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SafeName? Link = null,
     float GraceSeconds = 0f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPrincipal? Contributor = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? RetractDeadlineTick = null

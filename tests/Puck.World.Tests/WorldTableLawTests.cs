@@ -11,7 +11,7 @@ namespace Puck.World.Tests;
 /// a duplicate key refuses at validation, and the table is not simulation state.</summary>
 public sealed class WorldTableLawTests {
     private static WorldStateRow Slot(string name, long value) =>
-        new(WorldCellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, value)]);
+        new(CellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, value)]);
     private static long Value(WorldFixture fixture, string row) =>
         WorldDefinitionRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
 
@@ -29,13 +29,13 @@ public sealed class WorldTableLawTests {
     public void ALiteralAndADynamicKeyReadTheTableAndAMissingKeyNeverHolds() {
         var (source, hash) = WriteTable(TableDocument.IntKind, (1, 60m), (2, 90m), (250, 5m));
         var document = Fixtures.BuildDocument() with {
-            Tables = [new WorldTableRow("power", source, hash)],
+            Tables = [new TableRow("power", source, hash)],
             StateRaw = new WorldStateSection(World: [Slot("move", 2L), Slot("literal", 0L), Slot("dynamic", 0L), Slot("missing", 0L)]),
             Rules = [
-                new WorldRule(WorldCellName.Parse("lit"), [new ActionEffect.SetState(State: "literal", FromState: "$table:power:250")]),
-                new WorldRule(WorldCellName.Parse("dyn"), [new ActionEffect.SetState(State: "dynamic", FromState: "$table:power:$cell:move:$value")]),
+                new WorldRule(CellName.Parse("lit"), [new ActionEffect.SetState(State: "literal", FromState: "$table:power:250")]),
+                new WorldRule(CellName.Parse("dyn"), [new ActionEffect.SetState(State: "dynamic", FromState: "$table:power:$cell:move:$value")]),
                 new WorldRule(
-                    WorldCellName.Parse("gap"),
+                    CellName.Parse("gap"),
                     [new ActionEffect.SetState(State: "missing", Value: 1m)],
                     Gate: new ActionPredicate.CompareState(State: "$table:power:$cell:missing:$value", Comparison: ActionStateComparison.GreaterOrEqual, Value: 0m)
                 ),
@@ -59,22 +59,22 @@ public sealed class WorldTableLawTests {
     public void AMissingLiteralKeyAStaleHashAndADuplicateKeyRefuse() {
         var (source, hash) = WriteTable(TableDocument.FixedKind, (7, 1.5m));
         var baseline = Fixtures.BuildDocument() with {
-            Tables = [new WorldTableRow("rates", source, hash)],
-            StateRaw = new WorldStateSection(World: [new WorldStateRow(WorldCellName.Parse("rate"), CellKind.Fixed, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)])]),
-            Rules = [new WorldRule(WorldCellName.Parse("r"), [new ActionEffect.SetState(State: "rate", FromState: "$table:rates:7")])],
+            Tables = [new TableRow("rates", source, hash)],
+            StateRaw = new WorldStateSection(World: [new WorldStateRow(CellName.Parse("rate"), CellKind.Fixed, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)])]),
+            Rules = [new WorldRule(CellName.Parse("r"), [new ActionEffect.SetState(State: "rate", FromState: "$table:rates:7")])],
         };
         Assert.True(WorldDefinitionValidator.TryValidateLocally(definition: baseline, reason: out var okReason), okReason);
 
-        var missing = baseline with { Rules = [new WorldRule(WorldCellName.Parse("r"), [new ActionEffect.SetState(State: "rate", FromState: "$table:rates:8")])] };
+        var missing = baseline with { Rules = [new WorldRule(CellName.Parse("r"), [new ActionEffect.SetState(State: "rate", FromState: "$table:rates:8")])] };
         Assert.False(WorldDefinitionValidator.TryValidateLocally(definition: missing, reason: out var missingReason));
         Assert.Contains("does not carry", missingReason, StringComparison.Ordinal);
 
-        var stale = baseline with { Tables = [new WorldTableRow("rates", source, new string('0', 64))] };
+        var stale = baseline with { Tables = [new TableRow("rates", source, new string('0', 64))] };
         Assert.False(WorldDefinitionValidator.TryValidateLocally(definition: stale, reason: out var staleReason));
         Assert.Contains("hash", staleReason, StringComparison.Ordinal);
 
         var (duplicateSource, _) = WriteTable(TableDocument.IntKind, (1, 1m), (1, 2m));
-        var duplicate = baseline with { Tables = [new WorldTableRow("rates", duplicateSource, hash)] };
+        var duplicate = baseline with { Tables = [new TableRow("rates", duplicateSource, hash)] };
         Assert.False(WorldDefinitionValidator.TryValidateLocally(definition: duplicate, reason: out var duplicateReason));
         Assert.Contains("declared twice", duplicateReason, StringComparison.Ordinal);
     }
@@ -85,18 +85,18 @@ public sealed class WorldTableLawTests {
         var (source, hash) = WriteColumns(TableDocument.IntKind, ["power", "priority"], (1, [60m, 0m]), (2, [90m, 1m]));
         var (chart, chartHash) = WriteTable(TableDocument.IntKind, (102, 2m), (201, 0m));
         var document = Fixtures.BuildDocument() with {
-            Tables = [new WorldTableRow("moves", source, hash), new WorldTableRow("chart", chart, chartHash)],
+            Tables = [new TableRow("moves", source, hash), new TableRow("chart", chart, chartHash)],
             StateRaw = new WorldStateSection(World: [Slot("move", 2L), Slot("attack", 1L), Slot("defend", 2L), Slot("power", 0L), Slot("priority", 0L), Slot("multiplier", 0L)]),
             Rules = [
-                new WorldRule(WorldCellName.Parse("stats"), [
+                new WorldRule(CellName.Parse("stats"), [
                     new ActionEffect.SetState(State: "power", FromState: "$table:moves:power:$cell:move:$value"),
                     new ActionEffect.SetState(State: "priority", FromState: "$table:moves:priority:$cell:move:$value"),
                 ]),
                 new WorldRule(
-                    WorldCellName.Parse("effect"),
+                    CellName.Parse("effect"),
                     [new ActionEffect.SetState(State: "multiplier", FromState: "$table:chart:$bind:pair")],
-                    Bindings: [new WorldRuleBinding(WorldCellName.Parse("pair"), CellKind.Int, new WorldValueExpression([
-                        new WorldValueToken.State("attack"), new WorldValueToken.Constant(100m), new WorldValueToken.Multiply(), new WorldValueToken.State("defend"), new WorldValueToken.Add(),
+                    Bindings: [new WorldRuleBinding(CellName.Parse("pair"), CellKind.Int, new ValueExpression([
+                        new ValueToken.State("attack"), new ValueToken.Constant(100m), new ValueToken.Multiply(), new ValueToken.State("defend"), new ValueToken.Add(),
                     ]))]
                 ),
             ],
@@ -108,7 +108,7 @@ public sealed class WorldTableLawTests {
         Assert.Equal(1L, Value(fixture, "priority"));
         Assert.Equal(2L, Value(fixture, "multiplier"));
 
-        var unnamed = document with { Rules = [new WorldRule(WorldCellName.Parse("stats"), [new ActionEffect.SetState(State: "power", FromState: "$table:moves:2")])] };
+        var unnamed = document with { Rules = [new WorldRule(CellName.Parse("stats"), [new ActionEffect.SetState(State: "power", FromState: "$table:moves:2")])] };
         Assert.False(WorldDefinitionValidator.TryValidateLocally(definition: unnamed, reason: out var columnReason));
         Assert.Contains("<column>", columnReason, StringComparison.Ordinal);
     }

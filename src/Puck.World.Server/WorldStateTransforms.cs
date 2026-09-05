@@ -9,15 +9,15 @@ public static partial class WorldStateTransforms {
     /// <summary>Lists every state row whose edit capability an operation needs.</summary>
     /// <param name="transform">The operation.</param>
     /// <returns>The addressed row names.</returns>
-    public static IEnumerable<string> Subjects(WorldStateTransform transform) => transform switch {
-        WorldStateTransform.Transfer transfer => transfer.Draw is null ? [transfer.From, transfer.To] : [transfer.From, transfer.To, transfer.Draw],
-        WorldStateTransform.SetRay ray => [ray.Row],
-        WorldStateTransform.Observe observe => [observe.Row],
-        WorldStateTransform.Shuffle shuffle => [shuffle.Row, shuffle.Draw],
-        WorldStateTransform.SortZone sortZone => [sortZone.Row, .. sortZone.By.Select(key => key.Row)],
-        WorldStateTransform.SortKeyed sortKeyed => [sortKeyed.Row],
-        WorldStateTransform.WriteSet writeSet => [writeSet.Row],
-        WorldStateTransform.Push push => [push.Row],
+    public static IEnumerable<string> Subjects(StateTransform transform) => transform switch {
+        StateTransform.Transfer transfer => transfer.Draw is null ? [transfer.From, transfer.To] : [transfer.From, transfer.To, transfer.Draw],
+        StateTransform.SetRay ray => [ray.Row],
+        StateTransform.Observe observe => [observe.Row],
+        StateTransform.Shuffle shuffle => [shuffle.Row, shuffle.Draw],
+        StateTransform.SortZone sortZone => [sortZone.Row, .. sortZone.By.Select(key => key.Row)],
+        StateTransform.SortKeyed sortKeyed => [sortKeyed.Row],
+        StateTransform.WriteSet writeSet => [writeSet.Row],
+        StateTransform.Push push => [push.Row],
         _ => [],
     };
 
@@ -29,10 +29,10 @@ public static partial class WorldStateTransforms {
     /// <param name="instance">The authoritative instance identity used by draw streams.</param>
     /// <param name="candidate">The new definition, or the original on refusal.</param>
     /// <param name="reason">The refusal reason.</param>
-    /// <param name="patterns">The document's compiled patterns, for <see cref="WorldStateTransform.SetRay"/>; empty
+    /// <param name="patterns">The document's compiled patterns, for <see cref="StateTransform.SetRay"/>; empty
     /// when the caller has none compiled (every other transform ignores it).</param>
     /// <returns>Whether the operation composed.</returns>
-    public static bool TryApply(WorldDefinition definition, WorldStateTransform transform, WorldPrincipal actor,
+    public static bool TryApply(WorldDefinition definition, StateTransform transform, WorldPrincipal actor,
         ulong tick, string instance, out WorldDefinition candidate, out string reason, CompiledWorldPatterns? patterns = null) {
         candidate = definition;
         var rows = definition.State.ToArray();
@@ -40,14 +40,14 @@ public static partial class WorldStateTransforms {
 
         try {
             composed = transform switch {
-                WorldStateTransform.Observe observe => TryObserve(definition, rows, observe, actor, tick, out reason),
-                WorldStateTransform.Transfer transfer => TryTransfer(definition, rows, transfer, instance, out reason),
-                WorldStateTransform.SetRay ray => TrySetRay(definition, rows, ray, patterns ?? CompiledWorldPatterns.Empty, out reason),
-                WorldStateTransform.Shuffle shuffle => TryShuffle(definition, rows, shuffle, instance, out reason),
-                WorldStateTransform.SortZone sortZone => TrySortZone(rows, sortZone, out reason),
-                WorldStateTransform.SortKeyed sortKeyed => TrySortKeyed(rows, sortKeyed, out reason),
-                WorldStateTransform.WriteSet writeSet => TryWriteSet(definition, rows, writeSet, out reason),
-                WorldStateTransform.Push push => TryPush(rows, push, out reason),
+                StateTransform.Observe observe => TryObserve(definition, rows, observe, actor, tick, out reason),
+                StateTransform.Transfer transfer => TryTransfer(definition, rows, transfer, instance, out reason),
+                StateTransform.SetRay ray => TrySetRay(definition, rows, ray, patterns ?? CompiledWorldPatterns.Empty, out reason),
+                StateTransform.Shuffle shuffle => TryShuffle(definition, rows, shuffle, instance, out reason),
+                StateTransform.SortZone sortZone => TrySortZone(rows, sortZone, out reason),
+                StateTransform.SortKeyed sortKeyed => TrySortKeyed(rows, sortKeyed, out reason),
+                StateTransform.WriteSet writeSet => TryWriteSet(definition, rows, writeSet, out reason),
+                StateTransform.Push push => TryPush(rows, push, out reason),
                 _ => Refuse("unknown state transform", out reason),
             };
         } catch (OverflowException exception) {
@@ -131,7 +131,7 @@ public static partial class WorldStateTransforms {
         return true;
     }
 
-    private static bool TryTransfer(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.Transfer transfer, string instance, out string reason) {
+    private static bool TryTransfer(WorldDefinition definition, WorldStateRow[] rows, StateTransform.Transfer transfer, string instance, out string reason) {
         if (!TryFind(rows, transfer.From, out var from, out reason) || !TryFind(rows, transfer.To, out var to, out reason)) {
             return false;
         }
@@ -140,10 +140,10 @@ public static partial class WorldStateTransforms {
         if (source.EffectiveDomain is not WorldStateDomain.KeysOf { Ordered: true } sourceZone || destination.EffectiveDomain is not WorldStateDomain.KeysOf { Ordered: true } destinationZone || sourceZone.Row != destinationZone.Row || !Enum.IsDefined(transfer.Selector)) {
             return Refuse("transfer requires zones in one token domain and a defined selector", out reason);
         }
-        if ((transfer.Selector == WorldZoneSelector.Key) != (transfer.Key is not null) || (transfer.Selector == WorldZoneSelector.Random) != (transfer.Draw is not null)) {
+        if ((transfer.Selector == ZoneSelector.Key) != (transfer.Key is not null) || (transfer.Selector == ZoneSelector.Random) != (transfer.Draw is not null)) {
             return Refuse("key selection requires only key; random selection requires only draw", out reason);
         }
-        if (transfer.Count < 1 || transfer.Count > WorldStateTransferCapacity.MaxTransferCount || (transfer.Selector == WorldZoneSelector.Key && transfer.Count != 1)) {
+        if (transfer.Count < 1 || transfer.Count > WorldStateTransferCapacity.MaxTransferCount || (transfer.Selector == ZoneSelector.Key && transfer.Count != 1)) {
             return Refuse($"transfer count must be 1..{WorldStateTransferCapacity.MaxTransferCount}, and exactly 1 for a key selection", out reason);
         }
         var cells = (source.Cells ?? []).ToList();
@@ -162,7 +162,7 @@ public static partial class WorldStateTransforms {
         ulong stream = 0;
         var cursor = 0L;
         var lastSample = 0L;
-        if (transfer.Selector == WorldZoneSelector.Random) {
+        if (transfer.Selector == ZoneSelector.Random) {
             if (!TryFind(rows, transfer.Draw!, out drawIndex, out reason)) {
                 return false;
             }
@@ -176,12 +176,12 @@ public static partial class WorldStateTransforms {
         // positional transfer walks the pile from its chosen end.
         for (var moved = 0; moved < transfer.Count; moved++) {
             var selected = transfer.Selector switch {
-                WorldZoneSelector.First => 0,
-                WorldZoneSelector.Last => cells.Count - 1,
-                WorldZoneSelector.Key => cells.FindIndex(c => c.Key.Value == transfer.Key),
+                ZoneSelector.First => 0,
+                ZoneSelector.Last => cells.Count - 1,
+                ZoneSelector.Key => cells.FindIndex(c => c.Key.Value == transfer.Key),
                 _ => 0,
             };
-            if (transfer.Selector == WorldZoneSelector.Random) {
+            if (transfer.Selector == ZoneSelector.Random) {
                 if (!WorldGeneratorEngine.TryFire(generator, site!.Kind, seed, stream, cursor, site.DrawnMasks, out var fired, out reason, draw.Secret)) {
                     return false;
                 }
@@ -207,7 +207,7 @@ public static partial class WorldStateTransforms {
         return true;
     }
 
-    private static bool TrySetRay(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.SetRay ray, CompiledWorldPatterns patterns, out string reason) {
+    private static bool TrySetRay(WorldDefinition definition, WorldStateRow[] rows, StateTransform.SetRay ray, CompiledWorldPatterns patterns, out string reason) {
         if (!TryFind(rows, ray.Row, out var index, out reason)) {
             return false;
         }
@@ -239,7 +239,7 @@ public static partial class WorldStateTransforms {
         }
         var cells = (row.Cells ?? []).ToList();
         for (var affectedIndex = 0; affectedIndex < prefix; affectedIndex++) {
-            var key = WorldCellName.Parse(topology.Key(affected[affectedIndex]));
+            var key = CellName.Parse(topology.Key(affected[affectedIndex]));
             var existing = cells.FindIndex(c => c.Key == key);
             if (existing >= 0) {
                 cells[existing] = cells[existing] with { Value = ray.Value };
@@ -254,7 +254,7 @@ public static partial class WorldStateTransforms {
     // The zone's cells are indexed by key once; each attribute row is then walked once to fill its column of the
     // key table, and the cells are ordered by the key tuple with the original position as the final tiebreak, which
     // is what makes the sort stable. Keys are in column-major order: column k occupies [k * n, (k + 1) * n).
-    private static bool TrySortZone(WorldStateRow[] rows, WorldStateTransform.SortZone sort, out string reason) {
+    private static bool TrySortZone(WorldStateRow[] rows, StateTransform.SortZone sort, out string reason) {
         if (!TryFind(rows, sort.Row, out var index, out reason)) {
             return false;
         }
@@ -264,7 +264,7 @@ public static partial class WorldStateTransforms {
         if (row.EffectiveDomain is not WorldStateDomain.KeysOf { Ordered: true } zone || sort.By is not { Count: >= 1 and <= WorldStateCapacity.MaxSortKeys }) {
             return Refuse($"sortZone requires an ordered zone and 1..{WorldStateCapacity.MaxSortKeys} attribute keys, each carrying its own direction", out reason);
         }
-        var position = new Dictionary<WorldCellName, int>(count);
+        var position = new Dictionary<CellName, int>(count);
         for (var cellIndex = 0; cellIndex < count; cellIndex++) {
             position[cells[cellIndex].Key] = cellIndex;
         }
@@ -289,7 +289,7 @@ public static partial class WorldStateTransforms {
         return FinishSort(rows, index, row, cells, count, keys, descending, out reason);
     }
 
-    private static bool TrySortKeyed(WorldStateRow[] rows, WorldStateTransform.SortKeyed sort, out string reason) {
+    private static bool TrySortKeyed(WorldStateRow[] rows, StateTransform.SortKeyed sort, out string reason) {
         if (!TryFind(rows, sort.Row, out var index, out reason)) {
             return false;
         }
@@ -329,7 +329,7 @@ public static partial class WorldStateTransforms {
         return true;
     }
 
-    private static bool TryShuffle(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.Shuffle shuffle, string instance, out string reason) {
+    private static bool TryShuffle(WorldDefinition definition, WorldStateRow[] rows, StateTransform.Shuffle shuffle, string instance, out string reason) {
         if (!TryFind(rows, shuffle.Row, out var index, out reason)) {
             return false;
         }

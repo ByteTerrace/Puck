@@ -983,7 +983,7 @@ public sealed class WorldEventFeed {
     /// <summary>Returns the live occupant count of the placement region named <paramref name="placementId"/> as of the most
     /// recent <see cref="Collect"/> — the same per-(region, body) occupancy the region pass already tracks for the
     /// addon events feed, read directly for a world rule's <c>$region:&lt;id&gt;</c> reserved channel (see
-    /// <see cref="WorldRuleFacts"/>) rather than duplicated.</summary>
+    /// <see cref="RuleFacts"/>) rather than duplicated.</summary>
     /// <param name="placementId">The region-carrying placement's stable id.</param>
     /// <returns>The occupant count, or zero for a placement this tick has never seen carry a region.</returns>
     public int OccupantCount(string placementId) {

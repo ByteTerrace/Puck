@@ -10,7 +10,7 @@ namespace Puck.World.Tests;
 /// <c>$right</c>) resolves through, so it is admitted everywhere a key is authored.
 /// </summary>
 public sealed class WorldPairKeyLawTests {
-    private static WorldCellName Name(string value) => WorldCellName.Parse(value);
+    private static CellName Name(string value) => CellName.Parse(value);
     private static WorldStateRow Trust() => new(Name("trust"), CellKind.Int, Capacity: 8);
     private static WorldDefinition Document(params WorldRule[] rules) => Fixtures.BuildDocument() with {
         StateRaw = new(World: [Trust()]),

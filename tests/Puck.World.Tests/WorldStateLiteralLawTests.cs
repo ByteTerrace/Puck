@@ -9,8 +9,8 @@ public sealed class WorldStateLiteralLawTests {
 
     [Fact]
     public void IntegerComparisonAndWrite_PreserveAValueBeyondBinary32Precision() {
-        var sourceName = WorldCellName.Parse(candidate: "exact-source");
-        var destinationName = WorldCellName.Parse(candidate: "exact-destination");
+        var sourceName = CellName.Parse(candidate: "exact-source");
+        var destinationName = CellName.Parse(candidate: "exact-destination");
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [
                 new WorldStateRow(
@@ -25,7 +25,7 @@ public sealed class WorldStateLiteralLawTests {
                 ),
             ]),
             Rules = [new WorldRule(
-                Name: WorldCellName.Parse(candidate: "exact-literal"),
+                Name: CellName.Parse(candidate: "exact-literal"),
                 Gate: new ActionPredicate.CompareState(
                     State: sourceName.Value,
                     Comparison: Puck.Physics.Motion.ActionStateComparison.Equal,
@@ -51,15 +51,15 @@ public sealed class WorldStateLiteralLawTests {
     [Fact]
     public void IntegerComparison_PreservesLowBitsAcrossTheDeclaredIntegerRange() {
         const long Value = (1L << 40) + 1L;
-        var sourceName = WorldCellName.Parse(candidate: "wide-source");
-        var destinationName = WorldCellName.Parse(candidate: "wide-result");
+        var sourceName = CellName.Parse(candidate: "wide-source");
+        var destinationName = CellName.Parse(candidate: "wide-result");
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [
                 new WorldStateRow(Name: sourceName, Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: Value)]),
                 new WorldStateRow(Name: destinationName, Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
             ]),
             Rules = [new WorldRule(
-                Name: WorldCellName.Parse(candidate: "wide-literal"),
+                Name: CellName.Parse(candidate: "wide-literal"),
                 Gate: new ActionPredicate.CompareState(State: sourceName.Value, Comparison: Puck.Physics.Motion.ActionStateComparison.Equal, Value: Value),
                 Effects: [new ActionEffect.SetState(State: destinationName.Value, Value: 1m)]
             )],
@@ -73,15 +73,15 @@ public sealed class WorldStateLiteralLawTests {
 
     [Fact]
     public void ConsecutiveStateEffects_AreIndependentWhenALaterWriteRefuses() {
-        var first = WorldCellName.Parse(candidate: "atomic-first");
-        var second = WorldCellName.Parse(candidate: "atomic-second");
+        var first = CellName.Parse(candidate: "atomic-first");
+        var second = CellName.Parse(candidate: "atomic-second");
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [
                 new WorldStateRow(Name: first, Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
                 new WorldStateRow(Name: second, Kind: CellKind.Int, Min: 0L, Max: 1L, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
             ]),
             Rules = [new WorldRule(
-                Name: WorldCellName.Parse(candidate: "atomic-refusal"),
+                Name: CellName.Parse(candidate: "atomic-refusal"),
                 Gate: null,
                 Effects: [
                     new ActionEffect.SetState(State: first.Value, Value: 1m),
@@ -99,7 +99,7 @@ public sealed class WorldStateLiteralLawTests {
 
     [Fact]
     public void IntegerLiteralOutsideTheStateCarrier_RefusesByRuleName() {
-        var name = WorldCellName.Parse(candidate: "bounded-int");
+        var name = CellName.Parse(candidate: "bounded-int");
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [new WorldStateRow(
                 Name: name,
@@ -108,7 +108,7 @@ public sealed class WorldStateLiteralLawTests {
             )]),
         };
         var rule = new WorldRule(
-            Name: WorldCellName.Parse(candidate: "oversized-literal"),
+            Name: CellName.Parse(candidate: "oversized-literal"),
             Gate: new ActionPredicate.CompareState(
                 State: name.Value,
                 Comparison: Puck.Physics.Motion.ActionStateComparison.Equal,

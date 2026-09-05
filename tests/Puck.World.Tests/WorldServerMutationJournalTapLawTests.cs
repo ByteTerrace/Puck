@@ -40,7 +40,7 @@ public sealed class WorldServerMutationJournalTapLawTests {
     }
     [Fact]
     public void MutationJournalTap_FiresOnApply_AndItsReEncodedEntryReplaysToTheSameEffect() {
-        var row = new WorldStateRow(Name: WorldCellName.Parse(candidate: "gauge"), Kind: CellKind.Int, Capacity: 8);
+        var row = new WorldStateRow(Name: CellName.Parse(candidate: "gauge"), Kind: CellKind.Int, Capacity: 8);
         var document = Fixtures.BuildDocument().WithWorldState(rows: [row]);
         using var fixture = Fixtures.FreshServer(definition: document);
         (ulong Tick, byte[] Encoded)? captured = null;
@@ -97,7 +97,7 @@ public sealed class WorldServerMutationJournalTapLawTests {
 
         var restoredRow = WorldDefinitionRows.FindStateRow(rows: restoredServer.Definition.State, name: "gauge");
 
-        var writtenKey = WorldCellName.Parse(candidate: "0");
+        var writtenKey = CellName.Parse(candidate: "0");
 
         Assert.NotNull(@object: restoredRow);
         Assert.Equal(

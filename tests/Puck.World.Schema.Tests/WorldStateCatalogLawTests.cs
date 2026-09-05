@@ -35,7 +35,7 @@ public sealed class WorldStateCatalogLawTests {
     public void TryResolve_UsesOwnershipAndName_ThenDescriptorAccessNeedsNoName() {
         var catalog = WorldStateCatalog.Compile(section: BuildSection());
 
-        Assert.True(condition: catalog.TryResolve(lane: WorldStateOwnershipLane.World, name: WorldCellName.Parse(candidate: "score"), handle: out var score));
+        Assert.True(condition: catalog.TryResolve(lane: WorldStateOwnershipLane.World, name: CellName.Parse(candidate: "score"), handle: out var score));
         Assert.True(condition: catalog.TryResolve(handle: out var jumpUses, lane: WorldStateOwnershipLane.Body, name: "jumpUses"));
         Assert.Equal(expected: "score", actual: catalog[score].Name);
         Assert.Equal(expected: 0, actual: catalog[score].LaneOrdinal);
@@ -102,7 +102,7 @@ public sealed class WorldStateCatalogLawTests {
         Assert.True(condition: originalCatalog.TryResolve(handle: out var score, lane: WorldStateOwnershipLane.World, name: "score"));
 
         var replaced = original with {
-            StateRaw = new WorldStateSection(World: [new WorldStateRow(Name: WorldCellName.Parse(candidate: "round"), Kind: CellKind.Int)]),
+            StateRaw = new WorldStateSection(World: [new WorldStateRow(Name: CellName.Parse(candidate: "round"), Kind: CellKind.Int)]),
         };
 
         Assert.False(condition: replaced.StateCatalog.TryResolve(handle: out _, lane: WorldStateOwnershipLane.World, name: "score"));
@@ -132,7 +132,7 @@ public sealed class WorldStateCatalogLawTests {
     [Fact]
     public void WorldDefinition_InPlaceCallerArrayMutationCannotLeaveAStaleCatalog() {
         WorldStateRow[] rows = [new WorldStateRow(
-            Name: WorldCellName.Parse(candidate: "score"),
+            Name: CellName.Parse(candidate: "score"),
             Kind: CellKind.Int
         )];
         var definition = new WorldDefinition(StateRaw: new WorldStateSection(World: rows));
@@ -141,7 +141,7 @@ public sealed class WorldStateCatalogLawTests {
         Assert.True(condition: original.TryResolve(handle: out var score, lane: WorldStateOwnershipLane.World, name: "score"));
 
         rows[0] = new WorldStateRow(
-            Name: WorldCellName.Parse(candidate: "round"),
+            Name: CellName.Parse(candidate: "round"),
             Kind: CellKind.Int
         );
         var refreshed = definition.StateCatalog;
@@ -174,20 +174,20 @@ public sealed class WorldStateCatalogLawTests {
 
     private static WorldStateSection BuildSection() => new(
         World: [
-            new WorldStateRow(Name: WorldCellName.Parse(candidate: "score"), Kind: CellKind.Int),
+            new WorldStateRow(Name: CellName.Parse(candidate: "score"), Kind: CellKind.Int),
             new WorldStateRow(
-                Name: WorldCellName.Parse(candidate: "labels"),
+                Name: CellName.Parse(candidate: "labels"),
                 Kind: CellKind.Text,
                 Capacity: 4,
-                Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "primary"), Text: "ready")]
+                Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "primary"), Text: "ready")]
             ),
             new WorldStateRow(
-                Name: WorldCellName.Parse(candidate: "heat"),
+                Name: CellName.Parse(candidate: "heat"),
                 Kind: CellKind.Fixed,
                 Domain: new WorldStateDomain.CellsOf(Topology: "ground"),
                 Field: new WorldStateFieldTrait()
             ),
-            new WorldStateRow(Name: WorldCellName.Parse(candidate: "open"), Kind: CellKind.Bool),
+            new WorldStateRow(Name: CellName.Parse(candidate: "open"), Kind: CellKind.Bool),
         ],
         Body: [new ActionStateSlot(Name: "jumpUses", Kind: ActionStateKind.Counter)],
         Identity: [new ActionStateSlot(Name: "cooldown", Kind: ActionStateKind.Timer)]

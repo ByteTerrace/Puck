@@ -85,7 +85,7 @@ public sealed class WorldKeyedDrawLawTests {
         ]),
         Rules = [],
     };
-    private static WorldCellName Name(string value) => WorldCellName.Parse(value);
+    private static CellName Name(string value) => CellName.Parse(value);
     private static WorldStateCell Cell(string key, long value = 0) => new(Name(key), value);
     private static WorldStateRow Find(WorldDefinition document, string row) => WorldDefinitionRows.FindStateRow(document.State, row)!;
 }

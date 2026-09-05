@@ -1013,11 +1013,11 @@ public sealed class DocumentBasisLawTests {
 
         Assert.Equal(
             expected: 9L,
-            actual: WorldDefinitionRows.FindCell(cells: refinedRow.Cells, key: WorldCellName.Parse(candidate: "a"))!.Value
+            actual: WorldDefinitionRows.FindCell(cells: refinedRow.Cells, key: CellName.Parse(candidate: "a"))!.Value
         );
         Assert.Equal(
             expected: 2L,
-            actual: WorldDefinitionRows.FindCell(cells: refinedRow.Cells, key: WorldCellName.Parse(candidate: "b"))!.Value
+            actual: WorldDefinitionRows.FindCell(cells: refinedRow.Cells, key: CellName.Parse(candidate: "b"))!.Value
         );
 
         // Control: a leading `$replace` marker still opts into the old wholesale-replace behavior.
@@ -1043,7 +1043,7 @@ public sealed class DocumentBasisLawTests {
         Assert.Single(collection: replacedRow.Cells!);
         Assert.Equal(
             expected: 9L,
-            actual: WorldDefinitionRows.FindCell(cells: replacedRow.Cells, key: WorldCellName.Parse(candidate: "a"))!.Value
+            actual: WorldDefinitionRows.FindCell(cells: replacedRow.Cells, key: CellName.Parse(candidate: "a"))!.Value
         );
     }
 }

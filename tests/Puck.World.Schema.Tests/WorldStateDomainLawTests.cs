@@ -24,19 +24,19 @@ public sealed class WorldStateDomainLawTests {
 
     [Fact]
     public void UnauthoredRow_InfersSlotOrKeys_FromCellsAlone() {
-        var emptySlot = new WorldStateRow(WorldCellName.Parse("empty"), CellKind.Int);
+        var emptySlot = new WorldStateRow(CellName.Parse("empty"), CellKind.Int);
         Assert.True(emptySlot.IsSlot);
         Assert.False(emptySlot.IsKeyed);
         Assert.IsType<WorldStateDomain.Slot>(@object: emptySlot.EffectiveDomain);
 
-        var oneValue = new WorldStateRow(WorldCellName.Parse("v"), CellKind.Int, Cells: [new(WorldStateRow.SlotKey, 5)]);
+        var oneValue = new WorldStateRow(CellName.Parse("v"), CellKind.Int, Cells: [new(WorldStateRow.SlotKey, 5)]);
         Assert.True(oneValue.IsSlot);
         Assert.IsType<WorldStateDomain.Slot>(@object: oneValue.EffectiveDomain);
 
         // Control: a declared capacity, or more than one cell, or a single non-slot-keyed cell all infer Keys instead.
-        var byCapacity = new WorldStateRow(WorldCellName.Parse("cap"), CellKind.Int, Capacity: 3);
-        var byCellCount = new WorldStateRow(WorldCellName.Parse("many"), CellKind.Int, Cells: [new(WorldCellName.Parse("a"), 1), new(WorldCellName.Parse("b"), 2)]);
-        var byKeyedSingle = new WorldStateRow(WorldCellName.Parse("one"), CellKind.Int, Cells: [new(WorldCellName.Parse("a"), 1)]);
+        var byCapacity = new WorldStateRow(CellName.Parse("cap"), CellKind.Int, Capacity: 3);
+        var byCellCount = new WorldStateRow(CellName.Parse("many"), CellKind.Int, Cells: [new(CellName.Parse("a"), 1), new(CellName.Parse("b"), 2)]);
+        var byKeyedSingle = new WorldStateRow(CellName.Parse("one"), CellKind.Int, Cells: [new(CellName.Parse("a"), 1)]);
         foreach (var row in new[] { byCapacity, byCellCount, byKeyedSingle }) {
             Assert.False(row.IsSlot);
             Assert.True(row.IsKeyed);
@@ -49,8 +49,8 @@ public sealed class WorldStateDomainLawTests {
 
     [Fact]
     public void KeysOf_OrderedGivesZoneSemanticsAndUnorderedGivesAttributeSemantics() {
-        var zone = new WorldStateRow(WorldCellName.Parse("pile"), CellKind.Bool, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true), Capacity: 1, Cells: [new(WorldCellName.Parse("t1"), 1)]);
-        var attribute = new WorldStateRow(WorldCellName.Parse("rank"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards")), Cells: [new(WorldCellName.Parse("t1"), 7)]);
+        var zone = new WorldStateRow(CellName.Parse("pile"), CellKind.Bool, Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), Capacity: 1, Cells: [new(CellName.Parse("t1"), 1)]);
+        var attribute = new WorldStateRow(CellName.Parse("rank"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards")), Cells: [new(CellName.Parse("t1"), 7)]);
 
         Assert.True(zone.IsKeyed);
         Assert.True(attribute.IsKeyed);
@@ -62,10 +62,10 @@ public sealed class WorldStateDomainLawTests {
 
         // Control: the underlying domain row is a plain Keys row, not a KeysOf — a row can point AT a domain without
         // becoming indistinguishable from one.
-        var domainRow = new WorldStateRow(WorldCellName.Parse("domain"), CellKind.Int, Capacity: 4);
+        var domainRow = new WorldStateRow(CellName.Parse("domain"), CellKind.Int, Capacity: 4);
         Assert.IsType<WorldStateDomain.Keys>(@object: domainRow.EffectiveDomain);
 
-        var cards = new WorldStateRow(WorldCellName.Parse("cards"), CellKind.Int, Capacity: 1, Cells: [new(WorldCellName.Parse("t1"), 0)]);
+        var cards = new WorldStateRow(CellName.Parse("cards"), CellKind.Int, Capacity: 1, Cells: [new(CellName.Parse("t1"), 0)]);
         var deck = Document(cards, zone);
         Assert.Equal(expected: string.Empty, actual: Validate(deck));
 
@@ -75,22 +75,22 @@ public sealed class WorldStateDomainLawTests {
 
     [Fact]
     public void KeysOf_RefusesAnEmptyDomainAndABoardDomain() {
-        var emptyDomain = new WorldStateRow(WorldCellName.Parse("cards"), CellKind.Int, Capacity: 4);
-        var attribute = new WorldStateRow(WorldCellName.Parse("rank"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards")), Cells: [new(WorldCellName.Parse("t1"), 7)]);
+        var emptyDomain = new WorldStateRow(CellName.Parse("cards"), CellKind.Int, Capacity: 4);
+        var attribute = new WorldStateRow(CellName.Parse("rank"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards")), Cells: [new(CellName.Parse("t1"), 7)]);
         Assert.Contains(expectedSubstring: "outside token domain", actualString: Validate(Document(emptyDomain, attribute)));
 
         // Control: the same attribute row against a domain row that already carries its keys validates clean.
-        var populatedDomain = emptyDomain with { Cells = [new(WorldCellName.Parse("t1"), 0)] };
+        var populatedDomain = emptyDomain with { Cells = [new(CellName.Parse("t1"), 0)] };
         Assert.Equal(expected: string.Empty, actual: Validate(Document(populatedDomain, attribute)));
 
-        var board = new WorldStateRow(WorldCellName.Parse("board"), CellKind.Int, Domain: new WorldStateDomain.CellsOf(Topology: "board"));
-        var attributeOverBoard = new WorldStateRow(WorldCellName.Parse("owner"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("board")));
+        var board = new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new WorldStateDomain.CellsOf(Topology: "board"));
+        var attributeOverBoard = new WorldStateRow(CellName.Parse("owner"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(CellName.Parse("board")));
         Assert.Contains(expectedSubstring: "names no token domain", actualString: Validate(Document(board, attributeOverBoard)));
     }
 
     [Fact]
     public void CellsOf_AddressesATopologyAndAdmitsAnUnwrittenEmptyFill() {
-        var board = new WorldStateRow(WorldCellName.Parse("occupancy"), CellKind.Int, Domain: new WorldStateDomain.CellsOf(Topology: "board", Empty: -1), Cells: [new(WorldCellName.Parse("0"), 3)]);
+        var board = new WorldStateRow(CellName.Parse("occupancy"), CellKind.Int, Domain: new WorldStateDomain.CellsOf(Topology: "board", Empty: -1), Cells: [new(CellName.Parse("0"), 3)]);
         var domain = Assert.IsType<WorldStateDomain.CellsOf>(@object: board.EffectiveDomain);
         Assert.Equal(expected: "board", actual: domain.Topology);
         Assert.Equal(expected: -1L, actual: domain.Empty);
@@ -105,7 +105,7 @@ public sealed class WorldStateDomainLawTests {
 
     [Fact]
     public void Ring_KeepsCapacitySlotsAndAnEmptyFillOffTheDomainNotTheRow() {
-        var ring = new WorldStateRow(WorldCellName.Parse("taps"), CellKind.Int, Domain: new WorldStateDomain.Ring(Capacity: 3, Empty: -1), HistoryCursor: 1, Cells: [new(WorldCellName.Parse("0"), 9)]);
+        var ring = new WorldStateRow(CellName.Parse("taps"), CellKind.Int, Domain: new WorldStateDomain.Ring(Capacity: 3, Empty: -1), HistoryCursor: 1, Cells: [new(CellName.Parse("0"), 9)]);
         var domain = Assert.IsType<WorldStateDomain.Ring>(@object: ring.EffectiveDomain);
         Assert.Equal(expected: 3, actual: domain.Capacity);
         Assert.Equal(expected: -1L, actual: domain.Empty);
@@ -120,11 +120,11 @@ public sealed class WorldStateDomainLawTests {
 
     [Fact]
     public void EveryCase_RoundTripsThroughTheDollarTypeDiscriminatedWire() {
-        var slot = new WorldStateRow(WorldCellName.Parse("slot"), CellKind.Int, Domain: new WorldStateDomain.Slot(), Cells: [new(WorldStateRow.SlotKey, 1)]);
-        var keys = new WorldStateRow(WorldCellName.Parse("keys"), CellKind.Int, Domain: new WorldStateDomain.Keys(), Capacity: 2, Cells: [new(WorldCellName.Parse("a"), 1)]);
-        var keysOf = new WorldStateRow(WorldCellName.Parse("keysOf"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("keys"), Ordered: false), Cells: [new(WorldCellName.Parse("a"), 1)]);
-        var cellsOf = new WorldStateRow(WorldCellName.Parse("cellsOf"), CellKind.Int, Domain: new WorldStateDomain.CellsOf(Topology: "board", Empty: 2));
-        var ring = new WorldStateRow(WorldCellName.Parse("ring"), CellKind.Int, Domain: new WorldStateDomain.Ring(Capacity: 4, Empty: 7));
+        var slot = new WorldStateRow(CellName.Parse("slot"), CellKind.Int, Domain: new WorldStateDomain.Slot(), Cells: [new(WorldStateRow.SlotKey, 1)]);
+        var keys = new WorldStateRow(CellName.Parse("keys"), CellKind.Int, Domain: new WorldStateDomain.Keys(), Capacity: 2, Cells: [new(CellName.Parse("a"), 1)]);
+        var keysOf = new WorldStateRow(CellName.Parse("keysOf"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(CellName.Parse("keys"), Ordered: false), Cells: [new(CellName.Parse("a"), 1)]);
+        var cellsOf = new WorldStateRow(CellName.Parse("cellsOf"), CellKind.Int, Domain: new WorldStateDomain.CellsOf(Topology: "board", Empty: 2));
+        var ring = new WorldStateRow(CellName.Parse("ring"), CellKind.Int, Domain: new WorldStateDomain.Ring(Capacity: 4, Empty: 7));
 
         var definition = Document(slot, keys, keysOf, cellsOf, ring);
         Assert.Equal(expected: string.Empty, actual: Validate(definition));
@@ -138,7 +138,7 @@ public sealed class WorldStateDomainLawTests {
 
     [Fact]
     public void UnauthoredPhaseRow_InfersKeys_NeverSlot() {
-        var phase = new WorldStateRow(WorldCellName.Parse("turns"), CellKind.Int, Phase: new WorldStatePhase(Sequence: 1));
+        var phase = new WorldStateRow(CellName.Parse("turns"), CellKind.Int, Phase: new WorldStatePhase(Sequence: 1));
         Assert.True(phase.IsKeyed);
         Assert.False(phase.IsSlot);
         Assert.IsType<WorldStateDomain.Keys>(@object: phase.EffectiveDomain);
@@ -151,10 +151,10 @@ public sealed class WorldStateDomainLawTests {
 
     [Fact]
     public void CellCeiling_HonoursAnAuthoredCapacityUpToTheOneBoundAndDefaultsTheRoomOtherwise() {
-        var ordinary = new WorldStateRow(WorldCellName.Parse("plain"), CellKind.Int, Capacity: 200);
-        var linked = new WorldStateRow(WorldCellName.Parse("linked"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("domain")), Capacity: 200);
-        var unauthored = new WorldStateRow(WorldCellName.Parse("room"), CellKind.Int, Cells: [new WorldStateCell(WorldCellName.Parse("a"), 0L)]);
-        var oversized = new WorldStateRow(WorldCellName.Parse("big"), CellKind.Int, Capacity: WorldStateCapacity.MaxCellsPerRow + 1);
+        var ordinary = new WorldStateRow(CellName.Parse("plain"), CellKind.Int, Capacity: 200);
+        var linked = new WorldStateRow(CellName.Parse("linked"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(CellName.Parse("domain")), Capacity: 200);
+        var unauthored = new WorldStateRow(CellName.Parse("room"), CellKind.Int, Cells: [new WorldStateCell(CellName.Parse("a"), 0L)]);
+        var oversized = new WorldStateRow(CellName.Parse("big"), CellKind.Int, Capacity: WorldStateCapacity.MaxCellsPerRow + 1);
 
         Assert.Equal(expected: 200, actual: ordinary.CellCeiling);
         Assert.Equal(expected: 200, actual: linked.CellCeiling);

@@ -63,9 +63,9 @@ public sealed class DeliveredDocumentIdentifierLawTests {
             ],
             StateRaw = new WorldStateSection(World: [
                 new WorldStateRow(
-                    Name: WorldCellName.Parse(candidate: GroupRow),
+                    Name: CellName.Parse(candidate: GroupRow),
                     Kind: CellKind.Text,
-                    Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: GroupKey), Text: groupName)]
+                    Cells: [new WorldStateCell(Key: CellName.Parse(candidate: GroupKey), Text: groupName)]
                 ),
             ]),
         });

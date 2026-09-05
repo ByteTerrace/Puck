@@ -75,7 +75,7 @@ public abstract record WorldGroupSelector {
 /// layers under: no live mutation arm, no <c>Protocol.WorldSection</c> axis, no grant subject. Making a destination
 /// live-editable later is a complete mutation-axis addition, not an accidental consequence of introducing the
 /// row.</remarks>
-/// <param name="Name">The destination's own name — <see cref="WorldSafeName"/>-shaped, unique within the section. A
+/// <param name="Name">The destination's own name — <see cref="SafeName"/>-shaped, unique within the section. A
 /// <see cref="WorldPlacementPortal.Destination"/> facet resolves against this name (see
 /// <see cref="WorldDefinitionValidator"/>).</param>
 /// <param name="Reference">The <see cref="WorldReference.Name"/> of the <c>references</c> row this destination
@@ -92,7 +92,7 @@ public abstract record WorldGroupSelector {
 /// <see cref="WorldDestinationScope.Group"/> — a selector on any other scope, or a group scope with none, refuses by
 /// name (see <see cref="WorldDefinitionValidator"/>).</param>
 public sealed record WorldDestination(
-    WorldSafeName Name,
+    SafeName Name,
     string Reference,
     WorldDestinationDurability Durability,
     WorldDestinationScope Scope = WorldDestinationScope.Global,

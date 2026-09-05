@@ -18,9 +18,9 @@ public sealed class WorldRenderLightingSkyLawTests {
         tick: 0UL
     );
     private static WorldStateRow ColorsRow(string hex) => new(
-        Name: WorldCellName.Parse(candidate: "colors"),
+        Name: CellName.Parse(candidate: "colors"),
         Kind: CellKind.Text,
-        Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "sun"), Text: hex)]
+        Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "sun"), Text: hex)]
     );
 
     [Fact]
@@ -57,7 +57,7 @@ public sealed class WorldRenderLightingSkyLawTests {
             lawId: "render.lighting.sun-color-binding-kind",
             deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
                 RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Sun: new WorldRenderSun(Color: "state.colors.sun")) },
-                StateRaw = new WorldStateSection(World: [new WorldStateRow(Name: WorldCellName.Parse(candidate: "colors"), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "sun"), Value: 7L)])]),
+                StateRaw = new WorldStateSection(World: [new WorldStateRow(Name: CellName.Parse(candidate: "colors"), Kind: CellKind.Int, Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "sun"), Value: 7L)])]),
             })),
             controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
                 RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Sun: new WorldRenderSun(Color: "state.colors.sun")) },

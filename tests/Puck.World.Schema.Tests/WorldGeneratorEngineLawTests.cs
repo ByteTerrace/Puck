@@ -211,7 +211,7 @@ public sealed class WorldGeneratorEngineLawTests {
         Assert.Equal(expected: 1, actual: restarted.Masks![0].Count);
     }
 
-    private static WorldCellName Name(string value) => WorldCellName.Parse(candidate: value);
+    private static CellName Name(string value) => CellName.Parse(candidate: value);
     private static WorldGenerator DrawGenerator(WorldGeneratorMode mode) => new(
         Source: WorldGeneratorSource.Markov,
         Start: Name(value: "pool"),

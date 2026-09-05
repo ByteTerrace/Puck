@@ -20,7 +20,7 @@ public sealed class ReviewFixLawTests {
         StateRaw: new WorldStateSection(World: rows)
     );
     private static WorldStateRow Slot(string name, CellKind kind, long value, WorldStateAdvance? advance = null, WorldStateCycle? cycle = null) => new(
-        Name: WorldCellName.Parse(candidate: name),
+        Name: CellName.Parse(candidate: name),
         Kind: kind,
         Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: value)],
         Advance: advance,
@@ -34,9 +34,9 @@ public sealed class ReviewFixLawTests {
         // A keyed cell minted beside a row-level advance: the boot walk refuses it, so the live door must too.
         var keyedBesideAdvance = Definition(rows: [
             new WorldStateRow(
-                Name: WorldCellName.Parse(candidate: "regen"),
+                Name: CellName.Parse(candidate: "regen"),
                 Kind: CellKind.Int,
-                Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 10), new WorldStateCell(Key: WorldCellName.Parse(candidate: "1"), Value: 5)],
+                Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 10), new WorldStateCell(Key: CellName.Parse(candidate: "1"), Value: 5)],
                 Advance: new WorldStateAdvance(RateDenominator: 1, RateNumerator: 1)
             ),
         ]);
@@ -59,11 +59,11 @@ public sealed class ReviewFixLawTests {
     public void ADriveGateRow_NeverCarriesACyclingCell() {
         var gate = Definition(rows: [
             new WorldStateRow(
-                Name: WorldCellName.Parse(candidate: "gate"),
+                Name: CellName.Parse(candidate: "gate"),
                 Kind: CellKind.Int,
                 Capacity: 4,
                 GatesDrive: true,
-                Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: 0, Cycle: new WorldStateCycle())]
+                Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: 0, Cycle: new WorldStateCycle())]
             ),
         ]);
 
@@ -72,7 +72,7 @@ public sealed class ReviewFixLawTests {
     [Fact]
     public void PersistedMasks_MustFitTheSitesSource() {
         static WorldStateRow Site(WorldGenerator generator, IReadOnlyList<ClosedBitset256>? masks) => new(
-            Name: WorldCellName.Parse(candidate: "loot"),
+            Name: CellName.Parse(candidate: "loot"),
             Kind: CellKind.Int,
             Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 1)],
             Draw: new WorldDraw(Generator: generator, Timing: WorldDrawTiming.Event),
@@ -96,7 +96,7 @@ public sealed class ReviewFixLawTests {
         static CompiledWorldPredicate Compile(ActionStateComparison comparison, decimal literal, CellKind kind = CellKind.Int) {
             var definition = Definition(
                 rows: [Slot(name: "count", kind: kind, value: 2)],
-                rules: [new WorldRule(Name: WorldCellName.Parse(candidate: "probe"), Effects: [new ActionEffect.SetState(State: "count", Value: 1m)], Gate: new ActionPredicate.CompareState(State: "count", Comparison: comparison, Value: literal), Mode: ActionTriggerMode.Edge)]
+                rules: [new WorldRule(Name: CellName.Parse(candidate: "probe"), Effects: [new ActionEffect.SetState(State: "count", Value: 1m)], Gate: new ActionPredicate.CompareState(State: "count", Comparison: comparison, Value: literal), Mode: ActionTriggerMode.Edge)]
             );
 
             return WorldRuleCompiler.CompileAll(definition: definition)[0].Gate[0];
@@ -135,13 +135,13 @@ public sealed class ReviewFixLawTests {
     [Fact]
     public void ARuleGenerate_ReachesALatticeDrawFill() {
         var lattice = new WorldStateRow(
-            Name: WorldCellName.Parse(candidate: "tiles"),
+            Name: CellName.Parse(candidate: "tiles"),
             Kind: CellKind.Fixed,
             Domain: new WorldStateDomain.CellsOf(Topology: "grid"),
             Field: new WorldStateFieldTrait(Max: 4f, Paint: [new WorldLatticeFill.Draw(Generator: new WorldGenerator(Source: WorldGeneratorSource.UniformRange, RangeMin: 0, RangeMax: 65536))])
         );
         var definition = new WorldDefinition(
-            Rules: [new WorldRule(Name: WorldCellName.Parse(candidate: "redraw"), Effects: [new ActionEffect.Generate(Row: "tiles")], Mode: ActionTriggerMode.Edge)],
+            Rules: [new WorldRule(Name: CellName.Parse(candidate: "redraw"), Effects: [new ActionEffect.Generate(Row: "tiles")], Mode: ActionTriggerMode.Edge)],
             Simulation: new WorldSimulationDefaults(RateHz: 240),
             StateRaw: new WorldStateSection(
                 World: [lattice],
@@ -155,7 +155,7 @@ public sealed class ReviewFixLawTests {
     [Fact]
     public void DynamicsState_RoundTripsInTheFixedSpelling_OnAnIntRow() {
         var row = new WorldStateRow(
-            Name: WorldCellName.Parse(candidate: "gauge"),
+            Name: CellName.Parse(candidate: "gauge"),
             Kind: CellKind.Int,
             Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 300)],
             Dynamics: new WorldStateDynamics(Row: "critical", Y0: (300L << FixedQ4816.FractionBitCount), V0: (5L << FixedQ4816.FractionBitCount), EpochTick: 7)

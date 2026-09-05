@@ -63,7 +63,7 @@ public enum WorldDrawTiming : byte {
 /// <param name="Secret">An authority-provisioned 256-bit secret for an independently keyed streamDraw sample at each cursor. Never sent in observations.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldDraw(
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCellName? Source = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CellName? Source = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldGenerator? Generator = null,
     WorldDrawTiming Timing = WorldDrawTiming.Boot,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ClosedBitset256? Secret = null
@@ -108,5 +108,5 @@ public static class WorldDrawSites {
     /// under.</summary>
     /// <param name="rowName">The site row's name.</param>
     /// <returns>The site descriptor.</returns>
-    public static string StateRow(WorldCellName rowName) => $"state.{rowName}";
+    public static string StateRow(CellName rowName) => $"state.{rowName}";
 }

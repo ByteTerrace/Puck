@@ -1,7 +1,7 @@
 namespace Puck.State;
 
 /// <summary>One opcode in a compiled numeric world-rule expression.</summary>
-public enum WorldExpressionOp : byte {
+public enum ExpressionOp : byte {
     /// <summary>Push a compile-time literal.</summary>
     Constant,
     /// <summary>Push a live state/channel operand.</summary>

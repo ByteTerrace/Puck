@@ -9,7 +9,7 @@ internal sealed class WorldGrain(WorldSiloHost host) : Grain, IWorldGrain {
     private WorldAuthorityIdentity Identity() {
         var owner = this.GetPrimaryKey(keyExt: out var worldExtension);
 
-        if (!WorldSafeName.TryParse(
+        if (!SafeName.TryParse(
             candidate: worldExtension,
             name: out var world,
             reason: out var reason

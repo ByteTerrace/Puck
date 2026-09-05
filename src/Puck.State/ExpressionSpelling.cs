@@ -4,8 +4,8 @@ using System.Text;
 namespace Puck.State;
 
 /// <summary>
-/// The infix spelling of a <see cref="WorldValueExpression"/> — <c>"min(damage, hp) * 2 - armor[$each]"</c> — and
-/// its inverse. It is SYNTAX ONLY: a spelling parses to exactly the postfix <see cref="WorldValueToken"/> list an
+/// The infix spelling of a <see cref="ValueExpression"/> — <c>"min(damage, hp) * 2 - armor[$each]"</c> — and
+/// its inverse. It is SYNTAX ONLY: a spelling parses to exactly the postfix <see cref="ValueToken"/> list an
 /// author could have written by hand, and the compiler proves, prices, and evaluates that list exactly as before,
 /// so the infix form adds no semantics, no cost, and no second evaluator. Every token kind has one spelling:
 /// <list type="bullet">
@@ -32,31 +32,31 @@ namespace Puck.State;
 /// The ternary colon must not be glued to a <c>$</c>-name on both sides (<c>a ? $bind:x : 0</c> spaces it), which is
 /// the one place the two uses of <c>:</c> could meet.
 /// </summary>
-public static class WorldExpressionSyntax {
+public static class ExpressionSpelling {
     /// <summary>The longest spelling admitted, a capacity bound on the parser's input rather than on the expression
     /// (the 64-token ceiling still applies to what it parses to).</summary>
     public const int MaxLength = 4096;
 
-    private static readonly Dictionary<string, (int Arity, Func<WorldValueToken> Make)> Calls = new(comparer: StringComparer.Ordinal) {
-        ["min"] = (2, static () => new WorldValueToken.Min()),
-        ["max"] = (2, static () => new WorldValueToken.Max()),
-        ["clamp"] = (3, static () => new WorldValueToken.Clamp()),
-        ["abs"] = (1, static () => new WorldValueToken.Abs()),
-        ["sign"] = (1, static () => new WorldValueToken.Sign()),
-        ["popCount"] = (1, static () => new WorldValueToken.PopCount()),
-        ["leadingZeroCount"] = (1, static () => new WorldValueToken.LeadingZeroCount()),
-        ["trailingZeroCount"] = (1, static () => new WorldValueToken.TrailingZeroCount()),
-        ["lowestSetBit"] = (1, static () => new WorldValueToken.LowestSetBit()),
-        ["clearLowestSetBit"] = (1, static () => new WorldValueToken.ClearLowestSetBit()),
-        ["byteSwap"] = (1, static () => new WorldValueToken.ByteSwap()),
-        ["bitReverse"] = (1, static () => new WorldValueToken.BitReverse()),
-        ["rotateLeft"] = (2, static () => new WorldValueToken.RotateLeft()),
-        ["rotateRight"] = (2, static () => new WorldValueToken.RotateRight()),
-        ["parallelBitExtract"] = (2, static () => new WorldValueToken.ParallelBitExtract()),
-        ["parallelBitDeposit"] = (2, static () => new WorldValueToken.ParallelBitDeposit()),
-        ["bitField"] = (3, static () => new WorldValueToken.BitField()),
-        ["bitInsert"] = (4, static () => new WorldValueToken.BitInsert()),
-        ["select"] = (3, static () => new WorldValueToken.Select()),
+    private static readonly Dictionary<string, (int Arity, Func<ValueToken> Make)> Calls = new(comparer: StringComparer.Ordinal) {
+        ["min"] = (2, static () => new ValueToken.Min()),
+        ["max"] = (2, static () => new ValueToken.Max()),
+        ["clamp"] = (3, static () => new ValueToken.Clamp()),
+        ["abs"] = (1, static () => new ValueToken.Abs()),
+        ["sign"] = (1, static () => new ValueToken.Sign()),
+        ["popCount"] = (1, static () => new ValueToken.PopCount()),
+        ["leadingZeroCount"] = (1, static () => new ValueToken.LeadingZeroCount()),
+        ["trailingZeroCount"] = (1, static () => new ValueToken.TrailingZeroCount()),
+        ["lowestSetBit"] = (1, static () => new ValueToken.LowestSetBit()),
+        ["clearLowestSetBit"] = (1, static () => new ValueToken.ClearLowestSetBit()),
+        ["byteSwap"] = (1, static () => new ValueToken.ByteSwap()),
+        ["bitReverse"] = (1, static () => new ValueToken.BitReverse()),
+        ["rotateLeft"] = (2, static () => new ValueToken.RotateLeft()),
+        ["rotateRight"] = (2, static () => new ValueToken.RotateRight()),
+        ["parallelBitExtract"] = (2, static () => new ValueToken.ParallelBitExtract()),
+        ["parallelBitDeposit"] = (2, static () => new ValueToken.ParallelBitDeposit()),
+        ["bitField"] = (3, static () => new ValueToken.BitField()),
+        ["bitInsert"] = (4, static () => new ValueToken.BitInsert()),
+        ["select"] = (3, static () => new ValueToken.Select()),
     };
 
     /// <summary>Parses an infix spelling to its postfix token list.</summary>
@@ -64,7 +64,7 @@ public static class WorldExpressionSyntax {
     /// <param name="tokens">The tokens, in evaluation order, when the spelling parses.</param>
     /// <param name="error">Why it did not, naming the character position, or empty.</param>
     /// <returns><see langword="true"/> when <paramref name="text"/> is a well-formed expression.</returns>
-    public static bool TryParse(string? text, out IReadOnlyList<WorldValueToken> tokens, out string error) {
+    public static bool TryParse(string? text, out IReadOnlyList<ValueToken> tokens, out string error) {
         tokens = [];
         if (string.IsNullOrWhiteSpace(value: text)) {
             error = "is empty";
@@ -78,7 +78,7 @@ public static class WorldExpressionSyntax {
         try {
             var root = parser.ParseExpression();
             parser.ExpectEnd();
-            var list = new List<WorldValueToken>();
+            var list = new List<ValueToken>();
             root.Emit(into: list);
             tokens = list;
             error = string.Empty;
@@ -95,7 +95,7 @@ public static class WorldExpressionSyntax {
     /// <param name="text">The spelling, when the list is a well-formed postfix program.</param>
     /// <returns><see langword="false"/> when the list underflows or leaves more than one value — a list the compiler
     /// would refuse too.</returns>
-    public static bool TryPrint(IReadOnlyList<WorldValueToken> tokens, out string text) {
+    public static bool TryPrint(IReadOnlyList<ValueToken> tokens, out string text) {
         ArgumentNullException.ThrowIfNull(tokens);
         var stack = new Stack<Node>();
         foreach (var token in tokens) {
@@ -121,7 +121,7 @@ public static class WorldExpressionSyntax {
     /// <param name="tokens">The postfix tokens.</param>
     /// <returns>The spelling.</returns>
     /// <exception cref="ArgumentException">The list underflows or leaves more than one value.</exception>
-    public static string Print(IReadOnlyList<WorldValueToken> tokens) =>
+    public static string Print(IReadOnlyList<ValueToken> tokens) =>
         (TryPrint(tokens: tokens, text: out var text)
             ? text
             : throw new ArgumentException(message: "the token list is not a well-formed postfix expression", paramName: nameof(tokens))
@@ -154,21 +154,21 @@ public static class WorldExpressionSyntax {
     private static string QuoteName(string name) =>
         (IsBareName(name: name) ? name : $"`{name}`");
 
-    private static Node? Lower(WorldValueToken token, Stack<Node> stack) {
+    private static Node? Lower(ValueToken token, Stack<Node> stack) {
         switch (token) {
-            case WorldValueToken.Constant constant:
+            case ValueToken.Constant constant:
                 return new Literal(Value: constant.Value);
-            case WorldValueToken.State state:
+            case ValueToken.State state:
                 return new StateRead(Name: state.Name, Key: state.Key);
-            case WorldValueToken.BoardShift shift:
+            case ValueToken.BoardShift shift:
                 return (stack.Count >= 1) ? new Call(Name: "boardShift", Arguments: [stack.Pop()], Names: [shift.Topology, shift.Direction]) : null;
-            case WorldValueToken.BoardImage image:
+            case ValueToken.BoardImage image:
                 return (stack.Count >= 1) ? new Call(Name: "boardImage", Arguments: [stack.Pop()], Names: [image.Topology, image.Element]) : null;
-            case WorldValueToken.Select:
+            case ValueToken.Select:
                 return Pop(stack, 3) is { } branches ? new Ternary(Condition: branches[0], WhenTrue: branches[1], WhenFalse: branches[2]) : null;
-            case WorldValueToken.Negate:
+            case ValueToken.Negate:
                 return (stack.Count >= 1) ? new Unary(Operator: "-", Operand: stack.Pop()) : null;
-            case WorldValueToken.BitNot:
+            case ValueToken.BitNot:
                 return (stack.Count >= 1) ? new Unary(Operator: "~", Operand: stack.Pop()) : null;
         }
         if (BinaryOperator(token: token) is { } symbol) {
@@ -193,45 +193,45 @@ public static class WorldExpressionSyntax {
         return result;
     }
 
-    private static string? BinaryOperator(WorldValueToken token) => token switch {
-        WorldValueToken.Add => "+",
-        WorldValueToken.Subtract => "-",
-        WorldValueToken.Multiply => "*",
-        WorldValueToken.Divide => "/",
-        WorldValueToken.Modulo => "%",
-        WorldValueToken.BitAnd => "&",
-        WorldValueToken.BitOr => "|",
-        WorldValueToken.BitXor => "^",
-        WorldValueToken.ShiftLeft => "<<",
-        WorldValueToken.ShiftRight => ">>",
-        WorldValueToken.ShiftRightLogical => ">>>",
-        WorldValueToken.Equal => "==",
-        WorldValueToken.NotEqual => "!=",
-        WorldValueToken.Less => "<",
-        WorldValueToken.LessOrEqual => "<=",
-        WorldValueToken.Greater => ">",
-        WorldValueToken.GreaterOrEqual => ">=",
+    private static string? BinaryOperator(ValueToken token) => token switch {
+        ValueToken.Add => "+",
+        ValueToken.Subtract => "-",
+        ValueToken.Multiply => "*",
+        ValueToken.Divide => "/",
+        ValueToken.Modulo => "%",
+        ValueToken.BitAnd => "&",
+        ValueToken.BitOr => "|",
+        ValueToken.BitXor => "^",
+        ValueToken.ShiftLeft => "<<",
+        ValueToken.ShiftRight => ">>",
+        ValueToken.ShiftRightLogical => ">>>",
+        ValueToken.Equal => "==",
+        ValueToken.NotEqual => "!=",
+        ValueToken.Less => "<",
+        ValueToken.LessOrEqual => "<=",
+        ValueToken.Greater => ">",
+        ValueToken.GreaterOrEqual => ">=",
         _ => null,
     };
 
-    private static WorldValueToken BinaryToken(string symbol) => symbol switch {
-        "+" => new WorldValueToken.Add(),
-        "-" => new WorldValueToken.Subtract(),
-        "*" => new WorldValueToken.Multiply(),
-        "/" => new WorldValueToken.Divide(),
-        "%" => new WorldValueToken.Modulo(),
-        "&" => new WorldValueToken.BitAnd(),
-        "|" => new WorldValueToken.BitOr(),
-        "^" => new WorldValueToken.BitXor(),
-        "<<" => new WorldValueToken.ShiftLeft(),
-        ">>" => new WorldValueToken.ShiftRight(),
-        ">>>" => new WorldValueToken.ShiftRightLogical(),
-        "==" => new WorldValueToken.Equal(),
-        "!=" => new WorldValueToken.NotEqual(),
-        "<" => new WorldValueToken.Less(),
-        "<=" => new WorldValueToken.LessOrEqual(),
-        ">" => new WorldValueToken.Greater(),
-        _ => new WorldValueToken.GreaterOrEqual(),
+    private static ValueToken BinaryToken(string symbol) => symbol switch {
+        "+" => new ValueToken.Add(),
+        "-" => new ValueToken.Subtract(),
+        "*" => new ValueToken.Multiply(),
+        "/" => new ValueToken.Divide(),
+        "%" => new ValueToken.Modulo(),
+        "&" => new ValueToken.BitAnd(),
+        "|" => new ValueToken.BitOr(),
+        "^" => new ValueToken.BitXor(),
+        "<<" => new ValueToken.ShiftLeft(),
+        ">>" => new ValueToken.ShiftRight(),
+        ">>>" => new ValueToken.ShiftRightLogical(),
+        "==" => new ValueToken.Equal(),
+        "!=" => new ValueToken.NotEqual(),
+        "<" => new ValueToken.Less(),
+        "<=" => new ValueToken.LessOrEqual(),
+        ">" => new ValueToken.Greater(),
+        _ => new ValueToken.GreaterOrEqual(),
     };
 
     // Binding strength, C's order: the ternary is loosest, a primary tightest.
@@ -251,7 +251,7 @@ public static class WorldExpressionSyntax {
 
     private abstract record Node {
         public abstract int Level { get; }
-        public abstract void Emit(List<WorldValueToken> into);
+        public abstract void Emit(List<ValueToken> into);
         public abstract void PrintBare(StringBuilder into);
         public void Print(StringBuilder into, int parentLevel, bool rightOperand) {
             var parenthesize = ((Level < parentLevel) || (rightOperand && (Level == parentLevel)));
@@ -266,12 +266,12 @@ public static class WorldExpressionSyntax {
     }
     private sealed record Literal(decimal Value) : Node {
         public override int Level => PrimaryLevel;
-        public override void Emit(List<WorldValueToken> into) => into.Add(item: new WorldValueToken.Constant(Value: Value));
+        public override void Emit(List<ValueToken> into) => into.Add(item: new ValueToken.Constant(Value: Value));
         public override void PrintBare(StringBuilder into) => into.Append(value: Value.ToString(provider: CultureInfo.InvariantCulture));
     }
     private sealed record StateRead(string Name, string? Key) : Node {
         public override int Level => PrimaryLevel;
-        public override void Emit(List<WorldValueToken> into) => into.Add(item: new WorldValueToken.State(Name: Name, Key: Key));
+        public override void Emit(List<ValueToken> into) => into.Add(item: new ValueToken.State(Name: Name, Key: Key));
         public override void PrintBare(StringBuilder into) {
             var (name, key) = ((Key is null) && TrySplitTableKey(Name, out var table, out var tableKey))
                 ? (table, tableKey)
@@ -285,8 +285,8 @@ public static class WorldExpressionSyntax {
         }
         // A "$cell:row:key" key prints as row[key], nesting as deep as the indirection goes.
         private static void AppendKey(StringBuilder into, string key) {
-            if (key.StartsWith(value: WorldRuleFacts.CellKeyPrefix, comparisonType: StringComparison.Ordinal)) {
-                var rest = key[WorldRuleFacts.CellKeyPrefix.Length..];
+            if (key.StartsWith(value: RuleFacts.CellKeyPrefix, comparisonType: StringComparison.Ordinal)) {
+                var rest = key[RuleFacts.CellKeyPrefix.Length..];
                 var colon = rest.IndexOf(value: ':');
                 if (colon > 0 && colon < rest.Length - 1) {
                     into.Append(value: QuoteName(name: rest[..colon])).Append(value: '[');
@@ -300,9 +300,9 @@ public static class WorldExpressionSyntax {
     }
     private sealed record Unary(string Operator, Node Operand) : Node {
         public override int Level => UnaryLevel;
-        public override void Emit(List<WorldValueToken> into) {
+        public override void Emit(List<ValueToken> into) {
             Operand.Emit(into: into);
-            into.Add(item: (Operator == "-") ? new WorldValueToken.Negate() : new WorldValueToken.BitNot());
+            into.Add(item: (Operator == "-") ? new ValueToken.Negate() : new ValueToken.BitNot());
         }
         public override void PrintBare(StringBuilder into) {
             into.Append(value: Operator);
@@ -314,8 +314,8 @@ public static class WorldExpressionSyntax {
         }
     }
     private sealed record Binary(string Operator, Node Left, Node Right) : Node {
-        public override int Level => WorldExpressionSyntax.Level(symbol: Operator);
-        public override void Emit(List<WorldValueToken> into) {
+        public override int Level => ExpressionSpelling.Level(symbol: Operator);
+        public override void Emit(List<ValueToken> into) {
             Left.Emit(into: into);
             Right.Emit(into: into);
             into.Add(item: BinaryToken(symbol: Operator));
@@ -328,11 +328,11 @@ public static class WorldExpressionSyntax {
     }
     private sealed record Ternary(Node Condition, Node WhenTrue, Node WhenFalse) : Node {
         public override int Level => TernaryLevel;
-        public override void Emit(List<WorldValueToken> into) {
+        public override void Emit(List<ValueToken> into) {
             Condition.Emit(into: into);
             WhenTrue.Emit(into: into);
             WhenFalse.Emit(into: into);
-            into.Add(item: new WorldValueToken.Select());
+            into.Add(item: new ValueToken.Select());
         }
         public override void PrintBare(StringBuilder into) {
             Condition.Print(into: into, parentLevel: TernaryLevel + 1, rightOperand: false);
@@ -344,13 +344,13 @@ public static class WorldExpressionSyntax {
     }
     private sealed record Call(string Name, Node[] Arguments, string[] Names) : Node {
         public override int Level => PrimaryLevel;
-        public override void Emit(List<WorldValueToken> into) {
+        public override void Emit(List<ValueToken> into) {
             foreach (var argument in Arguments) {
                 argument.Emit(into: into);
             }
             into.Add(item: Name switch {
-                "boardShift" => new WorldValueToken.BoardShift(Topology: Names[0], Direction: Names[1]),
-                "boardImage" => new WorldValueToken.BoardImage(Topology: Names[0], Element: Names[1]),
+                "boardShift" => new ValueToken.BoardShift(Topology: Names[0], Direction: Names[1]),
+                "boardImage" => new ValueToken.BoardImage(Topology: Names[0], Element: Names[1]),
                 _ => Calls[Name].Make(),
             });
         }
@@ -372,14 +372,14 @@ public static class WorldExpressionSyntax {
     private static bool TrySplitTableKey(string name, out string table, out string key) {
         table = name;
         key = string.Empty;
-        if (!name.StartsWith(value: WorldRuleFacts.TablePrefix, comparisonType: StringComparison.Ordinal)) {
+        if (!name.StartsWith(value: RuleFacts.TablePrefix, comparisonType: StringComparison.Ordinal)) {
             return false;
         }
         var split = name.LastIndexOf(value: ":$", comparisonType: StringComparison.Ordinal);
-        if (split < WorldRuleFacts.TablePrefix.Length) {
+        if (split < RuleFacts.TablePrefix.Length) {
             split = name.LastIndexOf(value: ':');
         }
-        if (split < WorldRuleFacts.TablePrefix.Length || split == name.Length - 1) {
+        if (split < RuleFacts.TablePrefix.Length || split == name.Length - 1) {
             return false;
         }
         table = name[..split];
@@ -591,7 +591,7 @@ public static class WorldExpressionSyntax {
                             key = ParseKey();
                             Expect(punctuation: "]");
                         }
-                        if ((key is not null) && !quoted && name.StartsWith(value: WorldRuleFacts.TablePrefix, comparisonType: StringComparison.Ordinal)) {
+                        if ((key is not null) && !quoted && name.StartsWith(value: RuleFacts.TablePrefix, comparisonType: StringComparison.Ordinal)) {
                             return new StateRead(Name: $"{name}:{key}", Key: null);
                         }
                         return new StateRead(Name: name, Key: key);
@@ -621,7 +621,7 @@ public static class WorldExpressionSyntax {
             if (indexable && Accept(punctuation: "[")) {
                 var inner = ParseKey();
                 Expect(punctuation: "]");
-                return $"{WorldRuleFacts.CellKeyPrefix}{key}:{inner}";
+                return $"{RuleFacts.CellKeyPrefix}{key}:{inner}";
             }
             return key;
         }

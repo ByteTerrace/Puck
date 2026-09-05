@@ -6,7 +6,7 @@ using Puck.Maths;
 namespace Puck.State;
 
 /// <summary>Allocation-free arithmetic refusal for the shared rule, decision, and flock expression evaluator.</summary>
-public static class WorldExpressionArithmetic {
+public static class ExpressionArithmetic {
     /// <summary>Evaluates one binary operation. Integer division truncates toward zero; Fixed multiplication and
     /// division round once to nearest, ties to even, through Puck.Maths. Overflow is tested after rounding.</summary>
     /// <param name="operation">A binary arithmetic expression operation.</param>
@@ -15,62 +15,62 @@ public static class WorldExpressionArithmetic {
     /// <param name="right">The right raw operand.</param>
     /// <param name="value">The raw result, or zero on refusal.</param>
     /// <returns>False for an unsupported operation/kind, zero divisor, or unrepresentable result.</returns>
-    public static bool TryBinary(WorldExpressionOp operation, CellKind kind, long left, long right, out long value) {
+    public static bool TryBinary(ExpressionOp operation, CellKind kind, long left, long right, out long value) {
         value = 0;
         if (kind is not (CellKind.Int or CellKind.Fixed)) { return false; }
         switch (operation) {
-            case WorldExpressionOp.Add: return Narrow((Int128)left + right, out value);
-            case WorldExpressionOp.Subtract: return Narrow((Int128)left - right, out value);
-            case WorldExpressionOp.Minimum: value = Math.Min(left, right); return true;
-            case WorldExpressionOp.Maximum: value = Math.Max(left, right); return true;
-            case WorldExpressionOp.Equal: value = (left == right) ? 1L : 0L; return true;
-            case WorldExpressionOp.NotEqual: value = (left != right) ? 1L : 0L; return true;
-            case WorldExpressionOp.Less: value = (left < right) ? 1L : 0L; return true;
-            case WorldExpressionOp.LessOrEqual: value = (left <= right) ? 1L : 0L; return true;
-            case WorldExpressionOp.Greater: value = (left > right) ? 1L : 0L; return true;
-            case WorldExpressionOp.GreaterOrEqual: value = (left >= right) ? 1L : 0L; return true;
-            case WorldExpressionOp.Modulo:
+            case ExpressionOp.Add: return Narrow((Int128)left + right, out value);
+            case ExpressionOp.Subtract: return Narrow((Int128)left - right, out value);
+            case ExpressionOp.Minimum: value = Math.Min(left, right); return true;
+            case ExpressionOp.Maximum: value = Math.Max(left, right); return true;
+            case ExpressionOp.Equal: value = (left == right) ? 1L : 0L; return true;
+            case ExpressionOp.NotEqual: value = (left != right) ? 1L : 0L; return true;
+            case ExpressionOp.Less: value = (left < right) ? 1L : 0L; return true;
+            case ExpressionOp.LessOrEqual: value = (left <= right) ? 1L : 0L; return true;
+            case ExpressionOp.Greater: value = (left > right) ? 1L : 0L; return true;
+            case ExpressionOp.GreaterOrEqual: value = (left >= right) ? 1L : 0L; return true;
+            case ExpressionOp.Modulo:
                 // The raw remainder is the remainder in either kind (Q48.16 bits share one scale); -1 divides
                 // everything, so it reads zero rather than faulting on long.MinValue.
                 if (right == 0) { return false; }
                 value = (right == -1) ? 0L : (left % right);
                 return true;
-            case WorldExpressionOp.BitAnd: if (kind != CellKind.Int) { return false; } value = left & right; return true;
-            case WorldExpressionOp.BitOr: if (kind != CellKind.Int) { return false; } value = left | right; return true;
-            case WorldExpressionOp.BitXor: if (kind != CellKind.Int) { return false; } value = left ^ right; return true;
-            case WorldExpressionOp.ShiftLeft:
+            case ExpressionOp.BitAnd: if (kind != CellKind.Int) { return false; } value = left & right; return true;
+            case ExpressionOp.BitOr: if (kind != CellKind.Int) { return false; } value = left | right; return true;
+            case ExpressionOp.BitXor: if (kind != CellKind.Int) { return false; } value = left ^ right; return true;
+            case ExpressionOp.ShiftLeft:
                 if (kind != CellKind.Int || (ulong)right > 63UL) { return false; }
                 value = left << (int)right;
                 return true;
-            case WorldExpressionOp.ShiftRight:
+            case ExpressionOp.ShiftRight:
                 if (kind != CellKind.Int || (ulong)right > 63UL) { return false; }
                 value = left >> (int)right;
                 return true;
-            case WorldExpressionOp.ShiftRightLogical:
+            case ExpressionOp.ShiftRightLogical:
                 if (kind != CellKind.Int || (ulong)right > 63UL) { return false; }
                 value = left >>> (int)right;
                 return true;
-            case WorldExpressionOp.RotateLeft:
+            case ExpressionOp.RotateLeft:
                 if (kind != CellKind.Int || (ulong)right > 63UL) { return false; }
                 value = (long)BitOperations.RotateLeft((ulong)left, (int)right);
                 return true;
-            case WorldExpressionOp.RotateRight:
+            case ExpressionOp.RotateRight:
                 if (kind != CellKind.Int || (ulong)right > 63UL) { return false; }
                 value = (long)BitOperations.RotateRight((ulong)left, (int)right);
                 return true;
-            case WorldExpressionOp.ParallelBitExtract:
+            case ExpressionOp.ParallelBitExtract:
                 if (kind != CellKind.Int) { return false; }
                 value = (long)ParallelExtract((ulong)left, (ulong)right);
                 return true;
-            case WorldExpressionOp.ParallelBitDeposit:
+            case ExpressionOp.ParallelBitDeposit:
                 if (kind != CellKind.Int) { return false; }
                 value = (long)ParallelDeposit((ulong)left, (ulong)right);
                 return true;
-            case WorldExpressionOp.Multiply:
+            case ExpressionOp.Multiply:
                 return kind == CellKind.Int ? Narrow((Int128)left * right, out value) :
                     FusedArithmetic.TryMixedScaleProduct(left, FixedQ4816.FractionBitCount, right,
                         FixedQ4816.FractionBitCount, FixedQ4816.FractionBitCount, out value);
-            case WorldExpressionOp.Divide:
+            case ExpressionOp.Divide:
                 if (right == 0) { return false; }
                 if (kind == CellKind.Int) { return Narrow((Int128)left / right, out value); }
                 var numerator = (UInt128)(left < 0 ? -(Int128)left : left);
@@ -84,10 +84,10 @@ public static class WorldExpressionArithmetic {
 
     /// <summary>Gets a value indicating whether an operation consumes one stack value.</summary>
     /// <param name="operation">An expression operation.</param>
-    public static bool IsUnary(WorldExpressionOp operation) => operation is WorldExpressionOp.BitNot or WorldExpressionOp.PopCount
-        or WorldExpressionOp.LeadingZeroCount or WorldExpressionOp.TrailingZeroCount or WorldExpressionOp.LowestSetBit
-        or WorldExpressionOp.ClearLowestSetBit or WorldExpressionOp.ByteSwap or WorldExpressionOp.BitReverse
-        or WorldExpressionOp.Negate or WorldExpressionOp.Abs or WorldExpressionOp.Sign;
+    public static bool IsUnary(ExpressionOp operation) => operation is ExpressionOp.BitNot or ExpressionOp.PopCount
+        or ExpressionOp.LeadingZeroCount or ExpressionOp.TrailingZeroCount or ExpressionOp.LowestSetBit
+        or ExpressionOp.ClearLowestSetBit or ExpressionOp.ByteSwap or ExpressionOp.BitReverse
+        or ExpressionOp.Negate or ExpressionOp.Abs or ExpressionOp.Sign;
 
     /// <summary>Evaluates one unary operation. Bit operations read the Int carrier's two's-complement bits; Negate and
     /// Abs keep the operand's kind and refuse the carrier's minimum; Sign yields Int -1, 0, or 1 for either kind.</summary>
@@ -96,29 +96,29 @@ public static class WorldExpressionArithmetic {
     /// <param name="operand">The raw operand.</param>
     /// <param name="value">The raw result, or zero on refusal.</param>
     /// <returns>False for an unsupported operation/kind or an unrepresentable result.</returns>
-    public static bool TryUnary(WorldExpressionOp operation, CellKind kind, long operand, out long value) {
+    public static bool TryUnary(ExpressionOp operation, CellKind kind, long operand, out long value) {
         value = 0;
         if (kind is not (CellKind.Int or CellKind.Fixed)) { return false; }
         switch (operation) {
-            case WorldExpressionOp.Negate:
+            case ExpressionOp.Negate:
                 if (operand == long.MinValue) { return false; }
                 value = -operand; return true;
-            case WorldExpressionOp.Abs:
+            case ExpressionOp.Abs:
                 if (operand == long.MinValue) { return false; }
                 value = Math.Abs(operand); return true;
-            case WorldExpressionOp.Sign: value = Math.Sign(operand); return true;
+            case ExpressionOp.Sign: value = Math.Sign(operand); return true;
         }
         if (kind != CellKind.Int) { return false; }
         var bits = (ulong)operand;
         switch (operation) {
-            case WorldExpressionOp.BitNot: value = ~operand; return true;
-            case WorldExpressionOp.PopCount: value = BitOperations.PopCount(bits); return true;
-            case WorldExpressionOp.LeadingZeroCount: value = BitOperations.LeadingZeroCount(bits); return true;
-            case WorldExpressionOp.TrailingZeroCount: value = BitOperations.TrailingZeroCount(bits); return true;
-            case WorldExpressionOp.LowestSetBit: value = (long)(bits & (~bits + 1UL)); return true;
-            case WorldExpressionOp.ClearLowestSetBit: value = (long)(bits & (bits - 1UL)); return true;
-            case WorldExpressionOp.ByteSwap: value = (long)BinaryPrimitives.ReverseEndianness(bits); return true;
-            case WorldExpressionOp.BitReverse: value = (long)ReverseBits(bits); return true;
+            case ExpressionOp.BitNot: value = ~operand; return true;
+            case ExpressionOp.PopCount: value = BitOperations.PopCount(bits); return true;
+            case ExpressionOp.LeadingZeroCount: value = BitOperations.LeadingZeroCount(bits); return true;
+            case ExpressionOp.TrailingZeroCount: value = BitOperations.TrailingZeroCount(bits); return true;
+            case ExpressionOp.LowestSetBit: value = (long)(bits & (~bits + 1UL)); return true;
+            case ExpressionOp.ClearLowestSetBit: value = (long)(bits & (bits - 1UL)); return true;
+            case ExpressionOp.ByteSwap: value = (long)BinaryPrimitives.ReverseEndianness(bits); return true;
+            case ExpressionOp.BitReverse: value = (long)ReverseBits(bits); return true;
             default: return false;
         }
     }

@@ -32,7 +32,7 @@ public sealed class MutationAllOrNothingLawTests {
 
     private static bool ApplyAndObserveChange(WorldFixture fixture, string name) {
         var before = fixture.DefinitionBytes();
-        var row = new WorldStateRow(Name: WorldCellName.Parse(candidate: name), Kind: CellKind.Int);
+        var row = new WorldStateRow(Name: CellName.Parse(candidate: name), Kind: CellKind.Int);
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(Principal: WorldPrincipal.Console, Row: row));
         fixture.Step();

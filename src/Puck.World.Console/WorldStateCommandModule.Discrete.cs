@@ -145,7 +145,7 @@ public sealed partial class WorldStateCommandModule {
         }
         try {
             var json = WorldCommandArguments.RawAfter(args: in args, context: context, tokens: prefix);
-            var operation = JsonSerializer.Deserialize(json, WorldJsonContext.Default.WorldStateTransform);
+            var operation = JsonSerializer.Deserialize(json, WorldJsonContext.Default.StateTransform);
             if (operation is null) {
                 return CommandResult.Error("state transform must be an object");
             }

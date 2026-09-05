@@ -673,7 +673,7 @@ public sealed partial class WorldServer {
         return WorldBodyKeyCache.Get(index: index);
     }
 
-    // Canonical "a_b" pair keys (underscore, not colon: WorldCellName reserves ':'), cached per distinct DIRECTED
+    // Canonical "a_b" pair keys (underscore, not colon: CellName reserves ':'), cached per distinct DIRECTED
     // pair once minted so a steady-state rule scan allocates nothing: (a, b) and (b, a) name different cells (an
     // observer's impression of a subject is not the reverse), and the domain (population capacity squared) is too
     // large to precompute the way WorldBodyKeyCache's single-index table is, so this grows lazily instead — the
@@ -755,9 +755,9 @@ public sealed partial class WorldServer {
     // The (row, key) PAIR rule at the mutation boundary: a null key means the row's SLOT cell, and a row that is
     // positively keyed (WorldStateRow.IsKeyed) has no single cell for a null key to mean — refused by name rather
     // than silently writing cells[0].
-    private static bool TryResolveTargetKey(WorldStateRow row, string? key, out WorldCellName resolved, out string reason) {
+    private static bool TryResolveTargetKey(WorldStateRow row, string? key, out CellName resolved, out string reason) {
         if (key is not null) {
-            if (!WorldCellName.TryParse(
+            if (!CellName.TryParse(
                 candidate: key,
                 name: out resolved,
                 reason: out var keyReason

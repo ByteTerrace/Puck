@@ -41,9 +41,9 @@ public sealed class WorldExpressionAuthoringLawTests {
             switch (node) {
                 case JsonObject obj:
                     if ((obj.Count == 1) && (obj["tokens"] is JsonArray)) {
-                        var tokens = JsonSerializer.Deserialize(obj.ToJsonString(), WorldJsonContext.Default.WorldValueExpressionTokens)!.Tokens;
-                        var printed = WorldExpressionSyntax.Print(tokens);
-                        Assert.True(WorldExpressionSyntax.TryParse(printed, out var parsed, out var error), $"{printed}: {error}");
+                        var tokens = JsonSerializer.Deserialize(obj.ToJsonString(), WorldJsonContext.Default.ValueExpressionTokens)!.Tokens;
+                        var printed = ExpressionSpelling.Print(tokens);
+                        Assert.True(ExpressionSpelling.TryParse(printed, out var parsed, out var error), $"{printed}: {error}");
                         Assert.Equal(tokens, parsed);
                         expressions++;
                         return;
@@ -64,12 +64,12 @@ public sealed class WorldExpressionAuthoringLawTests {
     [Fact]
     public void ARuleAuthoredInfixCompilesToTheSameProgramAsItsTokens() {
         var infix = Fixtures.BuildDocument() with {
-            StateRaw = new WorldStateSection(World: [new WorldStateRow(WorldCellName.Parse("hp"), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 5L)])]),
-            Rules = [new WorldRule(WorldCellName.Parse("r"), [new ActionEffect.SetState(State: "hp", Expression: WorldValueExpression.Parse("max(hp - 1, 0)"))])],
+            StateRaw = new WorldStateSection(World: [new WorldStateRow(CellName.Parse("hp"), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 5L)])]),
+            Rules = [new WorldRule(CellName.Parse("r"), [new ActionEffect.SetState(State: "hp", Expression: ValueExpression.Parse("max(hp - 1, 0)"))])],
         };
         var tokens = infix with {
-            Rules = [new WorldRule(WorldCellName.Parse("r"), [new ActionEffect.SetState(State: "hp", Expression: new WorldValueExpression([
-                new WorldValueToken.State("hp"), new WorldValueToken.Constant(1m), new WorldValueToken.Subtract(), new WorldValueToken.Constant(0m), new WorldValueToken.Max(),
+            Rules = [new WorldRule(CellName.Parse("r"), [new ActionEffect.SetState(State: "hp", Expression: new ValueExpression([
+                new ValueToken.State("hp"), new ValueToken.Constant(1m), new ValueToken.Subtract(), new ValueToken.Constant(0m), new ValueToken.Max(),
             ]))])],
         };
         var fromInfix = WorldDefinitionSerialization.Deserialize(WorldDefinitionSerialization.Serialize(infix));

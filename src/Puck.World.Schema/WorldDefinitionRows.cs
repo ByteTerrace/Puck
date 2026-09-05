@@ -39,7 +39,7 @@ public static class WorldDefinitionRows {
     /// <param name="cells">The row's cells, or <see langword="null"/> for a row declaring none.</param>
     /// <param name="key">The cell key to find.</param>
     /// <returns>The cell, or <see langword="null"/> when none carries that key.</returns>
-    public static WorldStateCell? FindCell(IReadOnlyList<WorldStateCell>? cells, WorldCellName key) {
+    public static WorldStateCell? FindCell(IReadOnlyList<WorldStateCell>? cells, CellName key) {
         if (cells is null) {
             return null;
         }

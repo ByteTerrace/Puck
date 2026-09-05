@@ -610,7 +610,7 @@ public sealed partial class NavigationLawTests {
 
     [Fact]
     public void NavigationStatusIsACompiledRuleFactRatherThanASecondScriptingSurface() {
-        var observed = WorldCellName.Parse(candidate: "observed-route");
+        var observed = CellName.Parse(candidate: "observed-route");
         var definition = NavigationDocument(domain: VolumeDomain()) with {
             StateRaw = new WorldStateSection(World: [new WorldStateRow(
                 Name: observed,
@@ -618,7 +618,7 @@ public sealed partial class NavigationLawTests {
                 Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]
             )]),
             Rules = [new WorldRule(
-                Name: WorldCellName.Parse(candidate: "observe-route"),
+                Name: CellName.Parse(candidate: "observe-route"),
                 Gate: new ActionPredicate.CompareState(
                     State: "$nav:body:0:hasPath",
                     Comparison: ActionStateComparison.Equal,

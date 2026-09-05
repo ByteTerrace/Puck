@@ -69,7 +69,7 @@ public static class WorldGeneratorEngine {
         public CompiledSource(WorldGenerator generator) {
             var contexts = (generator.Contexts ?? []);
 
-            Ordinals = new Dictionary<WorldCellName, int>(capacity: contexts.Count);
+            Ordinals = new Dictionary<CellName, int>(capacity: contexts.Count);
             Contexts = new EntrySet?[contexts.Count];
 
             for (var index = 0; (index < contexts.Count); index++) {
@@ -114,7 +114,7 @@ public static class WorldGeneratorEngine {
         }
 
         public EntrySet?[] Contexts { get; }
-        public Dictionary<WorldCellName, int> Ordinals { get; }
+        public Dictionary<CellName, int> Ordinals { get; }
         public EntrySet? Orbit { get; }
         public int[] OrbitNodes { get; }
         public EntrySet? Weighted { get; }

@@ -1,21 +1,21 @@
 namespace Puck.World;
 
 public static partial class WorldRuleCompiler {
-    private static CompiledWorldEffect ResolveStateTransform(WorldStateTransform transform, string ruleName, WorldDefinition definition) {
+    private static CompiledWorldEffect ResolveStateTransform(StateTransform transform, string ruleName, WorldDefinition definition) {
         WorldRuleException Invalid(string message) => new(WorldRuleRefusal.EffectKindInadmissible, ruleName, message);
         WorldStateRow Row(string name) => WorldDefinitionRows.FindStateRow(definition.State, name) ?? throw Invalid($"unknown state row '{name}'");
         switch (transform) {
-            case WorldStateTransform.Observe observe:
+            case StateTransform.Observe observe:
                 if (Row(observe.Row).Knowledge is null) {
                     throw Invalid("observe requires a knowledge board");
                 }
 
                 break;
-            case WorldStateTransform.Transfer transfer:
+            case StateTransform.Transfer transfer:
                 if (Row(transfer.From).EffectiveDomain is not WorldStateDomain.KeysOf { Ordered: true } source || Row(transfer.To).EffectiveDomain is not WorldStateDomain.KeysOf { Ordered: true } destination || source.Row != destination.Row ||
-                    !Enum.IsDefined(transfer.Selector) || (transfer.Selector == WorldZoneSelector.Key) != (transfer.Key is not null) ||
-                    (transfer.Selector == WorldZoneSelector.Random) != (transfer.Draw is not null) ||
-                    transfer.Count < 1 || transfer.Count > WorldStateTransferCapacity.MaxTransferCount || (transfer.Selector == WorldZoneSelector.Key && transfer.Count != 1)) {
+                    !Enum.IsDefined(transfer.Selector) || (transfer.Selector == ZoneSelector.Key) != (transfer.Key is not null) ||
+                    (transfer.Selector == ZoneSelector.Random) != (transfer.Draw is not null) ||
+                    transfer.Count < 1 || transfer.Count > WorldStateTransferCapacity.MaxTransferCount || (transfer.Selector == ZoneSelector.Key && transfer.Count != 1)) {
                     throw Invalid($"transfer requires compatible ordered token zones, selector arguments, and a count of 1..{WorldStateTransferCapacity.MaxTransferCount} (exactly 1 by key)");
                 }
                 if (transfer.Draw is { } drawName) {
@@ -26,7 +26,7 @@ public static partial class WorldRuleCompiler {
                     }
                 }
                 break;
-            case WorldStateTransform.SetRay ray:
+            case StateTransform.SetRay ray:
                 var row = Row(ray.Row);
                 if (row.EffectiveDomain is not WorldStateDomain.CellsOf board || WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology ||
                     !topology.TryCell(ray.From, out _) || topology.Direction(ray.Direction) < 0 ||
@@ -35,7 +35,7 @@ public static partial class WorldRuleCompiler {
                     throw Invalid("setRay requires valid board addressing, a declared integer-kind pattern, and an admitted replacement");
                 }
                 break;
-            case WorldStateTransform.SortZone sortZone:
+            case StateTransform.SortZone sortZone:
                 if (Row(sortZone.Row).EffectiveDomain is not WorldStateDomain.KeysOf { Ordered: true } zone ||
                     sortZone.By is not { Count: >= 1 and <= WorldStateCapacity.MaxSortKeys } ||
                     sortZone.By.Any(key => key is null || Row(key.Row) is not { IsKeyed: true, Kind: CellKind.Int or CellKind.Fixed } sortRow || sortRow.EffectiveDomain is not WorldStateDomain.KeysOf sortKeysOf || sortKeysOf.Row != zone.Row) ||
@@ -43,12 +43,12 @@ public static partial class WorldRuleCompiler {
                     throw Invalid($"sortZone requires an ordered zone with 1..{WorldStateCapacity.MaxSortKeys} distinct numeric attribute keys over the zone's token domain, each carrying its own direction");
                 }
                 break;
-            case WorldStateTransform.SortKeyed sortKeyed:
+            case StateTransform.SortKeyed sortKeyed:
                 if (Row(sortKeyed.Row) is not { IsKeyed: true, Kind: CellKind.Int or CellKind.Fixed }) {
                     throw Invalid("sortKeyed requires a keyed numeric row");
                 }
                 break;
-            case WorldStateTransform.Shuffle shuffle:
+            case StateTransform.Shuffle shuffle:
                 if (Row(shuffle.Row) is not { IsKeyed: true } ||
                     Row(shuffle.Draw).Draw is not { Timing: not WorldDrawTiming.Boot } shuffleDraw ||
                     Row(shuffle.Draw).Kind != CellKind.Int ||
@@ -57,17 +57,17 @@ public static partial class WorldRuleCompiler {
                     throw Invalid("shuffle requires a keyed row, and a redrawable integer streamDraw site");
                 }
                 break;
-            case WorldStateTransform.WriteSet writeSet:
+            case StateTransform.WriteSet writeSet:
                 var written = Row(writeSet.Row);
                 var setSource = Row(writeSet.Set);
                 if (written.EffectiveDomain is not WorldStateDomain.CellsOf writtenBoard || WorldTopologyCompilation.Find(definition.StateRaw, writtenBoard.Topology) is not { } writtenTopology ||
                     writtenTopology.CellCount > WorldBoardMask.MaxCells || setSource.Kind != CellKind.Int ||
-                    (writeSet.SetKey is null ? !setSource.IsSlot : (!setSource.IsKeyed || !WorldCellName.TryParse(writeSet.SetKey, out _, out _))) ||
+                    (writeSet.SetKey is null ? !setSource.IsSlot : (!setSource.IsKeyed || !CellName.TryParse(writeSet.SetKey, out _, out _))) ||
                     written.ClampToEnvelope(writeSet.Value) != writeSet.Value || (written.Kind == CellKind.Bool && writeSet.Value is not (0 or 1))) {
                     throw Invalid($"writeSet requires a board of at most {WorldBoardMask.MaxCells} cells, an integer set cell, and an admitted value");
                 }
                 break;
-            case WorldStateTransform.Push push:
+            case StateTransform.Push push:
                 var ring = Row(push.Row);
                 if (ring.EffectiveDomain is not WorldStateDomain.Ring || ring.ClampToEnvelope(push.Value) != push.Value) {
                     throw Invalid("push requires a history row and an admitted value");

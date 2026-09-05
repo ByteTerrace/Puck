@@ -20,12 +20,12 @@ public sealed class BodyScaleLawTests {
     private static WorldDefinition WithScaleRow(FixedQ4816 cellValue) {
         var baseDocument = Fixtures.BuildDocument();
         var scaleRow = new WorldStateRow(
-            Name: WorldCellName.Parse(candidate: "scale"),
+            Name: CellName.Parse(candidate: "scale"),
             Kind: CellKind.Fixed,
             Min: EnvelopeMin.Value,
             Max: EnvelopeMax.Value,
             Capacity: 8,
-            Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: cellValue.Value)]
+            Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: cellValue.Value)]
         );
 
         return (baseDocument with {
@@ -243,12 +243,12 @@ public sealed class BodyScaleLawTests {
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "platform");
         var creation = new WorldPrototype(Id: "platform", Document: canonical.Document, HashRaw: canonical.Hash);
         var scaleRow = new WorldStateRow(
-            Name: WorldCellName.Parse(candidate: "scale"),
+            Name: CellName.Parse(candidate: "scale"),
             Kind: CellKind.Fixed,
             Min: EnvelopeMin.Value,
             Max: EnvelopeMax.Value,
             Capacity: 8,
-            Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: cellValue.Value)]
+            Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "0"), Value: cellValue.Value)]
         );
 
         return source with {

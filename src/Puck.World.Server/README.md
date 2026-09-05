@@ -1262,7 +1262,7 @@ match the edge's view will pass while production 404s.
 
 `WorldOwnedWorldFileName` (in `Puck.World.Schema`, because the earliest door that
 has to enforce it is document validation) is the id↔file/blob-name mapping. It
-escapes nothing: it takes a `WorldSafeName`, whose fixed reserved-character set
+escapes nothing: it takes a `SafeName`, whose fixed reserved-character set
 (rather than `Path.GetInvalidFileNameChars()`) is what makes two machines on
 different operating systems agree on the name an id maps to. That makes the
 mapping injective into file-name STRINGS, which is not the same as into storage

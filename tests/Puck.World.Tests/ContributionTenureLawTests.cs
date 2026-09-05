@@ -82,7 +82,7 @@ public sealed class ContributionTenureLawTests {
                     Contribution: new WorldPlacementContribution(
                         Tenure: WorldContributionTenure.Presence,
                         SlotCreationId: SlotCreation,
-                        Link: WorldSafeName.Parse(candidate: LinkName),
+                        Link: SafeName.Parse(candidate: LinkName),
                         GraceSeconds: ContributionGraceSeconds
                     )
                 ),
@@ -90,7 +90,7 @@ public sealed class ContributionTenureLawTests {
             PopulationRaw = (document.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1) }),
             References = [
                 new WorldReference(
-                    Name: WorldSafeName.Parse(candidate: "peer"),
+                    Name: SafeName.Parse(candidate: "peer"),
                     Document: "peer.world.json",
                     Owner: null,
                     World: null
@@ -98,7 +98,7 @@ public sealed class ContributionTenureLawTests {
             ],
             Destinations = [
                 new WorldDestination(
-                    Name: WorldSafeName.Parse(candidate: "peer"),
+                    Name: SafeName.Parse(candidate: "peer"),
                     Reference: "peer",
                     Durability: WorldDestinationDurability.Persisted,
                     Scope: WorldDestinationScope.Global
@@ -106,7 +106,7 @@ public sealed class ContributionTenureLawTests {
             ],
             Adjacencies = [
                 new WorldAdjacency(
-                    Name: WorldSafeName.Parse(candidate: LinkName),
+                    Name: SafeName.Parse(candidate: LinkName),
                     Destination: "peer",
                     Counterpart: "south",
                     Boundary: new WorldAdjacencyBoundary(

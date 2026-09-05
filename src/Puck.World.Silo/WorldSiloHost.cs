@@ -119,7 +119,7 @@ public sealed class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateResolver 
                 input: parts[1],
                 result: out var owner
             ) &&
-                WorldSafeName.TryParse(
+                SafeName.TryParse(
                 candidate: parts[2],
                 name: out var world,
                 reason: out _
@@ -262,7 +262,7 @@ public sealed class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateResolver 
                     encoded: captured,
                     identity: new WorldAuthorityIdentity(
                         Owner: (FindWorldRow(name: name)?.Owner ?? Guid.Empty),
-                        World: (WorldSafeName.TryParse(candidate: name, name: out var world, reason: out _) ? world : default)
+                        World: (SafeName.TryParse(candidate: name, name: out var world, reason: out _) ? world : default)
                     ),
                     tick: capturedTick,
                     worldId: name

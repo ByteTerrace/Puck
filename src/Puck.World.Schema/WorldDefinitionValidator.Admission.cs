@@ -540,10 +540,10 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            // row.Id already crossed the WorldSafeName door at JSON parse — it CANNOT hold a value the
+            // row.Id already crossed the SafeName door at JSON parse — it CANNOT hold a value the
             // id-to-instance-name composition (WorldSessionResolver.MintInstanceName) would refuse (the identical
             // reasoning WorldIdentitySeed.Id's own validator comment states: the mapping is injective over
-            // WorldSafeName, so no separate "does it survive the mapping" check can ever fire here). The only thing
+            // SafeName, so no separate "does it survive the mapping" check can ever fire here). The only thing
             // left to check is ORDINAL UNIQUENESS within this document.
             if (!groupIds.Add(item: row.Id)) {
                 errors.Add(item: $"{path}.id '{row.Id}' is duplicated.");

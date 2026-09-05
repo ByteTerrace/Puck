@@ -84,15 +84,15 @@ public sealed class WorldUprightFactLawTests {
             })],
             PlacementRowsRaw = [new WorldPlacement(Id: "floor", PrototypeId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
             StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(Name: WorldCellName.Parse(candidate: UprightRow), Kind: CellKind.Fixed,
+                new WorldStateRow(Name: CellName.Parse(candidate: UprightRow), Kind: CellKind.Fixed,
                     Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
-                new WorldStateRow(Name: WorldCellName.Parse(candidate: AbsentRow), Kind: CellKind.Fixed,
+                new WorldStateRow(Name: CellName.Parse(candidate: AbsentRow), Kind: CellKind.Fixed,
                     Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0L)]),
             ]),
             Rules = [
-                new WorldRule(Name: WorldCellName.Parse(candidate: "upright-mirror"),
+                new WorldRule(Name: CellName.Parse(candidate: "upright-mirror"),
                     Effects: [new ActionEffect.SetState(State: UprightRow, FromState: uprightBody)]),
-                new WorldRule(Name: WorldCellName.Parse(candidate: "absent-mirror"),
+                new WorldRule(Name: CellName.Parse(candidate: "absent-mirror"),
                     Effects: [new ActionEffect.SetState(State: AbsentRow, FromState: $"{WorldRuleFacts.UprightPrefix}body:3")]),
             ],
         };

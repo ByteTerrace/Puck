@@ -93,7 +93,7 @@ namespace Puck.World;
 /// </remarks>
 /// <param name="Name">The rule's stable name — unique within the section, the
 /// <c>WorldMutation.UpsertWorldRule</c>/<c>WorldMutation.RemoveWorldRule</c> key, and the
-/// <c>world.rules</c> read-back line. A <see cref="WorldCellName"/>, the same validated-identifier type a state row
+/// <c>world.rules</c> read-back line. A <see cref="CellName"/>, the same validated-identifier type a state row
 /// and a cell key ride: dot-free and free of the reserved character set, refused by name (naming the offending
 /// character) at the JSON converter before a document can hold one. The reserved <c>$</c> prefix is refused on top of
 /// that, by <see cref="WorldRuleCompiler.CompileAll"/> — exactly as it is for a state row name, and for the same
@@ -114,7 +114,7 @@ namespace Puck.World;
 /// <param name="Bindings">The values bound once per evaluation, in declared order, read as <c>$bind:&lt;name&gt;</c>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldRule(
-    WorldCellName Name,
+    CellName Name,
     IReadOnlyList<ActionEffect> Effects,
     // Trails Effects and carries an explicit null default because it is genuinely optional — an always-rule omits it,
     // and the writer already omits it when null. A constructor parameter with no default is REQUIRED of a document
@@ -130,14 +130,14 @@ public sealed record WorldRule(
 /// gate, in declared order — a later binding, the gate, and every effect read it as
 /// <c>$bind:&lt;name&gt;</c>; an earlier binding cannot. The value is never stored: it lives on the evaluation and is
 /// recomputed at the next one.</summary>
-/// <param name="Name">The binding's name — the token after <see cref="WorldRuleFacts.BindPrefix"/>.</param>
+/// <param name="Name">The binding's name — the token after <see cref="RuleFacts.BindPrefix"/>.</param>
 /// <param name="Kind">The value's cell kind, <see cref="CellKind.Int"/> or <see cref="CellKind.Fixed"/>.</param>
 /// <param name="Expression">The postfix expression, evaluated in that kind.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldRuleBinding(WorldCellName Name, CellKind Kind, WorldValueExpression Expression);
+public sealed record WorldRuleBinding(CellName Name, CellKind Kind, ValueExpression Expression);
 /// <summary>The rule-binding vocabulary: the key token and body-reference token each compiled <see cref="RuleBinding"/>
 /// spells, and the scope it is live in. Kept beside the enum it is keyed by rather than among
-/// <see cref="WorldRuleFacts"/>' reserved-channel prefixes, which name no compiled type.</summary>
+/// <see cref="RuleFacts"/>' reserved-channel prefixes, which name no compiled type.</summary>
 public static class WorldRuleBindingTokens {
     /// <summary>The binding vocabulary, one row per <see cref="RuleBinding"/> other than <see cref="RuleBinding.None"/>:
     /// the key token (<c>$each</c>, <c>$left</c>, <c>$right</c>), the body-reference token derived from it by
@@ -154,7 +154,7 @@ public static class WorldRuleBindingTokens {
     /// <param name="keyToken">A <see cref="Bindings"/> key token.</param>
     public static string BodyTokenOf(string keyToken) => keyToken[1..];
 }
-/// <summary>Which symmetry-lattice map a <see cref="WorldRuleFacts.SymmetryPrefix"/> operand applies to its source
+/// <summary>Which symmetry-lattice map a <see cref="RuleFacts.SymmetryPrefix"/> operand applies to its source
 /// node.</summary>
 public enum WorldSymmetryFunction : byte {
     /// <summary>The node's ring, 0..7.</summary>
@@ -177,7 +177,7 @@ public enum WorldSymmetryFunction : byte {
     /// <summary>The node's projected Y coordinate, a fixed value.</summary>
     ProjectionY,
 }
-/// <summary>Which aggregate a <see cref="WorldRuleFacts.ReducePrefix"/> operand computes over a row's cells, or which
+/// <summary>Which aggregate a <see cref="RuleFacts.ReducePrefix"/> operand computes over a row's cells, or which
 /// extremum a <see cref="WorldRuleFacts.ArgMaxPrefix"/>/<see cref="WorldRuleFacts.ArgMinPrefix"/> operand searches
 /// for (only <see cref="Max"/>/<see cref="Min"/> are meaningful there — an arg-reduction never sums or counts).
 /// </summary>
@@ -229,7 +229,7 @@ public enum CompiledBodyRefKind : byte {
 /// row-name scan; <see langword="default"/> (invalid) otherwise.</param>
 public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Index, string? Row, string? Key = null, WorldStateHandle Handle = default);
 /// <summary>A state cell address whose integer value is read as a cell KEY at evaluation time
-/// (<see cref="WorldRuleFacts.CellKeyPrefix"/>), OR a live composite (observer, subject) pair key
+/// (<see cref="RuleFacts.CellKeyPrefix"/>), OR a live composite (observer, subject) pair key
 /// (<see cref="WorldRuleFacts.PairKeyPrefix"/>) — a keyed row can therefore be keyed by one body index, or by two,
 /// through the very same indirection carrier every dynamic key already resolves through.</summary>
 /// <param name="Row">The row holding the indirection cell, for a <c>$cell:</c> indirection; empty otherwise.</param>
@@ -276,7 +276,7 @@ public enum WorldRuleFactKind : byte {
     /// <summary>A declared <see cref="WorldStateRow"/>'s named cell.</summary>
     StateCell,
 
-    /// <summary>The server's completed-tick counter (<see cref="WorldRuleFacts.Tick"/>).</summary>
+    /// <summary>The server's completed-tick counter (<see cref="RuleFacts.Tick"/>).</summary>
     Tick,
 
     /// <summary>The live active-population count (<see cref="WorldRuleFacts.Population"/>).</summary>
@@ -291,7 +291,7 @@ public enum WorldRuleFactKind : byte {
     /// <summary>One live byte off a declared screen's booted machine (<see cref="WorldRuleFacts.MachinePrefix"/>).</summary>
     MachineMemory,
 
-    /// <summary>A numeric aggregate over a row's cells (<see cref="WorldRuleFacts.ReducePrefix"/>).</summary>
+    /// <summary>A numeric aggregate over a row's cells (<see cref="RuleFacts.ReducePrefix"/>).</summary>
     Reduction,
 
     /// <summary>The body naming a row's extremal cell (<see cref="WorldRuleFacts.ArgMaxPrefix"/>/
@@ -326,7 +326,7 @@ public enum WorldRuleFactKind : byte {
     /// <summary>The nearest tagged body's index (<see cref="WorldRuleFacts.NearestPrefix"/>).</summary>
     Nearest,
 
-    /// <summary>A <see cref="WorldRuleFacts.SymmetryPrefix"/> read: a cell's node through one symmetry-lattice map.</summary>
+    /// <summary>A <see cref="RuleFacts.SymmetryPrefix"/> read: a cell's node through one symmetry-lattice map.</summary>
     Symmetry,
 
     /// <summary>One body's navigation status or remaining waypoint count.</summary>
@@ -335,20 +335,20 @@ public enum WorldRuleFactKind : byte {
     Board,
     /// <summary>A phase protocol progression value.</summary>
     Phase,
-    /// <summary>A pattern-language match over a row's word (<see cref="WorldRuleFacts.MatchPrefix"/>): acceptance 1
+    /// <summary>A pattern-language match over a row's word (<see cref="RuleFacts.MatchPrefix"/>): acceptance 1
     /// or 0, a longest accepted prefix, or the accepting directions of a board origin.</summary>
     Pattern,
-    /// <summary>One value of a history ring by age (<see cref="WorldRuleFacts.HistoryPrefix"/>): 0 is the latest push,
+    /// <summary>One value of a history ring by age (<see cref="RuleFacts.HistoryPrefix"/>): 0 is the latest push,
     /// and an age the ring no longer holds reads the trait's empty value.</summary>
     History,
     /// <summary>The world's musical clock's signed phase error against the nearest beat
     /// (<see cref="WorldRuleFacts.ClockPrefix"/>).</summary>
     Clock,
 
-    /// <summary>A value the enclosing rule bound for this evaluation (<see cref="WorldRuleFacts.BindPrefix"/>).</summary>
+    /// <summary>A value the enclosing rule bound for this evaluation (<see cref="RuleFacts.BindPrefix"/>).</summary>
     Binding,
 
-    /// <summary>A static table entry (<see cref="WorldRuleFacts.TablePrefix"/>).</summary>
+    /// <summary>A static table entry (<see cref="RuleFacts.TablePrefix"/>).</summary>
     Table,
 }
 // CompiledWorldOperand is now the closed-union carrier declared in WorldOperandUnion.cs, with its case types in
@@ -420,8 +420,8 @@ public readonly record struct CompiledWorldPredicate(
 /// <param name="Operation">The stack operation.</param>
 /// <param name="Constant">The raw destination-kind literal for a constant token.</param>
 /// <param name="Operand">The live operand for an operand token.</param>
-/// <param name="Board">The compiled topology and direction of a <see cref="WorldExpressionOp.BoardShift"/> token.</param>
-public readonly record struct CompiledWorldExpressionToken(WorldExpressionOp Operation, long Constant = 0L, CompiledWorldOperand? Operand = null, CompiledWorldBoardQuery? Board = null);
+/// <param name="Board">The compiled topology and direction of a <see cref="ExpressionOp.BoardShift"/> token.</param>
+public readonly record struct CompiledWorldExpressionToken(ExpressionOp Operation, long Constant = 0L, CompiledWorldOperand? Operand = null, CompiledWorldBoardQuery? Board = null);
 /// <summary>A world-driven body operation compiled entirely to deterministic numerics.</summary>
 /// <param name="Operation">The body instruction operation.</param>
 /// <param name="Value">The operation's fixed-point scalar.</param>

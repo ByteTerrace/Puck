@@ -10,7 +10,7 @@ public static partial class WorldDefinitionValidator {
         }
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var topology in topologies) {
-            if (topology is null || !WorldCellName.TryParse(topology.Name, out _, out _) || !names.Add(topology.Name)) {
+            if (topology is null || !CellName.TryParse(topology.Name, out _, out _) || !names.Add(topology.Name)) {
                 errors.Add("state.lattices requires unique valid topology names.");
                 continue;
             }
@@ -79,7 +79,7 @@ public static partial class WorldDefinitionValidator {
                 if (domain is null || domain.EffectiveDomain is not WorldStateDomain.Keys) {
                     errors.Add($"state row '{row.Name}': '{domainName}' names no token domain.");
                 } else {
-                    var keys = new HashSet<WorldCellName>((domain.Cells ?? []).Where(c => c is not null).Select(c => c.Key));
+                    var keys = new HashSet<CellName>((domain.Cells ?? []).Where(c => c is not null).Select(c => c.Key));
                     foreach (var cell in row.Cells ?? []) {
                         if (cell is not null && !keys.Contains(cell.Key)) {
                             errors.Add($"state row '{row.Name}': key '{cell.Key}' is outside token domain '{domainName}'.");

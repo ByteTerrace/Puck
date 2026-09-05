@@ -25,7 +25,7 @@ public abstract record ActionPredicate {
     /// <param name="Comparison">The comparison operation.</param>
     /// <param name="Right">Right numeric expression.</param>
     /// <param name="Kind">The common Int or Fixed domain; no implicit conversion is performed.</param>
-    public sealed record CompareValue(WorldValueExpression Left, ActionStateComparison Comparison, WorldValueExpression Right, CellKind Kind = CellKind.Fixed) : ActionPredicate;
+    public sealed record CompareValue(ValueExpression Left, ActionStateComparison Comparison, ValueExpression Right, CellKind Kind = CellKind.Fixed) : ActionPredicate;
     /// <summary>The fact holds this tick.</summary>
     public sealed record Now(ActionFact Fact) : ActionPredicate;
     /// <summary>The fact held within the last <paramref name="WindowSeconds"/> — a per-instance recency clock,
@@ -40,7 +40,7 @@ public abstract record ActionPredicate {
     /// mechanism.</summary>
     /// <param name="State">At body scope, a named counter slot the kit declares. At world scope (see
     /// <see cref="WorldRule"/>), a declared <c>state</c>-section row name, or one of
-    /// <see cref="WorldRuleFacts"/>'s reserved channels.</param>
+    /// <see cref="RuleFacts"/>'s reserved channels.</param>
     /// <param name="Comparison">The comparison to apply.</param>
     /// <param name="Value">The authored constant comparand, or <see langword="null"/> when
     /// <paramref name="ComparandState"/> spells the comparand instead. Required (non-null) at body scope, where a
@@ -51,7 +51,7 @@ public abstract record ActionPredicate {
     /// is not keyed, and a parsed-and-discarded field is worse than no field.</param>
     /// <param name="ComparandState">world scope only (refused at body scope, on the same terms as
     /// <paramref name="Key"/>): another declared <c>state</c>-section row name, or one of
-    /// <see cref="WorldRuleFacts"/>'s reserved channels, read live and compared instead of <paramref name="Value"/>.
+    /// <see cref="RuleFacts"/>'s reserved channels, read live and compared instead of <paramref name="Value"/>.
     /// A dotted spelling (an author reaching for <c>row.key</c> in one string) is refused by name — address the cell
     /// with <paramref name="ComparandKey"/> instead. Comparing across incompatible cell kinds (an <c>int</c> row
     /// against a <c>fixed</c> row, say) is refused by name — mixing scales silently is worse than naming the
@@ -151,7 +151,7 @@ public readonly record struct WorldGameplayCue(string Name, string? Payload, int
 public abstract record WorldTransactionStep {
     /// <summary>One atomic state transform.</summary>
     /// <param name="Transform">The bounded operation.</param>
-    public sealed record TransformStateStep(WorldStateTransform Transform) : WorldTransactionStep;
+    public sealed record TransformStateStep(StateTransform Transform) : WorldTransactionStep;
     /// <summary>Sets one state cell from exactly one numeric source spelling.</summary>
     /// <param name="State">The destination row.</param>
     /// <param name="Key">The optional destination cell key.</param>
@@ -167,7 +167,7 @@ public abstract record WorldTransactionStep {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromState = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ValueSeconds = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldValueExpression? Expression = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? Expression = null
     ) : WorldTransactionStep;
     /// <summary>Adds exactly one numeric source to a state cell.</summary>
     /// <param name="State">The destination row.</param>
@@ -184,7 +184,7 @@ public abstract record WorldTransactionStep {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromState = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ValueSeconds = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldValueExpression? Expression = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? Expression = null
     ) : WorldTransactionStep;
     /// <summary>Consumes one non-negative integer countdown by the current engine-step width.</summary>
     /// <param name="State">The countdown row.</param>
@@ -263,7 +263,7 @@ public abstract record WorldTransactionStep {
 public abstract record ActionEffect {
     /// <summary>Applies a bounded state transform through the ordinary mutation pipeline.</summary>
     /// <param name="Transform">The typed operation.</param>
-    public sealed record TransformState(WorldStateTransform Transform) : ActionEffect;
+    public sealed record TransformState(StateTransform Transform) : ActionEffect;
     /// <summary>Writes the body's vertical-velocity channel (the jump launch / the surge). Under the grounded program
     /// gravity owns its decay; under the free program it bleeds to zero at the tuning's rise gravity (no fall phase).</summary>
     public sealed record SetVerticalVelocity(float Velocity, ActionTarget Target = ActionTarget.Self) : ActionEffect;
@@ -286,7 +286,7 @@ public abstract record ActionEffect {
         decimal? Value = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromState = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldValueExpression? Expression = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? Expression = null
     ) : ActionEffect;
     /// <summary>Writes a named state cell — a kit counter slot at body scope, a <c>state</c>-section row's cell at
     /// world scope (see <see cref="WorldRule"/>).</summary>
@@ -300,7 +300,7 @@ public abstract record ActionEffect {
     /// <param name="Key">The cell inside <paramref name="State"/> at world scope — <see langword="null"/> writes the
     /// row's slot cell, which a keyed row does not have (refused by name). Refused at body scope.</param>
     /// <param name="FromState">world scope only (refused at body scope, on the same terms as <paramref name="Value"/>):
-    /// another declared <c>state</c>-section row name, or one of <see cref="WorldRuleFacts"/>'s reserved channels,
+    /// another declared <c>state</c>-section row name, or one of <see cref="RuleFacts"/>'s reserved channels,
     /// read live at fire time and copied in place of an authored <paramref name="Value"/> — the row that resets to
     /// another row's own current value (a shadow row mirroring a counter someone else advances), never only a
     /// standing literal. Resolved through the same operand walk <see cref="ActionPredicate.CompareState"/>'s own
@@ -335,7 +335,7 @@ public abstract record ActionEffect {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ValueSeconds = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Text = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldValueExpression? Expression = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? Expression = null
     ) : ActionEffect;
     /// <summary>Adds to a named state cell — a kit counter slot at body scope, a <c>state</c>-section row's cell at
     /// world scope (see <see cref="WorldRule"/>).</summary>
@@ -359,7 +359,7 @@ public abstract record ActionEffect {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromState = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ValueSeconds = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldValueExpression? Expression = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? Expression = null
     ) : ActionEffect;
     /// <summary>Decrements a world-state countdown by the current simulation step's engine-tick width, saturating at
     /// zero. world scope only: the destination must be a <c>kind=int nonNegative=true</c> row. Unlike an authored

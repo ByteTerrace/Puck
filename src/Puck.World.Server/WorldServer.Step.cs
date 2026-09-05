@@ -416,11 +416,11 @@ public sealed partial class WorldServer {
     // caller's scratch list; the cells themselves are not retained.
     // A latch key for a non-integer forEach cell: its position in the row, flagged above any body index.
     private const int PositionalLatchBase = 0x4000_0000;
-    private readonly List<WorldCellName> m_eachKeyScratch = [];
+    private readonly List<CellName> m_eachKeyScratch = [];
     private string? m_boundEachKey;
 
     // Every cell key of the iterated row in cell order; an integer key also binds the body of that index.
-    private void EachKeys(string row, List<WorldCellName> into) {
+    private void EachKeys(string row, List<CellName> into) {
         into.Clear();
 
         if (WorldDefinitionRows.FindStateRow(
@@ -730,7 +730,7 @@ public sealed partial class WorldServer {
             // turns from and the value the could-this-move test compares against is the stored phase, not the live
             // rotation the trait carried it to this tick.
             if (
-                WorldCellName.TryParse(candidate: destinationKey, name: out var destinationCell, reason: out _) &&
+                CellName.TryParse(candidate: destinationKey, name: out var destinationCell, reason: out _) &&
                 (WorldDefinitionRows.FindCell(cells: row.Cells, key: destinationCell) is { } storedCell) &&
                 ((storedCell.Cycle is not null) || ((storedCell.Key == WorldStateRow.SlotKey) && (row.Cycle is not null)))
             ) {
@@ -895,11 +895,11 @@ public sealed partial class WorldServer {
 
         try {
             foreach (var token in program) {
-                if (token.Operation == WorldExpressionOp.Constant) {
+                if (token.Operation == ExpressionOp.Constant) {
                     stack[top++] = token.Constant;
                     continue;
                 }
-                if (token.Operation == WorldExpressionOp.Operand) {
+                if (token.Operation == ExpressionOp.Operand) {
                     var fact = ReadWorldFact(operand: token.Operand!.Value, tick: tick);
                     if (m_tableKeyMissing) {
                         m_tableKeyMissing = false;
@@ -913,7 +913,7 @@ public sealed partial class WorldServer {
                     stack[top++] = ConvertWorldFactToRaw(value: fact, kind: kind);
                     continue;
                 }
-                if (token.Operation == WorldExpressionOp.Clamp) {
+                if (token.Operation == ExpressionOp.Clamp) {
                     var maximum = stack[--top];
                     var minimum = stack[--top];
                     var input = stack[--top];
@@ -924,47 +924,47 @@ public sealed partial class WorldServer {
                     stack[top++] = Math.Clamp(value: input, min: minimum, max: maximum);
                     continue;
                 }
-                if (token.Operation == WorldExpressionOp.Select) {
+                if (token.Operation == ExpressionOp.Select) {
                     var whenFalse = stack[--top];
                     var whenTrue = stack[--top];
                     var condition = stack[--top];
                     stack[top++] = ((condition != 0L) ? whenTrue : whenFalse);
                     continue;
                 }
-                if (token.Operation == WorldExpressionOp.BitField) {
+                if (token.Operation == ExpressionOp.BitField) {
                     var width = stack[--top];
                     var offset = stack[--top];
                     var input = stack[--top];
-                    if (!WorldExpressionArithmetic.TryBitField(input, offset, width, out var field)) {
+                    if (!ExpressionArithmetic.TryBitField(input, offset, width, out var field)) {
                         value = 0L;
                         return false;
                     }
                     stack[top++] = field;
                     continue;
                 }
-                if (token.Operation == WorldExpressionOp.BoardShift) {
+                if (token.Operation == ExpressionOp.BoardShift) {
                     stack[top - 1] = WorldBoardQueries.ShiftMask((BoardNeighbourQuery)token.Board!, stack[top - 1]);
                     continue;
                 }
-                if (token.Operation == WorldExpressionOp.BoardImage) {
+                if (token.Operation == ExpressionOp.BoardImage) {
                     var image = (BoardNeighbourQuery)token.Board!;
                     stack[top - 1] = WorldBoardQueries.ImageOfMask(image.Topology, image.Direction, stack[top - 1]);
                     continue;
                 }
-                if (token.Operation == WorldExpressionOp.BitInsert) {
+                if (token.Operation == ExpressionOp.BitInsert) {
                     var width = stack[--top];
                     var offset = stack[--top];
                     var field = stack[--top];
                     var input = stack[--top];
-                    if (!WorldExpressionArithmetic.TryBitInsert(input, field, offset, width, out var inserted)) {
+                    if (!ExpressionArithmetic.TryBitInsert(input, field, offset, width, out var inserted)) {
                         value = 0L;
                         return false;
                     }
                     stack[top++] = inserted;
                     continue;
                 }
-                if (WorldExpressionArithmetic.IsUnary(token.Operation)) {
-                    if (!WorldExpressionArithmetic.TryUnary(token.Operation, kind, stack[top - 1], out var unary)) {
+                if (ExpressionArithmetic.IsUnary(token.Operation)) {
+                    if (!ExpressionArithmetic.TryUnary(token.Operation, kind, stack[top - 1], out var unary)) {
                         value = 0L;
                         return false;
                     }
@@ -976,7 +976,7 @@ public sealed partial class WorldServer {
                 var left = stack[--top];
                 // Data-dependent arithmetic refusal can occur thousands of times in a dense flock sample.
                 // Preserve the ordinary checked/rounded semantics without allocating an exception per neighbor.
-                if (!WorldExpressionArithmetic.TryBinary(token.Operation, kind, left, right, out var result)) {
+                if (!ExpressionArithmetic.TryBinary(token.Operation, kind, left, right, out var result)) {
                     value = 0L;
                     return false;
                 }
@@ -2016,7 +2016,7 @@ public sealed partial class WorldServer {
             Right: -1
         );
 
-        // Checkpoint spelling: "" for None, else ":left" or ":left:right" — ':' is reserved out of WorldCellName, so
+        // Checkpoint spelling: "" for None, else ":left" or ":left:right" — ':' is reserved out of CellName, so
         // the rule name it trails can never contain it. KEEP IN SYNC with TryParse.
         public string Format() => ((Left < 0)
             ? string.Empty

@@ -127,7 +127,7 @@ public sealed class StrictParseLawTests {
             DynamicsRaw = [.. Fixtures.StandardDynamics, new WorldDynamicsRow(Damping: 1f, Frequency: 1f, Name: "gauge", Response: 0f)],
             StateRaw = new WorldStateSection(World: [
                 new WorldStateRow(
-                    Name: WorldCellName.Parse(candidate: "hp"),
+                    Name: CellName.Parse(candidate: "hp"),
                     Kind: CellKind.Fixed,
                     Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)],
                     Dynamics: new WorldStateDynamics(EpochTick: 42, Row: "gauge", V0: v0, Y0: y0)

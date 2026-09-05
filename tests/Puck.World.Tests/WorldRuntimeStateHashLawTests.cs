@@ -14,12 +14,12 @@ public sealed class WorldRuntimeStateHashLawTests {
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [
                 new WorldStateRow(
-                    Name: WorldCellName.Parse(candidate: "count"),
+                    Name: CellName.Parse(candidate: "count"),
                     Kind: CellKind.Int,
                     Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 17L)]
                 ),
                 new WorldStateRow(
-                    Name: WorldCellName.Parse(candidate: "label"),
+                    Name: CellName.Parse(candidate: "label"),
                     Kind: CellKind.Text,
                     Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Text: "café")]
                 ),
@@ -60,7 +60,7 @@ public sealed class WorldRuntimeStateHashLawTests {
 
     [Fact]
     public void WorldScope_DistinguishesStoredAdvanceTraitsWithTheSameCurrentValue() {
-        var name = WorldCellName.Parse(candidate: "future-state");
+        var name = CellName.Parse(candidate: "future-state");
         var plain = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [new WorldStateRow(
                 Name: name,
@@ -88,7 +88,7 @@ public sealed class WorldRuntimeStateHashLawTests {
 
     [Fact]
     public void WorldScope_DistinguishesDrawTraitsWithTheSameCurrentValue() {
-        var name = WorldCellName.Parse(candidate: "future-draw");
+        var name = CellName.Parse(candidate: "future-draw");
         var plain = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [new WorldStateRow(
                 Name: name,

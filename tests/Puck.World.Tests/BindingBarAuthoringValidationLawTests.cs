@@ -102,9 +102,9 @@ public sealed class BindingBarAuthoringValidationLawTests {
     );
     private static WorldDefinition WithPolicy(WorldBindingBarAuthoring policy) => Fixtures.BuildDocument() with {
         StateRaw = new WorldStateSection(World: [
-            new WorldStateRow(Name: WorldCellName.Parse(candidate: "actionIcons"), Kind: CellKind.Text, Capacity: 8, Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "jump"), Text: "known.icon")]),
-            new WorldStateRow(Name: WorldCellName.Parse(candidate: "numericIcons"), Kind: CellKind.Int, Capacity: 8),
-            new WorldStateRow(Name: WorldCellName.Parse(candidate: "scalarIcons"), Kind: CellKind.Text, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Text: "known.icon")]),
+            new WorldStateRow(Name: CellName.Parse(candidate: "actionIcons"), Kind: CellKind.Text, Capacity: 8, Cells: [new WorldStateCell(Key: CellName.Parse(candidate: "jump"), Text: "known.icon")]),
+            new WorldStateRow(Name: CellName.Parse(candidate: "numericIcons"), Kind: CellKind.Int, Capacity: 8),
+            new WorldStateRow(Name: CellName.Parse(candidate: "scalarIcons"), Kind: CellKind.Text, Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Text: "known.icon")]),
         ]),
         BindingOverlaysRaw = [
             new WorldBindingOverlay(

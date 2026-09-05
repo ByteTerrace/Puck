@@ -41,7 +41,7 @@ public sealed class ReplayOrderedDomainCaptureLawTests {
 
         transport.SubmitWorldMutation(mutation: new WorldMutation.UpsertStateRow(
             Principal: WorldPrincipal.Console,
-            Row: new WorldStateRow(Name: WorldCellName.Parse(candidate: "tape-probe"), Kind: CellKind.Int)
+            Row: new WorldStateRow(Name: CellName.Parse(candidate: "tape-probe"), Kind: CellKind.Int)
         ));
         transport.SubmitUndo(
             count: 1,

@@ -13,7 +13,7 @@ public static partial class WorldDefinitionValidator {
 
         if (
             WorldDefinitionRows.FindStateRow(rows: definition.State, name: rowName) is not { } row ||
-            !WorldCellName.TryParse(candidate: key, name: out var cellKey, reason: out _) ||
+            !CellName.TryParse(candidate: key, name: out var cellKey, reason: out _) ||
             WorldDefinitionRows.FindCell(cells: row.Cells, key: cellKey) is not { } cell
         ) {
             reason = $"state row '{rowName}' cell '{key}' did not resolve after composition";
@@ -963,7 +963,7 @@ public static partial class WorldDefinitionValidator {
     }
     // The state section: schema cap (MaxRows), name uniqueness, both-or-neither Min/Max range (applied to every
     // cell's value), text-cell length against MaxTextValueLength, and per-row cell-count ceiling (MaxCellsPerRow,
-    // optionally narrowed by an authored Capacity). WorldCellName already refuses an empty/unsafe/dotted row name at
+    // optionally narrowed by an authored Capacity). CellName already refuses an empty/unsafe/dotted row name at
     // JSON parse, so this pass checks only uniqueness. Returns the declared rows by name so ValidateHud can refuse
     // an unknown state.<row>/state.<row>.<key> binding.
     private static Dictionary<string, WorldStateRow> ValidateState(IReadOnlyList<WorldStateRow> rows, IReadOnlyList<WorldGeneratorRow>? generators, ISet<string> dynamicsNames, List<string> errors) {
@@ -1034,7 +1034,7 @@ public static partial class WorldDefinitionValidator {
                 comparisonType: StringComparison.Ordinal,
                 value: WorldStateRow.ReservedNamePrefix
             )) {
-                errors.Add(item: $"{path}.name '{row.Name}' starts with the reserved prefix '{WorldStateRow.ReservedNamePrefix}' — reserved for engine-minted names and the rules section's own channels ({WorldRuleFacts.Tick}, {WorldRuleFacts.Population}, {WorldRuleFacts.RegionPrefix}<placementId>).");
+                errors.Add(item: $"{path}.name '{row.Name}' starts with the reserved prefix '{WorldStateRow.ReservedNamePrefix}' — reserved for engine-minted names and the rules section's own channels ({RuleFacts.Tick}, {WorldRuleFacts.Population}, {WorldRuleFacts.RegionPrefix}<placementId>).");
             }
 
             if (!Enum.IsDefined(value: row.Kind)) {
@@ -1171,7 +1171,7 @@ public static partial class WorldDefinitionValidator {
                     continue;
                 }
 
-                // A cell key can no longer be empty, dotted, or otherwise unsafe — WorldCellName refuses that at JSON
+                // A cell key can no longer be empty, dotted, or otherwise unsafe — CellName refuses that at JSON
                 // parse, before this method ever sees the cell — so this checks only uniqueness and the reserved key.
                 if (!keys.Add(item: cell.Key)) {
                     errors.Add(item: $"{path} ('{row.Name}') key '{cell.Key}' is duplicated.");

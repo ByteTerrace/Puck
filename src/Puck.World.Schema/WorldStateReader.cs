@@ -397,7 +397,7 @@ public static class WorldStateReader {
         var target = (key ?? WorldStateRow.SlotKey.Value);
 
         if (
-            !WorldCellName.TryParse(
+            !CellName.TryParse(
             candidate: target,
             name: out var targetKey,
             reason: out _
@@ -486,7 +486,7 @@ public static class WorldStateReader {
         }
 
         var target = (key ?? WorldStateRow.SlotKey.Value);
-        var cell = (WorldCellName.TryParse(
+        var cell = (CellName.TryParse(
             candidate: target,
             name: out var targetKey,
             reason: out _

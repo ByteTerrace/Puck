@@ -809,7 +809,7 @@ declaring its own copy.
 
 **Cellset-domain unification, the 64-cell half (landed).** The forked
 vocabulary was never a type-system problem: `$board:mask` already reads a
-board's occupancy as a plain `Int` 64-bit cell-set, and `WorldValueToken`'s
+board's occupancy as a plain `Int` 64-bit cell-set, and `ValueToken`'s
 `bitAnd`/`bitOr`/`bitXor`/`bitNot`/`popCount`/`lowestSetBit` were already
 generic ops over that same `Int`, so no new operand/effect value kind was
 needed to unify it — only the genuinely duplicate spellings were. Deleted:
@@ -1314,8 +1314,11 @@ and `puck schema --check` byte-identical to before:
 1. The pure pieces move with no behaviour change — expression syntax and
    tokens, the expression arithmetic, tables and their document, state
    transforms, the identifier family, the reserved-channel prefixes, the opcode
-   enum. Consumers take a global using; type names keep their `World` prefix
-   until the last phase so every diff reads as a move.
+   enum. Consumers take a global using, and the moved types drop their
+   `World` prefix at once — a state library names no world — while the
+   world-only reserved channels (bodies, distance, line of sight, screens,
+   links, regions, the population) stay in the document project as
+   `WorldRuleFacts` beside the state-neutral `RuleFacts`.
 2. The extension seams. The operand and effect unions become registries the
    world project fills with its own arms (distance, line of sight, channels,
    bodies; pose, cue, HUD, placement, field, save), each arm carrying its own
@@ -1325,8 +1328,7 @@ and `puck schema --check` byte-identical to before:
    is designed rather than assumed.
 3. The evaluator moves behind a state-host interface — the mutation door, the
    journal, checkpoints, and the world-fact reader the operands answer through
-   — that `WorldServer` implements; only then do the `World` prefixes go, in one
-   rename sweep.
+   — that `WorldServer` implements.
 Refused: a compatibility shim between old and new spellings at any phase, and
 moving the evaluator before the seams exist.
 

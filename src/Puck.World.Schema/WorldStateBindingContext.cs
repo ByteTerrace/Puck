@@ -70,7 +70,7 @@ public static class WorldStateBindingContext {
 
         var candidate = reference[RowReferencePrefix.Length..];
 
-        if (!WorldCellName.TryParse(
+        if (!CellName.TryParse(
             candidate: candidate,
             name: out var name,
             reason: out _
@@ -86,7 +86,7 @@ public static class WorldStateBindingContext {
     /// <param name="family">The binding-context family name.</param>
     /// <param name="rowName">The validated state-row name on success.</param>
     /// <returns><see langword="true"/> when <paramref name="family"/> names a valid state-backed family.</returns>
-    public static bool TryParseFamily(string? family, out WorldCellName rowName) {
+    public static bool TryParseFamily(string? family, out CellName rowName) {
         rowName = default;
 
         return (
@@ -95,7 +95,7 @@ public static class WorldStateBindingContext {
             comparisonType: StringComparison.Ordinal,
             value: FamilyPrefix
         ) &&
-            WorldCellName.TryParse(
+            CellName.TryParse(
             candidate: family[FamilyPrefix.Length..],
             name: out rowName,
             reason: out _

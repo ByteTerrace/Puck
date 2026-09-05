@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace Puck.World;
 
-/// <summary>The transfer-count ceiling every <see cref="WorldStateTransform.Transfer"/> is validated against.</summary>
+/// <summary>The transfer-count ceiling every <see cref="StateTransform.Transfer"/> is validated against.</summary>
 public static class WorldStateTransferCapacity {
     /// <summary>The most tokens one transfer moves in a single mutation — <see cref="WorldTopologyCompilation.MaxCells"/>,
     /// the ceiling an uncapacitied <see cref="WorldStateDomain.KeysOf"/> pile row's own cell count is bounded by.</summary>

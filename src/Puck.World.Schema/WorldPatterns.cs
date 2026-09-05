@@ -8,7 +8,7 @@ namespace Puck.World;
 /// <param name="Min">The least value the symbol accepts.</param>
 /// <param name="Max">The greatest value the symbol accepts.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldPatternSymbol(WorldCellName Name, decimal Min, decimal Max);
+public sealed record WorldPatternSymbol(CellName Name, decimal Min, decimal Max);
 
 /// <summary>The closed pattern vocabulary over a row's cell values, matched against the whole word. Complement and
 /// intersection are first-class, so "no two adjacent kings" and "holds a 2 and a 5" are single patterns rather than
@@ -71,13 +71,13 @@ public abstract record WorldPatternNode {
 /// <param name="MaxStates">The machine-state budget the compile refuses past, 1..256.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldPatternRow(
-    WorldCellName Name,
+    CellName Name,
     CellKind Kind,
     IReadOnlyList<WorldPatternSymbol> Symbols,
     WorldPatternNode Pattern,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Attribute = null,
     int MaxStates = WorldPatternCapacity.DefaultStates,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldValueExpression? Value = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? Value = null
 );
 
 /// <summary>Representation ceilings for the pattern section.</summary>
@@ -244,7 +244,7 @@ public sealed class CompiledWorldPattern {
     private static bool TryLower(CellKind kind, decimal literal, out long raw) {
         try {
             raw = (kind == CellKind.Fixed)
-                ? WorldStateNumericLiteral.ToFixed(value: literal).Value
+                ? NumericLiteral.ToFixed(value: literal).Value
                 : checked((long)decimal.Round(d: literal, decimals: 0, mode: MidpointRounding.ToEven));
             return true;
         } catch (OverflowException) {

@@ -460,41 +460,41 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         return cost;
     }
 
-    private static long TransformCost(WorldStateTransform transform, WorldDefinition definition) {
+    private static long TransformCost(StateTransform transform, WorldDefinition definition) {
         var storage = definition.State.Sum(static row => (long)row.CellCeiling);
         var cost = 4096L + storage;
         switch (transform) {
-            case WorldStateTransform.SetRay ray:
+            case StateTransform.SetRay ray:
                 var board = WorldDefinitionRows.FindStateRow(definition.State, ray.Row)!;
                 var count = WorldTopologyCompilation.Find(definition.StateRaw, ((WorldStateDomain.CellsOf)board.EffectiveDomain).Topology)!.CellCount;
                 cost += (long)count * (count + 2);
                 break;
-            case WorldStateTransform.Transfer transfer:
+            case StateTransform.Transfer transfer:
                 var dealt = WorldDefinitionRows.FindStateRow(definition.State, transfer.From)!;
                 cost += (long)transfer.Count * (dealt.Capacity ?? dealt.CellCeiling);
                 break;
-            case WorldStateTransform.SortZone sortZone:
+            case StateTransform.SortZone sortZone:
                 var sortedZone = WorldDefinitionRows.FindStateRow(definition.State, sortZone.Row)!;
                 cost += 2L * (sortedZone.Capacity ?? sortedZone.CellCeiling) * Math.Max(1, sortZone.By.Count);
                 break;
-            case WorldStateTransform.SortKeyed sortKeyed:
+            case StateTransform.SortKeyed sortKeyed:
                 var sortedKeyed = WorldDefinitionRows.FindStateRow(definition.State, sortKeyed.Row)!;
                 cost += 2L * (sortedKeyed.Capacity ?? sortedKeyed.CellCeiling);
                 break;
-            case WorldStateTransform.Shuffle shuffle:
+            case StateTransform.Shuffle shuffle:
                 var pile = WorldDefinitionRows.FindStateRow(definition.State, shuffle.Row)!;
                 cost += 2L * (pile.Capacity ?? pile.CellCeiling);
                 break;
-            case WorldStateTransform.WriteSet writeSet:
+            case StateTransform.WriteSet writeSet:
                 var written = WorldDefinitionRows.FindStateRow(definition.State, writeSet.Row)!;
                 var writtenCells = WorldTopologyCompilation.Find(definition.StateRaw, ((WorldStateDomain.CellsOf)written.EffectiveDomain).Topology)!.CellCount;
                 cost += (long)writtenCells * (writtenCells + 1);
                 break;
-            case WorldStateTransform.Push push:
+            case StateTransform.Push push:
                 var ring = WorldDefinitionRows.FindStateRow(definition.State, push.Row)!;
                 cost += 2L * ((ring.EffectiveDomain as WorldStateDomain.Ring)?.Capacity ?? 1);
                 break;
-            case WorldStateTransform.Observe observe:
+            case StateTransform.Observe observe:
                 var row = WorldDefinitionRows.FindStateRow(definition.State, observe.Row)!;
                 var cells = WorldTopologyCompilation.Find(definition.StateRaw, ((WorldStateDomain.CellsOf)row.EffectiveDomain).Topology)!.CellCount;
                 cost += (long)cells * (cells + 3);

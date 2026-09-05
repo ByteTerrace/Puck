@@ -2659,7 +2659,7 @@
           "const": "compareState"
         },
         "state": {
-          "description": "At body scope, a named counter slot the kit declares. At world scope (see WorldRule), a declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels.",
+          "description": "At body scope, a named counter slot the kit declares. At world scope (see WorldRule), a declared state-section row name, or one of RuleFacts\u0027s reserved channels.",
           "type": "string"
         },
         "comparison": {
@@ -2683,7 +2683,7 @@
           "default": null
         },
         "comparandState": {
-          "description": "world scope only (refused at body scope, on the same terms as Key): another declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels, read live and compared instead of Value. A dotted spelling (an author reaching for row.key in one string) is refused by name \u2014 address the cell with ComparandKey instead. Comparing across incompatible cell kinds (an int row against a fixed row, say) is refused by name \u2014 mixing scales silently is worse than naming the mismatch.",
+          "description": "world scope only (refused at body scope, on the same terms as Key): another declared state-section row name, or one of RuleFacts\u0027s reserved channels, read live and compared instead of Value. A dotted spelling (an author reaching for row.key in one string) is refused by name \u2014 address the cell with ComparandKey instead. Comparing across incompatible cell kinds (an int row against a fixed row, say) is refused by name \u2014 mixing scales silently is worse than naming the mismatch.",
           "type": [
             "string",
             "null"
@@ -2705,7 +2705,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldValueTokenConstant": {
+    "ValueTokenConstant": {
       "description": "An exact authored decimal, converted to the destination row\u0027s numeric kind at compile time.",
       "properties": {
         "$type": {
@@ -2721,7 +2721,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldValueTokenState": {
+    "ValueTokenState": {
       "description": "A live state cell or reserved world-rule channel.",
       "properties": {
         "$type": {
@@ -2745,7 +2745,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldValueTokenAdd": {
+    "ValueTokenAdd": {
       "description": "Consumes two values and pushes their sum.",
       "properties": {
         "$type": {
@@ -2754,7 +2754,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenSubtract": {
+    "ValueTokenSubtract": {
       "description": "Consumes two values and pushes left minus right.",
       "properties": {
         "$type": {
@@ -2763,7 +2763,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenMultiply": {
+    "ValueTokenMultiply": {
       "description": "Consumes two values and pushes their product in the destination row\u0027s numeric domain.",
       "properties": {
         "$type": {
@@ -2772,7 +2772,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenDivide": {
+    "ValueTokenDivide": {
       "description": "Consumes two values and pushes left divided by right; zero fails evaluation. The caller closes a gate, rejects an effect/decision candidate, or supplies zero affinity according to its own contract.",
       "properties": {
         "$type": {
@@ -2781,7 +2781,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenMin": {
+    "ValueTokenMin": {
       "description": "Consumes two values and pushes the lesser.",
       "properties": {
         "$type": {
@@ -2790,7 +2790,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenMax": {
+    "ValueTokenMax": {
       "description": "Consumes two values and pushes the greater.",
       "properties": {
         "$type": {
@@ -2799,7 +2799,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenClamp": {
+    "ValueTokenClamp": {
       "description": "Consumes value, minimum, maximum (in that authored order) and pushes the inclusive clamp.",
       "properties": {
         "$type": {
@@ -2808,7 +2808,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenModulo": {
+    "ValueTokenModulo": {
       "description": "Consumes two values and pushes the remainder of left divided by right, truncating toward zero (Int: 37 % 40 = 37; Fixed: the raw remainder, so 2.5 % 1 = 0.5). A zero divisor fails evaluation; a divisor of -1 yields zero.",
       "properties": {
         "$type": {
@@ -2817,7 +2817,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenBitAnd": {
+    "ValueTokenBitAnd": {
       "description": "Consumes two Int values and pushes their bitwise AND. Int expressions only.",
       "properties": {
         "$type": {
@@ -2826,7 +2826,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenBitOr": {
+    "ValueTokenBitOr": {
       "description": "Consumes two Int values and pushes their bitwise OR. Int expressions only.",
       "properties": {
         "$type": {
@@ -2835,7 +2835,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenBitXor": {
+    "ValueTokenBitXor": {
       "description": "Consumes two Int values and pushes their bitwise XOR. Int expressions only.",
       "properties": {
         "$type": {
@@ -2844,7 +2844,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenBitNot": {
+    "ValueTokenBitNot": {
       "description": "Consumes one Int value and pushes its bitwise complement. Int expressions only.",
       "properties": {
         "$type": {
@@ -2853,7 +2853,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenShiftLeft": {
+    "ValueTokenShiftLeft": {
       "description": "Consumes value, count and pushes value shifted left by count bits; bits leave the top without refusal, so 1 shiftLeft 63 is the sign bit. A count outside 0..63 fails evaluation. Int only.",
       "properties": {
         "$type": {
@@ -2862,7 +2862,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenShiftRight": {
+    "ValueTokenShiftRight": {
       "description": "Consumes value, count and pushes the arithmetic (sign-propagating) right shift. A count outside 0..63 fails evaluation. Int only.",
       "properties": {
         "$type": {
@@ -2871,7 +2871,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenShiftRightLogical": {
+    "ValueTokenShiftRightLogical": {
       "description": "Consumes value, count and pushes the logical (zero-filling) right shift, the bitboard walk. A count outside 0..63 fails evaluation. Int only.",
       "properties": {
         "$type": {
@@ -2880,7 +2880,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenEqual": {
+    "ValueTokenEqual": {
       "description": "Consumes two same-kind values and pushes Int 1 when equal, else 0.",
       "properties": {
         "$type": {
@@ -2889,7 +2889,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenNotEqual": {
+    "ValueTokenNotEqual": {
       "description": "Consumes two same-kind values and pushes Int 1 when unequal, else 0.",
       "properties": {
         "$type": {
@@ -2898,7 +2898,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenLess": {
+    "ValueTokenLess": {
       "description": "Consumes two same-kind values and pushes Int 1 when left is less than right, else 0.",
       "properties": {
         "$type": {
@@ -2907,7 +2907,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenLessOrEqual": {
+    "ValueTokenLessOrEqual": {
       "description": "Consumes two same-kind values and pushes Int 1 when left is at most right, else 0.",
       "properties": {
         "$type": {
@@ -2916,7 +2916,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenGreater": {
+    "ValueTokenGreater": {
       "description": "Consumes two same-kind values and pushes Int 1 when left is greater than right, else 0.",
       "properties": {
         "$type": {
@@ -2925,7 +2925,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenGreaterOrEqual": {
+    "ValueTokenGreaterOrEqual": {
       "description": "Consumes two same-kind values and pushes Int 1 when left is at least right, else 0.",
       "properties": {
         "$type": {
@@ -2934,7 +2934,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenSelect": {
+    "ValueTokenSelect": {
       "description": "Consumes condition, whenTrue, whenFalse (in that authored order) and pushes whenTrue when the Int condition is nonzero, else whenFalse. The two branches must share a kind; the result takes it.",
       "properties": {
         "$type": {
@@ -2943,7 +2943,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenPopCount": {
+    "ValueTokenPopCount": {
       "description": "Consumes one Int value and pushes the number of set bits (0..64): a bitboard\u0027s piece count. Int only.",
       "properties": {
         "$type": {
@@ -2952,7 +2952,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenLeadingZeroCount": {
+    "ValueTokenLeadingZeroCount": {
       "description": "Consumes one Int value and pushes the count of zero bits above the highest set bit (64 for zero): 63 - leadingZeroCount is the highest set square, the integer log2. Int only.",
       "properties": {
         "$type": {
@@ -2961,7 +2961,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenTrailingZeroCount": {
+    "ValueTokenTrailingZeroCount": {
       "description": "Consumes one Int value and pushes the count of zero bits below the lowest set bit (64 for zero): the lowest occupied square\u0027s index. Int only.",
       "properties": {
         "$type": {
@@ -2970,7 +2970,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenLowestSetBit": {
+    "ValueTokenLowestSetBit": {
       "description": "Consumes one Int value and pushes its lowest set bit alone (x \u0026 -x; zero for zero): the next piece to visit. Int only.",
       "properties": {
         "$type": {
@@ -2979,7 +2979,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenClearLowestSetBit": {
+    "ValueTokenClearLowestSetBit": {
       "description": "Consumes one Int value and pushes it with its lowest set bit cleared (x \u0026 (x - 1)): the remaining pieces after a visit. Int only.",
       "properties": {
         "$type": {
@@ -2988,7 +2988,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenRotateLeft": {
+    "ValueTokenRotateLeft": {
       "description": "Consumes value, count and pushes the 64-bit left rotation; a count outside 0..63 fails evaluation. Int only.",
       "properties": {
         "$type": {
@@ -2997,7 +2997,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenRotateRight": {
+    "ValueTokenRotateRight": {
       "description": "Consumes value, count and pushes the 64-bit right rotation; a count outside 0..63 fails evaluation. Int only.",
       "properties": {
         "$type": {
@@ -3006,7 +3006,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenByteSwap": {
+    "ValueTokenByteSwap": {
       "description": "Consumes one Int value and pushes its eight bytes in reverse order: on an 8x8 bitboard, the board flipped rank for rank (a vertical mirror). Int only.",
       "properties": {
         "$type": {
@@ -3015,7 +3015,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenBitReverse": {
+    "ValueTokenBitReverse": {
       "description": "Consumes one Int value and pushes its 64 bits in reverse order: on an 8x8 bitboard, the board rotated a half turn. Int only.",
       "properties": {
         "$type": {
@@ -3024,7 +3024,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenNegate": {
+    "ValueTokenNegate": {
       "description": "Consumes one value and pushes its negation in the same kind; the carrier\u0027s minimum fails evaluation.",
       "properties": {
         "$type": {
@@ -3033,7 +3033,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenAbs": {
+    "ValueTokenAbs": {
       "description": "Consumes one value and pushes its magnitude in the same kind; the carrier\u0027s minimum fails evaluation.",
       "properties": {
         "$type": {
@@ -3042,7 +3042,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenSign": {
+    "ValueTokenSign": {
       "description": "Consumes one value of either kind and pushes Int -1, 0, or 1 by its sign.",
       "properties": {
         "$type": {
@@ -3051,7 +3051,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenParallelBitExtract": {
+    "ValueTokenParallelBitExtract": {
       "description": "Consumes value, mask and pushes the bits of value at the mask\u0027s set positions, packed toward bit 0 in order (pext): a bitboard\u0027s occupancy along a chosen set of squares as a dense index. Int only.",
       "properties": {
         "$type": {
@@ -3060,7 +3060,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenParallelBitDeposit": {
+    "ValueTokenParallelBitDeposit": {
       "description": "Consumes value, mask and pushes the low bits of value scattered to the mask\u0027s set positions in order (pdep): a dense index back onto its squares. Int only.",
       "properties": {
         "$type": {
@@ -3069,7 +3069,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenBitField": {
+    "ValueTokenBitField": {
       "description": "Consumes value, offset, width and pushes the unsigned field of width bits starting at bit offset; width outside 1..64 or offset \u002B width above 64 fails evaluation. Int only.",
       "properties": {
         "$type": {
@@ -3078,7 +3078,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenBitInsert": {
+    "ValueTokenBitInsert": {
       "description": "Consumes value, field, offset, width and pushes value with the width bits at offset replaced by the low bits of field; the same bounds as BitField. Int only.",
       "properties": {
         "$type": {
@@ -3087,7 +3087,7 @@
       },
       "additionalProperties": false
     },
-    "WorldValueTokenBoardShift": {
+    "ValueTokenBoardShift": {
       "description": "Consumes one Int mask over the named topology\u0027s cells (bit c is cell ordinal c, at most 64 cells) and pushes it with every set bit moved to that cell\u0027s neighbour in the named direction; a cell with no neighbour that way drops its bit instead of wrapping, so an attack map never crosses an edge. Int only.",
       "properties": {
         "$type": {
@@ -3108,7 +3108,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldValueTokenBoardImage": {
+    "ValueTokenBoardImage": {
       "description": "Consumes one Int mask over the named topology\u0027s cells and pushes it carried through a point-group element of that topology (a rotation or mirror of the board), so a rule authored from one side\u0027s view reads the other side\u0027s board through the half turn. Int only.",
       "properties": {
         "$type": {
@@ -3129,150 +3129,150 @@
       ],
       "additionalProperties": false
     },
-    "WorldValueToken": {
-      "description": "One authored token in a WorldValueExpression.",
+    "ValueToken": {
+      "description": "One authored token in a ValueExpression.",
       "type": "object",
       "required": [
         "$type"
       ],
       "anyOf": [
         {
-          "$ref": "#/$defs/WorldValueTokenConstant"
+          "$ref": "#/$defs/ValueTokenConstant"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenState"
+          "$ref": "#/$defs/ValueTokenState"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenAdd"
+          "$ref": "#/$defs/ValueTokenAdd"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenSubtract"
+          "$ref": "#/$defs/ValueTokenSubtract"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenMultiply"
+          "$ref": "#/$defs/ValueTokenMultiply"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenDivide"
+          "$ref": "#/$defs/ValueTokenDivide"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenMin"
+          "$ref": "#/$defs/ValueTokenMin"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenMax"
+          "$ref": "#/$defs/ValueTokenMax"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenClamp"
+          "$ref": "#/$defs/ValueTokenClamp"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenModulo"
+          "$ref": "#/$defs/ValueTokenModulo"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenBitAnd"
+          "$ref": "#/$defs/ValueTokenBitAnd"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenBitOr"
+          "$ref": "#/$defs/ValueTokenBitOr"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenBitXor"
+          "$ref": "#/$defs/ValueTokenBitXor"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenBitNot"
+          "$ref": "#/$defs/ValueTokenBitNot"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenShiftLeft"
+          "$ref": "#/$defs/ValueTokenShiftLeft"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenShiftRight"
+          "$ref": "#/$defs/ValueTokenShiftRight"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenShiftRightLogical"
+          "$ref": "#/$defs/ValueTokenShiftRightLogical"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenEqual"
+          "$ref": "#/$defs/ValueTokenEqual"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenNotEqual"
+          "$ref": "#/$defs/ValueTokenNotEqual"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenLess"
+          "$ref": "#/$defs/ValueTokenLess"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenLessOrEqual"
+          "$ref": "#/$defs/ValueTokenLessOrEqual"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenGreater"
+          "$ref": "#/$defs/ValueTokenGreater"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenGreaterOrEqual"
+          "$ref": "#/$defs/ValueTokenGreaterOrEqual"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenSelect"
+          "$ref": "#/$defs/ValueTokenSelect"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenPopCount"
+          "$ref": "#/$defs/ValueTokenPopCount"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenLeadingZeroCount"
+          "$ref": "#/$defs/ValueTokenLeadingZeroCount"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenTrailingZeroCount"
+          "$ref": "#/$defs/ValueTokenTrailingZeroCount"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenLowestSetBit"
+          "$ref": "#/$defs/ValueTokenLowestSetBit"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenClearLowestSetBit"
+          "$ref": "#/$defs/ValueTokenClearLowestSetBit"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenRotateLeft"
+          "$ref": "#/$defs/ValueTokenRotateLeft"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenRotateRight"
+          "$ref": "#/$defs/ValueTokenRotateRight"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenByteSwap"
+          "$ref": "#/$defs/ValueTokenByteSwap"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenBitReverse"
+          "$ref": "#/$defs/ValueTokenBitReverse"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenNegate"
+          "$ref": "#/$defs/ValueTokenNegate"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenAbs"
+          "$ref": "#/$defs/ValueTokenAbs"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenSign"
+          "$ref": "#/$defs/ValueTokenSign"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenParallelBitExtract"
+          "$ref": "#/$defs/ValueTokenParallelBitExtract"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenParallelBitDeposit"
+          "$ref": "#/$defs/ValueTokenParallelBitDeposit"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenBitField"
+          "$ref": "#/$defs/ValueTokenBitField"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenBitInsert"
+          "$ref": "#/$defs/ValueTokenBitInsert"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenBoardShift"
+          "$ref": "#/$defs/ValueTokenBoardShift"
         },
         {
-          "$ref": "#/$defs/WorldValueTokenBoardImage"
+          "$ref": "#/$defs/ValueTokenBoardImage"
         }
       ]
     },
-    "WorldValueExpressionTokens": {
-      "description": "The postfix object spelling of a WorldValueExpression: { \u0022tokens\u0022: [...] }. The converter reads this shape when an expression is authored as tokens and writes it back for an expression that carries no infix text.",
+    "ValueExpressionTokens": {
+      "description": "The postfix object spelling of a ValueExpression: { \u0022tokens\u0022: [...] }. The converter reads this shape when an expression is authored as tokens and writes it back for an expression that carries no infix text.",
       "type": "object",
       "properties": {
         "tokens": {
           "description": "The postfix tokens, in evaluation order.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/WorldValueToken"
+            "$ref": "#/$defs/ValueToken"
           }
         }
       },
@@ -3281,8 +3281,8 @@
       ],
       "additionalProperties": false
     },
-    "WorldValueExpression": {
-      "description": "A bounded postfix numeric expression evaluated by a world rule, decision, or flock affinity. Each token either pushes a value or consumes preceding values; the compiler proves stack shape and numeric kind before simulation begins. Authored either as an infix string (WorldExpressionSyntax, \u0022min(damage, hp) * 2\u0022) or as the postfix { \u0022tokens\u0022: [...] } object; both parse to the same tokens and each writes back in its own spelling.",
+    "ValueExpression": {
+      "description": "A bounded postfix numeric expression evaluated by a world rule, decision, or flock affinity. Each token either pushes a value or consumes preceding values; the compiler proves stack shape and numeric kind before simulation begins. Authored either as an infix string (ExpressionSpelling, \u0022min(damage, hp) * 2\u0022) or as the postfix { \u0022tokens\u0022: [...] } object; both parse to the same tokens and each writes back in its own spelling.",
       "anyOf": [
         {
           "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
@@ -3291,7 +3291,7 @@
           "maxLength": 4096
         },
         {
-          "$ref": "#/$defs/WorldValueExpressionTokens"
+          "$ref": "#/$defs/ValueExpressionTokens"
         }
       ]
     },
@@ -3302,7 +3302,7 @@
           "const": "compareValue"
         },
         "left": {
-          "$ref": "#/$defs/WorldValueExpression",
+          "$ref": "#/$defs/ValueExpression",
           "description": "Left numeric expression."
         },
         "comparison": {
@@ -3310,7 +3310,7 @@
           "description": "The comparison operation."
         },
         "right": {
-          "$ref": "#/$defs/WorldValueExpression",
+          "$ref": "#/$defs/ValueExpression",
           "description": "Right numeric expression."
         },
         "kind": {
@@ -3676,7 +3676,7 @@
           "default": null
         },
         "fromState": {
-          "description": "world scope only (refused at body scope, on the same terms as Value): another declared state-section row name, or one of WorldRuleFacts\u0027s reserved channels, read live at fire time and copied in place of an authored Value \u2014 the row that resets to another row\u0027s own current value (a shadow row mirroring a counter someone else advances), never only a standing literal. Resolved through the same operand walk CompareState\u0027s own ComparandState uses; mixing a fixed row into an int destination (or the reverse) is refused by name rather than coerced.",
+          "description": "world scope only (refused at body scope, on the same terms as Value): another declared state-section row name, or one of RuleFacts\u0027s reserved channels, read live at fire time and copied in place of an authored Value \u2014 the row that resets to another row\u0027s own current value (a shadow row mirroring a counter someone else advances), never only a standing literal. Resolved through the same operand walk CompareState\u0027s own ComparandState uses; mixing a fixed row into an int destination (or the reverse) is refused by name rather than coerced.",
           "type": [
             "string",
             "null"
@@ -3708,7 +3708,7 @@
           "default": null
         },
         "expression": {
-          "$ref": "#/$defs/WorldValueExpression",
+          "$ref": "#/$defs/ValueExpression",
           "description": "World scope only: a bounded numeric expression evaluated in the destination row\u0027s integer or fixed-point domain. Exactly one source spelling is authored.",
           "default": null
         }
@@ -3778,7 +3778,7 @@
           "default": null
         },
         "expression": {
-          "$ref": "#/$defs/WorldValueExpression",
+          "$ref": "#/$defs/ValueExpression",
           "description": "World scope only \u2014 see Expression.",
           "default": null
         }
@@ -3823,7 +3823,7 @@
           "default": null
         },
         "expression": {
-          "$ref": "#/$defs/WorldValueExpression",
+          "$ref": "#/$defs/ValueExpression",
           "description": "A bounded numeric expression evaluated in the row\u0027s kind.",
           "default": null
         }
@@ -3833,7 +3833,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldStateTransformTransfer": {
+    "StateTransformTransfer": {
       "description": "Moves one token, preserving identity. A random draw advances only when the whole transfer commits.",
       "properties": {
         "$type": {
@@ -3890,7 +3890,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldStateTransformSetRay": {
+    "StateTransformSetRay": {
       "description": "Writes the longest run a patterns row accepts, walked from the origin outward: the same prefix semantics as the $match operand\u0027s prefix facet, landed back on the board instead of read as a fact. Refuses when the accepted prefix is empty, so an author closes a run with the required symbol (a bracket capture is plus(through) . symbol(until)) rather than an unbounded one running off the board.",
       "properties": {
         "$type": {
@@ -3926,7 +3926,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldStateTransformShuffle": {
+    "StateTransformShuffle": {
       "description": "Reorders a row\u0027s cells by value in place by one Fisher-Yates pass over the named redrawable integer streamDraw site: n cells consume n - 1 samples, so the site\u0027s cursor advances by exactly that and a replay reproduces the permutation.",
       "properties": {
         "$type": {
@@ -3947,7 +3947,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldSortKey": {
+    "SortKey": {
       "description": "One key of a zone sort: a keyed numeric attribute row over the zone\u0027s token domain.",
       "type": [
         "object",
@@ -3969,13 +3969,13 @@
       ],
       "additionalProperties": false
     },
-    "WorldSortKeyList": {
+    "SortKeyList": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/WorldSortKey"
+        "$ref": "#/$defs/SortKey"
       }
     },
-    "WorldStateTransformSortZone": {
+    "StateTransformSortZone": {
       "description": "Reorders an ordered zone by attribute rows over its token domain, stably: the first key decides and each later key breaks the ties before it. The canonical order a pattern reads a hand in.",
       "properties": {
         "$type": {
@@ -3986,7 +3986,7 @@
           "type": "string"
         },
         "by": {
-          "$ref": "#/$defs/WorldSortKeyList",
+          "$ref": "#/$defs/SortKeyList",
           "description": "The attribute keys, 1..MaxSortKeys distinct numeric rows keyed over the zone\u0027s token domain, in precedence order; each carries its own direction."
         }
       },
@@ -3996,7 +3996,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldStateTransformSortKeyed": {
+    "StateTransformSortKeyed": {
       "description": "Reorders a keyed numeric row by its own cell values, stably.",
       "properties": {
         "$type": {
@@ -4017,7 +4017,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldStateTransformWriteSet": {
+    "StateTransformWriteSet": {
       "description": "Writes one value into every cell of a board whose bit is set in a cell-set mask read from a state cell: the way a set built from $board:mask and the and/or/xor/not/shift/image expression ops lands back on the board. The one board-writing form for every topology of at most 64 cells; a wider topology has no transform of its own and composes through per-cell rules instead.",
       "properties": {
         "$type": {
@@ -4051,7 +4051,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldStateTransformPush": {
+    "StateTransformPush": {
       "description": "Appends one value to a history row\u0027s ring, overwriting the oldest slot once the ring is full, and advances its cursor by one.",
       "properties": {
         "$type": {
@@ -4072,7 +4072,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldStateTransformObserve": {
+    "StateTransformObserve": {
       "description": "Refreshes a knowledge board from its declared source and visibility mask; authority only.",
       "properties": {
         "$type": {
@@ -4087,7 +4087,7 @@
       ],
       "additionalProperties": false
     },
-    "WorldStateTransform": {
+    "StateTransform": {
       "description": "The closed set of atomic state transforms. Each folds one candidate document and journals once.",
       "type": "object",
       "required": [
@@ -4095,28 +4095,28 @@
       ],
       "anyOf": [
         {
-          "$ref": "#/$defs/WorldStateTransformTransfer"
+          "$ref": "#/$defs/StateTransformTransfer"
         },
         {
-          "$ref": "#/$defs/WorldStateTransformSetRay"
+          "$ref": "#/$defs/StateTransformSetRay"
         },
         {
-          "$ref": "#/$defs/WorldStateTransformShuffle"
+          "$ref": "#/$defs/StateTransformShuffle"
         },
         {
-          "$ref": "#/$defs/WorldStateTransformSortZone"
+          "$ref": "#/$defs/StateTransformSortZone"
         },
         {
-          "$ref": "#/$defs/WorldStateTransformSortKeyed"
+          "$ref": "#/$defs/StateTransformSortKeyed"
         },
         {
-          "$ref": "#/$defs/WorldStateTransformWriteSet"
+          "$ref": "#/$defs/StateTransformWriteSet"
         },
         {
-          "$ref": "#/$defs/WorldStateTransformPush"
+          "$ref": "#/$defs/StateTransformPush"
         },
         {
-          "$ref": "#/$defs/WorldStateTransformObserve"
+          "$ref": "#/$defs/StateTransformObserve"
         }
       ]
     },
@@ -4127,7 +4127,7 @@
           "const": "transformState"
         },
         "transform": {
-          "$ref": "#/$defs/WorldStateTransform",
+          "$ref": "#/$defs/StateTransform",
           "description": "The typed operation."
         }
       },
@@ -5159,7 +5159,7 @@
           "const": "transformState"
         },
         "transform": {
-          "$ref": "#/$defs/WorldStateTransform",
+          "$ref": "#/$defs/StateTransform",
           "description": "The bounded operation."
         }
       },
@@ -5219,7 +5219,7 @@
           "default": null
         },
         "expression": {
-          "$ref": "#/$defs/WorldValueExpression",
+          "$ref": "#/$defs/ValueExpression",
           "description": "The bounded postfix numeric source.",
           "default": null
         }
@@ -5280,7 +5280,7 @@
           "default": null
         },
         "expression": {
-          "$ref": "#/$defs/WorldValueExpression",
+          "$ref": "#/$defs/ValueExpression",
           "description": "The bounded postfix numeric source.",
           "default": null
         }

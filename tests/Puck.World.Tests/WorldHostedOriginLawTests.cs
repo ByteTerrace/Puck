@@ -24,11 +24,11 @@ public sealed class WorldHostedOriginLawTests {
     // see Fixtures' own remarks).
     private static Dictionary<string, WorldDefinition> BuildQuilt() {
         WorldReference Reference(string name, string document) => new(
-            Name: WorldSafeName.Parse(candidate: name),
+            Name: SafeName.Parse(candidate: name),
             Document: document
         );
         WorldDestination Destination(string name, string referenceName) => new(
-            Name: WorldSafeName.Parse(candidate: name),
+            Name: SafeName.Parse(candidate: name),
             Durability: WorldDestinationDurability.Persisted,
             Reference: referenceName,
             Scope: WorldDestinationScope.Global
@@ -36,9 +36,9 @@ public sealed class WorldHostedOriginLawTests {
 
         var nw = Fixtures.BuildDocument() with {
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "nwNeEdge"), "toNe", "neNwEdge", Boundary(yaw: 90f)),
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "nwSwEdge"), "toSw", "swNwEdge", Boundary(yaw: 180f)),
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "nwIslandEdge"), "toIsland", "islandNwEdge", Boundary(yaw: -90f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "nwNeEdge"), "toNe", "neNwEdge", Boundary(yaw: 90f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "nwSwEdge"), "toSw", "swNwEdge", Boundary(yaw: 180f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "nwIslandEdge"), "toIsland", "islandNwEdge", Boundary(yaw: -90f)),
             ],
             Destinations = [
                 Destination(name: "toNe", referenceName: "toNe"),
@@ -53,8 +53,8 @@ public sealed class WorldHostedOriginLawTests {
         };
         var ne = Fixtures.BuildDocument() with {
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "neNwEdge"), "toNw", "nwNeEdge", Boundary(yaw: -90f)),
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "neSeEdge"), "toSe", "seNeEdge", Boundary(yaw: 180f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "neNwEdge"), "toNw", "nwNeEdge", Boundary(yaw: -90f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "neSeEdge"), "toSe", "seNeEdge", Boundary(yaw: 180f)),
             ],
             Destinations = [
                 Destination(name: "toNw", referenceName: "toNw"),
@@ -67,8 +67,8 @@ public sealed class WorldHostedOriginLawTests {
         };
         var se = Fixtures.BuildDocument() with {
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "seNeEdge"), "toNe", "neSeEdge", Boundary(yaw: 0f)),
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "seSwEdge"), "toSw", "swSeEdge", Boundary(yaw: 180f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "seNeEdge"), "toNe", "neSeEdge", Boundary(yaw: 0f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "seSwEdge"), "toSw", "swSeEdge", Boundary(yaw: 180f)),
             ],
             Destinations = [
                 Destination(name: "toNe", referenceName: "toNe"),
@@ -81,8 +81,8 @@ public sealed class WorldHostedOriginLawTests {
         };
         var sw = Fixtures.BuildDocument() with {
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "swSeEdge"), "toSe", "seSwEdge", Boundary(yaw: 0f)),
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "swNwEdge"), "toNw", "nwSwEdge", Boundary(yaw: 0f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "swSeEdge"), "toSe", "seSwEdge", Boundary(yaw: 0f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "swNwEdge"), "toNw", "nwSwEdge", Boundary(yaw: 0f)),
             ],
             Destinations = [
                 Destination(name: "toSe", referenceName: "toSe"),
@@ -95,7 +95,7 @@ public sealed class WorldHostedOriginLawTests {
         };
         var island = Fixtures.BuildDocument() with {
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "islandNwEdge"), "toNw", "nwIslandEdge", Boundary(yaw: 90f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "islandNwEdge"), "toNw", "nwIslandEdge", Boundary(yaw: 90f)),
             ],
             Destinations = [
                 Destination(name: "toNw", referenceName: "toNw"),
@@ -134,7 +134,7 @@ public sealed class WorldHostedOriginLawTests {
                 composed: definition,
                 identity: new WorldAuthorityIdentity(
                     Owner: owner,
-                    World: WorldSafeName.Parse(candidate: id)
+                    World: SafeName.Parse(candidate: id)
                 )
             );
 
@@ -173,7 +173,7 @@ public sealed class WorldHostedOriginLawTests {
                 owner: owner,
                 store: store,
                 target: target,
-                world: WorldSafeName.Parse(candidate: id)
+                world: SafeName.Parse(candidate: id)
             );
 
             Assert.True(

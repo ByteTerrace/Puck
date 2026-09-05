@@ -12,14 +12,14 @@ namespace Puck.World;
 /// refuses any other shape. <see cref="NeighbourKey"/> folds whichever spelling was authored into the one opaque
 /// string every <see cref="IWorldNeighbourResolver"/> call site already passes around.
 /// </summary>
-/// <param name="Name">The reference's own name — <see cref="WorldSafeName"/>-shaped, unique within the section.</param>
+/// <param name="Name">The reference's own name — <see cref="SafeName"/>-shaped, unique within the section.</param>
 /// <param name="Document">The referenced world's document path (e.g. <c>"dive.world.json"</c>), authored verbatim.
 /// Mutually exclusive with <see cref="Owner"/>/<see cref="World"/>.</param>
 /// <param name="Owner">The remote world's owning platform user id (an Entra oid) — worlds ARE users, so naming the
 /// owner names the world's account. Required together with <see cref="World"/>; refused alone.</param>
-/// <param name="World">The remote world's own <see cref="WorldSafeName"/>-shaped id within its owner's account.
+/// <param name="World">The remote world's own <see cref="SafeName"/>-shaped id within its owner's account.
 /// Required together with <see cref="Owner"/>; refused alone.</param>
-public sealed record WorldReference(WorldSafeName Name, string? Document = null, Guid? Owner = null, WorldSafeName? World = null) {
+public sealed record WorldReference(SafeName Name, string? Document = null, Guid? Owner = null, SafeName? World = null) {
     /// <summary>
     /// Gets the opaque key every <see cref="IWorldNeighbourResolver"/> call site resolves against — the authored
     /// <see cref="Document"/> path verbatim, or, for the owner-named arm, <c>"owner/{Owner:D}/{World}"</c>. Never

@@ -12,7 +12,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
     public void ShuffleIsAPermutationThatSpendsOneSamplePerPositionAndReplaysExactly() {
         var definition = Deck(52);
 
-        var shuffled = Apply(definition, new WorldStateTransform.Shuffle("deck", "dice"));
+        var shuffled = Apply(definition, new StateTransform.Shuffle("deck", "dice"));
         var order = Find(shuffled, "deck").Cells!.Select(c => c.Key.Value).ToArray();
 
         Assert.Equal(52, order.Length);
@@ -20,10 +20,10 @@ public sealed class WorldDeckAndDisclosureLawTests {
         Assert.NotEqual(Find(definition, "deck").Cells!.Select(c => c.Key.Value), order);
         Assert.Equal(51L, Find(shuffled, "dice").DrawCursor);
 
-        var again = Apply(definition, new WorldStateTransform.Shuffle("deck", "dice"));
+        var again = Apply(definition, new StateTransform.Shuffle("deck", "dice"));
         Assert.Equal(order, Find(again, "deck").Cells!.Select(c => c.Key.Value));
 
-        var later = Apply(shuffled, new WorldStateTransform.Shuffle("deck", "dice"));
+        var later = Apply(shuffled, new StateTransform.Shuffle("deck", "dice"));
         Assert.NotEqual(order, Find(later, "deck").Cells!.Select(c => c.Key.Value));
         Assert.Equal(102L, Find(later, "dice").DrawCursor);
     }
@@ -33,22 +33,22 @@ public sealed class WorldDeckAndDisclosureLawTests {
         // keysOf collapsed the old ordered-zone/unordered-attribute-row split into one shape: cell order is either
         // gameplay-meaningful (a pile) or incidental, but a keyed row's cells can always be permuted either way.
         var unordered = Deck(4) with { };
-        unordered = unordered with { StateRaw = unordered.StateRaw! with { World = unordered.StateRaw.World!.Select(r => r.Name.Value == "deck" ? r with { Domain = new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: false) } : r).ToArray() } };
-        Assert.True(WorldStateTransforms.TryApply(unordered, new WorldStateTransform.Shuffle("deck", "dice"), WorldPrincipal.World, 0, "test", out _, out var unorderedReason), unorderedReason);
+        unordered = unordered with { StateRaw = unordered.StateRaw! with { World = unordered.StateRaw.World!.Select(r => r.Name.Value == "deck" ? r with { Domain = new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: false) } : r).ToArray() } };
+        Assert.True(WorldStateTransforms.TryApply(unordered, new StateTransform.Shuffle("deck", "dice"), WorldPrincipal.World, 0, "test", out _, out var unorderedReason), unorderedReason);
 
         var slotOnly = Deck(4) with { };
         slotOnly = slotOnly with { StateRaw = slotOnly.StateRaw! with { World = slotOnly.StateRaw.World!.Select(r => r.Name.Value == "deck" ? r with { Domain = null, Capacity = null, Cells = [new(WorldStateRow.SlotKey, 0)] } : r).ToArray() } };
-        Assert.False(WorldStateTransforms.TryApply(slotOnly, new WorldStateTransform.Shuffle("deck", "dice"), WorldPrincipal.World, 0, "test", out _, out var reason));
+        Assert.False(WorldStateTransforms.TryApply(slotOnly, new StateTransform.Shuffle("deck", "dice"), WorldPrincipal.World, 0, "test", out _, out var reason));
         Assert.Contains("keyed row", reason);
 
         var bootSite = Deck(4);
         bootSite = bootSite with { StateRaw = bootSite.StateRaw! with { World = bootSite.StateRaw.World!.Select(r => r.Name.Value == "dice" ? r with { Draw = r.Draw! with { Timing = WorldDrawTiming.Boot } } : r).ToArray() } };
-        Assert.False(WorldStateTransforms.TryApply(bootSite, new WorldStateTransform.Shuffle("deck", "dice"), WorldPrincipal.World, 0, "test", out _, out var siteReason));
+        Assert.False(WorldStateTransforms.TryApply(bootSite, new StateTransform.Shuffle("deck", "dice"), WorldPrincipal.World, 0, "test", out _, out var siteReason));
         Assert.Contains("streamDraw site", siteReason);
 
-        var ruled = Deck(4) with { Rules = [new WorldRule(WorldCellName.Parse("shuffle"), [new ActionEffect.TransformState(new WorldStateTransform.Shuffle("deck", "dice"))])] };
+        var ruled = Deck(4) with { Rules = [new WorldRule(CellName.Parse("shuffle"), [new ActionEffect.TransformState(new StateTransform.Shuffle("deck", "dice"))])] };
         Assert.True(WorldDefinitionValidator.TryValidateLocally(ruled, out var ok), ok);
-        var badRule = Deck(4) with { Rules = [new WorldRule(WorldCellName.Parse("shuffle"), [new ActionEffect.TransformState(new WorldStateTransform.Shuffle("deck", "deck"))])] };
+        var badRule = Deck(4) with { Rules = [new WorldRule(CellName.Parse("shuffle"), [new ActionEffect.TransformState(new StateTransform.Shuffle("deck", "deck"))])] };
         Assert.False(WorldDefinitionValidator.TryValidateLocally(badRule, out _));
     }
 
@@ -85,7 +85,7 @@ public sealed class WorldDeckAndDisclosureLawTests {
         return Fixtures.BuildDocument() with {
             StateRaw = new(World: [
                 new(Name("cards"), CellKind.Int, Cells: keys.Select(k => Cell(k)).ToArray(), Capacity: count),
-                new(Name("deck"), CellKind.Bool, Cells: keys.Select(k => Cell(k)).ToArray(), Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true), Capacity: count),
+                new(Name("deck"), CellKind.Bool, Cells: keys.Select(k => Cell(k)).ToArray(), Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), Capacity: count),
                 new(Name("dice"), CellKind.Int, Draw: new WorldDraw(Generator: new WorldGenerator(Source: WorldGeneratorSource.StreamDraw), Timing: WorldDrawTiming.Event)),
             ]),
             Rules = [],
@@ -94,15 +94,15 @@ public sealed class WorldDeckAndDisclosureLawTests {
     private static WorldDefinition Hand(WorldHiddenCells hidden) => Fixtures.BuildDocument() with {
         StateRaw = new(World: [
             new(Name("cards"), CellKind.Int, Cells: [Cell("ace", 101), Cell("king", 202)], Visibility: new()),
-            new(Name("hand"), CellKind.Bool, Cells: [Cell("ace") with { Visibility = new(["seat1"]) }, Cell("king") with { Visibility = new(["seat1"]) }], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true), Visibility: new(Hidden: hidden)),
+            new(Name("hand"), CellKind.Bool, Cells: [Cell("ace") with { Visibility = new(["seat1"]) }, Cell("king") with { Visibility = new(["seat1"]) }], Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), Visibility: new(Hidden: hidden)),
         ]),
         Rules = [],
     };
-    private static WorldDefinition Apply(WorldDefinition definition, WorldStateTransform transform) {
+    private static WorldDefinition Apply(WorldDefinition definition, StateTransform transform) {
         Assert.True(WorldStateTransforms.TryApply(definition, transform, WorldPrincipal.World, 1, "test", out var candidate, out var reason), reason);
         return candidate!;
     }
-    private static WorldCellName Name(string value) => WorldCellName.Parse(value);
+    private static CellName Name(string value) => CellName.Parse(value);
     private static WorldStateCell Cell(string key, long value = 1) => new(Name(key), value);
     private static WorldStateRow Find(WorldDefinition document, string row) => WorldDefinitionRows.FindStateRow(document.State, row)!;
 }

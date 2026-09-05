@@ -186,7 +186,7 @@ public sealed class WorldFieldFlowLawTests {
         var document = FlowFields(width: 2, depth: 1, waterHeightScale: 0f, includeGround: false, spillRow: "spill");
         var lattice = Fixtures.BuildLattice(
             document: document,
-            state: [new WorldStateRow(Name: WorldCellName.Parse(candidate: "spill"), Kind: CellKind.Fixed)]
+            state: [new WorldStateRow(Name: CellName.Parse(candidate: "spill"), Kind: CellKind.Fixed)]
         );
 
         lattice.Restore(checkpoint: IntCheckpoint([4, 6]));
@@ -239,7 +239,7 @@ public sealed class WorldFieldFlowLawTests {
         var wrongShapeBase = Fixtures.WithLattice(definition: Fixtures.BuildDocument(), composite: FlowFields(width: 2, depth: 2, spillRow: "keyed"));
         var wrongShape = wrongShapeBase with {
             StateRaw = wrongShapeBase.StateRaw! with {
-                World = [.. (wrongShapeBase.StateRaw!.World ?? []), new WorldStateRow(Name: WorldCellName.Parse(candidate: "keyed"), Kind: CellKind.Fixed, Capacity: 4)],
+                World = [.. (wrongShapeBase.StateRaw!.World ?? []), new WorldStateRow(Name: CellName.Parse(candidate: "keyed"), Kind: CellKind.Fixed, Capacity: 4)],
             },
         };
 

@@ -48,10 +48,10 @@ public static partial class WorldRuleCompiler {
     // dynamic key ($cell:<row>:<key>, $each, or $bind:<name>) is read at evaluation.
     private static ResolvedOperand ResolveTableOperand(string name, string? key, string ruleName, WorldDefinition definition, string keyFieldLabel) {
         RefuseKeyOnReservedChannel(key: key, keyFieldLabel: keyFieldLabel, name: name, ruleName: ruleName);
-        var rest = name[WorldRuleFacts.TablePrefix.Length..];
+        var rest = name[RuleFacts.TablePrefix.Length..];
         var firstColon = rest.IndexOf(value: ':');
         if (firstColon <= 0 || firstColon == rest.Length - 1) {
-            throw new WorldRuleException(refusal: WorldRuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"'{name}' does not spell '{WorldRuleFacts.TablePrefix}<table>:<key>' or '{WorldRuleFacts.TablePrefix}<table>:<column>:<key>'");
+            throw new WorldRuleException(refusal: WorldRuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"'{name}' does not spell '{RuleFacts.TablePrefix}<table>:<key>' or '{RuleFacts.TablePrefix}<table>:<column>:<key>'");
         }
         string[] tokens = [rest[..firstColon], rest[(firstColon + 1)..]];
         var tables = (definition.Tables ?? []);
@@ -75,14 +75,14 @@ public static partial class WorldRuleCompiler {
             var columnName = (columnColon < 0) ? spelledKey : spelledKey[..columnColon];
             column = table.Column(name: columnName);
             if (column < 0 || columnColon < 0 || columnColon == spelledKey.Length - 1) {
-                throw new WorldRuleException(refusal: WorldRuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"'{name}': table '{tokens[0]}' has columns [{string.Join(separator: ", ", values: table.ColumnNames)}] and is read as '{WorldRuleFacts.TablePrefix}{tokens[0]}:<column>:<key>'");
+                throw new WorldRuleException(refusal: WorldRuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"'{name}': table '{tokens[0]}' has columns [{string.Join(separator: ", ", values: table.ColumnNames)}] and is read as '{RuleFacts.TablePrefix}{tokens[0]}:<column>:<key>'");
             }
             spelledKey = spelledKey[(columnColon + 1)..];
         }
         CompiledCellRef? keyFrom = null;
         var keyBinding = -1;
         var literal = 0L;
-        if (spelledKey.StartsWith(WorldRuleFacts.BindPrefix, StringComparison.Ordinal)) {
+        if (spelledKey.StartsWith(RuleFacts.BindPrefix, StringComparison.Ordinal)) {
             var bound = ResolveBindingOperand(name: spelledKey, key: null, ruleName: ruleName, keyFieldLabel: keyFieldLabel);
             if (bound.ValueKind != CellKind.Int) {
                 throw new WorldRuleException(refusal: WorldRuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"'{name}' key '{spelledKey}' is a fixed binding — a table key is an int binding");
@@ -91,7 +91,7 @@ public static partial class WorldRuleCompiler {
         } else if (TryResolveDynamicKey(key: spelledKey, ruleName: ruleName, definition: definition, verb: name, keyFieldLabel: "key", cell: out var dynamic)) {
             keyFrom = dynamic;
         } else if (!long.TryParse(s: spelledKey, style: System.Globalization.NumberStyles.AllowLeadingSign, provider: System.Globalization.CultureInfo.InvariantCulture, result: out literal)) {
-            throw new WorldRuleException(refusal: WorldRuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"'{name}' key '{spelledKey}' is not an integer, a '{WorldRuleFacts.CellKeyPrefix}<row>:<key>' indirection, a '{WorldRuleFacts.BindPrefix}<name>' binding, or a bound key token");
+            throw new WorldRuleException(refusal: WorldRuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"'{name}' key '{spelledKey}' is not an integer, a '{RuleFacts.CellKeyPrefix}<row>:<key>' indirection, a '{RuleFacts.BindPrefix}<name>' binding, or a bound key token");
         } else if (!table.TryLookup(key: literal, column: column, raw: out _)) {
             throw new WorldRuleException(refusal: WorldRuleRefusal.StateCellUndeclared, ruleName: ruleName, detail: $"'{name}' names key {literal}, which table '{tokens[0]}' does not carry");
         }
@@ -103,7 +103,7 @@ public static partial class WorldRuleCompiler {
     }
     private static ResolvedOperand ResolveBindingOperand(string name, string? key, string ruleName, string keyFieldLabel) {
         RefuseKeyOnReservedChannel(key: key, keyFieldLabel: keyFieldLabel, name: name, ruleName: ruleName);
-        var bound = name[WorldRuleFacts.BindPrefix.Length..];
+        var bound = name[RuleFacts.BindPrefix.Length..];
         var scope = (s_ruleBindings ?? []);
         for (var ordinal = 0; ordinal < scope.Count; ordinal++) {
             if (string.Equals(a: scope[ordinal].Name, b: bound, comparisonType: StringComparison.Ordinal)) {

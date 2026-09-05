@@ -12,7 +12,7 @@ namespace Puck.World.Schema.Tests;
 /// </summary>
 public sealed class StateAdvanceComputeLawTests {
     private static WorldStateRow Row(CellKind kind, long? min = null, long? max = null) => new(
-        Name: WorldCellName.Parse(candidate: "gauge"),
+        Name: CellName.Parse(candidate: "gauge"),
         Kind: kind,
         Min: min,
         Max: max,

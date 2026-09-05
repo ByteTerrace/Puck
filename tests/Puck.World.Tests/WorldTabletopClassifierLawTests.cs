@@ -25,34 +25,34 @@ public sealed class WorldTabletopClassifierLawTests {
     private const string Board = "board";
     private const string Prev = "previousBoard";
 
-    private static WorldValueToken[] Eq(WorldValueToken[] a, long v) => [.. a, new WorldValueToken.Constant(v), new WorldValueToken.Equal()];
-    private static WorldValueToken[] Eq(WorldValueToken[] a, WorldValueToken[] b) => [.. a, .. b, new WorldValueToken.Equal()];
-    private static WorldValueToken[] Mul(WorldValueToken[] a, WorldValueToken[] b) => [.. a, .. b, new WorldValueToken.Multiply()];
-    private static WorldValueToken[] Row(string name) => [new WorldValueToken.State(name)];
+    private static ValueToken[] Eq(ValueToken[] a, long v) => [.. a, new ValueToken.Constant(v), new ValueToken.Equal()];
+    private static ValueToken[] Eq(ValueToken[] a, ValueToken[] b) => [.. a, .. b, new ValueToken.Equal()];
+    private static ValueToken[] Mul(ValueToken[] a, ValueToken[] b) => [.. a, .. b, new ValueToken.Multiply()];
+    private static ValueToken[] Row(string name) => [new ValueToken.State(name)];
     // Reads `row[<key-row>'s own SlotKey cell]` -- the same dynamic ($cell:<row>:<key>) indirection the garden's
-    // board.$cell:cWhiteToCell:$value reads carry, spelled directly through WorldValueToken.State's own Key rather
+    // board.$cell:cWhiteToCell:$value reads carry, spelled directly through ValueToken.State's own Key rather
     // than the JSON convenience string.
-    private static WorldValueToken[] RowAt(string row, string keyRowSlotName) => [new WorldValueToken.State(row, $"$cell:{keyRowSlotName}:{WorldStateRow.SlotKey}")];
-    private static WorldValueToken[] Const(long v) => [new WorldValueToken.Constant(v)];
-    private static WorldValueToken[] PopcountOf(string maskRow) => [.. Row(maskRow), new WorldValueToken.PopCount()];
-    private static WorldValueToken[] Sig(long ownVac, long ownOcc, long otherVac, long otherOcc) => Mul(
+    private static ValueToken[] RowAt(string row, string keyRowSlotName) => [new ValueToken.State(row, $"$cell:{keyRowSlotName}:{WorldStateRow.SlotKey}")];
+    private static ValueToken[] Const(long v) => [new ValueToken.Constant(v)];
+    private static ValueToken[] PopcountOf(string maskRow) => [.. Row(maskRow), new ValueToken.PopCount()];
+    private static ValueToken[] Sig(long ownVac, long ownOcc, long otherVac, long otherOcc) => Mul(
         Mul(Eq(PopcountOf("ownVac"), ownVac), Eq(PopcountOf("ownOcc"), ownOcc)),
         Mul(Eq(PopcountOf("otherVac"), otherVac), Eq(PopcountOf("otherOcc"), otherOcc)));
     // Range 1:2 stands in for the garden's own 1:6 (every own piece kind, pawn included) -- wide enough that a
     // non-pawn own piece (code 2) still registers as "own", the same way the garden's mask range admits every
     // piece kind while a narrower per-shape test (the en passant mover check below) picks out the pawn alone.
-    private static WorldValueToken[] OwnVacMask() => [new WorldValueToken.State($"$board:mask:{Prev}:1:2"), new WorldValueToken.State($"$board:mask:{Board}:1:2"), new WorldValueToken.BitNot(), new WorldValueToken.BitAnd()];
-    private static WorldValueToken[] OwnOccMask() => [new WorldValueToken.State($"$board:mask:{Board}:1:2"), new WorldValueToken.State($"$board:mask:{Prev}:1:2"), new WorldValueToken.BitNot(), new WorldValueToken.BitAnd()];
-    private static WorldValueToken[] OtherVacMask() => [new WorldValueToken.State($"$board:mask:{Prev}:-1:-1"), new WorldValueToken.State($"$board:mask:{Board}:-1:-1"), new WorldValueToken.BitNot(), new WorldValueToken.BitAnd()];
-    private static WorldValueToken[] OtherOccMask() => [new WorldValueToken.State($"$board:mask:{Board}:-1:-1"), new WorldValueToken.State($"$board:mask:{Prev}:-1:-1"), new WorldValueToken.BitNot(), new WorldValueToken.BitAnd()];
-    private static WorldValueToken[] TZ(WorldValueToken[] m) => [.. m, new WorldValueToken.TrailingZeroCount()];
+    private static ValueToken[] OwnVacMask() => [new ValueToken.State($"$board:mask:{Prev}:1:2"), new ValueToken.State($"$board:mask:{Board}:1:2"), new ValueToken.BitNot(), new ValueToken.BitAnd()];
+    private static ValueToken[] OwnOccMask() => [new ValueToken.State($"$board:mask:{Board}:1:2"), new ValueToken.State($"$board:mask:{Prev}:1:2"), new ValueToken.BitNot(), new ValueToken.BitAnd()];
+    private static ValueToken[] OtherVacMask() => [new ValueToken.State($"$board:mask:{Prev}:-1:-1"), new ValueToken.State($"$board:mask:{Board}:-1:-1"), new ValueToken.BitNot(), new ValueToken.BitAnd()];
+    private static ValueToken[] OtherOccMask() => [new ValueToken.State($"$board:mask:{Board}:-1:-1"), new ValueToken.State($"$board:mask:{Prev}:-1:-1"), new ValueToken.BitNot(), new ValueToken.BitAnd()];
+    private static ValueToken[] TZ(ValueToken[] m) => [.. m, new ValueToken.TrailingZeroCount()];
     // The clamp finding #4/#8 add to the garden's own cWhite/cBlackFromCell/ToCell/CapturedCell and kingCell rows:
     // an empty mask's trailingZeroCount (64, the mask's own bit width) never gets written raw -- a mask with
     // nothing set reads as -1 ("no such cell") instead of leaking 64 into a row whose declared range refuses it.
-    private static WorldValueToken[] ClampedTZ(WorldValueToken[] m) => Select(Eq(PopcountOf2(m), 0), Const(-1), TZ(m));
-    private static WorldValueToken[] PopcountOf2(WorldValueToken[] m) => [.. m, new WorldValueToken.PopCount()];
-    private static WorldValueToken[] Select(WorldValueToken[] c, WorldValueToken[] t, WorldValueToken[] f) => [.. c, .. t, .. f, new WorldValueToken.Select()];
-    private static ActionEffect.SetState Set(string state, WorldValueToken[] expr) => new(State: state, Expression: new WorldValueExpression(expr));
+    private static ValueToken[] ClampedTZ(ValueToken[] m) => Select(Eq(PopcountOf2(m), 0), Const(-1), TZ(m));
+    private static ValueToken[] PopcountOf2(ValueToken[] m) => [.. m, new ValueToken.PopCount()];
+    private static ValueToken[] Select(ValueToken[] c, ValueToken[] t, ValueToken[] f) => [.. c, .. t, .. f, new ValueToken.Select()];
+    private static ActionEffect.SetState Set(string state, ValueToken[] expr) => new(State: state, Expression: new ValueExpression(expr));
 
     // kind: 0 none, 1 quiet, 2 capture, 3 en passant, 4 castle, 7 perturbation — the same codes the garden authors.
     // Split across several small rules, exactly as the garden's own classify-*-masks/counts/signatures/pick rules
@@ -63,23 +63,23 @@ public sealed class WorldTabletopClassifierLawTests {
     // unrelated other-side vacate anywhere on the board would forge a kind-3 record, which is exactly finding #1's
     // loophole.
     private static WorldRule[] ClassifyRules() => [
-        new(WorldCellName.Parse("masks"), [
+        new(CellName.Parse("masks"), [
             Set("ownVac", OwnVacMask()), Set("ownOcc", OwnOccMask()), Set("otherVac", OtherVacMask()), Set("otherOcc", OtherOccMask()),
         ]),
-        new(WorldCellName.Parse("sigs"), [
+        new(CellName.Parse("sigs"), [
             Set("quiet", Sig(1, 1, 0, 0)), Set("capture", Sig(1, 1, 1, 0)),
             Set("castle", Sig(2, 2, 0, 0)), Set("noChange", Sig(0, 0, 0, 0)),
         ]),
-        new(WorldCellName.Parse("cellsFrom"), [Set("fromCell", ClampedTZ(Row("ownVac")))]),
-        new(WorldCellName.Parse("cellsTo"), [Set("toCell", ClampedTZ(Row("ownOcc")))]),
-        new(WorldCellName.Parse("cellsCaptured"), [Set("capturedCell", ClampedTZ(Row("otherVac")))]),
-        new(WorldCellName.Parse("kindRule"), [
+        new(CellName.Parse("cellsFrom"), [Set("fromCell", ClampedTZ(Row("ownVac")))]),
+        new(CellName.Parse("cellsTo"), [Set("toCell", ClampedTZ(Row("ownOcc")))]),
+        new(CellName.Parse("cellsCaptured"), [Set("capturedCell", ClampedTZ(Row("otherVac")))]),
+        new(CellName.Parse("kindRule"), [
             Set("kind", Select(Row("quiet"), Const(1),
                 Select(Row("capture"),
                     Select(Eq(Row("capturedCell"), Row("toCell")), Const(2),
                         Select(
                             Mul(
-                                Eq(Row("capturedCell"), [.. Row("toCell"), .. Const(1), new WorldValueToken.Subtract()]),
+                                Eq(Row("capturedCell"), [.. Row("toCell"), .. Const(1), new ValueToken.Subtract()]),
                                 Eq(RowAt(Board, "toCell"), Const(1))),
                             Const(3), Const(7))),
                     Select(Row("castle"), Const(4),
@@ -90,13 +90,13 @@ public sealed class WorldTabletopClassifierLawTests {
     private static WorldDefinition Document(long[] previous, long[] current) {
         var document = Fixtures.BuildDocument();
         var topology = new WorldStateLatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, 4, 4);
-        WorldStateCell[] Cells(long[] values) => [.. Enumerable.Range(0, 16).Select(i => new WorldStateCell(WorldCellName.Parse(i.ToString()), values[i]))];
-        WorldStateRow Slot(string name, long min, long max) => new(WorldCellName.Parse(name), CellKind.Int, Min: min, Max: max, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0)]);
+        WorldStateCell[] Cells(long[] values) => [.. Enumerable.Range(0, 16).Select(i => new WorldStateCell(CellName.Parse(i.ToString()), values[i]))];
+        WorldStateRow Slot(string name, long min, long max) => new(CellName.Parse(name), CellKind.Int, Min: min, Max: max, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0)]);
 
         return document with {
             StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(WorldCellName.Parse(Board), CellKind.Int, Min: -6, Max: 6, Cells: Cells(current), Domain: new WorldStateDomain.CellsOf("board")),
-                new WorldStateRow(WorldCellName.Parse(Prev), CellKind.Int, Min: -6, Max: 6, Cells: Cells(previous), Domain: new WorldStateDomain.CellsOf("board")),
+                new WorldStateRow(CellName.Parse(Board), CellKind.Int, Min: -6, Max: 6, Cells: Cells(current), Domain: new WorldStateDomain.CellsOf("board")),
+                new WorldStateRow(CellName.Parse(Prev), CellKind.Int, Min: -6, Max: 6, Cells: Cells(previous), Domain: new WorldStateDomain.CellsOf("board")),
                 Slot("ownVac", 0, 65535), Slot("ownOcc", 0, 65535), Slot("otherVac", 0, 65535), Slot("otherOcc", 0, 65535),
                 Slot("quiet", 0, 1), Slot("capture", 0, 1), Slot("castle", 0, 1), Slot("noChange", 0, 1),
                 Slot("fromCell", -6, 16), Slot("toCell", -6, 16), Slot("capturedCell", -6, 16),
@@ -145,7 +145,7 @@ public sealed class WorldTabletopClassifierLawTests {
 
     private static WorldDefinition ShippedDocument(long[] previous, long[] current) {
         WorldStateCell[] Cells(long[] values) => [.. values.Select((value, index) =>
-            new WorldStateCell(Key: WorldCellName.Parse(index.ToString()), Value: value))];
+            new WorldStateCell(Key: CellName.Parse(index.ToString()), Value: value))];
 
         var rows = Garden.State.Where(row =>
             row.Name.Value is Board or Prev or "kingCell" or "move" or "moverColor" or "cFromBlack" or "cFromWhite" or "cKindBlack" or "cKindWhite" or "cToBlack" or "cToWhite" ||
@@ -171,7 +171,7 @@ public sealed class WorldTabletopClassifierLawTests {
         using var fixture = Fixtures.FreshServer(definition: ShippedDocument(previous, current));
         fixture.Step();
         var move = WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, "move")!;
-        long Read(string key) => WorldDefinitionRows.FindCell(move.Cells, WorldCellName.Parse(key))!.Value;
+        long Read(string key) => WorldDefinitionRows.FindCell(move.Cells, CellName.Parse(key))!.Value;
         return (Read("kind"), Read("from"), Read("to"), Read("mover"), Read("captured"));
     }
 

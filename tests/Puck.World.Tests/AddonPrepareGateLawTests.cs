@@ -112,7 +112,7 @@ public sealed class AddonPrepareGateLawTests {
 
                 fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
                     Principal: WorldPrincipal.Console,
-                    Row: new WorldStateRow(Name: WorldCellName.Parse(candidate: "no-host-control-probe"), Kind: CellKind.Int)
+                    Row: new WorldStateRow(Name: CellName.Parse(candidate: "no-host-control-probe"), Kind: CellKind.Int)
                 ));
                 fixture.Step();
 
@@ -173,7 +173,7 @@ public sealed class AddonPrepareGateLawTests {
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
             Principal: WorldPrincipal.Console,
-            Row: new WorldStateRow(Name: WorldCellName.Parse(candidate: "addon-gate-probe"), Kind: CellKind.Int)
+            Row: new WorldStateRow(Name: CellName.Parse(candidate: "addon-gate-probe"), Kind: CellKind.Int)
         ));
         fixture.Step();
 
@@ -201,7 +201,7 @@ public sealed class AddonPrepareGateLawTests {
         fixture.Server.EnqueueMutation(
             mutation: new WorldMutation.UpsertStateRow(
                 Principal: WorldPrincipal.Console,
-                Row: new WorldStateRow(Name: WorldCellName.Parse(candidate: "completion-token-probe-a"), Kind: CellKind.Int)
+                Row: new WorldStateRow(Name: CellName.Parse(candidate: "completion-token-probe-a"), Kind: CellKind.Int)
             ),
             sourceAddonInstanceId: 111L,
             actOrdinal: 7
@@ -213,7 +213,7 @@ public sealed class AddonPrepareGateLawTests {
         fixture.Server.EnqueueMutation(
             mutation: new WorldMutation.UpsertStateRow(
                 Principal: WorldPrincipal.Console,
-                Row: new WorldStateRow(Name: WorldCellName.Parse(candidate: "completion-token-probe-b"), Kind: CellKind.Int)
+                Row: new WorldStateRow(Name: CellName.Parse(candidate: "completion-token-probe-b"), Kind: CellKind.Int)
             ),
             sourceAddonInstanceId: 222L,
             actOrdinal: 9

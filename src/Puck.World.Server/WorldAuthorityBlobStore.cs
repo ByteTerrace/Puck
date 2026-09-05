@@ -57,17 +57,17 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
 
         return hash[Prefix.Length..];
     }
-    private static ObjectBlobAddress CheckpointAddress(Guid containerId, WorldSafeName world, long ordinal, string hash) => WorldOwnedWorldSync.HostedAddressFor(
+    private static ObjectBlobAddress CheckpointAddress(Guid containerId, SafeName world, long ordinal, string hash) => WorldOwnedWorldSync.HostedAddressFor(
         containerId: containerId,
         leaf: $"checkpoints/{ordinal:D12}-{ExtractHex(hash: hash)}.pckp",
         world: world
     );
-    private static ObjectBlobAddress JournalAddress(Guid containerId, WorldSafeName world, long ordinal) => WorldOwnedWorldSync.HostedAddressFor(
+    private static ObjectBlobAddress JournalAddress(Guid containerId, SafeName world, long ordinal) => WorldOwnedWorldSync.HostedAddressFor(
         containerId: containerId,
         leaf: $"journal/{ordinal:D12}.bin",
         world: world
     );
-    private static ObjectBlobAddress LatestPointerAddress(Guid containerId, WorldSafeName world) => WorldOwnedWorldSync.HostedAddressFor(
+    private static ObjectBlobAddress LatestPointerAddress(Guid containerId, SafeName world) => WorldOwnedWorldSync.HostedAddressFor(
         containerId: containerId,
         leaf: "checkpoints/latest",
         world: world

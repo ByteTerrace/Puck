@@ -74,7 +74,7 @@ carrying an `Identity` section (an owned world's boot load, a sync pull, and
 `state.<row>.<key>` (one named cell in ANY row shape — see
 [documents.md](documents.md)'s `state` section). The split on the FIRST dot
 after `state.` is unambiguous because a row/cell name can never itself hold a
-dot (`WorldCellName`). Refused by name at validation (`UnknownBinding`); an
+dot (`CellName`). Refused by name at validation (`UnknownBinding`); an
 empty-string binding reads as unbound rather than refused. The SAME `TryParse`
 serves the validator and the render resolver, so a document can never carry a
 binding the renderer silently treats as unbound.

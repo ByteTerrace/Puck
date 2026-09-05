@@ -37,8 +37,8 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
     /// script, large enough to be a plausible chat window.</summary>
     private const int ChatCapacity = 8;
 
-    private static readonly WorldCellName LogRowName = WorldCellName.Parse(candidate: "chat-log");
-    private static readonly WorldCellName InboxRowName = WorldCellName.Parse(candidate: "chat-inbox");
+    private static readonly CellName LogRowName = CellName.Parse(candidate: "chat-log");
+    private static readonly CellName InboxRowName = CellName.Parse(candidate: "chat-inbox");
     private readonly WorldOwnedWorlds m_worlds = worlds;
     private readonly PlayerRoster m_roster = roster;
     private readonly WorldServer m_server = server;
@@ -48,7 +48,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         if (args.Count is not (1 or 2)) {
             return CommandResult.Error(output: "[chat.allow: expected <sender-id> [player]]");
         }
-        if (!WorldSafeName.TryParse(
+        if (!SafeName.TryParse(
             candidate: args[0].ToString(),
             name: out var senderId,
             reason: out var nameReason
@@ -111,7 +111,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         if (args.Count is not (1 or 2)) {
             return CommandResult.Error(output: "[chat.block: expected <sender-id> [player]]");
         }
-        if (!WorldSafeName.TryParse(
+        if (!SafeName.TryParse(
             candidate: args[0].ToString(),
             name: out var senderId,
             reason: out var nameReason
@@ -159,7 +159,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
             ? "true"
             : "false")}]");
     }
-    private static string DescribeRow(WorldIdentity identity, WorldCellName rowName) {
+    private static string DescribeRow(WorldIdentity identity, CellName rowName) {
         if (
             !identity.TryReadState(
             name: rowName,
@@ -453,7 +453,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
 
         var player = PlayerRoster.DisplayNumber(slot: whisperSlot);
 
-        if (!WorldSafeName.TryParse(
+        if (!SafeName.TryParse(
             candidate: args[1].ToString(),
             name: out var recipientId,
             reason: out var nameReason

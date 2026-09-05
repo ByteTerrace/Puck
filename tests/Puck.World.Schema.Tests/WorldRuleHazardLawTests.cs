@@ -8,13 +8,13 @@ namespace Puck.World.Schema.Tests;
 /// tick, and never a pair of plain adds.</summary>
 public sealed class WorldRuleHazardLawTests {
     private static WorldStateRow Slot(string name) =>
-        new(WorldCellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 5L)]);
+        new(CellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 5L)]);
     private static ActionPredicate PhaseIs(long value) =>
         new ActionPredicate.CompareState(State: "phase", Comparison: ActionStateComparison.Equal, Value: value);
     private static ActionPredicate HpAtMost(long value) =>
         new ActionPredicate.CompareState(State: "hp", Comparison: ActionStateComparison.LessOrEqual, Value: value);
     private static WorldRule Rule(string name, ActionEffect effect, ActionPredicate? gate = null) =>
-        new(WorldCellName.Parse(name), [effect], Gate: gate);
+        new(CellName.Parse(name), [effect], Gate: gate);
     private static WorldDefinition Document(params WorldRule[] rules) => new(
         Simulation: new WorldSimulationDefaults(RateHz: 240),
         StateRaw: new WorldStateSection(World: [Slot("phase"), Slot("hp"), Slot("fainted"), Slot("armor")]),

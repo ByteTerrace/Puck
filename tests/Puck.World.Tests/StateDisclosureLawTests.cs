@@ -54,13 +54,13 @@ public sealed class StateDisclosureLawTests {
         }
     }
 
-    private static WorldCellName Name(string value) => WorldCellName.Parse(value);
+    private static CellName Name(string value) => CellName.Parse(value);
     private static WorldStateCell Cell(string key, long value) => new(Name(key), value);
     private static WorldDefinition Cards(string first = "seat1", string second = "seat2") => Fixtures.BuildDocument() with {
         StateRaw = new(World: [
             new(Name("cards"), CellKind.Int, Cells: [Cell("ace", 101), Cell("king", 202)], Visibility: new()),
-            new(Name("handA"), CellKind.Bool, Cells: [Cell("ace", 1)], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true), Visibility: new([first])),
-            new(Name("handB"), CellKind.Bool, Cells: [Cell("king", 1)], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true), Visibility: new([second]))
+            new(Name("handA"), CellKind.Bool, Cells: [Cell("ace", 1)], Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), Visibility: new([first])),
+            new(Name("handB"), CellKind.Bool, Cells: [Cell("king", 1)], Domain: new WorldStateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), Visibility: new([second]))
         ])
     };
 
@@ -91,14 +91,14 @@ public sealed class StateDisclosureLawTests {
                 new(Name("known"), CellKind.Int, Cells: [], Domain: new WorldStateDomain.CellsOf("map"), Visibility: new(["seat1"]), Knowledge: new("truth", "sight"))
             ]) };
         Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var reason), reason);
-        Assert.False(WorldStateTransforms.TryApply(definition, new WorldStateTransform.Observe("known"), WorldPrincipal.Seat(0), 8, "test", out _, out _));
-        Assert.True(WorldStateTransforms.TryApply(definition, new WorldStateTransform.Observe("known"), WorldPrincipal.World, 8, "test", out var seen, out reason), reason);
+        Assert.False(WorldStateTransforms.TryApply(definition, new StateTransform.Observe("known"), WorldPrincipal.Seat(0), 8, "test", out _, out _));
+        Assert.True(WorldStateTransforms.TryApply(definition, new StateTransform.Observe("known"), WorldPrincipal.World, 8, "test", out var seen, out reason), reason);
         var changed = seen.WithWorldState(seen.State.Select(r => r.Name.Value switch {
             "truth" => r with { Cells = [Cell("0", 42)] },
             "sight" => r with { Cells = [] },
             _ => r
         }).ToArray());
-        Assert.True(WorldStateTransforms.TryApply(changed, new WorldStateTransform.Observe("known"), WorldPrincipal.World, 12, "test", out var remembered, out reason), reason);
+        Assert.True(WorldStateTransforms.TryApply(changed, new StateTransform.Observe("known"), WorldPrincipal.World, 12, "test", out var remembered, out reason), reason);
         var cell = Assert.Single(Assert.Single(WorldStateDisclosure.Compose(remembered, WorldPrincipal.Seat(0))!).Cells);
         Assert.Equal(7, cell.Value);
         Assert.Equal(new WorldStateObservation(8, false), cell.Observation);

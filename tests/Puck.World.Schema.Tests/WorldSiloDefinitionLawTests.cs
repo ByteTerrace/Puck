@@ -45,13 +45,13 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
             Worlds: [
                 new WorldSiloWorldRow(
                     Owner: Guid.NewGuid(),
-                    World: (WorldSafeName.TryParse(candidate: "quilt-nw", name: out var nw, reason: out _) ? nw : default),
+                    World: (SafeName.TryParse(candidate: "quilt-nw", name: out var nw, reason: out _) ? nw : default),
                     Federation: new WorldSiloFederation(KeyFile: WriteKey(name: "nw.key")),
                     Pinned: true
                 ),
                 new WorldSiloWorldRow(
                     Owner: Guid.NewGuid(),
-                    World: (WorldSafeName.TryParse(candidate: "quilt-ne", name: out var ne, reason: out _) ? ne : default),
+                    World: (SafeName.TryParse(candidate: "quilt-ne", name: out var ne, reason: out _) ? ne : default),
                     Federation: new WorldSiloFederation(KeyFile: WriteKey(name: "ne.key")),
                     Pinned: false
                 ),

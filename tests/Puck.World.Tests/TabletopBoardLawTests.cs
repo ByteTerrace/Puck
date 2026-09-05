@@ -105,7 +105,7 @@ public sealed class TabletopBoardLawTests {
     private static ActionEffect.SetState Set(string state, decimal? value = null, string? key = null, string? fromState = null, string? fromKey = null) =>
         new(state, value, ActionTarget.Self, key, fromState, fromKey);
     private static WorldRule Rule(string name, ActionPredicate gate, ActionTriggerMode mode, params ActionEffect[] effects) =>
-        new(WorldCellName.Parse(name), effects, gate, mode);
+        new(CellName.Parse(name), effects, gate, mode);
     private static ActionPredicate[] MoverDetectPredicates(ActionPredicate quiescentEqualsOne, bool excludeOffFrameMover) {
         ActionPredicate[] baseline = [
             quiescentEqualsOne, Cs("justMoved", ActionStateComparison.Equal, 0m),
@@ -127,13 +127,13 @@ public sealed class TabletopBoardLawTests {
         var topology = new WorldStateLatticeTopology.Grid("board", new DocumentVector3(0f, 0f, 0f), 1f, 2, 2);
 
         long[] starting = [0, 5, 0, 0];
-        WorldStateRow BoardRow(string name, bool seeded) => new(WorldCellName.Parse(name), CellKind.Int,
-            Cells: [.. Enumerable.Range(0, 4).Select(k => new WorldStateCell(WorldCellName.Parse(k.ToString()), seeded ? starting[k] : 0))],
+        WorldStateRow BoardRow(string name, bool seeded) => new(CellName.Parse(name), CellKind.Int,
+            Cells: [.. Enumerable.Range(0, 4).Select(k => new WorldStateCell(CellName.Parse(k.ToString()), seeded ? starting[k] : 0))],
             Domain: new WorldStateDomain.CellsOf("board"));
-        WorldStateRow Keyed(string name, long initial) => new(WorldCellName.Parse(name), CellKind.Int, Min: -1, Max: 3,
-            Cells: [new WorldStateCell(WorldCellName.Parse("0"), initial)], Capacity: 1);
-        WorldStateRow Slot(string name, long initial) => new(WorldCellName.Parse(name), CellKind.Int, Min: -1, Max: 5,
-            Cells: [new WorldStateCell(WorldCellName.Parse(WorldStateRow.SlotKey), initial)]);
+        WorldStateRow Keyed(string name, long initial) => new(CellName.Parse(name), CellKind.Int, Min: -1, Max: 3,
+            Cells: [new WorldStateCell(CellName.Parse("0"), initial)], Capacity: 1);
+        WorldStateRow Slot(string name, long initial) => new(CellName.Parse(name), CellKind.Int, Min: -1, Max: 5,
+            Cells: [new WorldStateCell(CellName.Parse(WorldStateRow.SlotKey), initial)]);
 
         var quiescentEqualsOne = Cs(Quiescent, ActionStateComparison.Equal, 1m);
 
@@ -205,11 +205,11 @@ public sealed class TabletopBoardLawTests {
         var rigid = new WorldRigid(Mass: 1f, Restitution: 0.05f, Friction: 1f, RollingFriction: 2f, LinearDamping: 1f, AngularDamping: 1f);
         var topology = new WorldStateLatticeTopology.Grid("board", new DocumentVector3(0f, 0f, 0f), 1f, 2, 2);
 
-        WorldStateRow BoardRow(string name) => new(WorldCellName.Parse(name), CellKind.Int,
-            Cells: [.. Enumerable.Range(0, 4).Select(k => new WorldStateCell(WorldCellName.Parse(k.ToString()), 0))],
+        WorldStateRow BoardRow(string name) => new(CellName.Parse(name), CellKind.Int,
+            Cells: [.. Enumerable.Range(0, 4).Select(k => new WorldStateCell(CellName.Parse(k.ToString()), 0))],
             Domain: new WorldStateDomain.CellsOf("board"));
-        WorldStateRow Keyed(string name, long initial, int capacity) => new(WorldCellName.Parse(name), CellKind.Int, Min: -1, Max: 3,
-            Cells: [.. Enumerable.Range(0, capacity).Select(k => new WorldStateCell(WorldCellName.Parse(k.ToString()), initial))], Capacity: capacity);
+        WorldStateRow Keyed(string name, long initial, int capacity) => new(CellName.Parse(name), CellKind.Int, Min: -1, Max: 3,
+            Cells: [.. Enumerable.Range(0, capacity).Select(k => new WorldStateCell(CellName.Parse(k.ToString()), initial))], Capacity: capacity);
 
         var quiescentEqualsOne = Cs(Quiescent, ActionStateComparison.Equal, 1m);
         ActionEffect[] deriveEffects = [

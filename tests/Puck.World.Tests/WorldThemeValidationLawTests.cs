@@ -127,7 +127,7 @@ public sealed class WorldThemeValidationLawTests {
         var definition = Fixtures.BuildDocument() with {
             ThemeRaw = theme,
             StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(Name: WorldCellName.Parse(candidate: "lowAlpha"), Kind: CellKind.Fixed, Cells: [
+                new WorldStateRow(Name: CellName.Parse(candidate: "lowAlpha"), Kind: CellKind.Fixed, Cells: [
                     new WorldStateCell(Key: WorldStateRow.SlotKey, Value: Puck.Maths.FixedQ4816.FromDouble(value: 0.2).Value),
                 ]),
             ]),

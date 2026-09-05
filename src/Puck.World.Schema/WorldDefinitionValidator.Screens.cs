@@ -193,7 +193,7 @@ public static partial class WorldDefinitionValidator {
         }
     }
 
-    // The references section: null names nothing. Each row's Name already crossed WorldSafeName at JSON parse, so
+    // The references section: null names nothing. Each row's Name already crossed SafeName at JSON parse, so
     // this pass owns only uniqueness within the section and a non-empty Document — no boot-time file-existence
     // check (resolving a reference's Document is a future consumer's job). Returns the validated name set so a
     // later pass (a placement face's portal facet) can refuse an undeclared destination by name.

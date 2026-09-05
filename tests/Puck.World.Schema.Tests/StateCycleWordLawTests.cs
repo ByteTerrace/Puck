@@ -15,7 +15,7 @@ public sealed class StateCycleWordLawTests {
         StateRaw: new WorldStateSection(World: rows)
     );
     private static WorldStateRow SlotRow(string name, CellKind kind, long value, WorldStateCycle cycle) => new(
-        Name: WorldCellName.Parse(candidate: name),
+        Name: CellName.Parse(candidate: name),
         Kind: kind,
         Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: value)],
         Cycle: cycle

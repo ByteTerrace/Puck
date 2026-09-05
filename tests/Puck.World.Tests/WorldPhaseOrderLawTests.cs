@@ -45,10 +45,10 @@ public sealed class WorldPhaseOrderLawTests {
     public void EveryPhaseRowRequiresAPlainIntegerRowWithoutCellsOrCapacity() {
         Assert.True(WorldDefinitionValidator.TryValidateLocally(Document(Phase()), out var reason), reason);
         Assert.False(WorldDefinitionValidator.TryValidateLocally(
-            Document(new WorldStateRow(WorldCellName.Parse("turn"), CellKind.Int, Phase: new(), Capacity: 4)), out var capacityReason));
+            Document(new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Phase: new(), Capacity: 4)), out var capacityReason));
         Assert.Contains("without cells/capacity", capacityReason);
         Assert.False(WorldDefinitionValidator.TryValidateLocally(
-            Document(new WorldStateRow(WorldCellName.Parse("turn"), CellKind.Bool, Phase: new())), out var kindReason));
+            Document(new WorldStateRow(CellName.Parse("turn"), CellKind.Bool, Phase: new())), out var kindReason));
         Assert.Contains("without cells/capacity", kindReason);
     }
 
@@ -81,14 +81,14 @@ public sealed class WorldPhaseOrderLawTests {
         Assert.True(WorldDefinitionValidator.TryValidateLocally(parsed, out var reason), reason);
     }
 
-    private static WorldStateRow Phase(long sequence = 0) => new(WorldCellName.Parse("turn"), CellKind.Int, Phase: new(sequence));
-    private static WorldStateRow Board() => new(WorldCellName.Parse("board"), CellKind.Int,
-        Cells: [new(WorldCellName.Parse("0"), 1), new(WorldCellName.Parse("1"), 2), new(WorldCellName.Parse("2"), 2), new(WorldCellName.Parse("3"), 1)], Domain: new WorldStateDomain.CellsOf("map"));
-    private static WorldStateTransform.SetRay Ray() => new("board", "0", "E", "capture", 1);
+    private static WorldStateRow Phase(long sequence = 0) => new(CellName.Parse("turn"), CellKind.Int, Phase: new(sequence));
+    private static WorldStateRow Board() => new(CellName.Parse("board"), CellKind.Int,
+        Cells: [new(CellName.Parse("0"), 1), new(CellName.Parse("1"), 2), new(CellName.Parse("2"), 2), new(CellName.Parse("3"), 1)], Domain: new WorldStateDomain.CellsOf("map"));
+    private static StateTransform.SetRay Ray() => new("board", "0", "E", "capture", 1);
     private static WorldDefinition Document(params WorldStateRow[] rows) => Fixtures.BuildDocument() with {
         StateRaw = new(World: rows, Lattices: rows.Any(row => row.EffectiveDomain is WorldStateDomain.CellsOf) ? [new WorldStateLatticeTopology.Grid("map", new(0, 0, 0), 1, 4, 4)] : []),
-        PatternsRaw = [new(WorldCellName.Parse("capture"), CellKind.Int,
-            [new(WorldCellName.Parse("through"), 2, 2), new(WorldCellName.Parse("until"), 1, 1)],
+        PatternsRaw = [new(CellName.Parse("capture"), CellKind.Int,
+            [new(CellName.Parse("through"), 2, 2), new(CellName.Parse("until"), 1, 1)],
             new WorldPatternNode.Sequence([new WorldPatternNode.Plus(new WorldPatternNode.Symbol("through")), new WorldPatternNode.Symbol("until")]))],
         Rules = [],
     };

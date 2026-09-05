@@ -74,7 +74,7 @@ public static partial class WorldDefinitionValidator {
             }
         }
     }
-    // The destinations section: null names nothing. Each row's Name already crossed WorldSafeName; Durability/Scope
+    // The destinations section: null names nothing. Each row's Name already crossed SafeName; Durability/Scope
     // already crossed their strict-token converters; an unrecognized Selector $type already failed JSON parse. This
     // pass owns uniqueness within the section, a destinations section with no references section to name, each
     // row's Reference resolving to a declared references row, and the scope/selector pairing (ValidateGroupSelector).
@@ -374,7 +374,7 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (!WorldCellName.TryParse(
+            if (!CellName.TryParse(
                 candidate: name,
                 name: out _,
                 reason: out var nameReason
