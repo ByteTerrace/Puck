@@ -206,11 +206,9 @@ public enum WorldRuleRefusal : byte {
     SpawnPointUnknown,
 }
 
-/// <summary>The runtime refusals a firing world-rule effect can draw.</summary>
+/// <summary>The runtime refusals only a world-owned effect arm can draw; the state-neutral ones are
+/// <see cref="RuleEffectRefusal"/>'s, and both share the evaluator's ledger.</summary>
 public enum WorldRuleEffectRefusal : byte {
-    [Refusal(door: "world.rule.effect", condition: "a rule expression overflows, divides by zero, or produces an invalid stack result", kind: RefusalKind.Verdict)]
-    Arithmetic,
-
     [Refusal(door: "world.rule.effect", condition: "a rule body/pose/cue effect resolves no active body", kind: RefusalKind.Verdict)]
     BodyInactive,
 
@@ -223,11 +221,6 @@ public enum WorldRuleEffectRefusal : byte {
     [Refusal(door: "world.rule.effect", condition: "a rule save effect has no host persistence tap", kind: RefusalKind.Verdict)]
     SaveUnavailable,
 
-    [Refusal(door: "world.rule.effect", condition: "a rule-produced mutation refuses composition, validation, or admission", kind: RefusalKind.Verdict)]
-    MutationRejected,
-
     [Refusal(door: "world.rule.effect", condition: "a rule's 'removePlacement' effect targets a placement whose inhabited body a concrete drive grant currently possesses", kind: RefusalKind.Verdict)]
     CarrierPossessed,
-
-    TableKeyMissing,
 }

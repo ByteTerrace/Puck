@@ -14,8 +14,10 @@ presentation and backend assembly. The composition root that hosts it is
 
 Project references: `Puck.World.Schema`, `Puck.World.Protocol`, `Puck.Networking`,
 `Puck.Storage`, `Puck.Hosting`, and — through the schema — `Puck.State`, whose
-reader, catalog, and topologies the tick reads through; the rule evaluator,
-effect firing, the trace, interactions, and decisions stay here. The addon guest runtime itself is
+reader, catalog, topologies, and rule evaluator the tick runs; `WorldServer` is
+the evaluator's host (`WorldServer.RuleHost.cs`: the mutation door, preflight
+scopes, the world's effect arms), and interactions and decisions stay here as
+the rule kinds only a world evaluates. The addon guest runtime itself is
 [`Puck.World.Addons`](../Puck.World.Addons/README.md), which references this
 project rather than the reverse — see `IWorldAddonHost` below.
 
@@ -222,9 +224,9 @@ plus every admitted peer connection's re-minted admission grant; every other
 live `world.grant` acquisition drops). The `dirty` count in `world.status` IS
 the journal length.
 
-World-rule failures accumulate in a fixed-size category table. The first
-occurrence is narrated; repeated Level-rule failures only increment their
-counter. `world.rule.failures` reports the count and latest tick/rule/effect/reason.
+World-rule failures accumulate in the evaluator's ledger, one entry per
+category. The first occurrence is narrated; repeated Level-rule failures only
+increment their counter. `world.rule.failures` reports the count and latest tick/rule/effect/reason.
 Rule/interaction installation is also guarded by a static aggregate work budget,
 reported beside evaluation slots in `world.budget`; dynamic body-index keys use
 a prebuilt string cache on the evaluation path.

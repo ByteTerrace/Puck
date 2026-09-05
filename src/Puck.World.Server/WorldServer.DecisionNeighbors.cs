@@ -66,10 +66,10 @@ public sealed partial class WorldServer {
         m_population.IsActive(index) && m_population.EntryBody(index) is not null && m_population.Generation(index) == generation;
 
     private bool DecisionOptionGate(CompiledWorldDecisionOption option, int observer, int candidate, ulong tick) {
-        var left = m_boundLeft; var right = m_boundRight;
-        m_boundLeft = option.Neighbors is null ? -1 : observer; m_boundRight = candidate;
+        var left = m_evaluator.BoundLeft; var right = m_evaluator.BoundRight;
+        m_evaluator.BoundLeft = option.Neighbors is null ? -1 : observer; m_evaluator.BoundRight = candidate;
         try { return RuleGateOpen(option.Gate, tick); }
-        finally { m_boundLeft = left; m_boundRight = right; }
+        finally { m_evaluator.BoundLeft = left; m_evaluator.BoundRight = right; }
     }
 
     private bool DecisionPerceptible(DecisionPerception image, CompiledWorldDecisionNeighbors neighbors, int observer, int candidate) {
@@ -157,8 +157,8 @@ public sealed partial class WorldServer {
         ulong tick, in DecisionBinding state, bool lostEligibility, out DecisionChoice choice, bool gateAlreadyOpen = false) {
         choice = default;
         var option = policy.Options[index];
-        var left = m_boundLeft; var right = m_boundRight;
-        m_boundLeft = option.Neighbors is null ? -1 : key; m_boundRight = candidate;
+        var left = m_evaluator.BoundLeft; var right = m_evaluator.BoundRight;
+        m_evaluator.BoundLeft = option.Neighbors is null ? -1 : key; m_evaluator.BoundRight = candidate;
         try {
             if (!gateAlreadyOpen && !RuleGateOpen(option.Gate, tick)) { return false; }
             m_decisionWork = m_decisionWork with { Scored = m_decisionWork.Scored + 1 };
@@ -169,6 +169,6 @@ public sealed partial class WorldServer {
             }
             choice = new(index, candidate, generation, score);
             return true;
-        } finally { m_boundLeft = left; m_boundRight = right; }
+        } finally { m_evaluator.BoundLeft = left; m_evaluator.BoundRight = right; }
     }
 }

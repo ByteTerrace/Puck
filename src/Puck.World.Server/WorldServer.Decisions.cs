@@ -59,6 +59,7 @@ public sealed partial class WorldServer {
 
     private bool EvaluateDecisionRule(CompiledWorldRule rule, ulong tick, ulong stepTicks) {
         if (!m_decisionsByName.TryGetValue(rule.Name, out var runtime)) { return false; }
+        m_evaluator.RuleName = rule.Name;
         var applied = false;
         if (rule.ForEach is { } row) {
             CarrierKeys(row, m_carrierScratchLeft);
@@ -75,13 +76,13 @@ public sealed partial class WorldServer {
         }
         try {
             foreach (var key in runtime.Keys) {
-                m_boundEach = key;
-                m_boundEachKey = (key >= 0) ? WorldBodyKeyCache.Get(index: key) : null;
+                m_evaluator.BoundEach = key;
+                m_evaluator.BoundEachKey = (key >= 0) ? WorldBodyKeyCache.Get(index: key) : null;
                 applied |= EvaluateDecisionBinding(runtime, key, tick, stepTicks);
             }
-            m_boundEachKey = null;
+            m_evaluator.BoundEachKey = null;
         } finally {
-            m_boundEach = -1;
+            m_evaluator.BoundEach = -1;
         }
         return applied;
     }
@@ -117,7 +118,7 @@ public sealed partial class WorldServer {
             state.PeriodRemaining = 0;
             state.CommitmentRemaining = 0;
             state.LastScore = 0;
-            return hadChoice && FireWorldRuleEffects(policy.OnNoChoice, rule.Name, tick, stepTicks);
+            return hadChoice && m_evaluator.FireEffects(policy.OnNoChoice, rule.Name, tick, stepTicks);
         }
         var lostEligibility = state.Selected >= 0 &&
             ((state.Candidate >= 0 && (!DecisionBodyLive(key, state.Generation) || !DecisionBodyLive(state.Candidate, state.CandidateGeneration))) ||
@@ -159,13 +160,13 @@ public sealed partial class WorldServer {
         state.Candidate = selected.Candidate;
         state.CandidateGeneration = selected.Generation;
         state.CommitmentRemaining = winner < 0 ? 0 : policy.CommitmentTicks;
-        if (winner < 0) { return FireWorldRuleEffects(policy.OnNoChoice, rule.Name, tick, stepTicks); }
-        var applied = FireWorldRuleEffects(rule.Effects, rule.Name, tick, stepTicks);
+        if (winner < 0) { return m_evaluator.FireEffects(policy.OnNoChoice, rule.Name, tick, stepTicks); }
+        var applied = m_evaluator.FireEffects(rule.Effects, rule.Name, tick, stepTicks);
         if (selected.Candidate >= 0 && (!DecisionBodyLive(key, generation) || !DecisionBodyLive(selected.Candidate, selected.Generation))) { return applied; }
-        var left = m_boundLeft; var right = m_boundRight;
-        m_boundLeft = selected.Candidate < 0 ? -1 : key; m_boundRight = selected.Candidate;
-        try { return FireWorldRuleEffects(policy.Options[selected.Option].Effects, rule.Name, tick, stepTicks) || applied; }
-        finally { m_boundLeft = left; m_boundRight = right; }
+        var left = m_evaluator.BoundLeft; var right = m_evaluator.BoundRight;
+        m_evaluator.BoundLeft = selected.Candidate < 0 ? -1 : key; m_evaluator.BoundRight = selected.Candidate;
+        try { return m_evaluator.FireEffects(policy.Options[selected.Option].Effects, rule.Name, tick, stepTicks) || applied; }
+        finally { m_evaluator.BoundLeft = left; m_evaluator.BoundRight = right; }
     }
 
     private static ulong DrainDecisionTicks(ulong value, ulong step) => value > step ? value - step : 0;

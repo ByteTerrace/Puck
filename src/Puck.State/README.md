@@ -138,11 +138,24 @@ Nothing here carries a `World` name — a state library names no world.
   the cells it reads and writes (`CollectReads`/`CollectWrites` into
   `RuleAccess` lists). `CompiledCellRef` is the one key-indirection carrier
   (`$cell:`, a bound key, or a document project's `KeyFact`).
-- *Evaluation:* `IRuleReader` is what a fact reads through — the tick, the
-  rows and catalog, the bound keys and binding values, the tables, the
-  pattern and board scratch; `RuleEvaluation` holds `GateHolds`,
-  `TryEvaluateExpression`, `ResolveKey`, and the state reads they share.
-  Firing an effect stays with the evaluator that owns the mutation door.
+- *Evaluation:* `RuleEvaluator` runs a compiled family over an `IRuleHost` —
+  gates in array order, bindings before the gate, Edge/Level latching per
+  binding in a `RuleLatch` (simulation state: it hashes, flattens to a
+  checkpoint, restores), a forEach row's keys snapshotted before the first
+  evaluation, and every state-neutral effect fired through the host's door as
+  a `StateMutation` (`UpsertCell`, `RemoveCell`, `Generate`, `Apply` a
+  transform). A top-level effect preflights itself under a host scope and
+  installs alone; a `transaction` preflights its whole branch as one candidate.
+  The evaluator is the evaluation in flight — the tick, the bound forEach key
+  and participants, the binding values — which the host's `IRuleReader`
+  forwards to its operands. It also owns the trace (`RuleTraceEvaluation`,
+  armed per rule name) and the refusal ledger (`RuleRuntimeDiagnostic`, exact
+  counts per category; the host narrates a category's first occurrence). A
+  binding, effect, or `compareValue` conjunct whose expression faults is a
+  counted `RuleEffectRefusal.Arithmetic`, never a gate that silently stopped
+  holding; `ExpressionFault` names why. `IRuleReader` is what a fact reads
+  through; `RuleEvaluation` holds `GateHolds`, `TryEvaluateExpression`,
+  `ResolveKey`, and the state reads they share.
 - *Analyses:* `RuleDataflow` (a rule's read and write sets), `RuleHazards`
   (the write-after-read and write-after-write pairs document order decides,
   skipping pairs whose gates pin one cell to disjoint ranges), and
@@ -188,8 +201,15 @@ package:
 - A `RuleCompileContext` is derived to anchor what only the document knows
   (`FindTopology` in a placement's frame, `FindDraw` through a lattice fill)
   and to carry the per-compile scope the families cache into.
-- An evaluator implements `IRuleReader`, widened to whatever its registered
-  operands read through; a compiled fact casts the reader it is handed.
+- A host implements `IRuleHost` — `IRuleReader` widened with the mutation
+  door (`TryApply`, composing privately under `BeginPreflight`/`EndPreflight`
+  or installing), `FireEffect` for the effect arms it registered,
+  `TryEvaluateOwn` for the rule kinds only it understands (which run each
+  evaluation back through `RuleEvaluator.EvaluateOnce`, so latch, trace, and
+  ledger stay one mechanism), and `RefusalRecorded` — and widens the reader
+  further to whatever its registered operands read through; a compiled fact
+  casts the reader it is handed. A host owns one `RuleEvaluator` and one
+  `RuleLatch` per family it evaluates.
 - `CompiledRule` is non-sealed: a document project's rule overrides
   `CollectReads`, `CollectWrites`, and `Cost` to add the branches it alone
   carries, and every analysis follows.
@@ -198,19 +218,24 @@ package:
   the same modifier. `StateRow` is non-sealed on the same terms, with
   `StateRowJsonConverter<TRow>` as its converter base.
 
-## 🧭 What it will hold
+## 🧭 What stays a host's
 
-The evaluator, behind a state-host interface — the mutation door, the
-journal, checkpoints — that a host implements; effect firing, the rule trace,
-interactions, and decisions move with it. Refused: a compatibility shim between
-old and new spellings, and moving the evaluator before the seams exist.
+Composing a `StateMutation` against a row — eviction, a numeric upsert's
+advance/dynamics rebase, envelope validation, the journal — is each host's
+door; the pieces are here (`StateCellWriter`, `StateAdvance`,
+`StateRow.ClampToEnvelope`), the pipeline is not. Pairwise interactions and
+timed decisions are host-evaluated kinds until a pair domain over rows is
+designed rather than assumed. Refused: a compatibility shim between old and new
+spellings.
 
 ## 🔗 Where the rest lives
 
 The world's registered families (`WorldRuleVocabulary`, `WorldRuleCompileContext`,
 `IWorldRuleReader`), its rule and decision records, and the validators live in
-[`src/Puck.World.Schema`](../Puck.World.Schema/README.md); the evaluator stays in
-[`src/Puck.World.Server`](../Puck.World.Server/README.md).
+[`src/Puck.World.Schema`](../Puck.World.Schema/README.md); `WorldServer` is the
+host (`WorldServer.RuleHost.cs` in
+[`src/Puck.World.Server`](../Puck.World.Server/README.md)).
 `tests/Puck.State.Tests` proves the expression syntax, the function families,
-and the hex topology; the converter and schema facts that need the world
+the hex topology, and the evaluator over a headless host (a row list, no
+world); the converter and schema facts that need the world
 document's JSON context stay in `tests/Puck.World.Schema.Tests`.

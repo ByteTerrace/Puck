@@ -1392,7 +1392,11 @@ installs so those arms read and write under their `$type` discriminators. A
 compiled rule is a `CompiledWorldRule : CompiledRule` whose effects and operands
 are `Puck.State`'s class-typed facts plus the world's own (`WorldOperandKinds.cs`,
 `WorldEffectKinds.cs`); the world's operands read through `IWorldRuleReader`,
-the widening of `IRuleReader` that `WorldServer` implements. Gates admit
+the widening of `IRuleReader` that `WorldServer` implements beside `IRuleHost`,
+the state-host seam `Puck.State`'s `RuleEvaluator` drives — the mutation door a
+`StateMutation` maps through, the preflight scopes a transaction composes
+under, the world's own effect arms, and the decision and interaction kinds
+only the world evaluates. Gates admit
 `all`, `any`, `not`, `compareState`, and `compareValue`; they compile to a bounded postfix
 Boolean program, so nested logic does not allocate or recurse during a tick.
 Compile refusals travel in a `RuleException` carrying a `RuleRefusal` (the
@@ -1479,7 +1483,10 @@ evaluation alone — an effect that changed the cells it was computed from does
 not change it, which is what lets `min(damage, hp)` be dealt and then recoiled
 from in the same rule. At most 16 per rule; each expression prices into
 `world.budget` like an effect's. A binding that cannot evaluate closes the gate
-for that evaluation and reports an `Arithmetic` refusal. `world.rules` lists
+for that evaluation and reports an `Arithmetic` refusal; so does a
+`compareValue` conjunct whose expression faults — the conjunct reads false and
+the refusal is counted, so `world.rule.failures` names a rule that stopped
+firing on a domain fault instead of showing nothing. `world.rules` lists
 each rule's bindings by name and kind. The rule count itself has no ceiling of
 its own: the per-tick work budget is the bound. That budget is worst-case but
 not blind: rules whose gates pin the same literal cells to disjoint ranges (a

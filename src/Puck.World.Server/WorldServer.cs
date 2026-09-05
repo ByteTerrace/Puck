@@ -214,6 +214,11 @@ public sealed partial class WorldServer : IWorldServerHost {
     // The interaction family's own EDGE latch — the SAME shape m_ruleGateHeld is, kept separate for the identical
     // aliasing reason m_interactions itself is kept separate from m_rules.
     private readonly RuleLatch m_interactionGateHeld = new();
+    // The state library's evaluator over this server as its host (WorldServer.RuleHost.cs): the loop, the edge
+    // latching, the trace, the refusal ledger, and every state-neutral effect's firing.
+    private readonly RuleEvaluator m_evaluator;
+    // The installed documents a preflight scope remembers, innermost last (IRuleHost.BeginPreflight/EndPreflight).
+    private readonly Stack<WorldDefinition> m_preflightScopes = new();
     // Reused carrier/key scratch for rule evaluation: left (and forEach keys) and right, both live during one
     // distance interaction.
     private readonly List<int> m_carrierScratchLeft = [];
@@ -593,6 +598,7 @@ public sealed partial class WorldServer : IWorldServerHost {
         m_events = new WorldEventFeed(capacity: population.Capacity);
 
         m_tables = CompileTables(definition: definition);
+        m_evaluator = new RuleEvaluator(host: this);
 
         if ((definition.Music is { Count: > 0 } music) && (music[0] is { } row)) {
             // The row's Source/Hash were already proven to load, canonicalize, and pin-verify by

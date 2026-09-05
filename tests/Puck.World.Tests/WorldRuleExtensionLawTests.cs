@@ -206,7 +206,7 @@ public sealed class WorldRuleExtensionLawTests {
         fixture.Step();
 
         var diagnostic = Assert.Single(collection: fixture.Server.RuleRuntimeDiagnostics());
-        Assert.Equal(expected: WorldRuleEffectRefusal.Arithmetic, actual: diagnostic.Refusal);
+        Assert.Equal<Enum>(expected: RuleEffectRefusal.Arithmetic, actual: diagnostic.Refusal);
         Assert.Equal(expected: 2UL, actual: diagnostic.Count);
         Assert.Equal(expected: 2UL, actual: diagnostic.LastTick);
         Assert.Contains(expectedSubstring: "count=2", actualString: fixture.Server.DescribeRuleRuntimeDiagnostics(), comparisonType: StringComparison.Ordinal);

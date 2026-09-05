@@ -269,7 +269,16 @@ n-th-prime search, which is unbounded and belongs to a generator draw source;
 the layer family over `LayerSequence` (`layer`, `layerOffset`, `layerStart`, `layerSize`, each
 `(index-or-layer, start, step, seed)` — `layer(i, 6, 6, 1)` is `hexRadius(i)`); and `sqrt` (both kinds),
 `sin`, `cos` (fixed radians). Every other function is int-only, and a domain fault fails the expression the way
-an overflow does. `$table:<name>[:<column>]:<key>` reads a static
+an overflow does — and is counted: a faulting binding, effect, or `compareValue` conjunct reports `Arithmetic`
+in `world.rule.failures` (narrated once per category on stderr) and `world.rule.trace` shows the conjunct as
+`refused`, so a rule that "stopped firing" is read there first. Sharp edges an author hits by instinct: `%` is C
+truncation (`(pit - 1) % 14` reads -1), so a circular index is `mod(pit - 1, 14)` or `cycleForward`; `>>` is an
+arithmetic shift that drags the sign bit through a mask with bit 63 set, so a bitboard shifts with `>>>`;
+`pair(x, y)` admits components up to 3,037,000,498 (a hash or a Q48.16 raw does not pair); a Gödel multiset
+holds the first 15 primes at count one (their product is 6.1e17) and overflows at the 16th (`* 53`), and every
+count multiplies, so cap the row or the item set; `$board:mask`/`writeSet` stop at 64 cells while a topology
+admits 4,096 — a larger board addresses cells, not masks; a `transfer` of `count > 1` takes `first`/`last`/
+`random`, never an interior run. `$table:<name>[:<column>]:<key>` reads a static
 `tables` document (`puck.table.v1`, hash-pinned, outside simulation state) by an
 integer literal, a `$cell:` indirection, `$each`, or an int `$bind:`; a missing
 dynamic key is a `TableKeyMissing` refusal, never a value. Every top-level

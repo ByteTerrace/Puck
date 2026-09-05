@@ -2,6 +2,18 @@ using Puck.Maths;
 
 namespace Puck.State;
 
+/// <summary>Why a compiled expression did not evaluate.</summary>
+public enum ExpressionFault : byte {
+    /// <summary>The expression evaluated.</summary>
+    None,
+    /// <summary>A table read named a key its table lacks; the read reported itself.</summary>
+    TableKeyMissing,
+    /// <summary>An operand read a fact with no number.</summary>
+    Forever,
+    /// <summary>Overflow, a divide by zero, a function argument outside its domain, or an invalid stack result.</summary>
+    Domain,
+}
+
 /// <summary>The allocation-free read side every compiled operand and expression shares: key indirection, the
 /// handle-addressed cell read, and the postfix expression evaluator. An evaluator hands these its
 /// <see cref="IRuleReader"/>; nothing here holds state of its own.</summary>
@@ -83,7 +95,18 @@ public static class RuleEvaluation {
     /// <param name="program">The compiled postfix program.</param>
     /// <param name="kind">The kind the program was compiled in.</param>
     /// <param name="value">The result, on success.</param>
-    public static bool TryEvaluateExpression(IRuleReader reader, CompiledExpressionToken[] program, CellKind kind, out long value) {
+    public static bool TryEvaluateExpression(IRuleReader reader, CompiledExpressionToken[] program, CellKind kind, out long value) =>
+        TryEvaluateExpression(reader: reader, program: program, kind: kind, value: out value, fault: out _);
+
+    /// <summary>Evaluates a compiled postfix expression, naming why it did not evaluate.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="program">The postfix program.</param>
+    /// <param name="kind">The kind to evaluate in.</param>
+    /// <param name="value">The raw result.</param>
+    /// <param name="fault">Why the expression failed, or <see cref="ExpressionFault.None"/>.</param>
+    /// <returns><see langword="true"/> when the expression evaluated.</returns>
+    public static bool TryEvaluateExpression(IRuleReader reader, CompiledExpressionToken[] program, CellKind kind, out long value, out ExpressionFault fault) {
+        fault = ExpressionFault.Domain;
         Span<long> stack = stackalloc long[RuleCapacity.MaxExpressionTokens];
         var top = 0;
 
@@ -97,10 +120,12 @@ public static class RuleEvaluation {
                     var fact = token.Operand!.Read(reader: reader);
                     if (reader.TableKeyMissing) {
                         reader.TableKeyMissing = false;
+                        fault = ExpressionFault.TableKeyMissing;
                         value = 0L;
                         return false;
                     }
                     if (fact.IsForever) {
+                        fault = ExpressionFault.Forever;
                         value = 0L;
                         return false;
                     }
@@ -192,15 +217,21 @@ public static class RuleEvaluation {
         }
 
         value = ((top == 1) ? stack[0] : 0L);
+        fault = ((top == 1) ? ExpressionFault.None : ExpressionFault.Domain);
         return (top == 1);
     }
 
     /// <summary>Evaluates a compiled postfix gate. Each comparison reads its operands through the reader; a
-    /// <c>compareValue</c> conjunct that fails to evaluate is false. A gate with no tokens always holds.</summary>
+    /// <c>compareValue</c> conjunct whose expression faults is false and sets <paramref name="faulted"/>, so the
+    /// caller can report it rather than let the gate silently stop holding. A gate with no tokens always holds.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="gate">The compiled gate.</param>
+    /// <param name="faulted">Whether a conjunct's expression overflowed, left a function's domain, or read a fact
+    /// with no number; a missing table key is reported by the read itself and does not set this.</param>
     /// <param name="trace">An optional per-conjunct narration sink.</param>
-    public static bool GateHolds(IRuleReader reader, GateToken[] gate, List<string>? trace = null) {
+    public static bool GateHolds(IRuleReader reader, GateToken[] gate, out bool faulted, List<string>? trace = null) {
+        faulted = false;
+
         if (gate.Length == 0) {
             return true;
         }
@@ -232,8 +263,10 @@ public static class RuleEvaluation {
 
             if (predicate.LeftExpression is { } leftExpression) {
                 var rightValue = 0L;
-                var leftOk = TryEvaluateExpression(reader: reader, program: leftExpression, kind: predicate.ValueKind, value: out var leftValue);
-                var rightOk = leftOk && TryEvaluateExpression(reader: reader, program: predicate.RightExpression!, kind: predicate.ValueKind, value: out rightValue);
+                var rightFault = ExpressionFault.None;
+                var leftOk = TryEvaluateExpression(reader: reader, program: leftExpression, kind: predicate.ValueKind, value: out var leftValue, fault: out var leftFault);
+                var rightOk = leftOk && TryEvaluateExpression(reader: reader, program: predicate.RightExpression!, kind: predicate.ValueKind, value: out rightValue, fault: out rightFault);
+                faulted |= ((leftFault is ExpressionFault.Domain or ExpressionFault.Forever) || (rightFault is ExpressionFault.Domain or ExpressionFault.Forever));
                 var holds = rightOk && predicate.Comparison.Holds(value: FixedQ4816.FromRawBits(value: leftValue), valueIsForever: false, expected: FixedQ4816.FromRawBits(value: rightValue), expectedIsForever: false);
                 stack[top++] = holds;
                 if (trace is not null) {

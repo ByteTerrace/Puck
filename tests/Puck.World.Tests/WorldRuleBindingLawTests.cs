@@ -82,7 +82,7 @@ public sealed class WorldRuleBindingLawTests {
         fixture.Step();
         Assert.Equal(0L, Value(fixture, "hit"));
         var diagnostic = Assert.Single(fixture.Server.RuleRuntimeDiagnostics());
-        Assert.Equal(WorldRuleEffectRefusal.Arithmetic, diagnostic.Refusal);
+        Assert.Equal<Enum>(RuleEffectRefusal.Arithmetic, diagnostic.Refusal);
         Assert.Contains("binding 'q'", diagnostic.Effect, StringComparison.Ordinal);
     }
 }

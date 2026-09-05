@@ -326,20 +326,6 @@ public sealed partial class WorldServer {
     // The integer part of a Q48.16 value — the key or index a cell's value names.
     private static long IntegerOf(FixedQ4816 value) => (value.Value >> 16);
 
-    // The bodies bound for the evaluation in progress — set by the rule/interaction evaluator before a gate or
-    // effect is read, -1 when a binding is not in play.
-    private int m_boundEach = -1;
-    // The enclosing rule's bound values for the evaluation in flight (CompiledRuleBinding.Ordinal indexes it).
-    private readonly long[] m_ruleBindingValues = new long[RuleCapacity.MaxBindingsPerRule];
-    private int m_boundLeft = -1;
-    private int m_boundRight = -1;
-
-    private int BoundBody(BoundKey binding) => binding switch {
-        BoundKey.Each => m_boundEach,
-        BoundKey.Left => m_boundLeft,
-        BoundKey.Right => m_boundRight,
-        _ => -1,
-    };
     // The static tables the definition references, in tables-row order; a validated document's rows are proven to
     // load, so a failure here is an invariant violation, never a reachable case.
     private static CompiledTable[] CompileTables(WorldDefinition definition) {
@@ -358,7 +344,6 @@ public sealed partial class WorldServer {
     // Set by a table read whose dynamic key is absent; the enclosing gate evaluation or expression clears it and
     // fails, so a missing entry is a reported refusal rather than a value.
     private bool m_tableKeyMissing;
-    private string m_tableKeyMissingRule = string.Empty;
     /// <summary>Describes every static table the definition references: name, kind, entry count.</summary>
     public string DescribeTables() {
         if (m_tables.Length == 0) {
@@ -429,7 +414,7 @@ public sealed partial class WorldServer {
     }
     private int ResolveBodyRef(CompiledBodyRef bodyRef, ulong tick) => (bodyRef.Kind switch {
         CompiledBodyRefKind.Literal => bodyRef.Index,
-        CompiledBodyRefKind.Binding => BoundBody(binding: ((BoundKey)bodyRef.Index)),
+        CompiledBodyRefKind.Binding => m_evaluator.BoundIndex(key: ((BoundKey)bodyRef.Index)),
         CompiledBodyRefKind.Cell => (((IntegerOf(value: ReadStateCellByHandle(
         handle: bodyRef.Handle,
         key: bodyRef.Key!,
@@ -441,8 +426,8 @@ public sealed partial class WorldServer {
         // 'placement:$each' — position-indexed, never the string key: an out-of-range position (outside a
         // forEach evaluation, or a stale compile against a shorter row) resolves no body rather than reading
         // ordinal 0 by accident.
-        ? (((uint)m_boundEachPosition < (uint)ordinals.Count)
-            ? m_population.BodyForPlacementOrdinal(ordinal: ordinals[m_boundEachPosition])
+        ? (((uint)m_evaluator.BoundEachPosition < (uint)ordinals.Count)
+            ? m_population.BodyForPlacementOrdinal(ordinal: ordinals[m_evaluator.BoundEachPosition])
             : -1)
         // 'placement:<id>' — a fixed ordinal, resolved once at compile time.
         : m_population.BodyForPlacementOrdinal(ordinal: bodyRef.Index)),
