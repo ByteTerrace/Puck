@@ -82,11 +82,38 @@ var report = new PostBattery<PostContext>(
 report.Write(artifactsDirectory: artifactsDirectory);
 
 if (recordMode) {
+    // A recording run rewrites the ledger from what it measured, so a run that only selected part of the battery
+    // must merge over the entries already on file — replacing wholesale would delete every suite the filter did not
+    // select, silently discarding the ratchet for the rest of the corpus. An unfiltered run replaces wholesale, which
+    // is what lets it drop entries for ROMs the corpus no longer carries.
+    var isFiltered = ((tierFilter is not null) || (nameFilter is not null));
+    var recorded = context.RecordedEntries;
+    var entries = ((IEnumerable<LedgerEntry>)recorded);
+
+    if (isFiltered) {
+        var merged = ExpectationsLedger
+            .Load(path: ledgerPath)
+            .ToDictionary(
+            elementSelector: static pair => pair.Value,
+            keySelector: static pair => pair.Key
+        );
+
+        foreach (var entry in recorded) {
+            merged[entry.Key] = entry;
+        }
+
+        entries = merged.Values;
+    }
+
+    var written = entries.ToArray();
+
     ExpectationsLedger.Save(
-        entries: context.RecordedEntries,
+        entries: written,
         path: ledgerPath
     );
-    Console.Out.WriteLine(value: $"Recorded {context.RecordedEntries.Count} ledger entries to {ledgerPath}");
+    Console.Out.WriteLine(value: (isFiltered
+        ? $"Merged {recorded.Count} measured ledger entries into the {written.Length} in {ledgerPath}; the run was filtered, so unselected suites were kept"
+        : $"Recorded {written.Length} ledger entries to {ledgerPath}"));
 }
 
 return report.ExitCode;

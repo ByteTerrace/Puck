@@ -91,6 +91,12 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     private const int OamEntryCount = 40;
     private const int OamEntryStride = 4;
     private const int OamScanDots = 80;
+    // The OAM corruption bug's row geometry: object attribute memory is 20 rows of 8 bytes (four 16-bit words), and the
+    // scan reads one row every four dots (one M-cycle) — row 0 (the first two objects) is the scan's initial state and
+    // is never the corrupted row. Row 16 is the one absolute row whose corrected contents also spill into row 0.
+    private const int OamBugRowByteCount = 8;
+    private const int OamBugRowCount = (OamEntryCount * OamEntryStride / OamBugRowByteCount);
+    private const int OamBugSpilloverRow = 16;
     private const byte ObjectEnable = 0x02;
     private const byte ObjectSize = 0x04;
     private const byte PaletteAutoIncrement = 0x80;
@@ -133,6 +139,10 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     private bool m_supportsColor;
     // Whether the background fetcher latches its row at the tile step (see ConsoleModelExtensions.LatchesFetchRowAtTileStep).
     private bool m_latchesFetchRow;
+    // Whether NoteRegisterAddressBus can find a live OAM scan to corrupt (see ConsoleModelExtensions.HasOamCorruptionBug).
+    // The CPU already gates its own call site on the same question; this mirrors it so the PPU never depends on the
+    // caller alone to keep a Color machine's OAM clean.
+    private bool m_hasOamCorruptionBug;
 
     private readonly DmgCompatibilityState m_dmgCompatibilityState;
     private readonly CartridgeHeader m_header;
@@ -279,6 +289,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
         m_dmgCompatibilityState = dmgCompatibility;
         m_supportsColor = configuration.Model.SupportsColor();
         m_latchesFetchRow = configuration.Model.LatchesFetchRowAtTileStep();
+        m_hasOamCorruptionBug = configuration.Model.HasOamCorruptionBug();
         m_dmgCompatibility = dmgCompatibility.IsActive;
         m_cgbNative = (m_supportsColor && !m_dmgCompatibility);
         m_coarseColumnPhase = timing.CoarseColumnPhase;
@@ -385,6 +396,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
 
         m_supportsColor = model.SupportsColor();
         m_latchesFetchRow = model.LatchesFetchRowAtTileStep();
+        m_hasOamCorruptionBug = model.HasOamCorruptionBug();
         m_dmgCompatibility = m_dmgCompatibilityState.IsActive;
         m_cgbNative = (m_supportsColor && !m_dmgCompatibility);
 
@@ -963,6 +975,246 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
                 ++m_spriteCount;
             }
         }
+    }
+    /// <inheritdoc/>
+    // The register-bump trigger: always the plain write-corruption formula, regardless of what (if anything) the
+    // surrounding instruction reads or writes — real hardware ties the increment/decrement unit's output to the
+    // address bus with no notion of a concurrent access.
+    public void NoteRegisterAddressBus(ushort address) {
+        var row = OamBugRowFor(address: address);
+
+        if (row >= 0) {
+            ApplyOamWriteCorruption(rowIndex: row);
+        }
+    }
+    /// <inheritdoc/>
+    public void NoteBlockedOamRead() {
+        // A read's own two-T-cycle lead (Sm83.Decode.cs's LeadingTCyclesBeforeRead) is when the CPU samples the data
+        // bus, not when the address is driven onto it — the address-bus contention the OAM scan reacts to is present
+        // for the whole machine cycle, present already at its first T-cycle exactly like a write's. Back the dot up
+        // by that lead so a blocked read's row matches the row a write at the same instruction boundary would see.
+        var row = OamBugRowFor(
+            address: MemoryMap.ObjectAttributeMemoryStart,
+            dotBias: -2
+        );
+
+        if (row >= 0) {
+            ApplyOamReadCorruption(rowIndex: row);
+        }
+    }
+    /// <inheritdoc/>
+    public void NoteBlockedOamWrite() {
+        var row = OamBugRowFor(address: MemoryMap.ObjectAttributeMemoryStart);
+
+        if (row >= 0) {
+            ApplyOamWriteCorruption(rowIndex: row);
+        }
+    }
+    // The row the OAM scan is currently reading (1 through OamBugRowCount - 1), or -1 when the bug cannot fire: off a
+    // revision without it, outside the $FE00-$FEFF page (the whole page shares one decode, including the unusable
+    // $FEA0-$FEFF tail), outside the scan (mode 2) itself, on row 0 (the first two objects, never corrupted), or past
+    // the last real row (the two dots at the very end of the scan, where nothing lies ahead of it to read). The scan
+    // advances one row every four dots, but the row it is CURRENTLY reading trails the dot count by two — it starts
+    // row 0 already loaded and only begins reading row 1 two dots in. NoteBlockedOamRead/Write already know their
+    // address is in range (the bus only calls them from inside that gate), so they pass the range's own start; only
+    // NoteRegisterAddressBus's raw register value needs the range test.
+    private int OamBugRowFor(ushort address, int dotBias = 0) {
+        if (
+            !m_hasOamCorruptionBug ||
+            (m_mode != 2) ||
+            (address < MemoryMap.ObjectAttributeMemoryStart) ||
+            (address > MemoryMap.UnusableEnd)
+        ) {
+            return -1;
+        }
+
+        var row = ((m_dot + dotBias + 2) / 4);
+
+        return (((row >= 1) && (row < OamBugRowCount))
+            ? row
+            : -1);
+    }
+    // The write-corruption formula: the row's first word becomes ((a^c)&(b^c))^c, where a is that word's own value, b
+    // is the preceding row's first word, and c is the preceding row's third word; the row's last three words are then
+    // overwritten with the preceding row's. Pan Docs' "Write Corruption," and also its "Write During Increase/
+    // Decrease" (a write and a register bump sharing a row resolve to the same formula, so no separate case is needed).
+    // Unlike a blocked read's formulas, the result lands on the ACCESSED row itself, not the one before it.
+    private void ApplyOamWriteCorruption(int rowIndex) {
+        var rowOffset = (rowIndex * OamBugRowByteCount);
+        var precedingOffset = (rowOffset - OamBugRowByteCount);
+        var a = ReadOamBugWord(byteOffset: rowOffset);
+        var b = ReadOamBugWord(byteOffset: precedingOffset);
+        var c = ReadOamBugWord(byteOffset: (precedingOffset + 4));
+
+        WriteOamBugWord(
+            byteOffset: rowOffset,
+            value: ((ushort)(((a ^ c) & (b ^ c)) ^ c))
+        );
+
+        for (var word = 1; (word < 4); ++word) {
+            WriteOamBugWord(
+                byteOffset: (rowOffset + (word * 2)),
+                value: ReadOamBugWord(byteOffset: (precedingOffset + (word * 2)))
+            );
+        }
+    }
+    // A blocked read's formula depends on which of every four rows the scan is reading (row index modulo 4), a
+    // hardware split this family's silicon carries independent of which instruction performed the read:
+    //   - two of every four rows (index mod 4 in {1, 3}) use the plain read-corruption formula b|(a&c) — Pan Docs'
+    //     "Read Corruption" — applied to BOTH the preceding row's first word and the row's own (the two end up equal,
+    //     since a IS the row's own pre-corruption first word, so the values coincide once the trailing copy below
+    //     lands the preceding row's first word into the row's).
+    //   - one of every four (index mod 4 == 2) uses the combined formula Pan Docs calls "Read During Increase/
+    //     Decrease": (b&(a|c|d))|(a&c&d), where a is the first word two rows back, b is the preceding row's own first
+    //     word, c is the row's first word, and d is the preceding row's third word. The corrected preceding row is
+    //     then copied whole into both the row and the row two before it.
+    //   - one of every four (index mod 4 == 0, excluding row 0) uses a formula unique to that row's absolute position,
+    //     resolved by ApplyOamRowSpecificReadCorruption.
+    // Every branch converges on the same trailing step: the preceding row (now corrected) is copied whole into the
+    // row the scan is reading. Row 16 carries one further DMG-family quirk — its corrected contents spill into row 0.
+    private void ApplyOamReadCorruption(int rowIndex) {
+        var rowOffset = (rowIndex * OamBugRowByteCount);
+        var precedingOffset = (rowOffset - OamBugRowByteCount);
+
+        switch (rowIndex % 4) {
+            case 2:
+                var twoBeforeOffset = (precedingOffset - OamBugRowByteCount);
+                var secondaryA = ReadOamBugWord(byteOffset: twoBeforeOffset);
+                var secondaryB = ReadOamBugWord(byteOffset: precedingOffset);
+                var secondaryC = ReadOamBugWord(byteOffset: rowOffset);
+                var secondaryD = ReadOamBugWord(byteOffset: (precedingOffset + 4));
+
+                WriteOamBugWord(
+                    byteOffset: precedingOffset,
+                    value: ((ushort)((secondaryB & (secondaryA | secondaryC | secondaryD)) | (secondaryA & secondaryC & secondaryD)))
+                );
+                CopyOamBugRow(
+                    fromRowOffset: precedingOffset,
+                    toRowOffset: twoBeforeOffset
+                );
+
+                break;
+            case 0:
+                ApplyOamRowSpecificReadCorruption(
+                    rowOffset: rowOffset,
+                    precedingOffset: precedingOffset
+                );
+
+                break;
+            default:
+                var plainA = ReadOamBugWord(byteOffset: rowOffset);
+                var plainB = ReadOamBugWord(byteOffset: precedingOffset);
+                var plainC = ReadOamBugWord(byteOffset: (precedingOffset + 4));
+                var plainValue = ((ushort)(plainB | (plainA & plainC)));
+
+                WriteOamBugWord(
+                    byteOffset: precedingOffset,
+                    value: plainValue
+                );
+
+                break;
+        }
+
+        CopyOamBugRow(
+            fromRowOffset: precedingOffset,
+            toRowOffset: rowOffset
+        );
+
+        if (rowIndex == OamBugSpilloverRow) {
+            CopyOamBugRow(
+                fromRowOffset: rowOffset,
+                toRowOffset: 0
+            );
+        }
+    }
+    // Rows 4, 8, 12, and 16 each carry their own formula on this hardware family, resolved by absolute row offset
+    // rather than a shared one — the silicon's own layout, not a design choice. Row 8 (0x40) reads eight rows'
+    // preceding words (through the row four back) and drops its own first argument, per the reference; the other
+    // three read five words each.
+    private void ApplyOamRowSpecificReadCorruption(int rowOffset, int precedingOffset) {
+        var twoBeforeOffset = (precedingOffset - OamBugRowByteCount);
+        var fourBeforeOffset = (rowOffset - (OamBugRowByteCount * 4));
+
+        if (rowOffset == 0x40) {
+            var b = ReadOamBugWord(byteOffset: rowOffset);
+            var c = ReadOamBugWord(byteOffset: (precedingOffset + 4));
+            var d = ReadOamBugWord(byteOffset: (precedingOffset + 2));
+            var e = ReadOamBugWord(byteOffset: precedingOffset);
+            var f = ReadOamBugWord(byteOffset: (twoBeforeOffset + 2));
+            var g = ReadOamBugWord(byteOffset: twoBeforeOffset);
+            var h = ReadOamBugWord(byteOffset: fourBeforeOffset);
+
+            WriteOamBugWord(
+                byteOffset: precedingOffset,
+                value: ((ushort)((e & (h | g | (~d & f) | c | b)) | (c & g & h)))
+            );
+            CopyOamBugRow(
+                fromRowOffset: precedingOffset,
+                toRowOffset: twoBeforeOffset
+            );
+            CopyOamBugRow(
+                fromRowOffset: precedingOffset,
+                toRowOffset: fourBeforeOffset
+            );
+
+            return;
+        }
+
+        var a = ReadOamBugWord(byteOffset: rowOffset);
+        var tertiaryB = ReadOamBugWord(byteOffset: (precedingOffset + 4));
+        var tertiaryC = ReadOamBugWord(byteOffset: precedingOffset);
+        var tertiaryD = ReadOamBugWord(byteOffset: twoBeforeOffset);
+        var tertiaryE = ReadOamBugWord(byteOffset: fourBeforeOffset);
+
+        var value = (rowOffset switch {
+            0x20 => ((tertiaryC & (a | tertiaryB | tertiaryD | tertiaryE)) | (a & tertiaryB & tertiaryD & tertiaryE)),
+            0x60 => ((tertiaryC & (a | tertiaryB | tertiaryD | tertiaryE)) | (tertiaryB & tertiaryD & tertiaryE)),
+            _ => (tertiaryC | (a & tertiaryB & tertiaryD & tertiaryE)),
+        });
+
+        WriteOamBugWord(
+            byteOffset: precedingOffset,
+            value: ((ushort)value)
+        );
+        // The row-specific formulas (unlike the plain and combined ones) additionally propagate the corrected
+        // preceding row into BOTH the row two before and the row four before the one the scan is reading — a second
+        // copy beyond the trailing one every branch of ApplyOamReadCorruption already applies to the accessed row
+        // itself.
+        CopyOamBugRow(
+            fromRowOffset: precedingOffset,
+            toRowOffset: twoBeforeOffset
+        );
+        CopyOamBugRow(
+            fromRowOffset: precedingOffset,
+            toRowOffset: fourBeforeOffset
+        );
+    }
+    // Overwrites a row's four 16-bit words from another row — the tail every read/write corruption pattern applies
+    // once its own first word is settled.
+    private void CopyOamBugRow(int fromRowOffset, int toRowOffset) {
+        for (var word = 0; (word < 4); ++word) {
+            WriteOamBugWord(
+                byteOffset: (toRowOffset + (word * 2)),
+                value: ReadOamBugWord(byteOffset: (fromRowOffset + (word * 2)))
+            );
+        }
+    }
+    // OAM is a 16-bit-wide store for this bug's purposes; every formula operates on whole little-endian words.
+    private ushort ReadOamBugWord(int byteOffset) {
+        var low = m_memory.ReadObjectAttributeMemory(address: ((ushort)(MemoryMap.ObjectAttributeMemoryStart + byteOffset)));
+        var high = m_memory.ReadObjectAttributeMemory(address: ((ushort)(MemoryMap.ObjectAttributeMemoryStart + byteOffset + 1)));
+
+        return ((ushort)(low | (high << 8)));
+    }
+    private void WriteOamBugWord(int byteOffset, ushort value) {
+        m_memory.WriteObjectAttributeMemory(
+            address: ((ushort)(MemoryMap.ObjectAttributeMemoryStart + byteOffset)),
+            value: ((byte)value)
+        );
+        m_memory.WriteObjectAttributeMemory(
+            address: ((ushort)(MemoryMap.ObjectAttributeMemoryStart + byteOffset + 1)),
+            value: ((byte)(value >> 8))
+        );
     }
     // One dot of drawing: if the window starts at this pixel, hand the fetcher over to it; then advance the fetcher and
     // shift one pixel out of the FIFO. The leading SCX%8 pixels are discarded (fine scroll); the rest are resolved to a

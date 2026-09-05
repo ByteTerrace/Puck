@@ -47,21 +47,23 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     // CPU T-cycles between a DIV-APU event and the envelope step it defers under Color double speed on the later
     // colour steppings: the step lands one machine cycle after the event rather than inside it.
     private const int DeferredEnvelopeDelay = 4;
-    // Audio ticks between the CPU's write strobe reaching the unit and its read strobe doing so: a read settles
-    // later inside its machine cycle than a write commits, so a read observes one more audio tick than the write
-    // that set the event up. The generators absorb it by loading their countdowns this much longer; the write-side
-    // predicates undo it by looking one tick ahead (PeekSquare, PeekWaveFetch).
+    // Audio ticks between the CPU's write strobe reaching the unit and its read strobe doing so. A write commits on
+    // its machine cycle's first T-cycle and a read settles two T-cycles in, so a read observes one more audio tick
+    // than the write that set the event up. The generators absorb it by loading their countdowns this much longer;
+    // the write-side predicates undo it by looking one tick ahead (PeekSquare, PeekWaveFetch).
     private const int ReadStrobeSkew = 1;
     // Audio ticks the sweep unit's arming delay carries on top of the value the 128 Hz clock and a channel-1
-    // trigger nominally load. The 128 Hz path is observed through a read and so carries the read-strobe skew; the
-    // trigger path is observed against a NR13/NR14 write that follows it, and the early steppings complete their
-    // trigger calculation one tick sooner than the later ones. Swept against the sweep families of the
-    // hardware-accurate conformance suites and the sample-accurate suite; any other pair loses at least one case.
+    // trigger nominally load. The 128 Hz path is observed through a read and so carries the read-strobe skew.
     private const int SweepClockArmSkew = ReadStrobeSkew;
+    // The trigger path is observed against the NR13/NR14 write that follows it rather than through a read, so it
+    // does not carry the read-strobe skew; the early steppings additionally complete their trigger calculation one
+    // tick sooner than the later ones. This pair stays calibrated, not derived: the trace pins the mechanism (the
+    // overflow check disabling channel 1 one sweep tick early) but not the constant, and every other pair loses at
+    // least one case across the sweep families of the two conformance suites and the sample-accurate suite.
     private const int SweepTriggerArmSkewEarly = -1;
     private const int SweepTriggerArmSkewLate = 0;
     // Audio ticks the channel-1 restart hold carries past the value the trigger loads, over which the sweep unit
-    // refuses to refresh its shadow frequency.
+    // refuses to refresh its shadow frequency. Also calibrated.
     private const int RestartHoldSkew = 1;
     // Audio ticks the wave channel's sample fetcher waits past a trigger, on top of the freshly loaded period.
     private const int WaveTriggerFetchDelay = (3 + ReadStrobeSkew);
@@ -1381,7 +1383,7 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
             m_squareDelay[channel] = ((4 - m_lfDiv) + extraDelay);
         }
 
-        m_squareSampleCountdown[channel] = (((m_squareSampleLength[channel] ^ MaxSampleLength) * 2) + m_squareDelay[channel]);
+        m_squareSampleCountdown[channel] = ((((m_squareSampleLength[channel] ^ MaxSampleLength) * 2) + m_squareDelay[channel]) + TriggerReadStrobeSkew());
         m_envelopeVolume[channel] = (control >> 4);
 
         // The volume the trigger loads takes effect at once, even though the waveform itself does not.
@@ -1774,6 +1776,7 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
             }
         }
 
+        m_noiseCounterCountdown += TriggerReadStrobeSkew();
         m_noiseLfsr = (((divisor == 0) && m_channelActive[3] && ((m_noiseAlignment & 3) == 3))
             ? 0x0055
             : 0);
@@ -1973,6 +1976,17 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
             m_waveRam[offset] = m_waveRam[(row + offset)];
         }
     }
+    // The read-strobe skew a square or noise trigger loads on top of its own delay, in audio ticks. Where the skew
+    // is observable follows from how a machine cycle divides into audio ticks: at normal speed a machine cycle
+    // spans two of them, so the read strobe stays inside the same 1 MiHz half the duty counter and the noise
+    // counter are quoted against and the skew moves no edge a reader can see; under double speed a machine cycle
+    // is exactly one audio tick, so the same skew carries the first edge a whole step past where the reader
+    // expects it and the trigger has to load one tick longer to put it back. The wave fetcher and the sweep unit
+    // are quoted against the 2 MiHz clock directly, so they carry the skew at both speeds.
+    private int TriggerReadStrobeSkew() =>
+        (m_key1.IsDoubleSpeed
+        ? ReadStrobeSkew
+        : 0);
     private int PackedSample(int channel) =>
         (m_channelActive[channel]
         ? (m_sample[channel] & 0x0F)

@@ -51,4 +51,7 @@ internal sealed class Sm83SstBus : ISystemBus {
     /// <inheritdoc/>
     /// <remarks>No-op: this flat vector bus has no watchpoint machinery to witness.</remarks>
     public void NoteInstructionStart(ushort pc) { }
+    /// <inheritdoc/>
+    /// <remarks>No-op: this flat vector bus has no PPU to corrupt.</remarks>
+    public void NoteRegisterAddressBus(ushort address) { }
 }

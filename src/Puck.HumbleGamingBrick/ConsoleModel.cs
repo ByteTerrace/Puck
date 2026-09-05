@@ -189,4 +189,15 @@ public static class ConsoleModelExtensions {
     /// <returns><see langword="true"/> when the boot ROM deselects both button groups.</returns>
     public static bool DeselectsJoypadOnBoot(this ConsoleModel model) =>
         model.IsSuperGameBoy();
+    /// <summary>Returns whether the revision's object attribute memory (OAM) is exposed to the corruption bug: a 16-bit
+    /// register increment or decrement — however it arises (<c>INC</c>/<c>DEC rr</c>, the implicit stack-pointer moves
+    /// inside <c>PUSH</c>/<c>POP</c>/<c>CALL</c>/<c>RET</c>/<c>RST</c> and interrupt dispatch, <c>LD [hli]</c>/
+    /// <c>[hld]</c>, or <c>ADD SP</c>/<c>LD HL,SP+e</c>) whose register value lies in <c>0xFE00</c>–<c>0xFEFF</c> drives
+    /// the increment/decrement unit's output onto the address bus. While the PPU is scanning OAM (mode 2) that address
+    /// lands on the row it is currently reading and corrupts it. The Color hardware rewired OAM so the flaw does not
+    /// reach it, even running a monochrome cartridge in compatibility mode.</summary>
+    /// <param name="model">The revision to interrogate.</param>
+    /// <returns><see langword="true"/> for every revision except the Color steppings and the Advanced console.</returns>
+    public static bool HasOamCorruptionBug(this ConsoleModel model) =>
+        !model.SupportsColor();
 }

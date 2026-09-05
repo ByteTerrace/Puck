@@ -43,6 +43,9 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
     // Mutable so a LIVE device swap re-gates the only live model read (ExecuteStop: color arms a KEY1 speed switch,
     // monochrome halts). The boot register handoff (SeedPostBootState, incl. the AGB inc-b probe) stays construction-only.
     private bool m_supportsColor;
+    // Cached so every 16-bit increment/decrement site tests one field instead of re-deriving the model question; a
+    // Color machine never reaches NoteOamCorruption's body, let alone the bus/PPU call behind it.
+    private bool m_hasOamCorruptionBug;
     private byte m_a;
     private byte m_b;
     private byte m_c;
@@ -89,6 +92,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         m_joypad = joypad;
         m_key1 = key1;
         m_supportsColor = configuration.Model.SupportsColor();
+        m_hasOamCorruptionBug = configuration.Model.HasOamCorruptionBug();
 
         // With a boot ROM the CPU powers on cold — every register zero and PC at 0x0000, the overlay's reset vector —
         // and the boot program itself produces the handoff state. Without one, the documented handoff is seeded.
@@ -303,8 +307,20 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         Execute(opcode: opcode);
     }
     /// <inheritdoc/>
-    public void ApplyModel(ConsoleModel model) =>
+    public void ApplyModel(ConsoleModel model) {
         m_supportsColor = model.SupportsColor();
+        m_hasOamCorruptionBug = model.HasOamCorruptionBug();
+    }
+    // Reports a 16-bit register's pre-operation value to the bus for the OAM corruption bug's register-bump trigger,
+    // but only on a revision that has it — the single guarded call site every INC/DEC rr, the stack pointer's implicit
+    // move opening PUSH/CALL/RST/interrupt dispatch, and LD SP,HL funnel through, so a Color machine pays one field
+    // test and nothing past it. A direct CPU read or write that itself lands on OAM is a separate trigger the bus
+    // applies from ReadByte/WriteByte, independent of this one.
+    private void NoteOamCorruption(ushort preValue) {
+        if (m_hasOamCorruptionBug) {
+            m_bus.NoteRegisterAddressBus(address: preValue);
+        }
+    }
     /// <summary>Arms or clears the co-simulation trace sink. Host-side debug state — never snapshotted, never touched
     /// by the battery.</summary>
     public void SetTraceSink(ICpuTraceSink? sink) =>
@@ -471,21 +487,18 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         m_interruptMasterEnable = false;
 
         InternalCycle();
-        InternalCycle();
 
-        m_stackPointer = ((ushort)(m_stackPointer - 1));
-        WriteCycle(
-            address: m_stackPointer,
-            value: ((byte)(m_programCounter >> 8))
-        );
+        // The implicit SP move behind this dispatch's two-byte push reports once, against SP's value before either
+        // decrement — matching the single register-bump trigger PUSH/CALL/RST also fire, not one per byte. It lands
+        // between the two internal cycles, not after both: the second one is a plain delay ahead of the first push,
+        // while this report belongs to the machine cycle immediately before it, mirroring PushWord's own ordering.
+        NoteOamCorruption(preValue: m_stackPointer);
+        InternalCycle();
+        PushStackByte(value: ((byte)(m_programCounter >> 8)));
 
         var enabled = m_interrupts.Enabled;
 
-        m_stackPointer = ((ushort)(m_stackPointer - 1));
-        WriteCycle(
-            address: m_stackPointer,
-            value: ((byte)m_programCounter)
-        );
+        PushStackByte(value: ((byte)m_programCounter));
 
         var pending = ((InterruptKind)(((byte)m_interrupts.Requested) & ((byte)enabled) & 0x1F));
 

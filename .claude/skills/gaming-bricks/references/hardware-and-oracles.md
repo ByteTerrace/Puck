@@ -92,6 +92,29 @@ that skew in their countdown loads; the write-side predicates undo it by
 looking one tick ahead (`PeekSquare`, `PeekWaveFetch`). Move one and the other
 has to move with it.
 
+Where the skew is *observable* follows from how a machine cycle divides into
+audio ticks, and the two speeds differ. At normal speed a machine cycle spans
+two audio ticks, so the read strobe stays inside the same 1 MiHz half that the
+duty counter and the noise counter are quoted against and the skew moves no
+edge a reader can see. Under double speed a machine cycle is exactly one audio
+tick, so the same skew carries the first generator edge a whole step past where
+the reader expects it — which is why a square or noise *trigger* loads the skew
+only under double speed (`ApuComponent.TriggerReadStrobeSkew`), while the wave
+fetcher and the sweep unit, quoted against the 2 MiHz clock directly, carry it
+at both speeds. Applying it unconditionally costs ten sample-accurate cases;
+omitting it costs seven. This is the single mechanism behind the whole
+`channel_*_align` / `_align_cpu` / `_duty` family.
+
+Chasing an audio timing case is trace-led, not swept: run the co-simulation
+(`--cosim <rom> --sameboy … --boot … --model cgb --kind cpu`, budget past the
+boot animation), then walk the two `artifacts/gb-post/cosim/*.cosim.bin`
+streams for the first divergence in *content* rather than cycle stamp — the
+cycle column diverges harmlessly on a shared prologue long before any test
+runs. The SameSuite alignment ROMs are unrolled sweeps that retrigger a
+channel, burn one more `NOP` per iteration, and read PCM12/PCM34; the
+divergence lands on the iteration where the observed edge moves, which names
+the tick the model is off by.
+
 ## 3. Snapshots and host boundaries
 
 Both machines implement mid-frame `Snapshot`, `Restore`, and `Fork` through

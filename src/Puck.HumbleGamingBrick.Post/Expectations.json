@@ -967,8 +967,8 @@
     "Probe": "screenshot",
     "RomHash": "b94347eda46acab5",
     "Outcome": "fail",
-    "Reason": "1360 differing pixel(s) against oam_bug-dmg.png after 600 frames",
-    "DiffPixels": 1360
+    "Reason": "1158 differing pixel(s) against oam_bug-dmg.png after 600 frames",
+    "DiffPixels": 1158
   },
   {
     "Suite": "bully",
@@ -39362,8 +39362,7 @@
     "Model": "DmgC",
     "Probe": "conformance-serial",
     "RomHash": "27195c5159c820fe",
-    "Outcome": "fail",
-    "Reason": "result code 0x02"
+    "Outcome": "pass"
   },
   {
     "Suite": "oam-bug-singles",
@@ -39379,8 +39378,7 @@
     "Model": "DmgC",
     "Probe": "conformance-serial",
     "RomHash": "78ba7c503da2e9ed",
-    "Outcome": "fail",
-    "Reason": "result code 0x03"
+    "Outcome": "pass"
   },
   {
     "Suite": "oam-bug-singles",
@@ -39388,8 +39386,7 @@
     "Model": "DmgC",
     "Probe": "conformance-serial",
     "RomHash": "f4913fc530afe44b",
-    "Outcome": "fail",
-    "Reason": "result code 0x02"
+    "Outcome": "pass"
   },
   {
     "Suite": "oam-bug-singles",
@@ -39406,7 +39403,7 @@
     "Probe": "conformance-serial",
     "RomHash": "5aaa531756fcf91b",
     "Outcome": "fail",
-    "Reason": "result code 0x01"
+    "Reason": "no result within 5000 frames; serial=\u0022\u0022"
   },
   {
     "Suite": "oam-bug-singles",
@@ -39414,8 +39411,7 @@
     "Model": "DmgC",
     "Probe": "conformance-serial",
     "RomHash": "bb8901c23bcfadba",
-    "Outcome": "fail",
-    "Reason": "result code 0x02"
+    "Outcome": "pass"
   },
   {
     "Suite": "oam-dma",
@@ -39777,8 +39773,7 @@
     "Model": "CgbE",
     "Probe": "register-signature",
     "RomHash": "14f486891fbb7e3a",
-    "Outcome": "fail",
-    "Reason": "0x42 failure signature after 4 frames"
+    "Outcome": "pass"
   },
   {
     "Suite": "same-suite",
@@ -39786,8 +39781,7 @@
     "Model": "CgbE",
     "Probe": "register-signature",
     "RomHash": "4dfcf7019f4f4dfa",
-    "Outcome": "fail",
-    "Reason": "0x42 failure signature after 4 frames"
+    "Outcome": "pass"
   },
   {
     "Suite": "same-suite",
@@ -39803,8 +39797,7 @@
     "Model": "CgbE",
     "Probe": "register-signature",
     "RomHash": "41412a9739d472f5",
-    "Outcome": "fail",
-    "Reason": "0x42 failure signature after 4 frames"
+    "Outcome": "pass"
   },
   {
     "Suite": "same-suite",
@@ -39855,8 +39848,7 @@
     "Model": "CgbE",
     "Probe": "register-signature",
     "RomHash": "3f47ed000f351f87",
-    "Outcome": "fail",
-    "Reason": "0x42 failure signature after 4 frames"
+    "Outcome": "pass"
   },
   {
     "Suite": "same-suite",
@@ -39953,8 +39945,7 @@
     "Model": "CgbE",
     "Probe": "register-signature",
     "RomHash": "64cc21304decd0ad",
-    "Outcome": "fail",
-    "Reason": "0x42 failure signature after 4 frames"
+    "Outcome": "pass"
   },
   {
     "Suite": "same-suite",
@@ -39962,8 +39953,7 @@
     "Model": "CgbE",
     "Probe": "register-signature",
     "RomHash": "743c385ccf267dca",
-    "Outcome": "fail",
-    "Reason": "0x42 failure signature after 4 frames"
+    "Outcome": "pass"
   },
   {
     "Suite": "same-suite",
@@ -39979,8 +39969,7 @@
     "Model": "CgbE",
     "Probe": "register-signature",
     "RomHash": "48cb6f8a58f59c12",
-    "Outcome": "fail",
-    "Reason": "0x42 failure signature after 4 frames"
+    "Outcome": "pass"
   },
   {
     "Suite": "same-suite",
@@ -40207,8 +40196,7 @@
     "Model": "CgbE",
     "Probe": "register-signature",
     "RomHash": "95a67837aa33a3e2",
-    "Outcome": "fail",
-    "Reason": "0x42 failure signature after 4 frames"
+    "Outcome": "pass"
   },
   {
     "Suite": "same-suite",

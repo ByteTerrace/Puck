@@ -211,13 +211,32 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
 
         if (address <= MemoryMap.ObjectAttributeMemoryEnd) {
             // OAM is unreadable to the CPU while a DMA copies into it, or while the PPU holds its read lock (the scan,
-            // drawing, and the trailing unlock lag).
-            return ((m_oamDma.IsActive || m_ppu.BlocksOamReads)
-                ? (byte)0xFF
-                : m_memory.ReadObjectAttributeMemory(address: address));
+            // drawing, and the trailing unlock lag). A DMA in flight already owns the bus ahead of the CPU, so only a
+            // read blocked by the PPU alone reaches the corruption bug (bug#1: any blocked OAM access corrupts it,
+            // independent of which instruction or register carried the address).
+            if (m_oamDma.IsActive) {
+                return 0xFF;
+            }
+
+            if (m_ppu.BlocksOamReads) {
+                m_ppu.NoteBlockedOamRead();
+
+                return 0xFF;
+            }
+
+            return m_memory.ReadObjectAttributeMemory(address: address);
         }
 
         if (address <= MemoryMap.UnusableEnd) {
+            // The unusable region is never real memory, but it shares OAM's page decode: a read reaching it while the
+            // PPU blocks OAM reads still arms the corruption bug (Pan Docs: "Including the $FEA0-$FEFF region").
+            if (
+                !m_oamDma.IsActive &&
+                m_ppu.BlocksOamReads
+            ) {
+                m_ppu.NoteBlockedOamRead();
+            }
+
             return 0xFF;
         }
 
@@ -325,18 +344,28 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             );
         } else if (address <= MemoryMap.ObjectAttributeMemoryEnd) {
             // The CPU cannot reach OAM while a DMA transfer owns it — including the transfer's warm-up delay — or
-            // while the PPU holds its write lock (which briefly opens between the scan and the pipeline engaging).
-            if (
-                !m_oamDma.IsActiveOrWarmingUp &&
-                !m_ppu.BlocksOamWrites
-            ) {
-                m_memory.WriteObjectAttributeMemory(
-                    address: address,
-                    value: value
-                );
+            // while the PPU holds its write lock (which briefly opens between the scan and the pipeline engaging). A
+            // write blocked by the PPU alone (not by an in-flight DMA, which already owns the bus first) arms bug#1:
+            // any blocked OAM write corrupts it, independent of which instruction or register carried the address.
+            if (!m_oamDma.IsActiveOrWarmingUp) {
+                if (m_ppu.BlocksOamWrites) {
+                    m_ppu.NoteBlockedOamWrite();
+                } else {
+                    m_memory.WriteObjectAttributeMemory(
+                        address: address,
+                        value: value
+                    );
+                }
             }
         } else if (address <= MemoryMap.UnusableEnd) {
-            // The unusable region drops writes.
+            // The unusable region drops writes outright, but it shares OAM's page decode for the corruption bug (Pan
+            // Docs: "Including the $FEA0-$FEFF region").
+            if (
+                !m_oamDma.IsActiveOrWarmingUp &&
+                m_ppu.BlocksOamWrites
+            ) {
+                m_ppu.NoteBlockedOamWrite();
+            }
         } else if (address <= MemoryMap.IoRegistersEnd) {
             if (IsAudioBlock(address: address)) {
                 m_apu.WriteRegister(
@@ -520,6 +549,14 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
     /// <inheritdoc/>
     public void NoteInstructionStart(ushort pc) =>
         m_currentInstructionPc = pc;
+    /// <inheritdoc/>
+    // A running (or warming-up) OAM DMA already owns the OAM bus ahead of the CPU (the same ordering ReadByte/
+    // WriteByte gate OAM behind); the IDU's address-bus output loses that race just like an ordinary CPU access would.
+    public void NoteRegisterAddressBus(ushort address) {
+        if (!m_oamDma.IsActiveOrWarmingUp) {
+            m_ppu.NoteRegisterAddressBus(address: address);
+        }
+    }
     /// <summary>Arms (or re-arms, replacing the same address's kinds) a read/write watchpoint. Dormant until the first
     /// arm flips the hot-path guard on.</summary>
     /// <param name="address">The watched bus address.</param>

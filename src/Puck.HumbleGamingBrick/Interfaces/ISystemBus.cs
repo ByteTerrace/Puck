@@ -22,4 +22,11 @@ public interface ISystemBus {
     /// advanced to. A no-op on an implementation with no watchpoints (for example a flat test-vector bus).</summary>
     /// <param name="pc">The program counter at the start of the current instruction dispatch.</param>
     void NoteInstructionStart(ushort pc);
+    /// <summary>Reports a 16-bit register's value, before its increment/decrement unit (IDU) steps it by one, to the
+    /// bus — the same address-bus fact the IDU drives even though no read or write is asserted that machine cycle. The
+    /// CPU calls this only on a revision with <see cref="ConsoleModelExtensions.HasOamCorruptionBug"/> cached true, so
+    /// the call and its downstream OAM-row lookup never run on Color hardware. A no-op on an implementation with no PPU
+    /// to corrupt (for example a flat test-vector bus).</summary>
+    /// <param name="address">The register's value before the increment/decrement.</param>
+    void NoteRegisterAddressBus(ushort address);
 }
