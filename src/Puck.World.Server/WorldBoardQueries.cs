@@ -197,7 +197,7 @@ public static class WorldBoardQueries {
                 if (next == start) {
                     return true;
                 }
-                var previous = topology.Neighbour(start, (direction + topology.DirectionCount / 2) % topology.DirectionCount);
+                var previous = topology.Neighbour(start, topology.Opposite(direction));
                 if ((next < 0 || values[next] != query.Value) && (previous < 0 || values[previous] != query.Value)) {
                     return true;
                 }

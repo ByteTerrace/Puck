@@ -22,7 +22,7 @@ internal sealed class ThroughputStage : IPostStage<PostContext> {
         MachineStageProbes.MeasureThroughput(
             benchFrames: BenchFrames,
             build: static () => PostMachine.Build(
-                model: ConsoleModel.Dmg,
+                model: ConsoleModel.DmgC,
                 rom: SyntheticRom.Create()
             ),
             cycleUnit: "MT/s",

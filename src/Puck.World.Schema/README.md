@@ -62,11 +62,20 @@ key — `cellOf` takes a `bodyRef` in its place, the same `body:<n>`/
 topology — the only kind carrying a rectangular world-space frame
 (`CompiledWorldTopology.Origin`/`CellSize`, the same origin/cellSize every
 topology declares); a `Hex`/`Ring` row refuses them by name at compile.
+A `Box` topology is `width` by `layers` by `depth` cells with the 26 space
+directions: the grid's eight compass names in the layer, each prefixed `U`
+or `D` for the layer above or below, and `U`/`D` alone; ordinals run
+`(layer * depth + z) * width + x`, and `layerHeight` resolves a body's Y to
+its layer the way `cellSize` resolves X and Z. Rays, lines, masks under 64
+cells, patterns, path search, `combine`, and `mapBoard` apply to it
+unchanged; a 4x4x4 tic-tac-toe is one 64-bit mask and `line:4`.
 Every discrete topology carries its point group, derived from its shape and
 never authored: a square grid the eight elements `identity`, `rot90`,
 `rot180`, `rot270`, `mirrorX`, `mirrorZ`, `mirrorMain`, `mirrorAnti`; a
 rectangle the four without quarter turns; a hex board `rot60`..`rot300` and
-`mirror0`..`mirror5`; a ring the identity alone. `world.topology <topology>
+`mirror0`..`mirror5`; a box the signed axis permutations its equal extents
+admit (48 for a cube, 16 for a square prism, 8 otherwise), named by where
+`+x+y+z` land; a ring the identity alone. `world.topology <topology>
 [<cell>]` lists them and a cell's image under each. `mapBoard` (`target`,
 `source`, `element`) writes a board carried through an element, which is how
 rules authored from one side's view read the other side's position through
@@ -200,8 +209,11 @@ is a ring of the last pushed values, the temporal twin of a ray: `push`
 oldest first, so a combo, a rhythm window, or "three claims then silence" is
 one pattern. `world.state <row>` echoes capacity, cursor, and how much of
 the ring is held. `sort` puts a
-zone in canonical order by `by`, 1..8 attribute keys (`row`, `descending`) in
-precedence order, or a keyed row by its own values under `descending`, stably,
+zone in canonical order by `by`, up to `MaxSortKeys` (`WorldStateCapacity`,
+derived from `MaxRows` -- a sort key names a declared row, so a sort can
+never carry more keys than a section can hold) attribute keys (`row`,
+`descending`) in precedence order, or a keyed row by its own values under
+`descending`, stably,
 which is what turns a multiset question into a regular one: Reversi's
 flank is `them+ me` on a ray, a straight is five consecutive rank symbols over
 a sorted hand, Yahtzee's large straight is a `choice` of two sequences over a
@@ -390,7 +402,14 @@ are non-game adjacency/federation stress content — each a `basis` delta over
 the `quilt-base` template (see "Document composition" below). Reusable defaults
 live in `standard.basis.json`. The movement platform
 every kit rides is documented on its kit's `WorldMotion`
-row (`Speed`/`Turn`, `MoveFrame`/`FacingSnap`), the
+row (`Speed`/`Turn`, `MoveFrame`/`FacingSnap`, the up-axis steering ceilings
+`upTurn` (field/contact) and the obstruction-witness latch `obstruction`
+(displacement/idleThreshold/graceSeconds) — both default to the engine's own
+rates; `Turn.MaxPitch` is the drive frame's own pitch clamp; `groundStick` is
+the inward speed a grounded body on a curving surface is held against,
+independent of `Speed` — a kit's own resolved move speed measurably
+over-corrects a shallow slope climb, so it is its own field, defaulting to the
+engine's old constant), the
 frame its MoveAdvance/MoveStrafe channel rows are authored in
 (`channels[].frame`, `ChannelFrame`: `World` raw, `Camera` camera-relative and
 facing its travel, `Heading` body-relative with `Turn` steering — the stick's
@@ -398,15 +417,16 @@ facing its travel, `Heading` body-relative with `Turn` steering — the stick's
 beside stick-in-camera is one document), and the seat rig's own `dynamics` op
 (a named `dynamics` row shaping the boom ease). Beside `holds`, the motion row's
 `shaping` table admits a row carrying an `across` facet — the anisotropic drive
-decomposition (longitudinal accel/brake/coast via `along`, lateral grip via
-`across`, a held drift row authored ahead of the ordinary one, `Turn`'s own
-speed-scaled steering authority, optional pitched flight) `ShapeVelocity` reads
-alongside `ResolveDriveFrame`. A kart is the same motion row plus an `across`
-shaping row exactly as a swimmer is the same motion row plus a `Medium` hold
-row; a program selecting `ShapeVelocity` against a kit authoring no shaping row
-refuses by the `Shaping` tuning facet's name. An omitted engage/release/brake/
-grip rate means exact convergence, while an explicit rate must be positive;
-drive-only brake/reverse values are refused on a whole-vector row. The retired `arcade` world's
+decomposition (longitudinal accel/reversalRate/coast via `along`, lateral
+convergence via `across`, a held drift row authored ahead of the ordinary one,
+`Turn`'s own speed-scaled steering authority, optional pitched flight)
+`ShapeVelocity` reads alongside `ResolveDriveFrame`. A kart is the same motion
+row plus an `across` shaping row exactly as a swimmer is the same motion row
+plus a `Medium` hold row; a program selecting `ShapeVelocity` against a kit
+authoring no shaping row refuses by the `Shaping` tuning facet's name. An
+omitted engage/release/reversalRate/lateral rate means exact convergence,
+while an explicit rate must be positive; drive-only reversalRate/backwardSpeed
+values are refused on a whole-vector row. The retired `arcade` world's
 `gaming-brick`-cabinet + region-gated prompt/prize + `rules`-driven `state`
 reaction ladder (originally a document-mounted addon, ported to a world rule
 before the world itself was retired) survives only in git history; no shipped world exercises the `rules` section
@@ -1764,8 +1784,9 @@ just minted fresh — never inherits a previous occupant's value nor sits at the
 unscaled default the row itself disagrees with. `Scale` multiplies the body's
 collider volumes (about its own root — contact resolution and hold probes/
 standoff/reach alike), its resolved move speed and turn rate, a hold's own
-gravity fall/rise/terminal magnitudes, a wall hold's travel speed, and a
-grip's pull rate (`WorldBody.Hold.cs`) — so a shrunk body settles onto and
+gravity fall/rise magnitudes and its own vertical-channel envelope (including
+a medium's idle/settle target), a wall
+hold's travel speed, and a pull's own rate (`WorldBody.Hold.cs`) — so a shrunk body settles onto and
 depenetrates from the ground at a proportionally gentler rate too, rather than
 free-falling one tick of full-scale gravity into a collider whose own skin
 margin it can no longer absorb — and, client-side, reading the same row live,
@@ -1887,6 +1908,33 @@ the derived mass product); `massEquivalent`/`maxReach` are strictly positive
 after fixed-point compilation, and `maxCarryFraction` is non-negative. See the
 [server reference](../Puck.World.Server/README.md#carry-as-attachment-worldbodycarrycs-worldpopulationcarrycs)
 for the attachment mechanics.
+
+### Tether (`WorldTether.cs`)
+
+A kit's optional `tether` facet (`WorldTether` → `FixedWorldTether`) is a
+further distinct facet from `rigid`/`carry`, presence-is-the-switch on the
+same terms: it admits the kit's bodies to `body.attach`/`body.detach`/
+`body.reel`, an aimed distance-cap rope a body throws along its own facing
+and reels (`Puck.Physics.FixedSurfaceQuery.TryNearestSurfaceAlongDirection`,
+`Puck.Physics.FixedTetherConstraint`). Absent, those three channels refuse by
+name for every body wearing the kit. `maxAnchorDistance` (non-negative) is
+the aim ceiling — also the tether's rope length at attach, clamped to the
+resolved anchor's actual distance; `aimHalfAngleDegrees` (`[0, 180]`) is the
+aim-assist cone half-angle; `lengthRate` (non-negative) is the held reel
+channel's world-units-per-second rate; `minLength` (non-negative) is the
+reel-in floor; `releaseVelocityScale` (non-negative, default 1) scales the
+body's velocity at the instant of detach. `attachChannel`/`detachChannel`/
+`reelChannel` each name a declared composition channel (validated when
+authored; a null lane is simply unreachable). `modeState` optionally names a
+declared `state.body`/`state.identity` Counter slot the facet writes `1`
+while attached and `0` otherwise — resolved to an ordinal at kit compile
+time (never a runtime name scan), so the camera program's `select` op can key
+off it like any other `state.<row>` value. A body's attach state is
+`m_tether is not null` (`WorldBody.Tether.cs`) — there is no separate mode
+enum. Read back with `body.tether` (per body: `[body.tether: body:<n>
+attached=<yes|no> anchor=(x, y, z) rope=<length|n/a>]`) and per kit with
+`world.kits` (`tether=none` for a kit that carries no rope). Surface holds
+are not authored here — they are a kit's own `motion.holds` list.
 
 ## The `probes` section — probe and binding rows
 

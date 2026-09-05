@@ -680,11 +680,23 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
                 provider: CultureInfo.InvariantCulture,
                 handler: $"{((index == 0)
                 ? " "
-                : " | ")}{kit.Name} program={kit.BodyMotionProgram} {DescribeMotion(motion: kit.Motion)}"
+                : " | ")}{kit.Name} program={kit.BodyMotionProgram} {DescribeMotion(motion: kit.Motion)} {DescribeTether(tether: kit.Tether)}"
             );
         }
 
         return builder.Append(value: ']').ToString();
+    }
+    // A kit's tether facet: the aim/rope tuning and its named channels — "tether=none" for a kit that carries no
+    // rope at all (body.attach/body.detach/body.reel refuse it by name).
+    private static string DescribeTether(WorldTether? tether) {
+        if (tether is not { } facet) {
+            return "tether=none";
+        }
+
+        return string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"tether(maxAnchorDistance={facet.MaxAnchorDistance:0.#####} aimHalfAngleDegrees={facet.AimHalfAngleDegrees:0.#####} lengthRate={facet.LengthRate:0.#####} minLength={facet.MinLength:0.#####} releaseVelocityScale={facet.ReleaseVelocityScale:0.#####} attach={(facet.AttachChannel ?? "none")} detach={(facet.DetachChannel ?? "none")} reel={(facet.ReelChannel ?? "none")} modeState={(facet.ModeState ?? "none")})"
+        );
     }
     // A kit's shaping table: each row's mechanism in order — a named dynamics follower, the anisotropic decomposition (with
     // its own key scalars), or the whole-vector response law — echoed alongside the motion row so world.kits answers
@@ -710,7 +722,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             } else if ((row?.Across is { } across) && (row.Along is { } along)) {
                 _ = builder.Append(
                     provider: CultureInfo.InvariantCulture,
-                    handler: $"drive(engage={DescribeConvergence(value: along.Engage)} brake={DescribeConvergence(value: along.Brake)} release={DescribeConvergence(value: along.Release)} reverse={DescribeReverse(value: along.Reverse)} grip={DescribeConvergence(value: across.Grip)})"
+                    handler: $"drive(engage={DescribeConvergence(value: along.Engage)} reversalRate={DescribeConvergence(value: along.ReversalRate)} release={DescribeConvergence(value: along.Release)} backwardSpeed={DescribeOptional(value: along.BackwardSpeed)} lateral={DescribeConvergence(value: across.Lateral)})"
                 );
             } else if (row?.Along is { } responseAlong) {
                 _ = builder.Append(
@@ -728,7 +740,9 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         ? finite.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)
         : "instant"
     );
-    private static string DescribeReverse(float? value) => (value is { } finite
+    // The generic "omitted" read-back for an optional authored scalar — none is a document fact worth showing
+    // plainly, distinct from DescribeConvergence's own "instant" (an absent RATE, never an absent scalar).
+    private static string DescribeOptional(float? value) => (value is { } finite
         ? finite.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)
         : "none"
     );
@@ -746,7 +760,13 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"{((index == 0) ? "" : ",")}{hold.Name}:{hold.Hold}");
 
             if (hold.Gravity is { } gravity) {
-                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"(rise={gravity.Rise:0.###} fall={gravity.Fall:0.###} terminal={gravity.Terminal:0.###})");
+                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"(rise={gravity.Rise:0.###} fall={gravity.Fall:0.###})");
+            }
+            if (hold.Envelope is { } envelope) {
+                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"[envelope rise={DescribeOptional(value: envelope.RiseSpeed)} sink={envelope.SinkSpeed:0.###}]");
+            }
+            if (hold.Medium is { } medium) {
+                _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"[medium idleDrift={medium.IdleDrift:0.###} equilibriumOffset={medium.EquilibriumOffset:0.###} settleRate={medium.SettleRate:0.###}]");
             }
             if (hold.Thrust > 0f) {
                 _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"[thrust={hold.Thrust:0.###}]");
@@ -757,7 +777,13 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
     }
     private static string DescribeMotion(WorldMotion motion) => string.Create(
         provider: CultureInfo.InvariantCulture,
-        handler: $"speed={motion.Speed.Value:0.###} turn={motion.Turn.Rate:0.###} {DescribeHolds(motion: motion)} {DescribeShaping(motion: motion)}"
+        handler: $"speed={motion.Speed.Value:0.###} turn={motion.Turn.Rate:0.###}{DescribeMaxPitch(turn: motion.Turn)} upTurn=({motion.UpTurn.Field:0.###}/{motion.UpTurn.Contact:0.###}) obstruction=({motion.Obstruction.Displacement:0.###}/{motion.Obstruction.IdleThreshold:0.###}/{motion.Obstruction.GraceSeconds:0.###}) groundStick={motion.GroundStick:0.###} {DescribeHolds(motion: motion)} {DescribeShaping(motion: motion)}"
+    );
+    // maxPitch is unread while pitchRate is zero (a planar drive frame), so the census omits it there rather than
+    // echoing a clamp that governs nothing.
+    private static string DescribeMaxPitch(WorldTurn turn) => (turn.PitchRate > 0f
+        ? string.Create(provider: CultureInfo.InvariantCulture, handler: $" pitchMax={turn.MaxPitch:0.###}")
+        : string.Empty
     );
     private CommandResult HandleAssign(CommandContext context, WireArgs args) {
         if (args.Count < 2) {
@@ -1134,7 +1160,7 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.kits",
-            description: "Reports the kit census (Immediate): one segment per declared kit row — name, body motion program, and the motion row's key movement scalars, holds, and planar shaping. The kits section's own read-back (world.row.set kits/world.row.remove kits has no listing of its own otherwise).",
+            description: "Reports the kit census (Immediate): one segment per declared kit row — name, body motion program, the motion row's key movement scalars, holds, and planar shaping, and the kit's tether facet ('tether=none' for a kit that carries no rope). The kits section's own read-back (world.row.set kits/world.row.remove kits has no listing of its own otherwise).",
             handler: (context, args) => {
                 if (args.Count != 0) {
                     return CommandResult.Error(output: "[world.kits: no arguments — reports the kit census]");

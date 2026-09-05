@@ -376,7 +376,13 @@ choosing fixed-point primitives on sim value paths.
   carrier itself is stopped, not just the object it holds. `body.release`
   refuses by name when the carried body's CURRENT pose still overlaps static
   geometry or another body. The garden's `walker` kit (Wren) carries this
-  facet.
+  facet. A THIRD distinct facet, `tether` (`Puck.World.Schema.WorldTether`),
+  is an aimed distance-cap rope a body throws along its own facing and reels —
+  `body.attach`/`body.detach`/`body.reel`, `WorldBody.Tether.cs`; presence is
+  the switch, the same convention `rigid`/`carry` carry. A body's attach
+  state is `m_tether is not null` — there is no separate mode field. Read
+  back per body with `body.tether`, per kit with `world.kits`. The garden's
+  `walker` kit (Wren) carries this facet too.
 - The tabletop primitive: a placement's `board` facet (`WorldPlacementBoard`)
   anchors a discrete `Grid` `state.lattices` topology (only `Grid` carries the
   rectangular X/Z frame `$board:cellOf`/`offset` resolve against; `Ring`/`Hex`

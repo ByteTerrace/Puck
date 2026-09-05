@@ -265,6 +265,6 @@ internal static class HashDivergenceProbe {
     }
     private static ConsoleModel ModelFromHeader(byte[] rom) =>
         (((rom.Length > 0x0143) && (0 != (rom[0x0143] & 0x80)))
-        ? ConsoleModel.Cgb
-        : ConsoleModel.Dmg);
+        ? ConsoleModel.CgbE
+        : ConsoleModel.DmgC);
 }

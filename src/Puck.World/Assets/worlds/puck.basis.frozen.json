@@ -1297,8 +1297,8 @@
     "genlock": null,
     "height": 800,
     "listen": null,
-    "presentation": "Windowed",
     "presentMode": "Immediate",
+    "presentation": "Windowed",
     "rayQuery": true,
     "surfaceFormat": "r8g8b8a8",
     "targetHertz": 60,
@@ -1994,51 +1994,55 @@
           "radius": 0.35
         },
         "motion": {
-          "speed": {
-            "value": 4,
-            "held": {
-              "channel": "run",
-              "multiplier": 1.6
-            }
-          },
-          "turn": {
-            "rate": 2.5
-          },
-          "shaping": [
-            {
-              "along": {}
-            }
-          ],
           "facingSnap": false,
           "holds": [
             {
-              "name": "ground",
               "bond": "Surface",
               "cone": [
                 0,
                 60
               ],
-              "hold": "Gravity",
-              "reach": 1.2,
-              "gravity": {
-                "rise": 28,
-                "fall": 46,
-                "terminal": 40
+              "envelope": {
+                "sinkSpeed": 40
               },
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "hold": "Gravity",
+              "name": "ground",
+              "reach": 1.2,
               "thrust": 1
             },
             {
-              "name": "air",
               "bond": "Free",
-              "hold": "Gravity",
-              "gravity": {
-                "rise": 28,
-                "fall": 46,
-                "terminal": 40
+              "envelope": {
+                "sinkSpeed": 40
               },
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "hold": "Gravity",
+              "name": "air",
               "thrust": 1
             }
-          ]
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "held": {
+              "channel": "run",
+              "multiplier": 1.6
+            },
+            "value": 4
+          },
+          "turn": {
+            "rate": 2.5
+          }
         },
         "name": "defaultKit"
       }

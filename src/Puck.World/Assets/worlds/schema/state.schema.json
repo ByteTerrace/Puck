@@ -315,7 +315,8 @@
               "Field",
               "Grid",
               "Ring",
-              "Hex"
+              "Hex",
+              "Box"
             ],
             "default": "Field"
           },
@@ -336,6 +337,11 @@
           },
           "band": {
             "description": "For a Grid, the vertical half-extent about the origin\u0027s Y a position must lie within to resolve to a cell (cellOf); 0 resolves any height, so a piece on the floor beneath a table still reads as on its square.",
+            "type": "number",
+            "default": 0
+          },
+          "layerHeight": {
+            "description": "For a Box, the world-space height of one layer, so a position\u0027s Y above the origin resolves to a layer the way X and Z resolve to a column; positive, and only on a box.",
             "type": "number",
             "default": 0
           }

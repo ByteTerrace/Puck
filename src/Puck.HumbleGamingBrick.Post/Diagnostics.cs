@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Puck.Assets;
+using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Interfaces;
 using Puck.HumbleGamingBrick.Timing;
 using Puck.Maths;
@@ -74,6 +75,18 @@ internal static class Diagnostics {
             exitCode: out var bessExitCode
         )) {
             exitCode = bessExitCode;
+
+            return true;
+        }
+
+        // --cosim <rom> --sameboy <sb-trace.exe> --boot <dir> [--model dmg|cgb] [--frames N] [--kind cpu|ppu|pcm|all]
+        // [--out <dir>]: the SameBoy co-simulation diagnostic — reports the first divergent conceptual event between
+        // Puck and SameBoy for a ROM. Its own file to bound this method.
+        if (CosimDiagnostic.TryRun(
+            args: args,
+            exitCode: out var cosimExitCode
+        )) {
+            exitCode = cosimExitCode;
 
             return true;
         }
@@ -180,9 +193,10 @@ internal static class Diagnostics {
             }
         }
 
-        // --render <rom> <out.png> [frames] [dmg|cgb|agb]: boot a ROM (no boot ROM, seeded post-boot state), run N frames,
-        // and dump the framebuffer, to eyeball the PPU output. The model defaults to what the cartridge header asks
-        // for (CGB flag at 0x0143), so a dual-mode cart renders in color unless "dmg" forces the monochrome costume.
+        // --render <rom> <out.png> [frames] [dmg|cgb|agb] [--boot puck]: boot a ROM, run N frames, and dump the
+        // framebuffer, to eyeball the PPU output. The model defaults to what the cartridge header asks for (CGB flag at
+        // 0x0143), so a dual-mode cart renders in color unless "dmg" forces the monochrome costume. Without --boot the
+        // machine starts at the seeded post-boot state; --boot puck runs the forge's authored boot ROM from reset.
         for (var index = 0; (index < (args.Length - 2)); ++index) {
             if (string.Equals(
                 a: args[index],
@@ -207,7 +221,11 @@ internal static class Diagnostics {
                     romPath: romPath,
                     outputPath: args[(index + 2)],
                     frames: frames,
-                    model: model
+                    model: model,
+                    bootRom: AuthoredBootRom(
+                        args: args,
+                        model: model
+                    )
                 );
 
                 return true;
@@ -303,13 +321,14 @@ internal static class Diagnostics {
         ? args[(index + offset)]
         : null);
     // The value following a named flag (e.g. --frames 300), or null when the flag is absent or has no following token.
+    // A model token is either a family name (which selects that family's target revision) or a revision's own name.
     private static bool TryParseModel(string value, out ConsoleModel model) {
         if (string.Equals(
             a: value,
             b: "dmg",
             comparisonType: StringComparison.OrdinalIgnoreCase
         )) {
-            model = ConsoleModel.Dmg;
+            model = ConsoleModel.DmgC;
 
             return true;
         }
@@ -319,29 +338,28 @@ internal static class Diagnostics {
             b: "cgb",
             comparisonType: StringComparison.OrdinalIgnoreCase
         )) {
-            model = ConsoleModel.Cgb;
+            model = ConsoleModel.CgbE;
 
             return true;
         }
 
-        if (string.Equals(
-            a: value,
-            b: "agb",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
-            model = ConsoleModel.Agb;
-
+        if (Enum.TryParse(
+            ignoreCase: true,
+            result: out model,
+            value: value
+        ) && Enum.IsDefined(value: model)) {
             return true;
         }
 
-        model = ConsoleModel.Dmg;
+        model = ConsoleModel.DmgC;
 
         return false;
     }
+    // The family's target revision for whichever hardware the cartridge's color flag asks for.
     private static ConsoleModel ModelFromHeader(byte[] rom) =>
         (((rom.Length > 0x0143) && (0 != (rom[0x0143] & 0x80)))
-        ? ConsoleModel.Cgb
-        : ConsoleModel.Dmg);
+        ? ConsoleModel.CgbE
+        : ConsoleModel.DmgC);
     // Warm the machine with the fast Run path, then instruction-step under the clock, attributing each instruction's
     // consumed cycles to halted time when it began halted (a wake instruction lands in the halted bucket — off by one
     // instruction, immaterial at this scale).
@@ -418,8 +436,25 @@ internal static class Diagnostics {
 
         Console.WriteLine(value: $"  stat-trace {Path.GetFileName(path: romPath)} ({model}, {frames} frames, ly {lyMin:X2}-{lyMax:X2}) -> {outputPath}");
     }
-    private static void Render(string romPath, string outputPath, int frames, ConsoleModel model) {
+    // Resolves --boot: the literal "puck" selects the forge's authored image for the model, anything else (including
+    // its absence) leaves the machine on the seeded post-boot state.
+    private static byte[]? AuthoredBootRom(string[] args, ConsoleModel model) {
+        var boot = CommandLineArguments.Value(
+            args: args,
+            name: "--boot"
+        );
+
+        return (string.Equals(
+            a: boot,
+            b: "puck",
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )
+            ? BootRomBuilder.Build(model: model)
+            : null);
+    }
+    private static void Render(string romPath, string outputPath, int frames, ConsoleModel model, byte[]? bootRom) {
         using var machine = PostMachine.Build(
+            bootRom: bootRom,
             model: model,
             rom: File.ReadAllBytes(path: romPath)
         );
@@ -459,7 +494,11 @@ internal static class Diagnostics {
 
         var pixelHash = Fnv1aHash.Compute(values: MemoryMarshal.AsBytes(span: pixels));
 
-        Console.WriteLine(value: $"  rendered {Path.GetFileName(path: romPath)} ({model}, {frames} frames, {speedDetail}) -> {outputPath} [fb-hash 0x{pixelHash:X16}]");
+        var bootDetail = ((bootRom is null)
+            ? "seeded handoff"
+            : "authored boot ROM");
+
+        Console.WriteLine(value: $"  rendered {Path.GetFileName(path: romPath)} ({model}, {bootDetail}, {frames} frames, {speedDetail}) -> {outputPath} [fb-hash 0x{pixelHash:X16}]");
     }
     // Parses --dump-snapshot's knobs, boots the machine, runs the requested frames, and writes the snapshot image plus
     // its section-table sidecar. Returns 2 when --rom names a missing file, otherwise 0.
@@ -468,7 +507,7 @@ internal static class Diagnostics {
             args: args,
             capture: static (rom, isSynthetic, frames) => {
                 var model = (isSynthetic
-                    ? ConsoleModel.Dmg
+                    ? ConsoleModel.DmgC
                     : ModelFromHeader(rom: rom));
 
                 using var machine = PostMachine.Build(

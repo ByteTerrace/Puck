@@ -112,8 +112,8 @@ public sealed partial class WorldBody {
         );
         // A program that lacks the medium law must not leave stale medium facts behind — a switch away from one
         // clears them here; a switch back rewrites them next tick.
-        m_submerged = false;
-        m_atSurface = false;
+        m_inMedium = false;
+        m_atMediumBand = false;
         CommitTeleport(resetVertical: program.OwnsVerticalContactState);
         m_continuity = EntityContinuity.Teleport;
     }
@@ -156,7 +156,7 @@ public sealed partial class WorldBody {
     }
     /// <summary>Formats the standalone <c>body.where</c> echo — the bracket-tagged, index-prefixed line a piped run
     /// asserts against — as the full 6DOF pose plus the fact mask:
-    /// <c>[body.where: body:{N} pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|climbing
+    /// <c>[body.where: body:{N} pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|holdingunwalkable
     /// home=(x.xx, y.yy, z.zz) scale=s.ss com=(x.xx, y.yy, z.zz)]</c>. One format always. A grounded entity keeps a
     /// canonical level orientation — <c>pitch=0 roll=0</c> — while <c>y</c> is its resolved ground foot point
     /// (<c>0.00</c> on the flat plane, following the contact field where solids lift it). <c>facts=</c> is
@@ -166,7 +166,9 @@ public sealed partial class WorldBody {
     /// which orbits away from <c>pos=</c> (the root) for a rolling or tumbling rigid body while <c>pos=</c> itself
     /// stays the root every kit shares. <c>carrying=</c> trails only while <see cref="Carrying"/> is set, and
     /// <c>carriedBy=</c> only while <see cref="CarriedBy"/> is — both absent for every body outside a carry
-    /// relationship. The bare planar fragment is <see cref="DescribePose"/>.</summary>
+    /// relationship. <c>tether=</c>/<c>anchor=</c> trail only while <see cref="TetherLength"/> is set — absent for
+    /// every body carrying no tether facet, or one that authors the facet but is not currently attached. The bare
+    /// planar fragment is <see cref="DescribePose"/>.</summary>
     /// <param name="index">The 0-based body index to tag the line with.</param>
     /// <returns>The full bracketed <c>body.where</c> echo line.</returns>
     public string DescribeWhere(int index) {
@@ -186,14 +188,21 @@ public sealed partial class WorldBody {
             (Carrying is { } carrying ? $" carrying={carrying}" : string.Empty),
             (CarriedBy is { } carriedBy ? $" carriedBy={carriedBy}" : string.Empty)
         );
+        var tetherSuffix = ((TetherLength is { } ropeLength)
+            ? string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $" tether={((double)ropeLength):0.00} anchor=({((double)TetherAnchorPointOrLocalOffset.X):0.00}, {((double)TetherAnchorPointOrLocalOffset.Y):0.00}, {((double)TetherAnchorPointOrLocalOffset.Z):0.00})"
+            )
+            : string.Empty
+        );
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)} home=({home.X:0.00}, {home.Y:0.00}, {home.Z:0.00}) scale={scale:0.00}{comSuffix}{carrySuffix}]"
+            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)} home=({home.X:0.00}, {home.Y:0.00}, {home.Z:0.00}) scale={scale:0.00}{comSuffix}{carrySuffix}{tetherSuffix}]"
         );
     }
     /// <summary>Enqueues a timed scripted segment onto the tape: while it is live it drives the avatar with
-    /// <paramref name="intent"/>, overriding the held keys (or, on a population entry, its wander), for
+    /// <paramref name="intent"/>, overriding the held keys (or, on a population entry, its producer), for
     /// <paramref name="seconds"/> of advance time. All six channels are clamped to <c>[-1, 1]</c> — the planar three
     /// three leave the 6DOF three at their zero default, and <c>body.fly</c>'s full six carry all of them.
     /// A non-positive duration is ignored.</summary>
@@ -430,7 +439,9 @@ public sealed partial class WorldBody {
     /// <see langword="null"/> for a locomotion kit.</param>
     /// <param name="carry">The kit's compiled carry facet (<see cref="FixedWorldKit.Carry"/>), or
     /// <see langword="null"/> for a kit that can never pick up a rigid body.</param>
-    public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null) {
+    /// <param name="tether">The kit's compiled tether facet (<see cref="FixedWorldKit.Tether"/>), or
+    /// <see langword="null"/> for a kit that carries no rope.</param>
+    public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null, FixedWorldTether? tether = null) {
         SetTuning(
             holds: holds,
             tuning: tuning
@@ -470,6 +481,65 @@ public sealed partial class WorldBody {
         // WorldPopulation holds both sides, and its active-relationship pass clears the pair together on its next
         // visit.
         m_carry = carry;
+
+        var previousTetherFacet = m_tetherFacet;
+
+        m_tetherFacet = tether;
+
+        // Facet IDENTITY minus ModeState, not presence: a kit swap between two kits that both author a tether facet
+        // still changes which ordinals/params a live attach is judged against, so it must reset here too — presence
+        // alone would miss it, leaving the old FixedTetherConstraint and edge bits standing against the new facet.
+        // ModeState is excluded because it is orthogonal bookkeeping (cleared/republished on its own ordinal below);
+        // a retune changing only the modeState slot keeps a live attach rather than dropping it needlessly.
+        static FixedWorldTether? WithoutModeState(FixedWorldTether? facet) => (facet is { } value
+            ? (value with { ModeStateOrdinal = -1 })
+            : null
+        );
+        var tetherFacetChanged = (WithoutModeState(facet: previousTetherFacet) != WithoutModeState(facet: tether));
+        var tetherEdgeBindingChanged = (
+            (previousTetherFacet?.AttachChannelOrdinal ?? -1) != (tether?.AttachChannelOrdinal ?? -1) ||
+            (previousTetherFacet?.AttachThreshold ?? FixedQ4816.Zero) != (tether?.AttachThreshold ?? FixedQ4816.Zero) ||
+            (previousTetherFacet?.DetachChannelOrdinal ?? -1) != (tether?.DetachChannelOrdinal ?? -1) ||
+            (previousTetherFacet?.DetachThreshold ?? FixedQ4816.Zero) != (tether?.DetachThreshold ?? FixedQ4816.Zero)
+        );
+        var previousModeStateOrdinal = (previousTetherFacet?.ModeStateOrdinal ?? -1);
+        var modeStateOrdinal = (tether?.ModeStateOrdinal ?? -1);
+
+        if (tetherFacetChanged) {
+            // The tether facet's own identity just changed (a document mutation swapped this slot's kit to one
+            // gaining, losing, or simply authoring a DIFFERENT tether facet) — drop any live attach rather than let
+            // it dangle against ordinals/params a new facet no longer resolves, or a kept facet's own retuned values.
+            ClearTether();
+
+            // When the facet keeps the same mode row, the ordinal-change block below does not run; publish the
+            // cleared attach fact here rather than leaving the durable row at 1 after the rope is gone.
+            if (previousModeStateOrdinal == modeStateOrdinal) {
+                WriteTetherModeState();
+            }
+        }
+        if (tetherEdgeBindingChanged) {
+            // Each bit belongs to the old ordinal/threshold pair. Keeping it after either binding changes would make
+            // the first press under the new facet depend on a different channel's previous sample.
+            m_attachPreviousBit = false;
+            m_detachPreviousBit = false;
+        }
+        if (previousModeStateOrdinal != modeStateOrdinal) {
+            // The OLD facet's modeState row (bodyState/identityState declarations are world-global, so its ordinal
+            // resolves identically under any kit) may still read 1 from before the swap — CompileActionState just
+            // preserved every Durable slot's value across this recompile by name. Zero it directly before publishing
+            // the live attach fact through the new facet's ordinal.
+            if (previousModeStateOrdinal >= 0) {
+                ApplyRawState(
+                    reason: "tether.mode",
+                    requested: FixedQ4816.Zero.Value,
+                    slot: previousModeStateOrdinal,
+                    writer: "tether"
+                );
+                MarkDurableDirty(slot: previousModeStateOrdinal);
+            }
+
+            WriteTetherModeState();
+        }
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
             m_laneActions[lane] = default;
@@ -661,9 +731,9 @@ public sealed partial class WorldBody {
     /// <summary>Sets (or clears) the medium free surface this body's medium hold integrates against — sampled fresh
     /// every tick from the population's field lattice at this body's coupled cell, before this body's own Advance
     /// runs. Meaningful only to a kit authoring a medium hold; every other body carries it inertly.</summary>
-    /// <param name="surface">The medium surface's world-space Y, or <see langword="null"/> for no medium at this
-    /// body's position.</param>
-    public void SetMediumSurface(FixedQ4816? surface) {
+    /// <param name="surface">The medium surface, or <see langword="null"/> for no medium at this body's
+    /// position.</param>
+    public void SetMediumSurface(FixedFieldSurface? surface) {
         m_mediumSurface = surface;
     }
     /// <summary>Stages one deterministic producer intent for the next <see cref="Advance"/> — the producer tier below
@@ -787,10 +857,10 @@ public sealed partial class WorldBody {
     /// <summary>Gets the body that applied the latest targeted effect, held for one recipient advance.</summary>
     internal int AffectingSubject => m_affectingSubject;
 
-    /// <summary>Gets a value indicating whether the body's origin is inside the medium's surface bob band as of the
-    /// medium hold's last evaluation — the <c>world.contacts</c> read-back's medium witness. Always
+    /// <summary>Gets a value indicating whether the body's origin is inside the medium's equilibrium band as of
+    /// the medium hold's last evaluation — the <c>world.contacts</c> read-back's medium witness. Always
     /// <see langword="false"/> for a kit authoring no medium hold.</summary>
-    public bool AtSurface => m_atSurface;
+    public bool AtMediumBand => m_atMediumBand;
     /// <summary>Gets the body motion program this player currently executes.</summary>
     public string BodyMotionProgram => m_bodyMotionProgram.Name;
     /// <summary>Gets the last intent after the admitted held overlay composed with the movement tier, retained only for
@@ -852,8 +922,8 @@ public sealed partial class WorldBody {
     public bool Grounded => m_grounded;
     /// <summary>Gets this body's publishable fact mask this tick — evaluated through the SAME predicate the kit's
     /// action gates read (<c>FactHolds</c>), so the snapshot, the gates, and the <c>body.where</c> echo can never
-    /// disagree. Facts are not mutually exclusive: a body can be grounded and rising in one tick, and a climbing
-    /// body keeps whichever grounded/airborne answer its last contact resolve produced.</summary>
+    /// disagree. Facts are not mutually exclusive: a body can be grounded and rising in one tick, and a body holding
+    /// an unwalkable surface keeps whichever grounded/airborne answer its last contact resolve produced.</summary>
     public BodyFacts Facts {
         get {
             var facts = BodyFacts.None;
@@ -906,13 +976,13 @@ public sealed partial class WorldBody {
     internal bool HasMotionTape => (m_tapeCount > 0);
     /// <summary>Gets the most recently staged producer image for population-owned cadence reuse.</summary>
     internal PlayerIntent StagedProducerIntent => m_producerIntent;
-    /// <summary>Gets a value indicating whether the body's origin is below the medium surface as of the medium
-    /// hold's last evaluation — the <c>world.contacts</c> read-back's medium witness. Always
-    /// <see langword="false"/> for a kit authoring no medium hold.</summary>
-    public bool Submerged => m_submerged;
+    /// <summary>Gets a value indicating whether the body's origin sits below the medium's free surface, along
+    /// its own resolved gravity-up, as of the medium hold's last evaluation — the <c>world.contacts</c> read-back's
+    /// medium witness. Always <see langword="false"/> for a kit authoring no medium hold.</summary>
+    public bool InMedium => m_inMedium;
     /// <summary>Gets the avatar's current heading in radians (0 = facing -Z; increases turning left / counter-clockwise).
     /// Under the grounded program this returns the authoritative heading scalar <c>m_yaw</c> directly (the orientation is a
-    /// pure yaw rotation built from it, so decomposing it back out would be a redundant round-trip on the hot wander
+    /// pure yaw rotation built from it, so decomposing it back out would be a redundant round-trip on the hot steering
     /// path). Under the free program, where the full attitude is authoritative and <c>m_yaw</c> is inert, it is the yaw
     /// component of <see cref="Orientation"/>. The <c>body.where</c> read-back and <see cref="DescribePose"/> decompose
     /// the canonical orientation directly, bypassing this property.</summary>

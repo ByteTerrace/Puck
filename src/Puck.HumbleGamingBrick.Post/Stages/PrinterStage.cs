@@ -112,7 +112,7 @@ internal sealed class PrinterStage : IPostStage<PostContext> {
     private static PrinterScenarioResult RunScenario(int churnAtStep) {
         var rom = PrinterRom.Create();
         var machine = PostMachine.Build(
-            model: ConsoleModel.Dmg,
+            model: ConsoleModel.DmgC,
             rom: rom
         );
         var printer = new GamePrinterDevice();
@@ -152,7 +152,7 @@ internal sealed class PrinterStage : IPostStage<PostContext> {
                     var machineState = machine.Machine.Snapshot();
                     var printerState = CapturePrinter(printer: printer);
                     var freshMachine = PostMachine.Build(
-                        model: ConsoleModel.Dmg,
+                        model: ConsoleModel.DmgC,
                         rom: rom
                     );
                     var freshPrinter = new GamePrinterDevice();
@@ -208,7 +208,7 @@ internal sealed class PrinterStage : IPostStage<PostContext> {
     private static PrinterScenarioResult RunOverflowScenario(int bandCount) {
         var rom = PrinterRom.CreateOverflow(bandCount: bandCount);
         var machine = PostMachine.Build(
-            model: ConsoleModel.Dmg,
+            model: ConsoleModel.DmgC,
             rom: rom
         );
         var printer = new GamePrinterDevice();

@@ -21,7 +21,10 @@ namespace Puck.World;
 /// target that is pulled but pulls nothing. <see cref="Rigid"/> is a distinct facet: presence hands the kit's bodies
 /// to the rigid solver instead of a locomotion motion program, requires <see cref="Collider"/> (sphere/capsule/box)
 /// and <see cref="BodyContact"/> <see cref="WorldBodyContactMode.Solid"/>, and derives its own inertial mass from that
-/// collider's shape — it never reads <see cref="Mass"/>.</remarks>
+/// collider's shape — it never reads <see cref="Mass"/>. <see cref="Tether"/> is a further distinct facet: presence
+/// admits the kit's bodies to <c>body.attach</c>/<c>body.detach</c>/<c>body.reel</c>, an aimed distance-cap rope
+/// anchored through <see cref="Puck.Physics.IContactField.TryNearestSurfaceAlongDirection"/> and
+/// <see cref="Puck.Physics.FixedTetherConstraint"/>.</remarks>
 public sealed record WorldKit(
     string Name,
     string BodyMotionProgram,
@@ -33,6 +36,7 @@ public sealed record WorldKit(
     float Mass = 0f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRigid? Rigid = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCarry? Carry = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTether? Tether = null,
     [property: JsonPropertyName("pad"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, WorldPadElement>? PadRaw = null,
     [property: JsonPropertyName("autonomy"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldAutonomyCadence? AutonomyRaw = null
 ) {
@@ -113,6 +117,7 @@ public enum WorldBodyContactMode : byte {
 /// <param name="Rigid">The kit's compiled rigid-dynamics facet, or <see langword="null"/> for a locomotion kit.</param>
 /// <param name="Carry">The kit's compiled carry facet, or <see langword="null"/> for a kit that cannot pick up a
 /// rigid body.</param>
+/// <param name="Tether">The kit's compiled tether facet, or <see langword="null"/> for a kit that carries no rope.</param>
 public readonly record struct FixedWorldKit(
     CompiledBodyMotionProgram BodyMotionProgram,
     IReadOnlyDictionary<string, CompiledBodyProducer> Producers,
@@ -130,7 +135,8 @@ public readonly record struct FixedWorldKit(
     ulong AutonomousMotionTicks,
     ulong AutonomousSteeringTicks,
     FixedWorldRigid? Rigid = null,
-    FixedWorldCarry? Carry = null
+    FixedWorldCarry? Carry = null,
+    FixedWorldTether? Tether = null
 ) {
     private static (CompiledActionStateSlot[] Slots, Dictionary<string, int> ByName) CompileActionState(IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState) {
         var slots = new List<CompiledActionStateSlot>();
@@ -303,6 +309,11 @@ public readonly record struct FixedWorldKit(
             ? FixedWorldCarry.Compile(carry: carryRow)
             : (FixedWorldCarry?)null
         );
+        var tether = FixedWorldTether.Compile(
+            channels: channels,
+            stateOrdinals: stateSlots,
+            tether: kit.Tether
+        );
 
         var tuning = WorldMotionTuningFactory.Compile(
             channels: channels,
@@ -358,7 +369,8 @@ public readonly record struct FixedWorldKit(
                 ? FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: kit.Autonomy.SteeringSeconds))
                 : 0UL),
             Rigid: rigid,
-            Carry: carry
+            Carry: carry,
+            Tether: tether
         );
     }
 }

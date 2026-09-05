@@ -252,7 +252,6 @@ public sealed partial class WorldPopulation {
                 walkableThreshold: m_walkableThreshold
             );
             body.SetGravityField(field: m_gravityField);
-            body.SetAttachmentPolicy(policy: m_fixedAttachment);
             body.Pose(
                 position: captured.Position,
                 yawRadians: captured.Yaw,

@@ -26,7 +26,7 @@ public abstract record WorldCommand(WorldPrincipal Principal, int EntityIndex) {
         EntityIndex
     );
     /// <summary>Enqueues a timed scripted segment on an entity's tape (run = planar channels, fly = all six) — while live
-    /// it overrides that entity's device/wander for <see cref="Seconds"/> of advance time.</summary>
+    /// it overrides that entity's device/producer intent for <see cref="Seconds"/> of advance time.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="EntityIndex">The 0-based entity index.</param>
     /// <param name="Intent">The intent the segment holds while live.</param>

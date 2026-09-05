@@ -437,7 +437,7 @@ public sealed class CreationAnimationLawTests {
         var gatedSeeded = false;
         var gatedSpeed = 0f;
         var gatedAddress = FirstBody;
-        var gated = new[] { Stride(cadence: 1f, signal: CreationDriverDocument.SignalTime, when: [nameof(BodyFacts.Submerged)]) };
+        var gated = new[] { Stride(cadence: 1f, signal: CreationDriverDocument.SignalTime, when: [nameof(BodyFacts.InMedium)]) };
 
         for (var frame = 0; (frame < 20); frame++) {
             WorldGaitDrivers.Advance(
@@ -852,8 +852,8 @@ public sealed class CreationAnimationLawTests {
             Assert.True(condition: uint.IsPow2(value: ((uint)gate)), userMessage: $"BodyFacts.{fact} is not a single bit.");
         }
 
-        Assert.True(condition: BodyFactVocabulary.TryResolve(gate: out var climbing, name: nameof(BodyFacts.Climbing)));
-        Assert.Equal(expected: BodyFacts.Climbing, actual: climbing);
+        Assert.True(condition: BodyFactVocabulary.TryResolve(gate: out var holdingUnwalkable, name: nameof(BodyFacts.HoldingUnwalkable)));
+        Assert.Equal(expected: BodyFacts.HoldingUnwalkable, actual: holdingUnwalkable);
         // The controls: the ungated token resolves to no bit, and an unrecognized token resolves to nothing at all.
         Assert.True(condition: BodyFactVocabulary.TryResolve(gate: out var always, name: BodyFactVocabulary.Always));
         Assert.Equal(expected: BodyFacts.None, actual: always);

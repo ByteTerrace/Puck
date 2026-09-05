@@ -99,7 +99,7 @@ internal sealed class WatchpointAccessPcStage : IPostStage<PostContext> {
         );
 
         using var instance = PostMachine.Build(
-            model: ConsoleModel.Dmg,
+            model: ConsoleModel.DmgC,
             rom: rom
         );
 

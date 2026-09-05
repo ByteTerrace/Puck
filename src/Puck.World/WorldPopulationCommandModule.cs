@@ -22,22 +22,6 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         format: "0.#####",
         provider: CultureInfo.InvariantCulture
     );
-    // The world-level grapple read-back: every tuning field, authored beside the channel ordinals it resolved to.
-    // body.attachment answers the per-body question (mode/anchor/rope); this answers what the document decided.
-    // Surface holds are not here — they are a kit's own list, echoed by body.hold.
-    private string DescribeAttachmentPolicy() {
-        var authored = server.Definition.Attachment;
-        var compiled = population.CompiledAttachment;
-
-        if (!authored.Enabled) {
-            return "[world.attach-policy: attachment disabled — no attach/detach/reel channel reaches any body]";
-        }
-
-        return string.Create(
-            provider: CultureInfo.InvariantCulture,
-            handler: $"[world.attach-policy: enabled grappleMaxDistance={authored.GrappleMaxDistance:0.#####} grappleAssistHalfAngleDegrees={authored.GrappleAssistHalfAngleDegrees:0.#####} reelRate={authored.ReelRate:0.#####} reelInFloor={authored.ReelInFloor:0.#####} releaseMomentumScale={authored.ReleaseMomentumScale:0.#####} | channels attach={(authored.AttachChannel ?? "none")}(ordinal={compiled.AttachChannelOrdinal}) detach={(authored.DetachChannel ?? "none")}(ordinal={compiled.DetachChannelOrdinal}) reel={(authored.ReelChannel ?? "none")}(ordinal={compiled.ReelChannelOrdinal})]"
-        );
-    }
     private string DescribeGravity() {
         var authored = server.Definition.Gravity;
         var compiled = population.CompiledGravity;
@@ -297,15 +281,6 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
             handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.budget") is { } refusal)
                 ? refusal
                 : new CommandResult(Output: DescribeBudget())),
-            routing: CommandRouting.Immediate
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.attach-policy",
-            description: "Reads the authored/compiled grapple attachment section back (Immediate): every rope/reel/release tuning field and each attach/detach/reel channel name with its resolved ordinal. 'attachment disabled' when the world authors no attachment section. body.attachment answers the per-body question this does not — mode, anchor, rope length; body.hold answers the surface-hold question, which this section no longer carries.",
-            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.attach-policy") is { } refusal)
-                ? refusal
-                : new CommandResult(Output: DescribeAttachmentPolicy())),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(

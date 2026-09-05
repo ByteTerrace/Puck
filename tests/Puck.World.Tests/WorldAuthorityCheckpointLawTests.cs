@@ -34,7 +34,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
             PopulationRaw = source.Population with {
                 CapacityRaw = 5,
                 NetworkPlayers = 1,
-                DefaultPeerSourceRaw = IntentSource.Producer(name: "wander"),
+                DefaultPeerSourceRaw = IntentSource.Producer(name: "roam"),
             },
             KitRowsRaw = [source.Kits[0] with {
                 AutonomyRaw = new WorldAutonomyCadence(MotionSeconds: 0.1f, SteeringSeconds: 0.1f),

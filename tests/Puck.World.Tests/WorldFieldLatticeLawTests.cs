@@ -292,10 +292,15 @@ public sealed class WorldFieldLatticeLawTests {
             Z: FixedQ4816.FromDouble(value: 0.5)
         );
 
+        var surface = lattice.MediumSurface(position: in position);
+
+        Assert.NotNull(@object: surface);
         Assert.Equal(
             expected: FixedQ4816.FromInteger(value: 5),
-            actual: lattice.MediumSurface(position: in position)
+            actual: surface!.Value.Point.Y
         );
+        Assert.Equal(expected: position.X, actual: surface.Value.Point.X);
+        Assert.Equal(expected: position.Z, actual: surface.Value.Point.Z);
     }
     [Fact]
     public void ABodyOutsideTheLatticeOrOverAZeroValueCellHasNoMediumSurface() {

@@ -23,8 +23,24 @@ public sealed partial class NavigationLawTests {
             ["approach"] = 1f,
             ["orbit"] = 0f,
             ["altitudeGain"] = 2f,
+            ["approachAltitudeGain"] = 2f,
             ["inwardGain"] = 1f,
             ["turnScale"] = 2f,
+            ["forward"] = 0f,
+            ["softRadius"] = 1f,
+            ["weaveAmplitude"] = 0f,
+            ["weaveFrequencyBase"] = 0f,
+            ["weaveFrequencyRange"] = 0f,
+            ["activityRateBase"] = 0f,
+            ["activityRateRange"] = 0f,
+            ["strafeWave"] = 0f,
+            ["turnWave"] = 0f,
+            ["upWave"] = 0f,
+            ["pitchWave"] = 0f,
+            ["rollTurn"] = 0f,
+            ["pressThreshold"] = 0f,
+            ["altitudeBase"] = 0f,
+            ["altitudeRange"] = 0f,
         },
         Channels: new Dictionary<string, string>()
     );
@@ -165,7 +181,7 @@ public sealed partial class NavigationLawTests {
             Name: ProducerName,
             Version: BodyMotionProgram.CurrentVersion,
             Kind: BodyProgramKind.Producer,
-            Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.FaceSensorTarget, BodyMotionOp.ProduceAttendIntent],
+            Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.FaceSensorTarget, BodyMotionOp.ProduceSteeringIntent],
             Target: new BodyTargetSource.Navigated(Domain: domain.Name, Register: RegisterName)
         );
         var kit = document.Kits[0];
@@ -181,7 +197,7 @@ public sealed partial class NavigationLawTests {
                 // This navigation program carries no gravity law, so its hold row holds nothing and only consumes
                 // MoveUp: a Gravity row here would sink a navigator
                 // out of its own volume domain between goals.
-                Motion = kit.Motion with { Holds = [kit.Motion.Holds![0] with { Gravity = null, Hold = BodyHoldKind.None, Thrust = 1f }] },
+                Motion = kit.Motion with { Holds = [kit.Motion.Holds![0] with { Envelope = null, Gravity = null, Hold = BodyHoldKind.None, Thrust = 1f }] },
                 ProducersRaw = new Dictionary<string, BodyProgramParameters>(collection: kit.Producers) {
                     [ProducerName] = NavigationParameters(),
                 },

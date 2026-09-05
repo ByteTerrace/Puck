@@ -112,6 +112,13 @@ public static class MemoryMap {
     public const ushort ObjectColorPaletteData = 0xFF6B;
     /// <summary>The CGB VRAM bank select register (VBK).</summary>
     public const ushort VramBankSelect = 0xFF4F;
+    /// <summary>The CGB CPU-mode-select register (KEY0): a boot ROM writes it once, before the hand-off, and bit 2
+    /// set means the cartridge is running DMG-compatibility mode (see <see cref="DmgCompatibilityState"/>). Not
+    /// otherwise readable.</summary>
+    public const ushort SystemModeSelect = 0xFF4C;
+    /// <summary>The CGB object-priority-mode register (OPRI): 0 = CGB-style priority (OAM order), 1 = DMG-style
+    /// priority (X-coordinate). Color-only, and sealed in DMG-compatibility mode like KEY1 and RP.</summary>
+    public const ushort ObjectPriorityMode = 0xFF6C;
     /// <summary>The boot ROM disable register (BANK): any nonzero write permanently unmaps the boot ROM overlay.</summary>
     public const ushort BootRomDisable = 0xFF50;
     /// <summary>The CGB HDMA source high byte (HDMA1).</summary>

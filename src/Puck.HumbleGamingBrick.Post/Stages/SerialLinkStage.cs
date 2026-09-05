@@ -158,8 +158,8 @@ internal sealed class SerialLinkStage : IPostStage<PostContext> {
     // The lowercase token used in stage pass/fail details for a console model.
     private static string Label(ConsoleModel model) =>
         model switch {
-            ConsoleModel.Dmg => "dmg",
-            ConsoleModel.Cgb => "cgb",
+            ConsoleModel.DmgC => "dmg",
+            ConsoleModel.CgbE => "cgb",
             ConsoleModel.Agb => "agb",
             _ => model.ToString().ToLowerInvariant(),
         };

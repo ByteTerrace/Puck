@@ -25,7 +25,7 @@ internal sealed class DeterminismStage : IPostStage<PostContext> {
 
         return MachineStageProbes.VerifyDeterminism<MachineInstance, MachineSnapshot, MachineIdentity, Tick>(
             build: () => PostMachine.Build(
-                model: ConsoleModel.Dmg,
+                model: ConsoleModel.DmgC,
                 rom: rom
             ),
             describeDivergence: HashDivergenceProbe.DescribeDivergence,

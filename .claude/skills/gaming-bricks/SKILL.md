@@ -6,9 +6,9 @@ description: Guides changes to Puck's deterministic GB, GBC, and GBA GamingBrick
 # Gaming Bricks
 
 Treat the GamingBricks as one deterministic machine family: a shared SM83
-compatibility core for DMG, CGB, and AGB costumes, plus the separate
-ARM7TDMI-based GBA-native core. The current implementation and its Post stages
-are authoritative; update stale skill guidance in the same change.
+compatibility core covering every DMG/MGB/SGB/CGB/AGB hardware revision, plus
+the separate ARM7TDMI-based GBA-native core. The current implementation and its
+Post stages are authoritative; update stale skill guidance in the same change.
 
 ## Core invariants
 

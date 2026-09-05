@@ -69,7 +69,7 @@ public sealed class AbsentDerivationLawTests {
                     "speed": { "value": 4 },
                     "turn": { "rate": 2.5 },
                     "holds": [
-                      { "name": "air", "bond": "Free", "hold": "Gravity", "gravity": { "rise": 28, "fall": 46, "terminal": 40 } }
+                      { "name": "air", "bond": "Free", "hold": "Gravity", "gravity": { "rise": 28, "fall": 46 }, "envelope": { "sinkSpeed": 40 } }
                     ],
                     "shaping": [ { "along": {} } ]
                   },
@@ -110,7 +110,7 @@ public sealed class AbsentDerivationLawTests {
           { "name": "p", "version": "puck.body-motion.v1", "kind": "Motion", "operations": ["ResolveYawAttitudeAndPlanarFrame", "ComputePlanarTargetVelocity", "ShapeVelocity", "SnapYawToPlanarIntent", "ResolveHold", "ApplyHold", "IntegratePlanarAndVerticalVelocity", "CommitPose"] }
         ],
         "kits": { "rows": [
-          { "name": "k", "bodyMotionProgram": "p", "motion": { "speed": { "value": 4 }, "turn": { "rate": 2.5 }, "holds": [ { "name": "air", "bond": "Free", "hold": "Gravity", "gravity": { "rise": 28, "fall": 46, "terminal": 40 } } ], "shaping": [ { "along": {} } ] } }
+          { "name": "k", "bodyMotionProgram": "p", "motion": { "speed": { "value": 4 }, "turn": { "rate": 2.5 }, "holds": [ { "name": "air", "bond": "Free", "hold": "Gravity", "gravity": { "rise": 28, "fall": 46 }, "envelope": { "sinkSpeed": 40 } } ], "shaping": [ { "along": {} } ] } }
         ] }
         """;
     private const string MinimalViewsSection = """
@@ -183,7 +183,7 @@ public sealed class AbsentDerivationLawTests {
                 {
                   "name": "solo",
                   "bodyMotionProgram": "p",
-                  "motion": { "speed": { "value": 4 }, "turn": { "rate": 2.5 }, "holds": [ { "name": "air", "bond": "Free", "hold": "Gravity", "gravity": { "rise": 28, "fall": 46, "terminal": 40 } } ], "shaping": [ { "along": {} } ] }
+                  "motion": { "speed": { "value": 4 }, "turn": { "rate": 2.5 }, "holds": [ { "name": "air", "bond": "Free", "hold": "Gravity", "gravity": { "rise": 28, "fall": 46 }, "envelope": { "sinkSpeed": 40 } } ], "shaping": [ { "along": {} } ] }
                 }
               ] }
             }

@@ -18,11 +18,14 @@ namespace Puck.HumbleGamingBrick.Post;
 /// </summary>
 internal static class InfraredRom {
     private const int EntryPoint = 0x0100;
-    // Transmit at 0x0110, Receive at 0x012D (see the two subroutines' comments for the exact byte layout); the pattern
-    // table starts right after Receive ends.
+    // Transmit at 0x0110, Receive at 0x0150 (see the two subroutines' comments for the exact byte layout); the pattern
+    // table starts right after Receive ends. Receive is placed AFTER the cartridge header's 0x0134-0x014F title/color-flag
+    // span rather than overlapping it (Transmit alone fits before it): the header's color flag must read as this engine's
+    // own machine-code bytes only by construction, never by coincidence, so a byte the header setup wants to control (see
+    // Assemble) is never also a live opcode.
     private const int TransmitAddress = 0x0110;
-    private const int PatternBase = 0x0153;
-    private const int ReceiveAddress = 0x012D;
+    private const int PatternBase = 0x0180;
+    private const int ReceiveAddress = 0x0150;
     private const int RomSize = 0x8000;
     // The inner settle count between driving a bit and the receiver's matching sample. 0x20 iterations (~7 cycles each)
     // dwarfs the ~1-instruction lock-step skew the furthest-behind interleave can leave, so the transmitted bit is
@@ -78,30 +81,30 @@ internal static class InfraredRom {
         0xE0, 0x56,
         0xC9,
     ];
-    // Receive (0x012D): arms RP's data-read-enable with its own LED bit held off (so self-sensing never contributes —
+    // Receive (0x0150): arms RP's data-read-enable with its own LED bit held off (so self-sensing never contributes —
     // every sampled bit is purely the peer's), then samples once per settle window until the caller-baked bit count is
     // reached. Registers: DE = receive cursor, C = bits received, B = settle counter, A = scratch.
-    //            (0x012D)  3E C0      ld   a, 0xC0          ; arm read-enable, LED bit 0 = 0 (not driving)
-    //            (0x012F)  E0 56      ldh  (0xFF56), a
-    //            (0x0131)  11 00 C0   ld   de, 0xC000       ; receive buffer
-    //            (0x0134)  0E 00      ld   c, 0             ; bits received
-    //   rx_loop  (0x0136)  06 20      ld   b, 0x20
-    //   rx_settle(0x0138)  05         dec  b
-    //            (0x0139)  20 FD      jr   nz, rx_settle
-    //            (0x013B)  F0 56      ldh  a, (0xFF56)      ; sample RP
-    //            (0x013D)  E6 02      and  0x02             ; bit 1: 0 = light detected, 2 = none
-    //            (0x013F)  0F         rrca                  ; -> 0 (light) or 1 (none)
-    //            (0x0140)  EE 01      xor  0x01             ; -> received bit: 1 (light) or 0 (none)
-    //            (0x0142)  12         ld   (de), a          ; store received bit
-    //            (0x0143)  13         inc  de
-    //            (0x0144)  0C         inc  c                ; progress++
-    //            (0x0145)  79         ld   a, c
-    //            (0x0146)  EA F1 C0   ld   (0xC0F1), a      ; publish progress
-    //            (0x0149)  FE nn      cp   <expected count> ; caller-baked bit count
-    //            (0x014B)  20 E9      jr   nz, rx_loop
-    //            (0x014D)  3E A5      ld   a, 0xA5
-    //            (0x014F)  EA F0 C0   ld   (0xC0F0), a      ; completion marker
-    //            (0x0152)  C9         ret
+    //            (0x0150)  3E C0      ld   a, 0xC0          ; arm read-enable, LED bit 0 = 0 (not driving)
+    //            (0x0152)  E0 56      ldh  (0xFF56), a
+    //            (0x0154)  11 00 C0   ld   de, 0xC000       ; receive buffer
+    //            (0x0157)  0E 00      ld   c, 0             ; bits received
+    //   rx_loop  (0x0159)  06 20      ld   b, 0x20
+    //   rx_settle(0x015B)  05         dec  b
+    //            (0x015C)  20 FD      jr   nz, rx_settle
+    //            (0x015E)  F0 56      ldh  a, (0xFF56)      ; sample RP
+    //            (0x0160)  E6 02      and  0x02             ; bit 1: 0 = light detected, 2 = none
+    //            (0x0162)  0F         rrca                  ; -> 0 (light) or 1 (none)
+    //            (0x0163)  EE 01      xor  0x01             ; -> received bit: 1 (light) or 0 (none)
+    //            (0x0165)  12         ld   (de), a          ; store received bit
+    //            (0x0166)  13         inc  de
+    //            (0x0167)  0C         inc  c                ; progress++
+    //            (0x0168)  79         ld   a, c
+    //            (0x0169)  EA F1 C0   ld   (0xC0F1), a      ; publish progress
+    //            (0x016C)  FE nn      cp   <expected count> ; caller-baked bit count
+    //            (0x016E)  20 E9      jr   nz, rx_loop
+    //            (0x0170)  3E A5      ld   a, 0xA5
+    //            (0x0172)  EA F0 C0   ld   (0xC0F0), a      ; completion marker
+    //            (0x0175)  C9         ret
     private static readonly byte[] Receive = [
         0x3E, 0xC0,
         0xE0, 0x56,
@@ -155,9 +158,9 @@ internal static class InfraredRom {
     public static byte[] CreatePrimary(ReadOnlySpan<byte> patternBits, int expectedReceiveCount) =>
         Assemble(
             // 0x0100  31 FE FF   ld   sp, 0xFFFE
-            // 0x0103  21 53 01   ld   hl, PatternBase
+            // 0x0103  21 80 01   ld   hl, PatternBase
             // 0x0106  CD 10 01   call Transmit
-            // 0x0109  CD 2D 01   call Receive
+            // 0x0109  CD 50 01   call Receive
             // 0x010C  18 FE      jr   $                    ; spin
             dispatcher: [
                 0x31, 0xFE, 0xFF,
@@ -177,8 +180,8 @@ internal static class InfraredRom {
     public static byte[] CreateSecondary(ReadOnlySpan<byte> patternBits, int expectedReceiveCount) =>
         Assemble(
             // 0x0100  31 FE FF   ld   sp, 0xFFFE
-            // 0x0103  CD 2D 01   call Receive
-            // 0x0106  21 53 01   ld   hl, PatternBase
+            // 0x0103  CD 50 01   call Receive
+            // 0x0106  21 80 01   ld   hl, PatternBase
             // 0x0109  CD 10 01   call Transmit
             // 0x010C  18 FE      jr   $                    ; spin
             dispatcher: [
@@ -193,10 +196,14 @@ internal static class InfraredRom {
         );
 
     private static byte[] Assemble(byte[] dispatcher, ReadOnlySpan<byte> patternBits, int expectedReceiveCount) {
-        // A zero-filled image already carries a valid ROM-only header (see SyntheticRom). Both roles share the same
-        // Transmit/Receive subroutine bytes at the same fixed addresses; only the tiny dispatcher (call order) and the
-        // baked expected-count/pattern table differ.
+        // A zero-filled image already carries a valid ROM-only header (see SyntheticRom) except for the color flag,
+        // set explicitly below: both machines here run the CGB infrared port through the bus, which reads/writes it
+        // live only when the header declares Color support (see DmgCompatibilityState) — a bare monochrome flag would
+        // seal RP instead. Both roles share the same Transmit/Receive subroutine bytes at the same fixed addresses;
+        // only the tiny dispatcher (call order) and the baked expected-count/pattern table differ.
         var rom = new byte[RomSize];
+
+        rom[0x0143] = 0x80;
 
         dispatcher.CopyTo(
             array: rom,

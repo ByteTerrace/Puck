@@ -22,14 +22,28 @@ internal static class LinkSessionStepper {
     public static MachineInstance RequireCreditFits(MachineInstance instance, ulong credit, string side) {
         ArgumentNullException.ThrowIfNull(argument: instance);
 
-        if (credit > instance.Machine.Clock.CycleCount) {
+        RequireCreditFits(
+            credit: credit,
+            cycleCount: instance.Machine.Clock.CycleCount,
+            side: side
+        );
+
+        return instance;
+    }
+    /// <summary>Checks that a credit fits inside a machine's own cycle count — the raw-value form, for a re-anchor that
+    /// already holds the cycle count rather than the instance.</summary>
+    /// <param name="cycleCount">The machine's current cycle count.</param>
+    /// <param name="credit">The credit re-anchoring that machine's pacing target.</param>
+    /// <param name="side">The token side named in the failure message: <c>"first"</c> or <c>"second"</c>.</param>
+    /// <exception cref="ArgumentException"><paramref name="credit"/> exceeds <paramref name="cycleCount"/>;
+    /// <c>cycleCount − credit</c> is unsigned and would otherwise wrap to a target billions of cycles away.</exception>
+    public static void RequireCreditFits(ulong cycleCount, ulong credit, string side) {
+        if (credit > cycleCount) {
             throw new ArgumentException(
-                message: $"the resume token's {side} credit ({credit}) exceeds the machine's cycle count ({instance.Machine.Clock.CycleCount}).",
+                message: $"the resume token's {side} credit ({credit}) exceeds the machine's cycle count ({cycleCount}).",
                 paramName: "resumeToken"
             );
         }
-
-        return instance;
     }
     /// <summary>Advances both machines forward by a shared budget of T-cycles (dots), interleaved deterministically.</summary>
     /// <param name="first">The first machine (the tie-break winner when both are equally behind).</param>

@@ -824,7 +824,7 @@ public sealed partial class WorldServer {
         ));
     }
     // Swap the live definition and rebuild the derived state that compiled from it. Sim-affecting sections (kits,
-    // assignment, motion, wander, seat kit, spawns) recompile the population's fixed tables and live bodies; the
+    // assignment, motion, producer, seat kit, spawns) recompile the population's fixed tables and live bodies; the
     // scene/screens rebuild on the client through the delivered definition, and cameras/render/population defaults are
     // document-only.
     private void Install(WorldDefinition definition, bool rebuildPopulation) {

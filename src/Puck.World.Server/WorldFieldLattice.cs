@@ -37,6 +37,14 @@ public interface IWorldFieldLatticeHost {
     /// <param name="tick">The stepping tick.</param>
     void AddScalar(WorldStateHandle row, FixedQ4816 amount, ulong tick);
 }
+/// <summary>A field lattice's own free surface at one column — a point on it and the lattice's own frame normal
+/// (always world +Y: the lattice carries no rotation of its own). A medium hold's law projects displacement along
+/// the body's own resolved gravity-up rather than this normal, so a medium inside a tilted gravity area still
+/// measures depth along the axis that governs it; the lattice's own normal stays world +Y either way, so a curved
+/// (planetoid) surface is not expressible this way, only a uniform tilted one.</summary>
+/// <param name="Point">A point on the surface, over the sampled position's own column.</param>
+/// <param name="Normal">The lattice's own frame normal.</param>
+public readonly record struct FixedFieldSurface(FixedVector3 Point, FixedVector3 Normal);
 /// <summary>
 /// The live cell values of a world's <c>fields</c> section and the reactions that evolve them — simulation state
 /// beside the population: stepped from <c>WorldServer.Step</c> on the lattice's cadence, checkpointed, and delivered
@@ -44,6 +52,11 @@ public interface IWorldFieldLatticeHost {
 /// arithmetic in a fixed cell order, so the same document and input reproduce the same fields bit for bit.
 /// </summary>
 public sealed class WorldFieldLattice {
+    private static readonly FixedVector3 UnitY = new(
+        X: FixedQ4816.Zero,
+        Y: FixedQ4816.One,
+        Z: FixedQ4816.Zero
+    );
     private readonly FixedQ4816 m_cellSize;
     private readonly int m_depth;
     private readonly List<int> m_deltas = [];
@@ -562,10 +575,12 @@ public sealed class WorldFieldLattice {
     /// medium field's value times its height scale, over the lattice origin, at the body's coupled cell (the same
     /// coupling <see cref="TryBodyCellOf"/> resolves for <see cref="WorldReaction.Emit"/>/<see cref="WorldReaction.Expose"/>).
     /// <see langword="null"/> when the body lies outside the lattice's coupling ceiling, or every medium field reads
-    /// zero or less there.</summary>
+    /// zero or less there. Returns a point over <paramref name="position"/>'s own column at that height, and the
+    /// lattice's own frame normal — a caller measuring depth under a tilted gravity area projects along its OWN
+    /// resolved up instead of this normal.</summary>
     /// <param name="position">The body's world position.</param>
-    /// <returns>The surface's world-space Y, or <see langword="null"/> for no medium.</returns>
-    public FixedQ4816? MediumSurface(in FixedVector3 position) {
+    /// <returns>The surface, or <see langword="null"/> for no medium.</returns>
+    public FixedFieldSurface? MediumSurface(in FixedVector3 position) {
         if (!TryBodyCellOf(cell: out var cell, position: in position)) {
             return null;
         }
@@ -593,7 +608,13 @@ public sealed class WorldFieldLattice {
             }
         }
 
-        return best;
+        return ((best is { } height)
+            ? new FixedFieldSurface(
+                Normal: UnitY,
+                Point: new FixedVector3(X: position.X, Y: height, Z: position.Z)
+            )
+            : null
+        );
     }
     /// <summary>Reports whether a point lies inside one named live medium field: the same authored-field identity
     /// and body-coupling ceiling <see cref="MediumSurface"/> resolves through, narrowed to one field rather than

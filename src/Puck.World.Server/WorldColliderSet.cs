@@ -39,9 +39,9 @@ internal sealed class WorldColliderSet : IContactField {
     // Every ATTACHED solid row (Attach + Solid both set — refused only under the FIELD provider, see the validator):
     // its geometry cannot join m_colliders above because its origin/yaw are not the row's static authored transform,
     // they are a live body's pose. RefreshAttached recomputes m_attachedColliders from these once per tick. Attached
-    // colliders never carry a grip decision — hold/grapple queries search m_colliders alone (see
+    // colliders never carry a grip decision — hold/tether queries search m_colliders alone (see
     // TryHoldableSurfaceAlongDirection/TryNearestSurfaceAlongDirection), so a moving carrier is never itself
-    // holdable or grappleable today.
+    // holdable or tetherable today.
     private readonly IReadOnlyList<(WorldPlacement Placement, WorldPrototype Creation)> m_attachedRows;
     private readonly FixedStaticCollider[] m_colliders;
     // The holdable subset of m_colliders, filtered at build time rather than the full array gated after the fact:

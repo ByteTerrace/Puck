@@ -291,7 +291,7 @@ raws themselves are not independently hashed; they cross only through
 `TransferState`/`WorldAuthorityCheckpointCodec` (see
 [mutations.md](mutations.md)'s body-motion notes), never the replay tape.
 Checkpoint continuation also carries the follower seed latches, arbitrary-up
-frame/reseat/turn fractions, and same-world climb/grapple state through
+frame/reseat/turn fractions, and same-world tether state through
 `WorldBody.IntegrationResidue`; none is independently covered by this population
 hash before it changes a later pose.
 Across a session request, MATCH proves that re-executing the request reproduced

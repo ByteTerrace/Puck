@@ -24,6 +24,7 @@ public sealed partial class WorldPopulation {
             collider: kit.Collider,
             rigid: kit.Rigid,
             carry: kit.Carry,
+            tether: kit.Tether,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             holds: kit.Holds
         );
@@ -34,7 +35,6 @@ public sealed partial class WorldPopulation {
                 walkableThreshold: m_walkableThreshold
         );
         body.SetGravityField(field: m_gravityField);
-        body.SetAttachmentPolicy(policy: m_fixedAttachment);
 
         var spawn = InhabitantSpawn(
             placement: placement,
@@ -52,7 +52,7 @@ public sealed partial class WorldPopulation {
             rollRadians: FixedQ4816.Zero
         );
         // An inhabitant's home is the ground its row activated it on — the placement's position plus its own
-        // distribution sample — so its producer wanders THERE rather than at the world origin.
+        // distribution sample — so its producer roams THERE rather than at the world origin.
         body.SetHome(home: (spawn with { Y = altitude }));
 
         body.SetIntentSource(source: inhabit.Source);
@@ -70,7 +70,7 @@ public sealed partial class WorldPopulation {
         entry.Generation = checked((entry.Generation + 1));
         entry.Active = true;
     }
-    // Activate a simulated entry: re-seed its canonical pose/color/wander from its index, then mint its own body from
+    // Activate a simulated entry: re-seed its canonical pose/color/producer state from its index, then mint its own body from
     // its kit row (tuning + primary-action binding) spawned at that pose with the stored peer-source default. The
     // Warp/Face is a server-authoritative spawn (a one-time write into the sim); from here the pose flows only out.
     private void ActivateSimulated(int index, int? generation = null, IntentSource? source = null) {
@@ -93,6 +93,7 @@ public sealed partial class WorldPopulation {
             collider: kit.Collider,
             rigid: kit.Rigid,
             carry: kit.Carry,
+            tether: kit.Tether,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             holds: kit.Holds
         );
@@ -103,7 +104,6 @@ public sealed partial class WorldPopulation {
                 walkableThreshold: m_walkableThreshold
         );
         player.SetGravityField(field: m_gravityField);
-        player.SetAttachmentPolicy(policy: m_fixedAttachment);
 
         player.Pose(
             position: entry.SpawnPosition,
@@ -264,6 +264,7 @@ public sealed partial class WorldPopulation {
             collider: m_kits[m_seatKit].Collider,
             rigid: m_kits[m_seatKit].Rigid,
             carry: m_kits[m_seatKit].Carry,
+            tether: m_kits[m_seatKit].Tether,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             holds: m_kits[m_seatKit].Holds
         ) {
@@ -276,7 +277,6 @@ public sealed partial class WorldPopulation {
                 walkableThreshold: m_walkableThreshold
         );
         body.SetGravityField(field: m_gravityField);
-        body.SetAttachmentPolicy(policy: m_fixedAttachment);
 
         var spawnPoint = m_seatSpawns[slot];
 
@@ -290,7 +290,7 @@ public sealed partial class WorldPopulation {
         // Seats default Live and are never touched by population operations; producer state is seeded so a later
         // body.control producer:<name> uses the same deterministic path as a peer.
         ClearDesignations(entry: entry);
-        SeedSeatWander(slot: slot);
+        SeedSeatSteeringProducer(slot: slot);
         entry.Body = body;
         entry.BodyColor = (profile?.Color ?? Vector3.Zero);
         entry.CatalogRig = WorldLookSource.Catalog.DefaultIndex(slot);
@@ -645,7 +645,7 @@ public sealed partial class WorldPopulation {
     /// Install after <see cref="Rebuild(WorldDefinition, WorldSolidField?)"/>): a placement's inhabit facet joins bodies
     /// into the peer slice over the loopback link — an inhabitant is a <see cref="PopulationKind.NetworkPeer"/> whose entry
     /// carries a placement back-reference, holding a normal <see cref="WorldBody"/> under the resolved kit and driven by
-    /// its kit's attend producer. Bodies claim the highest free slots (capacity minus one downward) so an existing inhabitant never
+    /// its kit's sensing steering producer. Bodies claim the highest free slots (capacity minus one downward) so an existing inhabitant never
     /// renumbers; admission is bounded only by the table itself and rejects loudly when it is genuinely full — there is no
     /// census-fit reservation. Diff-by-placement: retire an entry whose row vanished, lost its facet, or changed
     /// creation/kit; keep a matching one (its pose survives an unrelated placement edit); admit new bodies at the highest
@@ -702,7 +702,8 @@ public sealed partial class WorldPopulation {
                 rigid: m_kits[kitIndex].Rigid,
                 carry: m_kits[kitIndex].Carry,
                 maxSmoothError: m_fixedMotion.MaxSmoothError,
-                holds: m_kits[kitIndex].Holds
+                holds: m_kits[kitIndex].Holds,
+                tether: m_kits[kitIndex].Tether
             );
         }
 
@@ -863,6 +864,7 @@ public sealed partial class WorldPopulation {
             collider: m_kits[m_seatKit].Collider,
             rigid: m_kits[m_seatKit].Rigid,
             carry: m_kits[m_seatKit].Carry,
+            tether: m_kits[m_seatKit].Tether,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
             holds: m_kits[m_seatKit].Holds
         ) {
@@ -875,7 +877,6 @@ public sealed partial class WorldPopulation {
                 walkableThreshold: m_walkableThreshold
         );
         body.SetGravityField(field: m_gravityField);
-        body.SetAttachmentPolicy(policy: m_fixedAttachment);
         body.Pose(
             position: position,
             yawRadians: yawRadians,
@@ -902,12 +903,12 @@ public sealed partial class WorldPopulation {
         }
 
         // resetPhase:false: entry.ProducerState is NEVER cleared by TryDetachSeatForTransfer (it only clears
-        // Body/Active/Parked/Designations — see that method's own remarks), so the pre-detach wander
+        // Body/Active/Parked/Designations — see that method's own remarks), so the pre-detach steering-producer
         // phase/activity/acquired-target are still sitting right here, untouched, the moment this runs — reseeding
         // them would needlessly discard state that was never actually lost, only about to be overwritten.
         // WeaveFrequency/PreferredAltitude are still recomputed either way (a pure function of slot+kit,
-        // safe/idempotent to redo), matching SeedSeatWander's other resetPhase:false caller (the ApplyPeerAdmitted-adjacent path).
-        SeedSeatWander(
+        // safe/idempotent to redo), matching SeedSeatSteeringProducer's other resetPhase:false caller (the ApplyPeerAdmitted-adjacent path).
+        SeedSeatSteeringProducer(
             resetPhase: false,
             slot: slot
         );
@@ -983,7 +984,7 @@ public sealed partial class WorldPopulation {
     /// 128-body table, or the document's <c>networkPlayers</c> admission cap already met (census bots and admitted
     /// remote humans share that one cap — see <see cref="CountActiveCensus"/>).</summary>
     /// <param name="source">The intent source the body starts with (<see cref="IntentSource.Live"/> for a genuine
-    /// remote human — a submitted intent/command fills its gaps, never a wander/attend producer).</param>
+    /// remote human — a submitted intent/command fills its gaps, never a steering producer).</param>
     /// <param name="grantTemplates">The verified admission entry's own grant templates for this connection (see
     /// <see cref="WorldAdmissionDoor"/>) — stored on the activated slot so a later whole-document rebuild can
     /// compare the then-live rows with the policy baseline before re-authorizing

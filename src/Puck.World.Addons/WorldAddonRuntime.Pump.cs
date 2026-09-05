@@ -505,7 +505,7 @@ public sealed partial class WorldAddonRuntime {
         contribution.Outcome = AddonVerdict.None;
 
         // Nudge a granted body Live the first tick it is not, mirroring a fresh seat's own default so a newly-granted
-        // addon does not sit waiting on a wander/idle producer to yield. Applied DIRECTLY, never through the loopback:
+        // addon does not sit waiting on a steering/idle producer to yield. Applied DIRECTLY, never through the loopback:
         // this is re-derived by re-running the guest under replay's re-run posture, so it must never be recorded as
         // server input. ApplyCommand re-checks Drive itself — a handle designates, it never decides.
         //
@@ -513,7 +513,7 @@ public sealed partial class WorldAddonRuntime {
         // on a HUMAN-OCCUPIED body that says nothing about whether the fold actually accepted anything from this
         // addon: StageContribution still refuses a channel this document-mounted addon never declared Reach over,
         // silently, and a submission that clears every ordinal that way must not be allowed to cancel the seat's own
-        // Idle/Wander/Attend control. So the nudge is gated a second time, narrower than Drive authority: an
+        // Idle/producer control. So the nudge is gated a second time, narrower than Drive authority: an
         // UNOCCUPIED body is nudged exactly as before (a bot at full authority); a HUMAN-OCCUPIED body is nudged
         // only when this contribution actually reached its OWN declared Reach on at least one channel.
         if (

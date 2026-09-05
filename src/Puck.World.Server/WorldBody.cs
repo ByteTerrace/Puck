@@ -41,7 +41,7 @@ public sealed partial class WorldBody {
     /// key/button has no timer.</summary>
     public const float MaxActionHoldSeconds = 60f;
 
-    private bool m_atSurface;
+    private bool m_atMediumBand;
     private CompiledBodyMotionProgram m_bodyMotionProgram;
     // The construction-validated program table and the program this body executes.
     private IReadOnlyDictionary<string, CompiledBodyMotionProgram> m_bodyMotionPrograms;
@@ -56,6 +56,9 @@ public sealed partial class WorldBody {
     private FixedWorldRigid? m_rigid;
     // The kit's carry facet, or null for a kit that can never pick up a rigid body — see WorldBody.Carry.cs.
     private FixedWorldCarry? m_carry;
+    // The kit's tether facet, or null for a kit that carries no rope — see WorldBody.Tether.cs. Null makes
+    // body.attach/body.detach/body.reel refuse by name; the runtime attach state is m_tether itself.
+    private FixedWorldTether? m_tetherFacet;
     // Rigid-only state: a locomotion body's velocity lives in m_planarVelocity/m_verticalVelocity instead, and never
     // both at once for the same body.
     private FixedVector3 m_rigidVelocity;
@@ -65,24 +68,15 @@ public sealed partial class WorldBody {
 
     // The world contact field this body solves its swept grounded position against (null before a population assigns
     // the document-derived field) and the body's own capsule volume (null = a volumeless kit, never solved).
-    // The inward speed a grounded body keeps against the surface it stands on, in world units per second. Sized to
-    // cover the drop a walker's own speed opens over a tick on the tightest surface worth standing on; depenetration
-    // removes whatever the surface does not curve away.
-    private static readonly FixedQ4816 StickSpeed = FixedQ4816.FromDouble(value: 2d);
-    // How fast a solved field may turn the body's up axis, as the HALF angle a rotor is built from — so this is
-    // pi/2 per second of half angle, a half turn per second of actual turn. That crosses the shell where an
-    // attractor's pull cancels the world's as one continuous roll rather than a single-tick inversion, and leaves
-    // every ordinary reorientation untouched: a field turns far slower than this everywhere else. The half angle is
-    // what SteerUp's rotor and its within-budget test both want, so accumulating it directly spares a per-tick
-    // halving. See WorldBody.Step's SteerUp.
-    private static readonly FixedQ4816 FieldUpTurnHalfRate = FixedQ4816.FromDouble(value: 1.5707963267949d);
+    /// <summary>Gets the inward speed a grounded body keeps against the surface it stands on, in world units per
+    /// second — kit-authored (<see cref="WorldMotion.GroundStick"/>), independent of the body's own move speed;
+    /// depenetration removes whatever the surface does not curve away.</summary>
+    private FixedQ4816 StickSpeed => m_tuning.GroundStick;
+    // The half-angle rate SteerUp's rotor and its within-budget test both want, so accumulating it directly spares a
+    // per-tick halving — see WorldBody.Step's SteerUp. Kit-authored (WorldMotion.UpTurn); see FixedUpTurnRates.
+    private FixedQ4816 FieldUpTurnHalfRate => m_tuning.UpTurn.Field;
     private static readonly FixedQ4816 MinFieldUpMagnitude = FixedQ4816.One;
-    // The ceiling on how fast a measured CONTACT normal may turn the up axis, again as a half-angle rate: 2*pi per
-    // second of half angle, two full turns per second of actual turn. This is a discontinuity filter, not a
-    // smoothing rate — it sits an order of magnitude above the fastest real curvature a body can walk (full sprint
-    // on the tightest planetoid), so ordinary running adopts the surface exactly and only a collider crease, which
-    // has no finite rate at all, is spread across a few ticks. See WorldBody.Step's contact adoption.
-    private static readonly FixedQ4816 ContactUpTurnHalfRate = FixedQ4816.FromDouble(value: 6.28318530717959d);
+    private FixedQ4816 ContactUpTurnHalfRate => m_tuning.UpTurn.Contact;
 
     private IContactField? m_contactField;
     // The body-owned frame policy compiled from the world document. The contact field remains a geometry seam and
@@ -176,8 +170,8 @@ public sealed partial class WorldBody {
     private FixedQ4816 m_verticalPreviousTarget;
     private bool m_verticalFollowerSeeded;
     // Where this body belongs — the position its activation placed it at. Producers measure their own steering
-    // against it (see ProduceWanderIntent), so it is simulation state: it decides trajectories. A teleport never
-    // moves it, which is what separates "where the body is" from "where the body is from".
+    // against it (see ProduceSteeringIntent's roam shape), so it is simulation state: it decides trajectories. A
+    // teleport never moves it, which is what separates "where the body is" from "where the body is from".
     private FixedVector3 m_home;
     // The avatar's simulation position. See Position.
     private FixedVector3 m_position;
@@ -188,7 +182,7 @@ public sealed partial class WorldBody {
     private FixedVector3 m_previousPosition;
     private PlayerIntent m_producerIntent;
     private RoleChannelOrdinals m_roleOrdinals;
-    private bool m_submerged;
+    private bool m_inMedium;
     // The two one-tick intent images below the tape, both no-allocation and consumed by the next Advance so a missed
     // producer tick can never leave a stale entity moving forever. The submitted image is the live stream (a seat's
     // device image or a remote client's submission), admitted unless the source is Idle; the producer image is the
@@ -218,7 +212,10 @@ public sealed partial class WorldBody {
     // Sampled fresh every tick, before this body's own Advance, from the population's field lattice at this body's
     // coupled cell — never captured/restored (see WorldBody.Transfer.cs's own remarks): a pure function of this
     // body's position and the live lattice, re-derived identically the very next tick regardless of any teleport.
-    private FixedQ4816? m_mediumSurface;
+    // A point and the lattice's own frame normal (world +Y — the lattice carries no rotation of its own); the medium
+    // hold's law projects displacement along the BODY's own resolved gravity-up, not this normal, so a tilted gravity
+    // area's medium still measures depth correctly.
+    private FixedFieldSurface? m_mediumSurface;
     // The grounded program's authoritative heading scalar (radians): integrated from the Turn rate, with m_orientation
     // derived from it each step (a pure yaw rotation). Under free it is inert (orientation is authoritative and Yaw is
     // read back out of it).
@@ -234,9 +231,8 @@ public sealed partial class WorldBody {
     private static readonly FixedQ4816 Pi = FixedQ4816.FromDouble(value: Math.PI);
     // Above the yaw round-trip error of FromAxisAngle -> ExtractYaw, below any facing a snap can leave (radians).
     private static readonly FixedQ4816 FacingAdoptEpsilon = FixedQ4816.FromDouble(value: 0.001);
-    // The drive pitch clamp (~69°): the flying variant's facing can climb and dive steeply but never flip past
-    // vertical, which would invert the yaw frame mid-flight.
-    private static readonly FixedQ4816 MaxDrivePitch = FixedQ4816.FromDouble(value: 1.2);
+    // Kit-authored (WorldTurn.MaxPitch); see FixedTurn.
+    private FixedQ4816 MaxDrivePitch => m_tuning.Turn.MaxPitch;
     private static readonly FixedQ4816 TwoPi = FixedQ4816.FromDouble(value: (2.0 * Math.PI));
     private static readonly FixedVector3 UnitX = new(
         X: FixedQ4816.One,
@@ -280,11 +276,10 @@ public sealed partial class WorldBody {
     // not turn — it was relocated. See WorldBody.Lifecycle's Pose and WorldBody.Step's ResolveUp.
     private bool m_upNeedsReseat;
 
-    private static readonly FixedQ4816 ObstructionLatchDisplacementSquared = FixedQ4816.FromDouble(value: 4.0); // (2 units)^2 — a single noisy depenetration correction at a blended corner can be large; only a body that has genuinely moved on should cross this
-    // A raw MoveAdvance/MoveStrafe role channel reads in [-1, 1] — well clear of ordinary analog noise at this
-    // threshold, so a genuinely-released stick/button (exactly 0) and a barely-held one are both "idle" alike.
-    private static readonly FixedQ4816 ObstructionLatchIdleThreshold = FixedQ4816.FromDouble(value: 0.05);
-    private static readonly ulong ObstructionLatchGraceTicks = FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: 0.5)); // 0.5s of real time
+    // Kit-authored (WorldMotion.Obstruction); see FixedObstructionLatch.
+    private FixedQ4816 ObstructionLatchDisplacementSquared => m_tuning.Obstruction.DisplacementSquared;
+    private FixedQ4816 ObstructionLatchIdleThreshold => m_tuning.Obstruction.IdleThreshold;
+    private ulong ObstructionLatchGraceTicks => m_tuning.Obstruction.GraceTicks;
     // The per-channel action runtime: the compiled binding (null = unbound), its press latch, and one recency clock per
     // Recently-predicate instance. Named counters and timers live in the kit-wide action-state register file below.
     // A role ordinal never has a binding, so it is naturally inert here.
@@ -359,8 +354,10 @@ public sealed partial class WorldBody {
     /// <see langword="null"/> for a locomotion kit.</param>
     /// <param name="carry">The kit's compiled carry facet (<see cref="FixedWorldKit.Carry"/>), or
     /// <see langword="null"/> for a kit that can never pick up a rigid body.</param>
+    /// <param name="tether">The kit's compiled tether facet (<see cref="FixedWorldKit.Tether"/>), or
+    /// <see langword="null"/> for a kit that carries no rope.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> or <paramref name="programs"/> is <see langword="null"/>.</exception>
-    public WorldBody(FixedMotionTuning tuning, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null) {
+    public WorldBody(FixedMotionTuning tuning, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedQ4816 maxSmoothError, CompiledActionSpec?[]? actions = null, FixedQ4816[]? actionThresholds = null, ChannelShape[]? actionShapes = null, bool[]? roleMask = null, RoleChannelOrdinals roleOrdinals = default, CompiledActionStateSlot[]? actionState = null, FixedWorldCollider? collider = null, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null, FixedWorldTether? tether = null) {
         SetTuning(holds: holds, tuning: tuning);
         m_bodyMotionProgram = (program ?? throw new ArgumentNullException(paramName: nameof(program)));
         m_bodyMotionPrograms = (programs ?? throw new ArgumentNullException(paramName: nameof(programs)));
@@ -375,6 +372,7 @@ public sealed partial class WorldBody {
         m_collider = collider;
         m_rigid = rigid;
         m_carry = carry;
+        m_tetherFacet = tether;
         m_maxSmoothError = maxSmoothError;
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {

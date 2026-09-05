@@ -534,7 +534,7 @@
       "version": "puck.body-motion.v1",
       "kind": "Producer",
       "operations": [
-        "ProduceWanderIntent"
+        "ProduceSteeringIntent"
       ]
     },
     {
@@ -550,8 +550,7 @@
       },
       "operations": [
         "SenseNearestInCone",
-        "ProduceWanderIntent",
-        "ProduceAttendIntent",
+        "ProduceSteeringIntent",
         "FaceSensorTarget"
       ]
     },
@@ -565,7 +564,7 @@
       },
       "operations": [
         "SenseNearestInCone",
-        "ProduceAttendIntent",
+        "ProduceSteeringIntent",
         "FaceSensorTarget"
       ]
     }
@@ -586,7 +585,6 @@
             {
               "along": {
                 "engage": 1000000,
-                "brake": 0,
                 "release": 1000000
               }
             }
@@ -599,8 +597,7 @@
               "lift": 1,
               "gravity": {
                 "rise": 14,
-                "fall": 23,
-                "terminal": 20
+                "fall": 23
               }
             }
           ]
@@ -668,7 +665,6 @@
             {
               "along": {
                 "engage": 1000000,
-                "brake": 0,
                 "release": 1000000
               }
             }
@@ -681,8 +677,7 @@
               "lift": 1,
               "gravity": {
                 "rise": 14,
-                "fall": 23,
-                "terminal": 20
+                "fall": 23
               }
             }
           ]
@@ -755,7 +750,6 @@
               },
               "along": {
                 "engage": 45,
-                "brake": 0,
                 "release": 55
               }
             },
@@ -766,14 +760,12 @@
               },
               "along": {
                 "engage": 34,
-                "brake": 0,
                 "release": 18
               }
             },
             {
               "along": {
                 "engage": 30,
-                "brake": 0,
                 "release": 17
               }
             }
@@ -790,8 +782,10 @@
               "reach": 1.2,
               "gravity": {
                 "rise": 14,
-                "fall": 23,
-                "terminal": 20
+                "fall": 23
+              },
+              "envelope": {
+                "sinkSpeed": 20
               }
             },
             {
@@ -800,8 +794,10 @@
               "hold": "Gravity",
               "gravity": {
                 "rise": 14,
-                "fall": 23,
-                "terminal": 20
+                "fall": 23
+              },
+              "envelope": {
+                "sinkSpeed": 20
               }
             }
           ]
@@ -945,7 +941,6 @@
               },
               "along": {
                 "engage": 45,
-                "brake": 0,
                 "release": 55
               }
             },
@@ -956,14 +951,12 @@
               },
               "along": {
                 "engage": 34,
-                "brake": 0,
                 "release": 18
               }
             },
             {
               "along": {
                 "engage": 30,
-                "brake": 0,
                 "release": 17
               }
             }
@@ -980,8 +973,10 @@
               "reach": 1.2,
               "gravity": {
                 "rise": 14,
-                "fall": 23,
-                "terminal": 20
+                "fall": 23
+              },
+              "envelope": {
+                "sinkSpeed": 20
               }
             },
             {
@@ -990,8 +985,10 @@
               "hold": "Gravity",
               "gravity": {
                 "rise": 14,
-                "fall": 23,
-                "terminal": 20
+                "fall": 23
+              },
+              "envelope": {
+                "sinkSpeed": 20
               }
             }
           ]
@@ -1025,7 +1022,7 @@
               "standoffRadius": 2,
               "approach": 0.75,
               "orbit": 0,
-              "altitudeGain": 0,
+              "approachAltitudeGain": 0,
               "inwardGain": 1.6,
               "turnScale": 2.5
             },
@@ -1149,7 +1146,6 @@
               },
               "along": {
                 "engage": 45,
-                "brake": 0,
                 "release": 55
               }
             },
@@ -1160,14 +1156,12 @@
               },
               "along": {
                 "engage": 34,
-                "brake": 0,
                 "release": 18
               }
             },
             {
               "along": {
                 "engage": 30,
-                "brake": 0,
                 "release": 17
               }
             }
@@ -1184,8 +1178,10 @@
               "reach": 1.2,
               "gravity": {
                 "rise": 14,
-                "fall": 23,
-                "terminal": 20
+                "fall": 23
+              },
+              "envelope": {
+                "sinkSpeed": 20
               }
             },
             {
@@ -1194,8 +1190,10 @@
               "hold": "Gravity",
               "gravity": {
                 "rise": 14,
-                "fall": 23,
-                "terminal": 20
+                "fall": 23
+              },
+              "envelope": {
+                "sinkSpeed": 20
               }
             }
           ]

@@ -87,8 +87,10 @@
               "reach": 1.2,
               "gravity": {
                 "rise": 20,
-                "fall": 30,
-                "terminal": 30
+                "fall": 30
+              },
+              "envelope": {
+                "sinkSpeed": 30
               }
             },
             {
@@ -97,8 +99,10 @@
               "hold": "Gravity",
               "gravity": {
                 "rise": 20,
-                "fall": 30,
-                "terminal": 30
+                "fall": 30
+              },
+              "envelope": {
+                "sinkSpeed": 30
               }
             }
           ]

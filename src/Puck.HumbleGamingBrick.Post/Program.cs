@@ -2,10 +2,10 @@ using Puck.HumbleGamingBrick.Post;
 
 // Puck.HumbleGamingBrick.Post — the HumbleGamingBrick machine's power-on self-test and the primary way the
 // machine is validated. It runs an ordered battery of self-checking stages and exits 0 (all passed), 1 (a check failed),
-// or 2 (a stage could not run). There is no rich CLI: three hand-parsed knobs — where artifacts land, and an optional
-// tier/name subset for iterating. Tier A runs anywhere on a synthetic ROM; Tier B needs the reference corpus, found via
-// the PUCK_GB_TESTROMS environment variable and skipped when absent; Tier C (the cross-machine serial link) is
-// self-contained like Tier A and runs anywhere.
+// or 2 (a stage could not run). There is no rich CLI: hand-parsed knobs for where artifacts land, an optional
+// tier/name subset for iterating, and the ledger controls (--record, --require-assets). Tier A runs anywhere on a
+// synthetic ROM; Tier B needs the reference corpus, found via the PUCK_GB_TESTROMS environment variable and skipped
+// when absent; Tier C (the cross-machine serial link) is self-contained like Tier A and runs anywhere.
 
 if (Diagnostics.TryRun(
     args: args,
@@ -44,6 +44,17 @@ var sstRoot = CommandLineArguments.ResolveDirectoryRoot(
     flag: "--sst",
     variable: "PUCK_GB_SST"
 );
+// --record regenerates Expectations.json from measured outcomes instead of gating against it; --require-assets turns
+// a ledger-recorded ROM that is absent from the resolved corpus into an infrastructure failure instead of a skip.
+var recordMode = args.Contains(
+    comparer: StringComparer.OrdinalIgnoreCase,
+    value: "--record"
+);
+var requireAssets = args.Contains(
+    comparer: StringComparer.OrdinalIgnoreCase,
+    value: "--require-assets"
+);
+var ledgerPath = ExpectationsLedger.ResolvePath();
 var stages = PostStages.Create()
     .Where(predicate: stage => PostStageFilters.TierMatches(
     stage: stage,
@@ -56,6 +67,11 @@ var stages = PostStages.Create()
     .ToArray();
 var context = new PostContext(
     artifactsDirectory: artifactsDirectory,
+    ledger: (recordMode
+        ? null
+        : ExpectationsLedger.Load(path: ledgerPath)),
+    recordMode: recordMode,
+    requireAssets: requireAssets,
     sstRoot: sstRoot,
     testRomRoot: testRomRoot
 );
@@ -64,4 +80,13 @@ var report = new PostBattery<PostContext>(
     stages: stages
 ).Run(context: context);
 report.Write(artifactsDirectory: artifactsDirectory);
+
+if (recordMode) {
+    ExpectationsLedger.Save(
+        entries: context.RecordedEntries,
+        path: ledgerPath
+    );
+    Console.Out.WriteLine(value: $"Recorded {context.RecordedEntries.Count} ledger entries to {ledgerPath}");
+}
+
 return report.ExitCode;

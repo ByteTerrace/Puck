@@ -5,51 +5,66 @@ namespace Puck.HumbleGamingBrick;
 
 /// <summary>
 /// The audio processing unit. It owns the sound register file (NR10–NR52) and wave RAM, the master power switch, and
-/// the four channels' length counters. The unit straddles the console's two clocks, so it is driven through two seams:
-/// its own CPU-domain <see cref="Tick"/> follows the DIV-APU event — a falling edge of one bit of the timer's DIV
-/// counter (bit 12, or bit 13 under Color double speed) — which steps a 512 Hz eight-step frame sequencer that clocks
-/// the length counters (steps 0/2/4/6), the sweep unit (2/6), and the envelopes (7); the channel generators (duty
-/// positions, the wave sample fetcher, and the noise LFSR) run on the fixed 4 MiHz dot clock and are advanced once per
-/// dot by <see cref="ApuGeneratorClock"/>, so engaging Color double speed does not raise the audio pitch. Reading DIV
-/// rather than a private divider is what makes resetting DIV perturb the sequencer exactly as on hardware.
-/// Powering the unit off through NR52 clears the register file and silences every channel; wave RAM stays accessible.
-/// All state is plain fields captured in a fixed order, so the APU snapshots and forks like every other component.
+/// the four channels' length counters, envelopes, sweep unit, and generators. The unit straddles the console's two
+/// clocks, so it is driven through two seams: its own CPU-domain <see cref="Tick"/> follows the DIV-APU event — the
+/// falling edge of one bit of the timer's DIV counter (bit 12, or bit 13 under Color double speed) — which advances a
+/// 512 Hz divider that clocks the length counters, the sweep unit, and the envelope pre-count, while the rising edge
+/// of the same bit arms the envelope clocks half a period later; the channel generators (duty positions, the wave
+/// sample fetcher, and the noise counter driving the LFSR) run on the fixed 2 MiHz audio clock, derived here by
+/// halving the whole-dot stream <see cref="ApuGeneratorClock"/> delivers, so engaging Color double speed does not
+/// raise the audio pitch. Reading DIV rather than a private divider is what makes resetting DIV perturb the sequencer
+/// exactly as on hardware. Powering the unit off through NR52 clears the register file and every generator; wave RAM
+/// stays accessible. All state is plain fields captured in a fixed order, so the APU snapshots and forks like every
+/// other component.
 /// </summary>
+/// <remarks>
+/// The channel outputs the CPU observes through PCM12/PCM34 are LATCHED, not recomputed: each channel publishes a new
+/// digital level only when its generator steps, its envelope moves, or a register write reaches it, and a channel
+/// whose DAC is off holds the level it last published. That latch is the emulated audio contract; the mixing that the
+/// host stage does downstream is presentation.
+/// </remarks>
 public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IModeSwitchable {
     private const int ChannelCount = 4;
     private const int DoubleSpeedDivApuBit = 13;
     private const byte LengthDataMask = 0x3F;
     private const byte LengthEnableBit = 0x40;
     private const byte MasterPower = 0x80;
-    private const int MaxFrequency = 2047;
-    // NR43 clock-shift codes 14 and 15 gate the LFSR's clock line entirely (the hardware-accurate references agree; a
-    // naive implementation omits the gate): the noise timer freezes rather than counting toward a step that hardware never delivers.
-    private const int NoiseShiftGateCode = 14;
+    private const int MaxSampleLength = 0x7FF;
     private const int NormalDivApuBit = 12;
     private const byte Nr52Readable = 0x70;
     private const int RegisterCount = 0x17;
     private const byte SquareNoiseDacMask = 0xF8;
     private const byte SweepNegate = 0x08;
-    private const int SweepReloadPeriod = 8;
     private const byte SweepShiftMask = 0x07;
     private const byte TriggerBit = 0x80;
     private const byte WaveDacEnable = 0x80;
-    // How many dots after a wave fetch the CPU's monochrome wave-RAM access window stays open (Color access always
-    // succeeds); the same window is the retrigger-corruption "fetch busy" predicate (see Trigger). Swept as 1/2/3
-    // against the hardware-accurate wave-RAM verdicts on the DMG machine: 2 is the unique value passing BOTH the
-    // "wave read while on" and "wave trigger while on" cases (1 starves the read window, 3 widens the corruption window one slot too far).
-    private const int WaveFetchWindowDots = 2;
     private const int WaveRamSize = 16;
-    // Dots between a trigger and the wave channel's first sample fetch, added on top of the freshly loaded period.
-    // In this countdown convention (a reload of N fires N dots later), 8 is the "+6 from trigger" formulation: the
-    // countdown fires one 2-dot APU step after reaching zero.
-    private const int WaveTriggerFetchDelayDots = 8;
-    // The monochrome CPU WRITE strobe reaches the wave-RAM port two dots ahead of where a READ samples it: a write
-    // issued up to two dots before the fetch that a read would need to coincide with still lands on the byte that
-    // fetch is about to latch. Derived by sweeping the "wave write while on" hardware-accurate case's full 32-position,
-    // every-other-dot table (0/2/4 dots of lead): 2 is the unique value clearing the whole table without moving the
-    // "wave read/trigger while on" verdicts (those key off the read-side window above, which this does not touch).
-    private const int WaveWriteFetchLeadDots = 2;
+    // The frame-sequencer divider skips its first event when the unit is powered on while the DIV-APU bit is already
+    // high; these are the three states of that one-shot.
+    private const int SkipDivEventInactive = 0;
+    private const int SkipDivEventSkipped = 1;
+    private const int SkipDivEventPending = 2;
+    // CPU T-cycles between a DIV-APU event and the envelope step it defers under Color double speed on the later
+    // colour steppings: the step lands one machine cycle after the event rather than inside it.
+    private const int DeferredEnvelopeDelay = 4;
+    // Audio ticks between the CPU's write strobe reaching the unit and its read strobe doing so: a read settles
+    // later inside its machine cycle than a write commits, so a read observes one more audio tick than the write
+    // that set the event up. The generators absorb it by loading their countdowns this much longer; the write-side
+    // predicates undo it by looking one tick ahead (PeekSquare, PeekWaveFetch).
+    private const int ReadStrobeSkew = 1;
+    // Audio ticks the sweep unit's arming delay carries on top of the value the 128 Hz clock and a channel-1
+    // trigger nominally load. The 128 Hz path is observed through a read and so carries the read-strobe skew; the
+    // trigger path is observed against a NR13/NR14 write that follows it, and the early steppings complete their
+    // trigger calculation one tick sooner than the later ones. Swept against the sweep families of the
+    // hardware-accurate conformance suites and the sample-accurate suite; any other pair loses at least one case.
+    private const int SweepClockArmSkew = ReadStrobeSkew;
+    private const int SweepTriggerArmSkewEarly = -1;
+    private const int SweepTriggerArmSkewLate = 0;
+    // Audio ticks the channel-1 restart hold carries past the value the trigger loads, over which the sweep unit
+    // refuses to refresh its shadow frequency.
+    private const int RestartHoldSkew = 1;
+    // Audio ticks the wave channel's sample fetcher waits past a trigger, on top of the freshly loaded period.
+    private const int WaveTriggerFetchDelay = (3 + ReadStrobeSkew);
     // NR10 sweep, NR11 duty/length, NR12 envelope, NR13 frequency low, NR14 trigger/control.
     private const int Nr10 = 0x00;
     private const int Nr11 = 0x01;
@@ -96,57 +111,98 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     // The wave channel's output right-shift selected by NR32 bits 5-6: 0 mutes (shift 4 zeroes a 4-bit nibble), then
     // 100%/50%/25% volume.
     private static readonly int[] WaveVolumeShift = [4, 0, 1, 2];
-    private readonly bool[] m_channelEnabled = new bool[ChannelCount];
-    // The envelope volume (0-15) and its reload countdown, per channel (the two squares and noise; the wave channel has
-    // no envelope). The volume scales the channel's gated waveform into its digital output.
-    private readonly int[] m_envelopeTimer = new int[ChannelCount];
-    private readonly int[] m_envelopeVolume = new int[ChannelCount];
-
-    // Whether the machine is Color hardware (the machine model, not the cartridge's compatibility mode): Color silicon
-    // buffers the wave-RAM port, so CPU access while the channel plays always succeeds; monochrome access must hit the
-    // window right after a fetch.
-    // Mutable so a live device swap re-gates the warm-path color/mono APU rules (wave-RAM access window, powered-off
-    // length writes, power-off length clearing, retrigger corruption). The boot-beep frame-sequencer phase and wave-RAM
-    // power-on pattern stay construction-only.
-    private bool m_isColor;
+    // The reload phase a NR43 write picks up from the 1 MiHz alignment, indexed by the alignment's low two bits.
+    private static readonly int[] NoiseReloadPhase = [2, 1, 0, 3];
+    private static readonly int[] EarlyNoiseReloadPhase = [2, 1, 4, 3];
 
     private readonly IKey1 m_key1;
-
-    private readonly int[] m_lengthCounter = new int[ChannelCount];
-    private readonly bool[] m_lengthEnabled = new bool[ChannelCount];
-    private readonly byte[] m_registers = new byte[RegisterCount];
-    // The square channels' duty-cycle position (0-7) and frequency-timer countdown, indexed 0 = channel 1, 1 = channel 2.
-    private readonly int[] m_squarePosition = new int[2];
-    private readonly int[] m_squareTimer = new int[2];
-
     private readonly ITimer m_timer;
-
+    private readonly byte[] m_registers = new byte[RegisterCount];
     private readonly byte[] m_waveRam = new byte[WaveRamSize];
 
-    private int m_frameSequencerStep;
+    // Whether each channel is sounding, and the four-bit digital level it last published. The level is a latch: a
+    // channel whose DAC is off keeps the level it had, which is what makes a DAC cut a flat step rather than a click.
+    private readonly bool[] m_channelActive = new bool[ChannelCount];
+    private readonly int[] m_sample = new int[ChannelCount];
+    private readonly int[] m_pulseLength = new int[ChannelCount];
+    private readonly bool[] m_lengthEnabled = new bool[ChannelCount];
+
+    // The envelope unit for the two square channels and the noise channel (the wave slot is unused). The volume moves
+    // only while the envelope's own clock line is high: the DIV-APU falling edge counts the reload down, the rising
+    // edge raises the line when the count lands, and the next falling edge steps the volume and drops it again. The
+    // lock latches when the line rises with the volume already at the rail it would move toward, which is what stops a
+    // rail-parked envelope from wrapping and what a NRx2 write can clear.
+    private readonly int[] m_envelopeVolume = new int[ChannelCount];
+    private readonly int[] m_envelopeCountdown = new int[ChannelCount];
+    private readonly bool[] m_envelopeClock = new bool[ChannelCount];
+    private readonly bool[] m_envelopeLocked = new bool[ChannelCount];
+    private readonly bool[] m_envelopeShouldLock = new bool[ChannelCount];
+
+    // The square channels' generator state. The sample length is the live eleven-bit frequency, which the sweep unit
+    // rewrites without touching NR13/NR14; the countdown runs in 2 MiHz audio ticks and reloads to twice the
+    // complement, so one duty step spans four dots per unit of (2048 - frequency).
+    private readonly int[] m_squareSampleLength = new int[2];
+    private readonly int[] m_squareSampleCountdown = new int[2];
+    private readonly int[] m_squareSampleIndex = new int[2];
+    private readonly bool[] m_squareSampleSuppressed = new bool[2];
+    private readonly int[] m_squareDelay = new int[2];
+    private readonly bool[] m_squareDidTick = new bool[2];
+    private readonly bool[] m_squareJustReloaded = new bool[2];
+
+    // Cached revision capabilities. Mutable so a live device swap re-gates them.
+    private bool m_hasEarlyAudioStepping;
+    private bool m_hasLateColorAudioQuirks;
+    private bool m_hasPerChannelDacs;
+    private bool m_hasShortSweepRestartHold;
+    private bool m_isColor;
+
+    private int m_channel1CompletedAddend;
+    private int m_channel1RestartHold;
+    private byte m_divDivider;
+    private bool m_generatorHalfStep;
     private bool m_lastDivApuBit;
+    // The 1 MiHz alignment phase inside the 2 MiHz audio clock: the sweep unit and the trigger delays are quoted
+    // against it, so a write lands differently depending on which half of the slower clock it arrives in.
+    private int m_lfDiv;
+    private int m_noiseAlignment;
+    private bool m_noiseBackgroundCounterActive;
+    // The noise channel's fourteen-bit free-running counter and the divider that clocks it. The LFSR steps on the
+    // rising edge of the counter bit NR43's clock shift selects, so two (divisor, shift) pairs naming the same rate
+    // step the LFSR at the same instants, and a shift past the counter's width never steps it at all.
+    private int m_noiseCounter;
+    private bool m_noiseCounterActive;
+    private int m_noiseCounterCountdown;
+    private bool m_noiseCountdownReloaded;
+    private bool m_noiseCurrentLfsrSample;
+    private bool m_noiseDidStepCounter;
     private int m_noiseLfsr;
-    private int m_noiseTimer;
+    private bool m_noiseNarrow;
+    private bool m_noiseStartedWithDacDisabled;
+    private int m_pendingEnvelopeDelay;
     private bool m_powered;
-    private bool m_sweepEnabled;
-    private bool m_sweepNegateUsed;
-    private int m_sweepShadow;
-    private int m_sweepTimer;
-    // The wave channel's fetch-follower state: the dots remaining in the monochrome access window that a fetch opens,
-    // and the last-fetched byte itself — the latch the channel's digital output is read from (NOT a live wave-RAM read;
-    // a CPU write while playing lands in RAM but is not heard until the next fetch). CPU access while playing lands on
-    // the byte at the LIVE sample position (a trigger resets it to zero, so pre-first-fetch access hits byte 0 —
-    // confirmed by cgb_sound 09, whose pre-fetch reads return 0x00, never the stale fetch's byte).
-    private int m_waveFetchHold;
-    private int m_wavePosition;
-    private byte m_waveSampleLatch;
-    private int m_waveTimer;
+    private int m_shadowSweepSampleLength;
+    private int m_skipDivEvent;
+    private int m_sweepCalculateCountdown;
+    private int m_sweepCalculateReloadTimer;
+    private bool m_sweepInstantCalculationDone;
+    private int m_sweepLengthAddend;
+    private int m_squareSweepCountdown;
+    private bool m_unshiftedSweep;
+    private bool m_waveEnable;
+    private bool m_waveFormJustRead;
+    private bool m_wavePulsed;
+    private byte m_waveSampleByte;
+    private int m_waveSampleCountdown;
+    private int m_waveSampleIndex;
+    private int m_waveSampleLength;
+    private int m_waveShift;
 
     /// <summary>Creates the APU wired to the timer whose DIV counter clocks its frame sequencer and the speed unit that
     /// selects which DIV bit does so. Without a boot ROM it is seeded powered on as the post-boot machine leaves it: the
-    /// boot ROM's start-up beep leaves channel 1 still sounding (its envelope already decayed to zero) with the beep's
-    /// frequency in NR13/NR14, full master volume routed to both terminals, and — on Color — the alternating wave-RAM
-    /// pattern. With one it powers on silent (the wave-RAM pattern is the hardware's, so it stays).</summary>
+    /// boot ROM's start-up chime leaves channel 1 still sounding (its envelope already decayed to zero) with the chime's
+    /// frequency in NR13/NR14, full master volume routed to both terminals, and — on Color silicon that initializes it —
+    /// the alternating wave-RAM pattern. With one it powers on silent (the wave-RAM pattern is the hardware's, so it
+    /// stays).</summary>
     /// <param name="timer">The divider/timer block, read for the DIV-APU event.</param>
     /// <param name="key1">The Color speed-switch unit, read for the current speed.</param>
     /// <param name="configuration">The machine configuration, which selects the wave RAM's power-on pattern.</param>
@@ -156,9 +212,11 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
         ArgumentNullException.ThrowIfNull(argument: key1);
         ArgumentNullException.ThrowIfNull(argument: configuration);
 
-        m_isColor = configuration.Model.SupportsColor();
         m_key1 = key1;
         m_timer = timer;
+
+        ApplyModel(model: configuration.Model);
+        ResetUnit();
 
         // With a boot ROM the unit powers on silent and unpowered — the boot program writes NR52 and plays its own
         // beep. Without one, the beep's register handoff is seeded directly.
@@ -172,25 +230,28 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
             m_registers[Nr14] = 0x87; // trigger latched, frequency high bits 0b111
             m_registers[Nr50] = 0x77;
             m_registers[Nr51] = 0xF3;
+            m_squareSampleLength[0] = (m_registers[Nr13] | ((m_registers[Nr14] & 0x07) << 8));
 
-            m_channelEnabled[0] = true;
-            m_lengthCounter[0] = LengthMaxima[0];
-            m_envelopeTimer[0] = 1;
-            m_squarePosition[0] = 2;
-            m_squareTimer[0] = 2041;
-            // The boot ROM leaves the frame sequencer mid-cycle, not at step zero: one DIV-APU event has elapsed on Color
-            // (eighteen on monochrome, whose step counter is that modulo eight). The hardware-accurate sound tests align themselves
-            // to this phase through length-counter syncs, so the seed is load-bearing.
-            m_frameSequencerStep = (configuration.Model.SupportsColor()
-                ? 1
-                : 2);
+            // The companion console's boot ROM plays no chime, so it hands off powered with every channel silent
+            // (NR52 reads 0xF0 rather than 0xF1).
+            if (configuration.Model.LeavesBootChimeSounding()) {
+                m_channelActive[0] = true;
+                m_pulseLength[0] = LengthMaxima[0];
+                m_envelopeCountdown[0] = 1;
+                m_squareSampleIndex[0] = 2;
+                m_squareSampleCountdown[0] = 1020; // audio ticks, half the chime's remaining dots
+            }
+
+            // The boot ROM leaves the 512 Hz divider mid-cycle, not at zero: two DIV-APU events have elapsed on
+            // Color and three on monochrome.
+            m_divDivider = (configuration.Model.SupportsColor()
+                ? (byte)2
+                : (byte)3);
         }
 
         m_lastDivApuBit = DivApuBit();
 
-        // The alternating wave-RAM pattern is the Color hardware's power-on characteristic (the boot ROM never writes
-        // wave RAM), so it is seeded on both paths.
-        if (configuration.Model.SupportsColor()) {
+        if (configuration.Model.SeedsWaveRamOnBoot()) {
             for (var offset = 0; (offset < WaveRamSize); offset += 2) {
                 m_waveRam[(offset + 1)] = 0xFF;
             }
@@ -203,87 +264,88 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
 
     /// <inheritdoc/>
     public void Tick() {
-        // Stop mode freezes the unit along with the rest of the CPU-domain peripherals.
+        // Stop mode freezes the DIV counter, so the frame sequencer has no edge to follow.
         if (m_key1.IsStopped) {
             return;
         }
 
-        // The DIV-APU bit is followed every T-cycle even while powered off, so the frame sequencer's phase relative to
-        // DIV survives a power cycle; only the stepping (and thus length/sweep/envelope clocking) is gated on power.
+        // The deferred envelope step lands one machine cycle after the DIV-APU event that raised it.
+        if (
+            (m_pendingEnvelopeDelay > 0) &&
+            (--m_pendingEnvelopeDelay == 0)
+        ) {
+            StepPendingEnvelopes();
+        }
+
+        // The DIV-APU bit is followed every T-cycle even while powered off, so the divider's phase relative to DIV
+        // survives a power cycle; only the stepping is gated on power.
         var bit = DivApuBit();
 
         if (
-            m_powered &&
             m_lastDivApuBit &&
             !bit
         ) {
-            StepFrameSequencer();
+            DivEvent();
+        } else if (
+            !m_lastDivApuBit &&
+            bit
+        ) {
+            DivSecondaryEvent();
         }
 
         m_lastDivApuBit = bit;
     }
-    /// <summary>Advances the channel generators by one dot of the fixed 4 MiHz LCD/audio clock — the frequency timers
-    /// do not follow the CPU clock, so Color double speed leaves the audio pitch unchanged. Called once per whole dot
-    /// by <see cref="ApuGeneratorClock"/>, the divider that derives the generator edge from the master clock's
-    /// sub-dot phase.</summary>
+    /// <summary>Advances the channel generators. <see cref="ApuGeneratorClock"/> calls this once per whole dot of the
+    /// fixed 4 MiHz clock; the generators themselves run at half that, so every second call steps the unit and the one
+    /// between it only carries the phase. The frequency timers therefore do not follow the CPU clock, and Color double
+    /// speed leaves the audio pitch unchanged.</summary>
     public void TickGenerators() {
-        // Stop mode halts the oscillator for the whole SoC, generators included.
-        if (m_key1.IsStopped) {
+        // Colour silicon keeps the audio oscillator running through stop mode; monochrome halts it with the rest of
+        // the SoC.
+        if (
+            m_key1.IsStopped &&
+            !m_isColor
+        ) {
             return;
         }
 
-        // The monochrome CPU access window a wave fetch opens drains one dot at a time.
-        if (m_waveFetchHold > 0) {
-            --m_waveFetchHold;
+        m_generatorHalfStep = !m_generatorHalfStep;
+
+        if (m_generatorHalfStep) {
+            return;
         }
 
-        // The wave channel's frequency timer runs every dot while the channel plays, stepping through its 32 samples;
-        // each expiry advances the position and FETCHES the addressed byte into the sample latch the output plays from.
-        if (
-            m_channelEnabled[2] &&
-            (--m_waveTimer <= 0)
-        ) {
-            m_waveTimer = WavePeriod();
-            m_wavePosition = (m_wavePosition + 1) & 0x1F;
-            m_waveSampleLatch = m_waveRam[(m_wavePosition >> 1)];
-            m_waveFetchHold = WaveFetchWindowDots;
-        }
-
-        // The two square channels each advance their eight-step duty position when their frequency timer expires, and the
-        // noise channel steps its LFSR the same way — all per dot while the channel plays. NR43 shift codes 14 and 15
-        // gate the LFSR clock line entirely, freezing the countdown until a usable code is written back.
-        AdvanceSquareTimer(channel: 0);
-        AdvanceSquareTimer(channel: 1);
-
-        if (
-            m_channelEnabled[3] &&
-            ((m_registers[Nr43] >> 4) < NoiseShiftGateCode) &&
-            (--m_noiseTimer <= 0)
-        ) {
-            m_noiseTimer = NoisePeriod();
-            StepNoiseLfsr();
-        }
+        RunAudioTick();
     }
     /// <inheritdoc/>
     public byte ReadRegister(ushort address) {
         if (address >= MemoryMap.WaveRamStart) {
-            if (!m_channelEnabled[2]) {
-                return m_waveRam[(address - MemoryMap.WaveRamStart)];
+            // While the channel plays, CPU access follows the channel, not the address: it lands on the byte at the
+            // live sample position. Colour silicon buffers the port so the access always succeeds; monochrome access
+            // succeeds only on the tick a fetch lands, and reads outside it float to 0xFF.
+            if (m_channelActive[2]) {
+                if (
+                    !m_isColor &&
+                    !m_waveFormJustRead
+                ) {
+                    return 0xFF;
+                }
+
+                if (!m_hasPerChannelDacs) {
+                    return 0xFF;
+                }
+
+                return m_waveRam[(m_waveSampleIndex >> 1)];
             }
 
-            // While the channel plays, CPU access follows the channel, not the address: it lands on the byte at the
-            // live sample position. Color silicon buffers the port so the access always succeeds; monochrome access
-            // succeeds only within the short window a fetch opens, and reads outside it float to 0xFF.
-            return ((m_isColor || (m_waveFetchHold > 0))
-                ? m_waveRam[(m_wavePosition >> 1)]
-                : (byte)0xFF);
+            return m_waveRam[(address - MemoryMap.WaveRamStart)];
         }
 
         if (address == MemoryMap.AudioMasterControl) {
             var status = 0;
 
             for (var channel = 0; (channel < ChannelCount); ++channel) {
-                if (m_channelEnabled[channel]) {
+                if (m_channelActive[channel]) {
                     status |= (1 << channel);
                 }
             }
@@ -303,22 +365,11 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     }
     /// <inheritdoc/>
     public void WriteRegister(ushort address, byte value) {
-        // Wave RAM is reachable regardless of power; while the wave channel plays, access follows the channel (see
-        // ReadRegister): a Color write lands on the byte at the live sample position — updating RAM but not the sample
-        // latch, so it is not heard until that byte is fetched again — and a monochrome write outside the post-fetch
-        // window is dropped.
         if (address >= MemoryMap.WaveRamStart) {
-            if (!m_channelEnabled[2]) {
-                m_waveRam[(address - MemoryMap.WaveRamStart)] = value;
-            } else if (m_isColor) {
-                m_waveRam[(m_wavePosition >> 1)] = value;
-            } else {
-                var (writeWindowOpen, writeIndex) = PeekWaveFetch(dots: WaveWriteFetchLeadDots);
-
-                if (writeWindowOpen) {
-                    m_waveRam[writeIndex] = value;
-                }
-            }
+            WriteWaveRam(
+                address: address,
+                value: value
+            );
 
             return;
         }
@@ -336,18 +387,15 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
 
         var offset = (address - MemoryMap.AudioStart);
 
-        // While powered off, Color ignores every write; monochrome hardware still lets the length-load registers (NRx1)
-        // write their length counters — only the length, not the duty or anything else. This is what the hardware-accurate
-        // "length counter during power" case checks.
+        // While powered off, Color ignores every write; monochrome hardware still lets the length-load registers
+        // (NRx1) through, and even then only their length field reaches the counter.
         if (!m_powered) {
-            if (!m_isColor) {
-                WriteLengthCounterWhilePoweredOff(
-                    offset: offset,
-                    value: value
-                );
+            if (
+                m_isColor ||
+                (offset is not (Nr11 or Nr21 or Nr31 or Nr41))
+            ) {
+                return;
             }
-
-            return;
         }
 
         WriteChannelRegister(
@@ -358,89 +406,313 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     /// <inheritdoc/>
     public byte ReadPcm(ushort address) {
         // PCM12 packs channel 1 in the low nibble and channel 2 in the high; PCM34 packs channel 3 (wave) low and
-        // channel 4 (noise) high. Each nibble is the channel's live digital output, or zero while it is not sounding.
+        // channel 4 (noise) high. Each nibble is the channel's latched digital level, or zero while it is silent.
         if (address == MemoryMap.PcmAmplitude12) {
-            return ((byte)((m_channelEnabled[0]
-                ? SquareOutput(channel: 0)
-                : 0) | ((m_channelEnabled[1]
-                ? SquareOutput(channel: 1)
-                : 0) << 4)));
+            return ((byte)(PackedSample(channel: 0) | (PackedSample(channel: 1) << 4)));
         }
 
-        return ((byte)((m_channelEnabled[2]
-            ? WaveOutput()
-            : 0) | ((m_channelEnabled[3]
-            ? NoiseOutput()
-            : 0) << 4)));
+        return ((byte)(PackedSample(channel: 2) | (PackedSample(channel: 3) << 4)));
     }
     /// <inheritdoc/>
-    public void ApplyModel(ConsoleModel model) =>
+    public void ApplyModel(ConsoleModel model) {
+        m_hasEarlyAudioStepping = model.HasEarlyAudioStepping();
+        m_hasLateColorAudioQuirks = model.HasLateColorAudioQuirks();
+        m_hasPerChannelDacs = model.HasPerChannelDacs();
+        m_hasShortSweepRestartHold = model.HasShortSweepRestartHold();
         m_isColor = model.SupportsColor();
+    }
     /// <inheritdoc/>
     public void SaveState(StateWriter writer) {
         writer.WriteBoolean(value: m_powered);
-        writer.WriteInt32(value: m_frameSequencerStep);
+        writer.WriteByte(value: m_divDivider);
         writer.WriteBoolean(value: m_lastDivApuBit);
-        writer.WriteBoolean(value: m_sweepEnabled);
-        writer.WriteBoolean(value: m_sweepNegateUsed);
-        writer.WriteInt32(value: m_sweepShadow);
-        writer.WriteInt32(value: m_sweepTimer);
-        writer.WriteInt32(value: m_waveFetchHold);
-        writer.WriteInt32(value: m_wavePosition);
-        writer.WriteByte(value: m_waveSampleLatch);
-        writer.WriteInt32(value: m_waveTimer);
+        writer.WriteBoolean(value: m_generatorHalfStep);
+        writer.WriteInt32(value: m_lfDiv);
+        writer.WriteInt32(value: m_skipDivEvent);
+        writer.WriteInt32(value: m_pendingEnvelopeDelay);
+        writer.WriteInt32(value: m_channel1CompletedAddend);
+        writer.WriteInt32(value: m_channel1RestartHold);
+        writer.WriteInt32(value: m_shadowSweepSampleLength);
+        writer.WriteInt32(value: m_squareSweepCountdown);
+        writer.WriteInt32(value: m_sweepCalculateCountdown);
+        writer.WriteInt32(value: m_sweepCalculateReloadTimer);
+        writer.WriteInt32(value: m_sweepLengthAddend);
+        writer.WriteBoolean(value: m_sweepInstantCalculationDone);
+        writer.WriteBoolean(value: m_unshiftedSweep);
+        writer.WriteBoolean(value: m_waveEnable);
+        writer.WriteBoolean(value: m_waveFormJustRead);
+        writer.WriteBoolean(value: m_wavePulsed);
+        writer.WriteByte(value: m_waveSampleByte);
+        writer.WriteInt32(value: m_waveSampleCountdown);
+        writer.WriteInt32(value: m_waveSampleIndex);
+        writer.WriteInt32(value: m_waveSampleLength);
+        writer.WriteInt32(value: m_waveShift);
+        writer.WriteInt32(value: m_noiseAlignment);
+        writer.WriteBoolean(value: m_noiseBackgroundCounterActive);
+        writer.WriteInt32(value: m_noiseCounter);
+        writer.WriteBoolean(value: m_noiseCounterActive);
+        writer.WriteInt32(value: m_noiseCounterCountdown);
+        writer.WriteBoolean(value: m_noiseCountdownReloaded);
+        writer.WriteBoolean(value: m_noiseCurrentLfsrSample);
+        writer.WriteBoolean(value: m_noiseDidStepCounter);
         writer.WriteInt32(value: m_noiseLfsr);
-        writer.WriteInt32(value: m_noiseTimer);
+        writer.WriteBoolean(value: m_noiseNarrow);
+        writer.WriteBoolean(value: m_noiseStartedWithDacDisabled);
         writer.WriteBytes(value: m_registers);
         writer.WriteBytes(value: m_waveRam);
 
         for (var channel = 0; (channel < ChannelCount); ++channel) {
-            writer.WriteBoolean(value: m_channelEnabled[channel]);
+            writer.WriteBoolean(value: m_channelActive[channel]);
             writer.WriteBoolean(value: m_lengthEnabled[channel]);
-            writer.WriteInt32(value: m_lengthCounter[channel]);
+            writer.WriteInt32(value: m_pulseLength[channel]);
+            writer.WriteInt32(value: m_sample[channel]);
             writer.WriteInt32(value: m_envelopeVolume[channel]);
-            writer.WriteInt32(value: m_envelopeTimer[channel]);
+            writer.WriteInt32(value: m_envelopeCountdown[channel]);
+            writer.WriteBoolean(value: m_envelopeClock[channel]);
+            writer.WriteBoolean(value: m_envelopeLocked[channel]);
+            writer.WriteBoolean(value: m_envelopeShouldLock[channel]);
         }
 
         for (var channel = 0; (channel < 2); ++channel) {
-            writer.WriteInt32(value: m_squarePosition[channel]);
-            writer.WriteInt32(value: m_squareTimer[channel]);
+            writer.WriteInt32(value: m_squareSampleLength[channel]);
+            writer.WriteInt32(value: m_squareSampleCountdown[channel]);
+            writer.WriteInt32(value: m_squareSampleIndex[channel]);
+            writer.WriteBoolean(value: m_squareSampleSuppressed[channel]);
+            writer.WriteInt32(value: m_squareDelay[channel]);
+            writer.WriteBoolean(value: m_squareDidTick[channel]);
+            writer.WriteBoolean(value: m_squareJustReloaded[channel]);
         }
     }
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
         m_powered = reader.ReadBoolean();
-        m_frameSequencerStep = reader.ReadInt32();
+        m_divDivider = reader.ReadByte();
         m_lastDivApuBit = reader.ReadBoolean();
-        m_sweepEnabled = reader.ReadBoolean();
-        m_sweepNegateUsed = reader.ReadBoolean();
-        m_sweepShadow = reader.ReadInt32();
-        m_sweepTimer = reader.ReadInt32();
-        m_waveFetchHold = reader.ReadInt32();
-        m_wavePosition = reader.ReadInt32();
-        m_waveSampleLatch = reader.ReadByte();
-        m_waveTimer = reader.ReadInt32();
+        m_generatorHalfStep = reader.ReadBoolean();
+        m_lfDiv = reader.ReadInt32();
+        m_skipDivEvent = reader.ReadInt32();
+        m_pendingEnvelopeDelay = reader.ReadInt32();
+        m_channel1CompletedAddend = reader.ReadInt32();
+        m_channel1RestartHold = reader.ReadInt32();
+        m_shadowSweepSampleLength = reader.ReadInt32();
+        m_squareSweepCountdown = reader.ReadInt32();
+        m_sweepCalculateCountdown = reader.ReadInt32();
+        m_sweepCalculateReloadTimer = reader.ReadInt32();
+        m_sweepLengthAddend = reader.ReadInt32();
+        m_sweepInstantCalculationDone = reader.ReadBoolean();
+        m_unshiftedSweep = reader.ReadBoolean();
+        m_waveEnable = reader.ReadBoolean();
+        m_waveFormJustRead = reader.ReadBoolean();
+        m_wavePulsed = reader.ReadBoolean();
+        m_waveSampleByte = reader.ReadByte();
+        m_waveSampleCountdown = reader.ReadInt32();
+        m_waveSampleIndex = reader.ReadInt32();
+        m_waveSampleLength = reader.ReadInt32();
+        m_waveShift = reader.ReadInt32();
+        m_noiseAlignment = reader.ReadInt32();
+        m_noiseBackgroundCounterActive = reader.ReadBoolean();
+        m_noiseCounter = reader.ReadInt32();
+        m_noiseCounterActive = reader.ReadBoolean();
+        m_noiseCounterCountdown = reader.ReadInt32();
+        m_noiseCountdownReloaded = reader.ReadBoolean();
+        m_noiseCurrentLfsrSample = reader.ReadBoolean();
+        m_noiseDidStepCounter = reader.ReadBoolean();
         m_noiseLfsr = reader.ReadInt32();
-        m_noiseTimer = reader.ReadInt32();
+        m_noiseNarrow = reader.ReadBoolean();
+        m_noiseStartedWithDacDisabled = reader.ReadBoolean();
         reader.ReadBytes(destination: m_registers);
         reader.ReadBytes(destination: m_waveRam);
 
         for (var channel = 0; (channel < ChannelCount); ++channel) {
-            m_channelEnabled[channel] = reader.ReadBoolean();
+            m_channelActive[channel] = reader.ReadBoolean();
             m_lengthEnabled[channel] = reader.ReadBoolean();
-            m_lengthCounter[channel] = reader.ReadInt32();
+            m_pulseLength[channel] = reader.ReadInt32();
+            m_sample[channel] = reader.ReadInt32();
             m_envelopeVolume[channel] = reader.ReadInt32();
-            m_envelopeTimer[channel] = reader.ReadInt32();
+            m_envelopeCountdown[channel] = reader.ReadInt32();
+            m_envelopeClock[channel] = reader.ReadBoolean();
+            m_envelopeLocked[channel] = reader.ReadBoolean();
+            m_envelopeShouldLock[channel] = reader.ReadBoolean();
         }
 
         for (var channel = 0; (channel < 2); ++channel) {
-            m_squarePosition[channel] = reader.ReadInt32();
-            m_squareTimer[channel] = reader.ReadInt32();
+            m_squareSampleLength[channel] = reader.ReadInt32();
+            m_squareSampleCountdown[channel] = reader.ReadInt32();
+            m_squareSampleIndex[channel] = reader.ReadInt32();
+            m_squareSampleSuppressed[channel] = reader.ReadBoolean();
+            m_squareDelay[channel] = reader.ReadInt32();
+            m_squareDidTick[channel] = reader.ReadBoolean();
+            m_squareJustReloaded[channel] = reader.ReadBoolean();
         }
     }
 
-    // The single DIV-counter bit whose falling edge advances the frame sequencer, higher under double speed so the event
-    // stays at 512 Hz.
+    // One 2 MiHz audio tick: the sweep unit's 1 MiHz half-rate, the two square duty counters, the wave fetcher, and
+    // the noise counter, in that order.
+    private void RunAudioTick() {
+        m_lfDiv ^= 1;
+        m_noiseAlignment = ((m_noiseAlignment + 1) & 0xFF);
+
+        RunSweepTick();
+        RunSquareTick(channel: 0);
+        RunSquareTick(channel: 1);
+        RunWaveTick();
+        RunNoiseTick();
+    }
+    // The sweep unit's own clock is half the audio clock, so it advances on the ticks that land on the slower clock's
+    // edge. A reload timer covers the gap between arming a calculation and the calculation running.
+    private void RunSweepTick() {
+        // Nothing is armed and nothing is holding: the whole unit is idle, which is the common case.
+        if (
+            (m_channel1RestartHold == 0) &&
+            (m_sweepCalculateCountdown == 0) &&
+            (m_sweepCalculateReloadTimer == 0) &&
+            !m_sweepInstantCalculationDone
+        ) {
+            return;
+        }
+
+        var sweepTicks = ((m_lfDiv == 0)
+            ? 1
+            : 0);
+
+        if (m_sweepCalculateReloadTimer > sweepTicks) {
+            m_sweepCalculateReloadTimer -= sweepTicks;
+            sweepTicks = 0;
+        } else {
+            if (
+                (m_sweepCalculateReloadTimer != 0) &&
+                (m_sweepCalculateCountdown == 0) &&
+                m_sweepInstantCalculationDone
+            ) {
+                SweepCalculationDone();
+            }
+
+            m_sweepInstantCalculationDone = false;
+            sweepTicks -= m_sweepCalculateReloadTimer;
+            m_sweepCalculateReloadTimer = 0;
+        }
+
+        // A zero shift with the unit not explicitly unshifted parks the calculation instead of advancing it.
+        if (
+            (m_sweepCalculateCountdown != 0) &&
+            (((m_registers[Nr10] & SweepShiftMask) != 0) || m_unshiftedSweep)
+        ) {
+            if (m_sweepCalculateCountdown > sweepTicks) {
+                m_sweepCalculateCountdown -= sweepTicks;
+            } else {
+                m_sweepCalculateCountdown = 0;
+
+                SweepCalculationDone();
+            }
+        }
+
+        if (m_channel1RestartHold > 0) {
+            --m_channel1RestartHold;
+        }
+    }
+    // One audio tick of a square channel's duty counter: count down and, on expiry, reload from the live frequency and
+    // step the duty position. The position wraps but is never reset here, so it free-runs across triggers.
+    private void RunSquareTick(int channel) {
+        if (!m_channelActive[channel]) {
+            return;
+        }
+
+        if (m_squareDelay[channel] > 0) {
+            --m_squareDelay[channel];
+        }
+
+        if (m_squareSampleCountdown[channel] > 0) {
+            --m_squareSampleCountdown[channel];
+            m_squareJustReloaded[channel] = false;
+
+            return;
+        }
+
+        m_squareSampleCountdown[channel] = (((m_squareSampleLength[channel] ^ MaxSampleLength) * 2) + 1);
+        m_squareSampleIndex[channel] = ((m_squareSampleIndex[channel] + 1) & 0x07);
+        m_squareSampleSuppressed[channel] = false;
+        m_squareDidTick[channel] = true;
+        m_squareJustReloaded[channel] = true;
+
+        UpdateSquareSample(channel: channel);
+    }
+    // One audio tick of the wave channel's fetcher: on expiry the position advances and the addressed byte is latched
+    // into the sample the output plays from.
+    private void RunWaveTick() {
+        m_waveFormJustRead = false;
+
+        if (!m_channelActive[2]) {
+            return;
+        }
+
+        if (m_waveSampleCountdown > 0) {
+            --m_waveSampleCountdown;
+
+            return;
+        }
+
+        m_waveSampleCountdown = (m_waveSampleLength ^ MaxSampleLength);
+        m_waveSampleIndex = ((m_waveSampleIndex + 1) & 0x1F);
+        m_waveSampleByte = m_waveRam[(m_waveSampleIndex >> 1)];
+        m_waveFormJustRead = true;
+
+        UpdateWaveSample();
+    }
+    // One audio tick of the noise channel's counter. The counter runs whenever the channel is armed OR has been armed
+    // since the unit powered on — the background count is what makes a restart land on a deterministic phase — and the
+    // LFSR steps on the rising edge of the selected counter bit.
+    private void RunNoiseTick() {
+        if (
+            !m_noiseCounterActive &&
+            !m_noiseBackgroundCounterActive
+        ) {
+            return;
+        }
+
+        if (m_noiseCounterCountdown > 1) {
+            --m_noiseCounterCountdown;
+            m_noiseCountdownReloaded = false;
+
+            return;
+        }
+
+        var divisor = ((m_registers[Nr43] & 0x07) << 2);
+
+        if (divisor == 0) {
+            divisor = 2;
+        }
+
+        // A countdown parked at zero reloads and then spends this tick counting the reload down.
+        if (m_noiseCounterCountdown == 0) {
+            m_noiseCounterCountdown = (divisor - 1);
+            m_noiseCountdownReloaded = false;
+
+            return;
+        }
+
+        m_noiseCounterCountdown = divisor;
+        m_noiseCountdownReloaded = true;
+
+        StepNoiseCounter();
+    }
+    // Advance the noise counter one step and, when the selected bit rises, step the LFSR.
+    private void StepNoiseCounter() {
+        var mask = (1 << (m_registers[Nr43] >> 4));
+        var oldBit = ((m_noiseCounter & mask) != 0);
+
+        m_noiseCounter = ((m_noiseCounter + 1) & 0x3FFF);
+        m_noiseDidStepCounter = true;
+
+        if (
+            ((m_noiseCounter & mask) != 0) &&
+            !oldBit &&
+            m_channelActive[3]
+        ) {
+            StepNoiseLfsr();
+        }
+    }
+    // The single DIV-counter bit whose edges drive the frame sequencer, higher under double speed so the event stays
+    // at 512 Hz.
     private bool DivApuBit() {
         var bit = (m_key1.IsDoubleSpeed
             ? DoubleSpeedDivApuBit
@@ -448,364 +720,1174 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
 
         return ((m_timer.DivCounter & (1 << bit)) != 0);
     }
-    // Advance the 512 Hz eight-step frame sequencer: the even steps clock the length counters (sweep on 2/6 and the
-    // envelopes on 7 join once those units land). Whether the *next* step clocks length drives the write-time quirks.
-    private void StepFrameSequencer() {
-        m_frameSequencerStep = (m_frameSequencerStep + 1) & 7;
+    // The DIV-APU event: advance the 512 Hz divider, count the envelope reloads down, step any envelope whose clock
+    // line is high, clock the length counters at 256 Hz, and clock the sweep unit at 128 Hz.
+    private void DivEvent() {
+        if (!m_powered) {
+            return;
+        }
 
-        if ((m_frameSequencerStep & 1) == 0) {
+        if (m_skipDivEvent == SkipDivEventPending) {
+            m_skipDivEvent = SkipDivEventSkipped;
+
+            return;
+        }
+
+        if (m_skipDivEvent == SkipDivEventSkipped) {
+            m_skipDivEvent = SkipDivEventInactive;
+        } else {
+            ++m_divDivider;
+        }
+
+        if ((m_divDivider & 7) == 7) {
+            CountEnvelopeReloadDown(channel: 0);
+            CountEnvelopeReloadDown(channel: 1);
+            CountEnvelopeReloadDown(channel: 3);
+        }
+
+        // The later colour steppings defer the envelope step by one machine cycle under double speed.
+        if (
+            m_key1.IsDoubleSpeed &&
+            m_hasLateColorAudioQuirks
+        ) {
+            m_pendingEnvelopeDelay = DeferredEnvelopeDelay;
+        } else {
+            StepPendingEnvelopes();
+        }
+
+        if ((m_divDivider & 1) == 1) {
             ClockLengthCounters();
         }
 
-        if (
-            (m_frameSequencerStep == 2) ||
-            (m_frameSequencerStep == 6)
-        ) {
-            ClockSweep();
-        }
+        if ((m_divDivider & 3) == 3) {
+            m_squareSweepCountdown = ((m_squareSweepCountdown + 1) & 7);
 
-        if (m_frameSequencerStep == 7) {
-            ClockEnvelopes();
+            TriggerSweepCalculation();
         }
     }
-    // One length-counter clock: each channel whose length is enabled and non-zero counts down, disabling the channel as
-    // it reaches zero.
+    // The rising edge of the same DIV-APU bit, half a period after the event: an envelope whose reload has landed
+    // raises its clock line here, and the next event is what actually moves the volume.
+    private void DivSecondaryEvent() {
+        if (!m_powered) {
+            return;
+        }
+
+        ArmEnvelopeClock(
+            channel: 0,
+            register: Nr12
+        );
+        ArmEnvelopeClock(
+            channel: 1,
+            register: Nr22
+        );
+        ArmEnvelopeClock(
+            channel: 3,
+            register: Nr42
+        );
+    }
+    private void ArmEnvelopeClock(int channel, int register) {
+        if (
+            !m_channelActive[channel] ||
+            (m_envelopeCountdown[channel] != 0)
+        ) {
+            return;
+        }
+
+        var control = m_registers[register];
+
+        m_envelopeCountdown[channel] = (control & 0x07);
+
+        SetEnvelopeClock(
+            channel: channel,
+            direction: ((control & 0x08) != 0),
+            value: (m_envelopeCountdown[channel] != 0)
+        );
+    }
+    private void CountEnvelopeReloadDown(int channel) {
+        if (!m_envelopeClock[channel]) {
+            m_envelopeCountdown[channel] = ((m_envelopeCountdown[channel] - 1) & 0x07);
+        }
+    }
+    private void StepPendingEnvelopes() {
+        m_pendingEnvelopeDelay = 0;
+
+        if (!m_powered) {
+            return;
+        }
+
+        StepEnvelope(
+            channel: 0,
+            register: Nr12
+        );
+        StepEnvelope(
+            channel: 1,
+            register: Nr22
+        );
+        StepEnvelope(
+            channel: 3,
+            register: Nr42
+        );
+    }
+    // One envelope step: drop the clock line, then — unless the lock latched as it rose — move the volume one unit in
+    // the NRx2 direction. A zero pace leaves the volume alone.
+    private void StepEnvelope(int channel, int register) {
+        if (!m_envelopeClock[channel]) {
+            return;
+        }
+
+        SetEnvelopeClock(
+            channel: channel,
+            direction: false,
+            value: false
+        );
+
+        if (m_envelopeLocked[channel]) {
+            return;
+        }
+
+        var control = m_registers[register];
+
+        if ((control & 0x07) == 0) {
+            return;
+        }
+
+        m_envelopeVolume[channel] += (((control & 0x08) != 0)
+            ? 1
+            : -1);
+
+        if (!m_channelActive[channel]) {
+            return;
+        }
+
+        if (channel == 3) {
+            UpdateNoiseSample();
+        } else {
+            UpdateSquareSample(channel: channel);
+        }
+    }
+    // Raise or drop an envelope's clock line. Raising it latches whether the volume is already parked at the rail the
+    // envelope would move toward; dropping it commits that latch as the lock.
+    private void SetEnvelopeClock(int channel, bool value, bool direction) {
+        if (m_envelopeClock[channel] == value) {
+            return;
+        }
+
+        if (value) {
+            m_envelopeClock[channel] = true;
+            m_envelopeShouldLock[channel] = (((m_envelopeVolume[channel] == 0x0F) && direction) || ((m_envelopeVolume[channel] == 0x00) && !direction));
+
+            return;
+        }
+
+        m_envelopeClock[channel] = false;
+        m_envelopeLocked[channel] |= m_envelopeShouldLock[channel];
+    }
+    // One length-counter clock: each channel whose length is enabled and non-zero counts down, silencing the channel
+    // as it reaches zero.
     private void ClockLengthCounters() {
         for (var channel = 0; (channel < ChannelCount); ++channel) {
             if (
-                m_lengthEnabled[channel] &&
-                (m_lengthCounter[channel] > 0)
+                !m_lengthEnabled[channel] ||
+                (m_pulseLength[channel] == 0)
             ) {
-                if (--m_lengthCounter[channel] == 0) {
-                    m_channelEnabled[channel] = false;
-                }
+                continue;
+            }
+
+            if (--m_pulseLength[channel] == 0) {
+                m_channelActive[channel] = false;
+
+                UpdateSample(
+                    channel: channel,
+                    value: 0
+                );
             }
         }
     }
-    // The frame sequencer clocks length on even steps, so the *next* step will clock length only when the current step is
-    // odd. The length-enable and trigger quirks hinge on this being false.
-    private bool NextStepClocksLength() =>
-        ((m_frameSequencerStep & 1) == 1);
+    // The master power switch. Switching the unit on resets every latch; switching it off additionally clears the
+    // register file. Monochrome hardware carries the length counters across the switch-on, which is what makes a
+    // length written while the unit is off take effect once it comes back; wave RAM is untouched either way.
     private void WriteMasterControl(byte value) {
+        var lengths = (stackalloc int[ChannelCount]);
         var powerOn = ((value & MasterPower) != 0);
 
+        for (var channel = 0; (channel < ChannelCount); ++channel) {
+            lengths[channel] = m_pulseLength[channel];
+        }
+
         if (
-            m_powered &&
-            !powerOn
-        ) {
-            PowerOff();
-        } else if (
             !m_powered &&
             powerOn
         ) {
-            // The step counter restarts so the first DIV-APU event advances it to step 0 (a length clock); the event's
-            // timing itself is preserved by the continuous DIV tracking in Tick.
+            ResetUnit();
+
             m_powered = true;
-            m_frameSequencerStep = 7;
+
+            // The unit skips its first DIV-APU event when it is switched on with the bit already high.
+            if (DivApuBit()) {
+                m_divDivider = 1;
+                m_skipDivEvent = SkipDivEventPending;
+            }
+        } else if (
+            m_powered &&
+            !powerOn
+        ) {
+            for (var channel = 0; (channel < ChannelCount); ++channel) {
+                UpdateSample(
+                    channel: channel,
+                    value: 0
+                );
+            }
+
+            Array.Clear(array: m_registers);
+            ResetUnit();
+
+            m_powered = false;
         }
-    }
-    // Powering off clears the register file and silences every channel; on Color the length counters clear too. Wave RAM
-    // is untouched.
-    private void PowerOff() {
-        Array.Clear(array: m_registers);
+
+        if (
+            m_isColor ||
+            !powerOn
+        ) {
+            return;
+        }
 
         for (var channel = 0; (channel < ChannelCount); ++channel) {
-            m_channelEnabled[channel] = false;
-            m_lengthEnabled[channel] = false;
-            m_envelopeVolume[channel] = 0;
-            m_envelopeTimer[channel] = 0;
+            m_pulseLength[channel] = lengths[channel];
+        }
+    }
+    // The unit's power-on state: every generator, envelope, sweep, and length latch cleared, the wave output muted,
+    // and the square counters parked so a channel that has never triggered never steps.
+    private void ResetUnit() {
+        Array.Clear(array: m_channelActive);
+        Array.Clear(array: m_envelopeClock);
+        Array.Clear(array: m_envelopeCountdown);
+        Array.Clear(array: m_envelopeLocked);
+        Array.Clear(array: m_envelopeShouldLock);
+        Array.Clear(array: m_envelopeVolume);
+        Array.Clear(array: m_lengthEnabled);
+        Array.Clear(array: m_pulseLength);
+        Array.Clear(array: m_sample);
+        Array.Clear(array: m_squareDelay);
+        Array.Clear(array: m_squareDidTick);
+        Array.Clear(array: m_squareJustReloaded);
+        Array.Clear(array: m_squareSampleIndex);
+        Array.Clear(array: m_squareSampleLength);
+        Array.Clear(array: m_squareSampleSuppressed);
 
-            // Color clears the length counters on power-off; monochrome keeps them (they stay writable while off).
-            if (m_isColor) {
-                m_lengthCounter[channel] = 0;
-            }
+        m_channel1CompletedAddend = 0;
+        m_channel1RestartHold = 0;
+        m_divDivider = 0;
+        m_lfDiv = 1;
+        m_noiseAlignment = 0;
+        m_noiseBackgroundCounterActive = false;
+        m_noiseCounter = 0;
+        m_noiseCounterActive = false;
+        m_noiseCounterCountdown = 0;
+        m_noiseCountdownReloaded = false;
+        m_noiseCurrentLfsrSample = false;
+        m_noiseDidStepCounter = false;
+        m_noiseLfsr = 0;
+        m_noiseNarrow = false;
+        m_noiseStartedWithDacDisabled = false;
+        m_pendingEnvelopeDelay = 0;
+        m_shadowSweepSampleLength = 0;
+        m_skipDivEvent = SkipDivEventInactive;
+        m_squareSampleCountdown[0] = 0xFFFF;
+        m_squareSampleCountdown[1] = 0xFFFF;
+        m_squareSweepCountdown = 0;
+        m_sweepCalculateCountdown = 0;
+        m_sweepCalculateReloadTimer = 0;
+        m_sweepInstantCalculationDone = false;
+        m_sweepLengthAddend = 0;
+        m_unshiftedSweep = false;
+        m_waveEnable = false;
+        m_waveFormJustRead = false;
+        m_wavePulsed = false;
+        m_waveSampleByte = 0;
+        m_waveSampleCountdown = 0;
+        m_waveSampleIndex = 0;
+        m_waveSampleLength = 0;
+        m_waveShift = 4;
+    }
+    // Wave RAM is reachable regardless of power; while the wave channel plays, access follows the channel rather than
+    // the address, and monochrome access outside the tick a fetch lands is dropped.
+    private void WriteWaveRam(ushort address, byte value) {
+        if (!m_channelActive[2]) {
+            m_waveRam[(address - MemoryMap.WaveRamStart)] = value;
+
+            return;
         }
 
-        Array.Clear(array: m_squarePosition);
-        Array.Clear(array: m_squareTimer);
+        var (justRead, index, _) = PeekWaveFetch();
 
-        m_frameSequencerStep = 0;
-        m_noiseLfsr = 0;
-        m_noiseTimer = 0;
-        m_powered = false;
-        m_sweepEnabled = false;
-        m_sweepNegateUsed = false;
-        m_sweepShadow = 0;
-        m_sweepTimer = 0;
-        m_waveFetchHold = 0;
-        m_wavePosition = 0;
-        m_waveSampleLatch = 0;
-        m_waveTimer = 0;
+        if (
+            (!m_isColor && !justRead) ||
+            !m_hasPerChannelDacs
+        ) {
+            return;
+        }
+
+        m_waveRam[(index >> 1)] = value;
+    }
+    // A square channel's duty counter as the CPU's write strobe sees it: one audio tick ahead of the live state,
+    // which is where a write lands relative to the read the same counter answers (see ReadStrobeSkew).
+    private (int Countdown, bool DidTick, bool JustReloaded) PeekSquare(int channel) {
+        if (!m_channelActive[channel]) {
+            return (m_squareSampleCountdown[channel], m_squareDidTick[channel], m_squareJustReloaded[channel]);
+        }
+
+        if (m_squareSampleCountdown[channel] > 0) {
+            return ((m_squareSampleCountdown[channel] - 1), m_squareDidTick[channel], false);
+        }
+
+        return ((((m_squareSampleLength[channel] ^ MaxSampleLength) * 2) + 1), true, true);
+    }
+    // The wave fetcher as the CPU's write strobe sees it: one audio tick ahead of the live state, which is where a
+    // write lands relative to the read the same fetcher answers (see ReadStrobeSkew).
+    private (bool JustRead, int Index, int Countdown) PeekWaveFetch() {
+        if (!m_channelActive[2]) {
+            return (false, m_waveSampleIndex, m_waveSampleCountdown);
+        }
+
+        if (m_waveSampleCountdown > 0) {
+            return (false, m_waveSampleIndex, (m_waveSampleCountdown - 1));
+        }
+
+        return (true, ((m_waveSampleIndex + 1) & 0x1F), (m_waveSampleLength ^ MaxSampleLength));
     }
     private void WriteChannelRegister(int offset, byte value) {
         switch (offset) {
             case Nr10:
-                m_registers[offset] = value;
+                WriteSweepControl(value: value);
 
-                // Clearing the sweep's negate bit after a negate calculation has run since the last trigger disables the
-                // channel at once (the calculation could no longer keep the frequency in range).
-                if (
-                    m_sweepNegateUsed &&
-                    ((value & SweepNegate) == 0)
-                ) {
-                    m_channelEnabled[0] = false;
+                return;
+            case Nr11:
+            case Nr21:
+                WriteSquareLength(
+                    channel: ((offset == Nr11)
+                        ? 0
+                        : 1),
+                    offset: offset,
+                    value: value
+                );
+
+                return;
+            case Nr12:
+            case Nr22:
+                WriteSquareEnvelope(
+                    channel: ((offset == Nr12)
+                        ? 0
+                        : 1),
+                    offset: offset,
+                    value: value
+                );
+
+                return;
+            case Nr13:
+            case Nr23: {
+                var channel = ((offset == Nr13)
+                    ? 0
+                    : 1);
+
+                m_squareSampleLength[channel] = ((m_squareSampleLength[channel] & ~0xFF) | value);
+
+                if (PeekSquare(channel: channel).JustReloaded) {
+                    m_squareSampleCountdown[channel] = (((m_squareSampleLength[channel] ^ MaxSampleLength) * 2) + 1);
                 }
 
                 break;
-            case Nr11:
-                m_registers[offset] = value;
-                m_lengthCounter[0] = (LengthMaxima[0] - (value & LengthDataMask));
+            }
+            case Nr14:
+            case Nr24:
+                WriteSquareControl(
+                    channel: ((offset == Nr14)
+                        ? 0
+                        : 1),
+                    offset: offset,
+                    value: value
+                );
 
-                break;
-            case Nr21:
-                m_registers[offset] = value;
-                m_lengthCounter[1] = (LengthMaxima[1] - (value & LengthDataMask));
+                return;
+            case Nr30:
+                WriteWaveDac(value: value);
 
                 break;
             case Nr31:
+                m_pulseLength[2] = (LengthMaxima[2] - value);
+
+                break;
+            case Nr32:
+                m_waveShift = WaveVolumeShift[((value >> 5) & 0x03)];
                 m_registers[offset] = value;
-                m_lengthCounter[2] = (LengthMaxima[2] - value);
 
-                break;
-            case Nr41:
-                m_registers[offset] = value;
-                m_lengthCounter[3] = (LengthMaxima[3] - (value & LengthDataMask));
+                if (m_channelActive[2]) {
+                    UpdateWaveSample();
+                }
 
-                break;
-            case Nr12:
-            case Nr22:
-            case Nr30:
-            case Nr42:
-                m_registers[offset] = value;
-                DisableDeadChannel(channel: ChannelForDac(offset: offset));
-
-                break;
-            case Nr14:
-                WriteControlRegister(
-                    channel: 0,
-                    offset: offset,
-                    value: value
-                );
-
-                break;
-            case Nr24:
-                WriteControlRegister(
-                    channel: 1,
-                    offset: offset,
-                    value: value
-                );
+                return;
+            case Nr33:
+                m_waveSampleLength = ((m_waveSampleLength & ~0xFF) | value);
 
                 break;
             case Nr34:
-                WriteControlRegister(
-                    channel: 2,
-                    offset: offset,
-                    value: value
-                );
+                WriteWaveControl(value: value);
 
-                break;
-            case Nr44:
-                WriteControlRegister(
-                    channel: 3,
-                    offset: offset,
-                    value: value
-                );
-
-                break;
-            default:
-                m_registers[offset] = value;
-
-                break;
-        }
-    }
-    // Monochrome-only: while the APU is powered off, a write to a length-load register (NRx1) still sets that channel's
-    // length counter (Color blocks every write). Only the length is written — no duty, no register store, no trigger.
-    private void WriteLengthCounterWhilePoweredOff(int offset, byte value) {
-        switch (offset) {
-            case Nr11:
-                m_lengthCounter[0] = (LengthMaxima[0] - (value & LengthDataMask));
-
-                break;
-            case Nr21:
-                m_lengthCounter[1] = (LengthMaxima[1] - (value & LengthDataMask));
-
-                break;
-            case Nr31:
-                m_lengthCounter[2] = (LengthMaxima[2] - value);
-
-                break;
+                return;
             case Nr41:
-                m_lengthCounter[3] = (LengthMaxima[3] - (value & LengthDataMask));
+                m_pulseLength[3] = (LengthMaxima[3] - (value & LengthDataMask));
 
                 break;
+            case Nr42:
+                WriteNoiseEnvelope(value: value);
+
+                return;
+            case Nr43:
+                WriteNoiseFrequency(value: value);
+
+                return;
+            case Nr44:
+                WriteNoiseControl(value: value);
+
+                return;
         }
-    }
-    // A channel's control register (NRx4) sets its length-enable bit and may trigger it. Enabling length mid-cycle, when
-    // the next sequencer step will not clock length, immediately clocks the (non-zero) counter — and can retire an
-    // untriggered channel on the spot; the trigger applies the same extra clock to a freshly reloaded counter.
-    private void WriteControlRegister(int channel, int offset, byte value) {
-        var wasLengthEnabled = m_lengthEnabled[channel];
-        var nowLengthEnabled = ((value & LengthEnableBit) != 0);
-        var triggering = ((value & TriggerBit) != 0);
 
         m_registers[offset] = value;
+    }
+    private void WriteSweepControl(byte value) {
+        if (
+            (m_sweepCalculateCountdown != 0) ||
+            (m_sweepCalculateReloadTimer != 0)
+        ) {
+            ApplySweepControlWriteGlitch(value: value);
+        }
+
+        var oldNegate = (((m_registers[Nr10] & SweepNegate) != 0) || m_hasEarlyAudioStepping);
+
+        m_registers[Nr10] = value;
+
+        // Clearing the negate bit after a calculation has completed with it set disables the channel at once: the
+        // completed addend can no longer keep the frequency in range.
+        if (
+            ((m_shadowSweepSampleLength + m_channel1CompletedAddend + (oldNegate
+                ? 1
+                : 0)) > MaxSampleLength) &&
+            ((value & SweepNegate) == 0)
+        ) {
+            m_channelActive[0] = false;
+
+            UpdateSample(
+                channel: 0,
+                value: 0
+            );
+        }
+
+        TriggerSweepCalculation();
+    }
+    // A NR10 write that lands while a sweep calculation is in flight perturbs the calculation itself: the early
+    // steppings can nudge it a step early or complete it outright, and the later ones re-load the countdown from the
+    // value being written. The double-speed data corruption the early steppings show is instance-specific silicon
+    // behaviour and is deliberately not modelled.
+    private void ApplySweepControlWriteGlitch(byte value) {
+        if (!m_hasEarlyAudioStepping) {
+            if (m_sweepCalculateReloadTimer == 2) {
+                m_sweepCalculateCountdown = (value & SweepShiftMask);
+
+                if (m_sweepCalculateCountdown == 0) {
+                    m_sweepCalculateReloadTimer = 0;
+                }
+            }
+
+            if (
+                ((value & SweepShiftMask) != 0) &&
+                ((m_registers[Nr10] & SweepShiftMask) == 0) &&
+                (m_lfDiv == 0) &&
+                (m_sweepCalculateCountdown > 1)
+            ) {
+                if (--m_sweepCalculateCountdown == 0) {
+                    SweepCalculationDone();
+                }
+            }
+
+            return;
+        }
 
         if (
-            nowLengthEnabled &&
-            !wasLengthEnabled &&
-            !NextStepClocksLength() &&
-            (m_lengthCounter[channel] > 0)
+            (m_sweepCalculateReloadTimer == 1) &&
+            (m_lfDiv == 0)
         ) {
-            if (
-                (--m_lengthCounter[channel] == 0) &&
-                !triggering
-            ) {
-                m_channelEnabled[channel] = false;
-            }
+            return;
         }
 
-        m_lengthEnabled[channel] = nowLengthEnabled;
+        if (m_sweepCalculateReloadTimer > 1) {
+            if (m_key1.IsDoubleSpeed) {
+                m_sweepCalculateCountdown = (value & SweepShiftMask);
+            }
 
-        if (triggering) {
-            Trigger(channel: channel);
+            return;
+        }
+
+        if (m_sweepCalculateCountdown == 0) {
+            return;
+        }
+
+        var zombieStep = (((m_registers[Nr10] & SweepShiftMask) == 0)
+            ? ((m_lfDiv ^ (m_key1.IsDoubleSpeed
+                ? 1
+                : 0)) != 0)
+            : (m_key1.IsDoubleSpeed && (m_sweepCalculateCountdown == 1)));
+
+        if (!zombieStep) {
+            return;
+        }
+
+        if (--m_sweepCalculateCountdown <= 1) {
+            m_sweepCalculateCountdown = 0;
+
+            SweepCalculationDone();
         }
     }
-    // A trigger enables the channel when its DAC is on, reloads a spent length counter to the channel maximum, and — if
-    // length is enabled and the next step will not clock it — applies the extra length clock to that fresh reload.
-    private void Trigger(int channel) {
-        m_channelEnabled[channel] = IsDacEnabled(channel: channel);
+    private void WriteSquareLength(int channel, int offset, byte value) {
+        m_pulseLength[channel] = (LengthMaxima[channel] - (value & LengthDataMask));
+        m_registers[offset] = (m_powered
+            ? value
+            : (byte)(value & LengthDataMask));
+    }
+    private void WriteSquareEnvelope(int channel, int offset, byte value) {
+        if ((value & SquareNoiseDacMask) == 0) {
+            // The DAC is off: the channel stops sounding at once.
+            m_registers[offset] = value;
+            m_channelActive[channel] = false;
 
-        if (m_lengthCounter[channel] == 0) {
-            m_lengthCounter[channel] = LengthMaxima[channel];
+            UpdateSample(
+                channel: channel,
+                value: 0
+            );
+
+            return;
+        }
+
+        if (m_channelActive[channel]) {
+            ApplyEnvelopeWriteGlitch(
+                channel: channel,
+                oldValue: m_registers[offset],
+                value: value
+            );
+
+            m_registers[offset] = value;
+
+            UpdateSquareSample(channel: channel);
+
+            return;
+        }
+
+        m_registers[offset] = value;
+    }
+    // A square channel's control register (NRx4): the frequency high bits, the trigger, and the length enable.
+    private void WriteSquareControl(int channel, int offset, byte value) {
+        var wasActive = m_channelActive[channel];
+        var previous = m_registers[offset];
+        var (countdown, didTick, justReloaded) = PeekSquare(channel: channel);
+
+        // Dropping the frequency's high bits out of the all-ones corner just before the counter reloads leaves the
+        // duty position one step behind where the reload would otherwise carry it.
+        if (
+            ((value & TriggerBit) == 0) &&
+            m_channelActive[channel] &&
+            ((previous & 0x07) == 7) &&
+            ((value & 0x07) != 7) &&
+            (m_hasLateColorAudioQuirks || ((countdown & 1) != 0)) &&
+            didTick &&
+            ((countdown >> 1) == (m_squareSampleLength[channel] ^ MaxSampleLength))
+        ) {
+            m_squareSampleIndex[channel] = ((m_squareSampleIndex[channel] - 1) & 0x07);
+            m_squareSampleSuppressed[channel] = false;
+        }
+
+        var oldSampleLength = m_squareSampleLength[channel];
+
+        m_squareSampleLength[channel] = ((m_squareSampleLength[channel] & 0xFF) | ((value & 0x07) << 8));
+
+        if (justReloaded) {
+            m_squareSampleCountdown[channel] = (((m_squareSampleLength[channel] ^ MaxSampleLength) * 2) + 1);
+        }
+
+        if ((value & TriggerBit) != 0) {
+            TriggerSquare(
+                channel: channel,
+                countdown: countdown,
+                justReloaded: justReloaded,
+                oldSampleLength: oldSampleLength,
+                value: value,
+                wasActive: wasActive
+            );
+        }
+
+        ApplyLengthEnableGlitch(
+            channel: channel,
+            reload: (LengthMaxima[channel] - 1),
+            value: value
+        );
+
+        m_lengthEnabled[channel] = ((value & LengthEnableBit) != 0);
+        m_registers[offset] = value;
+    }
+    private void TriggerSquare(int channel, int countdown, bool justReloaded, int oldSampleLength, byte value, bool wasActive) {
+        var control = m_registers[((channel == 0)
+            ? Nr12
+            : Nr22)];
+
+        m_envelopeClock[channel] = false;
+        m_envelopeLocked[channel] = false;
+        m_squareDidTick[channel] = false;
+
+        var forceUnsuppressed = false;
+
+        if (!m_channelActive[channel]) {
+            // The later colour steppings carry the duty position one step forward when a silent channel restarts on a
+            // frequency whose counter has not wrapped.
+            if (
+                m_hasLateColorAudioQuirks &&
+                ((value & 0x04) == 0) &&
+                ((((countdown - m_squareDelay[channel]) / 2) & 0x400) == 0)
+            ) {
+                m_squareSampleIndex[channel] = ((m_squareSampleIndex[channel] + 1) & 0x07);
+                forceUnsuppressed = true;
+            }
+
+            m_squareDelay[channel] = (6 + (m_lfDiv * ((m_hasEarlyAudioStepping && m_key1.IsDoubleSpeed)
+                ? 1
+                : -1)));
+        } else {
+            var extraDelay = 0;
+
+            if (m_hasLateColorAudioQuirks) {
+                if (
+                    !justReloaded &&
+                    ((value & 0x04) == 0) &&
+                    (((((countdown - 1) - m_squareDelay[channel]) / 2) & 0x400) == 0)
+                ) {
+                    m_squareSampleIndex[channel] = ((m_squareSampleIndex[channel] + 1) & 0x07);
+                    m_squareSampleSuppressed[channel] = false;
+                } else if (
+                    (m_squareSampleLength[channel] == MaxSampleLength) &&
+                    (oldSampleLength != MaxSampleLength) &&
+                    m_squareSampleSuppressed[channel]
+                ) {
+                    extraDelay += 2;
+                }
+            }
+
+            // A channel that is already sounding starts its first step one audio tick earlier.
+            m_squareDelay[channel] = ((4 - m_lfDiv) + extraDelay);
+        }
+
+        m_squareSampleCountdown[channel] = (((m_squareSampleLength[channel] ^ MaxSampleLength) * 2) + m_squareDelay[channel]);
+        m_envelopeVolume[channel] = (control >> 4);
+
+        // The volume the trigger loads takes effect at once, even though the waveform itself does not.
+        if (m_channelActive[channel]) {
+            UpdateSquareSample(channel: channel);
+        }
+
+        m_envelopeCountdown[channel] = (control & 0x07);
+
+        if (
+            ((control & SquareNoiseDacMask) != 0) &&
+            !m_channelActive[channel]
+        ) {
+            m_channelActive[channel] = true;
+            m_squareSampleSuppressed[channel] = !forceUnsuppressed;
+
+            UpdateSample(
+                channel: channel,
+                value: 0
+            );
+        }
+
+        if (m_pulseLength[channel] == 0) {
+            m_pulseLength[channel] = LengthMaxima[channel];
+            m_lengthEnabled[channel] = false;
+        }
+
+        if (channel == 0) {
+            TriggerSweep(wasActive: wasActive);
+        }
+    }
+    private void TriggerSweep(bool wasActive) {
+        m_channel1CompletedAddend = 0;
+        m_shadowSweepSampleLength = 0;
+        m_sweepInstantCalculationDone = false;
+
+        var control = m_registers[Nr10];
+
+        if ((control & SweepShiftMask) != 0) {
+            // A non-zero shift makes the trigger itself run an overflow check, after the unit's arming delay.
+            m_sweepCalculateCountdown = (control & SweepShiftMask);
+            m_sweepCalculateReloadTimer = ((((m_lfDiv ^ (m_key1.IsDoubleSpeed
+                ? 1
+                : 0)) != 0) && m_hasEarlyAudioStepping
+                ? 3
+                : 2) + (m_hasEarlyAudioStepping
+                ? SweepTriggerArmSkewEarly
+                : SweepTriggerArmSkewLate));
+            m_unshiftedSweep = false;
+
+            if (!wasActive) {
+                ++m_sweepCalculateReloadTimer;
+            }
+
+            m_sweepLengthAddend = (m_squareSampleLength[0] >> (control & SweepShiftMask));
+        } else {
+            m_sweepLengthAddend = 0;
+        }
+
+        m_channel1RestartHold = (((2 + RestartHoldSkew) - m_lfDiv) + ((m_isColor && !m_hasShortSweepRestartHold)
+            ? 2
+            : 0));
+        m_squareSweepCountdown = (((control >> 4) & 7) ^ 7);
+    }
+    // The 128 Hz sweep clock, and the same arming a NR10 write performs: when the countdown has run out, fold the
+    // pending addend into the live frequency and arm the next calculation.
+    private void TriggerSweepCalculation() {
+        var control = m_registers[Nr10];
+
+        if (
+            ((control & 0x70) == 0) ||
+            (m_squareSweepCountdown != 7)
+        ) {
+            return;
+        }
+
+        if ((control & SweepShiftMask) != 0) {
+            m_squareSampleLength[0] = ((m_sweepLengthAddend + m_shadowSweepSampleLength + (((control & SweepNegate) != 0)
+                ? 1
+                : 0)) & MaxSampleLength);
+        }
+
+        if (m_channel1RestartHold == 0) {
+            m_sweepLengthAddend = (m_squareSampleLength[0] >> (control & SweepShiftMask));
+        }
+
+        // The recalculation and its overflow check only run after a delay.
+        m_sweepCalculateCountdown = (control & SweepShiftMask);
+        m_sweepCalculateReloadTimer = ((1 + SweepClockArmSkew) + m_lfDiv);
+        m_unshiftedSweep = ((control & SweepShiftMask) == 0);
+        m_squareSweepCountdown = (((control >> 4) & 7) ^ 7);
+
+        if (m_sweepCalculateCountdown == 0) {
+            m_sweepInstantCalculationDone = true;
+        }
+    }
+    // The overflow check the sweep unit runs once its calculation delay elapses. The check sees the addend added a
+    // second time, which is why an overflow can disable the channel a step before the frequency itself would.
+    private void SweepCalculationDone() {
+        if (m_channel1RestartHold == 0) {
+            m_shadowSweepSampleLength = m_squareSampleLength[0];
+        }
+
+        if ((m_registers[Nr10] & SweepNegate) != 0) {
+            m_sweepLengthAddend ^= MaxSampleLength;
+        }
+
+        if (
+            ((m_shadowSweepSampleLength + m_sweepLengthAddend) > MaxSampleLength) &&
+            ((m_registers[Nr10] & SweepNegate) == 0)
+        ) {
+            m_channelActive[0] = false;
+
+            UpdateSample(
+                channel: 0,
+                value: 0
+            );
+        }
+
+        m_channel1CompletedAddend = m_sweepLengthAddend;
+    }
+    private void WriteWaveDac(byte value) {
+        m_waveEnable = ((value & WaveDacEnable) != 0);
+        m_registers[Nr30] = value;
+
+        if (m_waveEnable) {
+            return;
+        }
+
+        m_wavePulsed = false;
+
+        if (
+            m_channelActive[2] &&
+            PeekWaveFetch().JustRead &&
+            m_hasEarlyAudioStepping
+        ) {
+            m_waveSampleByte = m_waveRam[(Nr30 & 0x0F)];
+        }
+
+        m_channelActive[2] = false;
+
+        UpdateSample(
+            channel: 2,
+            value: 0
+        );
+    }
+    private void WriteWaveControl(byte value) {
+        m_waveSampleLength = ((m_waveSampleLength & 0xFF) | ((value & 0x07) << 8));
+
+        if ((value & TriggerBit) != 0) {
+            var (_, peekIndex, peekCountdown) = PeekWaveFetch();
+
+            m_wavePulsed = true;
+
+            // Retriggering the playing channel on the tick its fetch lands corrupts the head of wave RAM on
+            // monochrome hardware, where the trigger and the fetch collide on the RAM port; colour hardware buffers
+            // the port and is immune.
+            if (
+                !m_isColor &&
+                m_channelActive[2] &&
+                (peekCountdown == 0)
+            ) {
+                CorruptWaveRamOnRetrigger(index: peekIndex);
+            }
+
+            m_waveSampleIndex = 0;
 
             if (
-                m_lengthEnabled[channel] &&
-                !NextStepClocksLength()
+                m_channelActive[2] &&
+                (peekCountdown == 0)
             ) {
-                --m_lengthCounter[channel];
+                m_waveSampleByte = m_waveRam[0];
+            }
+
+            if (m_waveEnable) {
+                m_channelActive[2] = true;
+
+                UpdateSample(
+                    channel: 2,
+                    value: ((m_waveSampleByte >> 4) >> m_waveShift)
+                );
+            }
+
+            // The first fetch lands one full period plus the trigger delay after the trigger; until then the channel
+            // keeps playing the latch it already holds.
+            m_waveSampleCountdown = ((m_waveSampleLength ^ MaxSampleLength) + WaveTriggerFetchDelay);
+
+            if (m_pulseLength[2] == 0) {
+                m_pulseLength[2] = LengthMaxima[2];
+                m_lengthEnabled[2] = false;
             }
         }
 
-        // Per-channel trigger effects. A square channel reloads its frequency timer and envelope but KEEPS its duty
-        // position (it free-runs, reset only by an APU power-off); the wave channel restarts its sample position; the
-        // noise channel clears its LFSR. Only the first square channel has a sweep unit.
-        switch (channel) {
-            case 0:
-                m_squareTimer[0] = SquarePeriod(channel: 0);
-                LoadEnvelope(
-                    channel: 0,
-                    register: Nr12
-                );
-                TriggerSweep();
+        ApplyLengthEnableGlitch(
+            channel: 2,
+            reload: (LengthMaxima[2] - 1),
+            value: value
+        );
 
-                break;
-            case 1:
-                m_squareTimer[1] = SquarePeriod(channel: 1);
-                LoadEnvelope(
-                    channel: 1,
-                    register: Nr22
-                );
-
-                break;
-            case 2:
-                // Retriggering the playing channel while its fetch is busy corrupts the head of wave RAM on monochrome
-                // hardware (the CPU's trigger and the fetch collide on the RAM port); Color hardware buffers the port
-                // and is immune. The fetch-busy predicate is (m_waveFetchHold > 0) — inside the window a fetch
-                // opens — not a countdown check against m_waveTimer, which fires one slot late.
-                if (
-                    !m_isColor &&
-                    m_channelEnabled[2] &&
-                    (m_waveFetchHold > 0)
-                ) {
-                    CorruptWaveRamOnRetrigger();
+        m_lengthEnabled[2] = ((value & LengthEnableBit) != 0);
+        m_registers[Nr34] = value;
+    }
+    private void WriteNoiseEnvelope(byte value) {
+        if ((value & SquareNoiseDacMask) == 0) {
+            if (
+                m_channelActive[3] &&
+                ((m_registers[Nr43] & 0x07) != 0)
+            ) {
+                if (m_noiseCounterCountdown <= 2) {
+                    m_noiseCounter = ((m_noiseCounter + 1) & 0x3FFF);
                 }
 
-                // The position restarts but the sample latch is NOT refetched: the channel keeps playing the stale
-                // latch until the first fetch, which lands one full period plus the post-trigger delay after the
-                // trigger (the delay is the A/B'd cross-lineage constant — see WaveTriggerFetchDelayDots).
-                m_wavePosition = 0;
-                m_waveTimer = (WavePeriod() + WaveTriggerFetchDelayDots);
+                m_noiseBackgroundCounterActive = false;
+            }
 
-                break;
-            default:
-                m_noiseLfsr = 0;
-                m_noiseTimer = NoisePeriod();
-                LoadEnvelope(
+            m_registers[Nr42] = value;
+            m_channelActive[3] = false;
+            m_noiseCounterActive = false;
+
+            UpdateSample(
+                channel: 3,
+                value: 0
+            );
+
+            return;
+        }
+
+        if (m_channelActive[3]) {
+            ApplyEnvelopeWriteGlitch(
+                channel: 3,
+                oldValue: m_registers[Nr42],
+                value: value
+            );
+
+            m_registers[Nr42] = value;
+
+            UpdateNoiseSample();
+
+            return;
+        }
+
+        m_registers[Nr42] = value;
+    }
+    private void WriteNoiseFrequency(byte value) {
+        // A write that lands on the tick the counter reloads re-phases the reload against the 1 MiHz alignment.
+        if (m_noiseCountdownReloaded) {
+            var divisor = ((value & 0x07) << 2);
+
+            if (divisor == 0) {
+                divisor = 2;
+                m_noiseCounterCountdown = divisor;
+            } else {
+                var phase = (m_hasEarlyAudioStepping
+                    ? EarlyNoiseReloadPhase[(m_noiseAlignment & 3)]
+                    : NoiseReloadPhase[(m_noiseAlignment & 3)]);
+
+                m_noiseCounterCountdown = (divisor + phase);
+            }
+        }
+
+        m_noiseNarrow = ((value & 0x08) != 0);
+        m_registers[Nr43] = value;
+    }
+    private void WriteNoiseControl(byte value) {
+        if ((value & TriggerBit) != 0) {
+            m_envelopeClock[3] = false;
+            m_envelopeLocked[3] = false;
+            m_noiseLfsr = 0;
+
+            PrepareNoiseStart();
+
+            m_envelopeVolume[3] = (m_registers[Nr42] >> 4);
+            m_noiseCurrentLfsrSample = false;
+            m_envelopeCountdown[3] = (m_registers[Nr42] & 0x07);
+            m_noiseDidStepCounter = ((m_noiseAlignment & 3) == 2);
+
+            if ((m_registers[Nr42] & SquareNoiseDacMask) != 0) {
+                m_channelActive[3] = true;
+
+                UpdateSample(
                     channel: 3,
-                    register: Nr42
+                    value: 0
                 );
-
-                break;
-        }
-    }
-    // Load a channel's starting envelope volume and reload countdown from its NRx2 register (upper nibble = volume, low
-    // three bits = period), applied on a trigger.
-    private void LoadEnvelope(int channel, int register) {
-        m_envelopeVolume[channel] = (m_registers[register] >> 4);
-        m_envelopeTimer[channel] = m_registers[register] & 0x07;
-    }
-    // The wave channel's frequency-timer period in dots: (2048 - the 11-bit frequency) doubled.
-    private int WavePeriod() =>
-        ((2048 - (m_registers[Nr33] | ((m_registers[Nr34] & 0x07) << 8))) * 2);
-    // Simulates the wave channel's fetch/window state a further `dots` ticks ahead without mutating it — the
-    // monochrome CPU write strobe reaches the wave-RAM port that far ahead of where a read samples it (see
-    // WaveWriteFetchLeadDots), so a write's window-open decision and target byte are read off this near-future state,
-    // not the state at the write's own dot. Only ever peeked while the channel is enabled and monochrome, so a look-ahead
-    // over 1-2 dots never needs to model a mid-peek trigger or power-off.
-    private (bool WindowOpen, int Index) PeekWaveFetch(int dots) {
-        var hold = m_waveFetchHold;
-        var timer = m_waveTimer;
-        var position = m_wavePosition;
-
-        for (var dot = 0; (dot < dots); ++dot) {
-            if (hold > 0) {
-                --hold;
             }
 
-            if (--timer <= 0) {
-                timer = WavePeriod();
-                position = (position + 1) & 0x1F;
-                hold = WaveFetchWindowDots;
+            if (m_pulseLength[3] == 0) {
+                m_pulseLength[3] = LengthMaxima[3];
+                m_lengthEnabled[3] = false;
             }
         }
 
-        return ((hold > 0), (position >> 1));
+        ApplyLengthEnableGlitch(
+            channel: 3,
+            reload: (LengthMaxima[3] - 1),
+            value: value
+        );
+
+        m_lengthEnabled[3] = ((value & LengthEnableBit) != 0);
+        m_registers[Nr44] = value;
     }
-    // One dot of a square channel's frequency timer: while it plays, count down and, on expiry, reload from the
-    // current frequency and step the duty position. The position wraps but is never reset here, so it free-runs.
-    private void AdvanceSquareTimer(int channel) {
+    // The noise counter's restart phasing: the counter keeps running in the background once the channel has been
+    // armed, so a restart lands the reload on a phase derived from the 1 MiHz alignment rather than at zero.
+    private void PrepareNoiseStart() {
+        m_noiseCounterActive = ((m_registers[Nr42] & SquareNoiseDacMask) != 0);
+
+        var wasStartedWithDacDisabled = m_noiseStartedWithDacDisabled;
+        var wasBackgroundCounting = m_noiseBackgroundCounterActive;
+        var divisor = (m_registers[Nr43] & 0x07);
+        var instantStep = false;
+
+        m_noiseStartedWithDacDisabled = !m_noiseCounterActive;
+        m_noiseBackgroundCounterActive = true;
+
         if (
-            m_channelEnabled[channel] &&
-            (--m_squareTimer[channel] <= 0)
+            (divisor > 1) &&
+            (m_noiseCounterCountdown == 1)
         ) {
-            m_squareTimer[channel] = SquarePeriod(channel: channel);
-            m_squarePosition[channel] = (m_squarePosition[channel] + 1) & 0x07;
+            m_noiseCounter = ((m_noiseCounter + 1) & 0x3FFF);
+        } else if (
+            (m_noiseCounterCountdown == 2) &&
+            ((m_noiseAlignment & 3) == 0) &&
+            m_channelActive[3]
+        ) {
+            if (divisor == 0) {
+                divisor = 8;
+            } else if (divisor == 1) {
+                var mask = (1 << (m_registers[Nr43] >> 4));
+                var oldBit = ((m_noiseCounter & mask) != 0);
+
+                m_noiseCounter = ((m_noiseCounter + 1) & 0x3FFF);
+                instantStep = (((m_noiseCounter & mask) != 0) && !oldBit);
+            }
+        }
+
+        m_noiseCounterCountdown = ((divisor == 0)
+            ? 6
+            : ((divisor * 4) + 6));
+
+        if ((m_noiseAlignment & 1) != 0) {
+            if (divisor == 0) {
+                m_noiseCounterCountdown += ((!m_hasEarlyAudioStepping && wasBackgroundCounting)
+                    ? -1
+                    : 1);
+            } else if ((m_noiseAlignment & 2) != 0) {
+                m_noiseCounterCountdown += (((divisor == 1) && !m_channelActive[3])
+                    ? 1
+                    : -3);
+            } else {
+                --m_noiseCounterCountdown;
+
+                if (
+                    (divisor == 1) &&
+                    m_channelActive[3]
+                ) {
+                    m_noiseCounterCountdown -= 4;
+                }
+            }
+        } else if (divisor != 0) {
+            if ((m_noiseAlignment & 2) != 0) {
+                m_noiseCounterCountdown -= 2;
+            } else if (divisor > 1) {
+                m_noiseCounterCountdown -= 4;
+            } else if (
+                m_channelActive[3] &&
+                ((m_registers[Nr43] & 0xF0) == 0)
+            ) {
+                m_noiseCounterCountdown -= 4;
+            }
+        }
+
+        // The background count itself shifts the phase when the channel restarts from silence.
+        if (divisor > 1) {
+            if (
+                !m_noiseCounterActive &&
+                ((m_noiseAlignment & 3) == 0)
+            ) {
+                m_noiseCounterCountdown += 4;
+            }
+        } else if (
+            wasBackgroundCounting &&
+            !m_channelActive[3] &&
+            ((m_noiseAlignment & 3) == 0)
+        ) {
+            if (divisor == 0) {
+                if (wasStartedWithDacDisabled) {
+                    m_noiseCounterCountdown += 28;
+                }
+            } else {
+                m_noiseCounterCountdown -= 4;
+            }
+        }
+
+        m_noiseLfsr = (((divisor == 0) && m_channelActive[3] && ((m_noiseAlignment & 3) == 3))
+            ? 0x0055
+            : 0);
+
+        if (instantStep) {
+            StepNoiseLfsr();
         }
     }
-    // A square channel's frequency-timer period in dots: (2048 - the 11-bit frequency) times four.
-    private int SquarePeriod(int channel) {
-        var frequency = ((channel == 0)
-            ? m_registers[Nr13] | ((m_registers[Nr14] & 0x07) << 8)
-            : m_registers[Nr23] | ((m_registers[Nr24] & 0x07) << 8));
+    // Enabling a length counter while the divider's low bit is set clocks it once on the spot; a trigger in the same
+    // write keeps the channel alive by reloading the counter one short of its maximum instead.
+    private void ApplyLengthEnableGlitch(int channel, int reload, byte value) {
+        if (
+            (((value & LengthEnableBit) == 0) && !(m_isColor && m_hasEarlyAudioStepping)) ||
+            m_lengthEnabled[channel] ||
+            ((m_divDivider & 1) == 0) ||
+            (m_pulseLength[channel] == 0)
+        ) {
+            return;
+        }
 
-        return ((2048 - frequency) * 4);
-    }
-    // The noise channel's frequency-timer period in dots: a divisor selected by NR43's low three bits (code 0 meaning
-    // half a step) shifted up by NR43's upper-nibble clock-shift (codes 14/15 gate the clock entirely — see
-    // TickGenerators, which never lets the countdown run under them).
-    private int NoisePeriod() {
-        var code = m_registers[Nr43] & 0x07;
-        var divisor = ((code == 0)
-            ? 8
-            : (code << 4));
+        if (--m_pulseLength[channel] != 0) {
+            return;
+        }
 
-        return (divisor << (m_registers[Nr43] >> 4));
+        if ((value & TriggerBit) != 0) {
+            m_pulseLength[channel] = reload;
+
+            return;
+        }
+
+        m_channelActive[channel] = false;
+
+        UpdateSample(
+            channel: channel,
+            value: 0
+        );
     }
-    // Advance the noise LFSR one step: feed back the XNOR of its low two bits into bit 14 (and bit 6 in the 7-bit width
-    // selected by NR43 bit 3), so the low bit that gates the output follows the pseudo-random sequence.
+    // A NRx2 write reaching a sounding channel does not simply load a new volume: the envelope's counter and its
+    // direction line are wired so the write can step, invert, or freeze the volume outright. The early steppings pass
+    // every write through an all-ones intermediate, which is why they land on a different volume than the later ones.
+    private void ApplyEnvelopeWriteGlitch(int channel, byte oldValue, byte value) {
+        if (m_hasEarlyAudioStepping) {
+            ApplyEnvelopeWriteStep(
+                channel: channel,
+                oldValue: oldValue,
+                value: 0xFF
+            );
+            ApplyEnvelopeWriteStep(
+                channel: channel,
+                oldValue: 0xFF,
+                value: value
+            );
+
+            return;
+        }
+
+        ApplyEnvelopeWriteStep(
+            channel: channel,
+            oldValue: oldValue,
+            value: value
+        );
+    }
+    private void ApplyEnvelopeWriteStep(int channel, byte oldValue, byte value) {
+        if (m_envelopeClock[channel]) {
+            m_envelopeCountdown[channel] = (value & 0x07);
+        }
+
+        var shouldInvert = (((value & 0x08) ^ (oldValue & 0x08)) != 0);
+        var shouldStep = (((value & 0x07) != 0) && ((oldValue & 0x07) == 0) && !m_envelopeLocked[channel]);
+
+        if (
+            ((value & 0x0F) == 0x08) &&
+            ((oldValue & 0x0F) == 0x08) &&
+            !m_envelopeLocked[channel]
+        ) {
+            shouldStep = true;
+        }
+
+        if (shouldInvert) {
+            if ((value & 0x08) != 0) {
+                m_envelopeVolume[channel] = (((((oldValue & 0x07) == 0) && !m_envelopeLocked[channel])
+                    ? (m_envelopeVolume[channel] ^ 0x0F)
+                    : (0x0E - m_envelopeVolume[channel])) & 0x0F);
+                shouldStep = false;
+            } else {
+                m_envelopeVolume[channel] = ((0x10 - m_envelopeVolume[channel]) & 0x0F);
+            }
+        }
+
+        if (shouldStep) {
+            m_envelopeVolume[channel] = ((m_envelopeVolume[channel] + (((value & 0x08) != 0)
+                ? 1
+                : -1)) & 0x0F);
+
+            return;
+        }
+
+        if (
+            ((value & 0x07) == 0) &&
+            m_envelopeClock[channel]
+        ) {
+            SetEnvelopeClock(
+                channel: channel,
+                direction: false,
+                value: false
+            );
+        }
+    }
+    // Advance the noise LFSR one step: feed back the XNOR of its low two bits into bit 14 (and bit 6 in the 7-bit
+    // width selected by NR43 bit 3), so the low bit that gates the output follows the pseudo-random sequence. The
+    // clear on the false branch is what makes a width switch mid-sequence observable.
     private void StepNoiseLfsr() {
-        var feedback = (m_noiseLfsr ^ (m_noiseLfsr >> 1) ^ 1) & 1;
-        var mask = (((m_registers[Nr43] & 0x08) != 0)
+        var feedback = ((m_noiseLfsr ^ (m_noiseLfsr >> 1) ^ 1) & 1);
+        var mask = (m_noiseNarrow
             ? 0x4040
             : 0x4000);
 
@@ -816,187 +1898,95 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
         } else {
             m_noiseLfsr &= ~mask;
         }
-    }
-    // The envelope clock (frame-sequencer step 7, 64 Hz): step the two square channels' and the noise channel's volume.
-    private void ClockEnvelopes() {
-        ClockEnvelope(
-            channel: 0,
-            register: Nr12
-        );
-        ClockEnvelope(
-            channel: 1,
-            register: Nr22
-        );
-        ClockEnvelope(
-            channel: 3,
-            register: Nr42
-        );
-    }
-    // One envelope clock for a channel: a zero period disables the envelope; otherwise count down and, on expiry, reload
-    // and step the volume one unit in the NRx2 direction, holding at the 0 or 15 rail.
-    private void ClockEnvelope(int channel, int register) {
-        var period = m_registers[register] & 0x07;
 
+        m_noiseCurrentLfsrSample = ((m_noiseLfsr & 1) != 0);
+
+        UpdateNoiseSample();
+    }
+    // Publish a channel's digital level. A level a DAC-off channel would publish is dropped, so the channel holds the
+    // level it had; publishing zero over an already-zero level is a no-op.
+    private void UpdateSample(int channel, int value) {
         if (
-            (period == 0) ||
-            (--m_envelopeTimer[channel] > 0)
+            (value == 0) &&
+            (m_sample[channel] == 0)
         ) {
             return;
         }
 
-        m_envelopeTimer[channel] = period;
-
-        var next = (m_envelopeVolume[channel] + (((m_registers[register] & 0x08) != 0)
-            ? 1
-            : -1));
-
-        if (
-            (next >= 0) &&
-            (next <= 15)
-        ) {
-            m_envelopeVolume[channel] = next;
+        if (!IsDacEnabled(channel: channel)) {
+            return;
         }
+
+        m_sample[channel] = value;
     }
-    // A square channel's current digital output (0-15): its envelope volume when the selected duty pattern's bit for the
-    // current position is high, otherwise zero.
-    private int SquareOutput(int channel) {
+    private void UpdateSquareSample(int channel) {
+        // A freshly triggered channel publishes nothing until its first duty step.
+        if (m_squareSampleSuppressed[channel]) {
+            return;
+        }
+
         var duty = (m_registers[((channel == 0)
             ? Nr11
             : Nr21)] >> 6);
 
-        return ((DutyTable[((duty * 8) + m_squarePosition[channel])] != 0)
-            ? m_envelopeVolume[channel]
-            : 0);
+        UpdateSample(
+            channel: channel,
+            value: ((DutyTable[((duty * 8) + m_squareSampleIndex[channel])] != 0)
+                ? m_envelopeVolume[channel]
+                : 0)
+        );
     }
-    // The wave channel's current digital output: the four-bit sample from the LAST-FETCHED byte latch (never a live
-    // wave-RAM read — a CPU write while playing changes RAM, not what is heard), right-shifted by the NR32 volume code.
-    private int WaveOutput() {
-        var nibble = (((m_wavePosition & 1) != 0)
-            ? m_waveSampleLatch & 0x0F
-            : (m_waveSampleLatch >> 4));
+    private void UpdateWaveSample() =>
+        UpdateSample(
+            channel: 2,
+            value: (((((m_waveSampleIndex & 1) != 0)
+                ? (m_waveSampleByte & 0x0F)
+                : (m_waveSampleByte >> 4))) >> m_waveShift)
+        );
+    private void UpdateNoiseSample() {
+        if (!m_channelActive[3]) {
+            return;
+        }
 
-        return (nibble >> WaveVolumeShift[(m_registers[Nr32] >> 5) & 0x03]);
+        UpdateSample(
+            channel: 3,
+            value: (m_noiseCurrentLfsrSample
+                ? m_envelopeVolume[3]
+                : 0)
+        );
     }
     // The monochrome retrigger collision: the byte the channel was about to fetch bleeds into the head of wave RAM —
     // a byte from the first four-byte row copies alone into byte 0, one from a later row drags its whole aligned
     // four-byte row over bytes 0-3.
-    private void CorruptWaveRamOnRetrigger() {
-        var index = (((m_wavePosition + 1) & 0x1F) >> 1);
+    private void CorruptWaveRamOnRetrigger(int index) {
+        var head = (((index + 1) >> 1) & 0x0F);
 
-        if (index < 4) {
-            m_waveRam[0] = m_waveRam[index];
-        } else {
-            var row = index & 0x0C;
+        if (head < 4) {
+            m_waveRam[0] = m_waveRam[head];
 
-            for (var offset = 0; (offset < 4); ++offset) {
-                m_waveRam[offset] = m_waveRam[(row + offset)];
-            }
+            return;
+        }
+
+        var row = (head & 0x0C);
+
+        for (var offset = 0; (offset < 4); ++offset) {
+            m_waveRam[offset] = m_waveRam[(row + offset)];
         }
     }
-    // The noise channel's current digital output: its envelope volume when the LFSR's low bit is set, otherwise zero.
-    private int NoiseOutput() =>
-        (((m_noiseLfsr & 1) != 0)
-        ? m_envelopeVolume[3]
+    private int PackedSample(int channel) =>
+        (m_channelActive[channel]
+        ? (m_sample[channel] & 0x0F)
         : 0);
-    // A trigger arms the sweep unit: it copies the current frequency into the shadow register, reloads the sweep timer,
-    // enables the unit when it has a period or a shift, and — when a shift is set — runs one frequency calculation
-    // immediately so an already-overflowing sweep disables the channel on the trigger itself.
-    private void TriggerSweep() {
-        var period = SweepPeriod();
-        var shift = m_registers[Nr10] & SweepShiftMask;
-
-        m_sweepShadow = CurrentFrequency();
-        m_sweepTimer = ((period != 0)
-            ? period
-            : SweepReloadPeriod);
-        m_sweepEnabled = ((period != 0) || (shift != 0));
-        m_sweepNegateUsed = false;
-
-        if (shift != 0) {
-            _ = CalculateSweepFrequency();
-        }
-    }
-    // One sweep clock (frame-sequencer steps 2 and 6): count the timer down and, when it lands, reload it; then, if the
-    // unit is enabled with a real period, compute the next frequency, write it back through the shadow register when it
-    // fits and the shift is non-zero, and run a second calculation purely for its overflow check.
-    private void ClockSweep() {
-        if (--m_sweepTimer > 0) {
-            return;
+    private bool IsDacEnabled(int channel) {
+        if (!m_hasPerChannelDacs) {
+            return true;
         }
 
-        var period = SweepPeriod();
-
-        m_sweepTimer = ((period != 0)
-            ? period
-            : SweepReloadPeriod);
-
-        if (
-            !m_sweepEnabled ||
-            (period == 0)
-        ) {
-            return;
-        }
-
-        var newFrequency = CalculateSweepFrequency();
-
-        if (
-            (newFrequency <= MaxFrequency) &&
-            ((m_registers[Nr10] & SweepShiftMask) != 0)
-        ) {
-            m_sweepShadow = newFrequency;
-
-            WriteSweepFrequency(frequency: newFrequency);
-
-            _ = CalculateSweepFrequency();
-        }
-    }
-    // The next sweep frequency: the shadow shifted right and added to (or, in negate mode, subtracted from) itself. A
-    // result past the 11-bit maximum overflows and disables the channel; using negate mode latches so that later clearing
-    // it can disable the channel too.
-    private int CalculateSweepFrequency() {
-        var delta = (m_sweepShadow >> (m_registers[Nr10] & SweepShiftMask));
-        int newFrequency;
-
-        if ((m_registers[Nr10] & SweepNegate) != 0) {
-            newFrequency = (m_sweepShadow - delta);
-            m_sweepNegateUsed = true;
-        } else {
-            newFrequency = (m_sweepShadow + delta);
-        }
-
-        if (newFrequency > MaxFrequency) {
-            m_channelEnabled[0] = false;
-        }
-
-        return newFrequency;
-    }
-    // Store an eleven-bit frequency back into NR13 (low byte) and NR14 (low three bits), leaving NR14's control bits.
-    private void WriteSweepFrequency(int frequency) {
-        m_registers[Nr13] = ((byte)(frequency & 0xFF));
-        m_registers[Nr14] = ((byte)((m_registers[Nr14] & 0xF8) | ((frequency >> 8) & 0x07)));
-    }
-    private int CurrentFrequency() =>
-        m_registers[Nr13] | ((m_registers[Nr14] & 0x07) << 8);
-    private int SweepPeriod() =>
-        (m_registers[Nr10] >> 4) & 0x07;
-    // Turning a channel's DAC off (the upper five envelope bits, or NR30 bit 7 for wave) silences it at once.
-    private void DisableDeadChannel(int channel) {
-        if (!IsDacEnabled(channel: channel)) {
-            m_channelEnabled[channel] = false;
-        }
-    }
-    private bool IsDacEnabled(int channel) =>
-        channel switch {
+        return channel switch {
             0 => ((m_registers[Nr12] & SquareNoiseDacMask) != 0),
             1 => ((m_registers[Nr22] & SquareNoiseDacMask) != 0),
-            2 => ((m_registers[Nr30] & WaveDacEnable) != 0),
+            2 => m_waveEnable,
             _ => ((m_registers[Nr42] & SquareNoiseDacMask) != 0),
         };
-    private static int ChannelForDac(int offset) =>
-        offset switch {
-            Nr12 => 0,
-            Nr22 => 1,
-            Nr30 => 2,
-            _ => 3,
-        };
+    }
 }

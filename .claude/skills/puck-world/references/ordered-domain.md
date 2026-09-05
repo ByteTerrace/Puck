@@ -210,9 +210,11 @@ clamp deferred to `FoldChannelContributions` (a per-contributor clamp would
 make the result order-dependent). `HeldChannels` is the always-overlay
 device image (ordinals 6+ only; movement rides `Intent`).
 
-Per-entity intent sources: `IntentSource` = `Live`, `Idle`, `Wander`,
-`Attend`; the per-tick merge rule is tape > submitted > producer > zero,
-with `body.press` always overlaying.
+Per-entity intent sources: `IntentSource` = `Live`, `Idle`, `Producer(name)`
+(a named producer program, whose `ProduceSteeringIntent` op dispatches between
+its roam and approach runtime shapes on whether this tick's sense found a
+target); the per-tick merge rule is tape > submitted > producer > zero, with
+`body.press` always overlaying.
 
 ## Admission test
 

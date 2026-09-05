@@ -49,8 +49,8 @@ public static partial class WorldDefinitionValidator {
                 }
             }
         }
-        if (totalCells > 65_536) {
-            errors.Add("state board storage exceeds the 65536-cell world budget.");
+        if (totalCells > WorldTopologyCompilation.MaxTotalCells) {
+            errors.Add($"state board storage exceeds the {WorldTopologyCompilation.MaxTotalCells}-cell world budget.");
         }
     }
 

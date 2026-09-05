@@ -111,7 +111,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "body.where",
-            description: "Echoes a body's FULL 6DOF pose and its authoritative fact mask — [body.where: body:<n> pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|climbing home=(x.xx, y.yy, z.zz) scale=s.ss com=(x.xx, y.yy, z.zz)] — so a piped run can assert it moved or changed regime: facts= is the lower-case, |-joined set of the body facts the simulation's own action gates read (grounded, airborne, rising, falling, submerged, atsurface, climbing, flying, resting), or none. scale= is the body's live scale multiplier (1.00 unless bodies.scaleRow names a state row carrying this body's own cell) — the collider, resolved move speed, turn rate, and hold probes all read the same value. com= trails only for a rigid-kit body — its live centre of mass, which orbits away from pos= (always the root) for a rolling or tumbling body. body.where [body] (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries). A grounded entity prints pitch=0 roll=0; its y= reads the local ground height under it, not necessarily 0.00 (the garden's deck top sits at y=-0.50). A LOCAL seat's echo also carries anchor=body:<n> — the 0-based body index that seat's presentation (camera eye, audio listener, seat.<n>.position.* HUD bindings) derives from: the seat's bound body, or the routed body while possessing (a Control route targeting a body with capture on). A trailing instance:<name> token reads OUT OF a NAMED running instance's OWN tick snapshot instead — body.where <slot> instance:<name> (slot REQUIRED, 1..WorldBodiesLimits.LocalSeatCount, the instance form's own 1-based seat convention); no anchor rides that form (a spawned instance's seat has no client perceiving from it).",
+            description: "Echoes a body's FULL 6DOF pose and its authoritative fact mask — [body.where: body:<n> pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|holdingunwalkable home=(x.xx, y.yy, z.zz) scale=s.ss com=(x.xx, y.yy, z.zz)] — so a piped run can assert it moved or changed regime: facts= is the lower-case, |-joined set of the body facts the simulation's own action gates read (grounded, airborne, rising, falling, inmedium, atmediumband, holdingunwalkable, unsupported, resting), or none. scale= is the body's live scale multiplier (1.00 unless bodies.scaleRow names a state row carrying this body's own cell) — the collider, resolved move speed, turn rate, and hold probes all read the same value. com= trails only for a rigid-kit body — its live centre of mass, which orbits away from pos= (always the root) for a rolling or tumbling body. body.where [body] (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries). A grounded entity prints pitch=0 roll=0; its y= reads the local ground height under it, not necessarily 0.00 (the garden's deck top sits at y=-0.50). A LOCAL seat's echo also carries anchor=body:<n> — the 0-based body index that seat's presentation (camera eye, audio listener, seat.<n>.position.* HUD bindings) derives from: the seat's bound body, or the routed body while possessing (a Control route targeting a body with capture on). A trailing instance:<name> token reads OUT OF a NAMED running instance's OWN tick snapshot instead — body.where <slot> instance:<name> (slot REQUIRED, 1..WorldBodiesLimits.LocalSeatCount, the instance form's own 1-based seat convention); no anchor rides that form (a spawned instance's seat has no client perceiving from it).",
             handler: WhereHandler
         );
         yield return CommandDefinition.WithWireArgs(
@@ -154,7 +154,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "body.stop",
-            description: "Stops a body's avatar dead: clears its whole tape, releases every held movement key, cancels every in-flight timed press (body.press hold — materialized or still pending), AND clears any BindingEntryMode.Toggle latch the seat carries (a toggled-on channel does not survive a stop) — the panic verb: body.stop [body] (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries; stopping a population entry drops its tape so its wander resumes). Echoes the true released/cleared/toggle counts, or, if the Drive gate refused the command (e.g. CC/death), a refusal naming the denial — never an affirmative quoting a stale count. A trailing instance:<name> token addresses a NAMED running instance's own seat instead — body.stop <slot> instance:<name> (slot REQUIRED, 1..WorldBodiesLimits.LocalSeatCount) — echoing a bare \"tape cleared\", since no client mirrors that seat's held-key/toggle state.",
+            description: "Stops a body's avatar dead: clears its whole tape, releases every held movement key, cancels every in-flight timed press (body.press hold — materialized or still pending), AND clears any BindingEntryMode.Toggle latch the seat carries (a toggled-on channel does not survive a stop) — the panic verb: body.stop [body] (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries; stopping a population entry drops its tape so its producer resumes). Echoes the true released/cleared/toggle counts, or, if the Drive gate refused the command (e.g. CC/death), a refusal naming the denial — never an affirmative quoting a stale count. A trailing instance:<name> token addresses a NAMED running instance's own seat instead — body.stop <slot> instance:<name> (slot REQUIRED, 1..WorldBodiesLimits.LocalSeatCount) — echoing a bare \"tape cleared\", since no client mirrors that seat's held-key/toggle state.",
             handler: StopHandler,
             ackOnly: true
         );
@@ -373,7 +373,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     // Text mutations enter the same tick snapshots as physical input. Read-only inspection stays immediate so an
     // operator can inspect the last completed tick even while no simulation step is currently due.
     private static CommandDefinition Route(CommandDefinition command) =>
-        ((command.Name is "body.where" or "body.rig" or "player.sticks" or "body.channels" or "body.state" or "body.attachment")
+        ((command.Name is "body.where" or "body.rig" or "player.sticks" or "body.channels" or "body.state" or "body.tether")
             ? command
             : command with { Routing = CommandRouting.Simulation }
         );
@@ -493,7 +493,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             yield return Route(command: command);
         }
 
-        foreach (var command in AttachmentVerbs()) {
+        foreach (var command in TetherVerbs()) {
             yield return Route(command: command);
         }
     }
