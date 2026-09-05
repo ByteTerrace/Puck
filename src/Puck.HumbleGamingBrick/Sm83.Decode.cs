@@ -4,42 +4,176 @@ namespace Puck.HumbleGamingBrick;
 /// The SM83 instruction fetch and dispatch, plus the bus access primitives. The regular blocks — register-to-register
 /// loads, accumulator ALU, immediate and increment forms, RST, and the CB-prefixed bit operations — are decoded by
 /// their bit fields; the remaining opcodes are dispatched in four 32-entry range groups.
+/// <para>
+/// The bus primitives carry the access's phase, not just its cost. A machine cycle's four T-cycles hold two bus
+/// instants: the drive instant at its start, where the address and a write's data reach the peripheral, and the latch
+/// instant two T-cycles later, where the CPU samples the data lines. Cycles are ticked lazily against
+/// <c>m_busCycleDebt</c> so a write can settle before its own drive instant, which several I/O registers do; anything
+/// that samples component state outside an access settles the debt first.
+/// </para>
 /// </summary>
 public sealed partial class Sm83 {
     // A memory access spans one machine cycle = four CPU T-cycles, each ticking every component once in domain-aware
-    // lockstep through the component clock. Where inside those four T-cycles the bus actually settles is the access
-    // dot-phase, expressed here as the number of T-cycles ticked BEFORE the bus is touched: a read latches late (the
-    // CPU samples the bus on the access's final T-cycle), a write commits early (the value is driven on the first).
+    // lockstep through the component clock. An M-cycle has two distinct bus instants, not one: the DRIVE instant at the
+    // machine cycle's start, when the address and — for a write — the data are on the pins, and the LATCH instant two
+    // T-cycles later, when the CPU samples the data lines. A write reaches the peripheral on the drive instant; a read
+    // takes the peripheral's value on the latch instant.
     private const int CpuTCyclesPerMachineCycle = 4;
-    // The access dot-phase: how many of an access's four T-cycles tick BEFORE the bus is touched. A read latches at T2
-    // and a write commits on the first T-cycle. Derived by sweeping against the hardware-accurate memory-timing
-    // verdicts in src/Puck.HumbleGamingBrick.Post: read=2 clears the whole call/jp/ret/reti/push-pop/add_sp/
-    // ld_hl_sp/oam_dma timing family while keeping the timer conformance and the CPU-instruction/instruction-timing/memory-timing
-    // suites green.
+    // The read latch's offset from its machine cycle's drive instant. The whole call/jp/ret/reti/push-pop/add_sp/
+    // ld_hl_sp/oam_dma timing family and the timer conformance suite pin it: those cases distinguish which machine
+    // cycle an access lands in, and this is what places the sample inside it.
     private const int LeadingTCyclesBeforeRead = 2;
-    private const int LeadingTCyclesBeforeWrite = 0;
+    // The control register's display-enable bit, and the one control bit a monochrome control write presents on its
+    // settling T-cycle (the background enable).
+    private const byte LcdEnableBit = 0x80;
+    private const byte MonochromeLcdControlSettlingMask = 0x01;
+    // Cycles of the machine cycles already begun that have not been ticked yet — the distance from the clock's current
+    // position to the NEXT access's drive instant. A read leaves two (its own latch already ticked two of its four); a
+    // write leaves the four it did not tick, an internal cycle adds a whole four. Deferring them is what lets a write
+    // commit BEFORE its own drive instant, which the I/O write conflicts need and which a tick-as-you-go accounting
+    // cannot express. It is always zero at an instruction boundary, so no snapshot carries it.
+    private int m_busCycleDebt;
 
     private byte ReadCycle(ushort address) {
+        FlushBusCycles();
         AdvanceTCycles(count: LeadingTCyclesBeforeRead);
 
         var value = m_bus.ReadByte(address: address);
 
-        AdvanceTCycles(count: (CpuTCyclesPerMachineCycle - LeadingTCyclesBeforeRead));
+        m_busCycleDebt = (CpuTCyclesPerMachineCycle - LeadingTCyclesBeforeRead);
 
         return value;
     }
+    // Where inside its machine cycle an I/O write actually reaches the component behind the register. Most writes
+    // commit on the drive instant and the component reads the OLD value for that cycle. A handful of PPU registers sit
+    // on the display's own path and settle earlier or later than the pins do; a monochrome palette register settles
+    // over two T-cycles, the first of which drives the OR of the old and new values onto it. Whichever phase applies,
+    // the NEXT access's drive instant stays four T-cycles after this one's.
+    private enum WriteConflict {
+        None,
+        OneTCycleEarly,
+        TwoTCyclesEarly,
+        MonochromePalette,
+        MonochromeStatus,
+        MonochromeLcdControl,
+    }
+
     private void WriteCycle(ushort address, byte value) {
-        AdvanceTCycles(count: LeadingTCyclesBeforeWrite);
+        var conflict = ResolveWriteConflict(
+            address: address,
+            value: value
+        );
+
+        if (conflict == WriteConflict.None) {
+            FlushBusCycles();
+            m_bus.WriteByte(
+                address: address,
+                value: value
+            );
+
+            m_busCycleDebt = CpuTCyclesPerMachineCycle;
+
+            return;
+        }
+
+        WriteCycleWithConflict(
+            address: address,
+            conflict: conflict,
+            value: value
+        );
+    }
+    private void WriteCycleWithConflict(ushort address, byte value, WriteConflict conflict) {
+        var lead = (conflict switch {
+            WriteConflict.OneTCycleEarly => -1,
+            WriteConflict.TwoTCyclesEarly or WriteConflict.MonochromePalette or WriteConflict.MonochromeLcdControl => -2,
+            _ => 0,
+        });
+        // A write that settles before its own drive instant needs that much of the previous access still unticked.
+        // Every write reached through an instruction has it (a read leaves two, a write four, an internal cycle four
+        // more); a write that does not falls back to the pins' own instant rather than travelling backwards.
+        if ((m_busCycleDebt + lead) < 0) {
+            lead = 0;
+        }
+
+        AdvanceTCycles(count: (m_busCycleDebt + lead));
+
+        m_busCycleDebt = 0;
+
+        // A register that settles presents an intermediate value for one T-cycle, then takes the written one. The
+        // T-cycle is part of the phase, so it is spent even when the two values happen to coincide.
+        if (conflict is WriteConflict.MonochromePalette or WriteConflict.MonochromeStatus or WriteConflict.MonochromeLcdControl) {
+            m_bus.SettleIoWrite(
+                address: address,
+                value: (conflict switch {
+                    // A monochrome palette register settles through the OR of the old and new values.
+                    WriteConflict.MonochromePalette => ((byte)(value | m_bus.PeekIoRegister(address: address))),
+                    // The monochrome status register reads as all ones for the settling T-cycle.
+                    WriteConflict.MonochromeStatus => ((byte)0xFF),
+                    // Only the background-enable bit of a monochrome control register reaches the display on the
+                    // settling T-cycle; every other bit holds its old value across it.
+                    _ => ((byte)(m_bus.PeekIoRegister(address: address) | (value & MonochromeLcdControlSettlingMask))),
+                })
+            );
+            AdvanceTCycles(count: 1);
+
+            ++lead;
+        }
+
         m_bus.WriteByte(
             address: address,
             value: value
         );
-        AdvanceTCycles(count: (CpuTCyclesPerMachineCycle - LeadingTCyclesBeforeWrite));
+
+        m_busCycleDebt = (CpuTCyclesPerMachineCycle - lead);
+    }
+    private WriteConflict ResolveWriteConflict(ushort address, byte value) {
+        if (address is not (>= MemoryMap.LcdControl and <= MemoryMap.WindowX)) {
+            return WriteConflict.None;
+        }
+
+        if (m_supportsColor) {
+            // Color palette-index registers reach the display a machine cycle's worth of pins ahead of the write; from
+            // revision D the display samples them one T-cycle earlier still.
+            return (address switch {
+                MemoryMap.BackgroundPalette or MemoryMap.ObjectPalette0 or MemoryMap.ObjectPalette1 => (m_samplesPaletteEarly
+                    ? WriteConflict.TwoTCyclesEarly
+                    : WriteConflict.OneTCycleEarly),
+                _ => WriteConflict.None,
+            });
+        }
+
+        return (address switch {
+            // The enable edge is the one control write with no settling phase: the display's start-up chain, and every
+            // dot of the first line's transient with it, is measured from the pins.
+            MemoryMap.LcdControl => (((m_bus.PeekIoRegister(address: address) ^ value) & LcdEnableBit) == 0
+                ? WriteConflict.MonochromeLcdControl
+                : WriteConflict.None),
+            MemoryMap.LcdStatus => WriteConflict.MonochromeStatus,
+            MemoryMap.ScrollY => WriteConflict.OneTCycleEarly,
+            MemoryMap.ScrollX => WriteConflict.TwoTCyclesEarly,
+            MemoryMap.BackgroundPalette or MemoryMap.ObjectPalette0 or MemoryMap.ObjectPalette1 => WriteConflict.MonochromePalette,
+            _ => WriteConflict.None,
+        });
     }
     private void InternalCycle() =>
+        m_busCycleDebt += CpuTCyclesPerMachineCycle;
+    // A machine cycle the CPU spends without touching the bus at all — the locked-up fetchless spin, the speed-switch
+    // stall, stop and halt, and a DMA stall. Nothing can commit inside it, so it settles the debt as it goes.
+    private void IdleMachineCycle() {
+        FlushBusCycles();
         AdvanceTCycles(count: CpuTCyclesPerMachineCycle);
+    }
+    // Ticks the deferred cycles through, bringing the clock to the next access's drive instant. Every read of a
+    // component's state that is not itself a bus access has to settle the debt first, or it samples the past.
+    private void FlushBusCycles() {
+        var debt = m_busCycleDebt;
+
+        m_busCycleDebt = 0;
+
+        AdvanceTCycles(count: debt);
+    }
     private void AdvanceTCycles(int count) {
-        for (var remaining = count; (remaining != 0); --remaining) {
+        for (var remaining = count; (remaining > 0); --remaining) {
             m_componentClock.AdvanceCpuTCycle();
         }
     }
@@ -55,9 +189,15 @@ public sealed partial class Sm83 {
         // it one machine cycle per step (see StepInstruction), staying steppable at instruction granularity for the
         // whole re-gear. Without an armed switch (or on a monochrome machine) STOP parks the machine: stop mode on
         // Color, a plain halt-alike on monochrome.
+        FlushBusCycles();
+
         if (m_interrupts.Pending == InterruptKind.None) {
             _ = ReadNextByte();
         }
+
+        // The speed-switch stall and the halt latch are measured from the end of the opcode, not from the pad byte's
+        // own latch, so the pad read's remaining cycles settle before either is armed.
+        FlushBusCycles();
 
         if (
             m_supportsColor &&
@@ -175,6 +315,8 @@ public sealed partial class Sm83 {
                 // reaching here — the CPU does not halt either: PC snaps back onto this opcode so the pending line
                 // dispatches on the very next step with the return address pointing at this HALT, which re-executes
                 // once the handler returns.
+                FlushBusCycles();
+
                 if (m_interrupts.Pending != InterruptKind.None) {
                     if (m_interruptMasterEnable) {
                         m_programCounter = ((ushort)(m_programCounter - 1));

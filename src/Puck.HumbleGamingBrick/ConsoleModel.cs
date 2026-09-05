@@ -131,6 +131,13 @@ public static class ConsoleModelExtensions {
     /// <returns><see langword="true"/> from CPU CGB D onward.</returns>
     public static bool LatchesFetchRowAtTileStep(this ConsoleModel model) =>
         (model >= ConsoleModel.CgbD);
+    /// <summary>Returns whether the display samples a monochrome-palette register one T-cycle earlier inside the
+    /// writing machine cycle than the pins present it. CPU CGB D moved the sample, so the same mid-drawing palette
+    /// write lands a pixel apart on older and newer Color silicon.</summary>
+    /// <param name="model">The revision to interrogate.</param>
+    /// <returns><see langword="true"/> from CPU CGB D onward.</returns>
+    public static bool SamplesPaletteWriteEarly(this ConsoleModel model) =>
+        (model >= ConsoleModel.CgbD);
     /// <summary>Returns whether the infrared receiver reports the machine's own emitted light. CPU CGB E and every
     /// earlier Color stepping sense their own lit LED through the infrared port; the Advanced console does not, so an
     /// unpaired Advanced machine reads dark unless a cartridge with its own infrared window is present.</summary>

@@ -31,9 +31,10 @@ public sealed class PpuTimingParameters {
     public int LineEventPhase { get; init; } = -1;
     /// <summary>The additional shift, in dots, applied to the register file's own view only — the LY register, the
     /// polled STAT mode bits, and the CPU-facing memory locks — relative to the interrupt logic, which samples the same
-    /// edges a dot sooner. The gap is where the CPU latches an I/O read inside its access: the bus settles on the
-    /// access's third T-cycle (<c>Sm83</c>'s read dot-phase), while the interrupt line is sampled at the instruction
-    /// boundary, so a poll and an interrupt taken at the same edge disagree by one dot.</summary>
+    /// edges a dot sooner. Zero: the line event schedule's own dots already carry the gap between an I/O read's latch
+    /// (<c>Sm83.Decode</c>'s <c>LeadingTCyclesBeforeRead</c> into the access) and the interrupt line, which is sampled
+    /// at the instruction boundary. Shifting the schedule and restoring the polled view through this knob is measured
+    /// and refuted — it moves the interrupt raise and the memory locks together and fails the interrupt families.</summary>
     public int PolledEventPhase { get; init; }
     /// <summary>The additional shift, in dots, applied to the LY-comparison events only (the gap opening and its
     /// close, on every line kind) relative to the rest of the line event schedule — the LYC comparison's own clock

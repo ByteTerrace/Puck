@@ -81,12 +81,19 @@ Probe kinds:
   (bit depths 1/2/4, color type 3 via `PLTE`/`tRNS`), not just the 8-bit
   RGB/RGBA/grayscale-alpha PngEncoder itself ever writes. This framebuffer's
   DMG shades and CGB `(X<<3)|(X>>2)` channel expansion already match every
-  suite's "common palette" convention except gambatte's own CGB formula, so
-  gambatte's `.gbc` cases are recorded `unrunnable` rather than compared
-  incorrectly. A `ScreenshotProbe` case whose expected image still cannot be
-  decoded reports `Inconclusive` (folded into the ledger's `fail` bucket)
-  instead of throwing, so one bad image never takes its whole suite's stage
-  down as an infrastructure failure.
+  suite's "common palette" convention except gambatte's own CGB screenshots,
+  which are rendered under gambatte's own weighted RGB mix — a case's
+  `LedgerCase.Palette` selects that conversion (`GambatteCgbPalette`) before
+  the comparison runs. A `ScreenshotProbe` case whose expected image still
+  cannot be decoded reports `Inconclusive` (folded into the ledger's `fail`
+  bucket) instead of throwing, so one bad image never takes its whole suite's
+  stage down as an infrastructure failure.
+- `hex-pattern` — gambatte's `_out<hex>` convention: the expected hex digits
+  are drawn as 8x8 monochrome tiles at the top of the screen, compared against
+  a ported copy of `test/testrunner.cpp`'s own glyph table (`HexPatternProbe`).
+- `audio` — gambatte's `_outaudio0`/`_outaudio1` convention: whether the final
+  rendered frame's audio output is constant (silence) or varies (sound),
+  drained through `IAudioSink` at half the CPU clock (`AudioProbe`).
 
 Stage semantics, per case:
 
@@ -264,6 +271,11 @@ divergence in the requested budget (a trailing run-length difference at the
 `--frames` cutoff is reported but does not fail — see below), exit 1 means a
 content divergence was found, exit 2 means infrastructure (bad arguments, or
 `sb-trace.exe` itself failed).
+
+A run of fewer than about 60 frames compares only the boot ROM: the DMG logo
+scroll occupies them, so every ROM yields the same stream and the same record
+count. Give a comparison at least 120 frames, and treat two ROMs reporting an
+identical record count as evidence the ROMs never ran.
 
 The trace is a stream of conceptual events, not raw internal state — raw
 fetcher-step equality would flag the documented object-fetcher oracle skew

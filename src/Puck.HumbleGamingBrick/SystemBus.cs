@@ -138,6 +138,17 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
     }
 
     /// <inheritdoc/>
+    /// <remarks>Routed like an ordinary read, minus the watchpoint witness: the settling of a register mid-write is
+    /// not an access the debugger should see.</remarks>
+    public byte PeekIoRegister(ushort address) =>
+        m_ppu.ReadRegister(address: address);
+    /// <inheritdoc/>
+    public void SettleIoWrite(ushort address, byte value) =>
+        m_ppu.WriteRegister(
+            address: address,
+            value: value
+        );
+    /// <inheritdoc/>
     public byte ReadByte(ushort address) {
         // Debug read watchpoints: dormant (one predicted-not-taken field test) until a hgb.watch arms one, so the hot
         // fetch path is unchanged when nothing is armed (the ThroughputStage / zero-alloc gates prove it).

@@ -15,6 +15,17 @@ public interface ISystemBus {
     /// <param name="address">The 16-bit address to write.</param>
     /// <param name="value">The byte to write.</param>
     void WriteByte(ushort address, byte value);
+    /// <summary>Reads the byte an I/O register currently holds without issuing a bus access. The CPU needs it to
+    /// resolve a register whose write settles through an intermediate value; that settling is one transition inside a
+    /// single access, not an access of its own, so it never reaches the pins.</summary>
+    /// <param name="address">The 16-bit register address to peek.</param>
+    /// <returns>The byte the register holds.</returns>
+    byte PeekIoRegister(ushort address);
+    /// <summary>Applies the intermediate value an I/O register settles through part-way into the machine cycle that is
+    /// writing it. Not a bus access: an implementation with no I/O registers ignores it.</summary>
+    /// <param name="address">The 16-bit register address.</param>
+    /// <param name="value">The value the register presents for the settling T-cycle.</param>
+    void SettleIoWrite(ushort address, byte value);
     /// <summary>Notes the program counter at the start of the CPU's CURRENT instruction dispatch — the debug watchpoint
     /// PC witness. The bus has no other way to know which instruction is making an access (its own <c>ReadByte</c>/
     /// <c>WriteByte</c> only ever see an address), so the CPU calls this once per <c>StepInstruction</c>, before any

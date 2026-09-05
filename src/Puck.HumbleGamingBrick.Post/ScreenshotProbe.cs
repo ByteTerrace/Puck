@@ -7,8 +7,10 @@ namespace Puck.HumbleGamingBrick.Post;
 /// Runs a case for its suite's fixed frame budget, packs the resulting framebuffer through <see cref="FramebufferRgba"/>,
 /// and compares it pixel-exact against the first of a case's expected-image candidates that exists on disk (a
 /// suite's device-tag fallback chain, e.g. mealybug's <c>_dmg_blob.png</c> then <c>_dmg_b.png</c>). This framebuffer's
-/// DMG shades and CGB <c>(X&lt;&lt;3)|(X&gt;&gt;2)</c> channel expansion already match the shared "common palette" the
-/// corpus's screenshots are rendered under, so no color conversion happens here — a mismatch is either a rendering
+/// DMG shades and CGB <c>(X&lt;&lt;3)|(X&gt;&gt;2)</c> channel expansion already match the shared "common palette" most
+/// of the corpus's screenshots are rendered under (<see cref="LedgerCase.Palette"/> <see cref="ScreenshotPalette.Common"/>,
+/// no conversion applied); a case whose <see cref="LedgerCase.Palette"/> is <see cref="ScreenshotPalette.GambatteCgb"/>
+/// runs the framebuffer through <see cref="GambatteCgbPalette"/> first. A mismatch beyond that is either a rendering
 /// divergence or a resolution mismatch, both reported as a failure.
 /// </summary>
 internal static class ScreenshotProbe {
@@ -50,7 +52,10 @@ internal static class ScreenshotProbe {
         );
 
         var framebuffer = machine.GetRequiredService<IFramebuffer>();
-        var actualRgba = FramebufferRgba.Pack(pixels: framebuffer.Pixels);
+        var actualRgba = FramebufferRgba.Pack(pixels: (ledgerCase.Palette switch {
+            ScreenshotPalette.GambatteCgb => Transformed(pixels: framebuffer.Pixels),
+            _ => framebuffer.Pixels,
+        }));
         PngImage expected;
 
         try {
@@ -98,5 +103,15 @@ internal static class ScreenshotProbe {
                 Detail: $"{diffPixels} differing pixel(s) against {Path.GetFileName(path: imagePath)} after {ledgerCase.FrameCap} frames",
                 Verdict: ProbeVerdict.Fail
             ));
+    }
+
+    private static uint[] Transformed(ReadOnlySpan<uint> pixels) {
+        var transformed = new uint[pixels.Length];
+
+        for (var index = 0; (index < pixels.Length); ++index) {
+            transformed[index] = GambatteCgbPalette.Transform(pixel: pixels[index]);
+        }
+
+        return transformed;
     }
 }

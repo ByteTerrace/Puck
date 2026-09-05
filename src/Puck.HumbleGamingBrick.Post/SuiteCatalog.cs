@@ -631,13 +631,19 @@ internal static class SuiteCatalog {
         }
     }
     /// <summary>
-    /// gambatte ships most cases as <c>.gbc</c> cartridges whose CGB screenshots are rendered under gambatte's own RGB
-    /// formula (a weighted channel mix), not the shared <c>(X&lt;&lt;3)|(X&gt;&gt;2)</c> expansion this framebuffer
-    /// and every other suite's screenshots use — comparing against them would fail on a palette mismatch, not a real
-    /// emulation divergence, so every <c>.gbc</c> case is recorded unrunnable. The much smaller set of plain
-    /// <c>.gb</c> cases use the ordinary DMG shades and route mechanically when a matching <c>_dmg08</c>/<c>_xdmg08</c>
-    /// screenshot ships; a case reporting through a hex pattern (<c>_out&lt;hex&gt;</c>) or audio output
-    /// (<c>_outaudio*</c>) has no shipped image and is recorded unrunnable with its own reason.
+    /// gambatte's own result convention, ported from <c>test/testrunner.cpp</c>'s <c>main()</c>: a ROM's file stem is
+    /// scanned for <c>dmg08_cgb04c_out</c> (one shared expected value for both models), else <c>dmg08_out</c> (a DMG
+    /// value, plus a separate <c>cgb04c_out</c> value if that also appears — the multi-model
+    /// <c>_dmg08_out1_cgb04c_out0</c> shape), else a bare <c>_out</c> (a CGB-only value; DMG is not tested at all).
+    /// Whatever follows the matched tag is either <c>audio0</c>/<c>audio1</c> (<see cref="ProbeKind.Audio"/>) or a run
+    /// of hex digits (<see cref="ProbeKind.HexPattern"/>) — this is an exact substring search, so the corpus's own
+    /// "excluded" <c>_xout</c>/<c>_xoutaudio</c> variants (which testrunner.cpp also never matches) fall through
+    /// untested by design. A model with no out-tag instead gets a <see cref="ProbeKind.Screenshot"/> case when a
+    /// sibling expected image ships (a DMG image is <c>_dmg08.png</c> or <c>_xdmg08.png</c>; a CGB image is
+    /// <c>_cgb04c.png</c>, compared under <see cref="ScreenshotPalette.GambatteCgb"/> since gambatte renders its CGB
+    /// screenshots under its own RGB mix rather than the shared common palette). A ROM matching neither convention on
+    /// either model is recorded <see cref="CaseDisposition.Unrunnable"/> on its one applicable model — DMG, unless
+    /// its extension is <c>.gbc</c>.
     /// </summary>
     public static IReadOnlyList<LedgerCase> GambatteRoms(string? root) {
         if (root is null) {
@@ -654,26 +660,54 @@ internal static class SuiteCatalog {
         }
 
         var cases = new List<LedgerCase>();
-
-        foreach (var rom in EnumerateFiles(
+        var roms = EnumerateFiles(
             directory: suiteRoot,
             pattern: "*.gb",
             recurse: true
-        )) {
+        ).Concat(second: EnumerateFiles(
+            directory: suiteRoot,
+            pattern: "*.gbc",
+            recurse: true
+        ));
+
+        foreach (var rom in roms) {
             var directory = (Path.GetDirectoryName(path: rom) ?? suiteRoot);
             var stem = Path.GetFileNameWithoutExtension(path: rom);
             var relativePath = Rel(
                 fullPath: rom,
                 root: suiteRoot
             );
-            var candidates = new[] {
-                Path.Combine(path1: directory, path2: (stem + "_dmg08.png")),
-                Path.Combine(path1: directory, path2: (stem + "_xdmg08.png")),
-            };
+            var (dmgTag, cgbTag) = GambatteOutTags(stem: stem);
+            var dmgCase = GambatteResultCase(
+                model: ConsoleModel.DmgC,
+                relativePath: relativePath,
+                rom: rom,
+                stem: stem,
+                tag: dmgTag
+            );
+            var cgbCase = GambatteResultCase(
+                model: ConsoleModel.CgbE,
+                relativePath: relativePath,
+                rom: rom,
+                stem: stem,
+                tag: cgbTag
+            );
+            var dmgImage = FirstExisting(
+                candidates: [(stem + "_dmg08.png"), (stem + "_xdmg08.png")],
+                directory: directory
+            );
+            var cgbImage = FirstExisting(
+                candidates: [(stem + "_cgb04c.png")],
+                directory: directory
+            );
+            var routed = false;
 
-            if (candidates.Any(predicate: File.Exists)) {
+            if (dmgCase is not null) {
+                cases.Add(item: dmgCase);
+                routed = true;
+            } else if (dmgImage is not null) {
                 cases.Add(item: new LedgerCase(
-                    ExpectedImageCandidates: candidates,
+                    ExpectedImageCandidates: [dmgImage],
                     FrameCap: GambatteFrameCap,
                     FullPath: rom,
                     Model: ConsoleModel.DmgC,
@@ -681,47 +715,46 @@ internal static class SuiteCatalog {
                     RelativePath: relativePath,
                     Suite: "gambatte"
                 ));
-            } else {
-                var reason = (stem.Contains(
-                    comparisonType: StringComparison.OrdinalIgnoreCase,
-                    value: "_outaudio"
+                routed = true;
+            }
+
+            if (cgbCase is not null) {
+                cases.Add(item: cgbCase);
+                routed = true;
+            } else if (cgbImage is not null) {
+                cases.Add(item: new LedgerCase(
+                    ExpectedImageCandidates: [cgbImage],
+                    FrameCap: GambatteFrameCap,
+                    FullPath: rom,
+                    Model: ConsoleModel.CgbE,
+                    Palette: ScreenshotPalette.GambatteCgb,
+                    Probe: ProbeKind.Screenshot,
+                    RelativePath: relativePath,
+                    Suite: "gambatte"
+                ));
+                routed = true;
+            }
+
+            if (!routed) {
+                var fallbackModel = (string.Equals(
+                    a: Path.GetExtension(path: rom),
+                    b: ".gbc",
+                    comparisonType: StringComparison.OrdinalIgnoreCase
                 )
-                    ? "audio-output result requires decoding testrunner.cpp's PCM comparison, not implemented here"
-                    : (HasHexOutMarker(stem: stem)
-                        ? "hex-pattern result requires decoding testrunner.cpp's monochrome pattern, not implemented here"
-                        : "no DMG expected image shipped for this case"));
+                    ? ConsoleModel.CgbE
+                    : ConsoleModel.DmgC);
 
                 cases.Add(item: new LedgerCase(
                     Disposition: CaseDisposition.Unrunnable,
                     FrameCap: GambatteFrameCap,
                     FullPath: rom,
-                    Model: ConsoleModel.DmgC,
+                    Model: fallbackModel,
                     Probe: ProbeKind.Screenshot,
                     RelativePath: relativePath,
                     Suite: "gambatte",
-                    UnrunnableReason: reason
+                    UnrunnableReason: "no _out/_outaudio result marker decodes for this ROM and no expected screenshot ships beside it"
                 ));
             }
-        }
-
-        foreach (var rom in EnumerateFiles(
-            directory: suiteRoot,
-            pattern: "*.gbc",
-            recurse: true
-        )) {
-            cases.Add(item: new LedgerCase(
-                Disposition: CaseDisposition.Unrunnable,
-                FrameCap: GambatteFrameCap,
-                FullPath: rom,
-                Model: ConsoleModel.CgbE,
-                Probe: ProbeKind.Screenshot,
-                RelativePath: Rel(
-                    fullPath: rom,
-                    root: suiteRoot
-                ),
-                Suite: "gambatte",
-                UnrunnableReason: "gambatte's CGB screenshots use its own RGB conversion formula, not the shared (X<<3)|(X>>2) expansion this framebuffer produces"
-            ));
         }
 
         return cases;
@@ -1068,11 +1101,81 @@ internal static class SuiteCatalog {
             oldChar: '/'
         )
     );
-    private static bool HasHexOutMarker(string stem) =>
-        (stem.LastIndexOf(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            value: "_out"
-        ) >= 0);
+    private static string? FirstExisting(string directory, IEnumerable<string> candidates) =>
+        candidates
+            .Select(selector: candidate => Path.Combine(
+            path1: directory,
+            path2: candidate
+        ))
+            .FirstOrDefault(predicate: File.Exists);
+    // Ports testrunner.cpp's main() branch that decides which of a ROM's two models get an out-tag at all, and where
+    // each one's expected value starts. Ordinal, case-sensitive, exact-substring — matching testrunner.cpp exactly,
+    // including that it never matches the corpus's own "excluded" _xout/_xoutaudio variants.
+    private static (string? DmgTag, string? CgbTag) GambatteOutTags(string stem) {
+        const string Combined = "dmg08_cgb04c_out";
+        const string DmgOnly = "dmg08_out";
+        const string CgbOnly = "cgb04c_out";
+        const string Generic = "_out";
+
+        if (stem.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: Combined
+        )) {
+            return (Combined, Combined);
+        }
+
+        if (stem.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: DmgOnly
+        )) {
+            return (DmgOnly, (stem.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: CgbOnly
+            )
+                ? CgbOnly
+                : null));
+        }
+
+        return (null, (stem.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: Generic
+        )
+            ? Generic
+            : null));
+    }
+    // Builds the Audio or HexPattern case a matched out-tag implies: whatever follows the tag is either an
+    // audio0/audio1 marker or the maximal run of hex digits (frameBufferMatchesOut stops at the first character
+    // tileFromChar rejects, so trailing text past the digits — e.g. a second model's tag — is never consumed here).
+    private static LedgerCase? GambatteResultCase(string rom, string relativePath, ConsoleModel model, string stem, string? tag) {
+        if (tag is null) {
+            return null;
+        }
+
+        var value = stem[(stem.IndexOf(
+            comparisonType: StringComparison.Ordinal,
+            value: tag
+        ) + tag.Length)..];
+
+        if (value.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "audio0"
+        )) {
+            return new LedgerCase(ExpectedAudio: AudioExpectation.Silence, FrameCap: GambatteFrameCap, FullPath: rom, Model: model, Probe: ProbeKind.Audio, RelativePath: relativePath, Suite: "gambatte");
+        }
+
+        if (value.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "audio1"
+        )) {
+            return new LedgerCase(ExpectedAudio: AudioExpectation.Sound, FrameCap: GambatteFrameCap, FullPath: rom, Model: model, Probe: ProbeKind.Audio, RelativePath: relativePath, Suite: "gambatte");
+        }
+
+        var hex = new string(value: value.TakeWhile(predicate: static c => char.IsAsciiHexDigit(c: c)).ToArray());
+
+        return ((hex.Length > 0)
+            ? new LedgerCase(ExpectedHexPattern: hex, FrameCap: GambatteFrameCap, FullPath: rom, Model: model, Probe: ProbeKind.HexPattern, RelativePath: relativePath, Suite: "gambatte")
+            : null);
+    }
     private static IReadOnlyList<LedgerCase> ManualSpritePriorityRoms(string? root, string suite, string suiteRelativeDirectory) {
         if (root is null) {
             return [];

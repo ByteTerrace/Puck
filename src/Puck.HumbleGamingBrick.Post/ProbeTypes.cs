@@ -14,6 +14,30 @@ internal enum ProbeKind {
     /// <summary>A framebuffer capture compared pixel-exact against a shipped expected PNG, through
     /// <see cref="ScreenshotProbe"/>.</summary>
     Screenshot,
+    /// <summary>gambatte's monochrome digit pattern drawn at the top of the screen, through <see cref="HexPatternProbe"/>.</summary>
+    HexPattern,
+    /// <summary>gambatte's silence-or-sound convention over the final rendered frame's audio, through
+    /// <see cref="AudioProbe"/>.</summary>
+    Audio,
+}
+/// <summary>Which screenshot color convention a <see cref="ProbeKind.Screenshot"/> case's expected image was rendered
+/// under.</summary>
+internal enum ScreenshotPalette {
+    /// <summary>The shared "common palette" convention this framebuffer already produces natively: DMG shades, and
+    /// CGB channels expanded <c>(X&lt;&lt;3)|(X&gt;&gt;2)</c>.</summary>
+    Common,
+    /// <summary>gambatte's own weighted CGB-to-RGB mix (see <see cref="GambatteCgbPalette"/>), applied to the actual
+    /// framebuffer before comparison because gambatte's own CGB screenshots were rendered under it instead of the
+    /// common palette.</summary>
+    GambatteCgb,
+}
+/// <summary>What a <see cref="ProbeKind.Audio"/> case expects of the final rendered frame's audio output.</summary>
+internal enum AudioExpectation {
+    /// <summary>Every sample of the final frame must equal the first (gambatte's <c>_outaudio0</c> convention).</summary>
+    Silence,
+    /// <summary>At least one sample of the final frame must differ from the first (gambatte's <c>_outaudio1</c>
+    /// convention).</summary>
+    Sound,
 }
 /// <summary>What a probe found.</summary>
 internal enum ProbeVerdict {
@@ -49,6 +73,9 @@ internal enum CaseDisposition {
 /// <param name="Disposition">Whether this case runs the emulator at all.</param>
 /// <param name="UnrunnableReason">The reason a <see cref="CaseDisposition.Unrunnable"/> case is not run.</param>
 /// <param name="ExpectedImageCandidates">For <see cref="ProbeKind.Screenshot"/>, the expected-image paths to try in order.</param>
+/// <param name="Palette">For <see cref="ProbeKind.Screenshot"/>, the color convention the expected image was rendered under.</param>
+/// <param name="ExpectedHexPattern">For <see cref="ProbeKind.HexPattern"/>, the hex digits gambatte's convention expects drawn at the top of the screen.</param>
+/// <param name="ExpectedAudio">For <see cref="ProbeKind.Audio"/>, whether the final rendered frame is expected silent or sounding.</param>
 internal sealed record LedgerCase(
     string Suite,
     string RelativePath,
@@ -58,5 +85,8 @@ internal sealed record LedgerCase(
     int FrameCap,
     CaseDisposition Disposition = CaseDisposition.Runnable,
     string? UnrunnableReason = null,
-    IReadOnlyList<string>? ExpectedImageCandidates = null
+    IReadOnlyList<string>? ExpectedImageCandidates = null,
+    ScreenshotPalette Palette = ScreenshotPalette.Common,
+    string? ExpectedHexPattern = null,
+    AudioExpectation? ExpectedAudio = null
 );

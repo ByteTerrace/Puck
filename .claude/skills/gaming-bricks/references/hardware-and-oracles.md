@@ -86,8 +86,9 @@ period, which is why two (divisor, shift) pairs naming one rate step the LFSR
 at the same instants.
 
 A read and a write reach the unit at different points inside their machine
-cycle (`Sm83.Decode`'s `LeadingTCyclesBeforeRead`/`Write`), so a read observes
-one more audio tick than the write that set the event up. The generators carry
+cycle — a write on the drive instant, a read `LeadingTCyclesBeforeRead` later
+(`Sm83.Decode`) — so a read observes one more audio tick than the write that set
+the event up. The generators carry
 that skew in their countdown loads; the write-side predicates undo it by
 looking one tick ahead (`PeekSquare`, `PeekWaveFetch`). Move one and the other
 has to move with it.
@@ -154,30 +155,67 @@ one lag constant in isolation.
   the internal mode-3-to-0 edge (the 160th pixel popping) with the polled STAT
   flip and the VRAM unlocks at 255 + `SCX % 8`, and the mode-0 interrupt at
   256 + `SCX % 8`. The internal edge drives HDMA.
-- SameBoy's own line runs three dots ahead of that, its schedule numbered one
-  dot higher (its LX 3 is our dot 2). The gap accumulates on the first line
-  after an LCD enable, which we run 452 dots long where SameBoy runs 448 —
-  measured exactly on `lcdon_timing-GS`, whose line-0 origin both emulators put
-  at the same cycle, with SameBoy showing polled mode 3 at LX 78 (object memory
-  closing to writes at 76), its pixel loop at 83, mode 0 at 250, and line 1
-  starting 448 dots in.
-- Setting our first line to 449 dots with line 0's own group at 78/78/83 puts
-  every polled STAT and LY edge, first line included, on SameBoy's exact dot —
-  verified against the per-dot trace on two separate LCD enables — and takes the
-  mealybug/AGE error from 59.6k to 51.3k differing pixels. It also fails
-  `lcdon_timing`, `lcdon_write_timing` and `intr_2_mode0_timing_sprites`,
-  because a dot-identical PPU is not enough: `Sm83`'s read dot-phase latches an
-  I/O read on the access's third T-cycle where SameBoy latches it on the first
-  (`LeadingTCyclesBeforeRead`, itself pinned by the memory-timing family), so
-  with identical PPUs the two CPUs sample STAT two cycles apart. Our 452-dot
-  first line is the compensation for that. Four decompositions were measured and
-  refuted: shifting the whole schedule a dot (breaks the interrupt family, which
-  is sampled at the instruction boundary and not through the read path), giving
-  the polled register view its own phase of one or three dots (breaks
-  `hblank_ly_scx_timing`, which reads LY), and matching SameBoy's read
-  dot-phase (breaks more than it fixes). Closing this is the open frontier: it
-  costs three to four columns on every mid-mode-3 register signature, and it is
-  what keeps `m3_lcdc_win_en_change_multiple` off pixel-exact.
+- SameBoy's own line runs three dots ahead of ours, its schedule numbered one
+  dot higher (its LX 3 is our dot 2): its line origin is one dot before ours and
+  it runs the first line after an LCD enable 448 dots long where we run 452, so
+  every one of our register edges lands three dots later in absolute time than
+  the corresponding SameBoy edge. That gap is not slack — it is the exact
+  compensation for the two cores' read conventions. Our CPU latches an I/O read
+  two T-cycles into the access (`Sm83.Decode`'s `LeadingTCyclesBeforeRead`), so a
+  read whose machine cycle begins at dot C observes every edge through C+2;
+  SameBoy reads at the drive instant, and its display state machine runs on a
+  half-dot grid whose `GB_SLEEP` executes an event only once time has passed it,
+  so its read observes edges strictly before C. Equal observation therefore
+  requires our edge at SameBoy's edge plus three, which is what the schedule
+  above already produces. The `--cosim` CPU stream on `lcdon_timing-GS`,
+  `lcdon_write_timing-GS`, `hblank_ly_scx_timing-GS` and
+  `intr_2_mode0_timing_sprites` is divergence-free for 120 frames against a
+  boot-ROM-booted SameBoy, which is the evidence.
+- Do not re-derive the schedule by moving the PPU onto SameBoy's dots. Both
+  decompositions of that idea are measured and refuted. Shortening the first line
+  to 449 and giving the register view a +3 `PolledEventPhase` (carrying the
+  polled mode lags with it) leaves the polled STAT and LY dots exactly where they
+  are but moves the interrupt raise and the memory locks three dots early, which
+  fails `hblank_ly_scx_timing`, `intr_2_mode0_timing`,
+  `intr_2_mode0_timing_sprites`, `intr_2_mode3_timing`, `intr_2_oam_ok_timing`,
+  `lcdon_timing` and `lcdon_write_timing`. Moving only the pixel pipeline three
+  dots early (`Mode3PixelPipelineDelay` 8→5 with the mode-0 group trailing the
+  160th pop) keeps every acceptance case green but takes the mealybug/AGE error
+  from 65.7k to about 78k differing pixels.
+- The read dot-phase costs the pixel stream nothing. Against a boot-ROM-booted
+  SameBoy the `--cosim` `ppu-pixel` stream on `m3_bgp_change` runs identical into
+  the ROM's own drawing, and the first divergence is a colour on a matching dot,
+  not a dot: at LY 1 x 1 both push the pixel on the same master cycle and SameBoy
+  has already applied a new BGP where we have not. The residual mid-mode-3
+  signature error is the per-register I/O write conflict, not the schedule.
+- A `--cosim` run under about 60 frames proves nothing about the ROM: the DMG
+  boot ROM's logo scroll occupies them, so every ROM produces the same stream and
+  the same record count. Give a CPU-stream comparison at least 120 frames, and
+  check the record count differs per ROM before believing a clean result.
+- `01-read_timing` diverges from SameBoy at frame 107 on a TIMA read (`pc=C2C3`,
+  `hl=FF05`: SameBoy 0x01, ours 0x00, on the same master cycle and the same
+  instruction) while both pass the ROM's own verdict. It survives disabling the
+  write-conflict map, so it is the timer's own read-observation gap, not a write
+  phase.
+- An I/O write does not always reach the component on its machine cycle's drive
+  instant. `Sm83.Decode`'s `WriteConflict` carries the phases SameBoy's
+  `conflict_t` map records (`Core/sm83_cpu.c`), with the next access's drive
+  instant always staying four T-cycles after this one's: a monochrome palette
+  register settles two T-cycles early through the OR of the old and new values
+  and commits one T-cycle early; a Color palette register commits one T-cycle
+  early, two from revision D; monochrome SCY commits one early and SCX two; the
+  monochrome status register reads all ones for one settling T-cycle before the
+  value lands. The control register's own conflict is deliberately absent — its
+  write is also the LCD enable, and pulling that two T-cycles early moves the
+  first line's origin, which the LCD-on tables are calibrated against.
+- Expressing those phases is why the bus primitives defer. `ReadCycle` leaves the
+  two T-cycles it did not tick on `m_busCycleDebt`, `InternalCycle` banks four
+  without ticking, and `WriteCycle` can therefore settle before its own drive
+  instant. Every read of component state that is not itself a bus access
+  (`ServiceInterrupt`'s two mask reads, STOP's and HALT's pending checks) and
+  every machine cycle the CPU spends off the bus (`IdleMachineCycle`) settles the
+  debt first, and `StepInstruction` settles it before returning, so the debt is
+  always zero at an instruction boundary and no snapshot carries it.
 - CPU-visible state trails the internal edge by: polled STAT, VRAM read and
   VRAM write, and OAM write by zero dots; OAM read by zero on monochrome and
   one on Color; the mode-0 interrupt by one, reduced to zero on Color at single
@@ -200,15 +238,24 @@ one lag constant in isolation.
   advances its fetcher after the pop, so from the line's second tile the
   check-time fetcher state trails it by one step, and the allowance
   reconciles the two while the object stall stays dot-exact against SameBoy,
-  including `intr_2_mode0_timing_sprites`. Reordering to pop-then-fetch and
-  dropping the allowance is only correct together with the three-dot line
-  alignment above; on its own it moves every mid-line register sample a dot
-  the wrong way.
-- The remaining PPU frontier is the mealybug `m3_*` sub-dot register
-  signatures: the line alignment above, then the CPU-side register write
-  conflicts SameBoy models in `sm83_cpu.c` (`tile_sel_glitch`,
-  `wx_just_changed`, `disable_window_pixel_insertion_glitch`), which several
-  `m3_lcdc_*` and `m3_wx_*` signatures turn on.
+  including `intr_2_mode0_timing_sprites`. Pop-then-fetch with the allowance
+  dropped rests on moving the line onto SameBoy's dots, which is refuted above,
+  so the allowance stays.
+- Our first line after an LCD enable is four dots longer than SameBoy's, so each
+  enable slides our pipeline four dots against its oracle. On some ROMs the two
+  happen to land together (`m3_bgp_change`'s pixel stream is dot-identical); on
+  others they sit a dot apart, which is what keeps gambatte's
+  `lycint_dmgpalette_during_m3_*` off pixel-exact (their first pixel divergence
+  is one column, LY 1 x 155) while their non-interrupt siblings improved. No
+  write phase closes both: `MonochromePalette` at one T-cycle early instead of
+  two moves those four ROMs from 286/429 to 143 and costs fifteen others. Closing
+  it means the first line's length, which the register families pin — see the
+  refuted decompositions above.
+- The remaining PPU frontier is the mealybug `m3_lcdc_*` and `m3_wx_*`
+  signatures. They turn on the CPU-side write glitches SameBoy models in
+  `sm83_cpu.c` (`tile_sel_glitch`, `wx_just_changed`,
+  `disable_window_pixel_insertion_glitch`) and the control register's own
+  conflict phase; each needs PPU state the write path cannot reach today.
 
 The acceptance cases pinning this schedule by name: `hblank_ly_scx_timing`
 (its 51/50/49 SCX pattern), the `intr_2_*` family, `intr_1_2`,

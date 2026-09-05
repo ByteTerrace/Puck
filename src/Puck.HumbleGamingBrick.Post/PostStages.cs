@@ -260,8 +260,8 @@ internal static class PostStages {
         discover: context => SuiteCatalog.MealybugRoms(root: context.TestRomRoot),
         name: "mealybug"
     ),
-            // Tier B — gambatte: DMG screenshot cases route mechanically; its CGB cases and hex/audio-result cases
-            // are recorded unrunnable (see SuiteCatalog.GambatteRoms).
+            // Tier B — gambatte: hex-pattern, audio-silence-or-sound, and screenshot cases all route mechanically per
+            // ROM stem (see SuiteCatalog.GambatteRoms); only button-driven or dump-only ROMs stay unrunnable.
             new LedgerRomStage(
         discover: context => SuiteCatalog.GambatteRoms(root: context.TestRomRoot),
         name: "gambatte"

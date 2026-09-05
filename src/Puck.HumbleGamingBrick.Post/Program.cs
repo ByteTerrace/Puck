@@ -91,8 +91,15 @@ if (recordMode) {
     var entries = ((IEnumerable<LedgerEntry>)recorded);
 
     if (isFiltered) {
+        // A suite this run actually measured is replaced wholesale (an entry the new discovery no longer produces
+        // must not survive as a stale, never-checked row); a suite this run did not touch keeps its existing rows.
+        var measuredSuites = new HashSet<string>(
+            collection: recorded.Select(selector: static entry => entry.Suite),
+            comparer: StringComparer.Ordinal
+        );
         var merged = ExpectationsLedger
             .Load(path: ledgerPath)
+            .Where(predicate: pair => !measuredSuites.Contains(item: pair.Value.Suite))
             .ToDictionary(
             elementSelector: static pair => pair.Value,
             keySelector: static pair => pair.Key

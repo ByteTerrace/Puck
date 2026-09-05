@@ -78,6 +78,8 @@ internal static partial class ExpectationsLedger {
             ProbeKind.RegisterSignature => "register-signature",
             ProbeKind.GbMicrotest => "gb-microtest",
             ProbeKind.Screenshot => "screenshot",
+            ProbeKind.HexPattern => "hex-pattern",
+            ProbeKind.Audio => "audio",
             _ => throw new NotSupportedException(message: $"Unhandled probe kind '{probe}'."),
         };
     /// <summary>Writes the ledger, sorted by (suite, path, model), with LF line endings and a trailing newline.</summary>

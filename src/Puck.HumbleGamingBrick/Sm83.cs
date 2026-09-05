@@ -40,8 +40,10 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
     private readonly JoypadComponent m_joypad;
     private readonly Key1Component m_key1;
 
-    // Mutable so a LIVE device swap re-gates the only live model read (ExecuteStop: color arms a KEY1 speed switch,
-    // monochrome halts). The boot register handoff (SeedPostBootState, incl. the AGB inc-b probe) stays construction-only.
+    // Mutable so a LIVE device swap re-gates the live model reads: ExecuteStop (color arms a KEY1 speed switch,
+    // monochrome halts) and the I/O write conflicts, whose phases differ by family and by Color revision. The boot
+    // register handoff (SeedPostBootState, incl. the AGB inc-b probe) stays construction-only.
+    private bool m_samplesPaletteEarly;
     private bool m_supportsColor;
     // Cached so every 16-bit increment/decrement site tests one field instead of re-deriving the model question; a
     // Color machine never reaches NoteOamCorruption's body, let alone the bus/PPU call behind it.
@@ -91,6 +93,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         m_interrupts = interrupts;
         m_joypad = joypad;
         m_key1 = key1;
+        m_samplesPaletteEarly = configuration.Model.SamplesPaletteWriteEarly();
         m_supportsColor = configuration.Model.SupportsColor();
         m_hasOamCorruptionBug = configuration.Model.HasOamCorruptionBug();
 
@@ -192,6 +195,12 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
 
     /// <inheritdoc/>
     public void StepInstruction() {
+        StepInstructionCore();
+        // Nothing outlives the instruction with cycles owed: an instruction boundary is where every other component
+        // samples the CPU, and where a snapshot can be taken.
+        FlushBusCycles();
+    }
+    private void StepInstructionCore() {
         // M-06: the debug watchpoint PC witness. A cheap unconditional field write on the bus side (SystemBus.cs); the
         // bus itself decides whether anything downstream cares (a watch hit latches this, otherwise it is never read).
         m_bus.NoteInstructionStart(pc: m_programCounter);
@@ -200,7 +209,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
             // An illegal opcode wedges the CPU like real hardware: it fetches nothing and never advances, but time keeps
             // flowing — advance exactly one machine cycle so the PPU, timer, and the rest keep running and the screen
             // keeps refreshing. Interrupts cannot break the lock; only a reset (a fresh machine) clears it.
-            InternalCycle();
+            IdleMachineCycle();
 
             return;
         }
@@ -210,7 +219,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         // cycle (the speed flips two machine cycles in), and a pending interrupt aborts the stall like a halt wake once
         // the switch's interrupt-block window has closed.
         if (m_key1.IsSwitching) {
-            InternalCycle();
+            IdleMachineCycle();
 
             m_componentClock.IsDoubleSpeed = m_key1.IsDoubleSpeed;
 
@@ -229,7 +238,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
             if (m_joypad.AnyButtonHeld) {
                 m_key1.LeaveStop();
             } else {
-                InternalCycle();
+                IdleMachineCycle();
 
                 return;
             }
@@ -241,7 +250,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
 
                 m_hdma.OnCpuWoke();
             } else {
-                InternalCycle();
+                IdleMachineCycle();
 
                 return;
             }
@@ -265,7 +274,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         // unit the CPU has yielded; its start-up chain is measured from here.
         if (m_hdma.IsCpuStalled) {
             m_hdma.AcknowledgeStall();
-            InternalCycle();
+            IdleMachineCycle();
 
             return;
         }
@@ -308,6 +317,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
     }
     /// <inheritdoc/>
     public void ApplyModel(ConsoleModel model) {
+        m_samplesPaletteEarly = model.SamplesPaletteWriteEarly();
         m_supportsColor = model.SupportsColor();
         m_hasOamCorruptionBug = model.HasOamCorruptionBug();
     }
@@ -496,9 +506,13 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         InternalCycle();
         PushStackByte(value: ((byte)(m_programCounter >> 8)));
 
+        FlushBusCycles();
+
         var enabled = m_interrupts.Enabled;
 
         PushStackByte(value: ((byte)m_programCounter));
+
+        FlushBusCycles();
 
         var pending = ((InterruptKind)(((byte)m_interrupts.Requested) & ((byte)enabled) & 0x1F));
 

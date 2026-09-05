@@ -49,6 +49,13 @@ internal sealed class Sm83SstBus : ISystemBus {
         m_accesses.Add(item: (address, value, true));
     }
     /// <inheritdoc/>
+    /// <remarks>Reads the flat memory without recording an access; this bus has no registers to settle.</remarks>
+    public byte PeekIoRegister(ushort address) =>
+        m_memory[address];
+    /// <inheritdoc/>
+    /// <remarks>No-op: this flat vector bus has no registers, so nothing settles through an intermediate value.</remarks>
+    public void SettleIoWrite(ushort address, byte value) { }
+    /// <inheritdoc/>
     /// <remarks>No-op: this flat vector bus has no watchpoint machinery to witness.</remarks>
     public void NoteInstructionStart(ushort pc) { }
     /// <inheritdoc/>

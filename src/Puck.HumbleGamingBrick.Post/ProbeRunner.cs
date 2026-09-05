@@ -13,6 +13,8 @@ internal static class ProbeRunner {
             ProbeKind.RegisterSignature => RunRegisterSignature(ledgerCase: ledgerCase),
             ProbeKind.GbMicrotest => RunGbMicrotest(ledgerCase: ledgerCase),
             ProbeKind.Screenshot => ScreenshotProbe.Run(ledgerCase: ledgerCase),
+            ProbeKind.HexPattern => HexPatternProbe.Run(ledgerCase: ledgerCase),
+            ProbeKind.Audio => AudioProbe.Run(ledgerCase: ledgerCase),
             _ => throw new NotSupportedException(message: $"Unhandled probe kind '{ledgerCase.Probe}'."),
         };
     }
