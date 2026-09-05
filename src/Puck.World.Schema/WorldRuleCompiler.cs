@@ -757,7 +757,7 @@ public static partial class WorldRuleCompiler {
             throw new WorldRuleException(
                 refusal: WorldRuleRefusal.GeneratorUnknown,
                 ruleName: ruleName,
-                detail: $"state row '{generate.Row}' declares no draw — 'generate' redraws a draw site or a lattice row painted by a draw fill"
+                detail: $"state row '{generate.Row}' declares no draw — 'generate' redraws a draw site or a field row painted by a draw fill"
             );
         }
 

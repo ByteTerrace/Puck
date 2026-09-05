@@ -221,14 +221,15 @@ public sealed record WorldStateRow(
     /// when unauthored.</summary>
     [JsonIgnore]
     public WorldStateDomain EffectiveDomain => (Domain ?? InferDomain());
-    /// <summary>Infers the domain an unauthored row carries from its <see cref="Cells"/>/<see cref="Capacity"/> alone
-    /// — the same shape a plain row (no <see cref="Domain"/> member at all) has always had, restated as a case rather
-    /// than a pair of booleans: a declared <see cref="Capacity"/>, more than one cell, or a single cell under an
-    /// author-chosen key is <see cref="WorldStateDomain.Keys"/>; anything else (no cells yet, or exactly one cell
-    /// keyed <see cref="SlotKey"/>) is <see cref="WorldStateDomain.Slot"/>. A plain row therefore authors nothing
-    /// new by omitting <see cref="Domain"/>.</summary>
+    /// <summary>Infers the domain an unauthored row carries from its <see cref="Cells"/>/<see cref="Capacity"/>/
+    /// <see cref="Phase"/> alone — the same shape a plain row (no <see cref="Domain"/> member at all) has always had,
+    /// restated as a case rather than a pair of booleans: a declared <see cref="Capacity"/>, more than one cell, a
+    /// single cell under an author-chosen key, or a declared <see cref="Phase"/> trait is <see cref="WorldStateDomain.Keys"/>
+    /// — a phase row has no single value to read even before its first participant is admitted; anything else (no
+    /// cells yet, or exactly one cell keyed <see cref="SlotKey"/>) is <see cref="WorldStateDomain.Slot"/>. A plain row
+    /// therefore authors nothing new by omitting <see cref="Domain"/>.</summary>
     public WorldStateDomain InferDomain() =>
-        ((Capacity is not null) || (Cells is { Count: > 1 }) || ((Cells is { Count: 1 } cells) && (cells[0].Key != SlotKey))
+        ((Phase is not null) || (Capacity is not null) || (Cells is { Count: > 1 }) || ((Cells is { Count: 1 } cells) && (cells[0].Key != SlotKey))
             ? WorldStateDomain.Keys.Instance
             : WorldStateDomain.Slot.Instance);
     /// <summary>Gets the storage ceiling admitted by the row's shape. Ordinary rows retain the 128-cell ceiling.</summary>

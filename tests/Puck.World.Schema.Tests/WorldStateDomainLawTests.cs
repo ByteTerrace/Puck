@@ -74,6 +74,21 @@ public sealed class WorldStateDomainLawTests {
     }
 
     [Fact]
+    public void KeysOf_RefusesAnEmptyDomainAndABoardDomain() {
+        var emptyDomain = new WorldStateRow(WorldCellName.Parse("cards"), CellKind.Int, Capacity: 4);
+        var attribute = new WorldStateRow(WorldCellName.Parse("rank"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards")), Cells: [new(WorldCellName.Parse("t1"), 7)]);
+        Assert.Contains(expectedSubstring: "outside token domain", actualString: Validate(Document(emptyDomain, attribute)));
+
+        // Control: the same attribute row against a domain row that already carries its keys validates clean.
+        var populatedDomain = emptyDomain with { Cells = [new(WorldCellName.Parse("t1"), 0)] };
+        Assert.Equal(expected: string.Empty, actual: Validate(Document(populatedDomain, attribute)));
+
+        var board = new WorldStateRow(WorldCellName.Parse("board"), CellKind.Int, Domain: new WorldStateDomain.CellsOf(Topology: "board"));
+        var attributeOverBoard = new WorldStateRow(WorldCellName.Parse("owner"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("board")));
+        Assert.Contains(expectedSubstring: "names no token domain", actualString: Validate(Document(board, attributeOverBoard)));
+    }
+
+    [Fact]
     public void CellsOf_AddressesATopologyAndAdmitsAnUnwrittenEmptyFill() {
         var board = new WorldStateRow(WorldCellName.Parse("occupancy"), CellKind.Int, Domain: new WorldStateDomain.CellsOf(Topology: "board", Empty: -1), Cells: [new(WorldCellName.Parse("0"), 3)]);
         var domain = Assert.IsType<WorldStateDomain.CellsOf>(@object: board.EffectiveDomain);
@@ -119,6 +134,19 @@ public sealed class WorldStateDomainLawTests {
         Assert.Equal(expected: keysOf.Domain, actual: RoundTrip(definition, "keysOf").Domain);
         Assert.Equal(expected: cellsOf.Domain, actual: RoundTrip(definition, "cellsOf").Domain);
         Assert.Equal(expected: ring.Domain, actual: RoundTrip(definition, "ring").Domain);
+    }
+
+    [Fact]
+    public void UnauthoredPhaseRow_InfersKeys_NeverSlot() {
+        var phase = new WorldStateRow(WorldCellName.Parse("turns"), CellKind.Int, Phase: new WorldStatePhase(Sequence: 1));
+        Assert.True(phase.IsKeyed);
+        Assert.False(phase.IsSlot);
+        Assert.IsType<WorldStateDomain.Keys>(@object: phase.EffectiveDomain);
+        Assert.Equal(expected: string.Empty, actual: Validate(Document(phase)));
+
+        // Control: an authored Slot domain contradicts a phase trait and is refused rather than silently admitted.
+        var slotPhase = phase with { Domain = new WorldStateDomain.Slot() };
+        Assert.Contains(expectedSubstring: "phase requires an integer row without cells/capacity", actualString: Validate(Document(slotPhase)));
     }
 
     [Fact]

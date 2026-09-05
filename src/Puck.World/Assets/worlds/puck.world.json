@@ -25940,9 +25940,9 @@
       ],
       "gate": {
         "$type": "compareState",
+        "comparandState": "$reduce:count:cards",
         "comparison": "NotEqual",
-        "state": "cardsZoneTotal",
-        "value": 52
+        "state": "cardsZoneTotal"
       },
       "mode": "Edge",
       "name": "cardsZoneInvariant"
@@ -26884,8 +26884,7 @@
           "$type": "cellsOf",
           "topology": "pondBasin"
         },
-        "kind": "fixed",
-        "lattice": {
+        "field": {
           "color": "state.pondColors.water",
           "heightScale": 1,
           "initial": 1.4,
@@ -26903,6 +26902,7 @@
             }
           ]
         },
+        "kind": "fixed",
         "name": "water"
       },
       {

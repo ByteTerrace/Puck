@@ -176,8 +176,8 @@ public sealed class WorldMediumLawTests {
     }
     [Fact]
     public void MediumOutsideTheLatticeTraitRefusesByName() {
-        // The document below is a VALID medium row — the sabotage moves "medium" from inside "lattice" to a
-        // sibling of it, proving medium can only ever be authored through the lattice trait's own JSON shape.
+        // The document below is a VALID medium row — the sabotage moves "medium" from inside "field" to a
+        // sibling of it, proving medium can only ever be authored through the field trait's own JSON shape.
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(
                 World: [

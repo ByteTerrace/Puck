@@ -6116,8 +6116,7 @@
           "$type": "cellsOf",
           "topology": "island"
         },
-        "kind": "fixed",
-        "lattice": {
+        "field": {
           "color": "#6B4A34",
           "heightScale": 0.6,
           "initial": 0.35,
@@ -6190,6 +6189,7 @@
             }
           ]
         },
+        "kind": "fixed",
         "name": "dirt"
       },
       {
@@ -6197,8 +6197,7 @@
           "$type": "cellsOf",
           "topology": "island"
         },
-        "kind": "fixed",
-        "lattice": {
+        "field": {
           "color": "#3E8FD0",
           "heightScale": 1,
           "initial": 0,
@@ -6216,6 +6215,7 @@
             }
           ]
         },
+        "kind": "fixed",
         "name": "water"
       },
       {
@@ -6223,8 +6223,7 @@
           "$type": "cellsOf",
           "topology": "island"
         },
-        "kind": "fixed",
-        "lattice": {
+        "field": {
           "color": "#5FA04A",
           "heightScale": 0.35,
           "initial": 0,
@@ -6249,6 +6248,7 @@
             }
           ]
         },
+        "kind": "fixed",
         "name": "grass"
       },
       {
@@ -6256,12 +6256,12 @@
           "$type": "cellsOf",
           "topology": "island"
         },
-        "kind": "fixed",
-        "lattice": {
+        "field": {
           "initial": 0,
           "max": 15,
           "min": -5
         },
+        "kind": "fixed",
         "name": "heat"
       },
       {
@@ -6269,14 +6269,14 @@
           "$type": "cellsOf",
           "topology": "island"
         },
-        "kind": "fixed",
-        "lattice": {
+        "field": {
           "color": "#FF5A1F",
           "heightScale": 0.22,
           "initial": 0,
           "max": 1,
           "min": 0
         },
+        "kind": "fixed",
         "name": "fire"
       },
       {
@@ -6284,14 +6284,14 @@
           "$type": "cellsOf",
           "topology": "island"
         },
-        "kind": "fixed",
-        "lattice": {
+        "field": {
           "color": "#2A2320",
           "heightScale": 0.15,
           "initial": 0,
           "max": 1,
           "min": 0
         },
+        "kind": "fixed",
         "name": "char"
       },
       {
@@ -6299,8 +6299,7 @@
           "$type": "cellsOf",
           "topology": "island"
         },
-        "kind": "fixed",
-        "lattice": {
+        "field": {
           "color": "#D8F1FF",
           "heightScale": 1.5,
           "initial": 0,
@@ -6317,6 +6316,7 @@
             }
           ]
         },
+        "kind": "fixed",
         "name": "ice"
       },
       {

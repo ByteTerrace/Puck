@@ -274,8 +274,10 @@ never fatal to the tick. Effects and
 predicates address a (row, KEY) PAIR — an omitted key means the row's slot cell,
 and `WorldStateRow.IsKeyed` is the discriminator: one switch over the row's
 declared `Domain` (`WorldStateDomain` — `Slot`/`Keys`/`KeysOf`/`CellsOf`/`Ring`;
-an unauthored row infers `Slot` or `Keys` from `cells`/`capacity` alone, so a
-plain row spells nothing new), exhaustive with `IsSlot` by construction. A row
+an unauthored row infers `Slot` or `Keys` from `cells`/`capacity`/`phase` alone
+(a `phase` row has no single value to read even before its first participant,
+so it infers `Keys`), so a plain row spells nothing new), exhaustive with
+`IsSlot` by construction. A row
 with no cells at all still infers `Slot`, since the first write mints its slot
 cell. `CompareState` may instead name
 a reserved channel: `$tick`, `$population`, `$region:<placementId>`,
@@ -694,9 +696,9 @@ water field — see `Puck.World.Schema/README.md`'s tabletop-primitive
 section). A discrete topology's own `directions` (optional; each kind's
 compass/space names are the unauthored default) replaces its whole direction
 vocabulary — see the schema README's discrete-boards section for the
-authoring shape and validation. Lattice-shaped
+authoring shape and validation. Field-shaped
 state rows: `{"name": …, "kind": "fixed", "domain": {"$type": "cellsOf",
-"topology": …}, "lattice": {"initial"/"min"/"max", optional
+"topology": …}, "field": {"initial"/"min"/"max", optional
 "heightScale"/"color", "paint": […]}}` — `domain.topology` names the
 `Field`-kind topology (the same `cellsOf` case a discrete board's own domain
 uses; which storage a `cellsOf` row gets is an implementation choice keyed on
@@ -1085,7 +1087,7 @@ Presentation-only on the same terms, pinned by `CreationEffectorLawTests`. `body
 census, simulation (30 Hz), host (windowed, loopback-default — `--listen` binds
 QUIC), collision, gravity, channels, the `walk` body-motion program, the `walker` kit
 (`defaultSeatKit`), keyboard/gamepad bindings, the chase seat rig, the pip look, and grants — is the
-world document's own. A lattice trait's `color` speaks the same grammar (resolved live at
+world document's own. A field trait's `color` speaks the same grammar (resolved live at
 emit — a state cell write recolors a height field on the next frame, no re-bake, bricks hold only
 distances; `world.fields` echoes the authored token).
 The world's one placement is the `debugRoom` prototype at origin: a 48 m platform (top at y = −0.5)

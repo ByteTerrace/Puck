@@ -21,7 +21,7 @@ process that composes everything is [`Puck.World`](../Puck.World/README.md).
 
 The discrete substrate shares `state.lattices` with physical fields. Declare
 `kind: "Grid"`, `"Ring"`, or `"Hex"` and bind an integer/boolean row through
-`board: { "topology": "map", "empty": 0 }`. Only `Field` declarations create
+`domain: { "$type": "cellsOf", "topology": "map", "empty": 0 }`. Only `Field` declarations create
 physical field storage. A world may declare at most 16 topologies, including
 at most one physical field topology. Each discrete topology admits 4096 cells;
 boards together admit 65536 cells, and all declared state storage admits
@@ -244,7 +244,7 @@ cells; acceptance is always 1 or
 name `any` in place of a direction, answering the mask of accepting
 directions (bit d for direction ordinal d) or, with a trailing `count`, how
 many. `world.match` walks one word at the console and narrates every step:
-value, letter, state, verdict. A `history` row (`capacity` 1..128, `empty`)
+value, letter, state, verdict. A row declaring `domain: { "$type": "ring", "capacity": 1..128, "empty": ... }`
 is a ring of the last pushed values, the temporal twin of a ray: `push`
 (`row`, `value`) and the `pushState` effect (`value`/`fromState`/
 `expression`, world scope) append to it and advance its `historyCursor`;
@@ -692,7 +692,7 @@ number.
 
 ## Medium fields — a fluid free surface, as lattice content
 
-A `state.world` row's `lattice` trait may carry a `medium` facet
+A `state.world` row's `field` trait may carry a `medium` facet
 (`WorldLatticeMedium`, `WorldFields.cs`): the row's value times its
 `heightScale`, over the lattice origin, is a fluid free surface every active
 body samples at its coupled cell each tick (the same coupling
@@ -880,7 +880,7 @@ consolidation.
 A lattice is not a separate section: `state.lattices` (`WorldStateLatticeTopology`
 — name, origin, `cellSize`, `width`×`depth`×`layers`, `stepEveryTicks`,
 `reactions`) plus a `domain: {"$type": "cellsOf", "topology": …}` and a
-`lattice` trait on ordinary `fixed`-kind `state.world` rows
+`field` trait on ordinary `fixed`-kind `state.world` rows
 (`WorldStateFieldTrait` — `initial`/`min`/`max`, optional
 `heightScale`/`color`, `paint`; the topology itself lives on `domain`, shared
 with a discrete board's own `cellsOf` case) is the whole spelling.

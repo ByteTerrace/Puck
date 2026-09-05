@@ -493,8 +493,8 @@ public abstract record WorldLatticeFill {
     /// <param name="Generator">An inline numeric source, or <see langword="null"/> when <paramref name="Source"/> is named.</param>
     public sealed record Draw([property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCellName? Source = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldGenerator? Generator = null) : WorldLatticeFill;
 
-    /// <summary>Returns the one <see cref="Draw"/> fill a lattice trait's paint carries, or <see langword="null"/>.</summary>
-    /// <param name="trait">The trait, or <see langword="null"/> for a row that is not a lattice.</param>
+    /// <summary>Returns the one <see cref="Draw"/> fill a field trait's paint carries, or <see langword="null"/>.</summary>
+    /// <param name="trait">The trait, or <see langword="null"/> for a row that is not a field.</param>
     public static Draw? FindDraw(WorldStateFieldTrait? trait) {
         foreach (var fill in (trait?.Paint ?? [])) {
             if (fill is Draw draw) {

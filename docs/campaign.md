@@ -78,7 +78,7 @@ in `tests/Puck.Maths.Tests`.
 home is `WorldStateRow.Draw`; `bodies.capacityRow`/`host.backendRow` are boot-time reads of an
 already-resolved row rather than sites of their own, and nothing settles-and-clears any more — a
 boot-drawn row is the persisted evidence, re-read on every fresh load, never a value that becomes
-indistinguishable from an authored literal. A `state.lattices` topology plus a `lattice` trait on
+indistinguishable from an authored literal. A `state.lattices` topology plus a `field` trait on
 ordinary `fixed` rows is the field/terrain primitive, not a sibling section: `rect`/`noise`/`scatter`/`draw`
 paint seeds a row deterministically (integer-hash + Q48.16, seeded from `generation.worldSeed`), and
 `diffuse`/`decay`/`transform`/`emit`/`expose`/`flow` reactions evolve it each `stepEveryTicks`, every
@@ -184,10 +184,10 @@ shape's bound — `ShapeDomainOps.Reach` now charges it). `placements.policy` we
 same arc: unauthored derives to no-live-authoring and a scale envelope spanning the rows' own
 authored scales, so static worlds author no policy block. The world document itself authors
 everything else it runs: its census, its grants, simulation, host, collision, gravity, channels,
-the `walker` kit, bindings, the chase rig, and the pip look. A lattice trait's `color` speaks the same
+the `walker` kit, bindings, the chase rig, and the pip look. A field trait's `color` speaks the same
 grammar (resolved live at emit — a state cell write recolors a height field on the next frame with no
 re-bake, since bricks hold only distances; `world.fields` echoes each height field's authored color
-token; the check: author a lattice row's color as a state reference and boot).
+token; the check: author a field row's color as a state reference and boot).
 Everything else returns as deliberate evolution steps on this foundation. The first (2026-09-02): the
 platform at origin is a DEBUG AREA — one fixture per contact contract, each with a `spawnPoints` row
 and `body.pose spawn:<id>` to stand in front of it (`ramps`, `stairs`, `wall`, `pit`, `ladder`,
@@ -1072,9 +1072,9 @@ before ever walking cells), so a zone can show every one of its member
 tokens to an admitted reader or none — never a placeholder for the rest —
 while an attribute row keyed over that zone's domain resolves each cell
 through its owning zone's OWN visibility (`Observer.CanRead`'s nested
-zones-by-domain lookup, which requires `keysFrom` on the attribute row: drop
-it to save budget and `rank`/`suit` both go fully public, an opponent's hole
-cards included — a near-miss this landing corrected). `hand1`/`hand2` keep
+zones-by-domain lookup, which requires the attribute row's own `keysOf`
+domain: drop it to save budget and `rank`/`suit` both go fully public, an
+opponent's hole cards included — a near-miss this landing corrected). `hand1`/`hand2` keep
 their own `readers`/`readersFrom` for each seat's direct, full read of its
 own two cards, and `poker-showdown-reveal` widens that same `readersFrom` row
 at showdown — one more use of the tabletop primitive's own reveal seam, not a
@@ -1087,8 +1087,8 @@ Live hand-strength is priced against `world.budget`'s per-tick ceiling
 here): every `transformState` effect (dealing's `transfer`, a `sort`) is
 priced against the WHOLE document's declared cell storage
 (`WorldRuleWorkBudget.TransformCost`), and `rank`/`suit`'s privacy-required
-`keysFrom` each add a full topology-sized share to that storage on their own
-— so the deal's three transfers plus one sort PER SEAT (needed because the
+`keysOf` domain declares no capacity of its own, so each still adds a full
+topology-sized share to that storage — so the deal's three transfers plus one sort PER SEAT (needed because the
 shipped `hasTripAny`/`hasQuadAny`/`straightAny` patterns are adjacency-based
 and read wrong off an unsorted deal) are a real, non-trivial cost alongside
 chess's and the rigid facets' own rules. `poker-strength1`/`poker-strength2`

@@ -517,12 +517,12 @@ public static partial class WorldDefinitionValidator {
                 var topologyName = (row.EffectiveDomain is WorldStateDomain.CellsOf cellsOf ? cellsOf.Topology : null);
 
                 if (physical is null || topologyName != physical.Name) {
-                    errors.Add($"state row '{row.Name}' lattice domain.topology '{topologyName}' names no physical topology.");
+                    errors.Add($"state row '{row.Name}' field domain.topology '{topologyName}' names no physical topology.");
                 }
             }
         }
         if (physical is not null && definition.Fields is { Fields.Count: 0 }) {
-            errors.Add($"state.lattices '{physical.Name}' is declared but no state row carries a lattice trait.");
+            errors.Add($"state.lattices '{physical.Name}' is declared but no state row carries a field trait.");
         }
         if (definition.Fields is not { } fields) {
             return;

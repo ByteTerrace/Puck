@@ -67,9 +67,6 @@ public static partial class WorldDefinitionValidator {
             if (domainTraits > 1 || (domainTraits > 0 && !isPhysicalField && (row.Field is not null || row.Draw is not null || row.Advance is not null || row.Dynamics is not null || row.Cycle is not null || row.Evicts || row.GatesDrive))) {
                 errors.Add($"state row '{row.Name}': discrete storage traits are mutually exclusive and cannot carry continuous or draw traits.");
             }
-            if (row.EffectiveDomain is WorldStateDomain.Keys && row.Capacity is { } tokensCapacity && (tokensCapacity < 1 || tokensCapacity > WorldTopologyCompilation.MaxCells)) {
-                errors.Add($"state row '{row.Name}': capacity must be 1..{WorldTopologyCompilation.MaxCells}.");
-            }
             var domainName = (row.EffectiveDomain is WorldStateDomain.KeysOf keysOf ? keysOf.Row.Value : null);
             if (row.ValuesFrom is { } topologyName) {
                 var topology = WorldTopologyCompilation.Find(definition.StateRaw, topologyName);
@@ -80,12 +77,12 @@ public static partial class WorldDefinitionValidator {
             }
             if (domainName is not null) {
                 var domain = WorldDefinitionRows.FindStateRow(definition.State, domainName);
-                if (domain is null || domain.EffectiveDomain is not (WorldStateDomain.Keys or WorldStateDomain.CellsOf)) {
+                if (domain is null || domain.EffectiveDomain is not WorldStateDomain.Keys) {
                     errors.Add($"state row '{row.Name}': '{domainName}' names no token domain.");
                 } else {
                     var keys = new HashSet<WorldCellName>((domain.Cells ?? []).Where(c => c is not null).Select(c => c.Key));
                     foreach (var cell in row.Cells ?? []) {
-                        if (cell is not null && keys.Count > 0 && !keys.Contains(cell.Key)) {
+                        if (cell is not null && !keys.Contains(cell.Key)) {
                             errors.Add($"state row '{row.Name}': key '{cell.Key}' is outside token domain '{domainName}'.");
                         }
                     }
@@ -101,7 +98,7 @@ public static partial class WorldDefinitionValidator {
     }
 
     private static void ValidatePhase(WorldStateRow row, WorldStatePhase phase, List<string> errors) {
-        if (row.Kind != CellKind.Int || row.Cells is { Count: > 0 } || row.Capacity is not null || phase.Sequence < 0) {
+        if (row.Kind != CellKind.Int || row.EffectiveDomain is WorldStateDomain.Slot || row.Cells is { Count: > 0 } || row.Capacity is not null || phase.Sequence < 0) {
             errors.Add($"state row '{row.Name}': phase requires an integer row without cells/capacity and a nonnegative sequence.");
         }
     }

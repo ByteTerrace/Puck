@@ -402,7 +402,7 @@ internal sealed class DocumentWriteMaskJsonConverter : NameListMaskJsonConverter
 /// <c>UnmappedMemberHandling.Disallow</c> policy, so this converter re-implements it by hand.</para>
 /// </summary>
 internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> {
-    private const string Shape = "{\"name\":…,\"kind\":\"int\"|\"fixed\"|\"bool\"|\"text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…},\"lattice\":{\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"markov\"|\"uniformRange\"|\"weightedNumeric\"|\"streamDraw\"|\"symmetryOrbit\",…},\"timing\":\"boot\"|\"tickPeriod\"|\"event\"},\"drawCursor\":…,\"drawnMasks\":[…],\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…}}";
+    private const string Shape = "{\"name\":…,\"kind\":\"int\"|\"fixed\"|\"bool\"|\"text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…},\"field\":{\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"markov\"|\"uniformRange\"|\"weightedNumeric\"|\"streamDraw\"|\"symmetryOrbit\",…},\"timing\":\"boot\"|\"tickPeriod\"|\"event\"},\"drawCursor\":…,\"drawnMasks\":[…],\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…}}";
 
     private static string DescribeCellKind(CellKind cellKind) => cellKind switch {
         CellKind.Int => "int",
@@ -886,7 +886,7 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                 case "dynamics":
                     dynamics = JsonElement.ParseValue(reader: ref reader);
                     break;
-                case "lattice":
+                case "field":
                     lattice = JsonElement.ParseValue(reader: ref reader);
                     break;
                 case "cycle":
@@ -1009,7 +1009,7 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             (cycle is not null) &&
             (lattice is not null)
         ) {
-            throw new JsonException(message: $"state row '{name}' declares both 'cycle' and 'lattice' — a lattice row's cells are the lattice's.");
+            throw new JsonException(message: $"state row '{name}' declares both 'cycle' and 'field' — a physical-field row's cells are the field's.");
         }
         if (
             (cycle is not null) &&
@@ -1117,7 +1117,7 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             : null),
             Field: ((lattice is { } latticeElement)
             ? (latticeElement.Deserialize(jsonTypeInfo: WorldJsonContext.Default.WorldStateFieldTrait)
-                    ?? throw new JsonException(message: $"state row '{name}'.lattice must be an object."))
+                    ?? throw new JsonException(message: $"state row '{name}'.field must be an object."))
             : null),
             Cycle: ((cycle is { } cycleElement)
             ? (cycleElement.Deserialize(jsonTypeInfo: WorldJsonContext.Default.WorldStateCycle)
@@ -1282,7 +1282,7 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
         }
 
         if (value.Field is { } fieldTrait) {
-            writer.WritePropertyName(propertyName: "lattice");
+            writer.WritePropertyName(propertyName: "field");
             JsonSerializer.Serialize(
                 writer: writer,
                 value: fieldTrait,
