@@ -1332,6 +1332,26 @@ and `puck schema --check` byte-identical to before:
 Refused: a compatibility shim between old and new spellings at any phase, and
 moving the evaluator before the seams exist.
 
+**Placements compose, and a game addresses its bodies by placement.** A
+placement may name a `parent`: its position and yaw become a local offset and
+heading in the parent's resolved frame (rotation and translation only, resolved
+once at compile into `PlacementFrames`, never per tick), and a Grid topology
+named by a placement's `board` facet takes its origin from that placement's
+frame, so a board's squares and the pieces on it are authored in the board's
+own coordinates and the whole table can move. A rule names the body inhabiting
+a placement as `placement:<id>`, or `placement:$each` over a forEach row whose
+keys are placement ids, resolved to a body index through an ordinal table —
+never a string on the tick path — and a `$cell:` indirection's inner key may
+itself be `$each`. Chess is re-authored as a self-contained module on those
+primitives: pieces keyed by placement id, one forEach rule where thirty-two
+were; dominoes, billiards, and bowling anchor to marker placements of their
+own. The boot settle is the document's, not a test's: every tabletop rule
+gates on a held-quiescence counter and a one-time snapshot seeds the previous
+board before any classifier reads it, which also surfaced and fixed two
+legality bugs (white's turn value, the pawn pick's inverted branch). The
+garden's passive replay hash moves with the content; the frozen world's does
+not.
+
 ## After this arc
 
 Owner review of this branch gates the next wave. Recorded as decisions, not status — none of this has

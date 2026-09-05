@@ -217,13 +217,14 @@ public sealed class WorldSolidField : IContactField {
                 grantedByOverride: (placement.Grip is not null),
                 material: material
             );
+            var resolvedFrame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
             // The one transform conversion boundary: the program is encoded single-precision, but every placement
             // transform reaching it is derived in fixed point first (yaw via integer SinCos, origins via the fixed
             // lattice, reflected frames via fixed quaternion composition) and rounded exactly to float, so every
             // machine encodes bit-identical constants — the evaluator itself stays fixed point throughout.
             var fixedRotation = FixedQuaternion.FromAxisAngle(
                 axis: UnitY,
-                angle: FixedQ4816.FromDouble(value: (placement.YawDegrees * (Math.PI / 180.0)))
+                angle: FixedQ4816.FromDouble(value: (resolvedFrame.YawDegrees * (Math.PI / 180.0)))
             );
 
             // A creation whose parts carve each other is one candidate against the solid field, never a carve of it.
@@ -236,7 +237,7 @@ public sealed class WorldSolidField : IContactField {
             );
 
             CreationStampLattice.ForEachFixedInstance(
-                origin: FixedVector3.FromVector3(value: placement.Position),
+                origin: FixedVector3.FromVector3(value: resolvedFrame.Position),
                 rotation: fixedRotation,
                 pattern: WorldPlacementStamp.PatternFor(placement: placement),
                 sampledOffsets: WorldPlacementStamp.SampledFixedOffsetsFor(placement: placement, worldSeed: worldSeed),

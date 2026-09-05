@@ -89,7 +89,8 @@ public static class WorldPlacementStamper {
             )]
         );
     }
-    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed) {
+    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, WorldDefinition definition, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed) {
+        var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
         // Laid out ONCE here (rather than once for the reach measure below plus once per pattern/scatter instance
         // inside the visitor's EmitText call) — TextLayout.Layout is a pure function of (atlas, text, scale,
         // options), all fixed for this whole EmitPlacement call, so every reader below shares this one result.
@@ -115,7 +116,7 @@ public static class WorldPlacementStamper {
         );
         var rotation = Quaternion.CreateFromAxisAngle(
             axis: Vector3.UnitY,
-            angle: (placement.YawDegrees * (MathF.PI / 180f))
+            angle: (frame.YawDegrees * (MathF.PI / 180f))
         );
         // A creation whose parts carve each other (or that carries noise relief) is one SCOPED candidate against the
         // world field. A scope-free, text-free creation instead emits one TIGHT instance per shape — union-family
@@ -133,7 +134,7 @@ public static class WorldPlacementStamper {
         );
 
         CreationStampLattice.ForEachInstance(
-            origin: placement.Position,
+            origin: frame.Position,
             rotation: rotation,
             pattern: WorldPlacementStamp.PatternFor(placement: placement),
             sampledOffsets: WorldPlacementStamp.SampledOffsetsFor(placement: placement, worldSeed: worldSeed),
@@ -395,6 +396,7 @@ public static class WorldPlacementStamper {
             EmitPlacement(
                 builder: builder,
                 creation: creation.EngineDocument,
+                definition: definition,
                 paletteIds: paletteIds,
                 placement: placement,
                 textCatalog: textCatalog,

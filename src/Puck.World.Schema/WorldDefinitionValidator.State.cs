@@ -30,7 +30,7 @@ public static partial class WorldDefinitionValidator {
             return false;
         }
 
-        if (row.EffectiveDomain is WorldStateDomain.CellsOf board && (WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology || !topology.TryCell(key, out _))) {
+        if (row.EffectiveDomain is WorldStateDomain.CellsOf board && (WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology || !topology.TryCell(key, out _))) {
             reason = $"state row '{rowName}' cell '{key}' is outside its topology";
             return false;
         }

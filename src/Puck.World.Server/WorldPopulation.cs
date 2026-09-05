@@ -143,6 +143,13 @@ public sealed partial class WorldPopulation {
     public int LocalSeatCount { get; private set; }
 
     private readonly Entry[] m_entries;
+    // The placement:<id> body-reference token's ordinal table — index-aligned with the document's OWN
+    // definition.Placements order (a placement's ordinal IS its position in that list), rebuilt whenever
+    // ReconcileInhabitants runs (boot, and every mutation apply) so the tick-path rule read
+    // (WorldServer.ResolveBodyRef) is one array index, never a string lookup. -1 marks an uninhabited/unbound
+    // placement, the same convention an inactive body already reads as. Derived, never checkpointed — see its own
+    // rebuild site.
+    private int[] m_placementOrdinalToBody = [];
     // Reused broadphase scratch. This used to be four population-sized stackallocs while the table ceiling was
     // 128; the few-thousand-body representation makes that a stack-overflow hazard. Keeping it population-local
     // preserves allocation-free ticks and sizes the storage to the authored census rather than the global ceiling.

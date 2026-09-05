@@ -147,13 +147,18 @@ public sealed class WorldTabletopClassifierLawTests {
         WorldStateCell[] Cells(long[] values) => [.. values.Select((value, index) =>
             new WorldStateCell(Key: CellName.Parse(index.ToString()), Value: value))];
 
+        // Every classifier rule gates on 'settleHold' reaching its margin (see chess.world.json's own remarks) —
+        // seeded already-at-margin here rather than pulling in tabletop-settle-hold-advance/-reset too, since this
+        // fixture carries no rigid bodies for that debounce to measure and a single fixture.Step() is meant to
+        // classify immediately.
         var rows = Garden.State.Where(row =>
-            row.Name.Value is Board or Prev or "kingCell" or "move" or "moverColor" or "cFromBlack" or "cFromWhite" or "cKindBlack" or "cKindWhite" or "cToBlack" or "cToWhite" ||
+            row.Name.Value is Board or Prev or "kingCell" or "move" or "moverColor" or "settleHold" or "cFromBlack" or "cFromWhite" or "cKindBlack" or "cKindWhite" or "cToBlack" or "cToWhite" ||
             row.Name.Value.StartsWith("cBlack", StringComparison.Ordinal) ||
             row.Name.Value.StartsWith("cWhite", StringComparison.Ordinal)
         ).Select(row => row.Name.Value switch {
             Board => row with { Cells = Cells(current) },
             Prev => row with { Cells = Cells(previous) },
+            "settleHold" => row with { Cells = [new WorldStateCell(WorldStateRow.SlotKey, 60)] },
             _ => row,
         }).ToArray();
         var source = Fixtures.BuildDocument();

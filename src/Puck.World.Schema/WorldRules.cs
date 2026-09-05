@@ -217,17 +217,32 @@ public enum CompiledBodyRefKind : byte {
     /// <summary>The body a <see cref="RuleBinding"/> names this evaluation — <c>each</c>/<c>left</c>/<c>right</c>;
     /// <c>Index</c> carries the binding.</summary>
     Binding,
+
+    /// <summary>The body inhabiting a named placement — <c>placement:&lt;id&gt;</c> (a fixed placement, <c>Index</c>
+    /// carries its compiled ordinal — the placement's own position in <see cref="WorldDefinition.Placements"/>) or
+    /// <c>placement:$each</c> (only inside a rule declaring <see cref="WorldRule.ForEach"/> over a row whose every
+    /// declared key names an inhabited placement — <c>PlacementOrdinals</c> carries the position-indexed ordinal
+    /// table, resolved by <c>WorldServer.ResolveBodyRef</c> against the CURRENT forEach position, never a
+    /// string). Resolves through <c>WorldPopulation.BodyForPlacementOrdinal</c> — an array index, never the
+    /// placement's string id, on the tick path.</summary>
+    Placement,
 }
 /// <summary>One resolved body reference — see <see cref="CompiledBodyRefKind"/>.</summary>
 /// <param name="Kind">How the body is named.</param>
-/// <param name="Index">The literal 0-based index for <see cref="CompiledBodyRefKind.Literal"/>; unused otherwise.</param>
+/// <param name="Index">The literal 0-based index for <see cref="CompiledBodyRefKind.Literal"/>, or a fixed placement
+/// ordinal for <see cref="CompiledBodyRefKind.Placement"/> when <paramref name="PlacementOrdinals"/> is
+/// <see langword="null"/>; unused otherwise.</param>
 /// <param name="Row">The keyed row name for <see cref="CompiledBodyRefKind.ArgMax"/>/<see cref="CompiledBodyRefKind.ArgMin"/>
 /// and the indirection row for <see cref="CompiledBodyRefKind.Cell"/>; <see langword="null"/> otherwise.</param>
 /// <param name="Key">The indirection cell's key for <see cref="CompiledBodyRefKind.Cell"/>; <see langword="null"/> otherwise.</param>
 /// <param name="Handle">The compiled handle for <paramref name="Row"/> under <see cref="CompiledBodyRefKind.Cell"/> —
 /// resolved once at compile time so the per-tick indirection read (<c>WorldServer.ResolveBodyRef</c>) never repeats a
 /// row-name scan; <see langword="default"/> (invalid) otherwise.</param>
-public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Index, string? Row, string? Key = null, WorldStateHandle Handle = default);
+/// <param name="PlacementOrdinals">For <see cref="CompiledBodyRefKind.Placement"/> spelled <c>placement:$each</c>: the
+/// enclosing rule's <see cref="WorldRule.ForEach"/> row's declared keys, resolved once to placement ordinals in cell
+/// order (position-indexed, matching the SAME order <c>WorldServer.EachKeys</c> walks at runtime); <see langword="null"/>
+/// for a fixed <c>placement:&lt;id&gt;</c> reference or any other kind.</param>
+public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Index, string? Row, string? Key = null, WorldStateHandle Handle = default, IReadOnlyList<int>? PlacementOrdinals = null);
 /// <summary>A state cell address whose integer value is read as a cell KEY at evaluation time
 /// (<see cref="RuleFacts.CellKeyPrefix"/>), OR a live composite (observer, subject) pair key
 /// (<see cref="WorldRuleFacts.PairKeyPrefix"/>) — a keyed row can therefore be keyed by one body index, or by two,
@@ -244,8 +259,15 @@ public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Inde
 /// <c>$cell:</c>/binding indirection.</param>
 /// <param name="PairBodyB">The second body of a <c>$pair:</c> composite key; set exactly when
 /// <paramref name="PairBodyA"/> is.</param>
+/// <param name="InnerKeyBinding">For a <c>$cell:&lt;row&gt;:&lt;key&gt;</c> indirection whose OWN inner <c>&lt;key&gt;</c>
+/// spells a binding token (<c>$each</c>/<c>$left</c>/<c>$right</c>) rather than a literal declared cell — <paramref
+/// name="Row"/>/<paramref name="Handle"/> still name the row, but the cell read every evaluation is whichever one the
+/// CURRENT binding names (<c>WorldServer.ResolveOperandKey</c>), never a compile-time-fixed <paramref name="Key"/>
+/// (left empty in this case). <see cref="RuleBinding.None"/> for an ordinary literal-keyed <c>$cell:</c> indirection.
+/// Distinct from <paramref name="Binding"/>, which spells "the whole key IS the binding, no row at all" — this
+/// spells "the ROW is fixed, only ITS key is bound".</param>
 public readonly record struct CompiledCellRef(string Row, string Key, RuleBinding Binding = RuleBinding.None, WorldStateHandle Handle = default,
-    CompiledBodyRef? PairBodyA = null, CompiledBodyRef? PairBodyB = null);
+    CompiledBodyRef? PairBodyA = null, CompiledBodyRef? PairBodyB = null, RuleBinding InnerKeyBinding = RuleBinding.None);
 /// <summary>A name bound during one evaluation of a rule or interaction — the body index a key token
 /// <c>$each</c>/<c>$left</c>/<c>$right</c> or a body-reference token <c>each</c>/<c>left</c>/<c>right</c> reads.</summary>
 public enum RuleBinding : byte {

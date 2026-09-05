@@ -655,10 +655,44 @@ public static partial class WorldRuleCompiler {
             );
         }
 
+        if (string.Equals(
+            a: kind,
+            b: "placement",
+            comparisonType: StringComparison.Ordinal
+        )) {
+            if (string.Equals(
+                a: value,
+                b: "$each",
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return new CompiledBodyRef(
+                    Index: -1,
+                    Kind: CompiledBodyRefKind.Placement,
+                    Row: null,
+                    PlacementOrdinals: ResolveForEachPlacementOrdinals(
+                        channel: channel,
+                        definition: definition,
+                        ruleName: ruleName
+                    )
+                );
+            }
+
+            return new CompiledBodyRef(
+                Index: ResolvePlacementOrdinal(
+                    channel: channel,
+                    definition: definition,
+                    placementId: value,
+                    ruleName: ruleName
+                ),
+                Kind: CompiledBodyRefKind.Placement,
+                Row: null
+            );
+        }
+
         throw new WorldRuleException(
             refusal: WorldRuleRefusal.SpatialChannelMalformed,
             ruleName: ruleName,
-            detail: $"'{channel}' names body-reference token '{kind}:{value}' — expected 'body:<n>' or 'argmax:<row>'/'argmin:<row>'"
+            detail: $"'{channel}' names body-reference token '{kind}:{value}' — expected 'body:<n>', 'argmax:<row>'/'argmin:<row>', or 'placement:<id>'/'placement:$each'"
         );
     }
     private static CompiledWorldEffect ResolveCountdown(ActionEffect.CountdownState effect, string ruleName, WorldDefinition definition) {
@@ -805,6 +839,27 @@ public static partial class WorldRuleCompiler {
                 refusal: WorldRuleRefusal.StateCellUnaddressable,
                 ruleName: ruleName,
                 detail: $"'{channel}' reads row '{row}' as a body index, but it is kind={DescribeCellKind(kind: declared.Kind)} — an index cell is kind=int"
+            );
+        }
+
+        // The inner key of a '$cell:<row>:<key>' indirection is ordinarily a literal, compile-time-fixed cell — but a
+        // binding token ('$each' etc.) is legitimate too: 'pieceCell'/'pieceCode' share the SAME key set (both keyed
+        // by placement id, cell-for-cell), so a forEach rule over one reads/writes the OTHER at "whichever key this
+        // evaluation is at" rather than one hardcoded literal per rule — the mechanism the tabletop write-board rule
+        // rides to collapse from one rule per piece to one rule total.
+        if ((BindingOfKeyToken(key: key) is var innerBinding) && (innerBinding != RuleBinding.None)) {
+            RequireBindingInScope(
+                binding: innerBinding,
+                ruleName: ruleName,
+                spelled: key,
+                where: $"'{channel}' inner key"
+            );
+
+            return new CompiledCellRef(
+                Handle: ResolveWorldStateHandle(definition: definition, name: row),
+                InnerKeyBinding: innerBinding,
+                Key: string.Empty,
+                Row: row
             );
         }
 
@@ -2102,6 +2157,8 @@ public static partial class WorldRuleCompiler {
             ? []
             : [RuleBinding.Each]
         );
+        s_forEachRow = rule.ForEach;
+        s_forEachPlacementOrdinals = null;
 
         try {
             var bindings = CompileBindings(rule: rule, definition: definition);
@@ -2139,6 +2196,8 @@ public static partial class WorldRuleCompiler {
         } finally {
             s_bindingScope = null;
             s_ruleBindings = null;
+            s_forEachRow = null;
+            s_forEachPlacementOrdinals = null;
         }
     }
     /// <summary>Compiles every rule in the definition's <c>rules</c> section, in document order.</summary>

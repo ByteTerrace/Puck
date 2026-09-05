@@ -8,7 +8,7 @@ public sealed partial class WorldPopulation {
     // Join one inhabited body at a claimed peer slot: mint its body from the resolved kit spawned at the placement's
     // scatter pose, seat its intent source, and tag the peer with the placement back-reference (the entry stays a
     // NetworkPeer — an inhabitant is a peer, not a separate kind).
-    private void ActivateInhabitant(int index, WorldPlacement placement, WorldPlacementInhabit inhabit, byte kitIndex, int ordinal) {
+    private void ActivateInhabitant(WorldDefinition definition, int index, WorldPlacement placement, WorldPlacementInhabit inhabit, byte kitIndex, int ordinal) {
         var entry = m_entries[index];
         var kit = m_kits[kitIndex];
         var body = new WorldBody(
@@ -36,14 +36,15 @@ public sealed partial class WorldPopulation {
         );
         body.SetGravityField(field: m_gravityField);
 
+        var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
         var spawn = InhabitantSpawn(
-            placement: placement,
+            frame: frame,
             distribution: inhabit.Distribution!,
             ordinal: ordinal,
             count: inhabit.Count
         );
-        var altitude = FixedQ4816.FromDouble(value: placement.Position.Y);
-        var yaw = FixedQ4816.FromDouble(value: (placement.YawDegrees * (Math.PI / 180.0)));
+        var altitude = FixedQ4816.FromDouble(value: frame.Position.Y);
+        var yaw = FixedQ4816.FromDouble(value: (frame.YawDegrees * (Math.PI / 180.0)));
 
         body.Pose(
             position: spawn with { Y = altitude },
@@ -737,6 +738,7 @@ public sealed partial class WorldPopulation {
                 }
 
                 ActivateInhabitant(
+                    definition: definition,
                     index: slot,
                     inhabit: inhabit,
                     kitIndex: kitIndex,
@@ -758,8 +760,45 @@ public sealed partial class WorldPopulation {
 
         // Re-clamp the census against every entity-table slot now owned by an inhabitant or transferred authority.
         _ = SetSimulatedCount(count: m_simulatedCount);
+        RebuildPlacementOrdinalTable(definition: definition);
         m_revision++;
     }
+    // The placement:<id> body-reference token's ordinal table — see m_placementOrdinalToBody's own remarks. Rebuilt
+    // here rather than incrementally: ReconcileInhabitants already walks every inhabited placement in the SAME
+    // document-order pass a body-index reseat can move, so a second full scan costs nothing an inhabitant admission
+    // pass was not already going to pay.
+    private void RebuildPlacementOrdinalTable(WorldDefinition definition) {
+        var placements = definition.Placements;
+
+        if (m_placementOrdinalToBody.Length != placements.Count) {
+            m_placementOrdinalToBody = new int[placements.Count];
+        }
+
+        Array.Fill(array: m_placementOrdinalToBody, value: -1);
+
+        for (var index = 0; (index < m_entries.Length); index++) {
+            if (m_entries[index].PlacementId is not { } placementId) {
+                continue;
+            }
+
+            for (var ordinal = 0; (ordinal < placements.Count); ordinal++) {
+                if (string.Equals(a: placements[ordinal].Id, b: placementId, comparisonType: StringComparison.Ordinal)) {
+                    m_placementOrdinalToBody[ordinal] = index;
+
+                    break;
+                }
+            }
+        }
+    }
+    /// <summary>Resolves the <c>placement:&lt;id&gt;</c> body-reference token's compiled ordinal (the placement's own
+    /// position in <see cref="WorldDefinition.Placements"/>) to the body index currently inhabiting it, or -1 when
+    /// uninhabited — one array index, no string work, the tick-path contract <c>placement:$each</c>/<c>$distance:</c>/
+    /// <c>$los:</c>/etc. rely on.</summary>
+    /// <param name="ordinal">The compiled placement ordinal.</param>
+    public int BodyForPlacementOrdinal(int ordinal) => (((uint)ordinal < (uint)m_placementOrdinalToBody.Length)
+        ? m_placementOrdinalToBody[ordinal]
+        : -1
+    );
     /// <summary>Restores a just-detached federated peer after an aborted transfer, preserving its generation,
     /// admission facts, pose, dynamic state, and designation registers.</summary>
     public bool RestoreDetachedPeer(in WorldPeerEventEntry peer, IReadOnlyList<WorldAdmissionGrant> grantTemplates, WorldIdentity? profile, FixedVector3 position, FixedQ4816 yawRadians, WorldBody.TransferState dynamicState, IReadOnlyList<WorldTargetDesignation>? designations = null) {

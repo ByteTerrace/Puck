@@ -1824,6 +1824,12 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
+        // Every row's PARENT chain, checked once across the whole set rather than per row (a cycle or a distributed/
+        // scaled parent is a cross-row fact, not a single row's own shape).
+        if (!WorldPlacementFrameCompilation.TryValidate(placements: placements, reason: out var parentReason)) {
+            errors.Add(item: $"placements: {parentReason}");
+        }
+
         if (stampRegistrationCount > WorldPlacementPolicy.MaxStampRegistrations) {
             errors.Add(item: $"{stampRegistrationCount} animated + attached placements exceed the {WorldPlacementPolicy.MaxStampRegistrations}-slot replay pool.");
         }

@@ -18,7 +18,7 @@ public static class WorldAdjacencyGeometry {
     /// <summary>One deterministic selection result.</summary>
     public readonly record struct Selection(IReadOnlyList<WorldPlacement> Placements, bool Truncated);
 
-    private static bool IsWithinReach(WorldPlacement placement, WorldPrototype creation, WorldFaceFrame frame, float overlapDepth) {
+    private static bool IsWithinReach(WorldDefinition definition, WorldPlacement placement, WorldPrototype creation, WorldFaceFrame frame, float overlapDepth) {
         foreach (var shape in (creation.Document.Shapes ?? [])) {
             if (SdfSolidGeometry.GetLocalBounds(type: shape.Type).IsUnbounded) {
                 return true;
@@ -28,7 +28,7 @@ public static class WorldAdjacencyGeometry {
         return IsWithinBand(
             frame: frame,
             overlapDepth: overlapDepth,
-            position: placement.Position,
+            position: WorldDefinitionRows.ResolvedPosition(definition: definition, placement: placement),
             reach: (CreationGeometry.Reach(document: creation.Document) * placement.Scale)
         );
     }
@@ -81,6 +81,7 @@ public static class WorldAdjacencyGeometry {
             ) is not { } creation) ||
                 !IsWithinReach(
                 creation: creation,
+                definition: definition,
                 frame: frame,
                 overlapDepth: ((float)((double)overlapDepth)),
                 placement: placement
@@ -95,7 +96,15 @@ public static class WorldAdjacencyGeometry {
                 continue;
             }
 
-            selected.Add(item: placement);
+            // Resolved (WORLD-space) Position/YawDegrees, baked into the row this selection hands to BOTH consumers
+            // (contact and rendering) — a Parent-carrying placement crossing an adjacency band must cross it at its
+            // composed frame, never its authored parent-relative one.
+            var resolved = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
+
+            selected.Add(item: (placement with {
+                Position = resolved.Position,
+                YawDegrees = resolved.YawDegrees,
+            }));
         }
 
         return new Selection(

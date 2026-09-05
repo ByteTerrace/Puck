@@ -239,8 +239,12 @@ rule restyles a body — `puck.world.frozen.json`'s `look-*` rules drive one
 another text cell. Two indirections make "the body my `target` cell names"
 addressable: a key spelled `$cell:<row>:<key>` resolves to that cell's integer
 value at every read/firing (effect `key`/`fromKey`, `compareState`
-`key`/`comparandKey`), and a body-reference token `cell:<row>:<key>` does the
-same inside `$distance:`/`$los:`/`$nearest:`. `$bind:<name>` reads a value the
+`key`/`comparandKey`), its inner key may itself be `$each`, and a
+body-reference token `cell:<row>:<key>` does the same inside
+`$distance:`/`$los:`/`$nearest:`; `placement:<id>` and (over a forEach row
+keyed by placement ids) `placement:$each` name the body inhabiting a
+placement. A placement's `parent` composes its frame over another's, and a
+`board`-named Grid topology anchors its origin to that placement. `$bind:<name>` reads a value the
 enclosing rule's `bindings` list computed for this evaluation (feed-forward,
 declared order, never stored). Any `expression`/`left`/`right`/`score`/affinity
 member accepts an infix string (`"min(damage, hp[$each]) * 2"`, C precedence,

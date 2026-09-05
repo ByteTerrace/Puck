@@ -26,10 +26,10 @@
             "type": "string"
           },
           "position": {
-            "description": "The stamp position, world space. Inert (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one."
+            "description": "The stamp position \u2014 world space when Parent is null (today\u0027s behavior, unchanged), or this row\u0027s own local frame relative to Parent\u0027s COMPOSED world frame otherwise (see Parent). Inert (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one."
           },
           "yawDegrees": {
-            "description": "The stamp yaw about \u002BY, degrees. Same attach caveat as Position.",
+            "description": "The stamp yaw about \u002BY, degrees \u2014 world-space when Parent is null, added to the parent\u0027s own composed yaw otherwise. Same attach caveat as Position.",
             "type": "number"
           },
           "scale": {
@@ -94,6 +94,14 @@
           "board": {
             "$ref": "./common.schema.json#/$defs/WorldPlacementBoard",
             "description": "The placement\u0027s board facet (see WorldPlacementBoard) \u2014 the tabletop primitive, or null for no anchored topology. Omitted from the wire when null.",
+            "default": null
+          },
+          "parent": {
+            "description": "Another placement\u0027s Id this row\u0027s frame composes over, or null for a world-space row (today\u0027s behavior, unchanged). Position/YawDegrees become this row\u0027s own LOCAL offset/heading in the parent\u0027s composed frame: the parent\u0027s resolved yaw rotates the offset before adding the parent\u0027s resolved position (the same local-offset-rotated-by-orientation convention WorldPlacementAttach already uses), and yaw adds. Resolved ONCE, statically, by WorldPlacementFrameCompilation \u2014 never per tick \u2014 into PlacementFrames, which every consumer of a placement\u0027s WORLD transform reads instead of this row\u0027s own Position/YawDegrees. Validated: must name a declared placement other than itself, must not close a cycle, and that placement must carry neither a Distribution nor a Mirror (an expanded row has no single frame to compose against) nor a Scale other than 1 (composition rotates and translates only \u2014 nothing composes a parent\u0027s scale into a child\u0027s local offset).",
+            "type": [
+              "string",
+              "null"
+            ],
             "default": null
           }
         },

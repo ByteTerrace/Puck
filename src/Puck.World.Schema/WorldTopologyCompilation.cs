@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
@@ -243,7 +244,14 @@ public static class WorldTopologyCompilation {
         }
         return radius;
     }
-    private static readonly ConditionalWeakTable<WorldStateLatticeTopology, CompiledWorldTopology> s_cache = new();
+    private static readonly ConditionalWeakTable<WorldStateLatticeTopology, AnchoredCompile> s_cache = new();
+
+    // Anchor is the resolving placement INSTANCE, not merely its id — see Find(WorldDefinition, string)'s remarks on
+    // why identity (not name) is the correct staleness test.
+    private sealed class AnchoredCompile {
+        public WorldPlacement? Anchor;
+        public CompiledWorldTopology? Compiled;
+    }
 
     /// <summary>Finds the physical topology, if any. Discrete boards never allocate a fluid field.</summary>
     /// <param name="state">The state section.</param>
@@ -258,7 +266,10 @@ public static class WorldTopologyCompilation {
         return null;
     }
 
-    /// <summary>Finds and compiles a discrete topology by name.</summary>
+    /// <summary>Finds and compiles a discrete topology by name — UNANCHORED: a Grid's <c>origin</c> resolves exactly
+    /// as authored, never composed over a placement's <c>board</c> facet. Use <see cref="Find(WorldDefinition, string)"/>
+    /// whenever a placement/document is at hand, which every real consumer of a topology's world-space frame must —
+    /// this overload exists for topology-shape questions that have no document to anchor against (a bare fixture).</summary>
     /// <param name="state">The state section.</param>
     /// <param name="name">The topology name.</param>
     /// <returns>The compiled topology, or null if absent or malformed.</returns>
@@ -267,9 +278,65 @@ public static class WorldTopologyCompilation {
         for (var index = 0; index < (topologies?.Count ?? 0); index++) {
             var topology = topologies![index];
             if (topology is not null && topology.Name == name && TryValidate(topology, out _)) {
-                return s_cache.GetValue(topology, Compile);
+                return s_cache.GetValue(
+                    key: topology,
+                    createValueCallback: static topology => new AnchoredCompile { Compiled = Compile(topology: topology, anchor: null) }
+                ).Compiled;
             }
         }
+        return null;
+    }
+    /// <summary>Finds and compiles a discrete topology by name, ANCHORED: a Grid topology a placement's <c>board</c>
+    /// facet names (<see cref="WorldPlacementBoard.Topology"/>) takes its world origin from that placement's own
+    /// <see cref="WorldDefinitionRows.ResolvedFrame"/> plus its authored (now LOCAL) <c>origin</c> — translation only;
+    /// the anchor's yaw is not applied to the grid's own axes, which stay world-axis-aligned regardless of the
+    /// anchor's heading. An unanchored topology (no placement's <c>board</c> facet names it) resolves exactly as
+    /// authored, identical to <see cref="Find(WorldStateSection?, string)"/>. Cached per (topology, anchor placement
+    /// instance) pair, so a mutation that moves the anchor — a NEW <see cref="WorldPlacement"/> instance, since rows
+    /// are replaced wholesale, never mutated in place — recompiles rather than serving a stale origin; the topology's
+    /// own object identity alone (the OLD cache key) is not enough once its resolved origin depends on another row.</summary>
+    /// <param name="definition">The document — resolves the anchor, if any.</param>
+    /// <param name="name">The topology name.</param>
+    /// <returns>The compiled topology, or null if absent or malformed.</returns>
+    public static CompiledWorldTopology? Find(WorldDefinition definition, string name) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var topologies = definition.StateRaw?.Lattices;
+
+        for (var index = 0; index < (topologies?.Count ?? 0); index++) {
+            var topology = topologies![index];
+
+            if ((topology is null) || (topology.Name != name) || !TryValidate(topology, out _)) {
+                continue;
+            }
+
+            var anchor = FindAnchor(definition: definition, topologyName: name);
+            var cache = s_cache.GetValue(topology, static _ => new AnchoredCompile());
+
+            lock (cache) {
+                if (!ReferenceEquals(objA: cache.Anchor, objB: anchor) || (cache.Compiled is null)) {
+                    cache.Anchor = anchor;
+                    cache.Compiled = Compile(
+                        topology: topology,
+                        anchor: ((anchor is null) ? null : WorldDefinitionRows.ResolvedFrame(definition: definition, placement: anchor))
+                    );
+                }
+
+                return cache.Compiled;
+            }
+        }
+
+        return null;
+    }
+    // Every real placement carries at most one board facet naming this topology (validated: WorldDefinitionValidator.
+    // Board.cs refuses a second placement claiming the same topology) — the FIRST match is the only one there can be.
+    private static WorldPlacement? FindAnchor(WorldDefinition definition, string topologyName) {
+        foreach (var placement in definition.Placements) {
+            if (string.Equals(a: placement.Board?.Topology, b: topologyName, comparisonType: StringComparison.Ordinal)) {
+                return placement;
+            }
+        }
+
         return null;
     }
 
@@ -475,7 +542,10 @@ public static class WorldTopologyCompilation {
 
     // Cells are (X, Y, Z) triples: a grid or ring keeps Z at 0 and Y as its depth axis, a hex uses (q, r), a box
     // fills layers along Z. Every kind's directions are steps in the same triple, so one neighbour loop serves all.
-    private static CompiledWorldTopology Compile(WorldStateLatticeTopology topology) {
+    // `anchor`, when present, translates the authored (now LOCAL) origin by the anchoring placement's own resolved
+    // world position — see Find(WorldDefinition, string)'s remarks. Rotation is deliberately not applied: the grid's
+    // own axes stay world-aligned regardless of the anchor's yaw.
+    private static CompiledWorldTopology Compile(WorldStateLatticeTopology topology, CompiledPlacementFrame? anchor) {
         var (width, depth, layers, wrap, band, layerHeight, radius, authoredDirections, elementAliases) = Normalize(topology);
         var coordinates = new List<(int X, int Y, int Z)>();
         if (topology.Kind == WorldTopologyKind.Hex) {
@@ -540,11 +610,12 @@ public static class WorldTopologyCompilation {
             opposite[direction] = found;
         }
         var (images, elementNames) = CompiledWorldTopology.BuildSymmetry(topology.Kind, width, depth, layers, coordinates, indices);
+        var anchorPosition = (anchor?.Position ?? Vector3.Zero);
         var compiled = new CompiledWorldTopology(topology.Kind, coordinates.Count, directions.Length, neighbours, opposite, width, depth, wrap,
             new FixedVector3(
-                X: FixedQ4816.FromDouble(topology.Origin.X),
-                Y: FixedQ4816.FromDouble(topology.Origin.Y),
-                Z: FixedQ4816.FromDouble(topology.Origin.Z)
+                X: FixedQ4816.FromDouble(topology.Origin.X + anchorPosition.X),
+                Y: FixedQ4816.FromDouble(topology.Origin.Y + anchorPosition.Y),
+                Z: FixedQ4816.FromDouble(topology.Origin.Z + anchorPosition.Z)
             ),
             FixedQ4816.FromDouble(topology.CellSize),
             FixedQ4816.FromDouble(band),

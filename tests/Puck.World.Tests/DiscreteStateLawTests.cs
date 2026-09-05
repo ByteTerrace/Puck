@@ -83,7 +83,7 @@ public sealed class DiscreteStateLawTests {
         var topology = WorldTopologyCompilation.Find(definition.StateRaw, "map")!;
         Assert.Equal(-1, topology.Neighbour(0, topology.Direction("N")));
         Assert.Equal(5, topology.Neighbour(0, topology.Direction("SE")));
-        var wrapped = WorldTopologyCompilation.Find(new(Lattices: [Grid(wrap: WorldTopologyWrap.Both)]), "map")!;
+        var wrapped = WorldTopologyCompilation.Find(new WorldStateSection(Lattices: [Grid(wrap: WorldTopologyWrap.Both)]), "map")!;
         Assert.Equal(12, wrapped.Neighbour(0, wrapped.Direction("N")));
 
         // A ray over a fully wrapped board whose every cell matches the pattern reads the pattern-engine's own

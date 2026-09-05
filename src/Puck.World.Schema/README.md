@@ -746,6 +746,20 @@ directional vectors rotate with its yaw. When the placement carries `attach`,
 the area follows the same authoritative fixed-point body pose as its region,
 analytic collider, and emission. An inactive carrier contributes no area.
 
+A placement may name a `parent` placement: its `position` and `yawDegrees`
+are then a local offset and heading in the parent's resolved frame — the
+parent's yaw rotates the offset before the parent's position is added, and
+yaw adds — resolved once at compile (`WorldPlacementFrameCompilation`,
+`WorldDefinition.PlacementFrames`) and read by every consumer of a
+placement's world transform (colliders, stamps, spawn poses, region and
+emission facets, the client stamper, adjacency). A parent must be a declared
+placement other than the row itself, must not close a cycle, and carries no
+`distribution`, `mirror`, or `scale` other than 1. A Grid topology in
+`state.lattices` that a placement's `board` facet names takes its world
+origin from that placement's resolved frame plus its own, now local,
+`origin` (translation only; the grid's axes stay world-aligned), so a board
+and everything parented to its placement move together.
+
 For each body, the runtime starts with uniform plus the existing global solve,
 then folds matching areas in ascending `(priority, authored row index)` order.
 `Combine` adds; `Replace` assigns, so a higher-priority or later equal-priority
@@ -1557,8 +1571,12 @@ of keeping the two separate. `$pair:<bodyRefA>:<bodyRefB>` (a `key`,
 `comparandKey`, or `fromKey` prefix, resolving through the same
 `WorldRuleFacts.PairKeyPrefix` door every other dynamic key does) keys a row
 by a genuine (observer, subject) pair instead: each half is the same
-`body:<n>`/`argmax:<row>`/`argmin:<row>`/`cell:<row>:<key>`/bound-token
-grammar `$distance:`/`$los:` already spend their own halves on, composed into
+`body:<n>`/`argmax:<row>`/`argmin:<row>`/`cell:<row>:<key>`/`placement:<id>`/
+bound-token grammar `$distance:`/`$los:` already spend their own halves on
+(`placement:<id>` names the body inhabiting a placement, and `placement:$each`
+— inside a `forEach` over a row whose every key is an inhabited placement's id
+— the one the current key names, both resolved through a placement-ordinal
+table rather than a string on the tick path), composed into
 a directed `"<a>_<b>"` cell key — `(a, b)` and `(b, a)` name different cells.
 `$pair:each:cell:boneHolder:0` reads or writes each observer's own trust in
 whichever specific body it has most recently seen holding `boneHolder`'s cell

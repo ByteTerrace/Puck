@@ -45,13 +45,16 @@ public sealed partial class WorldStateCommandModule {
                 }
                 var lines = new List<string>();
                 foreach (var topology in server.Definition.StateRaw?.Lattices ?? []) {
-                    var compiled = WorldTopologyCompilation.Find(server.Definition.StateRaw, topology.Name);
+                    var compiled = WorldTopologyCompilation.Find(server.Definition, topology.Name);
                     var directionCount = compiled?.DirectionCount ?? 0;
                     var names = (compiled is null)
                         ? "none"
                         : string.Join(",", Enumerable.Range(0, directionCount).Select(compiled.DirectionName));
                     var normalized = WorldTopologyCompilation.Normalize(topology);
-                    lines.Add($"[world.topology '{topology.Name}' kind={topology.Kind} cells={compiled?.CellCount ?? normalized.Width * normalized.Depth * normalized.Layers} directions={directionCount} names={names} wrap={normalized.Wrap}]");
+                    var origin = (compiled is null)
+                        ? "none"
+                        : $"({(double)compiled.Origin.X:0.####},{(double)compiled.Origin.Y:0.####},{(double)compiled.Origin.Z:0.####})";
+                    lines.Add($"[world.topology '{topology.Name}' kind={topology.Kind} cells={compiled?.CellCount ?? normalized.Width * normalized.Depth * normalized.Layers} directions={directionCount} names={names} wrap={normalized.Wrap} origin={origin}]");
                 }
                 return new CommandResult(Output: string.Join(Environment.NewLine, lines));
             });

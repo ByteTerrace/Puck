@@ -731,7 +731,7 @@ public static partial class WorldRuleCompiler {
         }
         CompiledWorldExpressionToken ResolveBoardShift(ValueToken.BoardShift shift) {
             if (kind != CellKind.Int) { throw Malformed("token 'BoardShift' is admitted in kind=int expressions only"); }
-            if (WorldTopologyCompilation.Find(definition.StateRaw, shift.Topology ?? string.Empty) is not { } topology) {
+            if (WorldTopologyCompilation.Find(definition, shift.Topology ?? string.Empty) is not { } topology) {
                 throw Malformed($"token 'BoardShift' names no discrete topology '{shift.Topology}'");
             }
             if (topology.CellCount > WorldBoardMask.MaxCells) {
@@ -745,7 +745,7 @@ public static partial class WorldRuleCompiler {
         }
         CompiledWorldExpressionToken ResolveBoardImage(ValueToken.BoardImage image) {
             if (kind != CellKind.Int) { throw Malformed("token 'BoardImage' is admitted in kind=int expressions only"); }
-            if (WorldTopologyCompilation.Find(definition.StateRaw, image.Topology ?? string.Empty) is not { } topology) {
+            if (WorldTopologyCompilation.Find(definition, image.Topology ?? string.Empty) is not { } topology) {
                 throw Malformed($"token 'BoardImage' names no discrete topology '{image.Topology}'");
             }
             if (topology.CellCount > WorldBoardMask.MaxCells) {

@@ -606,6 +606,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
                         placementId: placement.Id,
                         shapeId: sound.ShapeId,
                         staticPosition: WorldAnchorGeometry.StaticShapePosition(
+                            definition: definition,
                             placement: placement,
                             creation: creation,
                             shapeId: sound.ShapeId

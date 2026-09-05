@@ -172,10 +172,13 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// <param name="Id">The row's stable string id (its mutation address).</param>
 /// <param name="PrototypeId">The referenced <see cref="WorldPrototype.Id"/> (must resolve; removal of a referenced
 /// creation rejects loudly).</param>
-/// <param name="Position">The stamp position, world space. Inert (still validated and stored, but read by nothing —
-/// neither the resolve nor the renderer) when <paramref name="Attach"/> is set: the row's live position is the resolved
-/// attachment, never this authored one.</param>
-/// <param name="YawDegrees">The stamp yaw about +Y, degrees. Same attach caveat as <paramref name="Position"/>.</param>
+/// <param name="Position">The stamp position — world space when <paramref name="Parent"/> is null (today's behavior,
+/// unchanged), or this row's own local frame relative to <paramref name="Parent"/>'s COMPOSED world frame otherwise
+/// (see <paramref name="Parent"/>). Inert (still validated and stored, but read by nothing — neither the resolve nor
+/// the renderer) when <paramref name="Attach"/> is set: the row's live position is the resolved attachment, never
+/// this authored one.</param>
+/// <param name="YawDegrees">The stamp yaw about +Y, degrees — world-space when <paramref name="Parent"/> is null,
+/// added to the parent's own composed yaw otherwise. Same attach caveat as <paramref name="Position"/>.</param>
 /// <param name="Scale">The uniform stamp scale (clamped to the placement policy envelope by validation).</param>
 /// <param name="Distribution">The placement distribution, or <see langword="null"/> for a single copy. Static
 /// placements accept a Lattice, Noise, or Scatter region, each with a <c>none</c> fill — Lattice materializes a
@@ -222,6 +225,17 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// Omitted from the wire when null. Requires <paramref name="Solid"/> (validated).</param>
 /// <param name="Board">The placement's board facet (see <see cref="WorldPlacementBoard"/>) — the tabletop
 /// primitive, or <see langword="null"/> for no anchored topology. Omitted from the wire when null.</param>
+/// <param name="Parent">Another placement's <see cref="Id"/> this row's frame composes over, or <see langword="null"/>
+/// for a world-space row (today's behavior, unchanged). <see cref="Position"/>/<see cref="YawDegrees"/> become this
+/// row's own LOCAL offset/heading in the parent's composed frame: the parent's resolved yaw rotates the offset before
+/// adding the parent's resolved position (the same local-offset-rotated-by-orientation convention
+/// <see cref="WorldPlacementAttach"/> already uses), and yaw adds. Resolved ONCE, statically, by
+/// <see cref="WorldPlacementFrameCompilation"/> — never per tick — into <see cref="WorldDefinition.PlacementFrames"/>,
+/// which every consumer of a placement's WORLD transform reads instead of this row's own Position/YawDegrees.
+/// Validated: must name a declared placement other than itself, must not close a cycle, and that placement must
+/// carry neither a <see cref="Distribution"/> nor a <see cref="Mirror"/> (an expanded row has no single frame to
+/// compose against) nor a <see cref="Scale"/> other than 1 (composition rotates and translates only — nothing
+/// composes a parent's scale into a child's local offset).</param>
 public sealed record WorldPlacement(
     string Id,
     string PrototypeId,
@@ -239,7 +253,8 @@ public sealed record WorldPlacement(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementContribution? Contribution = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacementResponse>? Respond = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementGrip? Grip = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementBoard? Board = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementBoard? Board = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Parent = null
 );
 /// <summary>Adapts placement document facets to the shared creation-stamp vocabulary.</summary>
 public static class WorldPlacementStamp {

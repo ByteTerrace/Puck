@@ -417,7 +417,12 @@ lives in its own file under `Assets/worlds/games/`, imported by the garden's
 The shared substrate — channels, kits, population capacity, the tabletop
 placement, spawn points, the island, hud/views, and everything no game's own
 content touches — stays in `puck.world.json` itself; `world.imports` reads the
-resolved stack back.
+resolved stack back. A module addresses the world through placements, never
+absolute coordinates: chess's squares and pieces carry `parent: tabletop`, its
+board topology anchors to that placement, its piece rows are keyed by
+placement id and read through `placement:$each`, and dominoes, billiards, and
+bowling anchor to marker placements of their own — so a module composes into
+any host that declares the placement it names.
 
 A kit carrying a `carry` facet may pick up another kit's rigid body:
 `body.carry <carrier> <target>` begins it (within an authored reach and mass

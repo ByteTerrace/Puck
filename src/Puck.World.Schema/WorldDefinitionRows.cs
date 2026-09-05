@@ -125,6 +125,23 @@ public static class WorldDefinitionRows {
         name: id,
         selector: static placement => placement.Id
     );
+    /// <summary>Resolves a placement's WORLD-space transform through <see cref="WorldDefinition.PlacementFrames"/> —
+    /// the composed frame every consumer of a placement's transform reads instead of its own Position/YawDegrees.
+    /// Falls back to <paramref name="placement"/>'s own authored Position/YawDegrees when the table carries no entry
+    /// for it (an ad hoc placement outside <paramref name="definition"/>'s own rows).</summary>
+    public static CompiledPlacementFrame ResolvedFrame(WorldDefinition definition, WorldPlacement placement) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: placement);
+
+        return (definition.PlacementFrames.TryGetValue(key: placement.Id, value: out var frame)
+            ? frame
+            : new CompiledPlacementFrame(Position: placement.Position, YawDegrees: placement.YawDegrees)
+        );
+    }
+    /// <summary>Resolves a placement's composed world position (see <see cref="ResolvedFrame"/>).</summary>
+    public static System.Numerics.Vector3 ResolvedPosition(WorldDefinition definition, WorldPlacement placement) => ResolvedFrame(definition: definition, placement: placement).Position;
+    /// <summary>Resolves a placement's composed world yaw, degrees (see <see cref="ResolvedFrame"/>).</summary>
+    public static float ResolvedYawDegrees(WorldDefinition definition, WorldPlacement placement) => ResolvedFrame(definition: definition, placement: placement).YawDegrees;
     /// <summary>Finds a placement's declared face by name — the primitive a
     /// <see cref="WorldPlacementPortal.Counterpart"/> resolves its face half against (see
     /// <see cref="WorldPortalCounterpart"/>), and every other placement/face reader (<c>world.portals</c>,

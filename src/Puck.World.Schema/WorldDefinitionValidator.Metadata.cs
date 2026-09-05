@@ -222,6 +222,8 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"gravity.areas declares {areas.Count} rows, past the {WorldGravityCapacity.MaxAreas}-row cap.");
         }
 
+        var frames = WorldPlacementFrameCompilation.Compile(placements: placements);
+
         for (var index = 0; (index < areas.Count); index++) {
             var area = areas[index];
             var path = $"gravity.areas[{index}]";
@@ -307,6 +309,7 @@ public static partial class WorldDefinitionValidator {
                     area: area,
                     authoredIndex: index,
                     compiled: out _,
+                    frame: frames[placement.Id],
                     placement: placement
                 )
             ) {

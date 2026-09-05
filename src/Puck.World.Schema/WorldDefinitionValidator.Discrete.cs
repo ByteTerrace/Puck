@@ -33,7 +33,7 @@ public static partial class WorldDefinitionValidator {
                 (row.Kind == CellKind.Bool && board.Empty is not (0 or 1))) {
                 errors.Add($"state row '{row.Name}': board.empty is outside the value domain.");
             }
-            var compiled = WorldTopologyCompilation.Find(definition.StateRaw, board.Topology);
+            var compiled = WorldTopologyCompilation.Find(definition, board.Topology);
             if (compiled is null) {
                 errors.Add($"state row '{row.Name}': domain.topology '{board.Topology}' names no valid discrete topology.");
                 continue;
@@ -68,7 +68,7 @@ public static partial class WorldDefinitionValidator {
             }
             var domainName = (row.EffectiveDomain is WorldStateDomain.KeysOf keysOf ? keysOf.Row.Value : null);
             if (row.ValuesFrom is { } topologyName) {
-                var topology = WorldTopologyCompilation.Find(definition.StateRaw, topologyName);
+                var topology = WorldTopologyCompilation.Find(definition, topologyName);
                 if (domainName is null || row.Kind != CellKind.Int || topology is null ||
                     (row.Cells ?? []).Any(c => c is not null && (ulong)c.Value >= (ulong)topology.CellCount)) {
                     errors.Add($"state row '{row.Name}': valuesFrom requires token-keyed integer positions inside a discrete topology.");

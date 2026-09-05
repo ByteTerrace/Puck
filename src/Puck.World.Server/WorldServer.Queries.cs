@@ -661,16 +661,23 @@ public sealed partial class WorldServer {
             return eachKey;
         }
 
-        var index = ((indirection.Binding != RuleBinding.None)
-            ? BoundBody(binding: indirection.Binding)
-            : IntegerOf(value: ReadStateCellByHandle(
-                handle: indirection.Handle,
-                key: indirection.Key,
-                tick: tick
-            ))
+        if (indirection.Binding != RuleBinding.None) {
+            return WorldBodyKeyCache.Get(index: BoundBody(binding: indirection.Binding));
+        }
+
+        // The ROW is fixed ('pieceCell'), but a '$cell:<row>:<key>' indirection whose OWN inner key spelled a
+        // binding token reads whichever cell THIS evaluation is at, never the compile-time Key (empty here) — see
+        // CompiledCellRef.InnerKeyBinding's own remarks.
+        var innerKey = ((indirection.InnerKeyBinding == RuleBinding.Each) && (m_boundEachKey is { } eachInnerKey)
+            ? eachInnerKey
+            : indirection.Key
         );
 
-        return WorldBodyKeyCache.Get(index: index);
+        return WorldBodyKeyCache.Get(index: IntegerOf(value: ReadStateCellByHandle(
+            handle: indirection.Handle,
+            key: innerKey,
+            tick: tick
+        )));
     }
 
     // Canonical "a_b" pair keys (underscore, not colon: CellName reserves ':'), cached per distinct DIRECTED
@@ -744,6 +751,15 @@ public sealed partial class WorldServer {
     )) is var cellIndex) && (cellIndex >= 0) && (cellIndex < m_population.Capacity))
         ? ((int)cellIndex)
         : -1),
+        CompiledBodyRefKind.Placement => ((bodyRef.PlacementOrdinals is { } ordinals)
+        // 'placement:$each' — position-indexed, never the string key: an out-of-range position (outside a
+        // forEach evaluation, or a stale compile against a shorter row) resolves no body rather than reading
+        // ordinal 0 by accident.
+        ? (((uint)m_boundEachPosition < (uint)ordinals.Count)
+            ? m_population.BodyForPlacementOrdinal(ordinal: ordinals[m_boundEachPosition])
+            : -1)
+        // 'placement:<id>' — a fixed ordinal, resolved once at compile time.
+        : m_population.BodyForPlacementOrdinal(ordinal: bodyRef.Index)),
         _ => ResolveArgBody(
         handle: bodyRef.Handle,
         op: ((bodyRef.Kind == CompiledBodyRefKind.ArgMax)

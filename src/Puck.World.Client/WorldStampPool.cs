@@ -868,6 +868,10 @@ public sealed partial class WorldStampPool {
             );
         }
 
+        // An ANIMATED row's own registration carries no WorldDefinition reference (KeyedReconciler's recreate/update
+        // delegates are static, capturing nothing), so a Parent-carrying animated row rides its own authored
+        // Position/YawDegrees here rather than its composed frame — the ordinary (non-animated) static-stamp path
+        // (WorldPlacementStamper.EmitStatic) is the one every Parent-carrying placement in the shipped games rides.
         var rotation = Quaternion.CreateFromAxisAngle(
             axis: Vector3.UnitY,
             angle: (row.YawDegrees * (MathF.PI / 180f))

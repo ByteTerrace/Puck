@@ -191,9 +191,11 @@ public readonly record struct FixedWorldGravity(
             return Inert;
         }
 
+        var frames = WorldPlacementFrameCompilation.Compile(placements: placements);
         var uniform = FixedVector3.FromVector3(value: gravity.UniformAcceleration);
         var areas = CompileAreas(
             areas: gravity.Areas,
+            frames: frames,
             placements: placements
         );
 
@@ -220,7 +222,7 @@ public readonly record struct FixedWorldGravity(
 
             attractors.Add(item: new GravityBody(
                 Mass: FixedQ4816.FromDouble(value: attractor.Mass),
-                Position: FixedVector3.FromVector3(value: placement.Position)
+                Position: FixedVector3.FromVector3(value: frames[placement.Id].Position)
             ));
         }
 
@@ -243,7 +245,7 @@ public readonly record struct FixedWorldGravity(
 
             attractors.Add(item: new GravityBody(
                 Mass: mass,
-                Position: FixedVector3.FromVector3(value: placement.Position)
+                Position: FixedVector3.FromVector3(value: frames[placement.Id].Position)
             ));
         }
 
@@ -263,7 +265,7 @@ public readonly record struct FixedWorldGravity(
         );
     }
 
-    private static FixedWorldGravityArea[] CompileAreas(IReadOnlyList<WorldGravityArea>? areas, IReadOnlyList<WorldPlacement> placements) {
+    private static FixedWorldGravityArea[] CompileAreas(IReadOnlyList<WorldGravityArea>? areas, IReadOnlyDictionary<string, CompiledPlacementFrame> frames, IReadOnlyList<WorldPlacement> placements) {
         if (areas is not { Count: > 0 }) {
             return [];
         }
@@ -283,6 +285,7 @@ public readonly record struct FixedWorldGravity(
                     area: area,
                     authoredIndex: authoredIndex,
                     compiled: out var lowered,
+                    frame: frames[placement.Id],
                     placement: placement
                 )
             ) {
@@ -478,23 +481,23 @@ public readonly record struct FixedWorldGravityArea(
         );
 
     /// <summary>Attempts to lower an authored area through the fixed-point analytic evaluator.</summary>
-    internal static bool TryCompile(WorldGravityArea area, WorldPlacement placement, int authoredIndex, out FixedWorldGravityArea compiled) {
+    internal static bool TryCompile(WorldGravityArea area, WorldPlacement placement, CompiledPlacementFrame frame, int authoredIndex, out FixedWorldGravityArea compiled) {
         compiled = default;
 
         if (
             !Enum.IsDefined(value: area.Mode) ||
-            !IsFixedRepresentable(value: placement.Position) ||
+            !IsFixedRepresentable(value: frame.Position) ||
             !IsFixedRepresentable(value: placement.Scale) ||
             !(placement.Scale > 0f) ||
-            !IsFixedRepresentable(value: placement.YawDegrees)
+            !IsFixedRepresentable(value: frame.YawDegrees)
         ) {
             return false;
         }
 
         try {
             var scale = FixedQ4816.FromDouble(value: placement.Scale);
-            var position = FixedVector3.FromVector3(value: placement.Position);
-            var yaw = FixedQ4816.FromDouble(value: (placement.YawDegrees * (Math.PI / 180.0)));
+            var position = FixedVector3.FromVector3(value: frame.Position);
+            var yaw = FixedQ4816.FromDouble(value: (frame.YawDegrees * (Math.PI / 180.0)));
             var boundsKind = default(FixedWorldGravityAreaBoundsKind);
             var radiusSquared = FixedQ4816.Zero;
             var halfExtents = FixedVector3.Zero;

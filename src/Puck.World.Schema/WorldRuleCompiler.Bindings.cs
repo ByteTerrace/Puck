@@ -9,6 +9,16 @@ public static partial class WorldRuleCompiler {
     // only the bindings declared before it; the gate and effects see all of them.
     [ThreadStatic]
     private static List<CompiledRuleBinding>? s_ruleBindings;
+    // The enclosing rule's declared ForEach row name (or null) — set by Compile for the duration of one compile, read
+    // by ResolveBodyRefToken's 'placement:$each' arm, which needs no OTHER caller context threaded down the deep
+    // gate/effect/binding call tree the same way s_bindingScope does not.
+    [ThreadStatic]
+    private static string? s_forEachRow;
+    // Lazily resolved the first time 'placement:$each' is parsed within the current rule's compile (every further
+    // occurrence in the SAME rule reads this cache rather than re-walking the ForEach row); cleared alongside
+    // s_forEachRow.
+    [ThreadStatic]
+    private static IReadOnlyList<int>? s_forEachPlacementOrdinals;
     private static CompiledRuleBinding[] CompileBindings(WorldRule rule, WorldDefinition definition) {
         if (rule.Bindings is not { Count: > 0 } authored) {
             return [];
@@ -150,7 +160,7 @@ public static partial class WorldRuleCompiler {
 
     // The body-reference grammar as a refusal spells it; the bound tokens come from the same table the parser reads.
     private static readonly string s_bodyRefVocabulary =
-        (("a 'body:<n>', 'argmax:<row>'/'argmin:<row>', 'cell:<row>:<key>', or a bound " +
+        (("a 'body:<n>', 'argmax:<row>'/'argmin:<row>', 'cell:<row>:<key>', 'placement:<id>'/'placement:$each', or a bound " +
         string.Join(
             separator: '/',
             values: WorldRuleBindingTokens.Bindings.Select(selector: static entry => $"'{WorldRuleBindingTokens.BodyTokenOf(keyToken: entry.KeyToken)}'")
