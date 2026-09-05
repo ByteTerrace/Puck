@@ -142,6 +142,9 @@ public sealed partial class AgbApu : IAgbApu {
 
         return requested;
     }
+
+    // A non-consuming readiness check lets an idle CPU bus access avoid both FIFO callbacks.
+    internal bool HasPendingFifoRefill => (m_fifoARefill || m_fifoBRefill);
     /// <inheritdoc/>
     public bool ConsumeFifoBRefill() {
         var requested = m_fifoBRefill;

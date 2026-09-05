@@ -2,7 +2,7 @@ namespace Puck.AdvancedGamingBrick;
 
 /// <summary>
 /// The system event scheduler for the cycle-stepped engine. Time is a single monotonic master clock,
-/// <see cref="Now"/>, advanced one cycle at a time by the bus's per-cycle stepping. Peripherals schedule events at
+/// <see cref="Now"/>, advanced by the bus in event-bounded spans or individual cycles during timer/IRQ transitions. Peripherals schedule events at
 /// absolute times on that clock, and the bus fires each one at its <b>exact</b> cycle (the cycle-stepped hardware model — no deferred
 /// batching, so a peripheral register read mid-instruction sees state that has advanced to the precise cycle).
 /// </summary>
@@ -21,7 +21,7 @@ public sealed partial class AgbScheduler {
 
     private Event? m_root;
 
-    /// <summary>The master clock: the current absolute time, advanced one cycle at a time by the bus.</summary>
+    /// <summary>The master clock: the current absolute time, advanced by the bus without crossing pending events.</summary>
     public long Now { get; set; }
     /// <summary>The absolute time of the next scheduled event, or <see cref="long.MaxValue"/> if none is queued.</summary>
     public long NextWhen => (m_root?.When ?? long.MaxValue);

@@ -58,6 +58,8 @@ public sealed partial class AgbTimerController : IAgbTimerController {
     private readonly int[] m_latchReload = new int[4];
 
     private bool m_timerLatched;
+    // Derived latch/IRQ summary for the bus hot path; rebuilt on restore rather than serialized.
+    private bool m_hasPendingLatch;
     // true = event-scheduled (steady) mode: prescaler timers advance via overflow events and are read closed-form.
     // false = per-cycle window: RunCycle drives the latch/IRQ machinery. The bus flips this via EnsureScheduled /
     // EnsurePerCycle at each span boundary; a freshly constructed block is per-cycle until the bus schedules it.
@@ -88,7 +90,9 @@ public sealed partial class AgbTimerController : IAgbTimerController {
     }
 
     /// <inheritdoc/>
-    public bool HasPendingLatch =>
+    public bool HasPendingLatch => m_hasPendingLatch;
+
+    private void RefreshPendingLatch() => m_hasPendingLatch =
         (m_timerLatched
         || m_pending[0] || m_pending[1] || m_pending[2] || m_pending[3]
         || (m_irqCountdown[0] != 0) || (m_irqCountdown[1] != 0) || (m_irqCountdown[2] != 0) || (m_irqCountdown[3] != 0));
@@ -129,6 +133,7 @@ public sealed partial class AgbTimerController : IAgbTimerController {
         }
 
         m_timerLatched = true;
+        m_hasPendingLatch = true;
     }
     /// <inheritdoc/>
     public void EnsureScheduled(long now) {
@@ -219,6 +224,8 @@ public sealed partial class AgbTimerController : IAgbTimerController {
             StepLatch(timer: 3);
             m_timerLatched = false;
         }
+
+        RefreshPendingLatch();
     }
 
     // The counter a CNT_L read returns: a scheduled prescaler timer is reconstructed closed-form from its anchor; a
@@ -280,6 +287,7 @@ public sealed partial class AgbTimerController : IAgbTimerController {
             (m_irqCountdown[timer] == 0)
         ) {
             m_irqCountdown[timer] = OverflowIrqDelay;
+            m_hasPendingLatch = true;
         }
 
         if (timer < 2) {
@@ -294,6 +302,7 @@ public sealed partial class AgbTimerController : IAgbTimerController {
             Step(timer: (timer + 1));
         }
 
+        RefreshPendingLatch();
         ScheduleOverflow(timer: timer);
     }
     // Overflow-IRQ delay: count an armed request down to its fire cycle, then assert the flag on the interrupt
@@ -303,6 +312,7 @@ public sealed partial class AgbTimerController : IAgbTimerController {
             (m_irqCountdown[timer] != 0) &&
             (--m_irqCountdown[timer] == 0)
         ) {
+            RefreshPendingLatch();
             m_interrupts.Request(source: ((InterruptSource)(((int)InterruptSource.Timer0) + timer)));
         }
     }
@@ -338,6 +348,7 @@ public sealed partial class AgbTimerController : IAgbTimerController {
             // already in flight is left alone (the interrupt flag is a level bit — a fresh arm only matters once the
             // in-flight one has fired), so a fast-overflowing timer cannot indefinitely defer its own recognition.
             m_irqCountdown[timer] = OverflowIrqDelay;
+            m_hasPendingLatch = true;
         }
 
         if (timer < 2) {

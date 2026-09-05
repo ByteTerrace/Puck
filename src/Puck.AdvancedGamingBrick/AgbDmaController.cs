@@ -29,6 +29,9 @@ public sealed partial class AgbDmaController : IAgbDmaController {
     private bool m_running;
     private int m_activeChannel = -1;
 
+    // Access-time readiness for the built-in bus; enabled timed channels are pending only after their trigger.
+    internal bool HasPendingTransfer => (m_active[0] || m_active[1] || m_active[2] || m_active[3]);
+
     /// <summary>Creates the DMA block bound to the interrupt controller it signals on completion.</summary>
     /// <param name="interrupts">The interrupt controller.</param>
     /// <exception cref="ArgumentNullException"><paramref name="interrupts"/> is <see langword="null"/>.</exception>

@@ -458,6 +458,28 @@ public sealed partial class AgbPpu : IAgbPpu {
         var effect = (blendControl >> 6) & 0x3;
         var firstTargets = blendControl & 0x3Fu;
         var secondTargets = (blendControl >> 8) & 0x3Fu;
+        var backdrop = ((int)PaletteColor(index: 0));
+        Span<int> backgrounds = stackalloc int[4];
+        var backgroundCount = 0;
+
+        // Background priority is constant across this scanline. Sort once, preserving BG-number ties;
+        // each pixel then needs only the first two opaque, window-enabled backgrounds.
+        for (var background = 0; (background < 4); ++background) {
+            if (((activeBackgrounds >> background) & 1) == 0) {
+                continue;
+            }
+
+            var position = backgroundCount;
+            var priority = m_registers[(4 + background)] & 0x3;
+
+            while ((position > 0) && ((m_registers[(4 + backgrounds[(position - 1)])] & 0x3) > priority)) {
+                backgrounds[position] = backgrounds[(position - 1)];
+                --position;
+            }
+
+            backgrounds[position] = background;
+            ++backgroundCount;
+        }
 
         for (var x = 0; (x < ScreenWidth); ++x) {
             var enableMask = (windowsActive
@@ -469,7 +491,6 @@ public sealed partial class AgbPpu : IAgbPpu {
 
             // Find the top two visible, opaque layers by (priority, then OBJ-before-BG, then BG number); the
             // backdrop sits beneath everything (priority 5, id 5).
-            var backdrop = ((int)PaletteColor(index: 0));
             var top = new Layer(
                 Color: backdrop,
                 Id: 5,
@@ -483,11 +504,33 @@ public sealed partial class AgbPpu : IAgbPpu {
                 Priority: 5
             );
 
-            if (
-                objectsEnabled &&
-                (m_spriteLine[x] >= 0) &&
-                ((enableMask & 0x10u) != 0u)
-            ) {
+            for (var index = 0; (index < backgroundCount); ++index) {
+                var background = backgrounds[index];
+
+                if (((enableMask >> background) & 1u) == 0u) {
+                    continue;
+                }
+
+                var color = m_backgroundLine[background][x];
+
+                if (color >= 0) {
+                    var layer = new Layer(
+                        Color: color,
+                        Priority: m_registers[(4 + background)] & 0x3,
+                        Order: (background + 1),
+                        Id: background
+                    );
+
+                    if (top.Id == 5) {
+                        top = layer;
+                    } else {
+                        second = layer;
+                        break;
+                    }
+                }
+            }
+
+            if (objectsEnabled && (m_spriteLine[x] >= 0) && ((enableMask & 0x10u) != 0u)) {
                 Consider(
                     color: m_spriteLine[x],
                     priority: m_spritePriority[x],
@@ -496,28 +539,6 @@ public sealed partial class AgbPpu : IAgbPpu {
                     top: ref top,
                     second: ref second
                 );
-            }
-
-            for (var background = 0; (background < 4); ++background) {
-                if (
-                    (((activeBackgrounds >> background) & 1) == 0) ||
-                    (((enableMask >> background) & 1u) == 0u)
-                ) {
-                    continue;
-                }
-
-                var color = m_backgroundLine[background][x];
-
-                if (color >= 0) {
-                    Consider(
-                        color: color,
-                        priority: m_registers[(4 + background)] & 0x3,
-                        order: (background + 1),
-                        id: background,
-                        top: ref top,
-                        second: ref second
-                    );
-                }
             }
 
             var result = top.Color;

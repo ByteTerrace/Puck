@@ -26,7 +26,7 @@ check failed. Exit code 2 means infrastructure prevented a stage from running.
 
 | Tier | Coverage | Assets |
 |---|---|---|
-| A | CPU and bus smoke vectors; determinism; state round trip; fork determinism; save round trip; bounded queued-host backpressure and immutable frame publication; throughput; zero-alloc-per-frame | none |
+| A | CPU and bus smoke vectors; exhaustive BG/OBJ priority and transparency combinations with window/effect cases; determinism; state round trip; fork determinism; save round trip; bounded queued-host backpressure and immutable frame publication; throughput; zero-alloc-per-frame | none |
 | B | conformance CPU/save/misc suites; ARM fuzz corpus; render hashes; accuracy suite; AGS aging cartridge | assets listed below; stages skip when absent |
 | C | deterministic multiplayer cable replay and a commercial link-game replay | synthetic replay needs none; commercial replay needs a retail BIOS and `PUCK_AGB_LINK_GAME` |
 
@@ -60,6 +60,24 @@ latency and allocation. `--bench-rom` defaults to the same zero-asset
 synthetic cartridge the throughput stage runs. Every fleet cell ends with a
 serial-vs-parallel bit-lock check; a divergence exits 1. Mirrors the Humble
 Post's `--bench`.
+
+Add `--bench-warmup-frames N` to start every measured fleet and burst cell
+from the same snapshot after `N` frames with keys released. This separates
+later execution from boot cost; construction and restoration happen outside
+the stopwatch. The input script begins at frame zero after restoration.
+Without this option, cells start at direct boot as before. Audio output is
+disabled in this benchmark, and latency probes retain their separate
+120-frame warm-up. Repeat both builds on a quiet machine and compare the
+same ROM, BIOS, warm-up and frame budget; a short boot run does not predict
+gameplay throughput.
+
+For performance refactors, retain the original executable and compare raw
+`--dump-snapshot` images across builds. Same-build replay checks alone cannot
+detect a deterministic regression. The `ppu-composition` stage separately
+checks 131,072 pixels against a fully sorted layer model, including window
+masking, transparent backgrounds, priority ties and semi-transparent OBJ.
+The `cartridge-fetch` stage checks wide reads against byte reads at sensor
+overlays, empty and odd-sized ROM boundaries, and cartridge page boundaries.
 
 ## Determinism diagnostics
 

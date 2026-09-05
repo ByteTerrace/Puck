@@ -28,7 +28,7 @@ internal static class BenchDiagnostic {
     /// <summary>Runs the bench and writes the report to the console and <c>bench-report.txt</c> in the artifacts
     /// directory.</summary>
     /// <param name="args">The command-line arguments (<c>--bench-rom</c>, <c>--bench-frames</c>,
-    /// <c>--bench-fleet</c>, <c>--artifacts</c>).</param>
+    /// <c>--bench-fleet</c>, <c>--bench-warmup-frames</c>, <c>--artifacts</c>).</param>
     /// <returns>0 on a clean run; 1 when a determinism guard failed.</returns>
     public static int Run(string[] args) {
         var romPath = CommandLineArguments.Value(
@@ -72,11 +72,26 @@ internal static class BenchDiagnostic {
 
         var report = new StringBuilder();
         var determinismHeld = true;
+        var warmupFrames = CommandLineArguments.Value(args: args, name: "--bench-warmup-frames");
+        AgbMachineSnapshot? initialState = null;
+
+        if (warmupFrames is not null) {
+            if (!int.TryParse(s: warmupFrames, result: out var warmup) || (warmup < 0)) {
+                Console.Error.WriteLine(value: "--bench-warmup-frames must be a nonnegative integer.");
+                return 2;
+            }
+
+            using var subject = PostMachine.Build(bios: bios, rom: rom);
+            subject.RunFrames(frames: warmup);
+            initialState = subject.Machine.Snapshot();
+        }
 
         BenchDiagnosticFormatting.Line(
             report: report,
             text: $"machine-fleet bench (AGB) — {romName}, frame floor {frameFloor}/machine, {Environment.ProcessorCount} logical processors"
         );
+        BenchDiagnosticFormatting.Line(report: report,
+            text: $"runtime {Environment.Version}; warm-up {warmupFrames ?? "0"} frames with keys released before each measured fleet cell; audio output disabled");
 
         // Discarded warm-up fleets so JIT tiering settles before anything is measured.
         RunFleet(
@@ -120,6 +135,7 @@ internal static class BenchDiagnostic {
             GC.WaitForPendingFinalizers();
 
             var independentSingle = RunFleet(
+                initialState: initialState,
                 bios: bios,
                 choir: false,
                 count: count,
@@ -128,6 +144,7 @@ internal static class BenchDiagnostic {
                 rom: rom
             );
             var independentParallel = RunFleet(
+                initialState: initialState,
                 bios: bios,
                 choir: false,
                 count: count,
@@ -136,6 +153,7 @@ internal static class BenchDiagnostic {
                 rom: rom
             );
             var choirSingle = RunFleet(
+                initialState: initialState,
                 bios: bios,
                 choir: true,
                 count: count,
@@ -144,6 +162,7 @@ internal static class BenchDiagnostic {
                 rom: rom
             );
             var choirParallel = RunFleet(
+                initialState: initialState,
                 bios: bios,
                 choir: true,
                 count: count,
@@ -200,6 +219,7 @@ internal static class BenchDiagnostic {
         // Burst catch-up: the dormancy model's budget — a frozen machine fast-forwarding its elapsed span. One
         // machine uncapped, and one machine per logical processor all catching up at once.
         var burstSingle = RunFleet(
+            initialState: initialState,
             bios: bios,
             choir: false,
             count: 1,
@@ -208,6 +228,7 @@ internal static class BenchDiagnostic {
             rom: rom
         );
         var burstFleet = RunFleet(
+            initialState: initialState,
             bios: bios,
             rom: rom,
             count: Environment.ProcessorCount,
@@ -283,7 +304,7 @@ internal static class BenchDiagnostic {
     /// same-stream honesty check (machine 0 vs the last machine, which always consumes stream 0).</summary>
     private sealed record FleetCell(double MachineFramesPerSecond, AgbMachineSnapshot Anchor, bool PairMatched);
 
-    private static FleetCell RunFleet(ReadOnlyMemory<byte> bios, byte[] rom, int count, int frames, bool choir, bool parallel) {
+    private static FleetCell RunFleet(ReadOnlyMemory<byte> bios, byte[] rom, int count, int frames, bool choir, bool parallel, AgbMachineSnapshot? initialState = null) {
         var machines = new PostMachine[count];
 
         for (var index = 0; (index < count); ++index) {
@@ -291,6 +312,10 @@ internal static class BenchDiagnostic {
                 bios: bios,
                 rom: rom
             );
+
+            if (initialState is not null) {
+                machines[index].Machine.Restore(snapshot: initialState);
+            }
         }
 
         var stopwatch = Stopwatch.StartNew();

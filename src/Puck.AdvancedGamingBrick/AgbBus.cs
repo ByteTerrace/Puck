@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Puck.AdvancedGamingBrick;
 
 /// <summary>
@@ -36,6 +38,8 @@ public sealed partial class AgbBus : IAgbBus {
     private readonly IAgbSerialController m_serial;
     private readonly IAgbPpu m_ppu;
     private readonly IAgbApu m_apu;
+    private readonly AgbDmaController? m_dmaCore;
+    private readonly AgbApu? m_apuCore;
 
     private uint m_openBus;
     private uint m_prevFetchHalf;
@@ -106,6 +110,8 @@ public sealed partial class AgbBus : IAgbBus {
         m_serial = serial;
         m_ppu = ppu;
         m_apu = apu;
+        m_dmaCore = dma as AgbDmaController;
+        m_apuCore = apu as AgbApu;
 
         cartridge.SetCycleProvider(provider: () => m_scheduler.Now);
 
@@ -198,7 +204,23 @@ public sealed partial class AgbBus : IAgbBus {
     // advance. Direct-Sound keeps a timer enabled all session, so this collapse is what keeps real gameplay fast.
     // The timer block is flipped between event-scheduled and per-cycle at each span boundary; EnsureScheduled queues
     // the overflow events (and must run BEFORE the next-event clamp so an overflow due this span is not overstepped).
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void StepClocks(int n) {
+        if ((n > 0) && !m_timers.HasPendingLatch && m_interrupts.PipelineQuiescent) {
+            m_timers.EnsureScheduled(now: m_scheduler.Now);
+
+            // Most accesses finish before any peripheral event. Keep this path small enough to inline;
+            // equality belongs to the slow path so events still fire before the access returns.
+            if (n < (m_scheduler.NextWhen - m_scheduler.Now)) {
+                m_scheduler.Now += n;
+
+                return;
+            }
+        }
+
+        StepClocksSlow(n: n);
+    }
+    private void StepClocksSlow(int n) {
         if (n <= 0) {
             m_scheduler.Now += n; // defensive; charge sites never pass a negative count
 
@@ -281,11 +303,22 @@ public sealed partial class AgbBus : IAgbBus {
     // trigger runs its whole burst HERE, just before the CPU touches the bus, with the CPU stalled — so the burst's
     // cycles and its completion IRQ are charged to the consuming instruction. m_dmaActive guards re-entry from the
     // DMA's own accesses and marks those accesses as DMA (for EEPROM routing).
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void RunPendingDma() {
         if (m_dmaActive) {
             return;
         }
 
+        // Built-in peripherals expose their request flags without consuming them. Decorators and substitute
+        // implementations retain the full interface path, including their access-time callbacks.
+        if ((m_dmaCore is not null) && (m_apuCore is not null)
+            && !m_dmaCore.HasPendingTransfer && !m_apuCore.HasPendingFifoRefill) {
+            return;
+        }
+
+        RunPendingDmaSlow();
+    }
+    private void RunPendingDmaSlow() {
         m_dmaActive = true;
 
         var before = m_scheduler.Now;
@@ -1615,7 +1648,7 @@ public sealed partial class AgbBus : IAgbBus {
             if ((m_prefetchLoad & 0x1FFFEu) != 0) {
                 var offset = m_prefetchLoad & 0x01FFFFFFu;
 
-                m_prefetchSlots[(m_prefetchLoad >> 1) & 7] = ((ushort)(m_cartridge.ReadRom(offset: offset) | (m_cartridge.ReadRom(offset: (offset + 1u)) << 8)));
+                m_prefetchSlots[(m_prefetchLoad >> 1) & 7] = m_cartridge.ReadRomHalfword(offset: offset);
                 m_prefetchLoad += 2;
             }
 

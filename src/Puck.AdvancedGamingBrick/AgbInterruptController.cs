@@ -17,13 +17,17 @@ public sealed partial class AgbInterruptController : IAgbInterruptController {
     private bool m_ime0;
     private bool m_ime1;
     private bool m_synchronizer;
+    // Derived from the pipeline stages; refresh only when those stages change, not at every bus charge.
+    private bool m_pipelineQuiescent = true;
 
     /// <inheritdoc/>
     public bool Synchronizer => m_synchronizer;
     /// <inheritdoc/>
     public bool HasPendingInterrupt => ((m_enable0 & m_flag0 & SourceMask) != 0);
     /// <inheritdoc/>
-    public bool PipelineQuiescent =>
+    public bool PipelineQuiescent => m_pipelineQuiescent;
+
+    private void RefreshPipelineQuiescent() => m_pipelineQuiescent =
         ((m_flag0 == m_flag1)
         && (m_enable0 == m_enable1)
         && (m_ime0 == m_ime1)
@@ -41,11 +45,13 @@ public sealed partial class AgbInterruptController : IAgbInterruptController {
         m_enable0 = m_enable1;
         m_flag0 = m_flag1;
         m_ime0 = m_ime1;
+        RefreshPipelineQuiescent();
     }
     /// <inheritdoc/>
     public void Request(InterruptSource source) {
         // Land the request in the "next" stage.
         m_flag1 |= ((ushort)(1u << ((int)source)));
+        RefreshPipelineQuiescent();
     }
     /// <inheritdoc/>
     public ushort ReadRegister(uint offset) => offset switch {
@@ -77,5 +83,7 @@ public sealed partial class AgbInterruptController : IAgbInterruptController {
             default:
                 break;
         }
+
+        RefreshPipelineQuiescent();
     }
 }
