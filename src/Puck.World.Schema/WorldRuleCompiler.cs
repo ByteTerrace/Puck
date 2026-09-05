@@ -1085,6 +1085,9 @@ public static partial class WorldRuleCompiler {
         if (name.StartsWith(WorldRuleFacts.HistoryPrefix, StringComparison.Ordinal)) {
             return ResolveHistoryOperand(name, key, ruleName, definition);
         }
+        if (name.StartsWith(WorldRuleFacts.ClockPrefix, StringComparison.Ordinal)) {
+            return ResolveClockOperand(name, key, ruleName, definition);
+        }
         var describe = $"{name}{((key is { } spelledKey)
             ? $".{spelledKey}"
             : string.Empty)}";

@@ -76,7 +76,7 @@ public static partial class WorldDefinitionValidator {
     }
     // Loads the referenced document (never required to exist until here — the row itself is a plain Name/Source/Hash
     // triple with nothing to validate offline), then runs the SAME structural check CheckAsset already gives every
-    // embedded family — see CheckJudge's remarks, the same load-then-check shape.
+    // embedded family — see CheckMusic's remarks, the same load-then-check shape.
     private static AssetCheck? CheckPatch(WorldPatch patch) {
         if (!WorldAssetRowLoader.TryLoadPatch(
             document: out var document,
@@ -103,38 +103,14 @@ public static partial class WorldDefinitionValidator {
     }
     // Loads the referenced document (never required to exist until here — the row itself is a plain Name/Source/Hash
     // triple with nothing to validate offline), then runs the SAME structural check CheckAsset already gives every
-    // embedded family, plus facts JudgeCanonicalizer/MusicCanonicalizer alone cannot check: they validate one
-    // document at a time against only what Puck.World.Authoring itself can see. ticksPerBeat's divisibility
-    // duplicates ValidateSimulation's own FixedTickConversion.TicksPerSecond reasoning (Puck.World.Authoring cannot
-    // reference that constant's true owner either); a transition/layer/embellishment `when` token resolves against
+    // embedded family, plus facts MusicCanonicalizer alone cannot check: it validates one document at a time
+    // against only what Puck.World.Authoring itself can see. ticksPerBeat's divisibility duplicates
+    // ValidateSimulation's own FixedTickConversion.TicksPerSecond reasoning (Puck.World.Authoring cannot reference
+    // that constant's true owner either); a transition/layer/embellishment `when` token resolves against
     // WorldAudioCue.MusicWhenTokens — the sense-mappable subset the director compiler maps, not the full cue
     // vocabulary — which this document family's own project cannot reference without inverting the dependency; and a
     // layer/embellishment `gainThousandths` rides the same CreationSoundDocument.MaxLevel ceiling ValidateCues
     // enforces on a cue row, so the ceiling stays the one place — this validator — that enforces it everywhere.
-    private static AssetCheck? CheckJudge(WorldJudgeRow row) {
-        if (!WorldAssetRowLoader.TryLoadJudge(
-            document: out var document,
-            error: out var loadError,
-            row: row
-        )) {
-            return new AssetCheck(
-                CanonicalHash: null,
-                Violations: [("source", loadError!)]
-            );
-        }
-
-        return CheckAsset(
-            document: document,
-            source: row.Name,
-            validate: static document => JudgeCanonicalizer.Validate(document: document),
-            path: static violation => violation.Path,
-            message: static violation => violation.Message,
-            canonicalHash: static (document, source) => JudgeCanonicalizer.Canonicalize(
-                document: document,
-                source: source
-            ).Hash
-        );
-    }
     private static AssetCheck? CheckMusic(WorldMusicRow row, HashSet<string> tuneIds, HashSet<string> patchIds) {
         if (!WorldAssetRowLoader.TryLoadMusic(
             document: out var document,
@@ -790,7 +766,7 @@ public static partial class WorldDefinitionValidator {
         }
     }
     // The null-tolerant twin of ValidateAssets, for an OPTIONAL asset section (null = none authored) rather than a
-    // required one (Tunes/Patches) — a document declaring no music/judges is not missing anything.
+    // required one (Tunes/Patches) — a document declaring no music is not missing anything.
     private static HashSet<string> ValidateOptionalAssets<T>(IReadOnlyList<T>? rows, string section, Func<T, string> id, Func<T, string> hash, Func<T, AssetCheck?> check, List<string> errors) where T : class =>
         ValidateAssets(
             check: check,
@@ -1108,7 +1084,7 @@ public static partial class WorldDefinitionValidator {
         );
 
         scope.PatchIds = patchIds;
-        // Music/judges validate right beside tunes/patches — the same asset-row shape, optional (null = none) rather
+        // Music validates right beside tunes/patches — the same asset-row shape, optional (null = none) rather
         // than required, since a required section would refuse every world checked in before this arc.
         _ = ValidateOptionalAssets(
             rows: definition.Music,
@@ -1128,15 +1104,6 @@ public static partial class WorldDefinitionValidator {
         if (definition.Music is { Count: > 1 } musicRows) {
             errors.Add(item: $"music declares {musicRows.Count} rows, but at most one is honored — the server reads only music[0].");
         }
-
-        var judgeRowNames = ValidateOptionalAssets(
-            rows: definition.Judges,
-            section: "judges",
-            id: static row => row.Name,
-            hash: static row => row.Hash,
-            check: CheckJudge,
-            errors: errors
-        );
 
         var spawnPointIds = ValidateSpawnPoints(
             spawnPoints: definition.SpawnPoints,
@@ -1248,7 +1215,6 @@ public static partial class WorldDefinitionValidator {
             definition: definition,
             dynamicsNames: dynamicsNames,
             errors: errors,
-            judgeRowNames: judgeRowNames,
             programs: programs,
             stateRows: stateRows,
             stateSlots: actionStateSlots,

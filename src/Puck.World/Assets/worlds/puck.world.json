@@ -4429,6 +4429,24 @@
           "name": "r14"
         }
       ]
+    },
+    {
+      "kind": "int",
+      "name": "chessRayEmpty",
+      "pattern": {
+        "$type": "star",
+        "item": {
+          "$type": "symbol",
+          "name": "empty"
+        }
+      },
+      "symbols": [
+        {
+          "max": 0,
+          "min": 0,
+          "name": "empty"
+        }
+      ]
     }
   ],
   "placements": {
@@ -17683,7 +17701,7 @@
               {
                 "$type": "state",
                 "key": "$cell:move:to",
-                "name": "$board:rayCell:previousBoard:N"
+                "name": "$match:chessRayEmpty:previousBoard:N:cell"
               },
               {
                 "$type": "state",
@@ -17696,23 +17714,7 @@
               {
                 "$type": "state",
                 "key": "$cell:move:to",
-                "name": "$board:rayCell:previousBoard:S"
-              },
-              {
-                "$type": "state",
-                "key": "from",
-                "name": "move"
-              },
-              {
-                "$type": "equal"
-              },
-              {
-                "$type": "max"
-              },
-              {
-                "$type": "state",
-                "key": "$cell:move:to",
-                "name": "$board:rayCell:previousBoard:E"
+                "name": "$match:chessRayEmpty:previousBoard:S:cell"
               },
               {
                 "$type": "state",
@@ -17728,7 +17730,23 @@
               {
                 "$type": "state",
                 "key": "$cell:move:to",
-                "name": "$board:rayCell:previousBoard:W"
+                "name": "$match:chessRayEmpty:previousBoard:E:cell"
+              },
+              {
+                "$type": "state",
+                "key": "from",
+                "name": "move"
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "$cell:move:to",
+                "name": "$match:chessRayEmpty:previousBoard:W:cell"
               },
               {
                 "$type": "state",
@@ -17776,7 +17794,7 @@
               {
                 "$type": "state",
                 "key": "$cell:move:to",
-                "name": "$board:rayCell:previousBoard:NE"
+                "name": "$match:chessRayEmpty:previousBoard:NE:cell"
               },
               {
                 "$type": "state",
@@ -17789,23 +17807,7 @@
               {
                 "$type": "state",
                 "key": "$cell:move:to",
-                "name": "$board:rayCell:previousBoard:SE"
-              },
-              {
-                "$type": "state",
-                "key": "from",
-                "name": "move"
-              },
-              {
-                "$type": "equal"
-              },
-              {
-                "$type": "max"
-              },
-              {
-                "$type": "state",
-                "key": "$cell:move:to",
-                "name": "$board:rayCell:previousBoard:SW"
+                "name": "$match:chessRayEmpty:previousBoard:SE:cell"
               },
               {
                 "$type": "state",
@@ -17821,7 +17823,23 @@
               {
                 "$type": "state",
                 "key": "$cell:move:to",
-                "name": "$board:rayCell:previousBoard:NW"
+                "name": "$match:chessRayEmpty:previousBoard:SW:cell"
+              },
+              {
+                "$type": "state",
+                "key": "from",
+                "name": "move"
+              },
+              {
+                "$type": "equal"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "$cell:move:to",
+                "name": "$match:chessRayEmpty:previousBoard:NW:cell"
               },
               {
                 "$type": "state",
@@ -18254,7 +18272,7 @@
               {
                 "$type": "state",
                 "key": "$cell:move:from",
-                "name": "$board:rayDistance:previousBoard:S"
+                "name": "$match:chessRayEmpty:previousBoard:S:distance"
               },
               {
                 "$type": "constant",
@@ -18266,7 +18284,7 @@
               {
                 "$type": "state",
                 "key": "$cell:move:from",
-                "name": "$board:rayDistance:previousBoard:S"
+                "name": "$match:chessRayEmpty:previousBoard:S:distance"
               },
               {
                 "$type": "constant",
@@ -18497,7 +18515,7 @@
               {
                 "$type": "state",
                 "key": "$cell:move:from",
-                "name": "$board:rayDistance:previousBoard:N"
+                "name": "$match:chessRayEmpty:previousBoard:N:distance"
               },
               {
                 "$type": "constant",
@@ -18509,7 +18527,7 @@
               {
                 "$type": "state",
                 "key": "$cell:move:from",
-                "name": "$board:rayDistance:previousBoard:N"
+                "name": "$match:chessRayEmpty:previousBoard:N:distance"
               },
               {
                 "$type": "constant",
@@ -21724,7 +21742,7 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:0",
-                "name": "$board:rayCell:board:N"
+                "name": "$match:chessRayEmpty:board:N:cell"
               },
               {
                 "$type": "constant",
@@ -21751,7 +21769,7 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:0",
-                "name": "$board:rayCell:board:N"
+                "name": "$match:chessRayEmpty:board:N:cell"
               },
               {
                 "$type": "constant",
@@ -21779,7 +21797,7 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:0",
-                "name": "$board:rayCell:board:S"
+                "name": "$match:chessRayEmpty:board:S:cell"
               },
               {
                 "$type": "constant",
@@ -21806,65 +21824,7 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:0",
-                "name": "$board:rayCell:board:S"
-              },
-              {
-                "$type": "constant",
-                "value": 0
-              },
-              {
-                "$type": "max"
-              },
-              {
-                "$type": "shiftLeft"
-              },
-              {
-                "$type": "bitAnd"
-              },
-              {
-                "$type": "constant",
-                "value": 0
-              },
-              {
-                "$type": "notEqual"
-              },
-              {
-                "$type": "multiply"
-              },
-              {
-                "$type": "max"
-              },
-              {
-                "$type": "state",
-                "key": "$cell:kingCell:0",
-                "name": "$board:rayCell:board:E"
-              },
-              {
-                "$type": "constant",
-                "value": 0
-              },
-              {
-                "$type": "greaterOrEqual"
-              },
-              {
-                "$type": "state",
-                "name": "$board:mask:board:-4:-4"
-              },
-              {
-                "$type": "state",
-                "name": "$board:mask:board:-5:-5"
-              },
-              {
-                "$type": "bitOr"
-              },
-              {
-                "$type": "constant",
-                "value": 1
-              },
-              {
-                "$type": "state",
-                "key": "$cell:kingCell:0",
-                "name": "$board:rayCell:board:E"
+                "name": "$match:chessRayEmpty:board:S:cell"
               },
               {
                 "$type": "constant",
@@ -21895,7 +21855,7 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:0",
-                "name": "$board:rayCell:board:W"
+                "name": "$match:chessRayEmpty:board:E:cell"
               },
               {
                 "$type": "constant",
@@ -21922,7 +21882,65 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:0",
-                "name": "$board:rayCell:board:W"
+                "name": "$match:chessRayEmpty:board:E:cell"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "shiftLeft"
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "notEqual"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "$cell:kingCell:0",
+                "name": "$match:chessRayEmpty:board:W:cell"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "greaterOrEqual"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:board:-4:-4"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:board:-5:-5"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "constant",
+                "value": 1
+              },
+              {
+                "$type": "state",
+                "key": "$cell:kingCell:0",
+                "name": "$match:chessRayEmpty:board:W:cell"
               },
               {
                 "$type": "constant",
@@ -21973,7 +21991,7 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:0",
-                "name": "$board:rayCell:board:NE"
+                "name": "$match:chessRayEmpty:board:NE:cell"
               },
               {
                 "$type": "constant",
@@ -22000,7 +22018,7 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:0",
-                "name": "$board:rayCell:board:NE"
+                "name": "$match:chessRayEmpty:board:NE:cell"
               },
               {
                 "$type": "constant",
@@ -22028,7 +22046,7 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:0",
-                "name": "$board:rayCell:board:SE"
+                "name": "$match:chessRayEmpty:board:SE:cell"
               },
               {
                 "$type": "constant",
@@ -22055,65 +22073,7 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:0",
-                "name": "$board:rayCell:board:SE"
-              },
-              {
-                "$type": "constant",
-                "value": 0
-              },
-              {
-                "$type": "max"
-              },
-              {
-                "$type": "shiftLeft"
-              },
-              {
-                "$type": "bitAnd"
-              },
-              {
-                "$type": "constant",
-                "value": 0
-              },
-              {
-                "$type": "notEqual"
-              },
-              {
-                "$type": "multiply"
-              },
-              {
-                "$type": "max"
-              },
-              {
-                "$type": "state",
-                "key": "$cell:kingCell:0",
-                "name": "$board:rayCell:board:SW"
-              },
-              {
-                "$type": "constant",
-                "value": 0
-              },
-              {
-                "$type": "greaterOrEqual"
-              },
-              {
-                "$type": "state",
-                "name": "$board:mask:board:-3:-3"
-              },
-              {
-                "$type": "state",
-                "name": "$board:mask:board:-5:-5"
-              },
-              {
-                "$type": "bitOr"
-              },
-              {
-                "$type": "constant",
-                "value": 1
-              },
-              {
-                "$type": "state",
-                "key": "$cell:kingCell:0",
-                "name": "$board:rayCell:board:SW"
+                "name": "$match:chessRayEmpty:board:SE:cell"
               },
               {
                 "$type": "constant",
@@ -22144,7 +22104,7 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:0",
-                "name": "$board:rayCell:board:NW"
+                "name": "$match:chessRayEmpty:board:SW:cell"
               },
               {
                 "$type": "constant",
@@ -22171,7 +22131,65 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:0",
-                "name": "$board:rayCell:board:NW"
+                "name": "$match:chessRayEmpty:board:SW:cell"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "shiftLeft"
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "notEqual"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "$cell:kingCell:0",
+                "name": "$match:chessRayEmpty:board:NW:cell"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "greaterOrEqual"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:board:-3:-3"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:board:-5:-5"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "constant",
+                "value": 1
+              },
+              {
+                "$type": "state",
+                "key": "$cell:kingCell:0",
+                "name": "$match:chessRayEmpty:board:NW:cell"
               },
               {
                 "$type": "constant",
@@ -23363,7 +23381,7 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:1",
-                "name": "$board:rayCell:board:N"
+                "name": "$match:chessRayEmpty:board:N:cell"
               },
               {
                 "$type": "constant",
@@ -23390,7 +23408,7 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:1",
-                "name": "$board:rayCell:board:N"
+                "name": "$match:chessRayEmpty:board:N:cell"
               },
               {
                 "$type": "constant",
@@ -23418,7 +23436,7 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:1",
-                "name": "$board:rayCell:board:S"
+                "name": "$match:chessRayEmpty:board:S:cell"
               },
               {
                 "$type": "constant",
@@ -23445,65 +23463,7 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:1",
-                "name": "$board:rayCell:board:S"
-              },
-              {
-                "$type": "constant",
-                "value": 0
-              },
-              {
-                "$type": "max"
-              },
-              {
-                "$type": "shiftLeft"
-              },
-              {
-                "$type": "bitAnd"
-              },
-              {
-                "$type": "constant",
-                "value": 0
-              },
-              {
-                "$type": "notEqual"
-              },
-              {
-                "$type": "multiply"
-              },
-              {
-                "$type": "max"
-              },
-              {
-                "$type": "state",
-                "key": "$cell:kingCell:1",
-                "name": "$board:rayCell:board:E"
-              },
-              {
-                "$type": "constant",
-                "value": 0
-              },
-              {
-                "$type": "greaterOrEqual"
-              },
-              {
-                "$type": "state",
-                "name": "$board:mask:board:4:4"
-              },
-              {
-                "$type": "state",
-                "name": "$board:mask:board:5:5"
-              },
-              {
-                "$type": "bitOr"
-              },
-              {
-                "$type": "constant",
-                "value": 1
-              },
-              {
-                "$type": "state",
-                "key": "$cell:kingCell:1",
-                "name": "$board:rayCell:board:E"
+                "name": "$match:chessRayEmpty:board:S:cell"
               },
               {
                 "$type": "constant",
@@ -23534,7 +23494,7 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:1",
-                "name": "$board:rayCell:board:W"
+                "name": "$match:chessRayEmpty:board:E:cell"
               },
               {
                 "$type": "constant",
@@ -23561,7 +23521,65 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:1",
-                "name": "$board:rayCell:board:W"
+                "name": "$match:chessRayEmpty:board:E:cell"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "shiftLeft"
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "notEqual"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "$cell:kingCell:1",
+                "name": "$match:chessRayEmpty:board:W:cell"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "greaterOrEqual"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:board:4:4"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:board:5:5"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "constant",
+                "value": 1
+              },
+              {
+                "$type": "state",
+                "key": "$cell:kingCell:1",
+                "name": "$match:chessRayEmpty:board:W:cell"
               },
               {
                 "$type": "constant",
@@ -23612,7 +23630,7 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:1",
-                "name": "$board:rayCell:board:NE"
+                "name": "$match:chessRayEmpty:board:NE:cell"
               },
               {
                 "$type": "constant",
@@ -23639,7 +23657,7 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:1",
-                "name": "$board:rayCell:board:NE"
+                "name": "$match:chessRayEmpty:board:NE:cell"
               },
               {
                 "$type": "constant",
@@ -23667,7 +23685,7 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:1",
-                "name": "$board:rayCell:board:SE"
+                "name": "$match:chessRayEmpty:board:SE:cell"
               },
               {
                 "$type": "constant",
@@ -23694,65 +23712,7 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:1",
-                "name": "$board:rayCell:board:SE"
-              },
-              {
-                "$type": "constant",
-                "value": 0
-              },
-              {
-                "$type": "max"
-              },
-              {
-                "$type": "shiftLeft"
-              },
-              {
-                "$type": "bitAnd"
-              },
-              {
-                "$type": "constant",
-                "value": 0
-              },
-              {
-                "$type": "notEqual"
-              },
-              {
-                "$type": "multiply"
-              },
-              {
-                "$type": "max"
-              },
-              {
-                "$type": "state",
-                "key": "$cell:kingCell:1",
-                "name": "$board:rayCell:board:SW"
-              },
-              {
-                "$type": "constant",
-                "value": 0
-              },
-              {
-                "$type": "greaterOrEqual"
-              },
-              {
-                "$type": "state",
-                "name": "$board:mask:board:3:3"
-              },
-              {
-                "$type": "state",
-                "name": "$board:mask:board:5:5"
-              },
-              {
-                "$type": "bitOr"
-              },
-              {
-                "$type": "constant",
-                "value": 1
-              },
-              {
-                "$type": "state",
-                "key": "$cell:kingCell:1",
-                "name": "$board:rayCell:board:SW"
+                "name": "$match:chessRayEmpty:board:SE:cell"
               },
               {
                 "$type": "constant",
@@ -23783,7 +23743,7 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:1",
-                "name": "$board:rayCell:board:NW"
+                "name": "$match:chessRayEmpty:board:SW:cell"
               },
               {
                 "$type": "constant",
@@ -23810,7 +23770,65 @@
               {
                 "$type": "state",
                 "key": "$cell:kingCell:1",
-                "name": "$board:rayCell:board:NW"
+                "name": "$match:chessRayEmpty:board:SW:cell"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "shiftLeft"
+              },
+              {
+                "$type": "bitAnd"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "notEqual"
+              },
+              {
+                "$type": "multiply"
+              },
+              {
+                "$type": "max"
+              },
+              {
+                "$type": "state",
+                "key": "$cell:kingCell:1",
+                "name": "$match:chessRayEmpty:board:NW:cell"
+              },
+              {
+                "$type": "constant",
+                "value": 0
+              },
+              {
+                "$type": "greaterOrEqual"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:board:3:3"
+              },
+              {
+                "$type": "state",
+                "name": "$board:mask:board:5:5"
+              },
+              {
+                "$type": "bitOr"
+              },
+              {
+                "$type": "constant",
+                "value": 1
+              },
+              {
+                "$type": "state",
+                "key": "$cell:kingCell:1",
+                "name": "$match:chessRayEmpty:board:NW:cell"
               },
               {
                 "$type": "constant",
@@ -26058,6 +26076,56 @@
         "band": 0.3,
         "cellSize": 0.2,
         "depth": 8,
+        "directions": [
+          {
+            "name": "N",
+            "x": 0,
+            "y": -1,
+            "z": 0
+          },
+          {
+            "name": "NE",
+            "x": 1,
+            "y": -1,
+            "z": 0
+          },
+          {
+            "name": "E",
+            "x": 1,
+            "y": 0,
+            "z": 0
+          },
+          {
+            "name": "SE",
+            "x": 1,
+            "y": 1,
+            "z": 0
+          },
+          {
+            "name": "S",
+            "x": 0,
+            "y": 1,
+            "z": 0
+          },
+          {
+            "name": "SW",
+            "x": -1,
+            "y": 1,
+            "z": 0
+          },
+          {
+            "name": "W",
+            "x": -1,
+            "y": 0,
+            "z": 0
+          },
+          {
+            "name": "NW",
+            "x": -1,
+            "y": -1,
+            "z": 0
+          }
+        ],
         "kind": "Grid",
         "layers": 1,
         "name": "chessBoard",

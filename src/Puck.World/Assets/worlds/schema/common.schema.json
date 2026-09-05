@@ -4281,22 +4281,6 @@
       ],
       "additionalProperties": false
     },
-    "ActionEffectJudge": {
-      "description": "Stages a rhythm-judge grading fact for the body whose trigger fired \u2014 the entity index, the judge window set, and the firing tick are collected during the body\u0027s advance (the same staged-output shape Generate uses) and drained by WorldServer.Step immediately after the body step, where they are graded against the world\u0027s musical clock. The grade is never computed here \u2014 this effect only names which judge row applies.",
-      "properties": {
-        "$type": {
-          "const": "judge"
-        },
-        "judgeRef": {
-          "description": "The declared judges row name (a puck.judge.v1 reference) whose hit windows grade the press.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "judgeRef"
-      ],
-      "additionalProperties": false
-    },
     "WorldHudRect": {
       "description": "A normalized rect (origin top-left, Y down) \u2014 a WorldHudPanel\u0027s rect is in screen space [0, 1] \u00D7 [0, 1]; a WorldHudElement\u0027s rect is in its owning panel\u0027s local [0, 1] \u00D7 [0, 1] space.",
       "type": "object",
@@ -6022,9 +6006,6 @@
           "$ref": "#/$defs/ActionEffectGenerate"
         },
         {
-          "$ref": "#/$defs/ActionEffectJudge"
-        },
-        {
           "$ref": "#/$defs/ActionEffectUpsertHudPanel"
         },
         {
@@ -6617,33 +6598,6 @@
           "type": "number"
         }
       },
-      "additionalProperties": false
-    },
-    "WorldMusicRow": {
-      "description": "One music-score asset reference row \u2014 a puck.music.v1 document\u0027s stable name, its file path (relative to BaseDirectory, the same convention WorldAddonRow.ModulePath already establishes for a machine-local asset shipped beside the executable), and the SHA-256 hex64 pin of the referenced document\u0027s own canonical bytes. Never embedded: the document is loaded, canonicalized, and hash-verified where it is compiled (Server.WorldServer\u0027s construction), the same load-then-pin discipline Puck.Text.FontAtlasSourceResolver.ResolvePinnedContained already applies to a font asset.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "name": {
-          "description": "The row\u0027s stable name \u2014 its mutation address.",
-          "type": "string"
-        },
-        "source": {
-          "description": "The referenced document\u0027s file path.",
-          "type": "string"
-        },
-        "hash": {
-          "description": "The SHA-256 hex64 of the referenced document\u0027s canonical bytes.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name",
-        "source",
-        "hash"
-      ],
       "additionalProperties": false
     },
     "WorldPatternNodeSymbol": {

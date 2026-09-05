@@ -11,7 +11,7 @@ namespace Puck.World;
 /// leg (one <c>puck.probe-track.v1</c> document standing in for every socket at once), never both, never neither. A
 /// world declares no <c>probes</c> rows when it wants no camera-derived reading at all. Boot-authored only: no
 /// <see cref="Protocol.WorldSection"/> dispatch axis carries a live mutation kind for it yet (see
-/// <see cref="Protocol.WorldSection.Probes"/>), the same standing <c>judges</c> carries.</summary>
+/// <see cref="Protocol.WorldSection.Probes"/>), the same standing <c>music</c> carries.</summary>
 /// <param name="Id">The probe's own name — <see cref="WorldSafeName"/>-shaped, unique among the rows; <c>probe.status</c>
 /// and <c>probe.record</c> address it.</param>
 /// <param name="Kind">The registered probe kind id (a <c>puck.probe.v1</c> manifest's file stem) — checked

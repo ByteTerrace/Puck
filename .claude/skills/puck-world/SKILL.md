@@ -64,19 +64,22 @@ if built, also live in that extension layer.
 `src/Puck.Audio` is a sibling engine-services project: the deterministic fixed-point mixer/voice-synth core
 (`Puck.Audio.Mixing` — `AudioMixer`/`VoiceSynth`/
 `AudioSnapshot`/`MachineAudioRate`) plus sim-state music
-(`Puck.Audio.Simulation` — `MusicClock`/`MusicDirector`/`RhythmJudge`/
+(`Puck.Audio.Simulation` — `MusicClock`/`MusicDirector`/
 `MusicSenseEdge`, stepped from `WorldServer.Step` right after
 `WorldEventFeed.Collect()`), referenced by `Puck.World.Server` (machine audio
-rate; `WorldAssetRowLoader` resolves each `WorldMusicRow`/`WorldJudgeRow`/
+rate; `WorldAssetRowLoader` resolves each `WorldMusicRow`/
 `WorldTune`/`WorldPatch` reference's document off disk (`puck.music.v1`,
-`puck.judge.v1`, `puck.audio.v1`, `puck.synth.v1` — the same name/source/hash
+`puck.audio.v1`, `puck.synth.v1` — the same name/source/hash
 shape every world audio asset row carries), and
-`MusicDirectorFactory` compiles the loaded documents into the sim-side shapes
+`MusicDirectorFactory` compiles the loaded document into the sim-side shapes
 and projects `WorldEventFeed.Edges` into `MusicSenseEdge`) and `Puck.World`
-(presentation glue). It parses no document. `music.state`/`judge.state` are
-`WorldAudioCommandModule` query verbs routed through seat 1's currently
+(presentation glue). It parses no document. `music.state` is a
+`WorldAudioCommandModule` query verb routed through seat 1's currently
 claimed `WorldSeatAuthorityRouter` route — a transferred seat is followed the
-same way `PlayerCommandModule`'s drive-a-player verbs are.
+same way `PlayerCommandModule`'s drive-a-player verbs are. A rhythm hit
+window is an authored `compareState` range over the world-rule operand
+`$clock:<music>:phaseError` (the signed tick distance from `MusicClock`'s
+current position to the nearest beat), never a dedicated effect or section.
 
 Dependency rules are enforced by the architecture gate (`PUCKARCH`
 diagnostics from `build/Architecture.props`): `Puck.World.Schema` references

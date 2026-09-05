@@ -27,15 +27,12 @@ public sealed partial class WorldBody {
     /// <param name="designationOutputs">Receives authored target-register submissions.</param>
     /// <param name="generatorInvocations">Receives staged <c>generate</c> effect firings, enqueued through the
     /// ordinary mutation pipeline after the whole population advance.</param>
-    /// <param name="judgeInvocations">Receives staged <c>judge</c> effect firings — graded and folded into the
-    /// server's last-grade table immediately after the whole population advance, against that step's own
-    /// <c>ElapsedTicks</c> rather than any tick this method captures.</param>
     /// <returns><see langword="true"/> when <paramref name="engageProbeOrdinal"/>'s rising edge fired this tick
     /// (the caller should engage); otherwise <see langword="false"/>.</returns>
     /// <param name="rigidPolicy">The authored, once-compiled rigid-contact tunables <see cref="AdvanceRigid"/> reads;
     /// ignored for a locomotion kit.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
-    internal bool Advance(ulong tick, ulong stepTicks, RigidContactPolicy rigidPolicy, int? engageProbeOrdinal = null, int entityIndex = -1, BodyEffectTargets effectTargets = default, List<BodyEffectOutput>? effectOutputs = null, List<WorldDesignation>? designationOutputs = null, List<WorldGeneratorInvocation>? generatorInvocations = null, List<WorldJudgeInvocation>? judgeInvocations = null) {
+    internal bool Advance(ulong tick, ulong stepTicks, RigidContactPolicy rigidPolicy, int? engageProbeOrdinal = null, int entityIndex = -1, BodyEffectTargets effectTargets = default, List<BodyEffectOutput>? effectOutputs = null, List<WorldDesignation>? designationOutputs = null, List<WorldGeneratorInvocation>? generatorInvocations = null) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
 
         // Captured before ExecuteProgram (or the overlay add below) can move m_position — the swept portal-crossing
@@ -119,7 +116,6 @@ public sealed partial class WorldBody {
                     entityIndex: entityIndex,
                     generatorInvocations: generatorInvocations,
                     intent: intent,
-                    judgeInvocations: judgeInvocations,
                     moveSpeed: moveSpeed,
                     stepTicks: stepTicks,
                     turnSpeed: turnSpeed
@@ -635,25 +631,11 @@ public sealed partial class WorldBody {
                     scratch.GeneratorInvocations.Add(item: new WorldGeneratorInvocation(Row: siteRow));
                 }
                 break;
-            case BodyMotionOp.Judge:
-                // STAGED, never graded here: grading needs the world's musical clock, which this body does not
-                // hold — the fact joins WorldServer.Step's drain immediately after the whole population advance
-                // (see WorldJudgeInvocation).
-                if (
-                    (instruction.StateName is { } judgeRef) &&
-                    (scratch.JudgeInvocations is not null)
-                ) {
-                    scratch.JudgeInvocations.Add(item: new WorldJudgeInvocation(
-                        EntityIndex: scratch.EntityIndex,
-                        JudgeRef: judgeRef
-                    ));
-                }
-                break;
             default:
                 throw new InvalidOperationException(message: $"Body program reached uncompiled opcode value {((int)instruction.Operation)}.");
         }
     }
-    private void ExecuteProgram(PlayerIntent intent, FixedQ4816 moveSpeed, FixedQ4816 turnSpeed, ulong stepTicks, int entityIndex, BodyEffectTargets effectTargets, List<BodyEffectOutput>? effectOutputs, List<WorldDesignation>? designationOutputs, List<WorldGeneratorInvocation>? generatorInvocations, List<WorldJudgeInvocation>? judgeInvocations) {
+    private void ExecuteProgram(PlayerIntent intent, FixedQ4816 moveSpeed, FixedQ4816 turnSpeed, ulong stepTicks, int entityIndex, BodyEffectTargets effectTargets, List<BodyEffectOutput>? effectOutputs, List<WorldDesignation>? designationOutputs, List<WorldGeneratorInvocation>? generatorInvocations) {
         m_entityIndex = entityIndex;
         var scratch = new BodyMotionScratch {
             DesignationOutputs = designationOutputs,
@@ -663,7 +645,6 @@ public sealed partial class WorldBody {
             GeneratorInvocations = generatorInvocations,
             GoverningShapingRow = -1,
             Intent = intent,
-            JudgeInvocations = judgeInvocations,
             MoveSpeed = moveSpeed,
             NextPosition = m_position,
             Orientation = m_orientation,
@@ -2129,7 +2110,6 @@ public sealed partial class WorldBody {
         public List<BodyEffectOutput>? EffectOutputs;
         public List<WorldDesignation>? DesignationOutputs;
         public List<WorldGeneratorInvocation>? GeneratorInvocations;
-        public List<WorldJudgeInvocation>? JudgeInvocations;
         public int GoverningShapingRow;
     }
 }

@@ -33,8 +33,8 @@ cart builds byte-identically and passes its verify-by-running gate.
 (`AudioDocument`) and `puck.synth.v1` (`SynthPatchDocument`) are in
 `Puck.Assets` (`Puck.Assets.Documents`, beside the shared
 `DocumentCanonicalizer` core) so a forge package never drags a world assembly;
-the world-facing families (`puck.creation.v1`, `puck.music.v1`,
-`puck.judge.v1`) are in `src/Puck.World.Authoring`.
+the world-facing families (`puck.creation.v1`, `puck.music.v1`) are in
+`src/Puck.World.Authoring`.
 
 **Everything that turned art into cartridges is gone.** The following lived only
 in `Puck.Demo`, which is quarantined under `experimental/`. Read it as prior

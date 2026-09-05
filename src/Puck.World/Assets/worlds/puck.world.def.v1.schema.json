@@ -161,9 +161,6 @@
     "music": {
       "$ref": "./schema/music.schema.json"
     },
-    "judges": {
-      "$ref": "./schema/judges.schema.json"
-    },
     "seatModes": {
       "$ref": "./schema/seatModes.schema.json"
     },

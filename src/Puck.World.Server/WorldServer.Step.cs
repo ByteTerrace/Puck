@@ -15,7 +15,7 @@ public sealed partial class WorldServer {
     /// re-derivable from <c>MusicDirector.LastTransitionFromSegmentId</c>/<c>LastTransitionToSegmentId</c>, so no
     /// second value need round-trip through the tap. A <see langword="null"/> tap is a silent no-op, the same
     /// convention every other tap here follows; every live boot shape wires one (<c>WorldPostBuildWiring.Install</c>).
-    /// Never taped — see <c>MusicJudgeReplayReDerivabilityLawTests</c>: the director's own state is purely
+    /// Never taped — see <c>MusicReplayReDerivabilityLawTests</c>: the director's own state is purely
     /// re-derivable from the document plus tick, so a fresh replay boot re-fires the identical sequence of
     /// invocations without a recorded entry.</summary>
     public Action<ulong>? MusicTransitionTap { get; set; }
@@ -1538,29 +1538,6 @@ public sealed partial class WorldServer {
 
         m_population.ClearGeneratorInvocationOutputs();
 
-        // Kit-fired `judge` effects, staged during THIS tick's advance — graded and folded into m_judgeGrades right
-        // here, within the SAME Step call, rather than through the mutation pipeline: the acting body's own
-        // last-grade fact is not a document row, so judge.state observes this tick's grade on this tick's read-back
-        // instead of paying Generate's own next-tick round trip. Graded against context.ElapsedTicks, not the
-        // simulation-step ordinal `tick` above — RhythmJudge compares against MusicClock.TicksPerBeat, which is
-        // engine-tick-denominated (the SAME domain ElapsedTicks carries and MusicClock.Advance just advanced by
-        // context.StepTicks), so the step ordinal is the wrong unit to grade against. A judgeRef with no clock to
-        // grade against (a world declaring judges with no music row) still records the firing tick against a null
-        // (miss) grade.
-        foreach (var invocation in m_population.JudgeInvocationOutputs) {
-            var windows = FindJudgeWindows(judgeRef: invocation.JudgeRef);
-            var grade = (((m_musicClock is { } clock) && (windows is not null))
-                ? Puck.Audio.Simulation.RhythmJudge.Evaluate(
-                    tick: context.ElapsedTicks,
-                    clock: clock,
-                    windows: windows
-                )
-                : (Puck.Audio.Simulation.JudgeWindow?)null);
-
-            m_judgeGrades[(invocation.EntityIndex, invocation.JudgeRef)] = (grade?.Grade, context.ElapsedTicks);
-        }
-
-        m_population.ClearJudgeInvocationOutputs();
         if (m_population.DurableStateOutputs.Count > 0) {
             DurableStateOutputTap?.Invoke(obj: m_population.DurableStateOutputs);
             foreach (var output in m_population.DurableStateOutputs) {

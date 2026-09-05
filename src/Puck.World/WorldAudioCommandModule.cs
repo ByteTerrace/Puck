@@ -12,14 +12,14 @@ namespace Puck.World;
 /// <c>speaker.state</c> (live device/per-row status), <c>audio.emitters</c> (the derived emitter table),
 /// <c>voice.state</c> + <c>voice.babble</c> (the live voice-babble status and its debug/test trigger — see
 /// <see cref="WorldAudioDirector.TriggerBabble"/>), <c>world.volume</c> (the master-volume session lever), and
-/// <c>music.state</c> + <c>judge.state</c> (the live music clock/director state and the declared judge window sets,
-/// both routed through seat 1's currently claimed <see cref="WorldAuthorityEndpoint.Submissions"/> — never the boot
-/// instance's own injected link directly — so the answer tracks a transferred seat the same way
-/// <see cref="PlayerCommandModule"/>'s drive-a-player verbs do). This module WRITES no DOCUMENT section: the four
-/// document sections it reads are authored through the general <see cref="WorldRowCommandModule"/> —
-/// <c>world.row.set</c>/<c>world.row.remove</c> over <c>speakers</c>/<c>tunes</c>/<c>patches</c>, and
-/// <c>world.row.set audio &lt;json&gt;</c> for the keyless defaults row (<c>music</c>/<c>judges</c> are boot-only —
-/// no live write door exists yet) — so no section is reachable through two doors. <c>voice.babble</c> is the one
+/// <c>music.state</c> (the live music clock/director state, routed through seat 1's currently claimed
+/// <see cref="WorldAuthorityEndpoint.Submissions"/> — never the boot instance's own injected link directly — so the
+/// answer tracks a transferred seat the same way <see cref="PlayerCommandModule"/>'s drive-a-player verbs do). This
+/// module WRITES no DOCUMENT section: the four document sections it reads are authored through the general
+/// <see cref="WorldRowCommandModule"/> — <c>world.row.set</c>/<c>world.row.remove</c> over
+/// <c>speakers</c>/<c>tunes</c>/<c>patches</c>, and <c>world.row.set audio &lt;json&gt;</c> for the keyless defaults
+/// row (<c>music</c> is boot-only — no live write door exists yet) — so no section is reachable through two doors.
+/// <c>voice.babble</c> is the one
 /// exception, and a narrower one: it mutates only the director's own presentation-side scheduled-trigger state
 /// (never a document field, nothing <c>world.save</c> folds back), so it carries no grant check — there is nothing
 /// to gate a session lever over. A SEPARATE module from <see cref="WorldMutationCommandModule"/> to keep every
@@ -38,7 +38,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
     // published for every boot, so this never throws for want of a claim. The query carries the routed endpoint's
     // OWN 1-based entity index (never the local roster display number) — its Observe grant check narrows to that
     // body, the one subject a routed seat is always seeded with, so a transferred seat never needs a standing
-    // world-wide grant just to read music/judge state.
+    // world-wide grant just to read music state.
     private CommandResult RoutedQuery(Func<int, WorldQuery> query) => (seatRouter.TryRouteQuery(
         factory: query,
         result: out var result,
@@ -274,7 +274,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,
             name: "music.state",
-            description: "Reads the live music clock/director state authoritatively off seat 1's currently claimed authority — the current segment, any pending transition, elapsed clock ticks, transition count, the tick/from/to of the most recent committed transition (none= before the first one, or when the world declares no music), the currently active conditional-layer tune ids, and the patch/tick of the most recent director embellishment. Follows a transferred seat the same way body.where does, so it answers correctly whether that authority is local or remote. A query — always echoes.",
+            description: "Reads the live music clock/director state authoritatively off seat 1's currently claimed authority — the current segment, any pending transition, elapsed clock ticks, transition count, the tick/from/to of the most recent committed transition (none= before the first one, or when the world declares no music), the currently active conditional-layer tune ids, the patch/tick of the most recent director embellishment, and $clock:phaseError's own live value (0 when the world declares no music). Follows a transferred seat the same way body.where does, so it answers correctly whether that authority is local or remote. A query — always echoes.",
             valueKind: CommandValueKind.Digital,
             handler: _ => RoutedQuery(
                 query: static index => new WorldQuery.MusicState(Index: index)
@@ -283,18 +283,8 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         );
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,
-            name: "judge.state",
-            description: "Reads the declared judge window sets, and the last judged grade/tick, authoritatively off seat 1's currently claimed authority. Follows a transferred seat the same way body.where does. A query — always echoes.",
-            valueKind: CommandValueKind.Digital,
-            handler: _ => RoutedQuery(
-                query: static index => new WorldQuery.JudgeState(Index: index)
-            ),
-            routing: CommandRouting.Immediate
-        );
-        yield return CommandDefinition.Verb(
-            bindability: CommandBindability.Unbindable,
             name: "instrument.state",
-            description: "Reads which diegetic instrument screen (if any) the routed seat holds a screen application to, authoritatively off seat 1's currently claimed authority — screen index, whether the booted machine there carries the instrument-clock capability, its authored tempo in engine ticks per beat, and whether it is driving the world's music clock (holding the application is the whole gate — see world.instrument-clock). Follows a transferred seat the same way music.state/judge.state do. A query — always echoes.",
+            description: "Reads which diegetic instrument screen (if any) the routed seat holds a screen application to, authoritatively off seat 1's currently claimed authority — screen index, whether the booted machine there carries the instrument-clock capability, its authored tempo in engine ticks per beat, and whether it is driving the world's music clock (holding the application is the whole gate — see world.instrument-clock). Follows a transferred seat the same way music.state does. A query — always echoes.",
             valueKind: CommandValueKind.Digital,
             handler: _ => RoutedQuery(
                 query: static index => new WorldQuery.InstrumentState(Index: index)

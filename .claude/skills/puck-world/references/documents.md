@@ -689,7 +689,10 @@ alone (`Ring`/`Hex` refuse it), and a `Grid`'s `cellSize` must quantize to a
 positive Q48.16 value — it is the divisor `$board:cellOf` resolves world
 positions against (the garden's `chessBoard` alongside its own `pondBasin`
 water field — see `Puck.World.Schema/README.md`'s tabletop-primitive
-section). Lattice-shaped
+section). A discrete topology's own `directions` (optional; each kind's
+compass/space names are the unauthored default) replaces its whole direction
+vocabulary — see the schema README's discrete-boards section for the
+authoring shape and validation. Lattice-shaped
 state rows: `{"name": …, "kind": "fixed", "lattice":
 {"topology": …, "initial"/"min"/"max", optional "heightScale"/"color",
 "paint": […]}}`. `WorldFieldsSection.Compile` assembles the runtime composite
@@ -1710,7 +1713,7 @@ reserved derived-face band (`WorldPlacementPolicy.DerivedFaceBase` +
   carries exactly the vocabulary its canonicalizer hashes. Tunes/patches are
   never embedded — `WorldTune`/`WorldPatch` are name/source/hash reference
   rows resolved off disk by `WorldAssetRowLoader`, the same shape
-  `WorldMusicRow`/`WorldJudgeRow` already use.
+  `WorldMusicRow` already uses.
 
 **Adding a schema field — the sweep direction.** Adding a top-level SECTION
 refuses at boot until every shipped world carries it (through its own

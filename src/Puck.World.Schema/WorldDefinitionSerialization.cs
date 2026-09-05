@@ -107,8 +107,8 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldShaping[]))]
 // The audio sections: the speaker row + tune/patch asset REFERENCE rows + the audio defaults (the world.row.set
 // speakers / world.row.set tunes / world.row.set patches / world.row.set audio payload shapes). WorldTune/WorldPatch
-// are plain name/source/hash rows — no embedded document, no bridging converter (see WorldMusicRow/WorldJudgeRow,
-// registered below, for the same shape).
+// are plain name/source/hash rows — no embedded document, no bridging converter (see WorldMusicRow, registered
+// below, for the same shape).
 [JsonSerializable(typeof(WorldSpeaker))]
 // The speaker union's nested kinds collide by simple name with the camera/screen-source unions' (Fixed/Anchored and
 // None/Machine); explicit TypeInfoPropertyName entries resolve the source-gen collision (SYSLIB1031).
@@ -136,9 +136,8 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldSpeakerSource.Machine), TypeInfoPropertyName = "WorldSpeakerSourceMachine")]
 [JsonSerializable(typeof(WorldTune))]
 [JsonSerializable(typeof(WorldPatch))]
-// puck.music.v1 / puck.judge.v1 are referenced, never embedded — plain Name/Source/Hash rows, no bridging converter.
+// puck.music.v1 is referenced, never embedded — a plain Name/Source/Hash row, no bridging converter.
 [JsonSerializable(typeof(WorldMusicRow))]
-[JsonSerializable(typeof(WorldJudgeRow))]
 [JsonSerializable(typeof(WorldAudioDefaults))]
 [JsonSerializable(typeof(WorldAudioCue))]
 // The probes section rows (the document `probes` section) and the frame-source vocabulary a probe socket shares

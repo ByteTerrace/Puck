@@ -166,6 +166,13 @@ public static class WorldRuleFacts {
     /// <summary>The prefix; <c>$history:&lt;row&gt;:&lt;age&gt;</c> reads the value pushed <c>age</c> pushes ago into a
     /// history row (0 is the latest), or the ring's empty value past what it holds; age is 0..capacity-1.</summary>
     public const string HistoryPrefix = "$history:";
+    /// <summary>The prefix; <c>$clock:&lt;music&gt;:phaseError</c> reads the signed tick distance from the world's
+    /// musical clock's current position to the nearest beat — positive after the beat, negative ahead of the next
+    /// one, magnitude at most half a beat. A hit window is an ordinary <c>compareState</c> range over it (no
+    /// dedicated effect or asset family): the same read at every firing tick a kit action's own edge trigger stamps
+    /// a state cell for. <c>music</c> must name the document's declared music row (the only clock a world may
+    /// author); a world with none has no clock to read and the operand refuses at compile time.</summary>
+    public const string ClockPrefix = "$clock:";
     /// <summary>The prefix a cell KEY may carry in place of a literal: <c>$cell:&lt;row&gt;:&lt;key&gt;</c> resolves, at
     /// every read and every firing, to the integer value of that cell spelled as a key — so an effect or operand
     /// addresses "the cell named by another cell" (the target a body's <c>target</c> cell currently names). Admitted
@@ -500,6 +507,9 @@ public enum WorldRuleFactKind : byte {
     /// <summary>One value of a history ring by age (<see cref="WorldRuleFacts.HistoryPrefix"/>): 0 is the latest push,
     /// and an age the ring no longer holds reads the trait's empty value.</summary>
     History,
+    /// <summary>The world's musical clock's signed phase error against the nearest beat
+    /// (<see cref="WorldRuleFacts.ClockPrefix"/>).</summary>
+    Clock,
 }
 /// <summary>One resolved operand of a world-rule comparison — the (<see cref="Kind"/>, <see cref="Row"/>,
 /// <see cref="Key"/>) address plus the <see cref="Screen"/>/<see cref="Address"/> machine coordinates, the live
@@ -583,6 +593,11 @@ public enum WorldMatchFacet : byte {
     DirectionMask,
     /// <summary>Over every direction of a board origin: how many rays are accepted.</summary>
     DirectionCount,
+    /// <summary>One board-origin ray: the cell one step past the longest accepted prefix — the first cell the
+    /// pattern rejects — or -1 when the whole ray (to the edge or a wrapped return) is accepted.</summary>
+    Cell,
+    /// <summary>One board-origin ray: the step distance to <see cref="Cell"/>'s cell, or -1 on the same terms.</summary>
+    Distance,
 }
 /// <summary>One operation in a compiled postfix Boolean gate.</summary>
 public enum CompiledWorldPredicateKind : byte {

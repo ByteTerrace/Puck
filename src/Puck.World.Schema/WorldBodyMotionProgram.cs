@@ -410,17 +410,6 @@ public static class BodyActionSpecFactory {
             Target: ActionTarget.Self,
             StateName: generate.Row
         ),
-            // The judge row is resolved against the declared judges[] table at validation time (ValidateEffect), so
-            // by the time this compiles the name is already known to name a real row — nothing further to bind here.
-            ActionEffect.Judge judge => new CompiledBodyInstruction(
-            Operation: BodyMotionOp.Judge,
-            Value: default,
-            Direction: default,
-            DurationTicks: 0UL,
-            StateSlot: -1,
-            Target: ActionTarget.Self,
-            StateName: judge.JudgeRef
-        ),
             // countdownState/upsertHudPanel/removeHudPanel/upsertPlacement/removePlacement author WORLD state/document
             // rows — a per-body
             // action has none of its own, so these are refused BY NAME here rather than parsed and discarded

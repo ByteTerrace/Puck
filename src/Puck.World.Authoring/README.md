@@ -1,8 +1,8 @@
 # Puck.World.Authoring
 
 The authored-content document families `Puck.World` embeds inline:
-`puck.creation.v1` (`CreationDocument`/`CreationCanonicalizer`),
-`puck.music.v1` (`MusicDocument`), and `puck.judge.v1` (`JudgeDocument`), all
+`puck.creation.v1` (`CreationDocument`/`CreationCanonicalizer`) and
+`puck.music.v1` (`MusicDocument`), both
 riding the shared `DocumentCanonicalizer` core in `Puck.Assets` — which also
 owns the `puck.audio.v1`/`puck.synth.v1` families (`Puck.Assets.Documents`),
 so the ROM forges can consume them without a world assembly. `CreationFrame`

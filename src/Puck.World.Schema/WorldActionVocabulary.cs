@@ -414,7 +414,6 @@ public abstract record WorldTransactionStep {
 [JsonDerivedType(typeof(ActionEffect.StartTimer), typeDiscriminator: "startTimer")]
 [JsonDerivedType(typeof(ActionEffect.Designate), typeDiscriminator: "designate")]
 [JsonDerivedType(typeof(ActionEffect.Generate), typeDiscriminator: "generate")]
-[JsonDerivedType(typeof(ActionEffect.Judge), typeDiscriminator: "judge")]
 [JsonDerivedType(typeof(ActionEffect.UpsertHudPanel), typeDiscriminator: "upsertHudPanel")]
 [JsonDerivedType(typeof(ActionEffect.RemoveHudPanel), typeDiscriminator: "removeHudPanel")]
 [JsonDerivedType(typeof(ActionEffect.UpsertPlacement), typeDiscriminator: "upsertPlacement")]
@@ -642,14 +641,6 @@ public abstract record ActionEffect {
     /// <param name="Row">The draw site's row name. One name, not a (source, destination) pair: a site's source is its
     /// own facet and a site is a scalar slot, so there is nothing else to address.</param>
     public sealed record Generate(string Row) : ActionEffect;
-    /// <summary>Stages a rhythm-judge grading fact for the body whose trigger fired — the entity index, the judge
-    /// window set, and the firing tick are collected during the body's advance (the same staged-output shape
-    /// <see cref="Generate"/> uses) and drained by <c>WorldServer.Step</c> immediately after the body step, where
-    /// they are graded against the world's musical clock. The grade is never computed here — this effect only names
-    /// which judge row applies.</summary>
-    /// <param name="JudgeRef">The declared <c>judges</c> row name (a <c>puck.judge.v1</c> reference) whose hit
-    /// windows grade the press.</param>
-    public sealed record Judge(string JudgeRef) : ActionEffect;
     /// <summary>Upserts a whole HUD panel row — world scope only (refused at body scope: a per-body action has no HUD
     /// panel of its own to author). Admits <c>WorldMutation.UpsertHudPanel</c> into the world-rule effect set
     /// through the same seam <see cref="Generate"/> uses: the compiled effect submits the mutation stamped

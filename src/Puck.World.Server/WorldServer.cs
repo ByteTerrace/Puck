@@ -255,15 +255,6 @@ public sealed partial class WorldServer : IWorldServerHost {
     // the fifth, machine-memory watches, is addon-scoped instead). Collected once per Step, after the population
     // advances; drained by WorldAddonRuntime.ResolveReads the same tick.
     private readonly WorldEventFeed m_events;
-    // The declared judge window sets, compiled once at construction from definition.Judges (boot-only — nothing
-    // mutates this section live yet). Keyed by row id for judge.state's echo.
-    private readonly IReadOnlyList<(string Id, IReadOnlyList<Puck.Audio.Simulation.JudgeWindow> Windows)> m_judgeWindowSets;
-
-    // The last-graded (body, judge) fact table — sim state, folded by Step's drain of WorldPopulation.
-    // JudgeInvocationOutputs immediately after the whole population advance. A null Grade records a miss (no window
-    // admitted the distance, or the world declares judges with no musical clock to grade against) — the tick is
-    // still recorded either way, so judge.state can distinguish "never fired" from "fired and missed."
-    private readonly Dictionary<(int EntityIndex, string JudgeRef), (string? Grade, ulong Tick)> m_judgeGrades = [];
 
     // The tick-denominated musical clock and its event-driven segment director, compiled once at construction from
     // the FIRST declared definition.Music row (a world authoring none carries neither). Stepped in Step, right
@@ -620,20 +611,6 @@ public sealed partial class WorldServer : IWorldServerHost {
             m_musicDirector = new Puck.Audio.Simulation.MusicDirector(graph: MusicDirectorFactory.CompileGraph(document: score));
         }
 
-        m_judgeWindowSets = ((definition.Judges is { Count: > 0 } judges)
-            ? [.. judges.Select(selector: row => {
-                if (!WorldAssetRowLoader.TryLoadJudge(
-                    document: out var windowSet,
-                    error: out var loadError,
-                    row: row
-                )) {
-                    throw new InvalidOperationException(message: $"judges[{row.Name}]: {loadError} (a validated document must still resolve at construction)");
-                }
-
-                return (row.Name, MusicDirectorFactory.CompileWindows(document: windowSet!));
-            })]
-            : []
-        );
         m_grants = new WorldGrants(
             seatCount: population.LocalSeatCount,
             population: population.Capacity,

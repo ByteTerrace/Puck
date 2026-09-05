@@ -36,25 +36,54 @@ All shapes still carry the registry's required `origin` and `cellSize` fields.
 Missing board entries read as the declared `empty` value. Wrapped scans stop
 before revisiting their origin.
 
+The compass/space-direction names above are each kind's DEFAULT — the
+vocabulary it compiles when the topology authors no `directions` — never a
+fixed table. A topology's own `directions` (an array of `{"name", "x", "y",
+"z"}` steps) replaces that default WHOLESALE: `$board:neighbour`/`attacks`/
+`$match:...:<direction>` and every other direction
+token resolve against ONLY the authored list once one is declared. Grid/Hex/
+Ring name planar steps as `x`/`y`; only `Box` may declare a nonzero `z`
+(a layer step); a `Ring` (which has no second axis) refuses a nonzero `y`.
+Every step's own negation must appear as another entry (so
+the opposite-direction table above always closes), names and steps must be
+distinct, the zero step is refused, and on a wrapped axis (a `Ring` always
+wraps X) a step's magnitude must be under that axis' own width or depth — the
+modulo wrap formula folds a step at or past the extent onto the wrong cell or
+onto itself, so validation refuses it rather than leaving it to resolve
+silently wrong; 1..64 entries are admitted (the bit width of the `long` mask
+`$match:`'s direction-mask facet packs one bit per direction into). A
+4-connected grid (orthogonal moves only) or a leaper's own named reach are
+authored this way rather than composed from raw `$board:offset` deltas. A
+physical field topology admits no `directions` at all — there is no discrete
+adjacency to name.
+
 Rule operands accept these bounded channels:
 
 | Channel | Result |
 |---|---|
 | `$board:neighbour:<row>:<direction>` | Neighbour ordinal, or -1 at the edge |
-| `$board:rayCell:<row>:<direction>` | First nonempty cell ordinal, or -1 |
-| `$board:rayDistance:<row>:<direction>` | Distance to that cell, or -1 |
-| `$board:line:<row>:<length>:<value>:<exact\|atLeast>` | 1 when a matching line exists, otherwise 0 |
 | `$board:pathCost:<row>:<target>:<maxCost>:<maxVisits>` | Minimum terrain entry cost, -1 when unreachable/unaffordable, -2 when the visit budget is exhausted |
 | `$board:mask:<row>:<min>:<max>` | The 64-bit cell-set mask of cells whose value lies in min..max (bit c is cell ordinal c); the topology holds at most 64 cells |
 | `$board:canonical:<row>` | The least 64-bit fingerprint of the whole board's values over every element, for boards of any size: pushed into a history ring, repetition up to symmetry is a pattern |
 | `$board:cellOf:<row>:<bodyRef>` | The Grid cell a body's resolved world position falls in, or -1 |
 | `$board:offset:<row>:<dx>:<dz>` | The cell reached by an arbitrary (dx, dz) grid step from the key cell, or -1 |
-| `$board:attacks:<row>:<min>:<max>:<directions>` | 1 when walking any of 1..4 comma-separated directions from the key cell finds, before any other occupied cell, one whose value lies in min..max; 0 otherwise. `rayCell`'s single-direction first-blocker rule, unioned over the authored directions and filtered to a range — a slider's reach at one square in one call |
+| `$board:attacks:<row>:<min>:<max>:<directions>` | 1 when walking any of 1..4 comma-separated directions from the key cell finds, before any other occupied cell, one whose value lies in min..max; 0 otherwise. A single-direction first-blocker rule, unioned over the authored directions and filtered to a range — a slider's reach at one square in one call |
+| `$match:<pattern>:<row>:<direction>:cell` | The first cell one step past the longest accepted prefix of the ray from the key cell in `direction` — the first cell the pattern REJECTS — or -1 when the whole ray is accepted |
+| `$match:<pattern>:<row>:<direction>:distance` | The step count to that cell, or -1 on the same terms |
 | `$phase:<row>` | The row's own generation — the same value a `WorldPhaseGuard` checks against it |
+| `$clock:<music>:phaseError` | Signed tick distance from the world's musical clock's current position to the nearest beat: `elapsed mod ticksPerBeat`, or that minus `ticksPerBeat` past half a beat (tied toward "past"). `music` must name the document's declared `music` row. |
+
+A ray's first-blocker cell/distance is a `$match:` facet, not a `$board:`
+channel — the identical ray walk read through the pattern engine, generalized
+from "first cell not equal to the board's empty sentinel" to any authored
+pattern (see "Patterns" below); an `n`-in-a-row check composes the same way,
+reading a run-length pattern with the plain accept facet or `prefix`. A
+rhythm hit window is an authored `compareState` range over `$clock:…:phaseError`
+— never a dedicated effect or asset family.
 
 Board operands use the ordinary predicate/source `key` for their origin,
-including the existing `$cell:` dynamic-key form; `line`, `cellOf` accept no
-key — `cellOf` takes a `bodyRef` in its place, the same `body:<n>`/
+including the existing `$cell:` dynamic-key form; `cellOf` accepts no
+key — it takes a `bodyRef` in its place, the same `body:<n>`/
 `argmax:<row>`/`argmin:<row>`/`cell:<row>:<key>` vocabulary `$distance:`/
 `$los:`/`$nearest:` read. Both `cellOf` and `offset` require a `Grid`
 topology — the only kind carrying a rectangular world-space frame
@@ -64,25 +93,37 @@ A `Box` topology is `width` by `layers` by `depth` cells with the 26 space
 directions: the grid's eight compass names in the layer, each prefixed `U`
 or `D` for the layer above or below, and `U`/`D` alone; ordinals run
 `(layer * depth + z) * width + x`, and `layerHeight` resolves a body's Y to
-its layer the way `cellSize` resolves X and Z. Rays, lines, masks under 64
-cells, patterns, and path search apply to it unchanged; a 4x4x4 tic-tac-toe
-is one 64-bit mask and `line:4`.
+its layer the way `cellSize` resolves X and Z. Rays, masks under 64
+cells, patterns, and path search apply to it unchanged; an `n`-in-a-row
+check over a 4x4x4 cube is one 64-bit mask, or a run-length pattern read
+with `$match:`.
 Every discrete topology carries its point group, derived from its shape and
-never authored: a square grid the eight elements `identity`, `rot90`,
-`rot180`, `rot270`, `mirrorX`, `mirrorZ`, `mirrorMain`, `mirrorAnti`; a
-rectangle the four without quarter turns; a hex board `rot60`..`rot300` and
-`mirror0`..`mirror5`; a box the signed axis permutations its equal extents
-admit (48 for a cube, 16 for a square prism, 8 otherwise), named by where
-`+x+y+z` land; a ring the identity alone. `world.topology <topology>
-[<cell>]` lists them and a cell's image under each — see the `boardImage`
-expression op above for how a rule authored from one side's view reads the
-other side's position through `rot180`.
+never authored, ALL of it one signed-axis-permutation spelling: an element
+carries axis `A` to output position `k` with sign `S`, spelled `"+x-y+z"`
+(letter per axis, sign first). A square grid's eight elements are
+`identity`, `-x-z`, `-x+z`, `+x-z`, `+z+x`, `+z-x`, `-z+x`, `-z-x` (letters
+`xz`, its two planar axes); a rectangle the four without quarter turns; a
+hex board's twelve are the signed permutations of its cube coordinates
+`(q, r, s)` (letters `qrs`) that keep `q + r + s == 0` — a bare permutation
+or the same permutation negated throughout; a box the signed axis
+permutations its equal extents admit (48 for a cube, 16 for a square prism,
+8 otherwise, letters `xyz`); a ring the identity alone. A topology may
+additionally author `elementAliases` (`[{"name": "rot90", "element":
+"-z+x"}]`) — friendlier names an author may use interchangeably with the
+canonical spelling wherever an element name is read; `world.topology` always
+echoes the canonical form, plus every authored alias
+(`aliases=rot90=-z+x`, or `aliases=none`). `world.topology <topology>
+[<cell>]` lists every element and a cell's image under each — see the
+`boardImage` (`topology`, `element`) expression op for how a rule authored
+from one side's view reads the other side's position through `rot180`
+inside an expression; `writeSet` composes the same carried mask back onto
+a board.
 A grid's `band` is the vertical half-extent about its origin's Y a position
 must lie within for `cellOf` to answer a cell; 0 (the default) answers any
 height, so a table's board authors a band and a piece on the floor beneath
 it reads as off the board.
 `offset` is the arbitrary-`(dx, dz)` sibling of `neighbour`'s fixed eight
-directions — what a leaper (a knight, or any piece whose reach is not a ray)
+directions — what a leaper (a piece whose reach is not a ray)
 authors its geometry against.
 Path search uses all topology neighbours, including grid diagonals, at the
 destination cell's entry cost. Negative terrain is impassable. Equal-cost
@@ -249,7 +290,7 @@ moved between two occupied board cells — a piece whose cell resolves to no
 cell, before or after (captured, lifted off, knocked clear), never itself
 qualifies as the mover, so its own disappearance is never ruled legal or
 illegal by its own color — then a verdict any authored predicate — occupancy, turn order,
-a `$board:rayCell`/`$board:offset` movement-geometry check — may set to 0
+a `$match:…:cell`/`$board:offset` movement-geometry check — may set to 0
 without touching the mover; a legal verdict alone advances turn and adopts the
 new position into `lastLegal`). Illegal moves are recorded, never undone —
 the world never rejects or repositions a physical piece. A rule's own
@@ -293,18 +334,18 @@ is not enough, so a diagonal hop onto the en passant square with the passed
 pawn left standing classifies as a quiet move and stays refused. Movement
 legality and check read outward from the move's
 own squares rather than walking coordinates: a slider's reach is "does
-`$board:rayCell` from the destination back toward the origin land on the
-origin" (the origin is always the ray's own first-occupied answer when the
+`$match:<emptyRun>:…:cell` from the destination back toward the origin land on the
+origin" (the origin is always the ray's own first-blocker answer when the
 path is clear, so no coordinate arithmetic decides direction), a leaper's is
 `$board:offset` from the origin matching the destination over its fixed set
 of jumps, and a king's square is attacked exactly the same way, probed
-outward for an enemy pawn/knight/king/slider. Castling additionally reads a
+outward for an enemy piece. Castling additionally reads a
 one-tick-old snapshot of the check verdict (the king must not already have
 been in check before this settle) and, for the square the king crosses,
 `$board:attacks:<row>:<min>:<max>:<directions>` — walk a short authored
 direction list from a fixed cell and answer whether the first occupied cell
 on any of them falls in an authored value range, the same
-first-blocker-stops-the-walk contract as `rayCell`, unioned over several
+first-blocker-stops-the-walk contract as `$match:…:cell`, unioned over several
 directions and filtered to a range in one call rather than one rule per
 direction. The garden's `puck.world.json`
 chess rules are the worked example for both techniques; its bridge rules
@@ -1945,7 +1986,7 @@ manifest is consulted at boot. An `axis` binding's `source` mints the bindable
 input source `probe.<source>` (`Puck.Input.InputSources.Probe.Axis`); a
 `parameter` binding's `target` must name an entry the document's own
 `render.extensions` composes; a `control` binding's `control` field must name a
-`WorldCameraControls` member. Like `judges`/`music`, the section is
+`WorldCameraControls` member. Like `music`, the section is
 boot-authored only — no `WorldMutation` kind targets it and `world.row.set
 probes` refuses by name enumerating siblings — though it does carry its own
 `WorldSection.Probes` grant subject for a section-scoped hold.

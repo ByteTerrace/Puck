@@ -238,7 +238,6 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     private static long OperandCost(CompiledWorldOperand operand, WorldDefinition definition) {
         if (operand.Board is { } board) {
             var visits = board.Kind switch {
-                WorldBoardQueryKind.Line => (long)board.Topology.CellCount * board.Topology.DirectionCount * (board.Length + 2),
                 WorldBoardQueryKind.PathCost => (long)(board.MaxVisits + 1) * (board.Topology.CellCount + board.Topology.DirectionCount),
                 WorldBoardQueryKind.Canonical => (long)board.Topology.CellCount * board.Topology.ElementCount,
                 WorldBoardQueryKind.Attacks => (long)board.Topology.CellCount * (board.Directions?.Length ?? 1),

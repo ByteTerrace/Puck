@@ -1,6 +1,0 @@
-console off 1
-world.wait 5
-judge.state
-world.wait 60
-judge.state
-wire.errors

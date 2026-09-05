@@ -625,7 +625,6 @@ Replan:
                     engageProbeOrdinal: probe,
                     entityIndex: slot,
                     generatorInvocations: m_generatorInvocations,
-                    judgeInvocations: m_judgeInvocations,
                     rigidPolicy: m_rigidContactPolicy,
                     stepTicks: stepTicks,
                     tick: tick
@@ -818,7 +817,6 @@ Replan:
                 effectOutputs: m_effectOutputs,
                 designationOutputs: m_designationOutputs,
                 generatorInvocations: m_generatorInvocations,
-                judgeInvocations: m_judgeInvocations,
                 rigidPolicy: m_rigidContactPolicy
             );
             RecordFlockMotion(player);

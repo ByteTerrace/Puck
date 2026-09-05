@@ -25,20 +25,22 @@ audio layers recompute whole every `Step`, level-triggered off that tick's
 edges rather than queued like a transition — `ActiveLayerTuneIds` names every
 tune active this tick; a segment's director embellishments fire instantaneously
 on a matching edge, recorded in `LastEmbellishmentPatchId`/`LastEmbellishmentTick`),
-and `RhythmJudge` (a pure `(tick, clock, windows) -> grade?` hit-window
-grader). Neither type references
+. Neither type references
 `WorldEventFeed`/`WorldEventEdge` (the project that declares them sits above
 this one in the layering) — `Puck.World.Server.MusicDirectorFactory` compiles
-authored `puck.music.v1`/`puck.judge.v1` documents into these shapes and
+an authored `puck.music.v1` document into these shapes and
 projects one tick's `WorldEventFeed.Edges` into `MusicSenseEdge`s at the
-`WorldServer.Step` call site, immediately after `Collect()`.
+`WorldServer.Step` call site, immediately after `Collect()`. A rhythm hit
+window is an authored `compareState` range over the `$clock:<music>:phaseError`
+world-rule operand (the signed tick distance from `MusicClock`'s current
+position to the nearest beat) rather than a dedicated grader type.
 
 `VoiceBabbler` is the same tier's third primitive: `ComputeTriggerTicks`
 turns a caller-estimated syllable count plus an identity's authored cadence
 into the trigger tick of each syllable's short pitched voice — cadence-spaced,
 with a bounded forward-only jitter drawn from one `Pcg32XshRr` stream seeded
-`(state: utteranceOrdinal, stream: identitySeed)`. Like `MusicClock` and
-`RhythmJudge` it never estimates a syllable count from text or chooses which
+`(state: utteranceOrdinal, stream: identitySeed)`. Like `MusicClock` it
+never estimates a syllable count from text or chooses which
 `VoicePatch` a trigger voices — both are the caller's job. Playback wiring is
 landed on top of it: `Puck.World.Client.WorldAudioDirector.TriggerBabble`
 resolves the delivered definition's single `WorldIdentityDefinition.Voice`
@@ -76,9 +78,9 @@ host boots every machine at `MachineAudioRate.SampleRate`).
 
 `dotnet build Puck.slnx -c Release` plus `puck architecture` (the exact
 closure above); `dotnet test tests/Puck.Audio.Tests` for the mixer/synth and
-`MusicClock`/`MusicDirector`/`RhythmJudge`/`VoiceBabbler` laws. Behavioral verification runs
+`MusicClock`/`MusicDirector`/`VoiceBabbler` laws. Behavioral verification runs
 the real windowed `Puck.World` and reads
-`audio.state`/`audio.emitters`/`speaker.state`/`voice.state`/`music.state`/`judge.state`
+`audio.state`/`audio.emitters`/`speaker.state`/`voice.state`/`music.state`
 over stdin — there is no build-only gate for a world-audio feature.
 `tests/Puck.World.Canaries/voice-babble` proves the playback wiring end to
 end: triggering an identity's babble fires four DISTINCT syllable triggers

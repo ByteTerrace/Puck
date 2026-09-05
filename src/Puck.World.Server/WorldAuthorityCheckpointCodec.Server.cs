@@ -382,16 +382,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             value: section.MusicDirectorLastEmbellishmentTick,
             writeValue: static (w, v) => w.WriteUInt64(value: v)
         );
-        WriteArray(
-            writer: writer,
-            items: section.JudgeGrades,
-            writeItem: static (w, row) => {
-                w.WriteInt32(value: row.EntityIndex);
-                w.WriteString(value: row.JudgeRef);
-                w.WriteNullableString(value: row.Grade);
-                w.WriteUInt64(value: row.Tick);
-            }
-        );
 
         return writer.ToArray();
     }
@@ -519,25 +509,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader,
             readValue: static (ref WireReader r) => r.ReadUInt64()
         );
-        var judgeGrades = ReadArray(
-            reader: ref reader,
-            field: "server judge grades",
-            readItem: static (ref WireReader r) => {
-                var entityIndex = r.ReadInt32();
-                var judgeRef = r.ReadString(
-                    field: "judge grade judgeRef",
-                    maxBytes: MaxStringBytes
-                );
-                var grade = r.ReadNullableString(
-                    field: "judge grade",
-                    maxBytes: MaxStringBytes
-                );
-                var tick = r.ReadUInt64();
-
-                return (entityIndex, judgeRef, grade, tick);
-            }
-        );
-
         if (!reader.TryFinish(failure: out var failure)) {
             section = null!;
             reason = $"server section: {failure}";
@@ -552,7 +523,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             Intents: intents,
             InteractionGateHeld: interactionGateHeld,
             Journal: journal,
-            JudgeGrades: judgeGrades,
             LastCompletedEngineTicks: lastCompletedEngineTicks,
             LastCompletedTick: lastCompletedTick,
             LastDocumentReceipt: lastDocumentReceipt,

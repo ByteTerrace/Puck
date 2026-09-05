@@ -17,8 +17,8 @@ public static partial class WorldDefinitionValidator {
             if (topology.Kind != WorldTopologyKind.Field && !WorldTopologyCompilation.TryValidate(topology, out var reason)) {
                 errors.Add($"state.lattices '{topology.Name}': {reason}.");
             }
-            if (topology.Kind == WorldTopologyKind.Field && (topology.Wrap != WorldTopologyWrap.None || topology.Radius != 0)) {
-                errors.Add($"state.lattices '{topology.Name}': physical fields do not admit discrete wrapping or radius.");
+            if (topology.Kind == WorldTopologyKind.Field && (topology.Wrap != WorldTopologyWrap.None || topology.Radius != 0 || topology.Directions is not null || topology.ElementAliases is not null)) {
+                errors.Add($"state.lattices '{topology.Name}': physical fields do not admit discrete wrapping, radius, a direction vocabulary, or element aliases.");
             }
         }
         var totalCells = 0L;
