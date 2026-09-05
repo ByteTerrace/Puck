@@ -4033,7 +4033,7 @@
       "additionalProperties": false
     },
     "WorldStateTransformSetRay": {
-      "description": "Writes only a nonempty run of matching cells closed by a required terminator; otherwise refuses.",
+      "description": "Writes the longest run a patterns row accepts, walked from the origin outward: the same prefix semantics as the $match operand\u0027s prefix facet, landed back on the board instead of read as a fact. Refuses when the accepted prefix is empty, so an author closes a run with the required symbol (a bracket capture is plus(through) . symbol(until)) rather than an unbounded one running off the board.",
       "properties": {
         "$type": {
           "const": "setRay"
@@ -4043,23 +4043,19 @@
           "type": "string"
         },
         "from": {
-          "description": "The origin key, excluded from the write.",
+          "description": "The origin key, excluded from the read word and the write.",
           "type": "string"
         },
         "direction": {
           "description": "A direction in the board\u0027s topology.",
           "type": "string"
         },
-        "through": {
-          "description": "Every intervening cell must have this value.",
-          "type": "integer"
-        },
-        "until": {
-          "description": "The closing value, excluded from the write.",
-          "type": "integer"
+        "pattern": {
+          "description": "A patterns row over the board\u0027s own raw values (kind Int).",
+          "type": "string"
         },
         "value": {
-          "description": "The replacement value.",
+          "description": "The replacement value written to every cell of the accepted prefix.",
           "type": "integer"
         }
       },
@@ -4067,119 +4063,19 @@
         "row",
         "from",
         "direction",
-        "through",
-        "until",
+        "pattern",
         "value"
       ],
       "additionalProperties": false
     },
-    "WorldStateTransformCompletePhase": {
-      "description": "Completes the acting participant\u0027s activation or readiness, guarded against stale submissions.",
-      "properties": {
-        "$type": {
-          "const": "completePhase"
-        },
-        "row": {
-          "description": "The phase row.",
-          "type": "string"
-        },
-        "expectedSequence": {
-          "description": "The exact observed progression sequence; only the world program may omit it.",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "default": null
-        },
-        "timeout": {
-          "description": "World-only completion after the current deadline.",
-          "type": "boolean",
-          "default": false
-        },
-        "participant": {
-          "description": "World-only named participant on whose completion the authored rule acts.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "next": {
-          "description": "World-only branch: the declared phase a transition enters instead of the current phase\u0027s authored next. Ignored when the completion does not transition.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "required": [
-        "row"
-      ],
-      "additionalProperties": false
-    },
-    "StringListNullable": {
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "type": [
-          "string",
-          "null"
-        ]
-      }
-    },
-    "WorldStateTransformTurnOrder": {
-      "description": "Reshapes a phase row\u0027s turn order without completing anything. World-only.",
-      "properties": {
-        "$type": {
-          "const": "turnOrder"
-        },
-        "row": {
-          "description": "The phase row.",
-          "type": "string"
-        },
-        "direction": {
-          "description": "The new sequential step, 1 or -1, or null to keep it.",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "default": null
-        },
-        "skip": {
-          "$ref": "#/$defs/StringListNullable",
-          "description": "Participant tokens activation passes over from now on.",
-          "default": null
-        },
-        "unskip": {
-          "$ref": "#/$defs/StringListNullable",
-          "description": "Participant tokens restored to the order.",
-          "default": null
-        },
-        "active": {
-          "description": "A participant token to activate now in a sequential phase, or null to keep the current activation (moved past a newly skipped participant when it was the one active).",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "required": [
-        "row"
-      ],
-      "additionalProperties": false
-    },
     "WorldStateTransformShuffle": {
-      "description": "Reorders an ordered zone in place by one Fisher-Yates pass over the named redrawable integer streamDraw site: a pile of n tokens consumes n - 1 samples, so the site\u0027s cursor advances by exactly that and a replay reproduces the permutation.",
+      "description": "Reorders a row\u0027s cells by value in place by one Fisher-Yates pass over the named redrawable integer streamDraw site: n cells consume n - 1 samples, so the site\u0027s cursor advances by exactly that and a replay reproduces the permutation.",
       "properties": {
         "$type": {
           "const": "shuffle"
         },
         "row": {
-          "description": "The ordered zone.",
+          "description": "Any ordered zone or keyed row.",
           "type": "string"
         },
         "draw": {
@@ -4216,31 +4112,44 @@
       "additionalProperties": false
     },
     "WorldSortKeyList": {
-      "type": [
-        "array",
-        "null"
-      ],
+      "type": "array",
       "items": {
         "$ref": "#/$defs/WorldSortKey"
       }
     },
-    "WorldStateTransformSort": {
-      "description": "Reorders a row\u0027s cells by value, stably: an ordered zone by attribute rows over its token domain, the first key deciding and each later key breaking the ties before it; a keyed numeric row by its own cell values. The canonical order a pattern reads a hand in.",
+    "WorldStateTransformSortZone": {
+      "description": "Reorders an ordered zone by attribute rows over its token domain, stably: the first key decides and each later key breaks the ties before it. The canonical order a pattern reads a hand in.",
       "properties": {
         "$type": {
-          "const": "sort"
+          "const": "sortZone"
         },
         "row": {
-          "description": "The ordered zone or keyed numeric row.",
+          "description": "The ordered zone.",
           "type": "string"
         },
         "by": {
           "$ref": "#/$defs/WorldSortKeyList",
-          "description": "The attribute keys for a zone, 1..MaxSortKeys distinct rows in precedence order; null (required) for a keyed row.",
-          "default": null
+          "description": "The attribute keys, 1..MaxSortKeys distinct numeric rows keyed over the zone\u0027s token domain, in precedence order; each carries its own direction."
+        }
+      },
+      "required": [
+        "row",
+        "by"
+      ],
+      "additionalProperties": false
+    },
+    "WorldStateTransformSortKeyed": {
+      "description": "Reorders a keyed numeric row by its own cell values, stably.",
+      "properties": {
+        "$type": {
+          "const": "sortKeyed"
+        },
+        "row": {
+          "description": "The keyed numeric row.",
+          "type": "string"
         },
         "descending": {
-          "description": "Whether a keyed row\u0027s greatest value comes first; a zone\u0027s direction sits on each key.",
+          "description": "Whether the greatest value comes first.",
           "type": "boolean",
           "default": false
         }
@@ -4441,16 +4350,13 @@
           "$ref": "#/$defs/WorldStateTransformSetRay"
         },
         {
-          "$ref": "#/$defs/WorldStateTransformCompletePhase"
-        },
-        {
-          "$ref": "#/$defs/WorldStateTransformTurnOrder"
-        },
-        {
           "$ref": "#/$defs/WorldStateTransformShuffle"
         },
         {
-          "$ref": "#/$defs/WorldStateTransformSort"
+          "$ref": "#/$defs/WorldStateTransformSortZone"
+        },
+        {
+          "$ref": "#/$defs/WorldStateTransformSortKeyed"
         },
         {
           "$ref": "#/$defs/WorldStateTransformSetMask"

@@ -836,20 +836,6 @@ public sealed partial class WorldServer {
         )) {
             return -1;
         }
-        var phase = declared.Phase;
-        if (phase is null) {
-            return -1;
-        }
-        return operand.Key switch {
-            "current" => phase.Current,
-            "active" => phase.Phases[phase.Current].Mode == WorldPhaseMode.Sequential ? phase.Active : -1,
-            "ready" => phase.Ready,
-            "sequence" => phase.Sequence,
-            "round" => phase.Round,
-            "deadline" => WorldStateTransforms.Deadline(phase, m_definition.SimulationRateHz),
-            "direction" => phase.Direction,
-            "skipped" => phase.Skipped,
-            _ => -1,
-        };
+        return declared.Phase?.Sequence ?? -1;
     }
 }

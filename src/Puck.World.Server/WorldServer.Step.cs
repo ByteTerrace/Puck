@@ -1165,7 +1165,8 @@ public sealed partial class WorldServer {
             instanceIdentity: InstanceIdentity,
             candidate: out var candidate,
             reason: out var composeReason,
-            evictedKey: out _
+            evictedKey: out _,
+            patterns: m_patterns
         )) {
             m_ruleStatePreflightRejected = true;
             ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: in effect, tick: tick, detail: composeReason);

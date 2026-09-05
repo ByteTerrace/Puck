@@ -411,7 +411,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <para><b>A pure function of the candidate document and the instance identity.</b> Composing this mutation
     /// resolves the site's source (named or inlined), seeks the PRNG to the position the site's own
     /// <see cref="WorldStateRow.DrawCursor"/> records — an O(1) jump, never a replay — draws, and writes both the
-    /// drawn value and the advanced cursor/decks into the same candidate. Nothing lives outside the document, so
+    /// drawn value and the advanced cursor/drawn masks into the same candidate. Nothing lives outside the document, so
     /// <c>world.undo</c> rewinds a draw position bit-identically by the ordinary whole-document restore — there is no
     /// separate runtime to reconcile, and no tape record of a draw to keep in step.</para>
     /// <para><b>Authority: one hold, plus the mask.</b> The standard <see cref="WorldCapability.Mutate"/> hold over

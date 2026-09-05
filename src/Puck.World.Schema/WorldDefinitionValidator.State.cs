@@ -418,13 +418,13 @@ public static partial class WorldDefinitionValidator {
         if (WorldGeneratorEngine.TryResolveSource(
             generators: generators,
             draw: draw,
-            generator: out var dealtSource,
+            generator: out var drawnSource,
             reason: out _
         )) {
             ValidateDrawnMasks(
                 masks: row.DrawnMasks,
                 errors: errors,
-                generator: dealtSource,
+                generator: drawnSource,
                 path: $"{path}.drawnMasks"
             );
         }
@@ -1187,11 +1187,10 @@ public static partial class WorldDefinitionValidator {
                     key: cell.Key,
                     reason: out var reservedReason
                 )) {
-                    // Any other reserved-prefix key is refused unless it is exactly the engine-minted key legitimate
-                    // for this row's shape, carrying a value the engine could have written (a non-negative cursor; a
-                    // drawn mask inside its context's alternative count under an exhausting mode). The rule lives in
-                    // WorldGeneratorCells so UpsertStateCell's compose arm refuses the identical shape from the
-                    // identical code.
+                    // Any reserved-prefix key but the slot key itself is refused: draw and generator bookkeeping
+                    // (the cursor, the drawn masks) lives in the row's own typed fields, never a cell. The rule lives
+                    // in WorldStateReservedCells so UpsertStateCell's compose arm refuses the identical shape from
+                    // the identical code.
                     errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' {reservedReason}.");
                 }
 

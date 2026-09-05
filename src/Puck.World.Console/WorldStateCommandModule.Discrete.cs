@@ -139,8 +139,7 @@ public sealed partial class WorldStateCommandModule {
 
     private static string DescribeDiscrete(WorldServer server, WorldStateRow row) {
         if (row.Phase is { } phase) {
-            var node = phase.Phases[phase.Current];
-            return $" phase={node.Name} mode={node.Mode} active={phase.Active} ready={phase.Ready} sequence={phase.Sequence} round={phase.Round} direction={phase.Direction} skipped={phase.Skipped} deadline={WorldStateTransforms.Deadline(phase, server.Definition.SimulationRateHz)}";
+            return $" phase sequence={phase.Sequence}";
         }
         if (row.Board is { } board) {
             return $" topology={board.Topology} empty={board.Empty}";

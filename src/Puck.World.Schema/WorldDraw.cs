@@ -77,7 +77,7 @@ public sealed record WorldDraw(
 /// <c>host.backend</c>): the boot resolver draws it, writes the settled value into the ordinary literal field, and
 /// clears the facet — a settled field is indistinguishable from an authored one thereafter, so stderr narration at
 /// settlement time is the only surface that can say the value was random at all. A state site is a
-/// <see cref="WorldStateRow"/>: its facet is never cleared, its cursor and decks persist in the document, and a
+/// <see cref="WorldStateRow"/>: its facet is never cleared, its cursor and drawn masks persist in the document, and a
 /// save/reload resumes the sequence exactly where it stopped.</para>
 /// <para>A descriptor is an identity, never a position: a positional ordinal would renumber under ordinary
 /// operation (a settled facet clearing, a <c>world.row.remove state</c> retiring a row, an <c>UpsertStateRow</c>

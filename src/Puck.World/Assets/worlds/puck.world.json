@@ -25703,7 +25703,7 @@
         {
           "$type": "transformState",
           "transform": {
-            "$type": "sort",
+            "$type": "sortKeyed",
             "descending": false,
             "row": "combinedByRank1"
           }
@@ -25711,7 +25711,7 @@
         {
           "$type": "transformState",
           "transform": {
-            "$type": "sort",
+            "$type": "sortKeyed",
             "descending": false,
             "row": "combinedByRank2"
           }

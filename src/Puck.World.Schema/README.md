@@ -52,7 +52,7 @@ Rule operands accept these bounded channels:
 | `$board:cellOf:<row>:<bodyRef>` | The Grid cell a body's resolved world position falls in, or -1 |
 | `$board:offset:<row>:<dx>:<dz>` | The cell reached by an arbitrary (dx, dz) grid step from the key cell, or -1 |
 | `$board:attacks:<row>:<min>:<max>:<directions>` | 1 when walking any of 1..4 comma-separated directions from the key cell finds, before any other occupied cell, one whose value lies in min..max; 0 otherwise. `rayCell`'s single-direction first-blocker rule, unioned over the authored directions and filtered to a range — a slider's reach at one square in one call |
-| `$phase:<row>:<current\|active\|ready\|sequence\|round\|deadline\|direction\|skipped>` | Persisted phase fact; active is -1 outside sequential phases |
+| `$phase:<row>` | The row's own generation — the same value a `WorldPhaseGuard` checks against it |
 
 Board operands use the ordinary predicate/source `key` for their origin,
 including the existing `$cell:` dynamic-key form; `line`, `cellOf` accept no
@@ -103,7 +103,7 @@ are separate from these piles: each `drawnMasks` mask is four 64-bit words,
 serialized as exactly 64 hexadecimal digits, and supports 256 drawn entries.
 
 The closed `transformState` effect and transaction step carry one of `transfer`,
-`setRay`, `moveToken`, `completePhase`, `turnOrder`, `shuffle`, `sort`,
+`setRay`, `moveToken`, `shuffle`, `sortZone`, `sortKeyed`,
 `setMask`, `combine`, `push`, `mapBoard`, or `observe`. `setMask` (`row`, `mask`, `maskKey`,
 `value`) writes one value into every cell of a board (at most 64 cells) whose
 bit is set in a mask read from an integer cell, so a mask built by
@@ -115,39 +115,38 @@ as the `TransformState` document mutation. Transfers preserve keys and accept
 `Key`, `First`, `Last`, or `Random` selectors; random selection names a
 redrawable integer `streamDraw` site, and `count` (1..256) moves that many
 tokens in one mutation, each selected afresh from what remains, so a deal is
-one journal entry. A cursor advances only with the committed transfer. `setRay` changes a nonempty run of `through` cells closed by `until`;
-it excludes the origin and terminator and refuses a broken bracket.
+one journal entry. A cursor advances only with the committed transfer. `setRay` (`row`, `from`, `direction`, `pattern`, `value`) walks a ray from
+its origin and writes the longest run its named `patterns` row accepts — the
+same compiled machine and prefix semantics `$match` reads, landed back on the
+board instead of read as a fact; a bracket capture is authored as
+`plus(opponent) . symbol(own)`, and it excludes the origin and refuses an
+empty accepted prefix.
 `moveToken` checks all position rows over the topology for occupancy, searches
 within `maxVisits`, and debits the token's allowance atomically with its move.
-`shuffle` reorders an ordered zone in place by one Fisher-Yates pass over a
-redrawable integer `streamDraw` site, consuming one sample per position after
-the first (a 52-card deck advances the cursor by 51), so one transaction
-shuffles a whole deck and a replay deals the same order.
+`shuffle` reorders an ordered zone, or any other keyed row, in place by one
+Fisher-Yates pass over a redrawable integer `streamDraw` site, consuming one
+sample per position after the first (a 52-card deck advances the cursor by
+51), so one transaction shuffles a whole deck and a replay deals the same
+order.
 Every written row requires edit authority. Transaction preflight leaves no
 partial transfer, ray, cursor, allowance, or phase change after refusal.
 
-A `phase` row declares up to 32 authenticated participants and 32 named phases.
-`Sequential` activates participants in order; `Together` accepts actions until
-a participant becomes ready; `Resolution` admits only world-program completion.
-The order is state, not structure: the row carries `direction` (1 or -1) and a
-`skipped` participant mask, both persisted across phases, and the world-only
-`turnOrder` transform rewrites them (`direction`, `skip`, `unskip`, `active`)
-without completing anything — a reverse card, a fold, an elimination, a
-"play again". A sequential turn walks in `direction` over unskipped
-participants and the phase ends when it passes either end; a `Together` phase
-never waits on a skipped participant; skipping the active participant hands
-the turn onward around the ring. A transition enters the phase's authored
-`next` unless the world program's `completePhase` carries its own `next` — the
-branch (one player left standing goes to `showdown`, otherwise `deal`). Rules
-read `$phase:<row>:direction` and `:skipped` beside the other phase facts.
-Readiness alone preserves `sequence`; changing activation or phase increments
-it. Returning to phase zero increments `round`. A timeout expires at its exact
-deadline tick and takes precedence over a player action at that tick; a world
-rule explicitly performs timeout completion. Timeout completion advances the
-phase, including when some participants remain unready. Rows with `phaseOf`
-require the corresponding guard on external gameplay transforms. Grant those
-players the `TransformState` mutation kind, leaving document authoring to the
-authority. Phase eligibility does not grant access to another player's units.
+A `phase` row is a guarded submission stamp: nothing but its own generation
+(`sequence`, read back by `$phase:<row>`). `WorldPhaseGuard` (`row`,
+`sequence`, `participant`) is checked against a `TransformState` mutation's
+declared phase row before the transform composes, and a guarded mutation's
+success advances that row's generation by one in the same step — the guard
+both admits and completes, so authoring several ungated moves before one ends
+a turn is a matter of leaving those rows' `phaseOf` unset and reserving it for
+the one row that should end it. `participant` names another actor on whose
+behalf the mutation runs; only the world program may set it. Whose turn it
+is, rounds, ready/skipped bitsets, and deadlines carry no engine support any
+more — a world authors them as ordinary rows (a counter, a bitset board, a
+keyed "active" row) written by the same generic effects every other row uses,
+and gates them with ordinary rule conditions. Rows with `phaseOf` require the
+corresponding guard on external gameplay transforms. Grant those players the
+`TransformState` mutation kind, leaving document authoring to the authority.
+A guard does not grant access to another player's units.
 
 `visibility: {}` opts a row into public literal observations. `readers` limits
 that audience to canonical authenticated principals; `readers: []` retains it
@@ -208,12 +207,12 @@ is a ring of the last pushed values, the temporal twin of a ray: `push`
 `empty` past what the ring holds); `$match:<pattern>:<row>` reads the ring
 oldest first, so a combo, a rhythm window, or "three claims then silence" is
 one pattern. `world.state <row>` echoes capacity, cursor, and how much of
-the ring is held. `sort` puts a
-zone in canonical order by `by`, up to `MaxSortKeys` (`WorldStateCapacity`,
-derived from `MaxRows` -- a sort key names a declared row, so a sort can
-never carry more keys than a section can hold) attribute keys (`row`,
-`descending`) in precedence order, or a keyed row by its own values under
-`descending`, stably,
+the ring is held. `sortZone` puts a zone in canonical order by `by`, up to
+`MaxSortKeys` (`WorldStateCapacity`, derived from `MaxRows` -- a sort key
+names a declared row, so a sort can never carry more keys than a section can
+hold) attribute keys (`row`, `descending`) in precedence order; `sortKeyed`
+orders a keyed row by its own values under one `descending` flag. Both sort
+stably,
 which is what turns a multiset question into a regular one: Reversi's
 flank is `them+ me` on a ray, a straight is five consecutive rank symbols over
 a sorted hand, Yahtzee's large straight is a `choice` of two sequences over a

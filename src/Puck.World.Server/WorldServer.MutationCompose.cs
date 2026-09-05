@@ -679,7 +679,7 @@ public sealed partial class WorldServer {
     // never silently compose against tick zero. `evictedKey` is non-null only when an UpsertStateCell write against an
     // Evicts row dropped its oldest cell to make room — the same pure function every re-composition (live apply,
     // world.undo's journal replay) runs, so the reported victim and the actually-dropped cell can never disagree.
-    private static bool TryCompose(WorldDefinition current, WorldMutation mutation, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out WorldCellName? evictedKey) {
+    private static bool TryCompose(WorldDefinition current, WorldMutation mutation, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out WorldCellName? evictedKey, CompiledWorldPatterns? patterns = null) {
         if (!TryComposeCore(
             candidate: out candidate,
             current: current,
@@ -687,7 +687,8 @@ public sealed partial class WorldServer {
             instanceIdentity: instanceIdentity,
             mutation: mutation,
             reason: out reason,
-            tick: tick
+            tick: tick,
+            patterns: patterns
         )) {
             return false;
         }
@@ -724,7 +725,7 @@ public sealed partial class WorldServer {
             rowName: row
         )
     );
-    private static bool TryComposeCore(WorldDefinition current, WorldMutation mutation, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out WorldCellName? evictedKey) {
+    private static bool TryComposeCore(WorldDefinition current, WorldMutation mutation, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out WorldCellName? evictedKey, CompiledWorldPatterns? patterns = null) {
         reason = string.Empty;
         evictedKey = null;
 
@@ -1399,12 +1400,20 @@ public sealed partial class WorldServer {
                     reason = "operation requires its declared phase guard";
                     return false;
                 }
-                if (m.Guard is { } guard && !WorldStateTransforms.CanAct(current, guard, m.Principal, tick)) {
+                if (m.Guard is { } guard && !WorldStateTransforms.CanAct(current, guard, m.Principal)) {
                     candidate = current;
                     reason = "phase admission refused";
                     return false;
                 }
-                return WorldStateTransforms.TryApply(current, m.Transform, m.Principal, tick, instanceIdentity, out candidate, out reason);
+                if (!WorldStateTransforms.TryApply(current, m.Transform, m.Principal, tick, instanceIdentity, out candidate, out reason, patterns)) {
+                    return false;
+                }
+                // A matching guard both admits and completes: advancing the phase row's generation is the guard's
+                // whole job now that turn order, rounds, and readiness are ordinary rows a world's rules author.
+                if (m.Guard is { } applied) {
+                    candidate = WorldStateTransforms.Advance(candidate, applied.Row);
+                }
+                return true;
             case WorldMutation.UpsertStateRow m:
                 candidate = current.WithWorldState(rows: Upsert(
                     list: current.State,
