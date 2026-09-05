@@ -683,6 +683,39 @@ never structs, because a union boxes value cases on store. Row and key names lea
 object for compiled handles, kept only in the refusal text. Sequenced after `garden/w3`
 merges, since it rewrites the compiler arms the lanes are producing operands in.
 
+**Cellset-domain unification is deferred until the operand/effect union
+rewrite lands (owner decision).** Two asks sit behind this: one cell-set
+value type sized by topology (a bitset over cells; a single 64-bit word as
+the fast path for `CellCount <= 64`) with
+`and`/`or`/`xor`/`not`/`shift(direction)`/`image(element)`/`popCount`/
+`lowestSetBit` as expression ops, one `writeSet(row, set, value)` transform,
+and one canonical form, replacing `setMask`/`combine`/`mapBoard`/the
+`boardImage`/`boardShift` value-token duplicates/`canonicalMask`; and
+finishing the row-domain collapse — `keysOf`/`cellsOf`/`ring` replacing the
+`Tokens`/`Zone`/`KeysFrom`/`Board`/`Lattice`/`History` facets everywhere they
+survive. Neither is safe today. The row-domain collapse is unconditionally
+blocked: `keysOf`, `cellsOf`, and `ring` name nothing anywhere in the tree —
+only handle completion, the union rewrite's stated first step above, has
+landed of that precursor work — so deleting the old facets now deletes the
+tabletop primitive, the poker zones, and the island's fire/ice/water lattice
+with no replacement standing in. The cellset type is blocked on the same
+prerequisite the union-rewrite decision above already names as unstarted:
+`WorldTopologyCompilation.MaxCells` is 4096, so a cell set genuinely needs a
+multi-word representation once a topology exceeds 64 cells — the reason
+`combine` exists at all, even though nothing shipped exercises it past the
+64-cell fast path today (`setMask`/`combine`/`mapBoard`/`canonicalMask` are
+each proved only by a law test, never authored in a shipped world;
+`boardImage`/`boardShift` are proved nowhere). A representation that can
+outgrow one 64-bit word is a new operand/effect value kind, not a
+re-spelling of the plain `Int` cells `$board:mask`/`WorldValueToken`'s
+existing bit ops already use — so it belongs inside
+`CompiledWorldOperand`/`CompiledWorldEffect`, the flattened structs the
+union-rewrite decision above already calls the wrong shape to widen
+further; doing the cellset work first means touching every call site
+twice. The order is the operand/effect union rewrite, then cellset-domain
+unification, then the row-domain facet deletion, each its own change, each
+re-verified against the garden hash.
+
 **The tabletop primitive (owner decisions, Lane D).** Physics-first extends to
 board games: a chess set is 32 ordinary rigid bodies on a shared `piece` kit —
 no second entity kind, no engine-level "piece" concept. A placement's `board`
