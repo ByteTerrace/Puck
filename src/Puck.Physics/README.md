@@ -104,7 +104,15 @@ spherical-harmonic expansion.
 
 `FixedBodyColliderVolume` is the shared sphere/capsule/oriented-box vocabulary.
 `FixedDynamicBodyContacts` supplies a conservative compound broadphase radius and
-the deepest pair correction without knowing body identity or mutating state.
+the deepest pair correction without knowing body identity or mutating state. A
+box-vs-box pair depenetrates by separating-axis test over world X/Y/Z plus
+each box's own three face axes (`FixedColliderBounds.BoxAxes`) rather than
+the world-bounds approximation every other volume pair uses — an oriented
+box's own face axes are what a world-axis-only overlap never tests, and
+skipping them overstates penetration for anything but an axis-aligned box.
+Face axes alone (no edge-edge cross products) bound the remaining error
+rather than eliminate it: a pure edge-edge contact can still read deeper than
+its true minimum.
 `FixedStaticCollider.TryGetPush` does the same for analytic spheres,
 axis-aligned boxes, and half-spaces, returning only a `FixedContactPush`.
 

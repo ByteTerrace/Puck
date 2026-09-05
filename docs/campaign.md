@@ -544,9 +544,29 @@ grounded ball's continuous floor contact mask a fresh wall impact. A
 rigid-vs-rigid pair carries no such latch, so its restitution is instead
 floored to zero below a small closing-speed threshold — the same "settle,
 don't chatter" intent applied to a contact with no rising-edge state of its
-own — the threshold is an authored field, not a C# constant. A pair's contact
-anchor is a real off-center surface point, never the body center, so a strike
-carries real torque; its tangential response is a real Coulomb impulse
+own — the threshold is an authored field, not a C# constant. A contact
+anchor — static (ground/obstruction) or pair alike — is the struck shape's
+own true WITNESS POINT (the real support point of its box/capsule/sphere
+geometry oriented by the body's quaternion), never a point on the
+conservative bounding sphere and never the body center, so a strike carries
+the real lever arm its own surface implies. A grounded box or capsule
+resolves over its own support MANIFOLD (up to four box corners, or two
+capsule cap points when it lies on its side) with a few authored
+sequential-impulse passes rather than one witness point — the thing that
+keeps an upright body's centre of mass over its support polygon without an
+artificial extra damping term standing in for real contact geometry. A
+struck pair's own normal impulse propagates further than one pair-hop per
+tick too: the dynamic-contact solver runs a few EXTRA full broadphase-plus-
+narrowphase sweeps over the same tick — never a replay of only the pairs the
+first pass happened to find, since a pair's own positional split can move a
+body into a third one only a later sweep discovers — the count itself derived
+down from an authored ceiling by how many pairs that first pass routed
+through the rigid impulse path, so a rack break or a falling line of dominoes
+spreads within the tick it happens rather than one body-hop per tick. Every
+one of these counts — manifold passes, extra sweeps, the sweep ceiling itself
+— is an authored field
+echoed in `world.budget`, never a free per-tick knob. A pair's tangential
+response is a real Coulomb impulse
 through the two-body kernel, clamped to the friction coefficient against the
 normal impulse just applied, never an independent rescale of either body's
 whole velocity (which would burn or invent momentum along the normal).
@@ -560,7 +580,7 @@ rolling collider's rendered position does not orbit the root as it spins.
 Cross-world transfer of a rigid body is
 out of scope and refused by name — a carrier holding one refuses its OWN
 transfer for the same reason, rather than dropping or orphaning what it
-holds. The garden's `billiardsTray`/`bowlingLane`
+holds. The garden's `billiardsTray`/`bowlingLane`/`dominoes`
 placements are the proof fixture; see the
 [server](../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)
 and [schema](../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs) references.
@@ -610,8 +630,19 @@ second attachment primitive beside the surface-hold system — it is a
 carrier-declared kit facet (`carry`: a body-local frame offset, a
 mass-equivalent, and a reach) authored the same "presence is the whole
 switch" way `rigid` is. While carried, the target's own rigid integration is
-suspended entirely — its pose is derived from the carrier's frame every tick,
-never solved — and it re-enters the solver with the carrier's own velocity on
+suspended entirely — never solved — but its pose is not an unconditional
+follow either: TANGIBLE carry sweeps the target's own collider from its
+previous pose to the carrier-derived one against static geometry every tick,
+and separately resolves it against every other active solid body on the same
+positional-split terms an ordinary contact pair already uses, so a carried
+body pushes and is blocked rather than passing through walls or other
+bodies — and whichever correction either sweep applies is handed back to the
+CARRIER too, so holding something that cannot advance stops the carrier, not
+only the object. `body.release` refuses by name, leaving the relationship
+untouched, when the target's current pose still overlaps geometry or another
+body — the backstop for the rare case the continuous sweep above did not
+already prevent. It re-enters the solver with the carrier's own velocity on a
+successful
 release, never snapped to rest. A body may carry at most one other body at a
 time; a candidate must sit within the carrier's own live-scaled reach and its
 own live-scaled mass must not exceed the carrier's mass-equivalent times an
@@ -643,26 +674,92 @@ facet (`WorldPlacementBoard`) anchors a discrete Grid topology (already
 carrying its own world-space origin/cellSize — no second frame member) to the
 placement, and a world rule derives an occupancy row from each piece's
 resting cell (`$board:cellOf:<row>:body:<n>`, a new reserved channel, Grid-
-only) on `$physics:quiescent`'s rising edge — never every tick. Legality is
-authorable, not engine-adjudicated: the shipped garden default checks
-occupancy and turn order only, over the piece whose own resting cell changed
-between two occupied board cells — a piece that leaves the board entirely
-(captured, knocked clear) never itself registers as a mover, since it has no
-destination cell to rule on; the capturing piece's own move records the
-whole event, and lifting a piece off the board without a compensating move
-records nothing, leaving `turn`/`lastLegal` untouched. A full piece-
-movement-geometry vocabulary (sliding pieces via `$board:rayCell`, leapers
-via the new `$board:offset` channel, check/castling/en passant/promotion) is
-the reserved authorable extension, not built. Illegal moves are recorded — `illegalCount` counts them,
-`verdict` names the last ruling — and never rejected, undone, or repositioned;
-the table remembers the last legal position (`lastLegal`) for a human or a
-future AI body to act on. `plan` is the addon seam for candidate-highlight
-rendering: an ordinary board-typed row nothing in the engine writes, proved
-from the console (`world.state.cell.set plan <cell> 1`) rather than built.
-Boards are a primitive the catalog reuses (checkers, go, cards on a table),
-never a chess-specific engine feature, and a topology is carried by at most
-one placement. The shipped `body.carry` facet is a separate primitive: it
-picks up a rigid body, never a placement or board. See
+only) on `$physics:quiescent`'s rising edge — never every tick, and gated by
+the `$upright:<bodyRef>` reserved channel (a body's own up axis dotted
+against the world up its gravity opposes) so a knocked-over piece reads as
+displaced rather than occupying its last resting cell. Legality is
+authorable, not engine-adjudicated, and the shipped garden's default set is
+everything short of adjudication: movement geometry for all six piece kinds,
+captures, check, castling, en passant, and promotion. The classifier that
+finds which piece moved works over the WHOLE board rather than per piece —
+`$board:mask` reads each side's occupancy as a 64-bit board straight off the
+`board`/`previousBoard` rows, `popCount`/`lowestSetBit` size and locate the
+vacated/occupied deltas, and the shape of those deltas (one square vacated
+and occupied, a second side's square vacated too, two-and-two for castling)
+sorts a settle into a quiet move, a capture, an en passant, a castle, or a
+perturbation — the world program's own record, not a per-piece rule. A
+capture whose vacated defending square sits anywhere but the destination is
+en passant ONLY when that square is also adjacent to the destination behind
+the mover's own approach AND the piece that landed carries the pawn code;
+either test failing (an unrelated other-side vacate landing on the settle by
+coincidence) reads as a perturbation instead of a forged capture. Movement
+legality asks the SAME small vocabulary outward from the move's own squares:
+a slider's reach is "walking `$board:rayCell` from the destination back
+toward the origin finds the origin itself" (no coordinate arithmetic — an
+occupied origin is always the ray's own answer when the path is clear), a
+leaper's is the `$board:offset` cell matching the destination over its fixed
+set of jumps, and check is the mover's king square read the same way,
+attacked or not by an enemy pawn/knight/king/slider probed outward from it.
+A king-shaped settle (two-and-two, the same mask shape castling has) is
+judged ONLY by the castle legality check, never by the single-step king
+check beside it — the classifier's own "from" is always the king's own home
+cell (read directly off the pre-move board's king mask, never the lower of
+the two vacated cells), so it never coincides with a single king step by
+construction, on either side of the board. Castling rights are a
+one-way bitfield (`castleRights`, one bit per king/rook home square) a rule
+sets the instant that square's own piece departs — legally or not, since
+"has this piece ever left home" cannot un-happen and a capacity-bounded
+history ring answering the same question can forget it once the departure
+scrolls out, reviving rights a long game never truly regains; a castle event
+itself always departs the king's own home cell, so it burns that king's bit
+on both sides at once, exactly as a king move must. Castle legality also
+re-reads the physical squares this exact settle: the home cells held the
+king and rook immediately before it and hold neither immediately after, the
+transit squares were empty, and the rook's own landing square now holds it —
+a right can be intact and the physical board still refuse the move. Two
+more checks close the same gate: the king must not already have been in
+check on the position before this settle (a one-tick snapshot of the prior
+settle's own check verdict, since the board a rule reads mid-settle is
+already the post-move board) and the square the king crosses must not be
+attacked either, read via a `$board:attacks:<row>:<min>:<max>:<directions>`
+query that walks a short authored ray list from a fixed cell and answers
+whether the first occupied cell on any of them falls in an authored value
+range — a slider's reach at one square in one call, instead of one rule per
+direction; king- and knight-adjacency stay the cheap `$board:neighbour`/
+`$board:offset` composition already used elsewhere, since those never
+depend on which color is attacking. A piece that leaves the board entirely
+(captured, knocked clear, tilted) never itself registers as a mover, since
+it has no destination cell to rule on. A settle that only occupies (nothing
+of that side's own vacates) or only vacates clamps its empty half to -1
+rather than writing the mask's own bit width (64) into a row that refuses
+it, which would otherwise leave that settle's record silently stale for
+every rule reading it afterward. A capture only reads legal when the
+settle's own delta classifier already agrees a piece was removed (kind 2 for
+an ordinary capture, kind 3 for en passant specifically) — geometry alone
+(landing on the en passant target square) is not enough, so a diagonal hop
+onto that square with the passed pawn left standing classifies as a quiet
+move and is refused rather than silently completing the capture for the
+hand that forgot to lift the other piece. Illegal moves are recorded —
+`illegalCount` counts them, `verdict` names the last ruling — and never
+rejected, undone, or repositioned; the table remembers the last legal
+position (`lastLegal`) for a human or a future AI body to act on. Promotion
+is a same-cell piece swap — the pawn lifted off and a chosen piece set down
+on the SAME square, ordinarily two separate settles — which the mask
+classifier cannot see at all (a cell whose occupant changes value but stays
+occupied never enters either side's vacated or occupied mask), so it is not
+a move kind: reaching the last rank on an ordinary quiet or capture settle
+marks `promotionPending`, and it stays pending across the pawn being lifted
+off (an empty cell is not a promoted piece either) until a later settle
+where that cell holds an actual piece of the mover's own color other than a
+pawn, which clears it directly, independent of whatever move kind (if any)
+that settle classifies as. `plan` is
+the addon seam for candidate-highlight rendering: an ordinary board-typed row
+nothing in the engine writes, proved from the console
+(`world.state.cell.set plan <cell> 1`) rather than built. Boards are a
+primitive the catalog reuses (checkers, go, cards on a table), never a
+chess-specific engine feature, and a topology is carried by at most one
+placement. The shipped `body.carry` facet is a separate primitive: it picks
+up a rigid body, never a placement or board. See
 the [schema reference](../src/Puck.World.Schema/README.md#discrete-boards-cards-and-turns)
 and `world.tabletop`'s console read-back.
 
@@ -680,6 +777,66 @@ reach already exceeds a 0.2 m cell, so no body can stand on the 1.6 m board
 itself without risking contact; the garden's proof keeps Wren at a safe
 standoff beside the table and moves pieces by console verb, never by having
 her body touch one.
+
+**The hidden-hand poker table (owner decisions, Lane C).** State only, no
+card bodies: a `cards` token domain with `rank` AND `suit` attribute rows, a
+`deck`/`hand1`/`hand2`/`community` zone family, a plain int `pokerTurn`
+(deal/bet, not the `phase` trait — see the budget paragraph), a `bettor`
+turn-alternation row, a `bets` history ring. Placeholder card backs read
+through `rank`/`suit`'s own public, `Hidden: Placeholder` visibility rather
+than the zone rows themselves: a row's own `visibility.readers` is
+all-or-nothing (`WorldStateDisclosure.Compose` gates the WHOLE row once
+before ever walking cells), so a zone can show every one of its member
+tokens to an admitted reader or none — never a placeholder for the rest —
+while an attribute row keyed over that zone's domain resolves each cell
+through its owning zone's OWN visibility (`Observer.CanRead`'s nested
+zones-by-domain lookup, which requires `keysFrom` on the attribute row: drop
+it to save budget and `rank`/`suit` both go fully public, an opponent's hole
+cards included — a near-miss this landing corrected). `hand1`/`hand2` keep
+their own `readers`/`readersFrom` for each seat's direct, full read of its
+own two cards, and `poker-showdown-reveal` widens that same `readersFrom` row
+at showdown — one more use of the tabletop primitive's own reveal seam, not a
+second one. `poker-bet-action-seat1`/`-seat2` gate on `bettor` naming their
+own seat and flip it to the other seat on success, a real turn order over the
+two seats.
+
+Live hand-strength is priced against `world.budget`'s per-tick ceiling
+(consult the read-back for the current tally, never a hand-quoted fraction
+here): every `transformState` effect (dealing's `transfer`, a `sort`) is
+priced against the WHOLE document's declared cell storage
+(`WorldRuleWorkBudget.TransformCost`), and `rank`/`suit`'s privacy-required
+`keysFrom` each add a full topology-sized share to that storage on their own
+— so the deal's three transfers plus one sort PER SEAT (needed because the
+shipped `hasTripAny`/`hasQuadAny`/`straightAny` patterns are adjacency-based
+and read wrong off an unsorted deal) are a real, non-trivial cost alongside
+chess's and the rigid facets' own rules. `poker-strength1`/`poker-strength2`
+ARE rule-derived — a genuine landed fix, not a console fixture — but fold
+only the shipped `pairAny` pattern; trip/quad/straight/flush reads, a second
+per-seat suit union, and a full house/two-pair tally would each add their
+own full-document-priced transform on top of the sort, so they stay proven
+correct as authored patterns instead (unsorted or sorted as each needs — see
+`hasTripAny`'s pattern shape) by a law test
+(`tests/Puck.World.Tests/PokerHandStrengthLawTests.cs`, which compiles the
+shipped `patterns` rows themselves) and by `world.match`/`world.observe
+<principal>` (composes `WorldStateDisclosure` for an explicitly named
+principal, not the caller's own stamped identity — `world.why`/
+`world.grants`' own authority-side pattern) from the console, never folded
+into `strength1`/`strength2` live. The same ceiling is why the table plays
+exactly one hand per boot: returning a finished hand's cards to the deck for
+a second one costs three more `transfer`s the budget does not have, so
+`poker-deal`'s gate (`pokerTurn == 0`) never reopens once a hand is dealt —
+a second `dealRequest` refuses cleanly rather than partially applying.
+
+**Garden W3 integration (owner decision).** The tabletop-rules, rigid-fidelity,
+and cards lanes were each authored and budget-checked in isolation, every one
+landing comfortably under `WorldStateCapacity.MaxRows` and
+`WorldRuleCapacity.MaxWorkUnitsPerTick` alone. Merged into one document the
+three lanes' `state.world` rows and rule/transform costs sum past both
+ceilings — a document-capacity collision the per-lane work could not see, not
+a defect in any one lane's design. Both ceilings are structural (document size
+and static per-tick work, never a fixed-size buffer or a per-world tunable),
+so the fix is to widen them rather than cut a lane: `MaxRows` 128 → 256,
+`MaxWorkUnitsPerTick` 1,000,000 → 2,000,000.
 
 ## After this arc
 

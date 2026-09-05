@@ -59,6 +59,26 @@ public static class WorldBoardQueries {
         if (query.Kind == WorldBoardQueryKind.PathCost) {
             return PathCost(query, values, source);
         }
+        if (query.Kind == WorldBoardQueryKind.Attacks) {
+            var directions = query.Directions!;
+            for (var directionIndex = 0; directionIndex < directions.Length; directionIndex++) {
+                var direction = directions[directionIndex];
+                var rayCell = source;
+                for (var distance = 1; distance < topology.CellCount; distance++) {
+                    rayCell = topology.Neighbour(rayCell, direction);
+                    if (rayCell < 0 || rayCell == source) {
+                        break;
+                    }
+                    if (values[rayCell] != empty) {
+                        if (values[rayCell] >= query.Value && values[rayCell] <= query.Upper) {
+                            return 1;
+                        }
+                        break;
+                    }
+                }
+            }
+            return 0;
+        }
         var cell = source;
         for (var distance = 1; distance < topology.CellCount; distance++) {
             cell = topology.Neighbour(cell, query.Direction);

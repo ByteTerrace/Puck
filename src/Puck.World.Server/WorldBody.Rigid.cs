@@ -22,6 +22,8 @@ namespace Puck.World.Server;
 /// see <see cref="WorldBodyContactPolicy.RigidSubstepCeiling"/>.</param>
 /// <param name="PairRestitutionThreshold">Below this closing speed, a rigid-vs-rigid pair contact restitutes at
 /// zero rather than the authored coefficient — see <see cref="WorldBodyContactPolicy.RigidPairRestitutionSpeed"/>.</param>
+/// <param name="ManifoldIterations">The sequential-impulse pass count a box or capsule body's own ground support
+/// manifold resolves over — see <see cref="WorldBodyContactPolicy.RigidManifoldIterations"/>.</param>
 public readonly record struct RigidContactPolicy(
     FixedQ4816 RestLinearThreshold,
     FixedQ4816 RestAngularThreshold,
@@ -29,7 +31,8 @@ public readonly record struct RigidContactPolicy(
     FixedQ4816 SubstepTravelFraction,
     FixedQ4816 SubstepMinimumTravel,
     int SubstepCeiling,
-    FixedQ4816 PairRestitutionThreshold
+    FixedQ4816 PairRestitutionThreshold,
+    int ManifoldIterations
 ) {
     /// <summary>Compiles an authored <see cref="WorldBodyContactPolicy"/>'s rigid fields to this fixed-point form.</summary>
     public static RigidContactPolicy FromAuthored(WorldBodyContactPolicy policy) => new(
@@ -39,7 +42,8 @@ public readonly record struct RigidContactPolicy(
         SubstepTravelFraction: FixedQ4816.FromDouble(value: policy.RigidSubstepTravelFraction),
         SubstepMinimumTravel: FixedQ4816.FromDouble(value: policy.RigidSubstepMinimumTravel),
         SubstepCeiling: policy.RigidSubstepCeiling,
-        PairRestitutionThreshold: FixedQ4816.FromDouble(value: policy.RigidPairRestitutionSpeed)
+        PairRestitutionThreshold: FixedQ4816.FromDouble(value: policy.RigidPairRestitutionSpeed),
+        ManifoldIterations: policy.RigidManifoldIterations
     );
 }
 
@@ -120,6 +124,10 @@ public sealed partial class WorldBody {
     /// same radius the pair-contact anchor approximation and the static-contact substep bound both read, scaled
     /// linearly with <see cref="Scale"/> (see <see cref="ScaleRigid"/>). Zero for a locomotion kit.</summary>
     public FixedQ4816 RigidBoundingRadius => (m_rigid is { } rigid ? ScaleRigid(rigid: rigid).BoundingRadius : FixedQ4816.Zero);
+    /// <summary>Gets this body's live-<see cref="Scale"/>-consistent rigid-facet centre-of-mass offset from its root,
+    /// body-local axes — the same offset <see cref="AdvanceRigid"/> rotates and translates the body about, and what
+    /// <see cref="FixedRigidWitness.Anchor"/> subtracts from a local support point. Zero for a locomotion kit.</summary>
+    public FixedVector3 RigidCenterOffset => (m_rigid is { } rigid ? ScaleRigid(rigid: rigid).CenterOffset : FixedVector3.Zero);
     // Derives a scale-consistent copy of a compiled rigid facet for this body's live Scale: mass ∝ Scale³ against the
     // authored mass at scale 1 (a uniformly bigger body of the same material is heavier by its volume ratio), inertia
     // (mass·length²) ∝ Scale⁵ so inverse inertia ∝ Scale⁻⁵, and CenterOffset/BoundingRadius ∝ Scale — the same linear
@@ -450,6 +458,23 @@ public sealed partial class WorldBody {
 
         return handle;
     }
+    /// <summary>Gets this rigid body's own collider volume, scaled for its live <see cref="Scale"/>, in body-root-
+    /// local axes — the single volume a rigid kit's facet requires (<see cref="Puck.World.FixedWorldRigid.TryCompile"/>),
+    /// read by <see cref="FixedRigidWitness.Anchor"/> to place a contact anchor on the shape's true surface. A
+    /// default (zero-sphere) volume for a locomotion kit — never read there, callers gate on <see cref="IsRigid"/>.</summary>
+    internal FixedBodyColliderVolume RigidWitnessVolume() {
+        if (m_collider is not { Volumes.Length: > 0 } collider) {
+            return default;
+        }
+
+        Span<FixedBodyColliderVolume> scratch = stackalloc FixedBodyColliderVolume[1];
+        var volumes = ScaledColliderVolumes(
+            scratch: scratch,
+            volumes: collider.Volumes
+        );
+
+        return volumes[0];
+    }
     /// <summary>Builds (or refreshes) the persistent static ground phantom <see cref="AdvanceRigid"/>'s static-
     /// contact friction solve plays as the kernel's "other" body: zero velocity, zero inverse mass/inertia, so it
     /// never moves and never receives an impulse, whatever anchor or normal a call names.</summary>
@@ -515,6 +540,20 @@ public sealed partial class WorldBody {
             return;
         }
 
+        // A body the rest latch has closed stays FROZEN — position, orientation, and both contact latches held
+        // bit-identical — until something wakes it: TryApplyRigidImpulse, CommitRigidHandle (a dynamic-pair
+        // impulse), ApplyRigidPositionalCorrection (a dynamic-pair depenetration), Pose (a hard teleport), or
+        // SetContactField (a live solid edit replacing the static world it rested against — both in
+        // WorldBody.Lifecycle.cs), each of which clears m_resting itself. `$physics:quiescent`/`world.rigid`/
+        // `body.where`'s own "resting" fact all read this latch directly, so this IS what those facts mean: a body
+        // actually at rest has nothing left to solve, and re-deriving gravity/contact against it every tick (the
+        // bounded-iteration ground manifold below converges close to, never exactly, zero net impulse) is exactly
+        // what would make them lie.
+        if (m_resting) {
+            RigidStaticSubstepsThisTick = 0;
+            return;
+        }
+
         // Every subsequent read of `rigid` in this call — including the reference ResolveRigidContact receives below
         // — is this body's live-Scale-consistent copy (see ScaleRigid's own remarks), never the kit-shared authored
         // facet: a shrunk body's mass, inertia, substep bound, and contact-point lever arm all shrink with it.
@@ -540,8 +579,12 @@ public sealed partial class WorldBody {
 
         // Continuous collision, by derived substep count: a fast ball must not tunnel through a thin wall at the
         // authority rate, so the travel this tick is bounded against an authored fraction of the collider's own
-        // bounding radius rather than a fixed knob.
-        var travel = (m_rigidVelocity.Length * tickSeconds);
+        // bounding radius rather than a fixed knob. "Travel" is the fastest a point on the collider's own SURFACE
+        // moves, not just the centre: angularVelocity·BoundingRadius is a spinning body's own surface speed from
+        // rotation alone, added to the centre's own linear speed — a light, thin body pivoting in place can carry
+        // tens of radians/second from a single ground-manifold impulse while its centre barely translates, and
+        // without this term its ground contact would re-resolve only once a whole tick's rotation late.
+        var travel = ((m_rigidVelocity.Length + SaturatingNonnegativeProduct(left: m_angularVelocity.Length, right: rigid.BoundingRadius)) * tickSeconds);
         var perSubstepBound = FixedQ4816.Max(
             x: (rigid.BoundingRadius * policy.SubstepTravelFraction),
             y: policy.SubstepMinimumTravel
@@ -609,6 +652,13 @@ public sealed partial class WorldBody {
 
             m_position = bodyOrigin;
             m_rigidVelocity = velocity;
+            // The sweep above is a SINGLE-POINT CCD pass (no lever): for a box or capsule it already consumes this
+            // substep's own gravity-driven closing velocity at the body's centre, before the manifold below ever
+            // sees it. Captured here, BEFORE any obstruction-contact impulse runs, so ResolveRigidGroundManifold can
+            // reconstruct what the corner manifold needs — the RAW pre-sweep velocity (gravity's contribution intact,
+            // for the torque only an off-centre corner impulse can supply) PLUS whatever an obstruction contact this
+            // same substep goes on to add — without also re-consuming what the sweep already resolved.
+            var postSweepVelocity = velocity;
 
             // Ground and obstruction are independent contacts that may both hold in the same substep (a ball
             // resting on the floor that also clips a wall) — each carries its own rising-edge restitution latch and
@@ -621,7 +671,8 @@ public sealed partial class WorldBody {
                     normal: resolution.ObstructionNormal,
                     preVelocity: preVelocity,
                     contacting: ref m_rigidObstructionContacting,
-                    rigid: in rigid
+                    rigid: in rigid,
+                    volume: scaledColliderVolumes[0]
                 );
             } else if (m_rigidObstructionMissStreak < derivedSubsteps) {
                 m_rigidObstructionMissStreak++;
@@ -640,12 +691,34 @@ public sealed partial class WorldBody {
 
                 m_rigidGroundMissStreak = 0;
 
-                ResolveRigidContact(
-                    normal: groundNormal,
-                    preVelocity: preVelocity,
-                    contacting: ref m_rigidGroundContacting,
-                    rigid: in rigid
-                );
+                // A box or capsule rests on a MANIFOLD (up to four corners, or two cap points lying on a side), never
+                // a single witness point straight below its centre — that single point carries no lever against a
+                // tip in the direction perpendicular to it, which is exactly the tip a body standing on its own
+                // support polygon must resist. A sphere's own witness point is already its unique ground contact.
+                var groundVolume = scaledColliderVolumes[0];
+
+                if (
+                    (groundVolume.Kind == FixedBodyColliderKind.Box) ||
+                    (groundVolume.Kind == FixedBodyColliderKind.Capsule)
+                ) {
+                    ResolveRigidGroundManifold(
+                        contacting: ref m_rigidGroundContacting,
+                        iterations: policy.ManifoldIterations,
+                        normal: groundNormal,
+                        postSweepVelocity: postSweepVelocity,
+                        preVelocity: preVelocity,
+                        rigid: in rigid,
+                        volume: groundVolume
+                    );
+                } else {
+                    ResolveRigidContact(
+                        contacting: ref m_rigidGroundContacting,
+                        normal: groundNormal,
+                        preVelocity: preVelocity,
+                        rigid: in rigid,
+                        volume: groundVolume
+                    );
+                }
                 // Rolling resistance: a pure angular-velocity decay while actually grounded, distinct from — and
                 // applied after — the coupled slip-friction solve above (which already moved translational energy
                 // into rotational and back through the shared inertia, not this decay).
@@ -693,7 +766,7 @@ public sealed partial class WorldBody {
     /// translational and rotational velocity together through the body's own inertia (the two-body kernel, with the
     /// world modeled as an infinite-mass static phantom — see <see cref="GroundPhantomHandle"/>) rather than an
     /// ad-hoc lever with no way back into linear motion.</summary>
-    private void ResolveRigidContact(FixedVector3 normal, FixedVector3 preVelocity, ref bool contacting, in FixedWorldRigid rigid) {
+    private void ResolveRigidContact(FixedVector3 normal, FixedVector3 preVelocity, ref bool contacting, in FixedWorldRigid rigid, FixedBodyColliderVolume volume) {
         var postSweepVelocity = m_rigidVelocity;
         var incoming = FixedVector3.Dot(
             left: preVelocity,
@@ -728,10 +801,11 @@ public sealed partial class WorldBody {
             return;
         }
 
-        // The contact point, relative to the body's own center: straight out from the center opposite the contact
-        // normal, at the collider's conservative bounding radius — the same single-point approximation the
-        // rigid-vs-rigid pair anchors use.
-        var contactAnchor = (-normal * rigid.BoundingRadius);
+        // The contact point, relative to the body's own centre of mass: the true witness point of the shape along
+        // -normal (the point a sphere/capsule/box actually touches the surface at), not a point on the conservative
+        // bounding sphere — see FixedRigidWitness. Carries a real lever arm off-centre, so the friction impulse below
+        // imparts torque exactly where the shape actually contacts.
+        var contactAnchor = FixedRigidWitness.Anchor(centerOffset: rigid.CenterOffset, orientation: m_orientation, volume: volume, worldDirection: -normal);
         var contactVelocity = (m_rigidVelocity + FixedVector3.Cross(
             left: m_angularVelocity,
             right: contactAnchor
@@ -804,6 +878,211 @@ public sealed partial class WorldBody {
             scales: FixedWorldRigid.Scales,
             refusals: ref refusals
         );
+        m_rigidVelocity = ballHandle.LinearVelocity;
+        m_angularVelocity = ballHandle.AngularVelocity;
+    }
+    /// <summary>Resolves a box or capsule rigid body's ground contact over its own support manifold
+    /// (<see cref="FixedRigidWitness.SupportManifold"/> — up to four box corners, or two capsule cap points lying on
+    /// a side, down to a single true corner once the body is tilted enough) instead of one CoM-anchored witness
+    /// point: <paramref name="iterations"/> sequential-impulse passes distribute a real NORMAL impulse — reflected by
+    /// restitution on a rising edge, targeting zero closing speed otherwise, on the same terms
+    /// <see cref="ResolveRigidContact"/>'s own restitution branch uses — over every manifold point still closing,
+    /// each carrying its own lever arm off the body's centre of mass, then a per-point Coulomb friction impulse
+    /// clamped to THAT point's own accumulated normal impulse — never the manifold's total, so one heavily loaded
+    /// corner cannot license slip at a corner carrying none. A normal impulse applied through an off-centre corner is
+    /// what produces real torque: an upright body's weight, reacting only against the corner(s) still under it, is
+    /// what keeps its centre of mass over its support polygon (or topples it once that polygon no longer reaches
+    /// under the centre) without an artificial extra damping term.</summary>
+    private void ResolveRigidGroundManifold(FixedVector3 normal, FixedVector3 preVelocity, FixedVector3 postSweepVelocity, ref bool contacting, in FixedWorldRigid rigid, FixedBodyColliderVolume volume, int iterations) {
+        var incoming = FixedVector3.Dot(
+            left: preVelocity,
+            right: normal
+        );
+        var wasContacting = contacting;
+
+        contacting = true;
+
+        if (rigid.BoundingRadius <= FixedQ4816.Zero) {
+            return;
+        }
+
+        Span<FixedVector3> anchors = stackalloc FixedVector3[4];
+        var pointCount = FixedRigidWitness.SupportManifold(
+            anchors: anchors,
+            centerOffset: rigid.CenterOffset,
+            normal: normal,
+            orientation: m_orientation,
+            volume: volume
+        );
+
+        // AdvanceRigid's earlier field.ResolveSweep call is a SINGLE-POINT CCD pass (no lever): for a box or capsule
+        // it already consumes this substep's own gravity-driven closing velocity at the body's CENTRE, before this
+        // manifold ever runs — reading the post-sweep m_rigidVelocity here would hand every corner an already-zeroed
+        // deficit and this loop would apply no impulse at all, freezing a tilted body exactly where it was posed
+        // rather than letting gravity's torque about the still-loaded corner(s) carry it the rest of the way over.
+        // The manifold instead reconstructs what SHOULD reach it: the RAW pre-sweep velocity (gravity intact, for the
+        // corner impulses to redistribute with real lever arms) plus whatever an obstruction contact THIS SAME
+        // substep already added on top of the sweep's own result (`m_rigidVelocity - postSweepVelocity`) — so that
+        // contact's effect is preserved rather than discarded. A genuine first impact (the rising edge) still
+        // reflects by restitution, exactly like ResolveRigidContact's own single-point path. Angular velocity is
+        // untouched by the sweep, so it carries over as-is (any obstruction impulse's spin included).
+        var obstructionDelta = (m_rigidVelocity - postSweepVelocity);
+        var manifoldBaseline = (preVelocity + obstructionDelta);
+
+        if (
+            (!wasContacting) &&
+            (incoming < FixedQ4816.Zero)
+        ) {
+            manifoldBaseline += (normal * (rigid.Restitution * -incoming));
+        }
+
+        var ballHandle = TwoBodyHandle();
+
+        ballHandle.LinearVelocity = manifoldBaseline;
+
+        var groundHandle = GroundPhantomHandle();
+        var refusals = 0;
+        Span<long> accumulatedNormalImpulseRaw = stackalloc long[4];
+        var passes = Math.Max(val1: 1, val2: iterations);
+
+        // Sequential impulse with a per-point ACCUMULATED normal impulse, clamped to non-negative and applied by
+        // DELTA (never a bare positive-only add): every corner shares the same body's mass/inertia, so one corner's
+        // correction shifts the closing speed every other corner reads. Clamping the running total — rather than
+        // only ever adding more whenever a point still reads closing<0 — lets a later pass back a point OFF an
+        // earlier pass's over-application when the coupling has since satisfied it, so passes converge toward the
+        // manifold's true equilibrium (zero net closing at every point still under load) instead of only ever
+        // injecting energy. A body already resting under gravity converges to zero delta, not a residual climb.
+        for (var pass = 0; (pass < passes); pass++) {
+            for (var point = 0; (point < pointCount); point++) {
+                var anchor = anchors[point];
+                var contactVelocity = (ballHandle.LinearVelocity + FixedVector3.Cross(
+                    left: ballHandle.AngularVelocity,
+                    right: anchor
+                ));
+                var closing = FixedVector3.Dot(
+                    left: contactVelocity,
+                    right: normal
+                );
+
+                if (!FixedTwoBodyKernel.TryEffectiveMass(
+                    bodyA: groundHandle,
+                    anchorA: FixedVector3.Zero,
+                    bodyB: ballHandle,
+                    anchorB: anchor,
+                    normal: normal,
+                    scales: FixedWorldRigid.Scales,
+                    normalMassRaw: out var normalMassRaw,
+                    refusals: ref refusals
+                )) {
+                    continue;
+                }
+
+                if (!FusedArithmetic.TryMixedScaleProduct(
+                    a: (-closing).Value,
+                    fractionBitsA: FixedQ4816.FractionBitCount,
+                    b: normalMassRaw,
+                    fractionBitsB: FixedWorldRigid.Scales.EffectiveMass,
+                    fractionBitsOut: FixedQ4816.FractionBitCount,
+                    result: out var lambdaRaw
+                )) {
+                    continue;
+                }
+
+                var previousAccumulated = accumulatedNormalImpulseRaw[point];
+                var newAccumulated = Math.Max(val1: 0L, val2: unchecked((previousAccumulated + lambdaRaw)));
+                var deltaRaw = unchecked((newAccumulated - previousAccumulated));
+
+                if (deltaRaw == 0L) {
+                    continue;
+                }
+
+                accumulatedNormalImpulseRaw[point] = newAccumulated;
+
+                FixedTwoBodyKernel.ApplyImpulse(
+                    bodyA: groundHandle,
+                    anchorA: FixedVector3.Zero,
+                    bodyB: ballHandle,
+                    anchorB: anchor,
+                    normal: normal,
+                    impulseRaw: deltaRaw,
+                    scales: FixedWorldRigid.Scales,
+                    refusals: ref refusals
+                );
+            }
+        }
+
+        for (var point = 0; (point < pointCount); point++) {
+            if (accumulatedNormalImpulseRaw[point] <= 0L) {
+                continue;
+            }
+
+            var anchor = anchors[point];
+            var contactVelocity = (ballHandle.LinearVelocity + FixedVector3.Cross(
+                left: ballHandle.AngularVelocity,
+                right: anchor
+            ));
+            var tangential = (contactVelocity - (normal * FixedVector3.Dot(
+                left: contactVelocity,
+                right: normal
+            )));
+
+            if (tangential == FixedVector3.Zero) {
+                continue;
+            }
+
+            var tangentSpeed = tangential.Length;
+            var tangentDirection = (tangential / tangentSpeed);
+
+            if (!FixedTwoBodyKernel.TryEffectiveMass(
+                bodyA: groundHandle,
+                anchorA: FixedVector3.Zero,
+                bodyB: ballHandle,
+                anchorB: anchor,
+                normal: tangentDirection,
+                scales: FixedWorldRigid.Scales,
+                normalMassRaw: out var tangentMassRaw,
+                refusals: ref refusals
+            )) {
+                continue;
+            }
+
+            if (!FusedArithmetic.TryMixedScaleProduct(
+                a: (-tangentSpeed).Value,
+                fractionBitsA: FixedQ4816.FractionBitCount,
+                b: tangentMassRaw,
+                fractionBitsB: FixedWorldRigid.Scales.EffectiveMass,
+                fractionBitsOut: FixedQ4816.FractionBitCount,
+                result: out var stickImpulseRaw
+            )) {
+                continue;
+            }
+
+            var maxTangentImpulseRaw = SaturatingNonnegativeProduct(
+                left: FixedQ4816.FromRawBits(value: accumulatedNormalImpulseRaw[point]),
+                right: rigid.Friction
+            ).Value;
+            var clampedImpulseRaw = Math.Clamp(
+                value: stickImpulseRaw,
+                min: -maxTangentImpulseRaw,
+                max: maxTangentImpulseRaw
+            );
+
+            if (clampedImpulseRaw == 0L) {
+                continue;
+            }
+
+            FixedTwoBodyKernel.ApplyImpulse(
+                bodyA: groundHandle,
+                anchorA: FixedVector3.Zero,
+                bodyB: ballHandle,
+                anchorB: anchor,
+                normal: tangentDirection,
+                impulseRaw: clampedImpulseRaw,
+                scales: FixedWorldRigid.Scales,
+                refusals: ref refusals
+            );
+        }
+
         m_rigidVelocity = ballHandle.LinearVelocity;
         m_angularVelocity = ballHandle.AngularVelocity;
     }

@@ -1502,6 +1502,51 @@ public static partial class WorldRuleCompiler {
             );
         }
 
+        // $upright: — the same single-body-reference grammar $parked: spends, widened through BodyRefTokenWidth
+        // (not hardcoded to two tokens) so a cell:<row>:<key> reference composes here too.
+        if (name.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: WorldRuleFacts.UprightPrefix
+        )) {
+            RefuseKeyOnReservedChannel(
+                key: key,
+                keyFieldLabel: keyFieldLabel,
+                name: name,
+                ruleName: ruleName
+            );
+
+            var suffix = name[WorldRuleFacts.UprightPrefix.Length..];
+            var tokens = suffix.Split(separator: ':');
+            var width = BodyRefTokenWidth(start: 0, tokens: tokens);
+
+            if (tokens.Length != width) {
+                throw new WorldRuleException(
+                    refusal: WorldRuleRefusal.SpatialChannelMalformed,
+                    ruleName: ruleName,
+                    detail: $"'{name}' does not spell '{WorldRuleFacts.UprightPrefix}<bodyRef>' ({s_bodyRefVocabulary})"
+                );
+            }
+
+            var uprightBody = ResolveBodyRefToken(
+                channel: name,
+                definition: definition,
+                ruleName: ruleName,
+                start: 0,
+                tokens: tokens
+            );
+
+            return new ResolvedOperand(
+                Operand: new CompiledWorldOperand(
+                    Kind: WorldRuleFactKind.Upright,
+                    Row: null,
+                    Key: null,
+                    BodyA: uprightBody
+                ),
+                ValueKind: CellKind.Fixed,
+                Describe: describe
+            );
+        }
+
         // $parked: — the same single-body-reference grammar $distance:/$los: spend one half of theirs on, so it
         // composes with argmax/argmin directly ($parked:argmax:threat).
         if (name.StartsWith(
@@ -1754,7 +1799,7 @@ public static partial class WorldRuleCompiler {
             throw new WorldRuleException(
                 refusal: WorldRuleRefusal.StateRowUnknown,
                 ruleName: ruleName,
-                detail: $"'{name}' carries the reserved '{WorldStateRow.ReservedNamePrefix}' prefix but names none of the reserved channels ('{WorldRuleFacts.Tick}', '{WorldRuleFacts.Population}', '{WorldRuleFacts.RegionPrefix}<placementId>', '{WorldRuleFacts.MachinePrefix}<screen>:<address>', '{WorldRuleFacts.ReducePrefix}<op>:<row>', '{WorldRuleFacts.ArgMaxPrefix}<row>', '{WorldRuleFacts.ArgMinPrefix}<row>', '{WorldRuleFacts.DistancePrefix}<a>:<b>', '{WorldRuleFacts.LineOfSightPrefix}<a>:<b>', '{WorldRuleFacts.NavigationPrefix}<bodyRef>:<facet>', '{WorldRuleFacts.ParkedPrefix}<bodyRef>', '{WorldRuleFacts.LinkPrefix}<adjacencyName>', '{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>')"
+                detail: $"'{name}' carries the reserved '{WorldStateRow.ReservedNamePrefix}' prefix but names none of the reserved channels ('{WorldRuleFacts.Tick}', '{WorldRuleFacts.Population}', '{WorldRuleFacts.RegionPrefix}<placementId>', '{WorldRuleFacts.MachinePrefix}<screen>:<address>', '{WorldRuleFacts.ReducePrefix}<op>:<row>', '{WorldRuleFacts.ArgMaxPrefix}<row>', '{WorldRuleFacts.ArgMinPrefix}<row>', '{WorldRuleFacts.DistancePrefix}<a>:<b>', '{WorldRuleFacts.LineOfSightPrefix}<a>:<b>', '{WorldRuleFacts.UprightPrefix}<bodyRef>', '{WorldRuleFacts.NavigationPrefix}<bodyRef>:<facet>', '{WorldRuleFacts.ParkedPrefix}<bodyRef>', '{WorldRuleFacts.LinkPrefix}<adjacencyName>', '{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>')"
             );
         }
 
@@ -1776,7 +1821,7 @@ public static partial class WorldRuleCompiler {
             ?? throw new WorldRuleException(
             refusal: WorldRuleRefusal.StateRowUnknown,
             ruleName: ruleName,
-            detail: $"'{name}' names no state row, and is not a reserved channel ('{WorldRuleFacts.Tick}', '{WorldRuleFacts.Population}', '{WorldRuleFacts.RegionPrefix}<placementId>', '{WorldRuleFacts.MachinePrefix}<screen>:<address>', '{WorldRuleFacts.ReducePrefix}<op>:<row>', '{WorldRuleFacts.ArgMaxPrefix}<row>', '{WorldRuleFacts.ArgMinPrefix}<row>', '{WorldRuleFacts.DistancePrefix}<a>:<b>', '{WorldRuleFacts.LineOfSightPrefix}<a>:<b>', '{WorldRuleFacts.NavigationPrefix}<bodyRef>:<facet>', '{WorldRuleFacts.ParkedPrefix}<bodyRef>', '{WorldRuleFacts.LinkPrefix}<adjacencyName>', '{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>')"
+            detail: $"'{name}' names no state row, and is not a reserved channel ('{WorldRuleFacts.Tick}', '{WorldRuleFacts.Population}', '{WorldRuleFacts.RegionPrefix}<placementId>', '{WorldRuleFacts.MachinePrefix}<screen>:<address>', '{WorldRuleFacts.ReducePrefix}<op>:<row>', '{WorldRuleFacts.ArgMaxPrefix}<row>', '{WorldRuleFacts.ArgMinPrefix}<row>', '{WorldRuleFacts.DistancePrefix}<a>:<b>', '{WorldRuleFacts.LineOfSightPrefix}<a>:<b>', '{WorldRuleFacts.UprightPrefix}<bodyRef>', '{WorldRuleFacts.NavigationPrefix}<bodyRef>:<facet>', '{WorldRuleFacts.ParkedPrefix}<bodyRef>', '{WorldRuleFacts.LinkPrefix}<adjacencyName>', '{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>')"
         ));
 
         if (

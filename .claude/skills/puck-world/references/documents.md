@@ -606,7 +606,21 @@ an authored `rigidSubstepTravelFraction` (default 0.5) — the count itself is
 derived per body per tick from speed and collider size, never authored
 directly. `rigidRestLinearSpeed`/`rigidRestAngularSpeed`/`rigidRestHoldSeconds`
 (defaults 0.05/0.1/0.25) are the thresholds and hold window a grounded rigid
-body's `Resting` fact latches against.
+body's `Resting` fact latches against. `rigidManifoldIterations` (default 4,
+maximum 16) bounds the sequential-impulse passes a box or capsule's own ground
+support manifold (up to four box corners, or two capsule cap points, fewer
+once tilted enough — `FixedRigidWitness.SupportManifold`) resolves over each
+substep, so a normal impulse off-centre carries torque instead of only
+friction. `rigidPairRestitutionSpeed` (default 0.05) floors a rigid-vs-rigid
+pair's restitution at zero below that closing speed, so two resting bodies do
+not micro-bounce apart every tick they are found touching.
+`rigidPairIterationCeiling`/`rigidPairIterationBudget` (defaults 4/64) bound
+how many EXTRA full broadphase-plus-narrowphase sweeps `ResolveDynamicContacts`
+runs after its first pass in one tick — the count actually run is derived DOWN
+from the ceiling by the budget divided by how many pairs the first pass routed
+through the rigid impulse path, so an impulse chain (a rack break, a falling
+domino line) can cross more than one pair-hop within the same tick instead of
+propagating one body-hop per tick.
 
 A kit's `rigid` facet (`mass`, `restitution`, `friction`, `rollingFriction`,
 `linearDamping`, `angularDamping`) hands its bodies to the rigid solver
@@ -866,7 +880,7 @@ key is the one reserved exception). `nonNegative` is a per-row floor ANY numeric
 declare, enforced regardless of `min`; `int` + `nonNegative` IS a timer, never
 a fifth kind, and the cross-document write-back channel
 (`Server.WorldOwnedWorlds.Decide`) reads that same row trait rather than
-assuming a floor of its own. Capped at `WorldStateCapacity.MaxRows` (128)
+assuming a floor of its own. Capped at `WorldStateCapacity.MaxRows` (256)
 rows, `MaxCellsPerRow` (128) cells per row (which an authored `capacity` may
 only NARROW, never widen), and
 `MaxTextValueLength` (256) text UTF-16 code units, refused by name past any.
@@ -2187,7 +2201,7 @@ zone, and neutral-grace duration.
   from population capacity. Do not use live instance count to size reserved
   bone storage.
 - `WorldHudCapacity` (`WorldHud.cs`): see [hud.md](hud.md).
-- `WorldStateCapacity` (`WorldState.cs`): `MaxRows = 128`,
+- `WorldStateCapacity` (`WorldState.cs`): `MaxRows = 256`,
   `MaxCellsPerRow = 128` (an authored `capacity` may only narrow it),
   `MaxTextValueLength = 256` (UTF-16 units, a text cell's value), and
   `MaxBodySlots = 128` across the `body` and `identity` lanes (the fixed

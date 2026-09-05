@@ -236,6 +236,9 @@ public sealed partial class WorldServer : IWorldServerHost {
     // lessOrEqual) would spuriously OPEN for a body reference that resolved to nothing.
     private static readonly FixedQ4816 NoBodyDistance = FixedQ4816.MaxValue;
 
+    // WorldRuleFacts.UprightPrefix's rotated axis: a body's own local +Y before FixedOrientation is applied.
+    private static readonly FixedVector3 s_localUp = new(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero);
+
     // Per-body "the last FULLY-DRAINED tick reported this body contended" latch — the SAME once-per-episode shape as
     // m_driveDenied (checked BEFORE the current tick's outcome overwrites it, so the transition into a contended state
     // logs once, not the state itself), so two addons left permanently double-granted over one body log the collision

@@ -258,6 +258,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 WorldBoardQueryKind.Line => (long)board.Topology.CellCount * board.Topology.DirectionCount * (board.Length + 2),
                 WorldBoardQueryKind.PathCost => (long)(board.MaxVisits + 1) * (board.Topology.CellCount + board.Topology.DirectionCount),
                 WorldBoardQueryKind.Canonical or WorldBoardQueryKind.CanonicalMask => (long)board.Topology.CellCount * board.Topology.ElementCount,
+                WorldBoardQueryKind.Attacks => (long)board.Topology.CellCount * (board.Directions?.Length ?? 1),
                 _ => board.Topology.CellCount,
             };
             return board.Topology.CellCount + visits;

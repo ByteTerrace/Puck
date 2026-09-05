@@ -171,4 +171,34 @@ public sealed class DiscreteStateLawTests {
         Assert.Empty(Find(fixture.Server.Definition, "hand").Cells!);
         Assert.Equal(1, Find(fixture.Server.Definition, "failed").Cells![0].Value);
     }
+
+    [Fact]
+    public void AttacksQueryStopsAtTheFirstBlockerAndOnlyMatchesItsOwnValue() {
+        var definition = Document(new WorldStateRow(Name("board"), CellKind.Int, Board: new("map")));
+        var topology = WorldTopologyCompilation.Find(definition.StateRaw, "map")!;
+        var east = topology.Direction("E");
+        var south = topology.Direction("S");
+        const int origin = 4; // (x=0, z=1) on the 4-wide grid
+        const int rookCell = 6; // two steps east of the origin
+        var values = new long[topology.CellCount];
+        values[rookCell] = 4;
+        var attacksEast = new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Attacks, Value: 4, Upper: 4, Directions: [east]);
+        Assert.Equal(1, WorldBoardQueries.Evaluate(attacksEast, values, 0, origin));
+        // Control: the same ray with no qualifying piece at all must read a miss, not a stale hit.
+        Assert.Equal(0, WorldBoardQueries.Evaluate(attacksEast, new long[topology.CellCount], 0, origin));
+        // Control: the rook's cell holds a code outside the authored range -- geometry alone must not be enough.
+        var attacksWrongValue = attacksEast with { Value = 5, Upper = 5 };
+        Assert.Equal(0, WorldBoardQueries.Evaluate(attacksWrongValue, values, 0, origin));
+        // Control: the piece sits east, not south -- an authored direction that never reaches it must read a miss.
+        var attacksSouthOnly = new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Attacks, Value: 4, Upper: 4, Directions: [south]);
+        Assert.Equal(0, WorldBoardQueries.Evaluate(attacksSouthOnly, values, 0, origin));
+        // Several authored directions OR together: south alone misses, but south-or-east finds the rook via east.
+        var attacksEitherWay = new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Attacks, Value: 4, Upper: 4, Directions: [south, east]);
+        Assert.Equal(1, WorldBoardQueries.Evaluate(attacksEitherWay, values, 0, origin));
+        // Control: a non-qualifying piece one step closer blocks the ray -- if the walk did not stop at the first
+        // occupied cell, this would wrongly still see the rook past it.
+        var blocked = (long[])values.Clone();
+        blocked[origin + 1] = 9;
+        Assert.Equal(0, WorldBoardQueries.Evaluate(attacksEast, blocked, 0, origin));
+    }
 }
