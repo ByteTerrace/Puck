@@ -723,9 +723,9 @@ proves an authored two-tolerance range grades a press exactly as the
 retired windows list did), with no dedicated effect or section; `music.state`
 carries the live value as its `phaseError` field, the read-back the
 retired `judge.state` verb owned. This family had zero callers in every
-shipped world — the only asset that existed,
-`src/Puck.World/Assets/worlds/judges/nexus-drum-easy.judge.json`, was
-referenced by no world (only by the retired `music-judge-press` canary,
+shipped world — the only asset that existed (now deleted, under
+`Assets/worlds/judges/`) was referenced by no world (only by the retired
+`music-judge-press` canary,
 itself referencing a `prototypes/` world that no longer exists) — so
 deleting it touched no shipped rule: the schema, validator,
 `Puck.Physics.Motion.BodyMotionOp`, the wire vocabulary
