@@ -53,8 +53,35 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
         preflight: preflight,
         reason: out reason
     );
-    void IRuleHost.BeginPreflight() => m_preflightScopes.Push(item: m_definition);
-    void IRuleHost.EndPreflight() => m_definition = m_preflightScopes.Pop();
+    void IRuleHost.BeginPreflight() {
+        m_preflightScopes.Push(item: m_definition);
+        m_preflightMutations.Push(item: []);
+    }
+    void IRuleHost.EndPreflight() {
+        m_definition = m_preflightScopes.Pop();
+        _ = m_preflightMutations.Pop();
+    }
+    // One member installs as itself; several install as one Batch — one admission, validation, journal entry, and
+    // delivery for the whole transaction.
+    bool IRuleHost.TryCommitPreflight(ulong tick, out string reason) {
+        m_definition = m_preflightScopes.Pop();
+        var composed = m_preflightMutations.Pop();
+        reason = string.Empty;
+
+        if (composed.Count == 0) {
+            return false;
+        }
+
+        var mutation = ((composed.Count == 1) ? composed[0] : new WorldMutation.Batch(Principal: WorldPrincipal.World, Mutations: composed));
+
+        if (TryApplyMutation(mutation: mutation, tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false)) {
+            return true;
+        }
+
+        reason = "the ordinary mutation door refused the transaction; its mutation rejection names the concrete reason";
+
+        return false;
+    }
     // A decision evaluates on its own timers; an interaction evaluates once per bound carrier or pair, each through
     // the evaluator's own gate-and-fire under the latch binding the sweep chooses.
     bool IRuleHost.TryEvaluateOwn(CompiledRule rule, RuleLatch latch, ulong tick, ulong stepTicks, out bool applied) {

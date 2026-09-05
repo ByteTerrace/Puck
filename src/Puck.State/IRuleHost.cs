@@ -24,6 +24,13 @@ public interface IRuleHost : IRuleReader {
     void BeginPreflight();
     /// <summary>Closes the innermost preflight scope, restoring the state <see cref="BeginPreflight"/> remembered.</summary>
     void EndPreflight();
+    /// <summary>Closes the innermost preflight scope and installs everything it composed as one mutation — one
+    /// admission, one validation, one journal entry, one delivery — the way a <c>transaction</c> effect lands. A scope
+    /// that composed nothing installs nothing and answers <see langword="false"/> with an empty reason.</summary>
+    /// <param name="tick">The simulation tick the mutation lands on.</param>
+    /// <param name="reason">Why the door refused the whole, or empty.</param>
+    /// <returns><see langword="true"/> when the scope's mutations installed.</returns>
+    bool TryCommitPreflight(ulong tick, out string reason);
     /// <summary>Fires an effect arm the library does not own — one a document project registered through its
     /// <see cref="EffectFamily"/>. Under preflight the host validates without acting and answers
     /// <see cref="EffectOutcome.Refused"/> for what could not fire, which fails the enclosing transaction; a refusal is

@@ -158,7 +158,8 @@ Nothing here carries a `World` name — a state library names no world.
   evaluation, and every state-neutral effect fired through the host's door as
   a `StateMutation` (`UpsertCell`, `RemoveCell`, `Generate`, `Apply` a
   transform). A top-level effect preflights itself under a host scope and
-  installs alone; a `transaction` preflights its whole branch as one candidate.
+  installs alone; a `transaction` preflights its whole branch as one candidate
+  and the host commits that scope as one mutation (`TryCommitPreflight`).
   The evaluator is the evaluation in flight — the tick, the bound forEach key
   and participants, the binding values — which the host's `IRuleReader`
   forwards to its operands. It also owns the trace (`RuleTraceEvaluation`,

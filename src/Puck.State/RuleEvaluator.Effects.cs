@@ -234,59 +234,65 @@ public sealed partial class RuleEvaluator {
         return Apply(effect: effect, ruleName: ruleName, mutation: new StateMutation.Apply(Transform: new StateTransform.Push(Row: row.Name.Value, Value: raw)), tick: tick, preflight: preflight);
     }
 
+    // A transaction preflights its branch under one host scope, then commits that scope as one mutation; the steps
+    // that submit nothing (a cue, a pose, a body effect) fire afterwards, for real, in order. A refused branch runs
+    // onFailure on the same terms.
     private bool FireTransaction(TransactionEffect transaction, string ruleName, ulong tick, ulong stepTicks) {
-        var effects = transaction.Effects;
+        if (FireBranch(effect: transaction, effects: transaction.Effects, ruleName: ruleName, tick: tick, stepTicks: stepTicks, applied: out var applied)) {
+            return applied;
+        }
 
+        var failure = transaction.OnFailure;
+
+        if (failure.Length == 0) {
+            return false;
+        }
+
+        return FireBranch(effect: transaction, effects: failure, ruleName: ruleName, tick: tick, stepTicks: stepTicks, applied: out applied) && applied;
+    }
+
+    private bool FireBranch(EffectFact effect, EffectFact[] effects, string ruleName, ulong tick, ulong stepTicks, out bool applied) {
+        applied = false;
         m_preflightRejected = false;
         m_host.BeginPreflight();
+
+        var rejected = false;
+
         try {
             for (var index = 0; index < effects.Length; index++) {
                 _ = Fire(effect: effects[index], ruleName: ruleName, tick: tick, stepTicks: stepTicks, preflight: true, strict: true);
                 if (m_preflightRejected) {
+                    rejected = true;
                     break;
                 }
             }
-        } finally {
+        } catch {
             m_host.EndPreflight();
+            throw;
         }
 
-        if (m_preflightRejected) {
+        if (rejected) {
+            m_host.EndPreflight();
             m_preflightRejected = false;
-            var failure = transaction.OnFailure;
 
-            if (failure.Length == 0) {
-                return false;
-            }
-
-            m_host.BeginPreflight();
-            try {
-                for (var index = 0; index < failure.Length; index++) {
-                    _ = Fire(effect: failure[index], ruleName: ruleName, tick: tick, stepTicks: stepTicks, preflight: true, strict: true);
-                    if (m_preflightRejected) {
-                        return false;
-                    }
-                }
-            } finally {
-                m_host.EndPreflight();
-                m_preflightRejected = false;
-            }
-
-            var failureApplied = false;
-
-            for (var index = 0; index < failure.Length; index++) {
-                failureApplied |= Fire(effect: failure[index], ruleName: ruleName, tick: tick, stepTicks: stepTicks, preflight: false, strict: true);
-            }
-
-            return failureApplied;
+            return false;
         }
 
-        var applied = false;
+        if (m_host.TryCommitPreflight(tick: tick, reason: out var reason)) {
+            applied = true;
+        } else if (reason.Length > 0) {
+            ReportRefusal(refusal: RuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: effect, tick: tick, detail: reason);
+
+            return false;
+        }
 
         for (var index = 0; index < effects.Length; index++) {
-            applied |= Fire(effect: effects[index], ruleName: ruleName, tick: tick, stepTicks: stepTicks, preflight: false, strict: true);
+            if (!effects[index].SubmitsMutation) {
+                _ = Fire(effect: effects[index], ruleName: ruleName, tick: tick, stepTicks: stepTicks, preflight: false, strict: true);
+            }
         }
 
-        return applied;
+        return true;
     }
 
     private bool Apply(EffectFact effect, string ruleName, StateMutation mutation, ulong tick, bool preflight) {

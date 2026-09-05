@@ -838,7 +838,10 @@ A solitaire cascade is a `slice` transfer: the keyed token and every token
 after it, moved in order as one run. A Go group is `$board:component` and its
 liberties `$board:liberties`: a flood from the key cell along the topology's
 directions under a settled-cell budget, priced by that budget like `pathCost`,
-reading -2 when the budget runs out rather than ever running unbounded.
+reading -2 when the budget runs out rather than ever running unbounded. A
+transaction journals once: the host commits the preflight scope as one `Batch`
+mutation — one admission, validation, journal entry, and delivery — so the
+three transforms of a large-board capture cost the journal what one write does.
 
 **The row-domain facet collapse has landed (owner decision).** `WorldStateRow`
 carries one `Domain` (`WorldStateDomain`: `Slot`, `Keys`, `KeysOf(row,

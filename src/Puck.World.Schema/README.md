@@ -1871,7 +1871,9 @@ each top-level state effect is preflighted and installed on its own, in order; a
 later effect's range/capacity refusal leaves the earlier writes applied.
 
 An explicit `transaction` is the one atomic group — its whole branch preflights
-against one private candidate and either installs together or not at all — and adds
+against one private candidate and either installs together or not at all, as one
+`Batch` mutation with one admission, one validation, one journal entry, and one
+delivery (a single-step branch installs as that step) — and adds
 an optional `onFailure` branch. Both branches accept at most 64 steps and may
 combine state cells, draw generation, HUD/placement mutations, poses, cues, body
 effects, and field paints. The whole branch is preflighted against each preceding

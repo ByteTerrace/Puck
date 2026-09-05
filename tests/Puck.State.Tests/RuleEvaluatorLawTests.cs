@@ -10,7 +10,8 @@ public sealed class RuleEvaluatorLawTests {
     // "locked", so a transaction has something to fail on; a preflight scope is a snapshot of the (immutable) row
     // list.
     private sealed class HeadlessHost : IRuleHost, IStateSection {
-        private readonly Stack<IReadOnlyList<StateRow>> m_scopes = new();
+        private readonly Stack<(IReadOnlyList<StateRow> Rows, int Composed)> m_scopes = new();
+        private int m_composed;
         private readonly long[] m_patternWord = new long[PatternCapacity.MaxWord];
         private long[] m_boardScratch = new long[64];
 
@@ -87,10 +88,18 @@ public sealed class RuleEvaluatorLawTests {
             var rows = new List<StateRow>(collection: Rows);
             rows[rows.IndexOf(item: row)] = row with { Cells = cells };
             Rows = rows;
-            if (!preflight) { Installs++; }
+            if (preflight) { m_composed++; } else { Installs++; }
         }
-        public void BeginPreflight() => m_scopes.Push(item: Rows);
-        public void EndPreflight() => Rows = m_scopes.Pop();
+        public void BeginPreflight() => m_scopes.Push(item: (Rows, m_composed));
+        public void EndPreflight() => (Rows, m_composed) = m_scopes.Pop();
+        public bool TryCommitPreflight(ulong tick, out string reason) {
+            reason = string.Empty;
+            var (_, before) = m_scopes.Pop();
+            var installed = (m_composed > before);
+            m_composed = before;
+            if (installed) { Installs++; }
+            return installed;
+        }
         public EffectOutcome FireEffect(EffectFact effect, string ruleName, ulong tick, ulong stepTicks, bool preflight) => throw new InvalidOperationException(effect.Describe);
         public bool TryEvaluateOwn(CompiledRule rule, RuleLatch latch, ulong tick, ulong stepTicks, out bool applied) {
             applied = false;
@@ -238,6 +247,23 @@ public sealed class RuleEvaluatorLawTests {
         Assert.Equal<Enum>(RuleEffectRefusal.MutationRejected, diagnostic.Refusal);
         Assert.Contains("refuses every write", diagnostic.Detail, StringComparison.Ordinal);
         Assert.Contains("refused (MutationRejected", evaluator.DescribeTrace(verb: "trace")!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ACommittedTransactionInstallsOnce() {
+        var (host, evaluator, rules, latch) = Arrange(
+            rules: [R(name: "deal", gate: null, effects: new ActionEffect.Transaction(
+                Effects: [new TransactionStep.AddCell(State: "gold", Value: 5m), new TransactionStep.AddCell(State: "cards", Value: 2m), new TransactionStep.SetCell(State: "turn", Value: 1m)]
+            ))],
+            rows: [Slot(name: "gold", value: 0L), Slot(name: "cards", value: 0L), Slot(name: "turn", value: 0L)]
+        );
+
+        Assert.True(evaluator.Evaluate(rules: rules, latch: latch, tick: 1UL, stepTicks: 1UL));
+        Assert.Equal(5L, host.Cell(row: "gold"));
+        Assert.Equal(2L, host.Cell(row: "cards"));
+        Assert.Equal(1L, host.Cell(row: "turn"));
+        Assert.Equal(1, host.Installs);
+        Assert.Empty(evaluator.Diagnostics());
     }
 
     [Fact]

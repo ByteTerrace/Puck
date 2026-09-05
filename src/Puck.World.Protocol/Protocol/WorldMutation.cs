@@ -633,4 +633,11 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="SeatLook">The seat camera feel.</param>
     [MutationKind(ordinal: 80, section: WorldSection.PlayerDefaults)]
     public sealed record SetPlayerSeatLook(WorldPrincipal Principal, WorldSeatCameraFeel SeatLook) : WorldMutation(Principal);
+    /// <summary>Several mutations installed as one: composed in order against one candidate, validated once, journaled
+    /// once, and replayed as one — the carrier a rule's <c>transaction</c> effect commits through. Admission checks
+    /// every member on its own terms; a member that would be refused alone refuses the batch.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Mutations">The members, in application order.</param>
+    [MutationKind(ordinal: 81, section: WorldSection.State)]
+    public sealed record Batch(WorldPrincipal Principal, [property: System.Text.Json.Serialization.JsonConverter(typeof(WorldMutationListJsonConverter))] IReadOnlyList<WorldMutation> Mutations) : WorldMutation(Principal);
 }

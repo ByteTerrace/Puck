@@ -549,6 +549,9 @@ public sealed partial class WorldServer {
         }
 
         m_definition = candidate;
+        if (m_preflightMutations.Count > 0) {
+            m_preflightMutations.Peek().Add(item: mutation);
+        }
 
         return true;
     }

@@ -172,6 +172,7 @@ public sealed partial class WorldServer {
         WorldMutation.RemoveHudElement m => $"RemoveHudElement '{m.PanelId}'.'{m.ElementId}'",
         WorldMutation.SetHudDefaults => "SetHudDefaults",
         WorldMutation.TransformState => "TransformState",
+        WorldMutation.Batch m => $"Batch[{string.Join(separator: ", ", values: m.Mutations.Select(Describe))}]",
         WorldMutation.UpsertStateRow m => $"UpsertStateRow '{m.Row.Name}'",
         WorldMutation.RemoveStateRow m => $"RemoveStateRow '{m.Name}'",
         WorldMutation.UpsertStateCell m => $"UpsertStateCell '{m.Row}'.'{m.Key}'",

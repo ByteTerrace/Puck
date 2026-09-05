@@ -289,7 +289,8 @@ and an interior run is `slice`: the keyed token and everything after it, in orde
 integer literal, a `$cell:` indirection, `$each`, or an int `$bind:`; a missing
 dynamic key is a `TableKeyMissing` refusal, never a value. Every top-level
 state effect is its own boundary; only a `transaction` groups effects
-atomically. `$symmetry:<function>[:<argument>]:<row>`
+atomically, and it journals once (a `Batch` mutation whose replay composes its
+members in order), so three `boardCombine`s in one transaction are one entry. `$symmetry:<function>[:<argument>]:<row>`
 reads a cell holding a symmetry-lattice node (0..239) through `ring`, `antipode`,
 `canonicalRay`, `cycle:<steps>`, `reflect:<node|cell:<row>[.<key>]>`,
 `orthogonal:<node|cell:…>` (1/0), `innerProduct:<node|cell:…>` (−2..2; 1 is a

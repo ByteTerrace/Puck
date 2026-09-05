@@ -14,7 +14,19 @@ public sealed partial class WorldServer {
     // Whether a mutation recompiles the population's fixed-point derived state (kit table, kit indices, live bodies'
     // compiled tuning/actions, AND the analytic collider set). A screen/collision edit rebuilds the collider set so a
     // live screens or collision change takes effect on the next tick with no restart.
-    private static bool AffectsPopulation(WorldMutation mutation) => (mutation is
+    // A batch is classified by its members: it affects whatever any member affects.
+    private static bool AnyMember(WorldMutation mutation, Func<WorldMutation, bool> affects) {
+        if (mutation is not WorldMutation.Batch batch) {
+            return false;
+        }
+        foreach (var member in batch.Mutations) {
+            if (affects(member)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    private static bool AffectsPopulation(WorldMutation mutation) => AnyMember(mutation, AffectsPopulation) || (mutation is
         WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetDefaultSeatKit or
         WorldMutation.SetKitAssignment or WorldMutation.SetMotion or WorldMutation.SetSpawns or
         WorldMutation.SetCollision or
@@ -41,11 +53,11 @@ public sealed partial class WorldServer {
     // moves through OUTSIDE a whole-document rebuild (ApplyRebuild carries its own unconditional prepare, which
     // also covers a channel-table change by restaging the whole host), so a per-row structural diff gated on JUST
     // these two kinds is the whole trigger a live mutation needs — see IWorldAddonHost.TryPrepare's own remarks.
-    private static bool AffectsAddons(WorldMutation mutation) => (mutation is
+    private static bool AffectsAddons(WorldMutation mutation) => AnyMember(mutation, AffectsAddons) || (mutation is
         WorldMutation.UpsertAddon or WorldMutation.RemoveAddon);
     // Whether a mutation can grow the SDF program past the probed render envelope (screen slabs / creation stamps — an
     // UpsertCreation re-shapes every live placement of it, so it measures too).
-    private static bool AffectsRenderEnvelope(WorldMutation mutation) => (mutation is
+    private static bool AffectsRenderEnvelope(WorldMutation mutation) => AnyMember(mutation, AffectsRenderEnvelope) || (mutation is
         WorldMutation.UpsertScreen or WorldMutation.RemoveScreen or
         WorldMutation.UpsertCreation or WorldMutation.RemoveCreation or
         WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement or
@@ -57,7 +69,7 @@ public sealed partial class WorldServer {
     // Whether a mutation can change the SDF contact field: the collision tuning and every solid-bearing section
     // (screens, creations that reshape a stamp, placements). Coarse by section,
     // matching AffectsPopulation/AffectsRenderEnvelope.
-    private static bool AffectsSolidField(WorldMutation mutation) => (mutation is
+    private static bool AffectsSolidField(WorldMutation mutation) => AnyMember(mutation, AffectsSolidField) || (mutation is
         WorldMutation.SetCollision or
         WorldMutation.UpsertScreen or WorldMutation.RemoveScreen or
         WorldMutation.UpsertCreation or WorldMutation.RemoveCreation or
@@ -138,7 +150,7 @@ public sealed partial class WorldServer {
     }
     // Whether a mutation is DOCUMENT-DEFAULTS class (edits the next boot's wake state; live session levers own "now").
     // Everything else, cameras included, applies live on delivery.
-    private static bool IsDocumentDefaults(WorldMutation mutation) => (mutation is
+    private static bool IsDocumentDefaults(WorldMutation mutation) => AnyMember(mutation, IsDocumentDefaults) || (mutation is
         WorldMutation.SetRenderDefaults or WorldMutation.SetPopulationDefaults or WorldMutation.SetPopulationDistribution or WorldMutation.SetPopulationCensus or WorldMutation.SetHostDefaults);
     // An EXPLICIT write to a cell carrying StateAdvance or StateDynamics — a whole-row UpsertStateRow
     // (which re-bases the row's OWN slot trait AND every keyed cell's own trait, since it re-declares the whole
@@ -476,6 +488,7 @@ public sealed partial class WorldServer {
         // section.
         WorldMutation.UpsertStateRow or WorldMutation.RemoveStateRow or WorldMutation.UpsertStateCell or WorldMutation.RemoveStateCell or WorldMutation.Generate or WorldMutation.TransformState => WorldSection.State,
         WorldMutation.SetInputHold => WorldSection.InputHold,
+        WorldMutation.Batch => WorldSection.State,
         WorldMutation.UpsertWorldRule or WorldMutation.RemoveWorldRule => WorldSection.Rules,
         WorldMutation.UpsertGroupKind or WorldMutation.RemoveGroupKind or WorldMutation.FormGroup or WorldMutation.JoinGroup or WorldMutation.LeaveGroup or WorldMutation.KickMember
             or WorldMutation.OfferOwnership or WorldMutation.SettleOwnership => WorldSection.Groups,
@@ -746,6 +759,22 @@ public sealed partial class WorldServer {
                 candidate = (current with { PopulationRaw = m.Population });
 
                 return true;
+            // Members compose in order against the running candidate, each re-basing its own cell traits as it would
+            // alone, so a batch installs exactly the document its members would have reached one by one.
+            case WorldMutation.Batch batch: {
+                var folded = current;
+                for (var index = 0; index < batch.Mutations.Count; index++) {
+                    var member = batch.Mutations[index];
+                    if (!TryCompose(current: folded, mutation: member, tick: tick, instanceIdentity: instanceIdentity, candidate: out var next, reason: out reason, evictedKey: out evictedKey, patterns: patterns)) {
+                        candidate = current;
+                        return false;
+                    }
+                    folded = RebaseCellTraits(candidate: next, mutation: member, original: folded, tick: tick);
+                }
+                candidate = folded;
+
+                return true;
+            }
             // The field-scoped population and views edits compose against the row AS IT STANDS HERE — the pending
             // candidate — so two console verbs queued in one tick each keep the other's field.
             case WorldMutation.SetPopulationDistribution m:

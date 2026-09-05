@@ -219,6 +219,8 @@ public sealed partial class WorldServer : IWorldServerHost {
     private readonly RuleEvaluator m_evaluator;
     // The installed documents a preflight scope remembers, innermost last (IRuleHost.BeginPreflight/EndPreflight).
     private readonly Stack<WorldDefinition> m_preflightScopes = new();
+    // The mutations each open preflight scope composed, innermost last — what TryCommitPreflight installs as one Batch.
+    private readonly Stack<List<WorldMutation>> m_preflightMutations = new();
     // Reused carrier/key scratch for rule evaluation: left (and forEach keys) and right, both live during one
     // distance interaction.
     private readonly List<int> m_carrierScratchLeft = [];
