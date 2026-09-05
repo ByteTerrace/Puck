@@ -1120,28 +1120,51 @@ and static per-tick work, never a fixed-size buffer or a per-world tunable),
 so the fix is to widen them rather than cut a lane: `MaxRows` 128 → 256,
 `MaxWorkUnitsPerTick` 1,000,000 → 2,000,000.
 
-**Games are imported fragments of one composed world (owner decision).** Each
-game in the garden — chess, poker, dominoes, billiards, bowling — lives in its
-own world file that `puck.world.json` imports, rather than all five sharing one
-ever-growing document. `WorldDefinition.Imports` is the fan-in half of
-composition beside `basis`'s single-parent chain: an ordered list of fragment
-paths, each fully resolved (its own `basis`/`imports` included) and folded left
-to right, then layered under the importing file's own body. The reasoning
-this decision rests on: a single-parent basis chain cannot express "five
-independent slices of one document" without artificial ordering between
-unrelated games; imports can, because siblings are checked for collision
-rather than silently overridden — a same-key row, object member, or list two
-games both declare refuses by name unless `puck.world.json` itself restates
-the key, so an accidental collision between two games' content is caught at
-load rather than silently resolved by import order. `key` joined the
-row-identity vocabulary (`id`/`name`/`key`/`index`) alongside this, so a state
-row's `cells` — the vocabulary a game's own counters and tables lean on —
-refines by cell rather than replacing wholesale under a basis delta. Every
-shipped world and canary was composed under the old and new vocabulary and
-proved `JsonNode.DeepEquals`; none needed migration. `world.imports` reads the
-resolved stack back. The garden's own `puck.world.json` is not yet split by
-this primitive — that split is its own follow-on change, sequenced after the
-motion-row wave this document's own `garden/w3` section describes.
+**Games are imported fragments of one composed world (landed).** Each game in
+the garden — chess, poker, dominoes, billiards, bowling, and a 4x4x4 tic-tac-toe
+cube (`Box`-topology Qubic, the schema's own discrete-boards worked example) —
+lives in its own file under `src/Puck.World/Assets/worlds/games/`, imported by
+`puck.world.json` in that order, rather than all six sharing one ever-growing
+document. `WorldDefinition.Imports` is the fan-in half of composition beside
+`basis`'s single-parent chain: an ordered list of fragment paths, each fully
+resolved (its own `basis`/`imports` included) and folded left to right, then
+layered under the importing file's own body. The reasoning this decision rests
+on: a single-parent basis chain cannot express "six independent slices of one
+document" without artificial ordering between unrelated games; imports can,
+because siblings are checked for collision rather than silently overridden —
+a same-key row, object member, or list two games both declare refuses by name
+unless `puck.world.json` itself restates the key, so an accidental collision
+between two games' content is caught at load rather than silently resolved by
+import order. `key` joined the row-identity vocabulary (`id`/`name`/`key`/
+`index`) alongside this, so a state row's `cells` — the vocabulary a game's own
+counters and tables lean on — refines by cell rather than replacing wholesale
+under a basis delta. The shared substrate — channels, kits, bodies capacity,
+the tabletop placement and its plan seam, spawn points, the island, the
+population, hud/views, and everything no game's own content touches — stays in
+`puck.world.json` itself; `chessBoard` (the `state.lattices` topology the
+tabletop anchors) moved with chess, `pondBasin` stayed. `billiardsColors`
+(ball/tray AND pin/pinBand cells) is genuinely shared between billiards and
+bowling and stays substrate rather than forcing an arbitrary owner. `world.imports`
+reads the resolved stack back.
+
+The import fold concatenates each source's contribution as one contiguous run
+(the basis chain, then each import fully resolved in list order, then the
+importing file's own new keys, appended last) — so a keyed list drawn from a
+monolithic file whose own authoring order interleaved substrate and game
+content as each was built over time (the original document's placements ran
+dominoes, most of the substrate, billiards, bowling, a substrate/chess/substrate
+interleave, then the rest of chess) cannot reproduce that exact array order; no
+composition built from one contiguous run per source can. This was proven, not
+assumed: composing the pre-split file and the post-split tree (with the new
+sixth game's own rows/rules/lattice subtracted back out) and canonicalizing
+every keyed list by sorting it on its identity key — the same vocabulary the
+merge itself keys by — made them `JsonNode.DeepEquals`; nothing but tic-tac-toe's
+own addition differs. Reordering a hashed row changes what the hash folds even
+though no value moves, so the passive garden replay's own hash moves with the
+split — expected, and the doctrine that already covers a deliberate correction
+("determinism pins the mapping, not the values") covers a deliberate
+reorganization the same way: the replay stays self-consistent (rule-failure-free,
+MATCH) before and after, which is the guarantee, not a frozen number.
 
 ## After this arc
 

@@ -410,6 +410,15 @@ placements are the garden's proof fixture — see the
 for the mechanics and the [schema reference](../Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
 for the authored facet.
 
+Each garden game — chess, poker, dominoes, billiards, bowling, tic-tac-toe —
+lives in its own file under `Assets/worlds/games/`, imported by the garden's
+`puck.world.json` (`WorldDefinition.Imports`; see the
+[`puck-world` skill's documents reference](../../.claude/skills/puck-world/references/documents.md#document-composition-basis-and-imports)).
+The shared substrate — channels, kits, population capacity, the tabletop
+placement, spawn points, the island, hud/views, and everything no game's own
+content touches — stays in `puck.world.json` itself; `world.imports` reads the
+resolved stack back.
+
 A kit carrying a `carry` facet may pick up another kit's rigid body:
 `body.carry <carrier> <target>` begins it (within an authored reach and mass
 ceiling, both scaling with the carrier's own live `Scale`), `body.release
@@ -589,6 +598,27 @@ which is why a hand never authors its own `Placeholder` policy. `world.observe
 reference](../../.claude/skills/puck-world/references/console.md)) is the
 read-back that lets one session inspect both seats' disclosures without
 submitting as either.
+
+The garden also carries a 4x4x4 tic-tac-toe cube (Qubic), state only — the
+`Box`-topology worked example the schema's own discrete-boards section names.
+`tttCube` is a `Box` `state.lattices` topology (width/depth/layers all 4,
+64 cells); `tttBoard` is a plain `cellsOf: tttCube` int row (0 empty, 1/2 the
+two marks). A move is two console writes plus a request bump —
+`world.state.cell.set tttMoveCell $value <0..63>` then
+`world.state.cell.set tttMoveRequest $value 1 add` — resolved by
+`ttt-place-mark` (gated on the cell naming an empty board cell and no winner
+yet; `$cell:tttMoveCell:$value` is the dynamic-key indirection that turns the
+authored cell index into `tttBoard`'s own write address), which places the
+mark, advances `tttMoveCount`/`tttBoardVersion`, and toggles `tttActive`.
+`ttt-reject-out-of-range`/`ttt-reject-illegal` resync `tttMoveApplied` without
+touching the board when the request names an out-of-bounds or already-occupied
+cell, so a bad request never sticks. `ttt-check-win` (gated on
+`tttBoardVersion` having advanced) folds all 76 four-in-a-row lines — each a
+literal 64-bit cell mask, `(occupancyMask & lineMask) == lineMask` — through
+eight-line chunks (the 64-token expression ceiling bounds how many lines one
+expression ORs together) into `tttWinner` (0 none, 1 X, 2 O, 3 draw at 64
+moves). `world.state tttBoard`/`tttWinner` is the read-back; there is no
+dedicated verb, since the generic one already answers it.
 
 World-space creation text uses the document's optional `text` catalog. Every
 font row has a stable name, a path relative to the world document, a
