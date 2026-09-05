@@ -335,6 +335,7 @@ surface, including parameters, return values, and exceptions.
 | `SimplestRational` | Locate the minimal-denominator fraction strictly inside an exact interval, by Stern–Brocot descent. |
 | `DiscreteMeasure` / `CompiledDiscreteMeasure64` / `DiscreteMeasureCompilationFailure` | Allocate an exact integer amount across integer intervals, then compile supported measures into a bounded, allocation-free form for frequently run code. |
 | `NumberTheoryFunctions` / `BigIntegerFunctions` | Provide prime enumeration, modular roots and inverses, primality, and factorization when the calculation needs arbitrary-width integers. |
+| `Combinatorics` | Count subsets and permutations exactly, and give them dense integer identities; see [combination and permutation ranks](#combination-and-permutation-ranks). |
 | `MonotonicPartitioner` / `MonotonicPartitionerMetrics` | Route a value to one of 1–1024 buckets while minimizing movement when another bucket is added, and report when that value moves. |
 | `CyclicRotation` / `SymmetryLattice` / `SymmetryWord` | Provide a bit-exact rotation loop (the thirty-step table, or any order's root of unity), the fixed, symmetric node set behind it in eight dimensions with its exact root pairing and ring walks, and a word of its reflections baked to a permutation with a derived order and a constant-time counted power. |
 | `Fnv1aHash` | Accumulate an explicit, stable 64-bit digest for replay and determinism checks. |
@@ -374,6 +375,72 @@ The internal Fermat masks used by bit permutations share these repetition
 primitives. For 128-bit words, proper blocks repeat within a 64-bit half first,
 then that half is copied. This keeps wide division and multiplication out of
 mask construction and allows constant masks to fold into constant loads.
+
+### Combination and permutation ranks
+
+`Combinatorics` assigns consecutive `ulong` identities to finite subsets and
+permutations. A combination forgets selection order; a permutation preserves
+it. Supply zero-based ordinals, with a stable mapping from your domain's keys.
+The library does not sort keys or infer that mapping.
+
+```csharp
+ReadOnlySpan<int> hand = [0, 1, 2, 3, 5];
+ulong hands = Combinatorics.Binomial(52, 5);             // 2,598,960
+ulong identity = Combinatorics.CombinationRank(52, hand); // 1
+Span<int> restored = stackalloc int[5];
+Combinatorics.CombinationUnrank(52, identity, restored);
+int largest = Combinatorics.CombinationElement(52, 5, identity, 4); // 5
+
+ReadOnlySpan<int> order = [2, 0, 1];
+ulong permutation = Combinatorics.PermutationRank(order); // 4 of 3! = 6
+Span<int> restoredOrder = stackalloc int[3];
+Combinatorics.PermutationUnrank(permutation, restoredOrder);
+```
+
+Combination input must be strictly increasing, with each element below `n`.
+Ranks use **colexicographic order**: compare the largest differing element
+first. Thus the pairs start `[0,1], [0,2], [1,2], [0,3]`. For elements `a[i]`,
+the rank is `Σ Binomial(a[i], i + 1)`. Increasing `n` preserves a subset's rank
+as long as the complete space still fits. This follows the combinatorial
+number system described by
+[Derrick Stolee](https://computationalcombinatorics.wordpress.com/2012/09/10/ranking-and-unranking-of-combinations-and-permutations/).
+Poker hand identity means the particular set of cards, not its poker strength
+or an equivalence class under suit changes.
+
+Permutation input contains every ordinal in `[0, length)` exactly once.
+Ranks use ordinary **lexicographic order**, with each Lehmer digit counting
+the still-available smaller ordinals. The digits have factorial place values;
+[Keith Schwarz's factoradic explanation](https://www.keithschwarz.com/interesting/code/factoradic-permutation/FactoradicPermutation)
+develops that correspondence. Arbitrary keyed rows must first be mapped to
+these ordinals by their consumer.
+
+All public results are exact. `Binomial(n, k)` accepts nonnegative `int`
+arguments, returns zero for `k > n`, and throws on `ulong` overflow.
+Combination encoding and decoding require the **entire** `Binomial(n, k)`
+space to fit, even when an individual rank would fit. `Factorial` fits through
+20!, and permutation operations accept lengths 0 through 20. Larger complete
+permutation spaces require a wider encoding than these APIs provide. Empty
+combinations and permutations each form a one-element space with rank zero.
+Invalid ranks are refused before writing any output; destination length
+determines how many elements to decode.
+
+Successful calls allocate no managed memory. Binomial arithmetic stays in
+64 bits when its intermediate product fits and uses an exact 128-bit
+intermediate otherwise. Combination unranking updates binomial coefficients
+by recurrence for universes through 128 elements and uses binary search for
+larger universes, so a large universe does not require a linear scan.
+`CombinationElement` decodes from the
+largest position down to the requested one; it is useful for a single query,
+while `CombinationUnrank` avoids repeating that work when all elements are
+needed. Permutation ranking uses a bit set and population counts.
+
+The registered laws compare ordering against independent enumeration, check
+large counts with `BigInteger`, and exercise invalid inputs and unchanged
+destinations on failure. The Deep tier checks every five-card hand.
+`CombinationQueries` and `PermutationQueries` in the
+[Maths benchmark harness](../Puck.Cli/README.md#puck-bench--the-puckmaths-microscope)
+measure representative small and wide spaces, including an independent
+quadratic permutation-ranking baseline.
 
 ---
 

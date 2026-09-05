@@ -1353,10 +1353,12 @@ call (`pairX(pair(x, y))` is `x`), a domain fault fails the expression the way
 an overflow does, and the compile-time kind proof admits each family only in
 the kind it means (`sin`/`cos` fixed, `sqrt` both, the rest int).
 `ModularTransform` stays a C# concern: a quasicrystal inflation would arrive as
-a generator draw source, not as an author-facing matrix. Two families wait on
-`Puck.Maths` members that do not exist yet: the combinatorial number system
-(binomials and colex rank, poker's hand identity) and factoradic permutation
-codes — the latter over a row, so its home is a reduction operand, not a call.
+a generator draw source, not as an author-facing matrix. Two families await
+consumer integration over [Puck.Maths `Combinatorics`](../src/Puck.Maths/README.md#combination-and-permutation-ranks):
+the combinatorial number system (binomials and colex rank, poker's hand
+identity) and factoradic permutation codes — the latter over a row, so its
+home is a reduction operand, not a call. The Maths APIs carry exact `ulong`
+ranks; complete permutation spaces fit through 20 elements.
 
 **Hex boards have grid parity, on one convention.** A hex topology is
 `HexagonalIndex` made spatial: cell `i` is index `i` (rings outward from the

@@ -13,7 +13,7 @@ adversarial review's job, not this file's.
 
 | leg kind | flavor | legs | statements |
 | --- | --- | --- | --- |
-| classical | — | 797 | 518 |
+| classical | — | 800 | 521 |
 | presented-twin | — | 9 | 8 |
 | in-tree-independent | — | 31 | 25 |
 | shared-substrate | fused-substrate | 36 | 34 |
@@ -23,15 +23,15 @@ adversarial review's job, not this file's.
 | shared-substrate | intra-presented | 82 | 47 |
 | shared-substrate | shared-upstream | 22 | 15 |
 | relative-canary | — | 18 | 17 |
-| structural | — | 1163 | 578 |
-| **total** | | **2248** | **731** |
+| structural | — | 1164 | 579 |
+| **total** | | **2252** | **735** |
 
 ## Counts by surface
 
 | surface | statements | agreement legs | structural legs | statements with no independent leg |
 | --- | --- | --- | --- | --- |
-| law: Deep | 111 | 147 | 123 | 21 |
-| law: Default | 591 | 867 | 1039 | 176 |
+| law: Deep | 112 | 148 | 123 | 21 |
+| law: Default | 594 | 869 | 1040 | 177 |
 | law: Exhaustive | 7 | 23 | 11 | 1 |
 | law: Smoke | 22 | 30 | 8 | 2 |
 
@@ -353,6 +353,7 @@ adversarial review's job, not this file's.
 | deep.binary-field-irreducible-census | law: Deep | structural | — | the five catalog moduli and the five maximally reducible t^degree + 1 probes, exactly as binary-field.irreducibility-vs-trial-division states them, under the same ENVELOPE: the kernel's closing `power == indeterminate` test is unreachable as a decision, and 65535 further moduli here do not reach it either. MIRROR of that case: at those degrees Deep adds nothing, and the census and trial-division legs above are what this row is for | — | — | — |
 | deep.binary-field-multiplicative-group | law: Deep | classical | — | the whole multiplicative-group statement — Inverse, Divide, SquareRoot and Exponentiate at all five catalog fields — over the Deep tier's 4096-draw batch and enlarged frontier block | the same BigInteger certificates, and the extended-Euclid and sequential-fold oracles EXTENDED from two catalog degrees to five. MIRROR of binary-field.multiplicative-group-vs-oracle at strictly stronger operands AND with the second derivation carried to every degree: at 32, 64 and 128 the Default case has the certificate alone, and here Oracles.BinaryFieldInverse re-derives the answer by a route that never exponentiates. ENVELOPE: the lane-vector streams have no exhaustive edge cross product — Tier.Deep grows their random batch and their frontier block only — so the operand side of this mirror is stronger by VOLUME rather than by exhaustion; deep.binary-field-degree8-exhaustive is where the sampling comes off entirely | — | — |
 | deep.binary-field-multiplicative-group | law: Deep | structural | — | the refusals, the zero-exponent identity and the group-order identities, all as binary-field.multiplicative-group-vs-oracle states them, the refusal ladder again as its own fixed claim. MIRROR of that case at strictly stronger operands | — | — | — |
+| deep.combinatorics-poker | law: Deep | classical | — | Every five-card hand has its exact dense colex identity and decodes to that hand | Five nested increasing ordinal loops enumerate all 2,598,960 hands in colex order without binomial arithmetic | — | — |
 | deep.complex-div-vs-oracle | law: Deep | classical | — | FixedComplex.op_Division over the exhaustive four-operand edge cross product, which is what puts BOTH division branches under every gate combination | Oracles.ComplexQuotient → Oracles.RoundDyadicRatio, one ties-to-even rounding of each exact rational at shift 16. MIRROR of complex.div-vs-oracle at strictly stronger operands | — | — |
 | deep.complex-div-vs-oracle | law: Deep | structural | — | the divisor substitution is identical on both sides: Subjects.ComplexDivisor maps the additive identity onto the multiplicative identity. MIRROR of complex.div-vs-oracle at strictly stronger operands | — | — | — |
 | deep.complex-mul-vs-oracle | law: Deep | classical | — | FixedComplex.op_Multiply over the exhaustive four-operand edge cross product | Oracles.QuadraticMultiply at (0, −1) — the Q48 expression in BigInteger, one Oracles.RoundDyadic at shift 32. MIRROR of complex.mul-vs-oracle at strictly stronger operands | — | — |
@@ -575,6 +576,9 @@ adversarial review's job, not this file's.
 | fft.round-trip-bound-deep | law: Deep | structural | — | MIRROR of fft.round-trip-bound at strictly stronger operands — lengths 512 through 4096 rather than 1 through 256, with a wider measured bound (96 ULPs; the calibration run's worst case at this length range was 62 ULPs at length 4096) because more butterfly stages accumulate more per-stage rounding. | — | — | — |
 | fft.self-referential-bit-identity | law: Default | structural | — | two Forward runs and two Inverse runs on identical input, in this process, return bit-identical results, at lengths 1 through 256. Rule 4's determinism contract: same input, same code version, bit-identical output on every run — this is the same-process purity half of that promise; it observes hidden mutable state or an operand-independent result and nothing else, and is never a pinned historical value (a correction to the kernel is expected to move the ACTUAL bits, never the fact that two runs agree with each other). | — | — | — |
 | integer.ceiling-divide-vs-oracle | law: Default | classical | — | BinaryIntegerFunctions.CeilingDivide<long> — T.DivRem plus the XOR-sign carry, deliberately not routed through FloorDivide | Subjects.CeilingDivideOracle — Oracles.FloorQuotient raised by one iff quotient·divisor != a; a different derivation route, both sides exact | — | — |
+| integer.combinatorics-counts | law: Default | classical | — | Exact ulong combination and permutation counts, including overflow | BigInteger factorial quotients on a bounded integer basis | — | — |
+| integer.combinatorics-order | law: Default | classical | — | Dense colex combination and lexicographic permutation ranks and inverses | Enumerated subset bitmasks through n=10 and lexicographic successor enumeration through n=8; factorial-quotient colex and inversion-count Lehmer witnesses at wide boundaries | — | — |
+| integer.combinatorics-refusals | law: Default | structural | — | Invalid sizes, ranks, elements, duplicates and ordering are rejected with documented parameter names; failed unranking leaves destinations unchanged | — | — | — |
 | integer.encoded-operations | law: Default | classical | — | Direct encoded transformations and component queries, checked overflow, and pair numbering across byte, ushort, uint, ulong, nuint and UInt128; hex swap, signed scale and diagonal translation across the admitted disk. | BigInteger bracketed square-shell lookup followed by coordinate arithmetic and two-segment perimeter counting; hex uses independent BigInteger coordinate lookup and six-edge solving. ENVELOPE: shared integer-hexagonal-index domain, full-width sampled carriers, plus hex indices below 3169 and factors from -8 through 8. | — | — |
 | integer.encoded-operations-boundaries | law: Default | classical | — | Complete byte-index basis with scales and increments 0, 1, 2, 3, 15, 16 and 255; hex ring-sector boundaries through MaxRadius, signed extreme factors and origin; component-only formatting at signed int extremes. | Independent BigInteger coordinate arithmetic and encoders used by integer.encoded-operations, and exact component-format expectations. ENVELOPE: explicit byte basis, representative hex radii and sector seams, and 25 formatting combinations. | — | — |
 | integer.fermat-mask-bit-oracle | law: Default | classical | — | The internal NthFermatMask<T> kernel, invoked directly by a reflection-created delegate for every legal exponent in all twelve built-in fixed-width integer carriers, including both 128-bit signs and the final half-word mask. | Oracles.RepeatPatternBits assembles individual destination bits from a block of ones in BigInteger. It shares no Fermat quotient, replication multiplication, machine-word decomposition or subject helper. ENVELOPE: the internal kernel requires valid exponents; invalid indices and custom carriers are outside this statement. | — | — |
@@ -2527,6 +2531,7 @@ EXCLUDED and live in the canary register above.
 | fft.round-trip-bound | law: Default | 2 |
 | fft.round-trip-bound-deep | law: Deep | 1 |
 | fft.self-referential-bit-identity | law: Default | 1 |
+| integer.combinatorics-refusals | law: Default | 1 |
 | integer.hexagonal-index-continuity | law: Default | 1 |
 | integer.hilbert-curve-refuses-outside-its-domain | law: Default | 2 |
 | integer.ray-cycle-factors-are-not-writable-by-consumers | law: Default | 1 |

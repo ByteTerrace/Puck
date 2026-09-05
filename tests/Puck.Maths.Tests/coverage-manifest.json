@@ -2591,6 +2591,64 @@
       ]
     },
     {
+      "Id": "Puck.Maths.Combinatorics.Binomial(System.Int32,System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.combinatorics-counts",
+        "integer.combinatorics-refusals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Combinatorics.CombinationElement(System.Int32,System.Int32,System.UInt64,System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.combinatorics-order",
+        "integer.combinatorics-refusals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Combinatorics.CombinationRank(System.Int32,System.ReadOnlySpan<System.Int32>)",
+      "State": "covered",
+      "CoveredBy": [
+        "deep.combinatorics-poker",
+        "integer.combinatorics-order",
+        "integer.combinatorics-refusals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Combinatorics.CombinationUnrank(System.Int32,System.UInt64,System.Span<System.Int32>)",
+      "State": "covered",
+      "CoveredBy": [
+        "deep.combinatorics-poker",
+        "integer.combinatorics-order",
+        "integer.combinatorics-refusals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Combinatorics.Factorial(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.combinatorics-counts",
+        "integer.combinatorics-refusals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Combinatorics.PermutationRank(System.ReadOnlySpan<System.Int32>)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.combinatorics-order",
+        "integer.combinatorics-refusals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Combinatorics.PermutationUnrank(System.UInt64,System.Span<System.Int32>)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.combinatorics-order",
+        "integer.combinatorics-refusals"
+      ]
+    },
+    {
       "Id": "Puck.Maths.CompiledCurvatureSpline.Closed",
       "State": "covered",
       "CoveredBy": [
