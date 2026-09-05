@@ -17,10 +17,11 @@ project supplies only the AGB hardware itself.
 - *Direct boot or BIOS boot:* a cartridge can start at
   `AdvancedGamingBrickMachine.CartridgeEntryPoint` (0x08000000) with the CPU's
   registers seeded to their post-BIOS state, or execute the real boot
-  sequence against a registered `IBios` — a legally clean, open-source
-  `ReplacementBios` by default, or a real dumped image a caller supplies.
-- *Header-driven cartridge detection with a documented override table:*
-  `AgbCartridge` scans the ROM header's save-type strings; `AgbGameOverrides`
+  sequence against a caller-supplied `IBios` image through the lower-level
+  machine API. The screen-machine host always direct-boots; its default BIOS
+  is a zeroed stub.
+- *Cartridge detection with a documented override table:*
+  `AgbCartridge` scans the ROM for save-type strings; `AgbGameOverrides`
   corrects the known-broken minority (anti-piracy decoy strings,
   EEPROM-backed carts that bait with an SRAM string) by the 4-character game
   code, and also keys GPIO sensor presence (rumble, solar, tilt) off the same
@@ -49,8 +50,8 @@ flowchart LR
 `IScreenMachineEngine` implementation a host resolves by id. Its options
 string selects the BIOS: no option or `direct` boots against a zeroed
 replacement image at the cartridge entry point, and `bios=<path>` loads an
-exact `ReplacementBios.ImageSize`-byte (16 KiB) image from disk and executes
-the real boot sequence.
+exact `ReplacementBios.ImageSize`-byte (16 KiB) image from disk for BIOS calls
+during cartridge execution. Both host options direct-boot the cartridge.
 
 ## 🚀 Quick start
 
@@ -83,8 +84,8 @@ test-only subsystem — a tracing bus, a flat test bus — before the standard
 | Bus | `AgbBus`, `IAgbBus`, `BusAccessType`, `AgbScheduler` | The cycle-scheduled system bus every subsystem reads and writes through. |
 | Video/audio | `AgbPpu`, `IAgbPpu`, `AgbApu`, `IAgbApu`, `ApuPulseChannel`, `ApuWaveChannel`, `ApuNoiseChannel` | The PPU and four-channel APU. |
 | Timing/interrupts | `AgbTimerController`, `IAgbTimerController`, `AgbInterruptController`, `IAgbInterruptController`, `InterruptSource`, `AgbDmaController`, `IAgbDmaController` | Timers, the interrupt controller, and DMA. |
-| Cartridge | `AgbCartridge`, `CartridgeBackup`, `AgbGameOverride`, `AgbGameOverrides` | ROM-header-driven save-type/RTC/GPIO detection and its override table. |
-| BIOS | `IBios`, `ReplacementBios`, `AgbBiosProfile` | The bootstrap contract, the open-source default image, and content-hash BIOS identification. |
+| Cartridge | `AgbCartridge`, `CartridgeBackup`, `AgbGameOverride`, `AgbGameOverrides` | ROM signature scanning and header game-code overrides for save/RTC/GPIO detection. |
+| BIOS | `IBios`, `ReplacementBios`, `AgbBiosProfile` | The BIOS image contract, owned image storage, and content-hash BIOS identification. |
 | Link | `AgbLinkCable`, `AgbLinkSession`, `AgbLinkResumeToken`, `IAgbLink`, `NullAgbLink`, `AgbSerialController`, `IAgbSerialController` | The deterministic, instruction-atomic multi-machine link cable. |
 | Hosting | `AdvancedMachineHost`, `AdvancedGamingBrickEngine`, `AdvancedGamingBrickCore`, `AdvancedPad`, `AdvancedGamingBrickLookahead` | The `IScreenMachineEngine` adapter over `Puck.GamingBricks`'s queued-host substrate. |
 
