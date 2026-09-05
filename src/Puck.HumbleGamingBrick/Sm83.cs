@@ -41,9 +41,8 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
     private readonly Key1Component m_key1;
 
     // Mutable so a LIVE device swap re-gates the live model reads: ExecuteStop (color arms a KEY1 speed switch,
-    // monochrome halts) and the I/O write conflicts, whose phases differ by family and by Color revision. The boot
-    // register handoff (SeedPostBootState, incl. the AGB inc-b probe) stays construction-only.
-    private bool m_samplesPaletteEarly;
+    // monochrome halts). The boot register handoff (SeedPostBootState, incl. the AGB inc-b probe) stays
+    // construction-only.
     private bool m_supportsColor;
     // Cached so every 16-bit increment/decrement site tests one field instead of re-deriving the model question; a
     // Color machine never reaches NoteOamCorruption's body, let alone the bus/PPU call behind it.
@@ -93,7 +92,6 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         m_interrupts = interrupts;
         m_joypad = joypad;
         m_key1 = key1;
-        m_samplesPaletteEarly = configuration.Model.SamplesPaletteWriteEarly();
         m_supportsColor = configuration.Model.SupportsColor();
         m_hasOamCorruptionBug = configuration.Model.HasOamCorruptionBug();
 
@@ -317,7 +315,6 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
     }
     /// <inheritdoc/>
     public void ApplyModel(ConsoleModel model) {
-        m_samplesPaletteEarly = model.SamplesPaletteWriteEarly();
         m_supportsColor = model.SupportsColor();
         m_hasOamCorruptionBug = model.HasOamCorruptionBug();
     }
@@ -328,6 +325,11 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
     // applies from ReadByte/WriteByte, independent of this one.
     private void NoteOamCorruption(ushort preValue) {
         if (m_hasOamCorruptionBug) {
+            // The increment/decrement unit drives the address bus at the START of its own machine cycle, so the row
+            // the object scan is on is sampled there: the deferred cycles of the previous access settle first, like
+            // every other read of component state that is not itself a bus access. A direct read's own trigger backs
+            // up from its latch instant to the same phase (Ppu.NoteBlockedOamRead).
+            FlushBusCycles();
             m_bus.NoteRegisterAddressBus(address: preValue);
         }
     }
@@ -452,7 +454,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
             : (byte)0x7C);
     }
     private void SeedMonochromeHandoff(ConsoleModel model) {
-        if (model == ConsoleModel.Dmg0) {
+        if (model.HasRearrangedMonochromeBootRom()) {
             m_a = 0x01;
             m_f = 0x00;
             m_b = 0xFF;
@@ -465,7 +467,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
             return;
         }
 
-        m_a = ((model == ConsoleModel.Mgb)
+        m_a = (model.HasRevisedBootIdentity()
             ? (byte)0xFF
             : (byte)0x01);
         m_f = 0xB0;
@@ -477,7 +479,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         m_l = 0x4D;
     }
     private void SeedSuperHandoff(ConsoleModel model) {
-        m_a = ((model == ConsoleModel.Sgb2)
+        m_a = (model.HasRevisedBootIdentity()
             ? (byte)0xFF
             : (byte)0x01);
         m_f = 0x00;

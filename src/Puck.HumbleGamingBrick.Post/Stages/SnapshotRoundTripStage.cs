@@ -24,8 +24,8 @@ internal sealed class SnapshotRoundTripStage : IPostStage<PostContext> {
     // registration order. Update this roster (and bump MachineIdentity.CurrentVersion) in the SAME change that adds,
     // removes, or reorders a registration — that is exactly the discipline a stale version number silently broke once.
     private static readonly string[] ExpectedSectionRoster = [
-        "clock", "ModelState", "SystemMemory", "InterruptController", "TimerComponent", "JoypadComponent",
-        "Key1Component", "SerialComponent", "InfraredPort", "ApuComponent", "AudioOutputComponent",
+        "clock", "ModelState", "DmgCompatibilityState", "SystemMemory", "InterruptController", "TimerComponent",
+        "JoypadComponent", "Key1Component", "SerialComponent", "InfraredPort", "ApuComponent", "AudioOutputComponent",
         "TiltSensorComponent", "CartridgeSlot", "OamDmaController", "Framebuffer", "Ppu", "HdmaController",
         "SystemBus", "Sm83",
     ];

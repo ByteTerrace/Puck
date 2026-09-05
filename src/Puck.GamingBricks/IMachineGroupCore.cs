@@ -24,7 +24,9 @@ public interface IMachineGroupCore : ITimeTravelMachineCore<MachineLinkPads>, ID
     /// <summary>Gets the number of members the medium connects.</summary>
     int MemberCount { get; }
     /// <summary>Gets a fingerprint folding every byte the medium has carried, in order — the pipe-assertable traffic
-    /// signal a replay compares. It is host state, not emulated state, so it keeps climbing across a rewind.</summary>
+    /// signal a replay compares. It is part of the group's own state image (<see cref="CompletedTransfers"/> beside
+    /// it), so a rewind restores it to the value it held at the landed instant, exactly like a member's own
+    /// state.</summary>
     ulong TrafficFingerprint { get; }
 
     /// <summary>Advancing a group cannot fork a lookahead: a lookahead would have to fork every member and the medium

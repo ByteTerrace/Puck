@@ -34,6 +34,13 @@ internal static class BootRomProgram {
     private const ushort MarkTileData = 0x8010;
     private const ushort MarkTileMapEntry = 0x9909;
     private const ushort UnmapAddress = 0x00FE;
+    private const ushort WaveRamStart = 0xFF30;
+    private const byte WaveRamLength = 16;
+    // Both button-group selection bits high.
+    private const byte JoypadDeselected = 0x30;
+    // The staged scratch runs from this port through 0xFF8F; the epilogue clears everything above it first, then these
+    // ports once the handoff registers have been read out of them.
+    private const byte ScratchStagedEnd = 0x89;
 
     // The scroll the mark falls in over, one step per frame.
     private const byte ScrollSteps = 32;
@@ -65,6 +72,7 @@ internal static class BootRomProgram {
 
         EmitVideoSetup(
             emitter: emitter,
+            layout: layout,
             mark: mark
         );
 
@@ -138,19 +146,28 @@ internal static class BootRomProgram {
             : ((ushort)0x0000)));
     }
 
-    // Parks the coincidence comparison off-screen, draws the mark, whitens the color palettes a color cartridge gets,
-    // and lights the LCD. Every video-memory write happens before the LCD comes on, so none of it can be locked out.
-    private static void EmitVideoSetup(Sm83Emitter emitter, int mark) {
+    // Parks the coincidence comparison off-screen, seeds the audio and joypad registers the revision hands off, draws
+    // the mark, whitens the color palettes a color cartridge gets, and lights the LCD. Every video-memory write happens
+    // before the LCD comes on, so none of it can be locked out, and every write here is prologue: the divider is reset
+    // afterwards, so none of it reaches the handoff counter.
+    private static void EmitVideoSetup(Sm83Emitter emitter, BootRomLayout layout, int mark) {
         // A call before the stack pointer is set would push over the interrupt-enable register; the handoff sets the
         // same value again, so this is the boot program's own stack rather than part of the handoff.
         emitter.LoadStackPointer(value: 0xFFFE);
 
-        // No scanline ever equals 0xFF, so the coincidence latch stays clear for the whole boot and the handoff STAT
-        // reads with its coincidence bit clear, exactly as the seeded handoff does.
+        // The comparison register is parked off-screen for the boot; the handoff writes the value the cartridge reads.
         emitter.LoadAImmediate(value: 0xFF);
         emitter.StoreAToHighPage(port: 0x45);
         emitter.LoadAImmediate(value: 0xFC);
         emitter.StoreAToHighPage(port: 0x47);
+
+        if (layout.Model.SeedsWaveRamOnBoot()) {
+            EmitWaveRamFill(emitter: emitter);
+        }
+
+        if (layout.Model.DeselectsJoypadOnBoot()) {
+            EmitJoypadDeselect(emitter: emitter);
+        }
 
         emitter.LoadImmediate(pair: Reg16.Hl, value: MarkTileData);
         emitter.LoadImmediateAddressOf(pair: Reg16.De, label: mark);
@@ -174,6 +191,58 @@ internal static class BootRomProgram {
         emitter.Load(
             destination: Reg8.Memory,
             source: Reg8.A
+        );
+    }
+    // Writes the alternating 0x00/0xFF pattern the Color boot ROMs leave in wave RAM. The wave channel is silent for
+    // the whole boot, so every byte lands at its own address rather than following a live sample position.
+    private static void EmitWaveRamFill(Sm83Emitter emitter) {
+        var pair = emitter.NewLabel();
+
+        emitter.LoadImmediate(
+            pair: Reg16.Hl,
+            value: WaveRamStart
+        );
+        emitter.LoadImmediate(
+            destination: Reg8.C,
+            value: (WaveRamLength / 2)
+        );
+        emitter.MarkLabel(label: pair);
+        emitter.XorA();
+        emitter.StoreAToHlIncrement();
+        emitter.LoadAImmediate(value: 0xFF);
+        emitter.StoreAToHlIncrement();
+        emitter.Decrement(register: Reg8.C);
+        emitter.JumpRelative(
+            condition: Condition.NotZero,
+            label: pair
+        );
+    }
+    // Deselects both button groups, which is what the joypad register reads back as on the revisions whose boot ROM
+    // leaves it that way.
+    private static void EmitJoypadDeselect(Sm83Emitter emitter) {
+        emitter.LoadAImmediate(value: JoypadDeselected);
+        emitter.StoreAToHighPage(port: 0x00);
+    }
+    // Clears high RAM from a port to the last byte below the interrupt-enable register, so the cartridge wakes to the
+    // cleared page the seeded handoff carries rather than to the boot program's stack residue and staged scratch.
+    private static void EmitClearHighRam(Sm83Emitter emitter, byte start) {
+        var clear = emitter.NewLabel();
+
+        emitter.XorA();
+        emitter.LoadImmediate(
+            pair: Reg16.Hl,
+            value: ((ushort)(0xFF00 | start))
+        );
+        emitter.LoadImmediate(
+            destination: Reg8.C,
+            value: ((byte)(0xFF - start))
+        );
+        emitter.MarkLabel(label: clear);
+        emitter.StoreAToHlIncrement();
+        emitter.Decrement(register: Reg8.C);
+        emitter.JumpRelative(
+            condition: Condition.NotZero,
+            label: clear
         );
     }
     // Refuses a cartridge whose logo or header checksum does not check out, the way the hardware does: the machine
@@ -620,6 +689,21 @@ internal static class BootRomProgram {
     private static void EmitHandoff(Sm83Emitter emitter, BootRomLayout layout, int registerTable) {
         var write = emitter.NewLabel();
 
+        // The cartridge wakes to a cleared high page. The Color program stages its computed bytes at the bottom of that
+        // page and calls, so it clears everything above the staged bytes here and the staged bytes themselves once the
+        // register file has read them. A monochrome program stages nothing and only pushes when it carries the delay
+        // routine, so its whole residue is one return address below the stack pointer.
+        if (layout.SupportsColor) {
+            EmitClearHighRam(
+                emitter: emitter,
+                start: ScratchStagedEnd
+            );
+        } else if (layout.TimesFromHeader) {
+            emitter.XorA();
+            emitter.StoreAToHighPage(port: 0xFC);
+            emitter.StoreAToHighPage(port: 0xFD);
+        }
+
         emitter.LoadImmediateAddressOf(
             pair: Reg16.Hl,
             label: registerTable
@@ -654,14 +738,21 @@ internal static class BootRomProgram {
         );
 
         // Nothing past this point may disturb the flags, so only immediate loads and high-page stores are left. A
-        // layout that hands off on the first line restarts the LCD here, as late as it can, and the comparison register
-        // lands after that restart so the coincidence latch keeps the clear value the parked register gave it.
+        // layout that hands off on the first line restarts the LCD here, as late as it can, and then parks the
+        // comparison register on zero, which the picture processor re-latches against the first line every dot.
         if (!layout.TimesLcdEnable) {
             EmitLcdRestart(emitter: emitter);
         }
 
         emitter.LoadAImmediate(value: 0x00);
         emitter.StoreAToHighPage(port: 0x45);
+
+        if (layout.SupportsColor) {
+            for (var port = ScratchCounter; (port < ScratchStagedEnd); ++port) {
+                emitter.StoreAToHighPage(port: port);
+            }
+        }
+
         emitter.LoadAImmediate(value: HandoffAccumulator(layout: layout));
         emitter.JumpAbsolute(address: UnmapAddress);
     }

@@ -15,17 +15,21 @@ public interface ISystemBus {
     /// <param name="address">The 16-bit address to write.</param>
     /// <param name="value">The byte to write.</param>
     void WriteByte(ushort address, byte value);
-    /// <summary>Reads the byte an I/O register currently holds without issuing a bus access. The CPU needs it to
-    /// resolve a register whose write settles through an intermediate value; that settling is one transition inside a
-    /// single access, not an access of its own, so it never reaches the pins.</summary>
-    /// <param name="address">The 16-bit register address to peek.</param>
-    /// <returns>The byte the register holds.</returns>
-    byte PeekIoRegister(ushort address);
-    /// <summary>Applies the intermediate value an I/O register settles through part-way into the machine cycle that is
-    /// writing it. Not a bus access: an implementation with no I/O registers ignores it.</summary>
+    /// <summary>Records a write to one of the display's own registers as in flight — the register it addresses, the
+    /// value the register holds, and the value arriving — and reports where inside the writing machine cycle the
+    /// display commits it. The record is what lets the display answer for itself: the CPU no longer decides what a
+    /// half-written register looks like, it only says what it is writing and when the pins present it.</summary>
     /// <param name="address">The 16-bit register address.</param>
-    /// <param name="value">The value the register presents for the settling T-cycle.</param>
-    void SettleIoWrite(ushort address, byte value);
+    /// <param name="value">The value arriving at the register.</param>
+    /// <param name="settles">Receives whether the register spends the T-cycle before its commit in transition, with
+    /// the held and arriving values both on its lines.</param>
+    /// <returns>The T-cycles the commit is displaced from the machine cycle's drive instant: negative commits early,
+    /// positive late, zero on the pins' own instant.</returns>
+    int RecordDisplayWrite(ushort address, byte value, out bool settles);
+    /// <summary>Opens the recorded write's settling T-cycle. Until the commit, every display consumer that samples
+    /// that register reads the transition rather than either value. Not a bus access: an implementation with no
+    /// display ignores it.</summary>
+    void OpenDisplayWriteSettle();
     /// <summary>Notes the program counter at the start of the CPU's CURRENT instruction dispatch — the debug watchpoint
     /// PC witness. The bus has no other way to know which instruction is making an access (its own <c>ReadByte</c>/
     /// <c>WriteByte</c> only ever see an address), so the CPU calls this once per <c>StepInstruction</c>, before any

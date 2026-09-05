@@ -20,7 +20,7 @@ namespace Puck.HumbleGamingBrick;
 public readonly record struct MachineIdentity(int Version, int Model, ulong BootRomHash, ulong RomHash, int RomLength) {
     /// <summary>The current snapshot format version. Increment it whenever the serialized field layout changes so an
     /// incompatible snapshot is rejected rather than misread.</summary>
-    public const int CurrentVersion = 6;
+    public const int CurrentVersion = 7;
 
     /// <summary>Computes an identity for a console model and its immutable ROM images using a stable FNV-1a fingerprint.</summary>
     /// <param name="model">The emulated console model.</param>

@@ -14,7 +14,10 @@ public interface IMachineCoreLender {
     /// (it is stopping or already severed), in which case the work did not run.</returns>
     bool RunOnLinkThread(Action work);
     /// <summary>Drops the link's captured rewind history because a member took an advance or a mutation the group's
-    /// frame-oriented replay log cannot reproduce. Call from inside work already running on the link's thread.</summary>
+    /// frame-oriented replay log cannot reproduce.</summary>
+    /// <exception cref="InvalidOperationException">The caller is not running on the link's own execution thread — call
+    /// from inside work already running there (a nested <see cref="RunOnLinkThread"/> would enqueue behind the caller
+    /// itself and never drain).</exception>
     void InvalidateLinkHistory();
     /// <summary>Severs the link because a member is going away — every member's core returns to its own worker before
     /// the departing member tears its core down.</summary>

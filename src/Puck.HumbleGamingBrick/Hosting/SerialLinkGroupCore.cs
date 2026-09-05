@@ -7,8 +7,9 @@ namespace Puck.HumbleGamingBrick;
 /// The two cores stay owned by their own hosts; this type owns only the cable and the pacing that rides it.
 /// </summary>
 /// <remarks>The group state image is <c>[first length][first state][second length][second state][first credit]
-/// [second credit]</c>, all little-endian — the two machines plus the pair-stepper's own overshoot credits, which the
-/// machines' snapshots do not carry.</remarks>
+/// [second credit][completed transfers][traffic fingerprint]</c>, all little-endian — the two machines, the
+/// pair-stepper's own overshoot credits, and the medium's own traffic counters, none of which the machines' snapshots
+/// carry.</remarks>
 internal sealed class SerialLinkGroupCore : IMachineGroupCore {
     private const ulong FnvOffsetBasis = 14_695_981_039_346_656_037UL;
     private const ulong FnvPrime = 1_099_511_628_211UL;
@@ -98,6 +99,8 @@ internal sealed class SerialLinkGroupCore : IMachineGroupCore {
         ));
         m_writer.WriteUInt64(value: credits.FirstCredit);
         m_writer.WriteUInt64(value: credits.SecondCredit);
+        m_writer.WriteInt64(value: CompletedTransfers);
+        m_writer.WriteUInt64(value: TrafficFingerprint);
 
         return SnapshotBuffer.CopyWrittenState(
             buffer: ref buffer,
@@ -151,6 +154,8 @@ internal sealed class SerialLinkGroupCore : IMachineGroupCore {
             FirstCredit: reader.ReadUInt64(),
             SecondCredit: reader.ReadUInt64()
         );
+        var completedTransfers = reader.ReadInt64();
+        var trafficFingerprint = reader.ReadUInt64();
 
         m_first.RestoreState(
             buffer: m_firstScratch,
@@ -161,6 +166,14 @@ internal sealed class SerialLinkGroupCore : IMachineGroupCore {
             length: secondLength
         );
         m_session.ReanchorPacing(credits: credits);
+        Volatile.Write(
+            location: ref m_completedTransfers,
+            value: completedTransfers
+        );
+        Volatile.Write(
+            location: ref m_trafficFingerprint,
+            value: trafficFingerprint
+        );
     }
     /// <inheritdoc/>
     public void RunCycles(long cycles) =>
@@ -171,20 +184,35 @@ internal sealed class SerialLinkGroupCore : IMachineGroupCore {
             buffer = new byte[length];
         }
     }
+    // The only writer is the group's own execution thread (transfer completion fires from inside RunCycles), so the
+    // increment/fold itself needs no interlock; the write is volatile only so CompletedTransfers/TrafficFingerprint's
+    // Volatile.Read from another thread observes it.
     private void Fold(byte value) {
-        ++m_completedTransfers;
-        m_trafficFingerprint = ((m_trafficFingerprint ^ value) * FnvPrime);
+        Volatile.Write(
+            location: ref m_completedTransfers,
+            value: (m_completedTransfers + 1)
+        );
+        Volatile.Write(
+            location: ref m_trafficFingerprint,
+            value: ((m_trafficFingerprint ^ value) * FnvPrime)
+        );
     }
     // The two sides fold under distinct tags so a fingerprint distinguishes which port received a byte, not merely that
     // one did.
     private void OnFirstTransferCompleted(byte value) {
         Fold(value: value);
-        m_trafficFingerprint = ((m_trafficFingerprint ^ 0x01UL) * FnvPrime);
+        Volatile.Write(
+            location: ref m_trafficFingerprint,
+            value: ((m_trafficFingerprint ^ 0x01UL) * FnvPrime)
+        );
         m_firstPreviousObserver?.Invoke(obj: value);
     }
     private void OnSecondTransferCompleted(byte value) {
         Fold(value: value);
-        m_trafficFingerprint = ((m_trafficFingerprint ^ 0x02UL) * FnvPrime);
+        Volatile.Write(
+            location: ref m_trafficFingerprint,
+            value: ((m_trafficFingerprint ^ 0x02UL) * FnvPrime)
+        );
         m_secondPreviousObserver?.Invoke(obj: value);
     }
 }

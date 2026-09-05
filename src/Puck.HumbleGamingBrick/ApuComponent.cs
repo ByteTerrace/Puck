@@ -249,15 +249,15 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
             m_divDivider = (configuration.Model.SupportsColor()
                 ? (byte)2
                 : (byte)3);
+
+            if (configuration.Model.SeedsWaveRamOnBoot()) {
+                for (var offset = 0; (offset < WaveRamSize); offset += 2) {
+                    m_waveRam[(offset + 1)] = 0xFF;
+                }
+            }
         }
 
         m_lastDivApuBit = DivApuBit();
-
-        if (configuration.Model.SeedsWaveRamOnBoot()) {
-            for (var offset = 0; (offset < WaveRamSize); offset += 2) {
-                m_waveRam[(offset + 1)] = 0xFF;
-            }
-        }
     }
 
     /// <inheritdoc/>

@@ -5,9 +5,10 @@ namespace Puck.HumbleGamingBrick.Forge;
 
 /// <summary>
 /// Reads the machine state a cartridge can observe at <c>0x0100</c>: the processor's register file, the divider
-/// counter, every readable high-page register, the interrupt-enable register, and Color palette RAM. It is the surface
-/// a boot program and the seeded post-boot handoff have to agree on, captured as a named field list so a comparison can
-/// name the first field that differs rather than a byte offset.
+/// counter, every readable high-page register, high RAM through <c>0xFFFE</c>, the interrupt-enable register, and
+/// Color palette RAM where the hardware is running natively. It is the surface a boot program and the seeded post-boot
+/// handoff have to agree on, captured as a named field list so a comparison can name the first field that differs
+/// rather than a byte offset.
 /// </summary>
 public static class BootRomHandoff {
     // The high-page registers whose value depends on the palette index register rather than on the handoff, read
@@ -38,9 +39,6 @@ public static class BootRomHandoff {
     /// <param name="instructionCeiling">The instruction budget before the boot is declared wedged.</param>
     /// <returns>A description of the first difference, or <see langword="null"/> when the two agree.</returns>
     public static string? Compare(ConsoleModel model, byte[] bootRom, byte[] rom, int instructionCeiling = DefaultInstructionCeiling) {
-        // The seeded first-line handoff carries a comparison latch the running processor cannot hold.
-        var maskCoincidence = (!model.SupportsColor() && (model != ConsoleModel.Dmg0));
-
         using var seeded = Create(
             bootRom: null,
             model: model,
@@ -60,16 +58,8 @@ public static class BootRomHandoff {
         }
 
         return FirstDifference(
-            actual: Capture(
-                instance: booted,
-                maskCoincidence: maskCoincidence,
-                model: model
-            ),
-            expected: Capture(
-                instance: seeded,
-                maskCoincidence: maskCoincidence,
-                model: model
-            )
+            actual: Capture(instance: booted),
+            expected: Capture(instance: seeded)
         );
     }
     /// <summary>Steps a machine until its boot program unmaps itself, leaving it at the cartridge's entry point.</summary>
@@ -89,14 +79,14 @@ public static class BootRomHandoff {
 
         return false;
     }
-    /// <summary>Captures the observable handoff surface of a machine.</summary>
+    /// <summary>Captures the observable handoff surface of a machine, leaving its state exactly as it found it.</summary>
     /// <param name="instance">The machine to read.</param>
-    /// <param name="model">The revision it emulates, which selects the Color-only fields.</param>
-    /// <param name="maskCoincidence">Whether to clear the LY-comparison bit of the status register before comparing.
-    /// The seeded handoff of a revision that parks on the first line carries the comparison latch clear while its LY
-    /// and LYC are both zero, which the running picture processor cannot hold: it recomputes the latch every dot.</param>
     /// <returns>The captured fields, in a stable order.</returns>
-    public static List<(string Name, int Value)> Capture(MachineInstance instance, ConsoleModel model, bool maskCoincidence) {
+    /// <remarks>Palette RAM has no read path but the index registers, so reading it moves them; the capture takes a
+    /// snapshot around that walk and restores it, which puts back the raw index bytes a write-back cannot reach.</remarks>
+    public static List<(string Name, int Value)> Capture(MachineInstance instance) {
+        ArgumentNullException.ThrowIfNull(argument: instance);
+
         var bus = instance.GetRequiredService<ISystemBus>();
         var cpu = instance.GetRequiredService<ICpu>();
         var fields = new List<(string Name, int Value)>(capacity: 256) {
@@ -121,26 +111,25 @@ public static class BootRomHandoff {
                 continue;
             }
 
-            var value = ((int)bus.ReadByte(address: address));
+            fields.Add(item: (RegisterName(address: address), bus.ReadByte(address: address)));
+        }
 
-            if (
-                maskCoincidence &&
-                (address == MemoryMap.LcdStatus)
-            ) {
-                value &= ~0x04;
-            }
-
-            fields.Add(item: (RegisterName(address: address), value));
+        for (var address = MemoryMap.HighRamStart; (address <= MemoryMap.HighRamEnd); ++address) {
+            fields.Add(item: ($"hram.{address:X4}", bus.ReadByte(address: address)));
         }
 
         fields.Add(item: ("io.ie", bus.ReadByte(address: MemoryMap.InterruptEnable)));
 
-        if (!model.SupportsColor()) {
+        // The data ports read sealed in compatibility mode, so palette RAM is observable only where the compatibility
+        // authority says Color silicon is running natively — never on the model alone.
+        if (
+            !instance.Machine.Model.SupportsColor() ||
+            instance.GetRequiredService<DmgCompatibilityState>().IsActive
+        ) {
             return fields;
         }
 
-        var backgroundIndex = bus.ReadByte(address: MemoryMap.BackgroundColorPaletteIndex);
-        var objectIndex = bus.ReadByte(address: MemoryMap.ObjectColorPaletteIndex);
+        var snapshot = instance.Machine.Snapshot();
 
         for (var slot = 0; (slot < PaletteRamSize); ++slot) {
             bus.WriteByte(
@@ -155,16 +144,7 @@ public static class BootRomHandoff {
             fields.Add(item: ($"palette.object[{slot}]", bus.ReadByte(address: ObjectPaletteData)));
         }
 
-        // The index registers are the probe's own scratch; put back what the handoff left so the captured pair is the
-        // machine's state and not the probe's.
-        bus.WriteByte(
-            address: MemoryMap.BackgroundColorPaletteIndex,
-            value: ((byte)(backgroundIndex & 0xBF))
-        );
-        bus.WriteByte(
-            address: MemoryMap.ObjectColorPaletteIndex,
-            value: ((byte)(objectIndex & 0xBF))
-        );
+        instance.Machine.Restore(snapshot: snapshot);
 
         return fields;
     }

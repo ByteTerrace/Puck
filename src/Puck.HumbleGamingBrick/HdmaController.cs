@@ -219,6 +219,12 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
         m_state = reader.ReadByte();
         m_stepCounter = reader.ReadInt32();
         m_windDownPending = reader.ReadBoolean();
+
+        // The state byte drives a switch with no default arm, so a value outside the four it can hold would run the
+        // unit off its own state machine rather than faulting.
+        if (m_state > StatePaused) {
+            throw new InvalidDataException(message: $"The video-RAM transfer unit's restored state byte is {m_state}, outside the {StateNone}-{StatePaused} range it can hold.");
+        }
     }
 
     // One two-dot step of the unit: wait for the CPU's freeze acknowledgment, move one byte, or wind down. The unit

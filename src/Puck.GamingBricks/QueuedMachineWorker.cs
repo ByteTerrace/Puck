@@ -55,7 +55,10 @@ public sealed class QueuedMachineWorker : IDisposable {
     private Vector3 m_emittedLight;
     private long m_frameVersion;
     private IMachineCoreLender? m_lender;
-    private bool m_lent;
+    // Volatile: set under m_lifecycleLock, but read (IsLent, TryRunOnLink, the lending link's own ReturnCore/publish
+    // calls) from the link thread and any caller thread without it, so a plain bool would let a reader observe a lend
+    // that already ended.
+    private volatile bool m_lent;
     private long m_lentFlushNativeFrame;
     private long m_lentStagedNativeFrame;
     private float m_motorLevel;
@@ -1064,6 +1067,15 @@ public sealed class QueuedMachineWorker : IDisposable {
     /// <param name="hostAccumulator">The link's tick-to-cycle accumulator phase at the sever, adopted as this worker's
     /// own so the conversion carries no drift across the seam.</param>
     public void ReturnCore(ulong hostAccumulator) {
+        // A lender's own teardown (LinkedMachineGroup.Dispose) calls this for every member, including one that is
+        // concurrently severing itself through its own Dispose/DetachCore — which holds m_lifecycleLock for that
+        // whole call, cascading into the lender's Dispose while still holding it. Bailing out here on the volatile
+        // flag alone, before taking the lock, lets the lender's teardown finish without ever contending for that
+        // worker's own lock: the two calls would otherwise deadlock on each other's lock.
+        if (!m_lent) {
+            return;
+        }
+
         lock (m_lifecycleLock) {
             if (!m_lent) {
                 return;

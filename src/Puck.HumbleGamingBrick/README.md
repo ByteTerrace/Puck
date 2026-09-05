@@ -33,8 +33,8 @@ supplies only the SM83-family hardware itself.
   instruction-atomically, so a cable, infrared, or printer session replays
   identically.
 - *Exact timing:* `TickResolution` runs the timeline at sub-cycle granularity
-  (quarter ticks by default), and `PpuTimingParameters`/`HdmaController`
-  reproduce the STAT/memory-lock schedule dot for dot.
+  (quarter ticks by default), and `Ppu`/`HdmaController` reproduce the
+  STAT/memory-lock schedule dot for dot.
 
 ## 📐 Hosting
 
@@ -70,12 +70,14 @@ pending on its port, as an unplugged console's does — and returns both cores t
 their own workers. The cable is point to point, so a set of three or more is
 refused by name rather than partially linked.
 
-Time travel is coupled over the group: the state image `SerialLinkGroupCore`
-captures holds both machines' snapshots plus the pair-stepper's own overshoot
-credits (`SerialLinkSession.PacingCredits`), which no machine's snapshot
-carries, so a rewind lands both members and the interleave together. That image
-is also the whole seam a cross-process transport would have to carry, alongside
-each submitted (tick budget, seat inputs) segment; no such transport exists.
+Time travel is coupled over the group: the state image
+`SerialLinkGroupCore.CaptureState` carries both machines' snapshots, the
+pair-stepper's own overshoot credits (`SerialLinkSession.PacingCredits`), and
+the medium's own completed-transfer count and traffic fingerprint, none of
+which either machine's snapshot carries, so a rewind lands both members, the
+interleave, and the medium's own counters together. That image is also the
+whole seam a cross-process transport would have to carry, alongside each
+submitted (tick budget, seat inputs) segment; no such transport exists.
 
 ## 🚀 Quick start
 
@@ -118,7 +120,7 @@ that has to satisfy it read the same data.
 | Machine | `Machine`, `ConsoleModel`, `ConsoleModelExtensions`, `MachineConfiguration`, `MachineFactory`, `MachineServiceRegistration` | The composition root and per-machine startup configuration. |
 | Live swap | `ModePoke`, `ConsoleModeRecipes` | The boot-shim byte pokes that retarget a running cartridge's cached hardware-detection state. |
 | CPU/bus | `Sm83`, `Sm83.Alu`, `Sm83.Decode`, `Sm83Disassembler`, `SystemBus`, `SystemMemory`, `MemoryMap` | The SM83 core and its addressable memory map. |
-| Video | `Ppu`, `PpuTimingParameters`, `HdmaController`, `Framebuffer` | The STAT-accurate pixel pipeline and DMA-driven video RAM transfer. |
+| Video | `Ppu`, `HdmaController`, `Framebuffer` | The STAT-accurate pixel pipeline and DMA-driven video RAM transfer. |
 | Audio | `ApuComponent`, `ApuGeneratorClock`, `AudioOutputComponent` | The four-channel APU and its host-facing output ring. |
 | Cartridges | `Cartridge`, `CartridgeHeader`, `CartridgeBase`, `MapperKind`, `RomOnlyCartridge`, `Mbc1Cartridge`…`Mbc7Cartridge`, `HuC1Cartridge`, `HuC3Cartridge`, `Mmm01Cartridge`, `CameraCartridge` | Header-selected mapper implementations and the camera peripheral. |
 | Link | `SerialComponent`, `SerialLinkSession`, `InfraredPort`, `IInfraredPeer`, `IInfraredCartridge`, `GamePrinterDevice`, `GamePrinterLinkSession` | The deterministic serial/infrared/printer link sessions. |

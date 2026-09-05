@@ -140,8 +140,15 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
         }
     }
     /// <inheritdoc/>
-    public long CompletedTransfers =>
-        m_core.CompletedTransfers;
+    public long CompletedTransfers {
+        get {
+            var transfers = 0L;
+
+            _ = RunOnLinkThread(work: () => transfers = m_core.CompletedTransfers);
+
+            return transfers;
+        }
+    }
     /// <summary>Gets the number of accepted group segments whose emulation has completed.</summary>
     public long CompletedSteps {
         get {
@@ -191,9 +198,17 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
         }
     }
     /// <summary>Gets a fingerprint folding every byte the medium has carried, in order — the traffic signal two runs of
-    /// the same linked script must agree on.</summary>
-    public ulong TrafficFingerprint =>
-        m_core.TrafficFingerprint;
+    /// the same linked script must agree on, read on the group's execution thread like <see cref="CycleCount"/> and
+    /// <see cref="CompletedTransfers"/>.</summary>
+    public ulong TrafficFingerprint {
+        get {
+            var fingerprint = 0UL;
+
+            _ = RunOnLinkThread(work: () => fingerprint = m_core.TrafficFingerprint);
+
+            return fingerprint;
+        }
+    }
 
     /// <summary>Captures the group's whole state image — every member's snapshot plus the medium's pacing state — on
     /// the group's execution thread, so it observes a coherent inter-instruction boundary.</summary>
@@ -211,15 +226,21 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
         return image;
     }
     /// <inheritdoc/>
+    // The whole method runs under m_lifecycleLock, not just the teardown: a second concurrent caller (typically a
+    // member's own DetachCore cascading through SeverLink while another member's Dispose already won the exchange)
+    // blocks here until the first finishes returning every core, rather than observing a false "severed" the instant
+    // it loses the race. Member workers do not deadlock against this wait: ReturnCore's own pre-lock m_lent check lets
+    // the winner's foreach skip a worker that is concurrently tearing itself down without ever taking that worker's
+    // lifecycle lock.
     public void Dispose() {
-        if (0 != Interlocked.Exchange(
-            location1: ref m_disposed,
-            value: 1
-        )) {
-            return;
-        }
-
         lock (m_lifecycleLock) {
+            if (0 != Interlocked.Exchange(
+                location1: ref m_disposed,
+                value: 1
+            )) {
+                return;
+            }
+
             StopWorker();
             m_timeTravel.Dispose();
             m_core.Dispose();
@@ -256,8 +277,20 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
         return rewound;
     }
     /// <inheritdoc/>
-    public void InvalidateLinkHistory() =>
+    // Enforces the interface's own "call from inside work already running on the link's thread" contract rather than
+    // marshaling: every current caller (a lent worker's memory-poke/reconfigure path) invokes this from inside a
+    // RunOnLinkThread work item, so a second RunOnLinkThread here would enqueue behind itself and never drain — the
+    // link thread waiting on work only it can dequeue.
+    public void InvalidateLinkHistory() {
+        if (!ReferenceEquals(
+            objA: Thread.CurrentThread,
+            objB: m_worker
+        )) {
+            throw new InvalidOperationException(message: $"{nameof(InvalidateLinkHistory)} must run on the {m_workerName} link thread; call it from inside work already running there.");
+        }
+
         m_timeTravel.Reset();
+    }
     /// <inheritdoc/>
     public bool RunOnLinkThread(Action work) {
         ArgumentNullException.ThrowIfNull(argument: work);

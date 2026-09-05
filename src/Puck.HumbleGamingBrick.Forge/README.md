@@ -36,8 +36,9 @@ targets. Packs as `ByteTerrace.Puck.HumbleGamingBrick.Forge`.
   Color one. `BootRomLayout` carries what differs per revision,
   `BootRomProgram`/`BootRomColorTiming` emit it, `BootRomProbeCartridge` builds
   the throwaway cartridges the timing is solved against, and `BootRomHandoff` /
-  `BootRomHandoffCases` are the shared verification the forge tests and the
-  POST's `boot-rom-handoff` stage both run.
+  `BootRomHandoffCases` are the equivalence surface. The POST's
+  `boot-rom-handoff` stage is that comparison's only runner; the forge tests pin
+  each revision's image to a recorded hash instead.
 
 ## The authored boot ROMs
 
@@ -59,8 +60,18 @@ copy of the data: it computes its target from the cartridge header, resets the
 divider, and consumes exactly the predicted count before unmapping. Everything
 before the reset is free; everything after it is straight-line, and the builder
 solves that straight line by BOOTING the image it just emitted and reading back
-the counter and the scanline. The solve is deterministic, so the images are
-byte-identical across builds.
+the counter and the scanline. Only the straight line is solved: a revision's own
+offset from the shared Color tables (`BootRomLayout.HandoffCounterExtra`) is
+added by the emitted table walk, so the solved tail cannot absorb it.
+
+That solve reads only the tables and the emulated machine, so the same counter
+would come out of a wrong table. What breaks the circle is the
+`boot-rom-handoff` stage's reference cartridges: the mooneye `boot_div-*` ROMs
+assert, per revision, the counter their own header hands off with, and the stage
+checks both `BootDivPrediction` and the authored image against those numbers.
+That covers one header on every revision; every other row of the tables is
+unpinned by anything outside this repository, and the stage's pass detail says
+so.
 
 **The compatibility palettes.** For a cartridge the Color hardware runs in
 compatibility mode, the image carries `CompatibilityPalette`'s own selection
@@ -80,17 +91,21 @@ checksum that differs (`BootRomChecksumTable`) for the same reason.
 
 **What agrees with the seeded post-boot state.** Everything a cartridge can read
 at `0x0100`: the processor register file, the divider counter, every readable
-high-page register, the interrupt-enable register, and Color palette RAM. What
-does not, and cannot: the sub-register phase of the picture processor's pixel
-pipeline and of the audio generators. The seeded handoff sets those to captured
-constants no executing program reaches — the seeded square-channel timer exceeds
-its own reload period, and the seeded dot phase is odd where every instruction
-boundary lands on a multiple of four dots. On the revisions whose seeded handoff
-parks on the first line, the status register's LY-comparison bit is the same
-kind of gap: the seeded state holds that latch clear while LY and LYC are both
-zero, which the running processor cannot do because it recomputes the latch every
-dot. Video RAM, high RAM and the framebuffer also differ, because the boot
-program drew something.
+high-page register, high RAM through `0xFFFE`, the interrupt-enable register, and
+Color palette RAM where the hardware runs natively (the data ports read sealed in
+compatibility mode, so there is nothing to compare there). High RAM is in the
+comparison because the image clears it: the boot program's stack residue and the
+Color program's staged scratch are unwound before the handoff. Every register the
+seeded state carries is a register the image writes — the wave-RAM pattern and
+the deselected joypad included — so a capability question like
+`SeedsWaveRamOnBoot` describes both paths rather than only one.
+
+What does not agree, and cannot: the sub-register phase of the picture
+processor's pixel pipeline and of the audio generators. The seeded handoff sets
+those to captured constants no executing program reaches — the seeded
+square-channel timer exceeds its own reload period, and the seeded dot phase is
+odd where every instruction boundary lands on a multiple of four dots. Video RAM
+and the framebuffer also differ, because the boot program drew something.
 
 **Machine identity.** `MachineIdentity` fingerprints the boot ROM image, so a
 machine booted through an authored image has a different identity than a seeded
@@ -110,5 +125,7 @@ not alias them.
   `VerifyMachineSettle.SettleOutOfOamDma` after stepping frames — a fixed-size
   run can phase-lock its boundary inside OAM DMA, where reads are gated).
 
-Determinism note: forge output is byte-identical across runs and machines; the
-carts it builds hold no wall clock and no RNG hardware.
+Determinism note: forge output holds no wall clock and no RNG hardware. The boot
+images are pinned to recorded per-revision hashes, so a build that produced
+different bytes would be caught; the worked-example carts are compared
+same-process only.

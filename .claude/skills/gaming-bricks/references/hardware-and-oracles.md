@@ -173,21 +173,20 @@ one lag constant in isolation.
   boot-ROM-booted SameBoy, which is the evidence.
 - Do not re-derive the schedule by moving the PPU onto SameBoy's dots. Both
   decompositions of that idea are measured and refuted. Shortening the first line
-  to 449 and giving the register view a +3 `PolledEventPhase` (carrying the
+  to 449 and giving the register view a +3 polled-event phase (carrying the
   polled mode lags with it) leaves the polled STAT and LY dots exactly where they
   are but moves the interrupt raise and the memory locks three dots early, which
   fails `hblank_ly_scx_timing`, `intr_2_mode0_timing`,
   `intr_2_mode0_timing_sprites`, `intr_2_mode3_timing`, `intr_2_oam_ok_timing`,
   `lcdon_timing` and `lcdon_write_timing`. Moving only the pixel pipeline three
-  dots early (`Mode3PixelPipelineDelay` 8→5 with the mode-0 group trailing the
+  dots early (`Mode3EntryLatency` 8→5 with the mode-0 group trailing the
   160th pop) keeps every acceptance case green but takes the mealybug/AGE error
   from 65.7k to about 78k differing pixels.
 - The read dot-phase costs the pixel stream nothing. Against a boot-ROM-booted
   SameBoy the `--cosim` `ppu-pixel` stream on `m3_bgp_change` runs identical into
   the ROM's own drawing, and the first divergence is a colour on a matching dot,
   not a dot: at LY 1 x 1 both push the pixel on the same master cycle and SameBoy
-  has already applied a new BGP where we have not. The residual mid-mode-3
-  signature error is the per-register I/O write conflict, not the schedule.
+  has already applied a new BGP where we have not.
 - A `--cosim` run under about 60 frames proves nothing about the ROM: the DMG
   boot ROM's logo scroll occupies them, so every ROM produces the same stream and
   the same record count. Give a CPU-stream comparison at least 120 frames, and
@@ -195,27 +194,81 @@ one lag constant in isolation.
 - `01-read_timing` diverges from SameBoy at frame 107 on a TIMA read (`pc=C2C3`,
   `hl=FF05`: SameBoy 0x01, ours 0x00, on the same master cycle and the same
   instruction) while both pass the ROM's own verdict. It survives disabling the
-  write-conflict map, so it is the timer's own read-observation gap, not a write
-  phase.
+  display's write phases, so it is the timer's own read-observation gap, not a
+  write phase.
 - An I/O write does not always reach the component on its machine cycle's drive
-  instant. `Sm83.Decode`'s `WriteConflict` carries the phases SameBoy's
-  `conflict_t` map records (`Core/sm83_cpu.c`), with the next access's drive
-  instant always staying four T-cycles after this one's: a monochrome palette
-  register settles two T-cycles early through the OR of the old and new values
-  and commits one T-cycle early; a Color palette register commits one T-cycle
-  early, two from revision D; monochrome SCY commits one early and SCX two; the
-  monochrome status register reads all ones for one settling T-cycle before the
-  value lands. The control register's own conflict is deliberately absent — its
-  write is also the LCD enable, and pulling that two T-cycles early moves the
-  first line's origin, which the LCD-on tables are calibrated against.
+  instant, and the display — not the CPU — is what says so. `WriteCycle` routes
+  a write inside `LCDC`…`WX` to `ISystemBus.RecordDisplayWrite`, which records it
+  in flight (the register, the value held, the value arriving) and returns the
+  T-cycles the commit is displaced from the drive instant, negative early. The
+  next access's drive instant always stays four T-cycles after this one's. A
+  register that also *settles* spends the T-cycle before its commit in
+  transition: `OpenDisplayWriteSettle` opens that window, and `Ppu.WriteRegister`
+  closes it, so the record is zero at an instruction boundary and no snapshot
+  carries it. The phases, in `Ppu.RecordWrite`: a monochrome palette register
+  settles from two T-cycles early and commits one early; a Color palette register
+  commits one early, two from revision D (`SamplesPaletteWriteEarly`); monochrome
+  SCY commits one early and SCX two; the monochrome status register settles from
+  the drive instant and commits one T-cycle late; monochrome WX settles from the
+  drive instant with the arriving value already on its line. The control
+  register's own phase is skipped on the LCD-enable edge — that write is also the
+  enable, and pulling it two T-cycles early moves the first line's origin, which
+  the LCD-on tables are calibrated against. SameBoy's `conflict_t` map
+  (`Core/sm83_cpu.c`) is the corroborating source and carries phases this core
+  does not model: both LCDC glitch flags, and two that are measured and held
+  back rather than merely absent.
+- Color LYC and WX committing one T-cycle late at single speed, together with a
+  Color STAT settling window that holds the coincidence source across the
+  transition, is refuted: it repairs fourteen gambatte rows and breaks eleven
+  recorded passes, all in the `miscmstatirq/lycstatwirq_trigger_*` and
+  `lycEnable/late_ff41|ff45_enable_lcdoffset1_*` families. Color SCX committing
+  two T-cycles early at double speed (SameBoy's
+  `cgb_double_conflict_map[GB_IO_SCX]`) is measured as a net win with a cost:
+  four `scx_during_m3/*_ds_*` rows flip to passing and six fall by thousands of
+  pixels (9581→8866, 14833→14404, 12096→11810), while
+  `scx_during_m3/scx_during_m3_spx2_ds` and its `scx_attrib` sibling rise from 8
+  to 16. It needs the two risers explained before it lands, not another sweep.
+- The settling view is per consumer, which is the whole reason the record beats a
+  value the CPU writes into the register file. Inside the settling T-cycle each
+  of the display's own consumers samples the register at its own depth:
+  `MixerBackgroundPalette`/`MixerObjectPalette0`/`MixerObjectPalette1` read the
+  wire-OR of held and arriving, because a monochrome palette keeps driving while
+  the new value lands; `InterruptStatSelect` reads every source enabled, because
+  a monochrome status write releases its select lines first; `MixerControl` lets
+  only the background-enable bit through; `ObjectControl` additionally drops an
+  object-enable bit going low while a fetch runs, or at the start of a column on
+  every package but the compact monochrome one
+  (`DropsObjectEnableAtColumnStart`). Every other consumer reads the register
+  field directly and therefore sees the held value, which is what the fetcher and
+  the window comparisons want.
 - Expressing those phases is why the bus primitives defer. `ReadCycle` leaves the
   two T-cycles it did not tick on `m_busCycleDebt`, `InternalCycle` banks four
-  without ticking, and `WriteCycle` can therefore settle before its own drive
-  instant. Every read of component state that is not itself a bus access
-  (`ServiceInterrupt`'s two mask reads, STOP's and HALT's pending checks) and
-  every machine cycle the CPU spends off the bus (`IdleMachineCycle`) settles the
-  debt first, and `StepInstruction` settles it before returning, so the debt is
-  always zero at an instruction boundary and no snapshot carries it.
+  without ticking, and `WriteDisplayRegisterCycle` can therefore commit before its
+  own drive instant. Every read of component state that is not itself a bus
+  access (`ServiceInterrupt`'s two mask reads, STOP's and HALT's pending checks,
+  `NoteOamCorruption`'s object-scan row) and every machine cycle the CPU spends
+  off the bus (`IdleMachineCycle`) settles the debt first, and `StepInstruction`
+  settles it before returning, so the debt is always zero at an instruction
+  boundary and no snapshot carries it.
+- No write phase can close the mid-mode-3 write families, and the reason is
+  measured, not suspected. The schedule above puts our register edges three dots
+  later in absolute time than SameBoy's precisely so a CPU *read* (latched two
+  T-cycles into its access) observes what SameBoy's read (taken at the drive
+  instant) does. A CPU *write* gets no such compensation: both cores commit it at
+  the same absolute T-cycle, so against the display's own dots our write lands
+  three dots early. A case that writes and then reads is still calibrated, which
+  is why the acceptance interrupt and LCD-on families are green; a case whose
+  verdict is the picture itself has no read to compensate it, which is why every
+  mid-mode-3 screenshot family is off by a whole number of columns. On
+  `lycint_dmgpalette_during_m3_1` the `ppu-pixel` stream is
+  index-aligned and both cores commit BGP at the same absolute cycle, yet SameBoy
+  paints from LY 1 x 157 and we paint from x 155 — the two-column error the
+  ledger records as 286 differing pixels (143 lines x 2 columns), with the
+  `lycint_*_3`/`_4` pair three columns out at 429. The only coherent cures are to
+  move both conventions together — read at the drive instant
+  (`LeadingTCyclesBeforeRead` 0) and put the line on SameBoy's dots (first line
+  448, `LineEventPhase` 0) — or to leave it alone. Every decomposition that moved
+  one and not the other is refuted above.
 - CPU-visible state trails the internal edge by: polled STAT, VRAM read and
   VRAM write, and OAM write by zero dots; OAM read by zero on monochrome and
   one on Color; the mode-0 interrupt by one, reduced to zero on Color at single
@@ -252,10 +305,12 @@ one lag constant in isolation.
   it means the first line's length, which the register families pin — see the
   refuted decompositions above.
 - The remaining PPU frontier is the mealybug `m3_lcdc_*` and `m3_wx_*`
-  signatures. They turn on the CPU-side write glitches SameBoy models in
-  `sm83_cpu.c` (`tile_sel_glitch`, `wx_just_changed`,
-  `disable_window_pixel_insertion_glitch`) and the control register's own
-  conflict phase; each needs PPU state the write path cannot reach today.
+  signatures. They turn on the write glitches SameBoy models in `sm83_cpu.c`
+  (`tile_sel_glitch`, `wx_just_changed`,
+  `disable_window_pixel_insertion_glitch`). The write-in-flight record reaches
+  the PPU state each of them needs, so they are expressible as settling views on
+  the same rule rather than as special cases; what still blocks them is the
+  write-versus-read dot-phase asymmetry above, not the write path.
 
 The acceptance cases pinning this schedule by name: `hblank_ly_scx_timing`
 (its 51/50/49 SCX pattern), the `intr_2_*` family, `intr_1_2`,

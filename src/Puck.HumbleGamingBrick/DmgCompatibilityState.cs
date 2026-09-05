@@ -9,19 +9,21 @@ namespace Puck.HumbleGamingBrick;
 /// exactly one place.
 /// </summary>
 /// <remarks>Seeded at construction from the boot model and the immutable cartridge header — exactly the answer a real
-/// boot ROM's own header inspection produces — and re-derived on a live model swap or a snapshot restore (see
-/// <see cref="ApplyModel"/>, called by <see cref="Machine.ApplyModel"/> alongside every other capability gate). A real
-/// boot ROM run confirms (or, for a hand-authored header a boot ROM disagrees with, corrects) the same fact through
-/// <see cref="ApplyKey0"/> when it executes the write; the value is not itself snapshotted, since it is fully
-/// re-derivable from the (snapshotted) model and the (immutable) header exactly like every other component's cached
-/// capability flag.</remarks>
-public sealed class DmgCompatibilityState : IModeSwitchable {
+/// boot ROM's own header inspection produces — and re-derived on a live model swap until a boot ROM actually writes
+/// KEY0. From that write on the mode is a hardware latch rather than a derivation, so it is snapshotted and
+/// <see cref="ApplyModel"/> no longer re-derives it: a swap onto hardware without Color silicon still drops the mode,
+/// which has no meaning there, but a swap between Color revisions leaves the latch alone, since a swap is not a
+/// boot.</remarks>
+public sealed class DmgCompatibilityState : IModeSwitchable, ISnapshotable {
     /// <summary>The KEY0 bit the Color boot ROM sets to hand off in DMG-compatibility mode.</summary>
     public const byte Key0CompatibilityBit = 0x04;
 
     private readonly CartridgeHeader m_header;
 
     private bool m_isActive;
+    // Whether a boot ROM has executed its KEY0 write. Until it has, the mode is a pure function of the model and the
+    // header and a live model swap re-derives it; afterwards the latch is the machine's own state.
+    private bool m_key0Latched;
 
     /// <summary>Creates the authority seeded from the boot model and the cartridge header.</summary>
     /// <param name="configuration">The machine configuration, whose <see cref="MachineConfiguration.Model"/> seeds the mode.</param>
@@ -46,15 +48,30 @@ public sealed class DmgCompatibilityState : IModeSwitchable {
 
     /// <inheritdoc/>
     public void ApplyModel(ConsoleModel model) =>
-        m_isActive = Derive(
-            header: m_header,
-            model: model
-        );
+        m_isActive = (m_key0Latched
+            ? (m_isActive && model.SupportsColor())
+            : Derive(
+                header: m_header,
+                model: model
+            ));
     /// <summary>Applies a real boot ROM's write to KEY0 (<c>0xFF4C</c>) — the hardware event that hands the mode to
-    /// the cartridge. Bit 2 is the documented DMG-compatibility flag; the undocumented PGB bits are not modeled.</summary>
+    /// the cartridge, and the only writer of the mode once it has run. Bit 2 is the documented DMG-compatibility flag;
+    /// the undocumented PGB bits are not modeled.</summary>
     /// <param name="value">The byte written to FF4C.</param>
-    public void ApplyKey0(byte value) =>
+    public void ApplyKey0(byte value) {
         m_isActive = ((value & Key0CompatibilityBit) != 0);
+        m_key0Latched = true;
+    }
+    /// <inheritdoc/>
+    public void SaveState(StateWriter writer) {
+        writer.WriteBoolean(value: m_isActive);
+        writer.WriteBoolean(value: m_key0Latched);
+    }
+    /// <inheritdoc/>
+    public void LoadState(StateReader reader) {
+        m_isActive = reader.ReadBoolean();
+        m_key0Latched = reader.ReadBoolean();
+    }
 
     private static bool Derive(ConsoleModel model, CartridgeHeader header) =>
         (model.SupportsColor() && !header.SupportsColor);

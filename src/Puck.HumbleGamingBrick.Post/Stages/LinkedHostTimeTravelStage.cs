@@ -93,6 +93,18 @@ internal sealed class LinkedHostTimeTravelStage : IPostStage<PostContext> {
             return PostStageOutcome.Fail(detail: $"the rewind landed on recorded step {landedStep}'s cycle but not its state; a member or the pair-stepper's pacing did not restore");
         }
 
+        // The image compare above is byte-for-byte, but a medium that folds its traffic counters into the same bytes
+        // it always wrote would still pass it; check the live counters against the recorded instant directly so a
+        // medium that tracks its own transfer count/fingerprint OUTSIDE the captured state image (never rewound, just
+        // left climbing from the abandoned future) is caught here rather than only by chance downstream.
+        if (link.TrafficFingerprint != reference.TrafficFingerprints[landedStep]) {
+            return PostStageOutcome.Fail(detail: $"the rewind landed on recorded step {landedStep}'s cycle and state but its traffic fingerprint is 0x{link.TrafficFingerprint:X16}, not the recorded 0x{reference.TrafficFingerprints[landedStep]:X16}; the medium's fingerprint did not restore");
+        }
+
+        if (link.CompletedTransfers != reference.CompletedTransfersPerStep[landedStep]) {
+            return PostStageOutcome.Fail(detail: $"the rewind landed on recorded step {landedStep}'s cycle and state but its completed-transfer count is {link.CompletedTransfers}, not the recorded {reference.CompletedTransfersPerStep[landedStep]}; the medium's transfer count did not restore");
+        }
+
         for (var step = (landedStep + 1); (step < ScriptedSteps); ++step) {
             StepScript(
                 link: link,
@@ -174,8 +186,10 @@ internal sealed class LinkedHostTimeTravelStage : IPostStage<PostContext> {
         }
 
         using var link = ((LinkedMachineGroup)established!);
+        var completedTransfersPerStep = new long[ScriptedSteps];
         var cycles = new long[ScriptedSteps];
         var images = new byte[ScriptedSteps][];
+        var trafficFingerprints = new ulong[ScriptedSteps];
 
         for (var step = 0; (step < ScriptedSteps); ++step) {
             StepScript(
@@ -187,8 +201,10 @@ internal sealed class LinkedHostTimeTravelStage : IPostStage<PostContext> {
                 captureEveryStep ||
                 (step == (ScriptedSteps - 1))
             ) {
+                completedTransfersPerStep[step] = link.CompletedTransfers;
                 cycles[step] = link.CycleCount;
                 images[step] = link.CaptureState();
+                trafficFingerprints[step] = link.TrafficFingerprint;
             } else {
                 images[step] = [];
             }
@@ -196,9 +212,11 @@ internal sealed class LinkedHostTimeTravelStage : IPostStage<PostContext> {
 
         return new ScriptRun(
             CompletedTransfers: link.CompletedTransfers,
+            CompletedTransfersPerStep: completedTransfersPerStep,
             Cycles: cycles,
             Images: images,
-            TrafficFingerprint: link.TrafficFingerprint
+            TrafficFingerprint: link.TrafficFingerprint,
+            TrafficFingerprints: trafficFingerprints
         );
     }
     // The scripted seat input: each seat holds a different button for a different stretch of the run, so the two seats'
@@ -219,8 +237,10 @@ internal sealed class LinkedHostTimeTravelStage : IPostStage<PostContext> {
 
     private readonly record struct ScriptRun(
         long CompletedTransfers,
+        long[] CompletedTransfersPerStep,
         long[] Cycles,
         byte[][] Images,
-        ulong TrafficFingerprint
+        ulong TrafficFingerprint,
+        ulong[] TrafficFingerprints
     );
 }

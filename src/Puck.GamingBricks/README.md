@@ -172,7 +172,10 @@ every member through one shared cycle budget.
   an unfinished externally-clocked transfer stays pending, as an unplugged
   cable's does — and returns each core to its own worker with the group's
   tick-to-cycle accumulator phase, so the conversion carries no drift across the
-  seam. Disposing a member while it is lent severs the link first.
+  seam. Disposing a member while it is lent severs the link first; a second
+  concurrent severing caller (typically another member disposing itself at the
+  same instant) waits for the first to finish rather than observing a false
+  "already severed" before the group thread has actually stopped.
 
 Cross-process transport is out of scope here. The seam it would carry is the
 group core's serializable state image plus each submitted segment; nothing in

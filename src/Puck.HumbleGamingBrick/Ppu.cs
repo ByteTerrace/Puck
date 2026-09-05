@@ -85,6 +85,53 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     // Dots of the mode-3 entry latency that still accept object-memory and video-RAM writes before the locks engage.
     private const int Mode3AccessLockDots = 4;
     private const int MaxSpritesPerLine = 10;
+    // The coupled mode-3, LY/LYC/STAT-schedule and window timing constants. They place a visible line at these dots
+    // from the line boundary: LY register and object-scan interrupt pulse 2, polled mode 2 at 3, polled mode 3 with
+    // the memory locks at 83, the pixel loop at 88, screen column 0 at 96 + SCX%8, the internal mode-3-to-0 edge with
+    // the polled STAT flip and the video-RAM unlocks at 255 + SCX%8, and the mode-0 interrupt at 256 + SCX%8. The
+    // spacings between them are one coupled contract, not independent lags: the PPU-interrupt acceptance battery pins
+    // them jointly (its 51/50/49-cycle SCX pattern selects the mode-0 interrupt dot) and its LCD-on tables pin the
+    // first line after an enable. Every value here is CALIBRATED against those verdicts rather than derived from a
+    // named hardware mechanism, and moving one alone unbalances several cases at once.
+    // The offset added to the pipeline output position when the background fetcher derives its pixel-position-coupled
+    // coarse tile column.
+    private const int CoarseColumnPhase = 0;
+    // The shift applied to the whole per-line LY/LYC/STAT event schedule relative to the line boundary, aligning the
+    // corroborated event structure to this core's own access phase.
+    private const int LineEventPhase = -1;
+    // The additional shift applied to the LY-comparison events only (the gap opening and its close, on every line
+    // kind): the comparison's own clock runs ahead of the LY register's on hardware.
+    private const int LycEventPhase = 0;
+    // Dots the mode-0 STAT interrupt condition trails the internal mode-3-to-0 edge; the internal edge still drives
+    // the video-RAM transfer unit on time. The interrupt lands the dot after the 160th pixel pops, when the hardware
+    // re-evaluates the STAT line with the mode bits already cleared.
+    private const int Mode0IrqLag = 1;
+    // Dots the pixel pipeline idles between the internal mode-3 flip at dot 80 and the render loop engaging, so the
+    // first pop lands at dot 88 and the first visible pixel at dot 96 + SCX%8. It splits into the four dots before the
+    // memory locks and the polled mode-3 flip and the four after them.
+    private const int Mode3EntryLatency = 8;
+    // The m_mode3Delay value at and below which the CPU-facing memory locks have engaged: the locks land
+    // Mode3AccessLockDots into the entry latency, leaving that much of it on the counter.
+    private const int Mode3LockedAtOrBelow = (Mode3EntryLatency - Mode3AccessLockDots);
+    // The shift applied to the object-scan STAT interrupt pulse relative to its nominal slot. Zero fires the pulse on
+    // the LY register write, one dot before STAT shows mode 2, and lets the pulse tail overlap the dot the LY
+    // comparison becomes valid, so a coincidence held across the line boundary never sees the interrupt line dip.
+    private const int OamPulseOffset = 0;
+    // The additional shift applied to the register file's own view — the LY register, the polled STAT mode bits, and
+    // the CPU-facing memory locks — relative to the interrupt logic, which samples the same edges a dot sooner. Zero:
+    // the schedule's own dots already carry the gap between an I/O read's latch (Sm83.Decode's
+    // LeadingTCyclesBeforeRead) and the interrupt line, which is sampled at the instruction boundary.
+    private const int PolledEventPhase = 0;
+    // Dots the polled mode-3-to-0 STAT edge trails the internal transition at single speed; double speed adds one more
+    // (a documented 173.5-dot half-cycle made observable at half-dot resolution). The mode bits clear on the pop of
+    // the 160th pixel itself, so the single-speed lag is zero and the interrupt trails it by Mode0IrqLag.
+    private const int PolledMode0Lag = 0;
+    // Dots the polled mode-2-to-3 STAT edge trails the internal transition at the end of the object scan; the
+    // interrupt-side conditions are unaffected. Also moves the color-palette-RAM lock, which follows the polled mode.
+    private const int PolledMode3Lag = 3;
+    // The Color single-speed dot-in-line phase (mod 4) of the WY = LY comparator's sample grid; double speed adds one
+    // and monochrome three. The window's per-frame WY latch arms only on a dot at this phase.
+    private const int WindowYCheckGridPhase = 3;
     private const byte Mode0InterruptEnable = 0x08;
     private const byte Mode1InterruptEnable = 0x10;
     private const byte Mode2InterruptEnable = 0x20;
@@ -143,6 +190,23 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     // The CPU already gates its own call site on the same question; this mirrors it so the PPU never depends on the
     // caller alone to keep a Color machine's OAM clean.
     private bool m_hasOamCorruptionBug;
+    // Whether a monochrome palette register reaches the display a T-cycle ahead of the pins
+    // (see ConsoleModelExtensions.SamplesPaletteWriteEarly).
+    private bool m_samplesPaletteEarly;
+    // Whether an object-enable bit going low reaches the object path within its own settling T-cycle at the start of a
+    // column (see ConsoleModelExtensions.DropsObjectEnableAtColumnStart).
+    private bool m_dropsObjectEnableAtColumnStart;
+
+    // The write the CPU currently has on the display's register lines: which register, the value it holds, and the
+    // value arriving. A register does not take a write at an instant — it drives its held value while the arriving one
+    // lands — so a consumer that samples inside that transition reads a mixture of the two, and which mixture depends
+    // on the consumer, since a control bit reaches the fetcher, the object path, and the mixer at different depths.
+    // m_settlingRegister is the register in transition RIGHT NOW, zero whenever none is: the CPU opens it for one
+    // T-cycle and the commit closes it, so it is always zero at an instruction boundary and no snapshot carries it.
+    private ushort m_writeAddress;
+    private byte m_writeArriving;
+    private byte m_writeHeld;
+    private ushort m_settlingRegister;
 
     private readonly DmgCompatibilityState m_dmgCompatibilityState;
     private readonly CartridgeHeader m_header;
@@ -165,23 +229,6 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     private IPpuTraceSink? m_traceSink;
     private int m_traceLastMode = -1;
 
-    // The coupled mode-3, LY/LYC/STAT-schedule and window timing knobs, resolved once from the injected parameters into
-    // fields so the per-dot path never touches the parameter object. The defaults reproduce the shipped, oracle-tuned
-    // behavior; a sweep harness supplies alternatives to co-tune them against the hardware-verdict grader without a
-    // rebuild (the window activation phase shares the mode-3 boundary with the STAT lags, so they are swept jointly).
-    private readonly int m_coarseColumnPhase;
-    private readonly int m_lineEventPhase;
-    private readonly int m_lycEventPhase;
-    private readonly int m_mode0IrqLag;
-    private readonly int m_mode3DelayReload;
-    // The m_mode3Delay value at and below which the CPU-facing memory locks have engaged: the locks land
-    // Mode3AccessLockDots into the entry latency, leaving (reload - Mode3AccessLockDots) on the counter.
-    private readonly int m_mode3LockedAtOrBelow;
-    private readonly int m_oamPulseOffset;
-    private readonly int m_polledEventPhase;
-    private readonly int m_polledMode0Lag;
-    private readonly int m_polledMode3Lag;
-    private readonly int m_windowYCheckGridPhase;
 
     private byte m_backgroundColorPaletteIndex;
     private byte m_backgroundFifoCount;
@@ -266,18 +313,16 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     /// <param name="framebuffer">The pixel output buffer the pipeline writes one pixel per drawn dot into.</param>
     /// <param name="configuration">The machine configuration, selecting CGB color or DMG grayscale rendering.</param>
     /// <param name="key1">The Color speed-switch register, read to model the double-speed STAT mode-read delay.</param>
-    /// <param name="timing">The coupled mode-3 pixel-pipeline timing knobs (pre-roll delay, coarse-column phase).</param>
     /// <param name="header">The cartridge header, which selects Color-native or compatibility rendering and steers the
     /// boot ROM's handoff (the frame position it leaves, and the compatibility palettes it assigns).</param>
     /// <param name="dmgCompatibility">The shared DMG-compatibility authority.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public Ppu(InterruptController interrupts, SystemMemory memory, Framebuffer framebuffer, MachineConfiguration configuration, Key1Component key1, PpuTimingParameters timing, CartridgeHeader header, DmgCompatibilityState dmgCompatibility) {
+    public Ppu(InterruptController interrupts, SystemMemory memory, Framebuffer framebuffer, MachineConfiguration configuration, Key1Component key1, CartridgeHeader header, DmgCompatibilityState dmgCompatibility) {
         ArgumentNullException.ThrowIfNull(argument: interrupts);
         ArgumentNullException.ThrowIfNull(argument: memory);
         ArgumentNullException.ThrowIfNull(argument: framebuffer);
         ArgumentNullException.ThrowIfNull(argument: configuration);
         ArgumentNullException.ThrowIfNull(argument: key1);
-        ArgumentNullException.ThrowIfNull(argument: timing);
         ArgumentNullException.ThrowIfNull(argument: header);
         ArgumentNullException.ThrowIfNull(argument: dmgCompatibility);
 
@@ -290,19 +335,10 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
         m_supportsColor = configuration.Model.SupportsColor();
         m_latchesFetchRow = configuration.Model.LatchesFetchRowAtTileStep();
         m_hasOamCorruptionBug = configuration.Model.HasOamCorruptionBug();
+        m_samplesPaletteEarly = configuration.Model.SamplesPaletteWriteEarly();
+        m_dropsObjectEnableAtColumnStart = configuration.Model.DropsObjectEnableAtColumnStart();
         m_dmgCompatibility = dmgCompatibility.IsActive;
         m_cgbNative = (m_supportsColor && !m_dmgCompatibility);
-        m_coarseColumnPhase = timing.CoarseColumnPhase;
-        m_lineEventPhase = timing.LineEventPhase;
-        m_lycEventPhase = timing.LycEventPhase;
-        m_mode0IrqLag = timing.Mode0IrqLag;
-        m_mode3DelayReload = timing.Mode3PixelPipelineDelay;
-        m_mode3LockedAtOrBelow = (timing.Mode3PixelPipelineDelay - Mode3AccessLockDots);
-        m_oamPulseOffset = timing.OamPulseOffset;
-        m_polledEventPhase = timing.PolledEventPhase;
-        m_polledMode0Lag = timing.PolledMode0Lag;
-        m_polledMode3Lag = timing.PolledMode3Lag;
-        m_windowYCheckGridPhase = timing.WyCheckGridPhase;
         m_irqMode = -1;
         m_lyForComparison = 0;
 
@@ -331,7 +367,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
                 m_lyRegister = m_ly;
                 m_lyForComparison = m_ly;
                 m_irqMode = 1;
-            } else if (configuration.Model == ConsoleModel.Dmg0) {
+            } else if (configuration.Model.HasRearrangedMonochromeBootRom()) {
                 // The rearranged revision-0 monochrome boot ROM runs long enough to hand off mid vertical blank rather
                 // than at the top of a frame, so LY reads 0x91 and STAT reports mode 1.
                 m_ly = Dmg0PostBootLcdY;
@@ -342,6 +378,12 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
                 m_lyForComparison = m_ly;
                 m_irqMode = 1;
             }
+
+            // The comparison latch is a function of the parked line, not a constant: a revision whose boot ROM hands off
+            // on the first line leaves LY and LYC both zero, which is a coincidence the running picture processor
+            // reports, so the status register reads 0x84 rather than 0x80 there.
+            m_lycCoincidence = (m_lyForComparison == m_lyc);
+            m_lycInterruptLine = m_lycCoincidence;
 
             if (m_cgbNative) {
                 // The boot ROM powers background palette RAM to white for a Color game; object palette RAM stays zeroed.
@@ -397,9 +439,20 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
         m_supportsColor = model.SupportsColor();
         m_latchesFetchRow = model.LatchesFetchRowAtTileStep();
         m_hasOamCorruptionBug = model.HasOamCorruptionBug();
+        m_samplesPaletteEarly = model.SamplesPaletteWriteEarly();
+        m_dropsObjectEnableAtColumnStart = model.DropsObjectEnableAtColumnStart();
+        RefreshCompatibilityMode(wasDmgCompatibility: wasDmgCompatibility);
+    }
+    /// <summary>Re-reads the compatibility-mode authority after a KEY0 write. The render path caches the answer in
+    /// plain fields, so the display has to be told when the latch moves.</summary>
+    public void RefreshCompatibilityMode() =>
+        RefreshCompatibilityMode(wasDmgCompatibility: m_dmgCompatibility);
+    private void RefreshCompatibilityMode(bool wasDmgCompatibility) {
         m_dmgCompatibility = m_dmgCompatibilityState.IsActive;
         m_cgbNative = (m_supportsColor && !m_dmgCompatibility);
 
+        // Entering compatibility mode for the first time needs its shade palettes resolved; the resolve is a pure
+        // function of the immutable header, so repeating it would be harmless but pointless.
         if (
             m_dmgCompatibility &&
             !wasDmgCompatibility
@@ -424,7 +477,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     // engages with no entry latency.
     public bool BlocksOamWrites =>
         (((m_mode == 2) && (m_dot >= OamWriteLockDot)) ||
-        ((m_mode == 3) && (m_mode3Delay <= m_mode3LockedAtOrBelow)) ||
+        ((m_mode == 3) && (m_mode3Delay <= Mode3LockedAtOrBelow)) ||
         (m_oamWriteUnlockCountdown > 0));
     /// <inheritdoc/>
     public bool BlocksVideoRamReads =>
@@ -433,7 +486,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     // Writes ride the fetcher's actual bus occupancy: they still land during the entry-latency dots after the mode-3
     // flip (reads are already locked there), so the write lock shares the OAM write window's shape.
     public bool BlocksVideoRamWrites =>
-        (((m_mode == 3) && (m_mode3Delay <= m_mode3LockedAtOrBelow)) || (m_videoRamWriteUnlockCountdown > 0));
+        (((m_mode == 3) && (m_mode3Delay <= Mode3LockedAtOrBelow)) || (m_videoRamWriteUnlockCountdown > 0));
 
     // Whether the CPU can reach color-palette RAM through the data ports: the PPU locks it while drawing (mode 3), like
     // VRAM — blocked reads return open bus and blocked writes are dropped, while the index ports stay fully live. The
@@ -592,6 +645,69 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     /// by the battery.</summary>
     public void SetTraceSink(IPpuTraceSink? sink) =>
         m_traceSink = sink;
+    /// <summary>Records a write to one of this display's registers as in flight and returns where inside the writing
+    /// machine cycle the display commits it.</summary>
+    /// <param name="address">The register address.</param>
+    /// <param name="value">The value arriving at the register.</param>
+    /// <param name="settles">Receives whether the register spends the T-cycle before its commit in transition.</param>
+    /// <returns>The T-cycles the commit is displaced from the machine cycle's drive instant: negative commits early,
+    /// positive late.</returns>
+    public int RecordWrite(ushort address, byte value, out bool settles) {
+        m_writeAddress = address;
+        m_writeArriving = value;
+        m_writeHeld = ReadRegister(address: address);
+        settles = false;
+
+        if (m_supportsColor) {
+            // A Color register switches cleanly, so nothing is ever in transition on it; only the instant moves. The
+            // monochrome palettes reach the display a machine cycle's worth of pins ahead of the write, and from
+            // revision D one T-cycle earlier still.
+            return ((address is (MemoryMap.BackgroundPalette or MemoryMap.ObjectPalette0 or MemoryMap.ObjectPalette1))
+                ? (m_samplesPaletteEarly
+                    ? -2
+                    : -1)
+                : 0);
+        }
+
+        switch (address) {
+            case MemoryMap.LcdControl:
+                // The enable edge is the one control write the display takes straight off the pins: the start-up
+                // chain, and every dot of the first line's transient with it, is measured from them.
+                if (((m_lcdc ^ value) & LcdEnable) != 0) {
+                    return 0;
+                }
+
+                settles = true;
+
+                return -2;
+            case MemoryMap.LcdStatus:
+                settles = true;
+
+                return 0;
+            case MemoryMap.ScrollY:
+                return -1;
+            case MemoryMap.ScrollX:
+                return -2;
+            case MemoryMap.BackgroundPalette:
+            case MemoryMap.ObjectPalette0:
+            case MemoryMap.ObjectPalette1:
+                settles = true;
+
+                return -2;
+            // The window-position register lands on the pins' instant, but its line is still moving for the T-cycle
+            // after, which is what the window comparison reads.
+            case MemoryMap.WindowX:
+                settles = true;
+
+                return 0;
+            default:
+                return 0;
+        }
+    }
+    /// <summary>Opens the recorded write's settling T-cycle. Every consumer that samples that register before the
+    /// commit reads the transition instead of either value.</summary>
+    public void OpenWriteSettle() =>
+        m_settlingRegister = m_writeAddress;
     /// <inheritdoc/>
     public byte ReadRegister(ushort address) =>
         address switch {
@@ -626,6 +742,9 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
         };
     /// <inheritdoc/>
     public void WriteRegister(ushort address, byte value) {
+        // The commit closes whatever was in transition: the register is now driving one value again.
+        m_settlingRegister = 0;
+
         switch (address) {
             case MemoryMap.LcdControl:
                 var wasEnabled = ((m_lcdc & LcdEnable) != 0);
@@ -904,6 +1023,63 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
 
         return ColorFromRgb555(rgb555: colorRam[index] | (colorRam[(index + 1)] << 8));
     }
+    // The value a register in transition presents to a consumer that samples it while the write settles. Monochrome
+    // silicon keeps the held value on the register's lines as the arriving one lands, so the two wire-OR.
+    private byte SettlingBlend() =>
+        ((byte)(m_writeHeld | m_writeArriving));
+    // The monochrome palettes as the mixer resolves a pixel through them.
+    private byte MixerBackgroundPalette() =>
+        ((m_settlingRegister == MemoryMap.BackgroundPalette)
+        ? SettlingBlend()
+        : m_backgroundPalette);
+    private byte MixerObjectPalette0() =>
+        ((m_settlingRegister == MemoryMap.ObjectPalette0)
+        ? SettlingBlend()
+        : m_objectPalette0);
+    private byte MixerObjectPalette1() =>
+        ((m_settlingRegister == MemoryMap.ObjectPalette1)
+        ? SettlingBlend()
+        : m_objectPalette1);
+    // The status register's source-select bits as the interrupt logic reads them. A monochrome status write releases
+    // the register's select lines before the arriving value lands, so every source reads enabled for the settling
+    // T-cycle; Color silicon switches them cleanly and opens no window at all.
+    private byte InterruptStatSelect() =>
+        ((m_settlingRegister == MemoryMap.LcdStatus)
+        ? StatSelectMask
+        : m_statSelect);
+    // The window-position register as the window comparison reads it. The arriving value is already on the line for
+    // the settling T-cycle, but the line is still moving, so monochrome silicon's one-pixel-early comparison does not
+    // resolve across it.
+    private byte WindowComparisonX() =>
+        ((m_settlingRegister == MemoryMap.WindowX)
+        ? m_writeArriving
+        : m_windowX);
+    // The control register as the mixer reads it. Only the background-enable bit reaches the color resolver within the
+    // settling T-cycle; every other bit is still the held one there, which is why the fetcher and the window
+    // comparisons read the register field directly.
+    private byte MixerControl() =>
+        ((m_settlingRegister == MemoryMap.LcdControl)
+        ? ((byte)(m_writeHeld | (m_writeArriving & BackgroundEnable)))
+        : m_lcdc);
+    // The control register as the object path reads it. An object-enable bit going low reaches the object fetcher and
+    // the pop-time gate within the settling T-cycle whenever a fetch is already running, and at the start of a column
+    // on every package but the compact monochrome one.
+    private byte ObjectControl() {
+        if (m_settlingRegister != MemoryMap.LcdControl) {
+            return m_lcdc;
+        }
+
+        var held = m_writeHeld;
+
+        if (
+            ((m_writeArriving & ObjectEnable) == 0) &&
+            (m_duringObjectFetch || ((m_positionInLine == 0) && m_dropsObjectEnableAtColumnStart))
+        ) {
+            held &= ((byte)(0xFF - ObjectEnable));
+        }
+
+        return ((byte)(held | (m_writeArriving & BackgroundEnable)));
+    }
     // A write to a CGB color-palette data port stores one byte at the current palette index — dropped while the PPU has
     // palette RAM locked (mode 3) — and, when the index register's auto-increment bit is set, advances the index within
     // its 6-bit range (wrapping, bit 7 preserved) whether or not the store landed.
@@ -932,7 +1108,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
         // tables). The shortened latency also closes the object-memory write window a full latency would open.
         m_mode3Delay = (m_firstLineAfterEnable
             ? FirstLineMode3Delay
-            : m_mode3DelayReload);
+            : Mode3EntryLatency);
         m_objectFetchPhase = 0;
         m_lcdColumn = 0;
         m_positionInLine = -(FifoSize + (m_scrollX & 0x07));
@@ -1317,7 +1493,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
 
         // The object-enable bit is sampled when the pixel pops: Color hardware fetches (and stalls for) sprites with the
         // bit clear, but a mid-line disable stops them from being drawn from that pixel on.
-        if ((m_lcdc & ObjectEnable) == 0) {
+        if ((ObjectControl() & ObjectEnable) == 0) {
             objectColor = 0;
         }
 
@@ -1354,7 +1530,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
             // The internal mode-0 edge lands here on time (HDMA and the bus gates see it immediately); the polled STAT
             // bits and the mode-0 interrupt condition trail it by their injected lags. Double speed adds one extra dot
             // to the polled edge — the kevtris 173.5 half-cycle made observable at half-dot resolution.
-            var polledLag = (m_polledMode0Lag + ((m_supportsColor && m_key1.IsDoubleSpeed)
+            var polledLag = (PolledMode0Lag + ((m_supportsColor && m_key1.IsDoubleSpeed)
                 ? 1
                 : 0));
 
@@ -1369,7 +1545,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
             // dot counter on a different machine-cycle phase than the monochrome one, and the PPU-interrupt
             // acceptance battery's mode-0 verdicts (which pass on both) are only satisfiable with this one-dot
             // model split.
-            var irqLag = (m_mode0IrqLag - ((m_supportsColor && !m_key1.IsDoubleSpeed)
+            var irqLag = (Mode0IrqLag - ((m_supportsColor && !m_key1.IsDoubleSpeed)
                 ? 1
                 : 0));
 
@@ -1396,7 +1572,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     // objects are disabled; Color hardware fetches regardless and gates drawing at the pixel pop.
     private void TryStartObjectFetch() {
         if (
-            ((m_lcdc & ObjectEnable) == 0) &&
+            ((ObjectControl() & ObjectEnable) == 0) &&
             !m_supportsColor
         ) {
             return;
@@ -1604,7 +1780,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
             return !(((objectAttribute & AttributePriority) != 0) && (backgroundColor != 0));
         }
 
-        if ((m_lcdc & BackgroundEnable) == 0) {
+        if ((MixerControl() & BackgroundEnable) == 0) {
             return true;
         }
 
@@ -1645,8 +1821,8 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
         }
 
         var palette = (((attribute & AttributeDmgPalette) != 0)
-            ? m_objectPalette1
-            : m_objectPalette0);
+            ? MixerObjectPalette1()
+            : MixerObjectPalette0());
 
         if (m_dmgCompatibility) {
             // Compatibility mode keeps the DMG palette-register indirection but lands in the boot-assigned colors.
@@ -1674,28 +1850,32 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     private bool WindowTriggerMatches(out bool desynced) {
         desynced = false;
 
-        if (m_windowX == 0) {
+        var windowX = WindowComparisonX();
+
+        if (windowX == 0) {
             return (
                 (m_positionInLine == -7) ||
                 (((m_scrollX & 0x07) != 0) && (m_positionInLine <= -8))
             );
         }
 
-        if (m_windowX >= (m_supportsColor
+        if (windowX >= (m_supportsColor
             ? 167
             : 166)) {
             return false;
         }
 
-        if (m_positionInLine == (m_windowX - 7)) {
+        if (m_positionInLine == (windowX - 7)) {
             return true;
         }
 
         // Monochrome panels run a pixel out of step with the pixel pipeline, so the window also starts on the
-        // comparison one column early.
+        // comparison one column early — except across the settling T-cycle of a write to the register itself, where
+        // the line has not resolved.
         if (
             !m_supportsColor &&
-            (m_positionInLine == (m_windowX - 6))
+            (m_settlingRegister != MemoryMap.WindowX) &&
+            (m_positionInLine == (windowX - 6))
         ) {
             desynced = true;
 
@@ -1745,7 +1925,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
 
         var logicalPosition = ((byte)(m_positionInLine + 7));
 
-        return (m_windowX == ((logicalPosition > 167)
+        return (WindowComparisonX() == ((logicalPosition > 167)
             ? (byte)0
             : logicalPosition));
     }
@@ -1768,9 +1948,9 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     private int WindowYCheckPhase() =>
         (m_supportsColor
         ? (m_key1.IsDoubleSpeed
-            ? (m_windowYCheckGridPhase + 1) & 3
-            : m_windowYCheckGridPhase)
-        : (m_windowYCheckGridPhase + 3) & 3);
+            ? (WindowYCheckGridPhase + 1) & 3
+            : WindowYCheckGridPhase)
+        : (WindowYCheckGridPhase + 3) & 3);
     // Rewind the background fetcher and empty its FIFO — shared by the start of a scanline and the mid-line hand-off to
     // the window, so the two entry points cannot drift apart.
     private void ResetBackgroundFetcher() {
@@ -1890,7 +2070,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
             if (m_firstFetchOfLine) {
                 tileColumn = (m_scrollX >> 3);
             } else {
-                var positionInLine = ((byte)(m_positionInLine + m_coarseColumnPhase));
+                var positionInLine = ((byte)(m_positionInLine + CoarseColumnPhase));
                 var colorBias = ((m_supportsColor && !m_duringObjectFetch)
                     ? 1
                     : 0);
@@ -1960,18 +2140,18 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
 
         if (m_dmgCompatibility) {
             // A disabled background reads as shade index zero, not through BGP — the DMG rule through the compat colors.
-            return (((m_lcdc & BackgroundEnable) != 0)
+            return (((MixerControl() & BackgroundEnable) != 0)
                 ? m_compatBackground[ShadeIndex(
                 color: color,
-                palette: m_backgroundPalette
+                palette: MixerBackgroundPalette()
             )]
                 : m_compatBackground[0]);
         }
 
-        return (((m_lcdc & BackgroundEnable) != 0)
+        return (((MixerControl() & BackgroundEnable) != 0)
             ? DmgShade(
             color: color,
-            palette: m_backgroundPalette
+            palette: MixerBackgroundPalette()
         )
             : DmgShades[0]);
     }
@@ -1987,14 +2167,14 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
                 if (m_dot == FirstLinePolledMode3Dot) {
                     m_statMode = 3;
                 }
-            } else if (m_dot == (OamScanDots + m_polledMode3Lag)) {
+            } else if (m_dot == (OamScanDots + PolledMode3Lag)) {
                 m_statMode = 3;
             }
         }
 
         ApplyLineSchedule(
             line: m_ly,
-            nominalDot: (m_dot - m_lineEventPhase)
+            nominalDot: (m_dot - LineEventPhase)
         );
 
         var lineLength = (m_firstLineAfterEnable
@@ -2006,7 +2186,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
 
         ApplyLineSchedule(
             line: nextLine,
-            nominalDot: ((m_dot - lineLength) - m_lineEventPhase)
+            nominalDot: ((m_dot - lineLength) - LineEventPhase)
         );
     }
     // Dispatch one line's event schedule by line kind. The nominal dot is the position within the line's OWN schedule;
@@ -2044,7 +2224,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
             return;
         }
 
-        var pulseDot = ((LineEventLyWriteVisibleDot + m_oamPulseOffset) + ((line == 0)
+        var pulseDot = ((LineEventLyWriteVisibleDot + OamPulseOffset) + ((line == 0)
             ? 1
             : 0));
 
@@ -2069,7 +2249,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
             m_irqMode = -1;
         }
 
-        if (nominalDot == (LineEventLyWriteVisibleDot + m_polledEventPhase)) {
+        if (nominalDot == (LineEventLyWriteVisibleDot + PolledEventPhase)) {
             m_lyRegister = ((byte)line);
 
             if (
@@ -2080,17 +2260,17 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
             }
         }
 
-        if (nominalDot == (LineEventLyWriteVisibleDot + m_lycEventPhase)) {
+        if (nominalDot == (LineEventLyWriteVisibleDot + LycEventPhase)) {
             m_lyForComparison = ((line != 0)
                 ? LycNone
                 : 0);
         }
 
-        if (nominalDot == (LineEventComparisonDot + m_polledEventPhase)) {
+        if (nominalDot == (LineEventComparisonDot + PolledEventPhase)) {
             m_statMode = 2;
         }
 
-        if (nominalDot == (LineEventComparisonDot + m_lycEventPhase)) {
+        if (nominalDot == (LineEventComparisonDot + LycEventPhase)) {
             m_lyForComparison = line;
         }
     }
@@ -2099,11 +2279,11 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     // asserts the OAM STAT source — twice, around the entry — as a direct interrupt request gated on the STAT line
     // being low (a held mode-0 or LYC condition blocks it), without disturbing the line's edge detector.
     private void ApplyVBlankEntrySchedule(int nominalDot) {
-        if (nominalDot == m_lycEventPhase) {
+        if (nominalDot == LycEventPhase) {
             m_lyForComparison = LycNone;
         }
 
-        if (nominalDot == (LineEventLyWriteVBlankDot + m_polledEventPhase)) {
+        if (nominalDot == (LineEventLyWriteVBlankDot + PolledEventPhase)) {
             m_lyRegister = VisibleScanlines;
         }
 
@@ -2111,11 +2291,11 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
             RequestVBlankOamQuirk();
         }
 
-        if (nominalDot == (LineEventComparisonDot + m_lycEventPhase)) {
+        if (nominalDot == (LineEventComparisonDot + LycEventPhase)) {
             m_lyForComparison = VisibleScanlines;
         }
 
-        if (nominalDot == (VBlankEntryDot + m_polledEventPhase)) {
+        if (nominalDot == (VBlankEntryDot + PolledEventPhase)) {
             m_statMode = 1;
         }
 
@@ -2128,15 +2308,15 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     }
     // A plain vertical-blank line (145–152): the comparison gap, the LY register, then the comparison — the mode stays 1.
     private void ApplyVBlankLineSchedule(int line, int nominalDot) {
-        if (nominalDot == m_lycEventPhase) {
+        if (nominalDot == LycEventPhase) {
             m_lyForComparison = LycNone;
         }
 
-        if (nominalDot == (LineEventLyWriteVBlankDot + m_polledEventPhase)) {
+        if (nominalDot == (LineEventLyWriteVBlankDot + PolledEventPhase)) {
             m_lyRegister = ((byte)line);
         }
 
-        if (nominalDot == (LineEventComparisonDot + m_lycEventPhase)) {
+        if (nominalDot == (LineEventComparisonDot + LycEventPhase)) {
             m_lyForComparison = line;
         }
     }
@@ -2145,36 +2325,36 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     // 153 comparison persists through the gap), and the LYC comparison follows 153 → gap → 0 — so LYC=0 matches from
     // late in line 153 seamlessly through line 0, whose own schedule never lapses it.
     private void ApplyLine153Schedule(int nominalDot) {
-        if (nominalDot == m_lycEventPhase) {
+        if (nominalDot == LycEventPhase) {
             m_lyForComparison = LycNone;
         }
 
-        if (nominalDot == (Line153LyWriteDot + m_polledEventPhase)) {
+        if (nominalDot == (Line153LyWriteDot + PolledEventPhase)) {
             m_lyRegister = ((byte)(ScanlinesPerFrame - 1));
         }
 
-        if (nominalDot == (Line153HandoverDot + m_polledEventPhase)) {
+        if (nominalDot == (Line153HandoverDot + PolledEventPhase)) {
             if (!m_key1.IsDoubleSpeed) {
                 m_lyRegister = 0;
             }
         }
 
-        if (nominalDot == (Line153HandoverDot + m_lycEventPhase)) {
+        if (nominalDot == (Line153HandoverDot + LycEventPhase)) {
             m_lyForComparison = (ScanlinesPerFrame - 1);
         }
 
-        if (nominalDot == (Line153ComparisonNoneDot + m_polledEventPhase)) {
+        if (nominalDot == (Line153ComparisonNoneDot + PolledEventPhase)) {
             m_lyRegister = 0;
         }
 
         if (
-            (nominalDot == (Line153ComparisonNoneDot + m_lycEventPhase)) &&
+            (nominalDot == (Line153ComparisonNoneDot + LycEventPhase)) &&
             !m_key1.IsDoubleSpeed
         ) {
             m_lyForComparison = LycNone;
         }
 
-        if (nominalDot == (Line153ComparisonZeroDot + m_lycEventPhase)) {
+        if (nominalDot == (Line153ComparisonZeroDot + LycEventPhase)) {
             m_lyForComparison = 0;
         }
     }
@@ -2182,7 +2362,7 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     // does not feed the edge detector (so a subsequent real source rise still produces its own edge).
     private void RequestVBlankOamQuirk() {
         if (
-            ((m_statSelect & Mode2InterruptEnable) != 0) &&
+            ((InterruptStatSelect() & Mode2InterruptEnable) != 0) &&
             !m_previousStatLine
         ) {
             m_interrupts.Request(kind: InterruptKind.LcdStatus);
@@ -2217,11 +2397,12 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
     // is a pulse at the line boundary, the HBlank source switches at the true mode-0 edge, and the VBlank source holds
     // from entry through line 153.
     private void UpdateStatInterrupt() {
+        var statSelect = InterruptStatSelect();
         var line =
-            ((((m_statSelect & Mode0InterruptEnable) != 0) && (m_irqMode == 0)) ||
-            (((m_statSelect & Mode1InterruptEnable) != 0) && (m_irqMode == 1)) ||
-            (((m_statSelect & Mode2InterruptEnable) != 0) && (m_irqMode == 2)) ||
-            (((m_statSelect & LycInterruptEnable) != 0) && m_lycInterruptLine));
+            ((((statSelect & Mode0InterruptEnable) != 0) && (m_irqMode == 0)) ||
+            (((statSelect & Mode1InterruptEnable) != 0) && (m_irqMode == 1)) ||
+            (((statSelect & Mode2InterruptEnable) != 0) && (m_irqMode == 2)) ||
+            (((statSelect & LycInterruptEnable) != 0) && m_lycInterruptLine));
 
         if (
             line &&

@@ -20,11 +20,13 @@ public sealed class JoypadComponent : IJoypad, ISnapshotable {
     private byte m_select;
 
     /// <summary>Creates the joypad wired to the interrupt controller it raises the joypad line on, with no buttons held
-    /// and the selection the revision's boot ROM leaves behind (see
+    /// and, when no boot ROM is configured, the selection the revision's boot ROM would have left behind (see
     /// <see cref="ConsoleModelExtensions.DeselectsJoypadOnBoot"/>) — also deselected when Color silicon hands off a
-    /// compatibility-mode cartridge, which the model alone cannot express.</summary>
+    /// compatibility-mode cartridge, which the model alone cannot express. A configured boot ROM writes that selection
+    /// itself.</summary>
     /// <param name="interrupts">The interrupt controller.</param>
-    /// <param name="configuration">The machine configuration, whose model selects the post-boot selection bits.</param>
+    /// <param name="configuration">The machine configuration, whose boot ROM and model select the post-boot selection
+    /// bits.</param>
     /// <param name="dmgCompatibility">The shared DMG-compatibility authority.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
     public JoypadComponent(IInterruptController interrupts, MachineConfiguration configuration, DmgCompatibilityState dmgCompatibility) {
@@ -33,10 +35,15 @@ public sealed class JoypadComponent : IJoypad, ISnapshotable {
         ArgumentNullException.ThrowIfNull(argument: dmgCompatibility);
 
         m_interrupts = interrupts;
-        m_select = ((configuration.Model.DeselectsJoypadOnBoot() || dmgCompatibility.IsActive)
-            ? SelectMask
-            : (byte)0x00);
         m_previousLine = 0x0F;
+
+        // With a boot ROM the register powers on with both groups selected and the boot program writes the selection it
+        // hands off; without one, the selection that program would have left is seeded.
+        if (configuration.BootRom is null) {
+            m_select = ((configuration.Model.DeselectsJoypadOnBoot() || dmgCompatibility.IsActive)
+                ? SelectMask
+                : (byte)0x00);
+        }
     }
 
     /// <inheritdoc/>

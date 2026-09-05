@@ -16,6 +16,9 @@ internal static class BootRomColorTiming {
     private const byte PaletteAutoIncrement = 0x80;
     private const byte PaletteByteCount = 8;
     private const byte CompatibilityModePort = 0x4C;
+    private const byte JoypadPort = 0x00;
+    // Both button-group selection bits high.
+    private const byte JoypadDeselected = 0x30;
     private const int TitleLength = 16;
     // High-page scratch the compatibility-mode whitening writes through, so both header classes cost the same.
     private const byte ScratchPaletteDecoyData = 0x8F;
@@ -56,6 +59,7 @@ internal static class BootRomColorTiming {
             emitter: emitter,
             header: header,
             labels: labels,
+            layout: layout,
             scratch: scratch
         );
     }
@@ -314,6 +318,9 @@ internal static class BootRomColorTiming {
         emitter.MarkLabel(label: afterCopy);
         emitter.LoadAImmediate(value: DmgCompatibilityState.Key0CompatibilityBit);
         emitter.StoreAToHighPage(port: CompatibilityModePort);
+        // Compatibility mode hands the cartridge the joypad register with both button groups deselected.
+        emitter.LoadAImmediate(value: JoypadDeselected);
+        emitter.StoreAToHighPage(port: JoypadPort);
         // Compatibility mode renders through the palettes the picture processor resolves from the cartridge title, and
         // the seeded handoff leaves palette RAM clear, so the whitening is aimed at high-page scratch instead.
         StagePaletteReadPorts(
@@ -625,8 +632,9 @@ internal static class BootRomColorTiming {
         );
     }
     // Walks the prediction tables into the staged handoff counter: the licensee-and-color-flag row, then the
-    // checksum contribution, then the fourth-letter tie-break for the checksums that share a row.
-    private static void EmitCounterLookup(Sm83Emitter emitter, BootRomScratch scratch, BootRomHeaderPorts header, BootRomColorLabels labels) {
+    // checksum contribution, then the fourth-letter tie-break for the checksums that share a row, then the revision's
+    // own offset from the shared tables.
+    private static void EmitCounterLookup(Sm83Emitter emitter, BootRomScratch scratch, BootRomHeaderPorts header, BootRomColorLabels labels, BootRomLayout layout) {
         var bucketZero = emitter.NewLabel();
         var bucketOne = emitter.NewLabel();
         var bucketDone = emitter.NewLabel();
@@ -867,6 +875,25 @@ internal static class BootRomColorTiming {
         );
         emitter.StoreAToHighPage(port: ((byte)(scratch.Counter + 1)));
         emitter.MarkLabel(label: counterDone);
+
+        var extra = layout.HandoffCounterExtra;
+
+        if (extra == 0) {
+            return;
+        }
+
+        emitter.LoadAFromHighPage(port: scratch.Counter);
+        emitter.ArithmeticImmediate(
+            op: AluOp.Add,
+            value: ((byte)(extra & 0xFF))
+        );
+        emitter.StoreAToHighPage(port: scratch.Counter);
+        emitter.LoadAFromHighPage(port: ((byte)(scratch.Counter + 1)));
+        emitter.ArithmeticImmediate(
+            op: AluOp.AddWithCarry,
+            value: ((byte)(extra >> 8))
+        );
+        emitter.StoreAToHighPage(port: ((byte)(scratch.Counter + 1)));
     }
     // Branches to above when the 16-bit value in high:low exceeds the table sentinel, and to below otherwise. The
     // comparison is a borrow-producing subtraction of the sentinel plus one, so it is exact for any pair of bytes.

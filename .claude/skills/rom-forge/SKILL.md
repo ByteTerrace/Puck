@@ -27,7 +27,8 @@ change, it is stale; update it in the same change.
 The forge types are public — the packages are the authoring surface. Each
 forge has a build+verify test project (`tests/Puck.HumbleGamingBrick.Forge.Tests`,
 `tests/Puck.AdvancedGamingBrick.Forge.Tests`) asserting the worked-example
-cart builds byte-identically and passes its verify-by-running gate.
+cart builds byte-identically and passes its verify-by-running gate. The Humble
+project also pins each boot ROM revision's image to a recorded hash.
 
 **The authored-content documents live elsewhere:** `puck.audio.v1`
 (`AudioDocument`) and `puck.synth.v1` (`SynthPatchDocument`) are in
@@ -138,29 +139,48 @@ at 0x00FE so the program counter falls into 0x0100.
 
 - **The handoff counter is the contract.** `BootDivPrediction`'s tables are the
   budget; the Color image carries those same tables and computes its target from
-  the cartridge header. The program resets the divider and then consumes exactly
-  the predicted count, so everything before the reset is free and everything
-  after it is straight line.
+  the cartridge header, plus the revision's own offset from those shared tables
+  (`BootRomLayout.HandoffCounterExtra`, which carries `Cgb0Extra`/`AgbExtra`).
+  The program resets the divider and then consumes exactly the predicted count,
+  so everything before the reset is free and everything after it is straight
+  line.
+- **The tables are pinned from outside; the solve is not evidence.** The same
+  `Compute(model, header)` call seeds the post-boot state, sets the emitted
+  image's target, and steers the builder's solve, so a wrong table produces a
+  matching boot. The `boot-rom-handoff` stage breaks that by booting the named
+  mooneye `boot_div-*` reference cartridges and checking both the prediction and
+  the authored image against the counter each cartridge asserts. That covers one
+  header on every revision; every other table row is unpinned outside this
+  repository, and the stage's pass detail says so. Never move a table value to
+  make a boot agree with it.
 - **The straight line is SOLVED, not counted.** `BootRomBuilder` boots the image
   it just emitted against `BootRomProbeCartridge` headers and adjusts two
   machine-cycle constants until the handoff counter and scanline land. Never
-  hand-count instruction timings into these constants.
+  hand-count instruction timings into these constants, and never let the solved
+  tail absorb a per-revision offset — that is `HandoffCounterExtra`'s job, added
+  by the emitted table walk.
 - **The compatibility palettes are the index registers' cause.** The image carries
   `CompatibilityPalette`'s selection tables and loads the chosen background and two
   object palettes eight bytes at a time through BCPD/OCPD auto-increment, which is
   the only thing that lands BCPS/OCPS on 0x88/0x90 (read back 0xC8/0xD0). The data
   ports read sealed in compatibility mode, so palette RAM contents are not compared
-  there and the seeded path carries no palette-RAM seed. Space for those tables
-  comes from the low window (`BootRomLowWindow`, between the entry jump and the
-  unmap) and from carrying the divider's checksum contributions as one common value
-  plus a row per checksum that differs (`BootRomChecksumTable`).
-- **Equivalence surface.** `BootRomHandoff.Compare` is the shared check the forge
-  tests and the POST's `boot-rom-handoff` stage both run: the processor register
-  file, the divider counter, every readable high-page register, the
-  interrupt-enable register, and Color palette RAM. The picture-pipeline and
-  audio-generator sub-register phase is NOT reachable from an executing program
-  and is outside it; so is the LY-comparison bit on the revisions whose seeded
-  handoff parks on the first line.
+  there (the capture is gated on the compatibility authority) and the seeded path
+  carries no palette-RAM seed. Space for those tables comes from the low window
+  (`BootRomLowWindow`, between the entry jump and the unmap) and from carrying the
+  divider's checksum contributions as one common value plus a row per checksum
+  that differs (`BootRomChecksumTable`).
+- **Equivalence surface.** `BootRomHandoff.Compare` has ONE runner, the POST's
+  `boot-rom-handoff` stage; the forge tests pin each revision's image to a
+  recorded hash instead. The compared surface is the processor register file, the
+  divider counter, every readable high-page register, high RAM through 0xFFFE,
+  the interrupt-enable register, and Color palette RAM where the compatibility
+  authority (`DmgCompatibilityState.IsActive`) says the silicon runs natively —
+  never on the model alone. `Capture` mutates nothing: it snapshots the machine
+  around the palette walk and restores it. Only the picture-pipeline and
+  audio-generator sub-register phase is outside the surface — it is not reachable
+  from an executing program. The LY-comparison bit is IN it and is not masked:
+  a revision whose seeded handoff parks at LY==LYC==0 carries the latch set, so
+  its status register reads 0x84.
 - `MachineIdentity` fingerprints the boot image, so a booted machine's snapshots
   never interchange with a seeded machine's.
 

@@ -138,16 +138,18 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
     }
 
     /// <inheritdoc/>
-    /// <remarks>Routed like an ordinary read, minus the watchpoint witness: the settling of a register mid-write is
-    /// not an access the debugger should see.</remarks>
-    public byte PeekIoRegister(ushort address) =>
-        m_ppu.ReadRegister(address: address);
-    /// <inheritdoc/>
-    public void SettleIoWrite(ushort address, byte value) =>
-        m_ppu.WriteRegister(
+    /// <remarks>The record and the commit phase both belong to the display, which owns the registers and every
+    /// consumer of them; the bus only routes the address. No watchpoint witness: a write in flight is one transition
+    /// inside a single access, not an access of its own.</remarks>
+    public int RecordDisplayWrite(ushort address, byte value, out bool settles) =>
+        m_ppu.RecordWrite(
             address: address,
+            settles: out settles,
             value: value
         );
+    /// <inheritdoc/>
+    public void OpenDisplayWriteSettle() =>
+        m_ppu.OpenWriteSettle();
     /// <inheritdoc/>
     public byte ReadByte(ushort address) {
         // Debug read watchpoints: dormant (one predicted-not-taken field test) until a hgb.watch arms one, so the hot
@@ -1021,8 +1023,12 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             case MemoryMap.SystemModeSelect:
                 // A real boot ROM's one-time write: confirms (or, for a hand-authored header a boot ROM disagrees
                 // with, corrects) the DMG-compatibility fact every other Color-only register above answers through.
-                if (m_supportsColor) {
+                // The register is sealed once the overlay unmaps, so a cartridge cannot re-enter or leave the mode.
+                if (m_supportsColor && m_bootRomMapped) {
                     m_dmgCompatibility.ApplyKey0(value: value);
+                    // The render path caches the answer, so the display is told when the latch moves rather than
+                    // re-reading the authority on every dot.
+                    m_ppu.RefreshCompatibilityMode();
                 }
 
                 break;

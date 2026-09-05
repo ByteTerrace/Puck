@@ -138,6 +138,28 @@ public static class ConsoleModelExtensions {
     /// <returns><see langword="true"/> from CPU CGB D onward.</returns>
     public static bool SamplesPaletteWriteEarly(this ConsoleModel model) =>
         (model >= ConsoleModel.CgbD);
+    /// <summary>Returns whether an object-enable bit going low reaches the display's object path within the settling
+    /// T-cycle of its own control write while the pixel pipeline sits at the start of a column. The compact
+    /// monochrome package routes that bit one latch deeper, so the same write leaves the column's objects drawn
+    /// there and drops them on every other monochrome package.</summary>
+    /// <param name="model">The revision to interrogate.</param>
+    /// <returns><see langword="true"/> for every revision except the compact monochrome package.</returns>
+    public static bool DropsObjectEnableAtColumnStart(this ConsoleModel model) =>
+        (model != ConsoleModel.Mgb);
+    /// <summary>Returns whether the revision runs the rearranged monochrome boot ROM. It takes long enough to hand
+    /// off mid vertical blank rather than at the top of a frame, so the display counter, the status register, and the
+    /// processor register file it leaves all differ from every later monochrome revision.</summary>
+    /// <param name="model">The revision to interrogate.</param>
+    /// <returns><see langword="true"/> for the revision-0 monochrome package.</returns>
+    public static bool HasRearrangedMonochromeBootRom(this ConsoleModel model) =>
+        (model == ConsoleModel.Dmg0);
+    /// <summary>Returns whether the boot ROM hands the cartridge the revised console-identity byte in the accumulator
+    /// (all ones) instead of the original one. It is the single register difference a cartridge probes to tell the
+    /// compact monochrome package and the second companion-console revision from their predecessors.</summary>
+    /// <param name="model">The revision to interrogate.</param>
+    /// <returns><see langword="true"/> for the compact monochrome package and the second companion-console revision.</returns>
+    public static bool HasRevisedBootIdentity(this ConsoleModel model) =>
+        (model is (ConsoleModel.Mgb or ConsoleModel.Sgb2));
     /// <summary>Returns whether the infrared receiver reports the machine's own emitted light. CPU CGB E and every
     /// earlier Color stepping sense their own lit LED through the infrared port; the Advanced console does not, so an
     /// unpaired Advanced machine reads dark unless a cartridge with its own infrared window is present.</summary>

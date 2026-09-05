@@ -33,10 +33,11 @@ public static class HumbleGamingBrickComponents {
 
         // The DMG-compatibility authority: registered as an IModeSwitchable BEFORE every consumer below (Ppu caches
         // its own answer, refreshed here on a live swap or restore) so a live-swap/restore fan-out sees this
-        // component's re-derivation before anything that reads it. Not itself snapshotted — it re-derives from the
-        // (snapshotted) model and the (immutable) header exactly like every other cached capability flag.
+        // component's state before anything that reads it. Snapshotted, because a boot ROM's KEY0 write makes the
+        // mode a latch rather than a derivation from the model and the header.
         services.TryAddScoped<DmgCompatibilityState>();
         services.AddScoped<IModeSwitchable>(implementationFactory: static provider => provider.GetRequiredService<DmgCompatibilityState>());
+        services.AddScoped<ISnapshotable>(implementationFactory: static provider => provider.GetRequiredService<DmgCompatibilityState>());
 
         services.TryAddScoped<SystemMemory>();
         services.AddScoped<ISnapshotable>(implementationFactory: static provider => provider.GetRequiredService<SystemMemory>());
@@ -153,7 +154,6 @@ public static class HumbleGamingBrickComponents {
 
         // The mode-3 timing knobs default to the shipped values; a sweep harness pre-registers its own instance so this
         // TryAdd is a no-op and the PPU reads the swept parameters (mirrors how the configuration seeds TickResolution).
-        services.TryAddScoped(implementationFactory: static provider => PpuTimingParameters.Default);
 
         services.TryAddScoped<Ppu>();
         services.AddScoped<IPpu>(implementationFactory: static provider => provider.GetRequiredService<Ppu>());

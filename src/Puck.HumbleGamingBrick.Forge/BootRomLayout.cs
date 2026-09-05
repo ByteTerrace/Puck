@@ -75,6 +75,14 @@ public sealed class BootRomLayout {
     /// blank, rather than re-enabling in the epilogue to hand off on the first line.</summary>
     public bool TimesLcdEnable =>
         (Probes[0].HandoffLine != 0);
+    /// <summary>Gets the T-cycles this revision's boot ROM runs beyond what the shared Color tables give for the same
+    /// header, which the emitted program adds to its own table walk rather than leaving to the solved tail.</summary>
+    public ushort HandoffCounterExtra =>
+        ((Model == ConsoleModel.Cgb0)
+        ? BootDivPrediction.Cgb0Extra
+        : (Model.HasAgbBootHandoff()
+            ? BootDivPrediction.AgbExtra
+            : (ushort)0));
     /// <summary>Gets the handoff counter every cartridge produces on this revision, for a revision whose boot time is a
     /// constant.</summary>
     public ushort ConstantCounter =>
