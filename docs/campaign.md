@@ -1304,6 +1304,32 @@ the same review: loosening the budget to an average-case estimate (a bound
 that can be exceeded is not a bound), and a stepping debugger (there is no
 call stack; a rule's evaluation is one line of facts).
 
+**`Puck.State`: the state and rule engine as a standalone deterministic library.**
+Extract it, on the `Puck.Commands`/`Puck.Physics` precedent: a package with no
+world, body, rendering, or presentation concept, which `Puck.World.Schema`
+consumes and extends, so a card game, a turn-based resolver, or another
+engine's frontend can run authoritative rules over `Puck.Maths` and
+`Puck.State` alone. Three phases, each landing with every hash pin unchanged
+and `puck schema --check` byte-identical to before:
+1. The pure pieces move with no behaviour change — expression syntax and
+   tokens, the expression arithmetic, tables and their document, state
+   transforms, the identifier family, the reserved-channel prefixes, the opcode
+   enum. Consumers take a global using; type names keep their `World` prefix
+   until the last phase so every diff reads as a move.
+2. The extension seams. The operand and effect unions become registries the
+   world project fills with its own arms (distance, line of sight, channels,
+   bodies; pose, cue, HUD, placement, field, save), each arm carrying its own
+   cost so the work sheet stays derived; the compiler compiles state effects
+   itself and dispatches the rest; the budget, dataflow, hazards, and trace move
+   with the compiler. Interactions stay world-side until a pair domain over rows
+   is designed rather than assumed.
+3. The evaluator moves behind a state-host interface — the mutation door, the
+   journal, checkpoints, and the world-fact reader the operands answer through
+   — that `WorldServer` implements; only then do the `World` prefixes go, in one
+   rename sweep.
+Refused: a compatibility shim between old and new spellings at any phase, and
+moving the evaluator before the seams exist.
+
 ## After this arc
 
 Owner review of this branch gates the next wave. Recorded as decisions, not status — none of this has
