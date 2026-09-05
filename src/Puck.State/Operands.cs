@@ -167,21 +167,21 @@ public sealed class ReductionOperand : OperandFact {
 
     /// <inheritdoc/>
     public override RuleFact Read(IRuleReader reader) {
-        if (!StateReader.TryReadHandle(rows: reader.Rows, catalog: reader.Catalog, handle: StateHandle, key: null, tick: reader.Tick, row: out var declared, rawValue: out _, text: out _)) {
+        if (!StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: StateHandle, key: null, tick: reader.Tick, row: out var declared, rawValue: out _, text: out _)) {
             return RuleFact.Finite(value: 0L, kind: ValueKind);
         }
         if (Reduce == StateReduceOp.ArrangementRank) {
-            return RuleFact.Finite(value: StateReader.ArrangementRank(rows: reader.Rows, zone: declared), kind: ValueKind);
+            return RuleFact.Finite(value: StateReader.ArrangementRank(store: reader.Store, zone: declared), kind: ValueKind);
         }
         if (FilterRow is null) {
-            return RuleFact.Finite(value: StateReader.ReduceRaw(row: declared, op: Reduce, tick: reader.Tick), kind: ValueKind);
+            return RuleFact.Finite(value: StateReader.ReduceRaw(store: reader.Store, row: declared, op: Reduce, tick: reader.Tick), kind: ValueKind);
         }
 
         var hasValue = false;
         var accumulator = 0L;
         foreach (var cell in (declared.Cells ?? [])) {
             if (
-                !StateReader.TryReadHandle(rows: reader.Rows, catalog: reader.Catalog, handle: FilterHandle, key: cell.Key.Value, tick: reader.Tick, row: out _, rawValue: out var filterRaw, text: out _) ||
+                !StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: FilterHandle, key: cell.Key.Value, tick: reader.Tick, row: out _, rawValue: out var filterRaw, text: out _) ||
                 (filterRaw.GetValueOrDefault() == 0L)
             ) {
                 continue;
@@ -190,7 +190,7 @@ public sealed class ReductionOperand : OperandFact {
                 accumulator++;
                 continue;
             }
-            if (!StateReader.TryRead(rows: reader.Rows, rowName: declared.Name, key: cell.Key.Value, tick: reader.Tick, row: out _, rawValue: out var raw, text: out _) || raw is null) {
+            if (!StateReader.TryRead(store: reader.Store, rowName: declared.Name, key: cell.Key.Value, tick: reader.Tick, row: out _, rawValue: out var raw, text: out _) || raw is null) {
                 continue;
             }
 
@@ -357,7 +357,7 @@ public sealed class BoardOperand : OperandFact, IStateAddressedOperand {
     private long ReadBoard(IRuleReader reader) {
         var query = Board;
         if (
-            !StateReader.TryReadHandle(rows: reader.Rows, catalog: reader.Catalog, handle: StateHandle, key: null, tick: reader.Tick, row: out var row, rawValue: out _, text: out _) ||
+            !StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: StateHandle, key: null, tick: reader.Tick, row: out var row, rawValue: out _, text: out _) ||
             (row.EffectiveDomain is not StateDomain.CellsOf rowBoard)
         ) {
             return -1;
@@ -368,7 +368,7 @@ public sealed class BoardOperand : OperandFact, IStateAddressedOperand {
             return ((origin >= 0) && query.Topology.TryOffset(origin, offsetQuery.Dx, offsetQuery.Dz, out var offset)) ? offset : -1;
         }
         var values = reader.BoardScratch(cells: query.Topology.CellCount);
-        BoardQueries.Read(row, query.Topology, values);
+        reader.Store.ReadBoard(row: row, topology: query.Topology, values: values);
         var key = RuleEvaluation.ResolveKey(reader: reader, key: Key, keyFrom: KeyFrom);
         var source = ((key is not null) && query.Topology.TryCell(key, out var sourceCell)) ? sourceCell : -1;
         // A pathCost query's live target resolves on the same terms as a '$cell:' key indirection — the same
@@ -398,7 +398,7 @@ public sealed class PhaseOperand : OperandFact {
 
     /// <inheritdoc/>
     public override RuleFact Read(IRuleReader reader) {
-        if (!StateReader.TryReadHandle(rows: reader.Rows, catalog: reader.Catalog, handle: StateHandle, key: null, tick: reader.Tick, row: out var declared, rawValue: out _, text: out _)) {
+        if (!StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: StateHandle, key: null, tick: reader.Tick, row: out var declared, rawValue: out _, text: out _)) {
             return RuleFact.Finite(value: -1L, kind: CellKind.Int);
         }
         return RuleFact.Finite(value: (declared.Phase?.Sequence ?? -1L), kind: CellKind.Int);
@@ -478,7 +478,7 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
         if (!reader.Patterns.TryGet(name: Pattern, pattern: out var pattern)) {
             throw new InvalidOperationException($"pattern operand '{Pattern}' outlived the compiled rules");
         }
-        if (!StateReader.TryReadHandle(rows: reader.Rows, catalog: reader.Catalog, handle: StateHandle, key: null, tick: reader.Tick, row: out var row, rawValue: out _, text: out _)) {
+        if (!StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: StateHandle, key: null, tick: reader.Tick, row: out var row, rawValue: out _, text: out _)) {
             throw new InvalidOperationException($"pattern operand over '{Row}' outlived its compiled row handle");
         }
 
@@ -490,7 +490,7 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
             }
 
             var values = reader.BoardScratch(cells: query.Topology.CellCount);
-            BoardQueries.Read(row, query.Topology, values);
+            reader.Store.ReadBoard(row: row, topology: query.Topology, values: values);
             var key = RuleEvaluation.ResolveKey(reader: reader, key: Key, keyFrom: KeyFrom);
             var origin = (((key is not null) && query.Topology.TryCell(key, out var cell)) ? cell : -1);
 
@@ -543,11 +543,11 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
         if (TokenExpression is { } tokenExpression) {
             wordLength = ReadTupleWord(reader: reader, row: row, expression: tokenExpression, kind: pattern.Source.Kind, word: word, start: start);
         } else {
-            if ((row.EffectiveDomain is StateDomain.KeysOf { Ordered: true }) && !StateReader.TryReadHandle(rows: reader.Rows, catalog: reader.Catalog, handle: FilterHandle, key: null, tick: reader.Tick, row: out source, rawValue: out _, text: out _)) {
+            if ((row.EffectiveDomain is StateDomain.KeysOf { Ordered: true }) && !StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: FilterHandle, key: null, tick: reader.Tick, row: out source, rawValue: out _, text: out _)) {
                 throw new InvalidOperationException($"pattern attribute '{FilterRow}' outlived its compiled row handle");
             }
 
-            wordLength = ReadWord(row: row, source: source, tick: reader.Tick, word: word, start: start);
+            wordLength = ReadWord(store: reader.Store, row: row, source: source, tick: reader.Tick, word: word, start: start);
         }
 
         return (MatchFacet == MatchFacet.Prefix)
@@ -557,20 +557,22 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
 
     /// <summary>Reads a zone's cells in pile order through its attribute row, a history ring oldest push first, or a
     /// keyed row's own cells in cell order.</summary>
+    /// <param name="store">Where each value is read.</param>
     /// <param name="row">The word's row.</param>
     /// <param name="source">The row the values are read from — the attribute row for a zone, else <paramref name="row"/>.</param>
     /// <param name="tick">The tick the read answers as of.</param>
     /// <param name="word">The word buffer.</param>
     /// <returns>The word's length.</returns>
     /// <param name="start">The token the word starts at, or <see langword="null"/> to read the whole row.</param>
-    public static int ReadWord(StateRow row, StateRow source, ulong tick, Span<long> word, string? start = null) {
+    public static int ReadWord(StateStore store, StateRow row, StateRow source, ulong tick, Span<long> word, string? start = null) {
+        ArgumentNullException.ThrowIfNull(argument: store);
         var length = 0;
 
         if (row.EffectiveDomain is StateDomain.Ring history) {
-            var count = (int)Math.Min(row.HistoryCursor, history.Capacity);
+            var count = (int)Math.Min(store.HistoryCursor(row: row), history.Capacity);
 
             for (var age = count - 1; age >= 0; age--) {
-                word[length++] = HistoryOperand.ReadSlot(row: row, history: history, age: age);
+                word[length++] = HistoryOperand.ReadSlot(store: store, row: row, history: history, age: age);
             }
 
             return length;
@@ -578,7 +580,7 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
 
         var cells = (row.Cells ?? []);
         for (var index = StartIndex(cells: cells, start: start); index < cells.Count; index++) {
-            StateReader.ReadCell(row: source, key: cells[index].Key.Value, tick: tick, rawValue: out var raw, text: out _);
+            StateReader.ReadCell(store: store, row: source, key: cells[index].Key.Value, tick: tick, rawValue: out var raw, text: out _);
             word[length++] = raw ?? 0L;
         }
 
@@ -653,13 +655,13 @@ public sealed class HistoryOperand : OperandFact {
     /// <inheritdoc/>
     public override RuleFact Read(IRuleReader reader) {
         if (
-            !StateReader.TryReadHandle(rows: reader.Rows, catalog: reader.Catalog, handle: StateHandle, key: null, tick: reader.Tick, row: out var row, rawValue: out _, text: out _) ||
+            !StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: StateHandle, key: null, tick: reader.Tick, row: out var row, rawValue: out _, text: out _) ||
             (row.EffectiveDomain is not StateDomain.Ring history)
         ) {
             throw new InvalidOperationException($"history operand over '{Row}' outlived its compiled row handle");
         }
 
-        return RuleFact.Finite(value: ReadSlot(row: row, history: history, age: Age), kind: ValueKind);
+        return RuleFact.Finite(value: ReadSlot(store: reader.Store, row: row, history: history, age: Age), kind: ValueKind);
     }
     /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) => 1L;
@@ -669,17 +671,20 @@ public sealed class HistoryOperand : OperandFact {
     /// <summary>Reads the slot pushed <paramref name="age"/> pushes ago: (cursor - 1 - age) mod capacity, since the
     /// ring's cells are its slots in order; a slot never written reads the empty value. Ring slots carry no time
     /// trait, so the stored raw is the live value.</summary>
+    /// <param name="store">Where the slots and the cursor are read.</param>
     /// <param name="row">The history row.</param>
     /// <param name="history">The row's ring domain.</param>
     /// <param name="age">The age.</param>
-    public static long ReadSlot(StateRow row, StateDomain.Ring history, long age) {
-        if (age >= Math.Min(row.HistoryCursor, history.Capacity)) {
+    public static long ReadSlot(StateStore store, StateRow row, StateDomain.Ring history, long age) {
+        ArgumentNullException.ThrowIfNull(argument: store);
+        var cursor = store.HistoryCursor(row: row);
+
+        if (age >= Math.Min(cursor, history.Capacity)) {
             return history.Empty;
         }
 
-        var slot = (int)((row.HistoryCursor - 1L - age) % history.Capacity);
-        var cells = row.Cells;
+        var slot = (int)((cursor - 1L - age) % history.Capacity);
 
-        return (cells is null || slot >= cells.Count) ? history.Empty : cells[slot].Value;
+        return (store.TryStoredAt(row: row, index: slot, value: out var value) ? value : history.Empty);
     }
 }

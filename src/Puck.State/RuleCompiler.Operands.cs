@@ -540,9 +540,9 @@ public static partial class RuleCompiler {
             "offset" => BoardQueryKind.Offset,
             "attacks" => BoardQueryKind.Attacks,
             "component" => BoardQueryKind.Component,
-            "liberties" => BoardQueryKind.Liberties,
-            "libertiesAt" => BoardQueryKind.LibertiesAt,
-            "capturesAt" => BoardQueryKind.CapturesAt,
+            "boundary" => BoardQueryKind.Boundary,
+            "boundaryAt" => BoardQueryKind.BoundaryAt,
+            "enclosedAt" => BoardQueryKind.EnclosedAt,
             _ => throw Invalid($"unknown board operation '{tokens[1]}'"),
         };
         if (kind is BoardQueryKind.Mask && topology.CellCount > BoardMask.MaxCells) {
@@ -598,22 +598,22 @@ public static partial class RuleCompiler {
                 throw Invalid("pathCost requires <targetCell>:<maxCost>:<maxVisits> or cell:<row>:<key>:<maxCost>:<maxVisits> on an integer terrain row");
             }
             query = new BoardPathCostQuery(topology, target, cost, visits, targetFrom);
-        } else if (kind is BoardQueryKind.Component or BoardQueryKind.Liberties or BoardQueryKind.LibertiesAt or BoardQueryKind.CapturesAt) {
-            var liberties = (kind != BoardQueryKind.Component);
-            var arity = (liberties ? 8 : 6);
-            var libertyLower = 0L;
-            var libertyUpper = 0L;
+        } else if (kind is BoardQueryKind.Component or BoardQueryKind.Boundary or BoardQueryKind.BoundaryAt or BoardQueryKind.EnclosedAt) {
+            var boundary = (kind != BoardQueryKind.Component);
+            var arity = (boundary ? 8 : 6);
+            var boundaryLower = 0L;
+            var boundaryUpper = 0L;
             if (tokens.Length != arity || row.Kind is not (CellKind.Int or CellKind.Bool) ||
                 !long.TryParse(tokens[3], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var memberLower) ||
                 !long.TryParse(tokens[4], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var memberUpper) || memberLower > memberUpper ||
-                (liberties && (!long.TryParse(tokens[5], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out libertyLower) ||
-                    !long.TryParse(tokens[6], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out libertyUpper) || libertyLower > libertyUpper)) ||
+                (boundary && (!long.TryParse(tokens[5], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out boundaryLower) ||
+                    !long.TryParse(tokens[6], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out boundaryUpper) || boundaryLower > boundaryUpper)) ||
                 !int.TryParse(tokens[arity - 1], NumberStyles.None, CultureInfo.InvariantCulture, out var componentVisits) || componentVisits < 1 || componentVisits > topology.CellCount) {
-                throw Invalid(liberties
-                    ? $"{tokens[1]} requires <min>:<max>:<libertyMin>:<libertyMax>:<maxVisits> on an integer or boolean board row"
+                throw Invalid(boundary
+                    ? $"{tokens[1]} requires <min>:<max>:<boundaryMin>:<boundaryMax>:<maxVisits> on an integer or boolean board row"
                     : "component requires <min>:<max>:<maxVisits> on an integer or boolean board row");
             }
-            query = new BoardComponentQuery(topology, memberLower, memberUpper, componentVisits, libertyLower, libertyUpper, kind);
+            query = new BoardComponentQuery(topology, memberLower, memberUpper, componentVisits, boundaryLower, boundaryUpper, kind);
         } else if (kind == BoardQueryKind.Attacks) {
             if (tokens.Length != 6 || row.Kind is not (CellKind.Int or CellKind.Bool) ||
                 !long.TryParse(tokens[3], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var attackLower) ||

@@ -58,6 +58,7 @@ public enum BoardCombineOp : byte {
 [JsonDerivedType(typeof(StateTransform.BoardCombine), "boardCombine")]
 [JsonDerivedType(typeof(StateTransform.Arrange), "arrange")]
 [JsonDerivedType(typeof(StateTransform.Push), "push")]
+[JsonDerivedType(typeof(StateTransform.ClearEnclosed), "clearEnclosed")]
 [JsonDerivedType(typeof(StateTransform.Observe), "observe")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public abstract record StateTransform {
@@ -141,6 +142,14 @@ public abstract record StateTransform {
     /// <param name="Row">The history row.</param>
     /// <param name="Value">The raw value pushed, in the row's kind.</param>
     public sealed record Push(string Row, long Value) : StateTransform;
+    /// <summary>Clears every group of cells valued <see cref="Lower"/>..<see cref="Upper"/> beside the cell
+    /// <see cref="From"/> names that has no empty cell beside it, writing the board's empty value over their members.
+    /// The write-path twin of <c>$board:enclosedAt</c>, applied after the value lands.</summary>
+    /// <param name="Row">The board.</param>
+    /// <param name="From">The placed value's cell: a literal cell key, or any dynamic key spelling a write accepts.</param>
+    /// <param name="Lower">The enclosed range's inclusive low end; the board's empty value lies outside it.</param>
+    /// <param name="Upper">The enclosed range's inclusive high end.</param>
+    public sealed record ClearEnclosed(string Row, string From, long Lower, long Upper) : StateTransform;
 }
 
 /// <summary>One key of a zone <c>sort</c>: a keyed numeric attribute row over the zone's token domain.</summary>

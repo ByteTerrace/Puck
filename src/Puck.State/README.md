@@ -187,7 +187,8 @@ Nothing here carries a `World` name — a state library names no world.
   `TableRow` as the name/source/hash reference a document pins one by and
   `CompiledTable` as the sorted, binary-searched loaded form.
 - *State transforms:* the `StateTransform` union (`transfer`, `setRay`,
-  `shuffle`, `sortZone`, `sortKeyed`, `writeSet`, `push`, `observe`),
+  `shuffle`, `sortZone`, `sortKeyed`, `writeSet`, `boardCombine`, `arrange`,
+  `push`, `clearEnclosed`, `observe`),
   `ZoneSelector`, and `SortKey`.
 - *Identifiers:* `SafeName` and `CellName` (validated at construction,
   refusing by name; `SafeName.MaxSuffixLength` reserves the file suffix a

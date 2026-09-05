@@ -11,7 +11,7 @@ namespace Puck.State.Tests;
 public sealed class ExpressionFunctionLawTests {
     private sealed class StubReader : IRuleReader {
         public ulong Tick => 0UL;
-        public IReadOnlyList<StateRow> Rows => [];
+        public StateStore Store => RowStore.Empty;
         public StateCatalog Catalog { get; } = StateCatalog.Compile(section: null);
         public CompiledPatterns Patterns => CompiledPatterns.Empty;
         public string? BoundEachKey => null;

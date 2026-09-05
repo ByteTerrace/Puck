@@ -126,7 +126,7 @@ public sealed partial class RuleEvaluator {
     public void EachKeys(string row, List<CellName> into) {
         into.Clear();
 
-        if (StateRows.FindStateRow(rows: m_host.Rows, name: row) is { Cells: { } cells }) {
+        if (m_host.Store.Find(name: row) is { Cells: { } cells }) {
             for (var index = 0; index < cells.Count; index++) {
                 into.Add(item: cells[index].Key);
             }

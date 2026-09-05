@@ -9,7 +9,7 @@ namespace Puck.World;
 /// <see cref="StateReader"/> for the pair rule, the computed value, and the allocation contract.</summary>
 public static class WorldStateReader {
     /// <summary>Resolves one world-owned row by its compiled typed handle (see
-    /// <see cref="StateReader.TryReadHandle"/>).</summary>
+    /// <see cref="StateReader.TryReadHandle(IReadOnlyList{StateRow}, StateCatalog, StateHandle, string?, ulong, out StateRow?, out long?, out string?)"/>).</summary>
     /// <param name="definition">The document to read.</param>
     /// <param name="catalog">The document's current state catalog.</param>
     /// <param name="handle">A world-lane handle minted by <paramref name="catalog"/>.</param>
@@ -96,7 +96,7 @@ public static class WorldStateReader {
         return StateReader.Reduce(rows: definition.State, rowName: rowName, op: op, tick: tick);
     }
     /// <summary>Resolves one (row, key) pair against the document's live <c>state</c> section (see
-    /// <see cref="StateReader.TryRead"/>).</summary>
+    /// <see cref="StateReader.TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/>).</summary>
     /// <param name="definition">The document to read.</param>
     /// <param name="rowName">The state row's name.</param>
     /// <param name="key">The cell key inside the row, or <see langword="null"/> for the row's slot cell.</param>

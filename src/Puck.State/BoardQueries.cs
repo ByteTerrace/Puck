@@ -172,12 +172,12 @@ public static class BoardQueries {
     }
 
     // A flood along the topology's directions from the key cell over in-range cells; every settled member is one
-    // visit against the budget. Liberties are counted once each through a second mark, so a cell touching the group
-    // twice is one liberty.
+    // visit against the budget. Boundary are counted once each through a second mark, so a cell touching the group
+    // twice is one boundary cell.
     private static long Component(BoardComponentQuery query, ReadOnlySpan<long> values, int source) {
         var topology = query.Topology;
         var count = topology.CellCount;
-        if (query.Kind is BoardQueryKind.LibertiesAt or BoardQueryKind.CapturesAt) {
+        if (query.Kind is BoardQueryKind.BoundaryAt or BoardQueryKind.EnclosedAt) {
             return Placement(query, values, source);
         }
         if (values[source] < query.Lower || values[source] > query.Upper) {
@@ -189,7 +189,7 @@ public static class BoardQueries {
             var mark = markPool.AsSpan(0, count);
             var stack = stackPool.AsSpan(0, count);
             mark.Clear();
-            var liberties = query.Kind == BoardQueryKind.Liberties;
+            var boundary = query.Kind == BoardQueryKind.Boundary;
             var size = 0;
             var members = 0L;
             var free = 0L;
@@ -209,27 +209,94 @@ public static class BoardQueries {
                     if (values[next] >= query.Lower && values[next] <= query.Upper) {
                         mark[next] = 1;
                         stack[size++] = next;
-                    } else if (liberties && values[next] >= query.LibertyLower && values[next] <= query.LibertyUpper) {
+                    } else if (boundary && values[next] >= query.BoundaryLower && values[next] <= query.BoundaryUpper) {
                         mark[next] = 2;
                         free++;
                     }
                 }
             }
-            return liberties ? free : members;
+            return boundary ? free : members;
         } finally {
             System.Buffers.ArrayPool<byte>.Shared.Return(markPool);
             System.Buffers.ArrayPool<int>.Shared.Return(stackPool);
         }
     }
 
-    // A stone on the empty key cell: LibertiesAt floods the friendly group it would join (the key cell a member) and
-    // counts the distinct empty cells beside it other than the key cell; CapturesAt floods each enemy group beside
-    // the key cell and counts those left with no liberty once the key cell is filled. -1 when the key cell is not
-    // empty, -2 when the settled-cell budget runs out across the floods.
+    /// <summary>Clears every group whose values lie in <paramref name="lower"/>..<paramref name="upper"/> beside
+    /// <paramref name="source"/> that has no cell at <paramref name="empty"/> beside it, writing <paramref name="empty"/>
+    /// over its members. The source cell itself counts as filled whatever it holds, so the value just placed there is
+    /// what closes the last gap.</summary>
+    /// <param name="topology">The board's topology.</param>
+    /// <param name="values">One value per cell, rewritten in place.</param>
+    /// <param name="source">The cell the placement landed on.</param>
+    /// <param name="lower">The enclosed range's inclusive low end.</param>
+    /// <param name="upper">The enclosed range's inclusive high end.</param>
+    /// <param name="empty">The board's empty value.</param>
+    /// <returns>How many cells were cleared.</returns>
+    public static long ClearEnclosed(CompiledTopology topology, Span<long> values, int source, long lower, long upper, long empty) {
+        ArgumentNullException.ThrowIfNull(topology);
+        var count = topology.CellCount;
+        if ((uint)source >= (uint)count || values[source] == empty) {
+            return 0L;
+        }
+        var markPool = System.Buffers.ArrayPool<byte>.Shared.Rent(count);
+        var stackPool = System.Buffers.ArrayPool<int>.Shared.Rent(2 * count);
+        try {
+            var mark = markPool.AsSpan(0, count);
+            var stack = stackPool.AsSpan(0, count);
+            var members = stackPool.AsSpan(count, count);
+            mark.Clear();
+            mark[source] = 1;
+            var cleared = 0L;
+            for (var seed = 0; seed < topology.DirectionCount; seed++) {
+                var start = topology.Neighbour(source, seed);
+                if (start < 0 || mark[start] != 0 || values[start] < lower || values[start] > upper) {
+                    continue;
+                }
+                var size = 0;
+                var memberCount = 0;
+                var alive = false;
+                mark[start] = 1;
+                stack[size++] = start;
+                while (size > 0) {
+                    var cell = stack[--size];
+                    members[memberCount++] = cell;
+                    for (var direction = 0; direction < topology.DirectionCount; direction++) {
+                        var next = topology.Neighbour(cell, direction);
+                        if (next < 0) {
+                            continue;
+                        }
+                        if (values[next] == empty) {
+                            alive = true;
+                        } else if (mark[next] == 0 && values[next] >= lower && values[next] <= upper) {
+                            mark[next] = 1;
+                            stack[size++] = next;
+                        }
+                    }
+                }
+                if (alive) {
+                    continue;
+                }
+                for (var index = 0; index < memberCount; index++) {
+                    values[members[index]] = empty;
+                }
+                cleared += memberCount;
+            }
+            return cleared;
+        } finally {
+            System.Buffers.ArrayPool<byte>.Shared.Return(markPool);
+            System.Buffers.ArrayPool<int>.Shared.Return(stackPool);
+        }
+    }
+
+    // A value on the empty key cell: BoundaryAt floods the in-range component it would join (the key cell a member)
+    // and counts the distinct boundary cells beside it other than the key cell; EnclosedAt floods each in-range
+    // component beside the key cell and counts the cells of those left with no boundary cell once the key cell is
+    // filled. -1 when the key cell is not empty, -2 when the settled-cell budget runs out across the floods.
     private static long Placement(BoardComponentQuery query, ReadOnlySpan<long> values, int source) {
         var topology = query.Topology;
         var count = topology.CellCount;
-        if (values[source] < query.LibertyLower || values[source] > query.LibertyUpper) {
+        if (values[source] < query.BoundaryLower || values[source] > query.BoundaryUpper) {
             return -1;
         }
         var markPool = System.Buffers.ArrayPool<byte>.Shared.Rent(count);
@@ -240,7 +307,7 @@ public static class BoardQueries {
             mark.Clear();
             mark[source] = 1;
             var settled = 0L;
-            if (query.Kind == BoardQueryKind.LibertiesAt) {
+            if (query.Kind == BoardQueryKind.BoundaryAt) {
                 var size = 0;
                 var free = 0L;
                 stack[size++] = source;
@@ -258,7 +325,7 @@ public static class BoardQueries {
                         if (values[next] >= query.Lower && values[next] <= query.Upper) {
                             mark[next] = 1;
                             stack[size++] = next;
-                        } else if (values[next] >= query.LibertyLower && values[next] <= query.LibertyUpper) {
+                        } else if (values[next] >= query.BoundaryLower && values[next] <= query.BoundaryUpper) {
                             mark[next] = 2;
                             free++;
                         }
@@ -266,18 +333,19 @@ public static class BoardQueries {
                 }
                 return free;
             }
-            var captures = 0L;
+            var enclosed = 0L;
             for (var seed = 0; seed < topology.DirectionCount; seed++) {
                 var start = topology.Neighbour(source, seed);
                 if (start < 0 || mark[start] != 0 || values[start] < query.Lower || values[start] > query.Upper) {
                     continue;
                 }
-                // Liberties seen for earlier groups are cleared back to unmarked so each group counts its own.
+                // Boundary cells seen for earlier components are cleared back to unmarked so each counts its own.
                 for (var cell = 0; cell < count; cell++) {
                     if (mark[cell] == 2) { mark[cell] = 0; }
                 }
                 var size = 0;
                 var free = 0L;
+                var members = 0L;
                 mark[start] = 1;
                 stack[size++] = start;
                 while (size > 0) {
@@ -286,6 +354,7 @@ public static class BoardQueries {
                         return -2;
                     }
                     settled++;
+                    members++;
                     for (var direction = 0; direction < topology.DirectionCount; direction++) {
                         var next = topology.Neighbour(cell, direction);
                         if (next < 0 || mark[next] != 0) {
@@ -294,17 +363,17 @@ public static class BoardQueries {
                         if (values[next] >= query.Lower && values[next] <= query.Upper) {
                             mark[next] = 1;
                             stack[size++] = next;
-                        } else if (values[next] >= query.LibertyLower && values[next] <= query.LibertyUpper) {
+                        } else if (values[next] >= query.BoundaryLower && values[next] <= query.BoundaryUpper) {
                             mark[next] = 2;
                             free++;
                         }
                     }
                 }
                 if (free == 0) {
-                    captures++;
+                    enclosed += members;
                 }
             }
-            return captures;
+            return enclosed;
         } finally {
             System.Buffers.ArrayPool<byte>.Shared.Return(markPool);
             System.Buffers.ArrayPool<int>.Shared.Return(stackPool);

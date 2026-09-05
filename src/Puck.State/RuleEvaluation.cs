@@ -66,7 +66,7 @@ public static class RuleEvaluation {
     /// <param name="key">The cell key.</param>
     public static FixedQ4816 ReadFixed(IRuleReader reader, StateHandle handle, string key) {
         if (
-            !StateReader.TryReadHandle(rows: reader.Rows, catalog: reader.Catalog, handle: handle, key: key, tick: reader.Tick, row: out var declared, rawValue: out var rawValue, text: out _) ||
+            !StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: handle, key: key, tick: reader.Tick, row: out var declared, rawValue: out var rawValue, text: out _) ||
             (rawValue is not { } raw)
         ) {
             return FixedQ4816.Zero;
@@ -84,7 +84,7 @@ public static class RuleEvaluation {
     /// <param name="key">The cell key.</param>
     public static RuleFact ReadStateFact(IRuleReader reader, StateHandle handle, string key) {
         if (
-            !StateReader.TryReadHandle(rows: reader.Rows, catalog: reader.Catalog, handle: handle, key: key, tick: reader.Tick, row: out var declared, rawValue: out var rawValue, text: out _) ||
+            !StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: handle, key: key, tick: reader.Tick, row: out var declared, rawValue: out var rawValue, text: out _) ||
             (rawValue is not { } raw)
         ) {
             return RuleFact.Finite(value: 0L, kind: CellKind.Int);

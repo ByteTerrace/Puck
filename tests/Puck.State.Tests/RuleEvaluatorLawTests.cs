@@ -21,6 +21,8 @@ public sealed class RuleEvaluatorLawTests {
         }
 
         public IReadOnlyList<StateRow> Rows { get; private set; }
+        private RowStore? m_store;
+        public StateStore Store => (m_store ??= new RowStore(rows: () => Rows));
         public List<RuleRuntimeDiagnostic> Narrated { get; } = [];
         public RuleEvaluator Evaluator { get; set; } = null!;
         public int Installs { get; private set; }

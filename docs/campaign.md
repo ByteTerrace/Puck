@@ -835,8 +835,8 @@ board's empty", one journaled mutation per operation at three walks of the
 board — a 19×19 attack map is three transforms where an 8×8's is one
 expression, and no multi-word cell-set type enters the expression language.
 A solitaire cascade is a `slice` transfer: the keyed token and every token
-after it, moved in order as one run. A Go group is `$board:component` and its
-liberties `$board:liberties`: a flood from the key cell along the topology's
+after it, moved in order as one run. A connected group is `$board:component` and its
+boundary `$board:boundary`: a flood from the key cell along the topology's
 directions under a settled-cell budget, priced by that budget like `pathCost`,
 reading -2 when the budget runs out rather than ever running unbounded. A
 transaction journals once: the host commits the preflight scope as one `Batch`

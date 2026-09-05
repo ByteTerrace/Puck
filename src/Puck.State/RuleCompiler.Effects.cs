@@ -522,6 +522,20 @@ public static partial class RuleCompiler {
                     throw Invalid("push requires a history row and an admitted value");
                 }
                 break;
+            case StateTransform.ClearEnclosed enclosed: {
+                var enclosedRow = Row(enclosed.Row);
+                if (enclosedRow.EffectiveDomain is not StateDomain.CellsOf enclosedBoard || context.FindTopology(name: enclosedBoard.Topology) is not { } enclosedTopology ||
+                    enclosedRow.Kind != CellKind.Int || enclosed.Lower > enclosed.Upper || (enclosedBoard.Empty >= enclosed.Lower && enclosedBoard.Empty <= enclosed.Upper)) {
+                    throw Invalid("clearEnclosed requires an integer board and an enclosed range that excludes the board's empty value");
+                }
+                if (RuleCompiler.TryResolveDynamicKey(key: enclosed.From, ruleName: ruleName, context: context, verb: "clearEnclosed", keyFieldLabel: "from", cell: out var origin)) {
+                    return new TransformStateEffect(transform: transform, describe: $"transformState ClearEnclosed {enclosed.Row} from {enclosed.From}", fromRef: origin);
+                }
+                if (!enclosedTopology.TryCell(enclosed.From, out _)) {
+                    throw Invalid($"clearEnclosed 'from' names no cell of '{enclosedBoard.Topology}' and spells no dynamic key");
+                }
+                break;
+            }
             default:
                 throw Invalid("unknown or null state transform");
         }

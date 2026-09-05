@@ -20,6 +20,7 @@ public static partial class WorldStateTransforms {
         StateTransform.BoardCombine combine => [combine.Row],
         StateTransform.Arrange arrange => [arrange.Row],
         StateTransform.Push push => [push.Row],
+        StateTransform.ClearEnclosed enclosed => [enclosed.Row],
         _ => [],
     };
 
@@ -52,6 +53,7 @@ public static partial class WorldStateTransforms {
                 StateTransform.BoardCombine combine => TryBoardCombine(definition, rows, combine, out reason),
                 StateTransform.Arrange arrange => TryArrange(rows, arrange, out reason),
                 StateTransform.Push push => TryPush(rows, push, out reason),
+                StateTransform.ClearEnclosed enclosed => TryClearEnclosed(definition, rows, enclosed, out reason),
                 _ => Refuse("unknown state transform", out reason),
             };
         } catch (OverflowException exception) {

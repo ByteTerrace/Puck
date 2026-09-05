@@ -28,6 +28,45 @@ public static class RuleDataflow {
         return Distinct(accesses: writes);
     }
 
+    /// <summary>Returns whether a rule reads a fact only the document host answers — anywhere in its bindings, gate,
+    /// or effects — so a frame over the section alone cannot evaluate it faithfully.</summary>
+    /// <param name="rule">The compiled rule.</param>
+    public static bool ReadsHost(CompiledRule rule) {
+        ArgumentNullException.ThrowIfNull(argument: rule);
+
+        foreach (var binding in (rule.Bindings ?? [])) {
+            if (ExpressionReadsHost(tokens: binding.Expression)) {
+                return true;
+            }
+        }
+        foreach (var token in rule.Gate) {
+            if ((token.Left is { HostOnly: true }) || (token.Comparand is { HostOnly: true }) || ExpressionReadsHost(tokens: token.LeftExpression) || ExpressionReadsHost(tokens: token.RightExpression)) {
+                return true;
+            }
+        }
+        foreach (var effect in rule.Effects) {
+            if (effect.ReadsHost) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ExpressionReadsHost(CompiledExpressionToken[]? tokens) {
+        if (tokens is null) {
+            return false;
+        }
+
+        foreach (var token in tokens) {
+            if (token.Operand is { HostOnly: true }) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Appends the cells a gate reads: every operand and expression of every token.</summary>
     public static void CollectGate(GateToken[] gate, List<RuleAccess> into) {
         ArgumentNullException.ThrowIfNull(argument: gate);

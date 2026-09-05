@@ -93,9 +93,9 @@ Rule operands accept these bounded channels:
 | `$board:cellOf:<row>:<bodyRef>` | The Grid cell a body's resolved world position falls in, or -1 |
 | `$board:offset:<row>:<dx>:<dz>` | The cell reached by an arbitrary (dx, dz) grid step from the key cell, or -1 |
 | `$board:component:<row>:<min>:<max>:<maxVisits>` | The size of the connected component (along the topology's directions) of cells whose value lies in min..max that contains the key cell; 0 when the key cell is outside the range, -2 when the budget of settled cells runs out |
-| `$board:liberties:<row>:<min>:<max>:<libertyMin>:<libertyMax>:<maxVisits>` | The count of distinct cells adjacent to that component whose value lies in libertyMin..libertyMax — a Go group's liberties (`1:1:0:0:<n>` for black on an empty-is-0 board), on the same terms |
-| `$board:libertiesAt:<row>:<min>:<max>:<libertyMin>:<libertyMax>:<maxVisits>` | The liberties a stone in min..max placed on the empty key cell would have — the distinct cells in libertyMin..libertyMax beside the group it joins, the key cell excluded; -1 when the key cell is not empty. With `capturesAt` at 0 it is suicide |
-| `$board:capturesAt:<row>:<min>:<max>:<libertyMin>:<libertyMax>:<maxVisits>` | The count of groups in min..max beside the empty key cell whose every liberty is that cell — the groups a stone placed there captures |
+| `$board:boundary:<row>:<min>:<max>:<boundaryMin>:<boundaryMax>:<maxVisits>` | The count of distinct cells adjacent to that component whose value lies in boundaryMin..boundaryMax (`1:1:0:0:<n>` counts the empty cells around a component of 1s on an empty-is-0 board), on the same terms |
+| `$board:boundaryAt:<row>:<min>:<max>:<boundaryMin>:<boundaryMax>:<maxVisits>` | The boundary a value in min..max placed on the empty key cell would have — the distinct cells in boundaryMin..boundaryMax beside the component it joins, the key cell excluded; -1 when the key cell is not empty |
+| `$board:enclosedAt:<row>:<min>:<max>:<boundaryMin>:<boundaryMax>:<maxVisits>` | The cells of the components in min..max beside the empty key cell whose only boundary cell is that cell — what a value placed there encloses. `clearEnclosed` is the transform that sweeps them once the value lands |
 | `$board:attacks:<row>:<min>:<max>:<directions>` | 1 when walking any of 1..4 comma-separated directions from the key cell finds, before any other occupied cell, one whose value lies in min..max; 0 otherwise. A single-direction first-blocker rule, unioned over the authored directions and filtered to a range — a slider's reach at one square in one call |
 | `$match:<pattern>:<row>:<direction>:cell` | The first cell one step past the longest accepted prefix of the ray from the key cell in `direction` — the first cell the pattern REJECTS — or -1 when the whole ray is accepted |
 | `$match:<pattern>:<row>:<direction>:distance` | The step count to that cell, or -1 on the same terms |
@@ -176,7 +176,11 @@ serialized as exactly 64 hexadecimal digits, and supports 256 drawn entries.
 
 The closed `transformState` effect and transaction step carry one of `transfer`,
 `setRay`, `shuffle`, `sortZone`, `sortKeyed`,
-`writeSet`, `boardCombine`, `arrange`, `push`, or `observe`. `arrange` (`row`,
+`writeSet`, `boardCombine`, `arrange`, `push`, `clearEnclosed`, or `observe`. `clearEnclosed`
+(`row`, `from`, `lower`, `upper`) writes the board's empty value over every
+component valued lower..upper beside the cell `from` names (a literal cell or
+any dynamic key spelling) that has no empty cell beside it — the write-path
+twin of `$board:enclosedAt`, fired after the value lands. `arrange` (`row`,
 `from`, `fromKey`) reorders an ordered zone of at most 20 tokens into the
 arrangement at the Lehmer rank read from an integer cell, rank 0 being the token
 domain's own order — the inverse of `$reduce:arrangementRank`. `writeSet` (`row`, `set`, `setKey`,

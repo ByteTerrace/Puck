@@ -4957,6 +4957,37 @@
       ],
       "additionalProperties": false
     },
+    "StateTransformClearEnclosed": {
+      "description": "Clears every group of cells valued Lower..Upper beside the cell From names that has no empty cell beside it, writing the board\u0027s empty value over their members. The write-path twin of $board:enclosedAt, applied after the value lands.",
+      "properties": {
+        "$type": {
+          "const": "clearEnclosed"
+        },
+        "row": {
+          "description": "The board.",
+          "type": "string"
+        },
+        "from": {
+          "description": "The placed value\u0027s cell: a literal cell key, or any dynamic key spelling a write accepts.",
+          "type": "string"
+        },
+        "lower": {
+          "description": "The enclosed range\u0027s inclusive low end; the board\u0027s empty value lies outside it.",
+          "type": "integer"
+        },
+        "upper": {
+          "description": "The enclosed range\u0027s inclusive high end.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "row",
+        "from",
+        "lower",
+        "upper"
+      ],
+      "additionalProperties": false
+    },
     "StateTransformObserve": {
       "description": "Refreshes a knowledge board from its declared source and visibility mask; authority only.",
       "properties": {
@@ -5005,6 +5036,9 @@
         },
         {
           "$ref": "#/$defs/StateTransformPush"
+        },
+        {
+          "$ref": "#/$defs/StateTransformClearEnclosed"
         },
         {
           "$ref": "#/$defs/StateTransformObserve"

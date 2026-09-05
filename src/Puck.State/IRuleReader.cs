@@ -9,8 +9,9 @@ namespace Puck.State;
 public interface IRuleReader {
     /// <summary>Gets the tick the evaluation in flight answers as of.</summary>
     ulong Tick { get; }
-    /// <summary>Gets the section's rows as of this tick.</summary>
-    IReadOnlyList<StateRow> Rows { get; }
+    /// <summary>Gets where every state read finds a cell's stored value as of this tick: the section's own rows, or a
+    /// frame over them.</summary>
+    StateStore Store { get; }
     /// <summary>Gets the catalog every compiled handle was minted against.</summary>
     StateCatalog Catalog { get; }
     /// <summary>Gets the compiled patterns every <see cref="RuleFacts.MatchPrefix"/> operand names.</summary>

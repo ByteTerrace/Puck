@@ -8,9 +8,10 @@ namespace Puck.World.Server;
 /// answer.</summary>
 public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
     private long[] m_boardScratch = [];
+    private RowStore? m_store;
 
     ulong IRuleReader.Tick => m_evaluator.Tick;
-    IReadOnlyList<StateRow> IRuleReader.Rows => m_definition.State;
+    StateStore IRuleReader.Store => (m_store ??= new RowStore(rows: () => m_definition.State));
     StateCatalog IRuleReader.Catalog => m_definition.StateCatalog;
     CompiledPatterns IRuleReader.Patterns => m_patterns;
     string? IRuleReader.BoundEachKey => m_evaluator.BoundEachKey;

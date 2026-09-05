@@ -28,6 +28,10 @@ public abstract class OperandFact {
     /// <summary>Appends every state cell the read touches, including the cells its key indirections resolve through.</summary>
     /// <param name="into">The read set being collected.</param>
     public virtual void CollectReads(List<RuleAccess> into) { }
+
+    /// <summary>Gets a value indicating whether the read needs the document host — a fact only it can answer (a body,
+    /// a region, a clock) — so a frame over the section alone cannot evaluate it.</summary>
+    public virtual bool HostOnly => false;
 }
 
 /// <summary>Shared shape for the case types that address a state row through a (row, key-or-indirection) pair —
@@ -51,6 +55,8 @@ public abstract class KeyFact {
     /// <summary>Appends every state cell the resolution reads through.</summary>
     /// <param name="into">The read set being collected.</param>
     public virtual void CollectReads(List<RuleAccess> into) { }
+    /// <summary>Gets a value indicating whether the resolution needs the document host.</summary>
+    public virtual bool HostOnly => false;
 }
 
 /// <summary>The key an implicit binding computed: the cell whose ordinal is the bound integer, spelled as that

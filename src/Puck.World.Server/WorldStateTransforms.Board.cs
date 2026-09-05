@@ -122,6 +122,37 @@ public static partial class WorldStateTransforms {
         reason = string.Empty;
         return true;
     }
+    // The enclosed members leave the sparse row rather than staying as explicit empty cells, the shape a copy produces.
+    private static bool TryClearEnclosed(WorldDefinition definition, WorldStateRow[] rows, StateTransform.ClearEnclosed enclosed, out string reason) {
+        if (!TryFind(rows, enclosed.Row, out var index, out reason)) {
+            return false;
+        }
+        var row = rows[index];
+        if (row.EffectiveDomain is not StateDomain.CellsOf board || WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology || row.Kind != CellKind.Int) {
+            return Refuse("clearEnclosed clears an integer board row", out reason);
+        }
+        if (!topology.TryCell(enclosed.From, out var source)) {
+            return Refuse($"clearEnclosed 'from' names no cell of '{board.Topology}'", out reason);
+        }
+        if (enclosed.Lower > enclosed.Upper || (board.Empty >= enclosed.Lower && board.Empty <= enclosed.Upper)) {
+            return Refuse("clearEnclosed takes a range that excludes the board's empty value", out reason);
+        }
+        Span<long> values = stackalloc long[topology.CellCount];
+        BoardQueries.Read(row, topology, values);
+        if (BoardQueries.ClearEnclosed(topology, values, source, enclosed.Lower, enclosed.Upper, board.Empty) == 0L) {
+            reason = string.Empty;
+            return true;
+        }
+        var cells = new List<StateCell>(row.Cells?.Count ?? 0);
+        foreach (var cell in (row.Cells ?? [])) {
+            if (!topology.TryCell(cell.Key.Value, out var ordinal) || values[ordinal] != board.Empty || cell.Value == board.Empty) {
+                cells.Add(cell);
+            }
+        }
+        rows[index] = row with { Cells = cells };
+        reason = string.Empty;
+        return true;
+    }
     private static bool TryReadBoard(WorldDefinition definition, WorldStateRow[] rows, string name, string topologyName, CompiledTopology topology, Span<long> values, out long empty, out string reason) {
         empty = 0L;
         if (!TryFind(rows, name, out var index, out reason)) {

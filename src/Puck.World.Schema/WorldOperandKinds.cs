@@ -6,6 +6,9 @@ namespace Puck.World;
 public abstract class WorldOperandFact : OperandFact {
     private protected WorldOperandFact(CellKind valueKind) : base(valueKind: valueKind) { }
 
+    /// <inheritdoc/>
+    public override bool HostOnly => true;
+
     /// <summary>Returns the population capacity the context's document declares — the per-tick cost of a read that
     /// scans every population slot.</summary>
     /// <param name="context">The compile context.</param>
@@ -224,4 +227,6 @@ public sealed class PairKeyFact : KeyFact {
     public CompiledBodyRef BodyB { get; }
 
     public override string Resolve(IRuleReader reader) => ((IWorldRuleReader)reader).PairKey(key: this);
+    /// <inheritdoc/>
+    public override bool HostOnly => true;
 }

@@ -42,6 +42,29 @@ public abstract class EffectFact {
     /// <summary>Appends every state cell firing writes.</summary>
     /// <param name="into">The write set being collected.</param>
     public virtual void CollectWrites(List<RuleAccess> into) { }
+
+    /// <summary>Gets a value indicating whether firing reads a fact only the document host answers
+    /// (<see cref="OperandFact.HostOnly"/>), so a frame cannot fire it faithfully.</summary>
+    public virtual bool ReadsHost => false;
+
+    /// <summary>Returns whether a key indirection resolves through the document host.</summary>
+    /// <param name="reference">The indirection, or <see langword="null"/>.</param>
+    protected static bool ReferenceReadsHost(CompiledCellRef? reference) => (reference is { Custom: { HostOnly: true } });
+    /// <summary>Returns whether any operand of a compiled expression is host-only.</summary>
+    /// <param name="tokens">The postfix program, or <see langword="null"/>.</param>
+    protected static bool ExpressionReadsHost(CompiledExpressionToken[]? tokens) {
+        if (tokens is null) {
+            return false;
+        }
+
+        foreach (var token in tokens) {
+            if (token.Operand is { HostOnly: true }) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
 
 /// <summary>Shared shape for the case types whose firing path addresses a state cell through a (row, key-or-indirection)
@@ -129,6 +152,8 @@ public sealed class WriteEffect : EffectFact, IStateWriteEffect, IValueSourcedEf
     }
     /// <inheritdoc/>
     public override void CollectWrites(List<RuleAccess> into) => into.Add(item: new RuleAccess(Row: Row, Key: ((KeyFrom is null) ? Key : null), IsSet: (Write == StateWriteKind.Set)));
+    /// <inheritdoc/>
+    public override bool ReadsHost => ((From is { HostOnly: true }) || ReferenceReadsHost(reference: KeyFrom) || ExpressionReadsHost(tokens: Expression));
 }
 
 /// <summary>Consumes a non-negative integer countdown by the simulation step's engine-tick width.</summary>
@@ -158,6 +183,8 @@ public sealed class CountdownEffect : EffectFact, IStateWriteEffect {
     public override void CollectReads(List<RuleAccess> into) => RuleAccess.CollectReference(reference: KeyFrom, into: into);
     /// <inheritdoc/>
     public override void CollectWrites(List<RuleAccess> into) => into.Add(item: new RuleAccess(Row: Row, Key: ((KeyFrom is null) ? Key : null), IsSet: false));
+    /// <inheritdoc/>
+    public override bool ReadsHost => ReferenceReadsHost(reference: KeyFrom);
 }
 
 /// <summary>Fires a generator row into its draw site.</summary>
@@ -210,6 +237,8 @@ public sealed class RemoveStateCellEffect : EffectFact, IStateAddressedEffect {
     public override void CollectReads(List<RuleAccess> into) => RuleAccess.CollectReference(reference: KeyFrom, into: into);
     /// <inheritdoc/>
     public override void CollectWrites(List<RuleAccess> into) => into.Add(item: new RuleAccess(Row: Row, Key: ((KeyFrom is null) ? Key : null), IsSet: true));
+    /// <inheritdoc/>
+    public override bool ReadsHost => ReferenceReadsHost(reference: KeyFrom);
 }
 
 /// <summary>Writes an absolute simulation due tick into an integer state cell.</summary>
@@ -243,6 +272,8 @@ public sealed class ScheduleStateEffect : EffectFact, IStateWriteEffect {
     public override void CollectReads(List<RuleAccess> into) => RuleAccess.CollectReference(reference: KeyFrom, into: into);
     /// <inheritdoc/>
     public override void CollectWrites(List<RuleAccess> into) => into.Add(item: new RuleAccess(Row: Row, Key: ((KeyFrom is null) ? Key : null), IsSet: true));
+    /// <inheritdoc/>
+    public override bool ReadsHost => ReferenceReadsHost(reference: KeyFrom);
 }
 
 /// <summary>Applies a preflighted state-cell mutation bundle with an optional failure branch.</summary>
@@ -280,16 +311,32 @@ public sealed class TransactionEffect : EffectFact {
         foreach (var effect in Effects) { effect.CollectWrites(into: into); }
         foreach (var effect in OnFailure) { effect.CollectWrites(into: into); }
     }
+    /// <inheritdoc/>
+    public override bool ReadsHost {
+        get {
+            foreach (var effect in Effects) { if (effect.ReadsHost) { return true; } }
+            foreach (var effect in OnFailure) { if (effect.ReadsHost) { return true; } }
+
+            return false;
+        }
+    }
 }
 
 /// <summary>An atomic discrete state transform.</summary>
 public sealed class TransformStateEffect : EffectFact {
     /// <param name="transform">The discrete state transform.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    public TransformStateEffect(StateTransform transform, string describe) : base(describe) => Transform = transform;
+    /// <param name="fromRef">The live key indirection a <see cref="StateTransform.ClearEnclosed"/>'s <c>from</c> spelled,
+    /// or <see langword="null"/> for a literal cell.</param>
+    public TransformStateEffect(StateTransform transform, string describe, CompiledCellRef? fromRef = null) : base(describe) {
+        Transform = transform;
+        FromRef = fromRef;
+    }
 
     /// <summary>Gets the discrete state transform.</summary>
     public StateTransform Transform { get; }
+    /// <summary>Gets the live key indirection the transform's origin cell resolves through, or <see langword="null"/>.</summary>
+    public CompiledCellRef? FromRef { get; }
 
     /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) {
@@ -328,6 +375,11 @@ public sealed class TransformStateEffect : EffectFact {
             case StateTransform.Push push:
                 cost += 2L * ((context.FindRow(name: push.Row)?.EffectiveDomain as StateDomain.Ring)?.Capacity ?? 1);
                 break;
+            case StateTransform.ClearEnclosed enclosed:
+                var enclosedCells = BoardCells(context: context, row: enclosed.Row);
+                var directions = ((context.FindRow(name: enclosed.Row)?.EffectiveDomain is StateDomain.CellsOf enclosedBoardRow) ? (context.FindTopology(name: enclosedBoardRow.Topology)?.DirectionCount ?? 0) : 0);
+                cost += (long)enclosedCells * (directions + 2);
+                break;
             case StateTransform.Observe observe:
                 var cells = BoardCells(context: context, row: observe.Row);
                 cost += (long)cells * (cells + 3);
@@ -343,6 +395,10 @@ public sealed class TransformStateEffect : EffectFact {
                     into.Add(item: new RuleAccess(Row: source, Key: null, IsSet: false));
                 }
             }
+        }
+        if (Transform is StateTransform.ClearEnclosed enclosed) {
+            into.Add(item: new RuleAccess(Row: enclosed.Row, Key: null, IsSet: false));
+            RuleAccess.CollectReference(reference: FromRef, into: into);
         }
     }
     public override void CollectWrites(List<RuleAccess> into) {
@@ -366,9 +422,12 @@ public sealed class TransformStateEffect : EffectFact {
         StateTransform.BoardCombine combine => [combine.Row],
         StateTransform.Arrange arrange => [arrange.Row],
         StateTransform.Push push => [push.Row],
+        StateTransform.ClearEnclosed enclosed => [enclosed.Row],
         StateTransform.Observe observe => [observe.Row],
         _ => [],
     };
+    /// <inheritdoc/>
+    public override bool ReadsHost => ReferenceReadsHost(reference: FromRef);
 }
 
 /// <summary>Pushes one evaluated value into a history row's ring.</summary>
@@ -410,6 +469,8 @@ public sealed class PushStateEffect : EffectFact, IValueSourcedEffect {
     public override void CollectReads(List<RuleAccess> into) => EffectCosts.CollectSourceReads(effect: this, into: into);
     /// <inheritdoc/>
     public override void CollectWrites(List<RuleAccess> into) => into.Add(item: new RuleAccess(Row: Row, Key: null, IsSet: true));
+    /// <inheritdoc/>
+    public override bool ReadsHost => ((From is { HostOnly: true }) || ExpressionReadsHost(tokens: Expression));
 }
 
 /// <summary>The saturating arithmetic every cost sheet sums with, and the shared pricing of a live value source.</summary>

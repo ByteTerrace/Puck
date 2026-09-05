@@ -37,7 +37,11 @@ public sealed partial class RuleEvaluator {
     private bool Fire(EffectFact effect, string ruleName, ulong tick, ulong stepTicks, bool preflight, bool strict) {
         switch (effect) {
             case TransformStateEffect transformState:
-                return Apply(effect: effect, ruleName: ruleName, mutation: new StateMutation.Apply(Transform: transformState.Transform), tick: tick, preflight: preflight);
+                var transform = transformState.Transform;
+                if ((transformState.FromRef is { } fromRef) && (transform is StateTransform.ClearEnclosed enclosed)) {
+                    transform = enclosed with { From = ResolveKey(key: enclosed.From, keyFrom: fromRef, tick: tick) };
+                }
+                return Apply(effect: effect, ruleName: ruleName, mutation: new StateMutation.Apply(Transform: transform), tick: tick, preflight: preflight);
             case TransactionEffect transaction:
                 return FireTransaction(transaction: transaction, ruleName: ruleName, tick: tick, stepTicks: stepTicks);
             case PushStateEffect push:
@@ -72,7 +76,7 @@ public sealed partial class RuleEvaluator {
 
         if (effect is RemoveStateCellEffect removeStateCell) {
             if (
-                StateReader.TryRead(rows: m_host.Rows, rowName: removeStateCell.Row, key: destinationKey, tick: tick, row: out _, rawValue: out var existing, text: out var existingText) &&
+                StateReader.TryRead(store: m_host.Store, rowName: removeStateCell.Row, key: destinationKey, tick: tick, row: out _, rawValue: out var existing, text: out var existingText) &&
                 (existing is null) &&
                 (existingText is null) &&
                 !strict
@@ -100,7 +104,7 @@ public sealed partial class RuleEvaluator {
         // stored base: a base is a fixed point of its own accumulation, so comparing against it would call a write
         // "no-op" whenever the base already happened to match — silently skipping the write, and with it the rebase
         // that is the only way a rule can reset an advancing row at all.
-        if (!StateReader.TryRead(rows: m_host.Rows, rowName: write.Row, key: destinationKey, tick: tick, row: out var row, rawValue: out var destination, text: out var currentText)) {
+        if (!StateReader.TryRead(store: m_host.Store, rowName: write.Row, key: destinationKey, tick: tick, row: out var row, rawValue: out var destination, text: out var currentText)) {
             return false;
         }
 
@@ -111,7 +115,7 @@ public sealed partial class RuleEvaluator {
             var nextText = textWrite.Text;
 
             if ((nextText is null) && (textWrite.From is StateCellOperand source)) {
-                if (!StateReader.TryRead(rows: m_host.Rows, rowName: source.Row, key: ResolveKey(key: source.Key, keyFrom: source.KeyFrom, tick: tick), tick: tick, row: out _, rawValue: out _, text: out nextText)) {
+                if (!StateReader.TryRead(store: m_host.Store, rowName: source.Row, key: ResolveKey(key: source.Key, keyFrom: source.KeyFrom, tick: tick), tick: tick, row: out _, rawValue: out _, text: out nextText)) {
                     return false;
                 }
             }
@@ -136,9 +140,10 @@ public sealed partial class RuleEvaluator {
         if (
             CellName.TryParse(candidate: destinationKey, name: out var destinationCell, reason: out _) &&
             (StateRows.FindCell(cells: row.Cells, key: destinationCell) is { } storedCell) &&
-            ((storedCell.Cycle is not null) || ((storedCell.Key == StateRow.SlotKey) && (row.Cycle is not null)))
+            ((storedCell.Cycle is not null) || ((storedCell.Key == StateRow.SlotKey) && (row.Cycle is not null))) &&
+            m_host.Store.TryStored(row: row, key: destinationCell, value: out var storedPhase, text: out _)
         ) {
-            current = storedCell.Value;
+            current = storedPhase;
         }
 
         // A live 'from' operand is read fresh every firing and converted to the destination row's own encoding; a
@@ -202,7 +207,7 @@ public sealed partial class RuleEvaluator {
     // pushState: the value is resolved the way a write's is, then lands as a Push transform so the ring's cursor and
     // slot move in one journaled mutation.
     private bool FirePush(PushStateEffect effect, string ruleName, ulong tick, bool preflight) {
-        if ((StateRows.FindStateRow(rows: m_host.Rows, name: effect.Row) is not { } row) || (row.EffectiveDomain is not StateDomain.Ring)) {
+        if ((m_host.Store.Find(name: effect.Row) is not { } row) || (row.EffectiveDomain is not StateDomain.Ring)) {
             return false;
         }
 
