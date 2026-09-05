@@ -22,6 +22,10 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         var work = 0L;
         var decisionScales = new HashSet<long>();
 
+        // Rules whose gates each require one literal cell to EQUAL a distinct constant can never fire on the same tick:
+        // the sheet charges such a group its most expensive value's rules, not their sum. Rules sharing a value, or
+        // gated on anything else, still sum.
+        var exclusive = new Dictionary<(string Row, string Key), Dictionary<long, long>>();
         foreach (var rule in rules) {
             if (rule.Decision is { } decision) {
                 foreach (var option in decision.Options) {
@@ -33,7 +37,21 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 : 1
             );
             slots = SaturatingAdd(left: slots, right: multiplier);
-            work = SaturatingAdd(left: work, right: SaturatingMultiply(left: multiplier, right: RuleCost(rule: rule, definition: definition)));
+            var cost = SaturatingMultiply(left: multiplier, right: RuleCost(rule: rule, definition: definition));
+            if (TryExclusiveGate(rule.Gate, out var cell, out var value)) {
+                if (!exclusive.TryGetValue(cell, out var byValue)) {
+                    byValue = [];
+                    exclusive[cell] = byValue;
+                }
+                byValue[value] = SaturatingAdd(left: byValue.GetValueOrDefault(value), right: cost);
+            } else {
+                work = SaturatingAdd(left: work, right: cost);
+            }
+        }
+        foreach (var group in exclusive.Values) {
+            var worst = 0L;
+            foreach (var sum in group.Values) { worst = Math.Max(worst, sum); }
+            work = SaturatingAdd(left: work, right: worst);
         }
 
         foreach (var interaction in interactions) {
@@ -63,6 +81,37 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         );
     }
 
+    // A gate that is one literal-keyed state cell compared Equal to a constant, or an All of conjuncts one of which
+    // is: the first such conjunct names the exclusivity group (row, key) and its constant the value.
+    private static bool TryExclusiveGate(CompiledWorldPredicate[] gate, out (string Row, string Key) cell, out long value) {
+        cell = default;
+        value = 0L;
+        if (gate.Length == 0) {
+            return false;
+        }
+        var last = gate[^1];
+        var conjuncts = 0;
+        if (last.Kind == CompiledWorldPredicateKind.Compare) {
+            conjuncts = 1;
+        } else if (last.Kind == CompiledWorldPredicateKind.All && last.Arity == gate.Length - 1) {
+            conjuncts = last.Arity;
+        } else {
+            return false;
+        }
+        for (var index = 0; index < conjuncts; index++) {
+            var predicate = gate[index];
+            if (predicate.Kind != CompiledWorldPredicateKind.Compare) {
+                return false;
+            }
+            if (predicate.Comparison == Puck.Physics.Motion.ActionStateComparison.Equal && predicate.Comparand is null && predicate.LeftExpression is null &&
+                predicate.Left is { Value: StateCellOperand { Key: { } key, KeyFrom: null } state }) {
+                cell = (state.Row, key);
+                value = predicate.Value;
+                return true;
+            }
+        }
+        return false;
+    }
     private static long RuleCost(CompiledWorldRule rule, WorldDefinition definition) {
         var cost = SaturatingAdd(1, PredicateCost(rule.Gate, definition));
         foreach (var binding in (rule.Bindings ?? [])) {

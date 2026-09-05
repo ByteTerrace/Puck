@@ -1424,7 +1424,11 @@ from in the same rule. At most 16 per rule; each expression prices into
 `world.budget` like an effect's. A binding that cannot evaluate closes the gate
 for that evaluation and reports an `Arithmetic` refusal. `world.rules` lists
 each rule's bindings by name and kind. The rule count itself has no ceiling of
-its own: the per-tick work budget is the bound.
+its own: the per-tick work budget is the bound. That budget is worst-case but
+not blind: rules whose gates each require the same literal cell to equal a
+distinct constant (a phase id, a mode) can never fire on one tick, so the sheet
+charges such a group its most expensive value rather than their sum; rules
+sharing a value, or gated on anything else, still sum.
 
 An option may expand into nearby individuals through `neighbors`. The enclosing
 rule must name a numeric keyed `forEach` row whose keys identify observers.
