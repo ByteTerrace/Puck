@@ -247,7 +247,7 @@ public sealed partial class NavigationLawTests {
         var document = SharedNavigationDocument(budget: 3, medium: true);
         document = document with { StateRaw = document.StateRaw! with { World = [.. document.State,
             new WorldStateRow(WorldCellName.Parse("heat"), CellKind.Fixed,
-                Lattice: new WorldStateLatticeTrait("water-space", Initial: 0, Min: 0, Max: 1))] } };
+                Domain: new WorldStateDomain.CellsOf("water-space"), Field: new WorldStateFieldTrait(Initial: 0, Min: 0, Max: 1))] } };
         using var fixture = Fixtures.FreshServer(document);
         _ = JoinNavigator(fixture, SharedGoal());
         fixture.Step(); fixture.Step(); fixture.Step();

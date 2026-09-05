@@ -58,7 +58,7 @@ public sealed class WorldBoxTopologyLawTests {
         // the run continues past the origin cell exactly as a dedicated line query would, generalized to any
         // authored run shape rather than only exact-length equality.
         static WorldStateCell Mark(int x, int y, int z) => new(WorldCellName.Parse((((z * 4) + y) * 4 + x).ToString()), 1L);
-        var board = new WorldStateRow(WorldCellName.Parse("cube"), CellKind.Int, Cells: [Mark(0, 0, 0), Mark(1, 1, 1), Mark(2, 2, 2), Mark(3, 3, 3)], Board: new("box"));
+        var board = new WorldStateRow(WorldCellName.Parse("cube"), CellKind.Int, Cells: [Mark(0, 0, 0), Mark(1, 1, 1), Mark(2, 2, 2), Mark(3, 3, 3)], Domain: new WorldStateDomain.CellsOf("box"));
         var runOfOnes = new WorldPatternRow(WorldCellName.Parse("runOfOnes"), CellKind.Int, Symbols: [new(WorldCellName.Parse("one"), 1, 1)], Pattern: new WorldPatternNode.Star(new WorldPatternNode.Symbol("one")));
         var run = new WorldStateRow(WorldCellName.Parse("run"), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
         var definition = Fixtures.BuildDocument() with {
@@ -88,7 +88,7 @@ public sealed class WorldBoxTopologyLawTests {
         static WorldStateRow Row(string name, params int[] indices) => new(
             WorldCellName.Parse(name), CellKind.Int,
             Cells: [.. indices.Select(i => new WorldStateCell(WorldCellName.Parse(i.ToString(System.Globalization.CultureInfo.InvariantCulture)), 7L))],
-            Board: new("box")
+            Domain: new WorldStateDomain.CellsOf("box")
         );
         static WorldStateRow Winner(string name) => new(WorldCellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
         var runTerminated = new WorldPatternRow(WorldCellName.Parse("runTerminated"), CellKind.Int, Symbols: [new(WorldCellName.Parse("seven"), 7, 7)],

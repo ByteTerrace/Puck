@@ -20,7 +20,7 @@ public static partial class WorldDefinitionValidator {
             return false;
         }
 
-        if (row.Tokens is not null || row.Zone is not null || row.KeysFrom is not null || row.Phase is not null || row.Knowledge is not null || cell.Visibility is not null || cell.Observation is not null) {
+        if (row.EffectiveDomain is WorldStateDomain.KeysOf || row.Phase is not null || row.Knowledge is not null || cell.Visibility is not null || cell.Observation is not null) {
             return TryValidateLocally(definition, out reason);
         }
         var capacity = Math.Clamp(value: (row.Capacity ?? row.CellCeiling), min: 1, max: row.CellCeiling);
@@ -30,7 +30,7 @@ public static partial class WorldDefinitionValidator {
             return false;
         }
 
-        if (row.Board is { } board && (WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology || !topology.TryCell(key, out _))) {
+        if (row.EffectiveDomain is WorldStateDomain.CellsOf board && (WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology || !topology.TryCell(key, out _))) {
             reason = $"state row '{rowName}' cell '{key}' is outside its topology";
             return false;
         }
@@ -341,7 +341,7 @@ public static partial class WorldDefinitionValidator {
         if (row.Draw is not { } draw) {
             // A lattice row painted by a draw fill carries the same cursor/masks bookkeeping for its whole-field
             // passes (see WorldLatticeFill.Draw), so only a row with neither facet is refused here.
-            var latticeDraws = (WorldLatticeFill.FindDraw(trait: row.Lattice) is not null);
+            var latticeDraws = (WorldLatticeFill.FindDraw(trait: row.Field) is not null);
 
             if ((row.DrawCursor != 0L) && !latticeDraws) {
                 errors.Add(item: $"{path} ('{row.Name}') declares drawCursor without draw — drawCursor is engine bookkeeping for a draw site alone.");
@@ -996,30 +996,33 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.name '{row.Name}' is duplicated.");
             }
 
-            // A lattice-shaped row is per-cell fixed-point substrate: its cells live in the lattice (checkpointed,
+            // A field-shaped row is per-cell fixed-point substrate: its cells live in the lattice (checkpointed,
             // snapshot-delivered), never as authored slot/keyed cells, and every keyed-row trait is refused at this
             // door so the shape cannot be held by convention.
-            if (row.Lattice is not null) {
+            if (row.Field is not null) {
+                if (row.EffectiveDomain is not WorldStateDomain.CellsOf) {
+                    errors.Add(item: $"{path} ('{row.Name}') declares a field trait without a cellsOf domain — a field row's domain names the topology it lies over.");
+                }
                 if (row.Kind != CellKind.Fixed) {
-                    errors.Add(item: $"{path} ('{row.Name}') declares a lattice trait with kind '{row.Kind}' — a lattice row is kind 'fixed'.");
+                    errors.Add(item: $"{path} ('{row.Name}') declares a field trait with kind '{row.Kind}' — a field row is kind 'fixed'.");
                 }
                 if (row.Cells is { Count: > 0 }) {
-                    errors.Add(item: $"{path} ('{row.Name}') declares both a lattice trait and cells — a lattice row's cells are the lattice's.");
+                    errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and cells — a field row's cells are the lattice's.");
                 }
                 if (row.Capacity is not null) {
-                    errors.Add(item: $"{path} ('{row.Name}') declares both a lattice trait and capacity — the topology sizes a lattice row.");
+                    errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and capacity — the topology sizes a field row.");
                 }
                 if (row.Advance is not null) {
-                    errors.Add(item: $"{path} ('{row.Name}') declares both a lattice trait and advance.");
+                    errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and advance.");
                 }
                 if (row.Dynamics is not null) {
-                    errors.Add(item: $"{path} ('{row.Name}') declares both a lattice trait and dynamics.");
+                    errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and dynamics.");
                 }
                 if (row.Cycle is not null) {
-                    errors.Add(item: $"{path} ('{row.Name}') declares both a lattice trait and cycle.");
+                    errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and cycle.");
                 }
                 if (row.Draw is not null) {
-                    errors.Add(item: $"{path} ('{row.Name}') declares both a lattice trait and a draw facet — a lattice row draws per cell through a 'draw' entry in its paint, never through the slot-row facet.");
+                    errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and a draw facet — a field row draws per cell through a 'draw' entry in its paint, never through the slot-row facet.");
                 }
             }
 

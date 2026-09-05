@@ -225,14 +225,13 @@ public static partial class WorldRuntimeStateHash {
             hash.Add(value: ((uint)(outcome.Multiplicity ?? 0)));
         }
     }
-    private static void AppendLattice(ref Fnv1aHash hash, WorldStateLatticeTrait? lattice) {
+    private static void AppendLattice(ref Fnv1aHash hash, WorldStateFieldTrait? lattice) {
         hash.Add(value: ((byte)(lattice is null ? 0 : 1)));
 
         if (lattice is null) {
             return;
         }
 
-        AppendString(hash: ref hash, value: lattice.Topology);
         hash.Add(value: BitConverter.SingleToUInt32Bits(value: lattice.Initial));
         hash.Add(value: BitConverter.SingleToUInt32Bits(value: lattice.Min));
         hash.Add(value: BitConverter.SingleToUInt32Bits(value: lattice.Max));
@@ -323,7 +322,7 @@ public static partial class WorldRuntimeStateHash {
             AppendAdvance(hash: ref hash, advance: row.Advance);
             AppendDraw(hash: ref hash, draw: row.Draw);
             AppendDynamics(hash: ref hash, dynamics: row.Dynamics);
-            AppendLattice(hash: ref hash, lattice: row.Lattice);
+            AppendLattice(hash: ref hash, lattice: row.Field);
             AppendCycle(hash: ref hash, cycle: row.Cycle);
             hash.Add(value: ((uint)cells.Count));
 

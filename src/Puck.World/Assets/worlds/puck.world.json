@@ -25891,6 +25891,61 @@
       },
       "mode": "Edge",
       "name": "poker-bet-action-seat2"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": {
+            "tokens": [
+              {
+                "$type": "state",
+                "name": "$reduce:count:deck"
+              },
+              {
+                "$type": "state",
+                "name": "$reduce:count:hand1"
+              },
+              {
+                "$type": "add"
+              },
+              {
+                "$type": "state",
+                "name": "$reduce:count:hand2"
+              },
+              {
+                "$type": "add"
+              },
+              {
+                "$type": "state",
+                "name": "$reduce:count:community"
+              },
+              {
+                "$type": "add"
+              }
+            ]
+          },
+          "state": "cardsZoneTotal"
+        }
+      ],
+      "name": "cardsZoneAccounting"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "cardsZoneInvariantViolated",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparandState": "$reduce:count:cards",
+        "comparison": "NotEqual",
+        "state": "cardsZoneTotal"
+      },
+      "mode": "Edge",
+      "name": "cardsZoneInvariant"
     }
   ],
   "schema": "puck.world.def.v1",
@@ -26825,8 +26880,11 @@
         "name": "pondColors"
       },
       {
-        "kind": "fixed",
-        "lattice": {
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "pondBasin"
+        },
+        "field": {
           "color": "state.pondColors.water",
           "heightScale": 1,
           "initial": 1.4,
@@ -26842,9 +26900,9 @@
               "minZ": 10,
               "value": 1.4
             }
-          ],
-          "topology": "pondBasin"
+          ]
         },
+        "kind": "fixed",
         "name": "water"
       },
       {
@@ -26913,10 +26971,6 @@
         "name": "wren"
       },
       {
-        "board": {
-          "empty": 0,
-          "topology": "chessBoard"
-        },
         "cells": [
           {
             "key": "0",
@@ -27175,14 +27229,14 @@
             "value": -4
           }
         ],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "chessBoard"
+        },
         "kind": "int",
         "name": "board"
       },
       {
-        "board": {
-          "empty": 0,
-          "topology": "chessBoard"
-        },
         "cells": [
           {
             "key": "0",
@@ -27441,14 +27495,14 @@
             "value": -4
           }
         ],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "chessBoard"
+        },
         "kind": "int",
         "name": "previousBoard"
       },
       {
-        "board": {
-          "empty": 0,
-          "topology": "chessBoard"
-        },
         "cells": [
           {
             "key": "0",
@@ -27707,12 +27761,16 @@
             "value": -4
           }
         ],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "chessBoard"
+        },
         "kind": "int",
         "name": "lastLegal"
       },
       {
-        "board": {
-          "empty": 0,
+        "domain": {
+          "$type": "cellsOf",
           "topology": "chessBoard"
         },
         "kind": "int",
@@ -28133,7 +28191,8 @@
         "name": "inCheck"
       },
       {
-        "history": {
+        "domain": {
+          "$type": "ring",
           "capacity": 12,
           "empty": -1
         },
@@ -29148,6 +29207,7 @@
         "name": "castleTransitAttacked"
       },
       {
+        "capacity": 52,
         "cells": [
           {
             "key": "2C",
@@ -29359,10 +29419,7 @@
           }
         ],
         "kind": "int",
-        "name": "cards",
-        "tokens": {
-          "capacity": 52
-        }
+        "name": "cards"
       },
       {
         "cells": [
@@ -29575,7 +29632,10 @@
             "value": 14
           }
         ],
-        "keysFrom": "cards",
+        "domain": {
+          "$type": "keysOf",
+          "row": "cards"
+        },
         "kind": "int",
         "name": "rank",
         "visibility": {
@@ -29794,18 +29854,24 @@
             "value": true
           }
         ],
+        "domain": {
+          "$type": "keysOf",
+          "ordered": true,
+          "row": "cards"
+        },
         "kind": "bool",
         "name": "deck",
         "visibility": {
           "readers": []
-        },
-        "zone": {
-          "ordered": true,
-          "tokens": "cards"
         }
       },
       {
         "capacity": 2,
+        "domain": {
+          "$type": "keysOf",
+          "ordered": true,
+          "row": "cards"
+        },
         "kind": "bool",
         "name": "hand1",
         "visibility": {
@@ -29813,14 +29879,15 @@
             "seat1"
           ],
           "readersFrom": "audience1"
-        },
-        "zone": {
-          "ordered": true,
-          "tokens": "cards"
         }
       },
       {
         "capacity": 2,
+        "domain": {
+          "$type": "keysOf",
+          "ordered": true,
+          "row": "cards"
+        },
         "kind": "bool",
         "name": "hand2",
         "visibility": {
@@ -29828,21 +29895,18 @@
             "seat2"
           ],
           "readersFrom": "audience2"
-        },
-        "zone": {
-          "ordered": true,
-          "tokens": "cards"
         }
       },
       {
         "capacity": 5,
+        "domain": {
+          "$type": "keysOf",
+          "ordered": true,
+          "row": "cards"
+        },
         "kind": "bool",
         "name": "community",
-        "visibility": {},
-        "zone": {
-          "ordered": true,
-          "tokens": "cards"
-        }
+        "visibility": {}
       },
       {
         "draw": {
@@ -29911,7 +29975,8 @@
         "value": false
       },
       {
-        "history": {
+        "domain": {
+          "$type": "ring",
           "capacity": 8,
           "empty": -1
         },
@@ -30155,7 +30220,10 @@
             "value": 4
           }
         ],
-        "keysFrom": "cards",
+        "domain": {
+          "$type": "keysOf",
+          "row": "cards"
+        },
         "kind": "int",
         "name": "suit",
         "visibility": {
@@ -30196,6 +30264,16 @@
         "kind": "int",
         "name": "boneHolderClaimMark",
         "nonNegative": true
+      },
+      {
+        "kind": "int",
+        "name": "cardsZoneTotal",
+        "value": 0
+      },
+      {
+        "kind": "bool",
+        "name": "cardsZoneInvariantViolated",
+        "value": false
       }
     ]
   },

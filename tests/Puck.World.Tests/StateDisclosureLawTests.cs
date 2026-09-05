@@ -58,9 +58,9 @@ public sealed class StateDisclosureLawTests {
     private static WorldStateCell Cell(string key, long value) => new(Name(key), value);
     private static WorldDefinition Cards(string first = "seat1", string second = "seat2") => Fixtures.BuildDocument() with {
         StateRaw = new(World: [
-            new(Name("cards"), CellKind.Int, Cells: [Cell("ace", 101), Cell("king", 202)], Tokens: new(), Visibility: new()),
-            new(Name("handA"), CellKind.Bool, Cells: [Cell("ace", 1)], Zone: new("cards"), Visibility: new([first])),
-            new(Name("handB"), CellKind.Bool, Cells: [Cell("king", 1)], Zone: new("cards"), Visibility: new([second]))
+            new(Name("cards"), CellKind.Int, Cells: [Cell("ace", 101), Cell("king", 202)], Visibility: new()),
+            new(Name("handA"), CellKind.Bool, Cells: [Cell("ace", 1)], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true), Visibility: new([first])),
+            new(Name("handB"), CellKind.Bool, Cells: [Cell("king", 1)], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true), Visibility: new([second]))
         ])
     };
 
@@ -86,9 +86,9 @@ public sealed class StateDisclosureLawTests {
         var definition = Fixtures.BuildDocument() with { StateRaw = new(
             Lattices: [new("map", new DocumentVector3(0,0,0), 1, 2, 1, Kind: WorldTopologyKind.Grid)],
             World: [
-                new(Name("truth"), CellKind.Int, Cells: [Cell("0", 7), Cell("1", 9)], Board: new("map"), Visibility: new([])),
-                new(Name("sight"), CellKind.Bool, Cells: [Cell("0", 1)], Board: new("map"), Visibility: new([])),
-                new(Name("known"), CellKind.Int, Cells: [], Board: new("map"), Visibility: new(["seat1"]), Knowledge: new("truth", "sight"))
+                new(Name("truth"), CellKind.Int, Cells: [Cell("0", 7), Cell("1", 9)], Domain: new WorldStateDomain.CellsOf("map"), Visibility: new([])),
+                new(Name("sight"), CellKind.Bool, Cells: [Cell("0", 1)], Domain: new WorldStateDomain.CellsOf("map"), Visibility: new([])),
+                new(Name("known"), CellKind.Int, Cells: [], Domain: new WorldStateDomain.CellsOf("map"), Visibility: new(["seat1"]), Knowledge: new("truth", "sight"))
             ]) };
         Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var reason), reason);
         Assert.False(WorldStateTransforms.TryApply(definition, new WorldStateTransform.Observe("known"), WorldPrincipal.Seat(0), 8, "test", out _, out _));

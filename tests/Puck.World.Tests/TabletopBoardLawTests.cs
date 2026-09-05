@@ -129,7 +129,7 @@ public sealed class TabletopBoardLawTests {
         long[] starting = [0, 5, 0, 0];
         WorldStateRow BoardRow(string name, bool seeded) => new(WorldCellName.Parse(name), CellKind.Int,
             Cells: [.. Enumerable.Range(0, 4).Select(k => new WorldStateCell(WorldCellName.Parse(k.ToString()), seeded ? starting[k] : 0))],
-            Board: new WorldStateBoard("board"));
+            Domain: new WorldStateDomain.CellsOf("board"));
         WorldStateRow Keyed(string name, long initial) => new(WorldCellName.Parse(name), CellKind.Int, Min: -1, Max: 3,
             Cells: [new WorldStateCell(WorldCellName.Parse("0"), initial)], Capacity: 1);
         WorldStateRow Slot(string name, long initial) => new(WorldCellName.Parse(name), CellKind.Int, Min: -1, Max: 5,
@@ -207,7 +207,7 @@ public sealed class TabletopBoardLawTests {
 
         WorldStateRow BoardRow(string name) => new(WorldCellName.Parse(name), CellKind.Int,
             Cells: [.. Enumerable.Range(0, 4).Select(k => new WorldStateCell(WorldCellName.Parse(k.ToString()), 0))],
-            Board: new WorldStateBoard("board"));
+            Domain: new WorldStateDomain.CellsOf("board"));
         WorldStateRow Keyed(string name, long initial, int capacity) => new(WorldCellName.Parse(name), CellKind.Int, Min: -1, Max: 3,
             Cells: [.. Enumerable.Range(0, capacity).Select(k => new WorldStateCell(WorldCellName.Parse(k.ToString()), initial))], Capacity: capacity);
 

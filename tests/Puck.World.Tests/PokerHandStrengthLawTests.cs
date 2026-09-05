@@ -98,8 +98,8 @@ public sealed class PokerHandStrengthLawTests {
     public void ReadersFromWidensAHiddenHandsAudienceOnlyAfterTheTokenIsWritten() {
         var definition = Fixtures.BuildDocument() with {
             StateRaw = new(World: [
-                new(Name("cards"), CellKind.Int, Tokens: new(Capacity: 2), Cells: [Cell("AS", 0), Cell("KS", 0)]),
-                new(Name("hand1"), CellKind.Bool, Zone: new("cards"), Capacity: 2,
+                new(Name("cards"), CellKind.Int, Capacity: 2, Cells: [Cell("AS", 0), Cell("KS", 0)]),
+                new(Name("hand1"), CellKind.Bool, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true), Capacity: 2,
                     Cells: [Cell("AS", 1), Cell("KS", 1)],
                     Visibility: new(Readers: ["seat1"], ReadersFrom: "audience1")),
                 new(Name("audience1"), CellKind.Text, Capacity: 1),

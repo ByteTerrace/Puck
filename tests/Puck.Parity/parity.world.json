@@ -35,8 +35,8 @@
       {
         "name": "bump",
         "kind": "fixed",
-        "lattice": {
-          "topology": "parityLattice",
+        "domain": { "$type": "cellsOf", "topology": "parityLattice" },
+        "field": {
           "initial": 0,
           "min": 0,
           "max": 1,

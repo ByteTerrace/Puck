@@ -122,7 +122,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         if (row.Draw is not { } draw) {
             // A lattice row's draw fill reads back the same way a site does — its source and its pass position —
             // minus a timing, since a whole-field pass is redrawn only by an explicit generate.
-            if (WorldLatticeFill.FindDraw(trait: row.Lattice) is { } fill) {
+            if (WorldLatticeFill.FindDraw(trait: row.Field) is { } fill) {
                 var fillSource = ((fill.Source is { } namedFill)
                     ? $"source={namedFill}"
                     : $"source=<inline:{DescribeSourceShape(generator: fill.Generator)}>"

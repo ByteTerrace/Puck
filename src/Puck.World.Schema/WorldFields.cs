@@ -51,7 +51,7 @@ public sealed record WorldFieldsSection(
                 return false;
             }
 
-            if (row.Lattice is not { } trait) {
+            if (row.Field is not { } trait) {
                 continue;
             }
 
@@ -128,7 +128,7 @@ public sealed record WorldFieldsSection(
         var paint = new List<WorldLatticeFill>();
 
         foreach (var row in (state?.World ?? [])) {
-            if (row.Lattice is not { } trait) {
+            if (row.Field is not { } trait) {
                 continue;
             }
 
@@ -185,15 +185,15 @@ public sealed record WorldFieldsSection(
         foreach (var row in composite.Fields) {
             rows.Add(item: new WorldStateRow(
                 Kind: CellKind.Fixed,
-                Lattice: new WorldStateLatticeTrait(
+                Domain: new WorldStateDomain.CellsOf(Topology: DefaultTopologyName),
+                Field: new WorldStateFieldTrait(
                     Color: row.Color,
                     HeightScale: row.HeightScale,
                     Initial: row.Initial,
                     Max: row.Max,
                     Medium: (row.Medium ? new WorldLatticeMedium() : null),
                     Min: row.Min,
-                    Paint: null,
-                    Topology: DefaultTopologyName
+                    Paint: null
                 ),
                 Name: WorldCellName.Parse(candidate: row.Name)
             ));
@@ -365,11 +365,12 @@ public sealed record WorldTopologyDirection(string Name, int X, int Y, int Z = 0
 /// alias resolves to.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldTopologyElementAlias(string Name, string Element);
-/// <summary>A state row's <c>lattice</c> trait -- the row holds one <see cref="CellKind.Fixed"/> scalar per cell of
-/// the named topology instead of slot/keyed cells. Values are authored DECIMAL (like every lattice quantity), not
-/// raw Q48.16 bits; a lattice row refuses slot/keyed members (<c>cells</c>, <c>capacity</c>, <c>advance</c>,
-/// <c>dynamics</c>, <c>draw</c> -- per-cell draws are the spatial-draw seam, refused until it lands).</summary>
-/// <param name="Topology">The <c>state.lattices</c> topology this row lies over.</param>
+/// <summary>A state row's <c>field</c> trait — carried only by a row whose <see cref="WorldStateRow.Domain"/> is
+/// <see cref="WorldStateDomain.CellsOf"/> over a <c>Field</c>-kind topology: the row holds one
+/// <see cref="CellKind.Fixed"/> scalar per cell of that topology instead of sparse board cells. Values are authored
+/// DECIMAL (like every lattice quantity), not raw Q48.16 bits; a field row refuses slot/keyed members (<c>cells</c>,
+/// <c>capacity</c>, <c>advance</c>, <c>dynamics</c>, <c>draw</c> -- per-cell draws are the spatial-draw seam, refused
+/// until it lands).</summary>
 /// <param name="Initial">The value every cell starts at before paint.</param>
 /// <param name="Min">The least value a cell holds.</param>
 /// <param name="Max">The greatest value a cell holds.</param>
@@ -385,8 +386,7 @@ public sealed record WorldTopologyElementAlias(string Name, string Element);
 /// <see cref="WorldReaction.Expose"/> resolve against — refused unless <paramref name="HeightScale"/> is greater
 /// than zero (a surface-less medium is meaningless).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldStateLatticeTrait(
-    string Topology,
+public sealed record WorldStateFieldTrait(
     float Initial = 0f,
     float Min = 0f,
     float Max = 1f,
@@ -395,7 +395,7 @@ public sealed record WorldStateLatticeTrait(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldLatticeFill>? Paint = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldLatticeMedium? Medium = null
 );
-/// <summary>Marks a lattice-shaped field as a fluid medium (see <see cref="WorldStateLatticeTrait.Medium"/>). No
+/// <summary>Marks a lattice-shaped field as a fluid medium (see <see cref="WorldStateFieldTrait.Medium"/>). No
 /// required members today — the growth seam a future medium trait (density, drag) widens without moving what
 /// already exists, the same trailing-member shape as every other optional-facet record in this document.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -428,7 +428,7 @@ public sealed record WorldFieldLatticeDefinition(
 /// <param name="Color">The color the field's surface shades with — a <c>#RRGGBB</c> literal or a
 /// <c>state.&lt;row&gt;[.&lt;key&gt;]</c> Text-cell binding; required when <paramref name="HeightScale"/>
 /// is nonzero.</param>
-/// <param name="Medium">Whether this field is a fluid medium (see <see cref="WorldStateLatticeTrait.Medium"/>).</param>
+/// <param name="Medium">Whether this field is a fluid medium (see <see cref="WorldStateFieldTrait.Medium"/>).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldFieldRow(
     string Name,
@@ -493,9 +493,9 @@ public abstract record WorldLatticeFill {
     /// <param name="Generator">An inline numeric source, or <see langword="null"/> when <paramref name="Source"/> is named.</param>
     public sealed record Draw([property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCellName? Source = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldGenerator? Generator = null) : WorldLatticeFill;
 
-    /// <summary>Returns the one <see cref="Draw"/> fill a lattice trait's paint carries, or <see langword="null"/>.</summary>
-    /// <param name="trait">The trait, or <see langword="null"/> for a row that is not a lattice.</param>
-    public static Draw? FindDraw(WorldStateLatticeTrait? trait) {
+    /// <summary>Returns the one <see cref="Draw"/> fill a field trait's paint carries, or <see langword="null"/>.</summary>
+    /// <param name="trait">The trait, or <see langword="null"/> for a row that is not a field.</param>
+    public static Draw? FindDraw(WorldStateFieldTrait? trait) {
         foreach (var fill in (trait?.Paint ?? [])) {
             if (fill is Draw draw) {
                 return draw;

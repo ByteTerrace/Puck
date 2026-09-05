@@ -122,9 +122,6 @@
       {
         "name": "units",
         "kind": "int",
-        "tokens": {
-          "capacity": 2
-        },
         "cells": [
           {
             "key": "scout",
@@ -134,12 +131,12 @@
             "key": "guard",
             "value": 2
           }
-        ]
+        ],
+        "capacity": 2
       },
       {
         "name": "positions",
         "kind": "int",
-        "keysFrom": "units",
         "valuesFrom": "map",
         "phaseOf": "turns",
         "visibility": {},
@@ -152,12 +149,15 @@
             "key": "guard",
             "value": 15
           }
-        ]
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "units"
+        }
       },
       {
         "name": "moves",
         "kind": "int",
-        "keysFrom": "units",
         "phaseOf": "turns",
         "cells": [
           {
@@ -168,23 +168,25 @@
             "key": "guard",
             "value": 3
           }
-        ]
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "units"
+        }
       },
       {
         "name": "terrain",
         "kind": "int",
-        "board": {
+        "cells": [],
+        "domain": {
+          "$type": "cellsOf",
           "topology": "map",
           "empty": 1
-        },
-        "cells": []
+        }
       },
       {
         "name": "discs",
         "kind": "int",
-        "board": {
-          "topology": "map"
-        },
         "cells": [
           {
             "key": "0",
@@ -202,14 +204,15 @@
             "key": "3",
             "value": 1
           }
-        ]
+        ],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "map"
+        }
       },
       {
         "name": "cards",
         "kind": "int",
-        "tokens": {
-          "capacity": 2
-        },
         "cells": [
           {
             "key": "copyA",
@@ -219,14 +222,12 @@
             "key": "copyB",
             "value": 7
           }
-        ]
+        ],
+        "capacity": 2
       },
       {
         "name": "deck",
         "kind": "bool",
-        "zone": {
-          "tokens": "cards"
-        },
         "cells": [
           {
             "key": "copyA",
@@ -236,15 +237,22 @@
             "key": "copyB",
             "value": true
           }
-        ]
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "cards",
+          "ordered": true
+        }
       },
       {
         "name": "hand",
         "kind": "bool",
-        "zone": {
-          "tokens": "cards"
-        },
-        "cells": []
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "cards",
+          "ordered": true
+        }
       },
       {
         "name": "turns",

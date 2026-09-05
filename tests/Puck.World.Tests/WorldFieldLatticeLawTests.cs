@@ -61,8 +61,8 @@ public sealed class WorldFieldLatticeLawTests {
                     Name: WorldCellName.Parse(candidate: "drawn"),
                     Kind: CellKind.Fixed,
                     DrawCursor: cursor,
-                    Lattice: new WorldStateLatticeTrait(
-                        Topology: "grid",
+                    Domain: new WorldStateDomain.CellsOf(Topology: "grid"),
+                    Field: new WorldStateFieldTrait(
                         Min: 0f,
                         Max: 1f,
                         Paint: [new WorldLatticeFill.Draw(Generator: new WorldGenerator(Source: WorldGeneratorSource.UniformRange, RangeMin: 0L, RangeMax: FixedQ4816.One.Value))]

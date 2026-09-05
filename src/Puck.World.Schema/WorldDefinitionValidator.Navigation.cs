@@ -78,10 +78,10 @@ public static partial class WorldDefinitionValidator {
                 }
                 if (domain.Kind == WorldNavigationKind.Medium) {
                     var mediumRow = definition.State.FirstOrDefault(predicate: row => string.Equals(a: row.Name, b: domain.Medium, comparisonType: StringComparison.Ordinal));
-                    if (string.IsNullOrWhiteSpace(value: domain.Medium) || mediumRow?.Lattice?.Medium is null) {
+                    if (string.IsNullOrWhiteSpace(value: domain.Medium) || mediumRow?.Field?.Medium is null || mediumRow.EffectiveDomain is not WorldStateDomain.CellsOf mediumCellsOf) {
                         errors.Add(item: $"{path}.medium '{domain.Medium}' names no lattice field carrying a medium trait.");
                     } else {
-                        var topology = definition.StateRaw?.Lattices?.FirstOrDefault(predicate: row => string.Equals(a: row.Name, b: mediumRow.Lattice.Topology, comparisonType: StringComparison.Ordinal));
+                        var topology = definition.StateRaw?.Lattices?.FirstOrDefault(predicate: row => string.Equals(a: row.Name, b: mediumCellsOf.Topology, comparisonType: StringComparison.Ordinal));
                         if (topology is not null && float.IsFinite(f: domain.CellSize) && float.IsFinite(f: topology.CellSize) && domain.CellSize > (topology.CellSize * (WorldNavigationCapacity.MaxMediumSegmentSubdivisions / 2f))) {
                             errors.Add(item: $"{path}.cellSize ({domain.CellSize}) cannot exceed {WorldNavigationCapacity.MaxMediumSegmentSubdivisions / 2} times medium lattice cellSize ({topology.CellSize}); that bounds live edge containment to {WorldNavigationCapacity.MaxMediumSegmentSubdivisions} subsegments.");
                         }

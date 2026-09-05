@@ -195,17 +195,14 @@ namespace Puck.World;
 // The authored-randomness facet a state row (WorldStateRow.Draw), the population section
 // (bodies.capacityRow reading a boot-drawn row), or the host section (WorldHostDefaults.BackendDraw) may declare.
 [JsonSerializable(typeof(WorldDraw))]
-[JsonSerializable(typeof(WorldStateLatticeTrait))]
-[JsonSerializable(typeof(WorldStateBoard))]
+[JsonSerializable(typeof(WorldStateFieldTrait))]
+[JsonSerializable(typeof(WorldStateDomain))]
 [JsonSerializable(typeof(WorldStateTransform))]
 [JsonSerializable(typeof(WorldObservedRow[]))]
 [JsonSerializable(typeof(WorldStatePhase))]
 [JsonSerializable(typeof(WorldStateVisibility))]
 [JsonSerializable(typeof(WorldStateKnowledge))]
 [JsonSerializable(typeof(WorldStateObservation))]
-[JsonSerializable(typeof(WorldStateZone))]
-[JsonSerializable(typeof(WorldStateHistory))]
-[JsonSerializable(typeof(WorldStateTokens))]
 [JsonSerializable(typeof(WorldStateLatticeTopology))]
 // The continuous-accumulation trait a state row's SLOT cell, or (independently) any of a keyed row's OWN cells, may
 // declare — read/written by WorldStateRowJsonConverter through this typed accessor, the same "hand-written row,
@@ -405,7 +402,7 @@ internal sealed class DocumentWriteMaskJsonConverter : NameListMaskJsonConverter
 /// <c>UnmappedMemberHandling.Disallow</c> policy, so this converter re-implements it by hand.</para>
 /// </summary>
 internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> {
-    private const string Shape = "{\"name\":…,\"kind\":\"int\"|\"fixed\"|\"bool\"|\"text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…},\"lattice\":{\"topology\":…,\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"markov\"|\"uniformRange\"|\"weightedNumeric\"|\"streamDraw\"|\"symmetryOrbit\",…},\"timing\":\"boot\"|\"tickPeriod\"|\"event\"},\"drawCursor\":…,\"drawnMasks\":[…]}";
+    private const string Shape = "{\"name\":…,\"kind\":\"int\"|\"fixed\"|\"bool\"|\"text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…},\"field\":{\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"markov\"|\"uniformRange\"|\"weightedNumeric\"|\"streamDraw\"|\"symmetryOrbit\",…},\"timing\":\"boot\"|\"tickPeriod\"|\"event\"},\"drawCursor\":…,\"drawnMasks\":[…],\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…}}";
 
     private static string DescribeCellKind(CellKind cellKind) => cellKind switch {
         CellKind.Int => "int",
@@ -801,15 +798,11 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
         JsonElement? draw = null;
         JsonElement? drawCursor = null;
         JsonElement? drawnMasks = null;
-        JsonElement? history = null;
         JsonElement? historyCursor = null;
-        JsonElement? board = null;
-        string? keysFrom = null;
+        JsonElement? domain = null;
         string? phaseOf = null;
         string? valuesFrom = null;
         JsonElement? phase = null, visibility = null, knowledge = null;
-        JsonElement? zone = null;
-        JsonElement? tokens = null;
         JsonElement? advance = null;
         JsonElement? dynamics = null;
         JsonElement? lattice = null;
@@ -869,17 +862,8 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                 case "drawCursor":
                     drawCursor = JsonElement.ParseValue(reader: ref reader);
                     break;
-                case "history":
-                    history = JsonElement.ParseValue(reader: ref reader);
-                    break;
                 case "historyCursor":
                     historyCursor = JsonElement.ParseValue(reader: ref reader);
-                    break;
-                case "tokens":
-                    tokens = JsonElement.ParseValue(reader: ref reader);
-                    break;
-                case "zone":
-                    zone = JsonElement.ParseValue(reader: ref reader);
                     break;
                 case "visibility": visibility = JsonElement.ParseValue(reader: ref reader); break;
                 case "knowledge": knowledge = JsonElement.ParseValue(reader: ref reader); break;
@@ -889,12 +873,9 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                 case "valuesFrom":
                     valuesFrom = reader.GetString();
                     break;
-                case "keysFrom":
-                    keysFrom = reader.GetString();
-                    break;
                 case "phaseOf": phaseOf = reader.GetString(); break;
-                case "board":
-                    board = JsonElement.ParseValue(reader: ref reader);
+                case "domain":
+                    domain = JsonElement.ParseValue(reader: ref reader);
                     break;
                 case "drawnMasks":
                     drawnMasks = JsonElement.ParseValue(reader: ref reader);
@@ -905,7 +886,7 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                 case "dynamics":
                     dynamics = JsonElement.ParseValue(reader: ref reader);
                     break;
-                case "lattice":
+                case "field":
                     lattice = JsonElement.ParseValue(reader: ref reader);
                     break;
                 case "cycle":
@@ -1028,7 +1009,7 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             (cycle is not null) &&
             (lattice is not null)
         ) {
-            throw new JsonException(message: $"state row '{name}' declares both 'cycle' and 'lattice' — a lattice row's cells are the lattice's.");
+            throw new JsonException(message: $"state row '{name}' declares both 'cycle' and 'field' — a physical-field row's cells are the field's.");
         }
         if (
             (cycle is not null) &&
@@ -1112,15 +1093,15 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                     element: drawCursorElement
                 )
             : 0L),
-            Tokens: tokens is { } tokensElement ? (tokensElement.Deserialize(WorldJsonContext.Default.WorldStateTokens) ?? throw new JsonException("tokens must be an object")) : null,
-            Zone: zone is { } zoneElement ? (zoneElement.Deserialize(WorldJsonContext.Default.WorldStateZone) ?? throw new JsonException("zone must be an object")) : null,
             Visibility: visibility is { } visibilityElement ? (visibilityElement.Deserialize(WorldJsonContext.Default.WorldStateVisibility) ?? throw new JsonException("visibility must be an object")) : null,
             Knowledge: knowledge is { } knowledgeElement ? (knowledgeElement.Deserialize(WorldJsonContext.Default.WorldStateKnowledge) ?? throw new JsonException("knowledge must be an object")) : null,
             Phase: phase is { } phaseElement ? (phaseElement.Deserialize(WorldJsonContext.Default.WorldStatePhase) ?? throw new JsonException("phase must be an object")) : null,
             PhaseOf: phaseOf,
-            KeysFrom: keysFrom,
             ValuesFrom: valuesFrom,
-            Board: board is { } boardElement ? (boardElement.Deserialize(WorldJsonContext.Default.WorldStateBoard) ?? throw new JsonException("board must be an object")) : null,
+            Domain: ((domain is { } domainElement)
+            ? (domainElement.Deserialize(jsonTypeInfo: WorldJsonContext.Default.WorldStateDomain)
+                    ?? throw new JsonException(message: $"state row '{name}'.domain must be an object."))
+            : null),
             DrawnMasks: ((drawnMasks is { } drawnMasksElement)
             ? ReadDrawnMasks(
                     element: drawnMasksElement,
@@ -1134,17 +1115,13 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                     element: dynamicsElement
                 )
             : null),
-            Lattice: ((lattice is { } latticeElement)
-            ? (latticeElement.Deserialize(jsonTypeInfo: WorldJsonContext.Default.WorldStateLatticeTrait)
-                    ?? throw new JsonException(message: $"state row '{name}'.lattice must be an object."))
+            Field: ((lattice is { } latticeElement)
+            ? (latticeElement.Deserialize(jsonTypeInfo: WorldJsonContext.Default.WorldStateFieldTrait)
+                    ?? throw new JsonException(message: $"state row '{name}'.field must be an object."))
             : null),
             Cycle: ((cycle is { } cycleElement)
             ? (cycleElement.Deserialize(jsonTypeInfo: WorldJsonContext.Default.WorldStateCycle)
                     ?? throw new JsonException(message: $"state row '{name}'.cycle must be an object."))
-            : null),
-            History: ((history is { } historyElement)
-            ? (historyElement.Deserialize(jsonTypeInfo: WorldJsonContext.Default.WorldStateHistory)
-                    ?? throw new JsonException(message: $"state row '{name}'.history must be an object."))
             : null),
             HistoryCursor: ((historyCursor is { } historyCursorElement)
             ? RequireInt64(
@@ -1208,13 +1185,15 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
         }
 
         // The one authored shape's two carriers: a slot writes back the SAME `value` sugar it was authored with, so a
-        // load->save round-trip is byte-identical; every other shape writes its cells keyed.
-        if (value.IsSlot) {
+        // load->save round-trip is byte-identical; every other shape writes its cells keyed. A slot row that has
+        // never been explicitly set carries no cell yet (the first write mints it) — round-trips as an empty
+        // `cells` array exactly as it always has, since there is no value to spell as `value` sugar.
+        if (value.IsSlot && (value.Cells is { Count: 1 })) {
             WriteCellValue(
                 writer: writer,
                 propertyName: "value",
                 kind: value.Kind,
-                cell: value.Cells![0]
+                cell: value.Cells[0]
             );
         } else {
             writer.WriteStartArray(propertyName: "cells");
@@ -1302,12 +1281,12 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             );
         }
 
-        if (value.Lattice is { } latticeTrait) {
-            writer.WritePropertyName(propertyName: "lattice");
+        if (value.Field is { } fieldTrait) {
+            writer.WritePropertyName(propertyName: "field");
             JsonSerializer.Serialize(
                 writer: writer,
-                value: latticeTrait,
-                jsonTypeInfo: WorldJsonContext.Default.WorldStateLatticeTrait
+                value: fieldTrait,
+                jsonTypeInfo: WorldJsonContext.Default.WorldStateFieldTrait
             );
         }
 
@@ -1327,15 +1306,6 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             );
         }
 
-        if (value.History is { } history) {
-            writer.WritePropertyName(propertyName: "history");
-            JsonSerializer.Serialize(
-                writer: writer,
-                value: history,
-                jsonTypeInfo: WorldJsonContext.Default.WorldStateHistory
-            );
-        }
-
         if (value.HistoryCursor != 0L) {
             writer.WriteNumber(
                 propertyName: "historyCursor",
@@ -1345,14 +1315,6 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
 
         if (value.Visibility is { } visibility) { writer.WritePropertyName("visibility"); JsonSerializer.Serialize(writer, visibility, WorldJsonContext.Default.WorldStateVisibility); }
         if (value.Knowledge is { } knowledge) { writer.WritePropertyName("knowledge"); JsonSerializer.Serialize(writer, knowledge, WorldJsonContext.Default.WorldStateKnowledge); }
-        if (value.Tokens is { } tokens) {
-            writer.WritePropertyName("tokens");
-            JsonSerializer.Serialize(writer, tokens, WorldJsonContext.Default.WorldStateTokens);
-        }
-        if (value.Zone is { } zone) {
-            writer.WritePropertyName("zone");
-            JsonSerializer.Serialize(writer, zone, WorldJsonContext.Default.WorldStateZone);
-        }
         if (value.Phase is { } phase) {
             writer.WritePropertyName("phase");
             JsonSerializer.Serialize(writer, phase, WorldJsonContext.Default.WorldStatePhase);
@@ -1361,12 +1323,9 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
         if (value.ValuesFrom is { } valuesFrom) {
             writer.WriteString("valuesFrom", valuesFrom);
         }
-        if (value.KeysFrom is { } keysFrom) {
-            writer.WriteString("keysFrom", keysFrom);
-        }
-        if (value.Board is { } board) {
-            writer.WritePropertyName("board");
-            JsonSerializer.Serialize(writer, board, WorldJsonContext.Default.WorldStateBoard);
+        if (value.Domain is { } domain) {
+            writer.WritePropertyName("domain");
+            JsonSerializer.Serialize(writer, domain, WorldJsonContext.Default.WorldStateDomain);
         }
         if (value.DrawnMasks is { Count: > 0 } drawnMasks) {
             writer.WritePropertyName(propertyName: "drawnMasks");

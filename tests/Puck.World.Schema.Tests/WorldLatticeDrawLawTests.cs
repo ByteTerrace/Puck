@@ -55,7 +55,8 @@ public sealed class WorldLatticeDrawLawTests {
                     Kind: CellKind.Fixed,
                     DrawCursor: cursor,
                     DrawnMasks: masks,
-                    Lattice: new WorldStateLatticeTrait(Topology: "grid", Max: 4f, Paint: ((paint.Count == 0) ? null : paint))
+                    Domain: new WorldStateDomain.CellsOf(Topology: "grid"),
+                    Field: new WorldStateFieldTrait(Max: 4f, Paint: ((paint.Count == 0) ? null : paint))
                 ),
             ],
             Lattices: [
