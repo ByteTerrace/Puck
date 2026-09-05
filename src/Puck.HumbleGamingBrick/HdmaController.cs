@@ -35,7 +35,7 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
     private readonly ICartridgeSlot m_cartridgeSlot;
     private readonly IKey1 m_key1;
     private readonly SystemMemory m_memory;
-    private readonly IPpu m_ppu;
+    private readonly Ppu m_ppu;
 
     private bool m_active;
     private bool m_allowWakeArm;
@@ -62,7 +62,7 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
     /// <param name="ppu">The PPU whose mode drives HBlank transfers.</param>
     /// <param name="key1">The speed-switch/stop unit.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public HdmaController(ICartridgeSlot cartridgeSlot, SystemMemory memory, IPpu ppu, IKey1 key1) {
+    public HdmaController(ICartridgeSlot cartridgeSlot, SystemMemory memory, Ppu ppu, IKey1 key1) {
         ArgumentNullException.ThrowIfNull(argument: cartridgeSlot);
         ArgumentNullException.ThrowIfNull(argument: memory);
         ArgumentNullException.ThrowIfNull(argument: ppu);

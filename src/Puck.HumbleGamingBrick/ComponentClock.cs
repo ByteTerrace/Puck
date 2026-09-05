@@ -52,6 +52,9 @@ public sealed class ComponentClock {
     // state changes by a path other than absorbing: a register write into any component, a restore, or a ticked
     // cycle, each of which clears it.
     private int m_quietRemaining;
+    // Cycles every CPU-domain component has agreed to absorb, not yet spent — the display judged separately, so a
+    // drawing stretch can still tick the display alone over them. Cleared with the whole agreement.
+    private int m_othersRemaining;
     // Cycles of an agreed stretch the clock has already advanced through but the components have not: applied to
     // them by Settle before anything reads or ticks them.
     private int m_pendingAbsorb;
@@ -204,13 +207,28 @@ public sealed class ComponentClock {
     public void AdvanceCpuTCycles(int count) {
         if (
             m_canAbsorb &&
-            (m_quietRemaining >= count)
+            (m_othersRemaining >= count)
         ) {
-            m_quietRemaining -= count;
-            m_pendingAbsorb += count;
-            AdvanceClock(cycles: count);
+            if (m_quietRemaining >= count) {
+                m_quietRemaining -= count;
+                m_othersRemaining -= count;
+                m_pendingAbsorb += count;
+                AdvanceClock(cycles: count);
 
-            return;
+                return;
+            }
+
+            if (
+                !m_isDoubleSpeed &&
+                m_hdma.IsIdle
+            ) {
+                m_quietRemaining = 0;
+                m_othersRemaining -= count;
+                m_pendingAbsorb += count;
+                TickDisplayAlone(cycles: count);
+
+                return;
+            }
         }
 
         AdvanceCpuTCyclesSlow(count: count);
@@ -221,6 +239,7 @@ public sealed class ComponentClock {
     public void Invalidate() {
         Settle();
         m_quietRemaining = 0;
+        m_othersRemaining = 0;
     }
     /// <summary>Applies the cycles the clock has advanced through to the components, so their state is current.
     /// Every read of a component's state from outside a tick — a bus access to a register or to display memory, a
@@ -239,8 +258,12 @@ public sealed class ComponentClock {
 
         m_pendingAbsorb = 0;
         m_settledCycleCount = now;
-        m_hdma.SampleMode();
-        m_ppu.Skip(dots: dots);
+
+        if (dots > 0) {
+            m_hdma.SampleMode();
+            m_ppu.Skip(dots: dots);
+        }
+
         AbsorbOthers(
             cycles: pending,
             generatorCalls: (m_isDoubleSpeed
@@ -264,6 +287,7 @@ public sealed class ComponentClock {
 
         // Whatever remained of an earlier agreement is shorter than this advance; it is re-derived below.
         m_quietRemaining = 0;
+        m_othersRemaining = 0;
         Settle();
 
         while (count > 0) {
@@ -288,10 +312,8 @@ public sealed class ComponentClock {
                     val2: ppuCycles
                 );
 
-                if (agreed > count) {
-                    m_quietRemaining = (agreed - count);
-                }
-
+                m_quietRemaining = (agreed - quiet);
+                m_othersRemaining = (others - quiet);
                 m_pendingAbsorb = quiet;
                 AdvanceClock(cycles: quiet);
                 Settle();
@@ -317,6 +339,7 @@ public sealed class ComponentClock {
                     continue;
                 }
 
+                m_othersRemaining = (others - quiet);
                 m_pendingAbsorb = quiet;
                 AdvanceClock(cycles: quiet);
                 Settle();
@@ -325,23 +348,34 @@ public sealed class ComponentClock {
                 continue;
             }
 
-            m_clock.AdvanceCycles(cycles: ((ulong)quiet));
-
-            // A tick samples the display's mode before the display's own dot on that cycle, so the transfer unit's
-            // sample comes from before the stretch's last dot.
-            for (var dot = 1; (dot < quiet); ++dot) {
-                m_ppu.Tick();
-            }
-
-            m_hdma.SampleMode();
-            m_ppu.Tick();
-            AbsorbOthers(
-                cycles: quiet,
-                generatorCalls: quiet
-            );
-            m_settledCycleCount = m_clock.CycleCount;
+            m_othersRemaining = (others - quiet);
+            m_pendingAbsorb = quiet;
+            TickDisplayAlone(cycles: quiet);
+            Settle();
             count -= quiet;
         }
+    }
+    // Ticks the display alone through cycles every other component has agreed to absorb, at normal speed: the
+    // display first catches up on any dots owed from earlier absorbed stretches, then is ticked one dot per cycle. A
+    // tick samples the display's mode before the display's own dot on that cycle, so the transfer unit's sample is
+    // taken before the stretch's last dot.
+    private void TickDisplayAlone(int cycles) {
+        var owed = ((int)(m_clock.CycleCount - m_settledCycleCount));
+
+        if (owed > 0) {
+            m_hdma.SampleMode();
+            m_ppu.Skip(dots: owed);
+        }
+
+        m_clock.AdvanceCycles(cycles: ((ulong)cycles));
+
+        for (var dot = 1; (dot < cycles); ++dot) {
+            m_ppu.Tick();
+        }
+
+        m_hdma.SampleMode();
+        m_ppu.Tick();
+        m_settledCycleCount = m_clock.CycleCount;
     }
     // Moves the clock through CPU T-cycles: a whole dot each at normal speed, half a dot each under double speed.
     private void AdvanceClock(int cycles) {
