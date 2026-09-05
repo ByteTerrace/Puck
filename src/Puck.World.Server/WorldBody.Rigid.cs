@@ -943,6 +943,7 @@ public sealed partial class WorldBody {
         var groundHandle = GroundPhantomHandle();
         var refusals = 0;
         Span<long> accumulatedNormalImpulseRaw = stackalloc long[4];
+        accumulatedNormalImpulseRaw.Clear();
         var passes = Math.Max(val1: 1, val2: iterations);
 
         // Sequential impulse with a per-point ACCUMULATED normal impulse, clamped to non-negative and applied by

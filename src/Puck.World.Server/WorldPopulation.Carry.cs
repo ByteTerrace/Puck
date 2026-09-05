@@ -230,7 +230,11 @@ public sealed partial class WorldPopulation {
                 other.ApplyDynamicContact(correction: -shared);
             }
 
-            carrier.ApplyDynamicContact(correction: shared);
+            if (carrier.IsRigid) {
+                carrier.ApplyRigidPositionalCorrection(correction: shared);
+            } else {
+                carrier.ApplyDynamicContact(correction: shared);
+            }
         }
     }
 
