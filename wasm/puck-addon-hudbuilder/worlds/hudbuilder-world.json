@@ -574,7 +574,6 @@
             {
               "along": {
                 "engage": 1000000,
-                "brake": 0,
                 "release": 1000000
               }
             }
@@ -587,8 +586,7 @@
               "lift": 1,
               "gravity": {
                 "rise": 14,
-                "fall": 23,
-                "terminal": 20
+                "fall": 23
               }
             }
           ]
@@ -656,7 +654,6 @@
             {
               "along": {
                 "engage": 1000000,
-                "brake": 0,
                 "release": 1000000
               }
             }
@@ -669,8 +666,7 @@
               "lift": 1,
               "gravity": {
                 "rise": 14,
-                "fall": 23,
-                "terminal": 20
+                "fall": 23
               }
             }
           ]
@@ -743,7 +739,6 @@
               },
               "along": {
                 "engage": 45,
-                "brake": 0,
                 "release": 55
               }
             },
@@ -754,14 +749,12 @@
               },
               "along": {
                 "engage": 34,
-                "brake": 0,
                 "release": 18
               }
             },
             {
               "along": {
                 "engage": 30,
-                "brake": 0,
                 "release": 17
               }
             }
@@ -778,8 +771,10 @@
               "reach": 1.2,
               "gravity": {
                 "rise": 14,
-                "fall": 23,
-                "terminal": 20
+                "fall": 23
+              },
+              "envelope": {
+                "sinkSpeed": 20
               }
             },
             {
@@ -788,8 +783,10 @@
               "hold": "Gravity",
               "gravity": {
                 "rise": 14,
-                "fall": 23,
-                "terminal": 20
+                "fall": 23
+              },
+              "envelope": {
+                "sinkSpeed": 20
               }
             }
           ]
@@ -933,7 +930,6 @@
               },
               "along": {
                 "engage": 45,
-                "brake": 0,
                 "release": 55
               }
             },
@@ -944,14 +940,12 @@
               },
               "along": {
                 "engage": 34,
-                "brake": 0,
                 "release": 18
               }
             },
             {
               "along": {
                 "engage": 30,
-                "brake": 0,
                 "release": 17
               }
             }
@@ -968,8 +962,10 @@
               "reach": 1.2,
               "gravity": {
                 "rise": 14,
-                "fall": 23,
-                "terminal": 20
+                "fall": 23
+              },
+              "envelope": {
+                "sinkSpeed": 20
               }
             },
             {
@@ -978,8 +974,10 @@
               "hold": "Gravity",
               "gravity": {
                 "rise": 14,
-                "fall": 23,
-                "terminal": 20
+                "fall": 23
+              },
+              "envelope": {
+                "sinkSpeed": 20
               }
             }
           ]
@@ -1013,24 +1011,9 @@
               "standoffRadius": 2,
               "approach": 0.75,
               "orbit": 0,
-              "altitudeGain": 0,
+              "approachAltitudeGain": 0,
               "inwardGain": 1.6,
-              "turnScale": 2.5,
-              "forward": 0,
-              "softRadius": 1000000,
-              "weaveAmplitude": 0,
-              "weaveFrequencyBase": 0,
-              "weaveFrequencyRange": 0,
-              "activityRateBase": 0,
-              "activityRateRange": 0,
-              "strafeWave": 0,
-              "turnWave": 0,
-              "upWave": 0,
-              "pitchWave": 0,
-              "rollTurn": 0,
-              "pressThreshold": 0,
-              "altitudeBase": 0,
-              "altitudeRange": 0
+              "turnScale": 2.5
             },
             "channels": {}
           }
@@ -1152,7 +1135,6 @@
               },
               "along": {
                 "engage": 45,
-                "brake": 0,
                 "release": 55
               }
             },
@@ -1163,14 +1145,12 @@
               },
               "along": {
                 "engage": 34,
-                "brake": 0,
                 "release": 18
               }
             },
             {
               "along": {
                 "engage": 30,
-                "brake": 0,
                 "release": 17
               }
             }
@@ -1187,8 +1167,10 @@
               "reach": 1.2,
               "gravity": {
                 "rise": 14,
-                "fall": 23,
-                "terminal": 20
+                "fall": 23
+              },
+              "envelope": {
+                "sinkSpeed": 20
               }
             },
             {
@@ -1197,8 +1179,10 @@
               "hold": "Gravity",
               "gravity": {
                 "rise": 14,
-                "fall": 23,
-                "terminal": 20
+                "fall": 23
+              },
+              "envelope": {
+                "sinkSpeed": 20
               }
             }
           ]

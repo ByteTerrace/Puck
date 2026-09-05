@@ -164,7 +164,7 @@
       "version": "puck.body-motion.v1",
       "kind": "Producer",
       "operations": [
-        "ProduceWanderIntent"
+        "ProduceSteeringIntent"
       ]
     },
     {
@@ -180,8 +180,7 @@
       },
       "operations": [
         "SenseNearestInCone",
-        "ProduceWanderIntent",
-        "ProduceAttendIntent",
+        "ProduceSteeringIntent",
         "FaceSensorTarget"
       ]
     },
@@ -195,7 +194,7 @@
       },
       "operations": [
         "SenseNearestInCone",
-        "ProduceAttendIntent",
+        "ProduceSteeringIntent",
         "FaceSensorTarget"
       ]
     }
@@ -259,8 +258,10 @@
               "reach": 1.2,
               "gravity": {
                 "rise": 14,
-                "fall": 23,
-                "terminal": 20
+                "fall": 23
+              },
+              "envelope": {
+                "sinkSpeed": 20
               }
             },
             {
@@ -269,8 +270,10 @@
               "hold": "Gravity",
               "gravity": {
                 "rise": 14,
-                "fall": 23,
-                "terminal": 20
+                "fall": 23
+              },
+              "envelope": {
+                "sinkSpeed": 20
               }
             }
           ]
