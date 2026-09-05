@@ -29,19 +29,6 @@ public static partial class WorldRuntimeStateHash {
             hash.Add(history.Empty);
             hash.Add(row.HistoryCursor);
         }
-        if (row.Phase is not { } phase) { return; }
-        hash.Add(phase.Participants.Count);
-        for (var index = 0; index < phase.Participants.Count; index++) { AppendString(ref hash, phase.Participants[index]); }
-        hash.Add(phase.Phases.Count);
-        Span<int> timeout = stackalloc int[4];
-        for (var index = 0; index < phase.Phases.Count; index++) {
-            var node = phase.Phases[index];
-            AppendString(ref hash, node.Name);
-            AppendString(ref hash, node.Next);
-            hash.Add((byte)node.Mode);
-            decimal.GetBits(node.TimeoutSeconds, timeout);
-            foreach (var word in timeout) { hash.Add(word); }
-        }
     }
 
     private static void AppendDiscreteTopologies(ref Fnv1aHash hash, WorldStateSection? state) {

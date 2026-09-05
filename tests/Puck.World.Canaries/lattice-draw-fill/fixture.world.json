@@ -20,12 +20,12 @@
               "$type": "draw",
               "generator": {
                 "source": "WeightedNumeric",
-                "mode": "ReshuffleOnExhaustion",
+                "mode": "RestartOnExhaustion",
                 "weighted": [
                   {
                     "value": 16384,
                     "weight": 1,
-                    "count": 2
+                    "multiplicity": 2
                   },
                   {
                     "value": 32768,

@@ -719,6 +719,60 @@ today deletes the tabletop primitive, the poker zones, and the island's
 fire/ice/water lattice with no replacement standing in, so it stays
 unstarted until the row-domain union itself ships.
 
+**The generator's card nouns are renamed to its actual primitive: multiset sampling
+(owner decision, Lane 2c).** `WorldGenerator` draws from a weighted entry set with
+optional exhaustion — a mechanism the schema, server, console, and tests spelled with
+card-game words that named no capability a neutral spelling couldn't: `WorldStateRow.DrawDecks`
+is `DrawnMasks`, `WorldGeneratorCapacity.MaxCardsPerSet` is `MaxEntriesPerSet`,
+`WorldGeneratorMode.ReshuffleOnExhaustion` is `RestartOnExhaustion`, and the per-entry repeat
+field on `WorldGeneratorAlternative`/`WorldGeneratorWeightedNumeric` (JSON `count`) is
+`Multiplicity` (JSON `multiplicity`). `WorldGeneratorEngine`'s own internal vocabulary
+renamed with it — `Deals`/`DecksAfter` to `Exhausts`/`MasksAfter`, the private `Deal` method
+to `DrawEntry`, and every `card`/`deck`/`dealt` local variable and doc comment to
+`unit`/`mask`/`drawn` — since a second, unrenamed vocabulary living one layer under the
+public one is the same defect the doctrine names. No shipped world or canary document
+authored the alternatives/weighted vocabulary (the garden's poker table uses the tabletop
+primitive's own token/zone/transfer vocabulary instead, never `WorldGenerator`), so the
+only document fixture touched is `tests/Puck.World.Canaries/lattice-draw-fill/fixture.world.json`
+plus that canary's and `symmetry-orbit-source`'s asserted console text (`decks=` → `masks=`).
+Pure rename, no behavior change: the passive 300-tick garden replay hashes identically
+before and after (`0xCC2D4742992B05CC`).
+
+**`WorldStatePhase` is reduced to the guard stamp it names (owner decision, Lane 2a).**
+A phase row now carries nothing but its own generation (`WorldStatePhase(long Sequence)`);
+`WorldPhaseMode`, `WorldPhaseDefinition`, and the `completePhase`/`turnOrder` transforms
+are deleted. `WorldPhaseGuard(Row, Sequence, Participant)` is the whole primitive: a
+guard's sequence must match its row's before the guarded transform composes, and that
+transform's success advances the row's generation by one in the same mutation — the
+guard both admits and completes a turn, so a world that wants several ungated moves
+before one ends reserves `PhaseOf` for the single row that should end it. Whose turn it
+is, rounds, ready/skipped bitsets, and deadlines are no longer engine knowledge; a world
+authors them as ordinary rows (a counter, a bitset board, a keyed "active" row) and rules
+that read and write those rows with the same generic effects every other row uses. The
+`$phase:<row>:current|active|ready|sequence|round|deadline|direction|skipped` fact
+collapses to `$phase:<row>`, reading the one thing left to read — a phase row's own cells
+stay empty, so this is not redundant with `$cell:`.
+
+**`setRay`, `shuffle`, and `sort` are re-cut to their real shapes (owner decision, Lane 2b).**
+`setRay`'s `through`/`until` fields are replaced by a `pattern` reference: the transform
+walks the ray from its origin and writes the longest run the named `patterns` row accepts
+— the same compiled machine and prefix semantics `$match` already runs, landed back on
+the board instead of read as a fact. A Reversi-style bracket capture is authored as
+`plus(opponent) . symbol(own)`; writing the accepted run's own-color terminator back to
+itself is idempotent, so no engine-side exception carves the terminator out of the write.
+`shuffle` permutes any ordered zone or any other keyed row, not zones alone — the
+Fisher-Yates pass never read zone structure to begin with. `sort` splits into `sortZone`
+(attribute keys over a zone's token domain, each carrying its own direction) and
+`sortKeyed` (a keyed numeric row's own values, one `descending` flag): one `$type` was
+carrying two authoring surfaces that refused each other's fields only at validation time;
+two `$type`s let the shape refuse at the type level instead. The garden's two `sort`
+rules move to `sortKeyed` (pure rename: the passive 300-tick replay hash is unchanged);
+no shipped world or canary declared `completePhase`, `turnOrder`, `setRay`, `moveToken`,
+or `shuffle`, so no other document migrates. `moveToken` is left as its own transform:
+composing it from `$board:pathCost` plus a transaction needs that fact's target cell to
+read a just-written value rather than the compile-time literal it takes today, which is
+new expressive power the fact does not carry yet, not a rewrite of what it already has.
+
 **The tabletop primitive (owner decisions, Lane D).** Physics-first extends to
 board games: a chess set is 32 ordinary rigid bodies on a shared `piece` kit —
 no second entity kind, no engine-level "piece" concept. A placement's `board`

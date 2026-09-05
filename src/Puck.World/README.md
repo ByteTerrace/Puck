@@ -531,8 +531,9 @@ bodies — beside the chess set: a `cards` token domain (52 identities, `rank`
 and `suit` attribute rows, each keeping `keysFrom: cards` so a hidden card's
 value inherits its owning zone's own visibility — see below) with a
 `deck`/`hand1`/`hand2`/`community` zone family, a `cardStream` streamDraw
-site, a plain int `pokerTurn` (0 = deal, 1 = bet — not the `phase` trait; its
-own `completePhase` transform would have cost as much as a whole extra deal),
+site, a plain int `pokerTurn` (0 = deal, 1 = bet — not the `phase` trait; a
+guarded row costs the same per-tick budget as any other transform-touched
+row, and one flag needs none of it),
 a `bettor` turn-alternation row over `seat1`/`seat2`, a `bets` history ring,
 and a `pot`. `poker-deal` draws each card at random off the deck (`Transfer`'s
 own `Random` selector, three calls off the one streamDraw site) and sets
@@ -555,7 +556,7 @@ not a console fixture. `pairAtRank2..14`, `hasTripAny`, `hasQuadAny`,
 correct against a sorted or order-independent word respectively, reachable via
 `world.match`, but only `pairAny` feeds `strength1`/`strength2` live:
 `WorldRuleWorkBudget.TransformCost` prices every `transformState`
-effect — a `sort`, a `transfer`, a `completePhase` alike — against the WHOLE
+effect — a `sortKeyed`, a `transfer`, a `setRay` alike — against the WHOLE
 document's declared cell storage (`suit` and `rank`'s privacy-required
 `keysFrom` each add a full topology-sized share to that storage on their own),
 so the deal's three transfers plus the two sorts are a real, non-trivial cost

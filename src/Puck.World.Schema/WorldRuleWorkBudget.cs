@@ -210,9 +210,13 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 var dealt = WorldDefinitionRows.FindStateRow(definition.State, transfer.From)!;
                 cost += (long)transfer.Count * (dealt.Capacity ?? dealt.CellCeiling);
                 break;
-            case WorldStateTransform.Sort sort:
-                var sorted = WorldDefinitionRows.FindStateRow(definition.State, sort.Row)!;
-                cost += 2L * (sorted.Capacity ?? sorted.CellCeiling) * Math.Max(1, sort.By?.Count ?? 1);
+            case WorldStateTransform.SortZone sortZone:
+                var sortedZone = WorldDefinitionRows.FindStateRow(definition.State, sortZone.Row)!;
+                cost += 2L * (sortedZone.Capacity ?? sortedZone.CellCeiling) * Math.Max(1, sortZone.By.Count);
+                break;
+            case WorldStateTransform.SortKeyed sortKeyed:
+                var sortedKeyed = WorldDefinitionRows.FindStateRow(definition.State, sortKeyed.Row)!;
+                cost += 2L * (sortedKeyed.Capacity ?? sortedKeyed.CellCeiling);
                 break;
             case WorldStateTransform.Shuffle shuffle:
                 var pile = WorldDefinitionRows.FindStateRow(definition.State, shuffle.Row)!;

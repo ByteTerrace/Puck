@@ -1215,7 +1215,7 @@ public static partial class WorldDefinitionValidator {
                     break;
                 case WorldLatticeFill.Draw draw:
                     if (!drawnFields.Add(item: row.Field)) {
-                        errors.Add(item: $"{path} is a second draw fill on field '{row.Field}' — a lattice row deals one whole-field pass at a time through its own cursor and decks, so it carries at most one draw fill.");
+                        errors.Add(item: $"{path} is a second draw fill on field '{row.Field}' — a lattice row draws one whole-field pass at a time through its own cursor and masks, so it carries at most one draw fill.");
                     }
 
                     if (!WorldGeneratorEngine.TryResolveSource(
@@ -1246,23 +1246,23 @@ public static partial class WorldDefinitionValidator {
                     }
 
                     var latticeSamples = ((((long)lattice.Width) * lattice.Depth) * lattice.Layers);
-                    var drawDecks = WorldDefinitionRows.FindStateRow(
+                    var drawnMasks = WorldDefinitionRows.FindStateRow(
                         rows: definition.State,
                         name: row.Field
-                    )?.DrawDecks;
+                    )?.DrawnMasks;
 
-                    ValidateDrawDecks(
-                        decks: drawDecks,
+                    ValidateDrawnMasks(
+                        masks: drawnMasks,
                         errors: errors,
                         generator: drawSource,
-                        path: $"state row '{row.Field}' drawDecks"
+                        path: $"state row '{row.Field}' drawnMasks"
                     );
 
                     if (
                         (latticeSamples > 0L) &&
                         !WorldGeneratorEngine.TryCheckBatchCapacity(
                             generator: drawSource,
-                            decks: drawDecks,
+                            masks: drawnMasks,
                             sampleCount: latticeSamples,
                             reason: out var batchReason
                         )

@@ -27,47 +27,25 @@ public sealed record WorldStateHistory(int Capacity, long Empty = 0);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldStateZone(string Tokens, bool Ordered = true);
 
-/// <summary>How participants complete a phase.</summary>
-[JsonConverter(typeof(StrictEnumConverter<WorldPhaseMode>))]
-public enum WorldPhaseMode : byte {
-    /// <summary>Participants act in declaration order, with multiple actions before explicitly completing.</summary>
-    Sequential,
-    /// <summary>All participants may act until each declares readiness.</summary>
-    Together,
-    /// <summary>Only the world program resolves this phase.</summary>
-    Resolution,
-}
-
-/// <summary>One node in a finite phase protocol.</summary>
-/// <param name="Name">The phase name.</param>
-/// <param name="Mode">Who may complete the phase.</param>
-/// <param name="Next">The next phase name.</param>
-/// <param name="TimeoutSeconds">The deadline interval, or zero for no deadline.</param>
+/// <summary>Marks a plain integer row as a guarded submission stamp: the row's own generation
+/// <see cref="Sequence"/>, the sole state a <see cref="WorldPhaseGuard"/> checks and the mutation pipeline advances.
+/// Nothing about who may act, in what order, or under what deadline is engine knowledge any more — a turn order, a
+/// round counter, a ready or skipped bitset, and a deadline are all ordinary rows a world's own rules author and
+/// advance, and eligibility is the ordinary grant/admission system over whichever rows a rule ties to this one via
+/// <see cref="WorldStateRow.PhaseOf"/>. Submitting any mutation whose <see cref="WorldPhaseGuard"/> matches this
+/// generation both admits the submission and, on success, advances the generation by one: the guard's presence on a
+/// mutation IS the turn's completion, so a world that wants several ungated moves before a turn ends simply leaves
+/// those rows untagged and reserves <see cref="WorldStateRow.PhaseOf"/> for the one row that ends it.</summary>
+/// <param name="Sequence">The generation. Advanced by the mutation pipeline after a guarded mutation naming this row
+/// succeeds; never written directly.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldPhaseDefinition(string Name, WorldPhaseMode Mode, string Next, decimal TimeoutSeconds = 0);
+public sealed record WorldStatePhase(long Sequence = 0);
 
-/// <summary>Authored phase protocol and persisted progression. Participants are authenticated principal tokens;
-/// readiness does not change their grants. One completion performs at most one phase transition.</summary>
-/// <param name="Participants">Distinct principal tokens in deterministic activation order, at most 32.</param>
-/// <param name="Phases">The finite phase table, at most 32.</param>
-/// <param name="Current">The current phase ordinal.</param>
-/// <param name="Active">The current participant ordinal for sequential phases.</param>
-/// <param name="Ready">The ready-participant bits for together phases.</param>
-/// <param name="Sequence">The generation incremented on changing activation or phase; readiness alone preserves it.</param>
-/// <param name="Round">The round, incremented on returning to phase zero.</param>
-/// <param name="DeadlineTick">The absolute deadline; zero at sequence zero derives from the initial phase timeout.</param>
-/// <param name="Direction">The sequential activation step, 1 or -1; a sequential phase ends when the turn passes the
-/// last participant in this direction.</param>
-/// <param name="Skipped">The participant bits activation passes over and readiness never waits for (a fold, an
-/// elimination); persists across phases until a <c>turnOrder</c> transform clears them.</param>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldStatePhase(IReadOnlyList<string> Participants, IReadOnlyList<WorldPhaseDefinition> Phases,
-    int Current = 0, int Active = 0, uint Ready = 0, long Sequence = 0, long Round = 0, long DeadlineTick = 0,
-    int Direction = 1, uint Skipped = 0);
-
-/// <summary>Admission guard for a submitted gameplay operation.</summary>
+/// <summary>Admission guard for a submitted gameplay operation: reduces a turn-taking protocol to the one thing the
+/// engine still enforces, a monotonic sequence a submission must match. See <see cref="WorldStatePhase"/> for what
+/// a match does on success.</summary>
 /// <param name="Row">The phase row.</param>
-/// <param name="Sequence">The observed activation/phase generation.</param>
+/// <param name="Sequence">The observed generation.</param>
 /// <param name="Participant">World-program-only participant attribution; outside callers always use their stamp.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldPhaseGuard(string Row, long Sequence, string? Participant = null);
@@ -89,10 +67,9 @@ public enum WorldZoneSelector : byte {
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 [JsonDerivedType(typeof(WorldStateTransform.Transfer), "transfer")]
 [JsonDerivedType(typeof(WorldStateTransform.SetRay), "setRay")]
-[JsonDerivedType(typeof(WorldStateTransform.CompletePhase), "completePhase")]
-[JsonDerivedType(typeof(WorldStateTransform.TurnOrder), "turnOrder")]
 [JsonDerivedType(typeof(WorldStateTransform.Shuffle), "shuffle")]
-[JsonDerivedType(typeof(WorldStateTransform.Sort), "sort")]
+[JsonDerivedType(typeof(WorldStateTransform.SortZone), "sortZone")]
+[JsonDerivedType(typeof(WorldStateTransform.SortKeyed), "sortKeyed")]
 [JsonDerivedType(typeof(WorldStateTransform.WriteSet), "writeSet")]
 [JsonDerivedType(typeof(WorldStateTransform.Push), "push")]
 [JsonDerivedType(typeof(WorldStateTransform.MoveToken), "moveToken")]
@@ -121,47 +98,34 @@ public abstract record WorldStateTransform {
     public sealed record Transfer(string From, string To, WorldZoneSelector Selector = WorldZoneSelector.Key,
         string? Key = null, bool InsertFirst = false, string? Draw = null, int Count = 1) : WorldStateTransform;
 
-    /// <summary>Writes only a nonempty run of matching cells closed by a required terminator; otherwise refuses.</summary>
+    /// <summary>Writes the longest run a <c>patterns</c> row accepts, walked from the origin outward: the same
+    /// prefix semantics as the <c>$match</c> operand's <c>prefix</c> facet, landed back on the board instead of
+    /// read as a fact. Refuses when the accepted prefix is empty, so an author closes a run with the required
+    /// symbol (a bracket capture is <c>plus(through) . symbol(until)</c>) rather than an unbounded one running off
+    /// the board.</summary>
     /// <param name="Row">The board row.</param>
-    /// <param name="From">The origin key, excluded from the write.</param>
+    /// <param name="From">The origin key, excluded from the read word and the write.</param>
     /// <param name="Direction">A direction in the board's topology.</param>
-    /// <param name="Through">Every intervening cell must have this value.</param>
-    /// <param name="Until">The closing value, excluded from the write.</param>
-    /// <param name="Value">The replacement value.</param>
-    public sealed record SetRay(string Row, string From, string Direction, long Through, long Until, long Value) : WorldStateTransform;
+    /// <param name="Pattern">A <c>patterns</c> row over the board's own raw values (kind Int).</param>
+    /// <param name="Value">The replacement value written to every cell of the accepted prefix.</param>
+    public sealed record SetRay(string Row, string From, string Direction, string Pattern, long Value) : WorldStateTransform;
 
-    /// <summary>Completes the acting participant's activation or readiness, guarded against stale submissions.</summary>
-    /// <param name="Row">The phase row.</param>
-    /// <param name="ExpectedSequence">The exact observed progression sequence; only the world program may omit it.</param>
-    /// <param name="Timeout">World-only completion after the current deadline.</param>
-    /// <param name="Participant">World-only named participant on whose completion the authored rule acts.</param>
-    /// <param name="Next">World-only branch: the declared phase a transition enters instead of the current phase's
-    /// authored <c>next</c>. Ignored when the completion does not transition.</param>
-    public sealed record CompletePhase(string Row, long? ExpectedSequence = null, bool Timeout = false, string? Participant = null,
-        string? Next = null) : WorldStateTransform;
-    /// <summary>Reshapes a phase row's turn order without completing anything. World-only.</summary>
-    /// <param name="Row">The phase row.</param>
-    /// <param name="Direction">The new sequential step, 1 or -1, or null to keep it.</param>
-    /// <param name="Skip">Participant tokens activation passes over from now on.</param>
-    /// <param name="Unskip">Participant tokens restored to the order.</param>
-    /// <param name="Active">A participant token to activate now in a sequential phase, or null to keep the current
-    /// activation (moved past a newly skipped participant when it was the one active).</param>
-    public sealed record TurnOrder(string Row, int? Direction = null, IReadOnlyList<string>? Skip = null, IReadOnlyList<string>? Unskip = null,
-        string? Active = null) : WorldStateTransform;
-    /// <summary>Reorders an ordered zone in place by one Fisher-Yates pass over the named redrawable integer
-    /// <c>streamDraw</c> site: a pile of n tokens consumes n - 1 samples, so the site's cursor advances by exactly
-    /// that and a replay reproduces the permutation.</summary>
-    /// <param name="Row">The ordered zone.</param>
+    /// <summary>Reorders a row's cells by value in place by one Fisher-Yates pass over the named redrawable integer
+    /// <c>streamDraw</c> site: n cells consume n - 1 samples, so the site's cursor advances by exactly that and a
+    /// replay reproduces the permutation.</summary>
+    /// <param name="Row">Any ordered zone or keyed row.</param>
     /// <param name="Draw">The integer streamDraw site supplying the samples.</param>
     public sealed record Shuffle(string Row, string Draw) : WorldStateTransform;
-    /// <summary>Reorders a row's cells by value, stably: an ordered zone by attribute rows over its token domain, the
-    /// first key deciding and each later key breaking the ties before it; a keyed numeric row by its own cell values.
-    /// The canonical order a pattern reads a hand in.</summary>
-    /// <param name="Row">The ordered zone or keyed numeric row.</param>
-    /// <param name="By">The attribute keys for a zone, 1..<see cref="WorldStateCapacity.MaxSortKeys"/> distinct
-    /// rows in precedence order; null (required) for a keyed row.</param>
-    /// <param name="Descending">Whether a keyed row's greatest value comes first; a zone's direction sits on each key.</param>
-    public sealed record Sort(string Row, IReadOnlyList<WorldSortKey>? By = null, bool Descending = false) : WorldStateTransform;
+    /// <summary>Reorders an ordered zone by attribute rows over its token domain, stably: the first key decides and
+    /// each later key breaks the ties before it. The canonical order a pattern reads a hand in.</summary>
+    /// <param name="Row">The ordered zone.</param>
+    /// <param name="By">The attribute keys, 1..<see cref="WorldStateCapacity.MaxSortKeys"/> distinct numeric rows
+    /// keyed over the zone's token domain, in precedence order; each carries its own direction.</param>
+    public sealed record SortZone(string Row, IReadOnlyList<WorldSortKey> By) : WorldStateTransform;
+    /// <summary>Reorders a keyed numeric row by its own cell values, stably.</summary>
+    /// <param name="Row">The keyed numeric row.</param>
+    /// <param name="Descending">Whether the greatest value comes first.</param>
+    public sealed record SortKeyed(string Row, bool Descending = false) : WorldStateTransform;
 
     /// <summary>Writes one value into every cell of a board whose bit is set in a cell-set mask read from a state
     /// cell: the way a set built from <c>$board:mask</c> and the and/or/xor/not/shift/image expression ops lands

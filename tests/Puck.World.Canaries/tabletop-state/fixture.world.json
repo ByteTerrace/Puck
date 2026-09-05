@@ -249,20 +249,43 @@
       {
         "name": "turns",
         "kind": "int",
-        "phase": {
-          "participants": [
-            "console"
-          ],
-          "phases": [
-            {
-              "name": "act",
-              "mode": "Sequential",
-              "next": "act"
-            }
-          ]
-        },
+        "phase": {},
         "cells": []
       }
     ]
-  }
+  },
+  "patterns": [
+    {
+      "name": "capture",
+      "kind": "int",
+      "symbols": [
+        {
+          "name": "through",
+          "min": 2,
+          "max": 2
+        },
+        {
+          "name": "until",
+          "min": 1,
+          "max": 1
+        }
+      ],
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "plus",
+            "item": {
+              "$type": "symbol",
+              "name": "through"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "until"
+          }
+        ]
+      }
+    }
+  ]
 }

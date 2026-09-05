@@ -2,7 +2,7 @@ using Xunit;
 
 namespace Puck.World.Schema.Tests;
 
-public sealed class DeckMask256LawTests {
+public sealed class ClosedBitset256LawTests {
     [Fact]
     public void EveryBitHasIndependentMembershipAndCanonicalText() {
         var set = default(ClosedBitset256);
@@ -29,22 +29,22 @@ public sealed class DeckMask256LawTests {
     [InlineData(104)]
     [InlineData(136)]
     [InlineData(256)]
-    public void CompleteDealConservesEveryCardAndResumesAtWordBoundaries(int count) {
+    public void CompleteDrawConservesEveryEntryAndResumesAtWordBoundaries(int count) {
         var generator = new WorldGenerator(Source: WorldGeneratorSource.WeightedNumeric,
             Mode: WorldGeneratorMode.WithoutReplacement,
             Weighted: Enumerable.Range(0, count).Select(i => new WorldGeneratorWeightedNumeric(Value: i, Weight: 1)).ToArray());
-        IReadOnlyList<ClosedBitset256>? decks = null;
+        IReadOnlyList<ClosedBitset256>? masks = null;
         var seen = new HashSet<long>();
         for (var cursor = 0; cursor < count; cursor++) {
-            Assert.True(WorldGeneratorEngine.TryFire(generator, CellKind.Int, 123, 7, cursor, decks, out var draw, out var reason), reason);
+            Assert.True(WorldGeneratorEngine.TryFire(generator, CellKind.Int, 123, 7, cursor, masks, out var draw, out var reason), reason);
             Assert.True(seen.Add(draw.Numeric!.Value));
-            Assert.Equal(cursor + 1, draw.Decks![0].Count);
-            Assert.True(WorldGeneratorEngine.TryFire(generator, CellKind.Int, 123, 7, cursor, decks, out var replay, out reason), reason);
+            Assert.Equal(cursor + 1, draw.Masks![0].Count);
+            Assert.True(WorldGeneratorEngine.TryFire(generator, CellKind.Int, 123, 7, cursor, masks, out var replay, out reason), reason);
             Assert.Equal(draw.Numeric, replay.Numeric);
-            Assert.Equal(draw.Decks, replay.Decks);
-            decks = draw.Decks;
+            Assert.Equal(draw.Masks, replay.Masks);
+            masks = draw.Masks;
         }
-        Assert.False(WorldGeneratorEngine.TryFire(generator, CellKind.Int, 123, 7, count, decks, out _, out _));
-        Assert.False(WorldGeneratorEngine.TryCheckBatchCapacity(generator, decks, 1, out _));
+        Assert.False(WorldGeneratorEngine.TryFire(generator, CellKind.Int, 123, 7, count, masks, out _, out _));
+        Assert.False(WorldGeneratorEngine.TryCheckBatchCapacity(generator, masks, 1, out _));
     }
 }

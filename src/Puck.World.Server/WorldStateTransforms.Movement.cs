@@ -3,32 +3,15 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public static partial class WorldStateTransforms {
-    /// <summary>Checks phase generation, eligibility, readiness and deadline against the stamped actor.</summary>
+    /// <summary>Checks a submitted guard's generation against its phase row.</summary>
     /// <param name="definition">The current definition.</param>
     /// <param name="guard">The submitted guard.</param>
     /// <param name="actor">The authenticated actor.</param>
-    /// <param name="tick">The simulation tick; a deadline at this tick has already expired.</param>
-    /// <returns>Whether this actor may perform a gameplay action.</returns>
-    public static bool CanAct(WorldDefinition definition, WorldPhaseGuard guard, WorldPrincipal actor, ulong tick) {
+    /// <returns>Whether the guard matches: the sole condition a mutation's guard checks.</returns>
+    public static bool CanAct(WorldDefinition definition, WorldPhaseGuard guard, WorldPrincipal actor) {
         var phase = WorldDefinitionRows.FindStateRow(definition.State, guard.Row)?.Phase;
-        if (phase is null || phase.Sequence != guard.Sequence || guard.Participant is not null && actor != WorldPrincipal.World) {
-            return false;
-        }
-        var deadline = Deadline(phase, definition.SimulationRateHz);
-        if (deadline > 0 && tick >= (ulong)deadline) {
-            return false;
-        }
-        var mode = phase.Phases[phase.Current].Mode;
-        if (mode == WorldPhaseMode.Resolution) {
-            return actor == WorldPrincipal.World;
-        }
-        var principal = guard.Participant ?? actor.Describe();
-        for (var index = 0; index < phase.Participants.Count; index++) {
-            if (phase.Participants[index] == principal) {
-                return mode == WorldPhaseMode.Sequential ? phase.Active == index : (phase.Ready & (1u << index)) == 0;
-            }
-        }
-        return false;
+
+        return phase is not null && phase.Sequence == guard.Sequence && (guard.Participant is null || actor == WorldPrincipal.World);
     }
 
     private static bool TryMove(WorldDefinition definition, WorldStateRow[] rows, WorldStateTransform.MoveToken move, out string reason) {

@@ -754,42 +754,43 @@ field refuses BY NAME, including `bound`/`mode`, which are non-nullable and are
 refused against their declared defaults:
 
 - `markov` — `start`, `bound`, `mode`, `contexts` (weighted alternatives, each
-  naming the context it moves INTO). Writes TEXT; deals per context. One
+  naming the context it moves INTO). Writes TEXT; exhausts per context. One
   emission is one walk from `start` to a TERMINAL context (one declaring no
   alternatives), refusing by name at `bound` rather than truncating. `mode` is
-  `withReplacement` (default), `withoutReplacement` (dealt out → refuse by name)
-  or `reshuffleOnExhaustion`.
+  `withReplacement` (default), `withoutReplacement` (drawn out → refuse by name)
+  or `restartOnExhaustion`.
 - `uniformRange` — `rangeMin`/`rangeMax`, both or neither. One numeric draw;
   refuses a `mode`.
-- `weightedNumeric` — `weighted` (`{value, weight, count?}` rows) and `mode`. One
-  numeric draw; under a deck `mode` the outcomes are dealt through the site's
-  single `drawDecks` mask — the numeric shuffle bag. `count` (also on a Markov
-  alternative) is that many cards per pass; a set's cards total at most 256.
+- `weightedNumeric` — `weighted` (`{value, weight, multiplicity?}` rows) and `mode`.
+  One numeric draw; under an exhausting `mode` the outcomes are drawn through the
+  site's single `drawnMasks` mask — the numeric shuffle bag. `multiplicity` (also
+  on a Markov alternative) is that many units per pass; a set's units total at
+  most 256.
 - `streamDraw` — no fields. One raw 32-bit draw; refuses a `mode`.
 
-The alias table over a source's full card set is compiled once per
+The alias table over a source's full entry set is compiled once per
 `WorldGenerator` instance (`WorldGeneratorEngine`, a `ConditionalWeakTable`), so
-per-tick draws do not rebuild it; a dealt-down pool is rebuilt allocation-free
+per-tick draws do not rebuild it; a drawn-down pool is rebuilt allocation-free
 in bounded stack storage per emission, with the identical alias mapping.
 
 A lattice row's paint may carry one `draw` fill (`WorldLatticeFill.Draw`,
 `{ "$type": "draw", "source" | "generator" }`, numeric sources only): the
 per-cell lattice draw. It is one whole-field pass of the row's stream
 (`WorldGeneratorEngine.TryFireBatch`; cell `k` = the sample at
-`drawCursor + k`, deck threaded cell to cell), painted at boot by `WorldServer`
-at the pass the row's `drawCursor`/`drawDecks` name, and advanced one pass plus
+`drawCursor + k`, mask threaded cell to cell), painted at boot by `WorldServer`
+at the pass the row's `drawCursor`/`drawnMasks` name, and advanced one pass plus
 repainted by `world.generate <row>` (`TryComposeGenerate`'s lattice arm, then
 `RepaintLatticeDrawAfterGenerate`). Draw keeps its authored position in the
 paint list: it overwrites earlier fills and later fills overwrite it. Whole-
 document rebuild/load/reset repaint every draw row; undo repaints only a row
-whose cursor/deck position rewound, preserving unrelated reaction-evolved
+whose cursor/mask position rewound, preserving unrelated reaction-evolved
 fields. Read law:
 `tests/Puck.World.Schema.Tests/WorldLatticeDrawLawTests.cs`; live proof:
 `tests/Puck.World.Canaries/lattice-draw-fill`.
 
-`WorldGeneratorCapacity`: 32 contexts, 64 alternatives per context (one deck-mask
-bit each), bound ≤ 64, token ≤ 64 UTF-16 units, 64 weighted outcomes, 64 declared
-sources, uniform bounds inside int32.
+`WorldGeneratorCapacity`: 32 contexts, 64 alternatives per context (one
+drawn-mask bit each), bound ≤ 64, token ≤ 64 UTF-16 units, 64 weighted outcomes,
+64 declared sources, uniform bounds inside int32.
 
 **A source holds NO position.** Declare it once in the optional `generators`
 section (`{"name": …, "generator": {…}}`) and reference it from any number of
@@ -805,7 +806,7 @@ declared row's name) or `generator` (inline), plus `timing`. Three sites:
 "host": { "backendDraw": {"source":"backendTable","timing":"boot"} }
 ```
 
-The CURSOR and dealt DECKS live on the SITE (`drawCursor`/`drawDecks`, engine-
+The CURSOR and drawn MASKS live on the SITE (`drawCursor`/`drawnMasks`, engine-
 minted row fields — never cells), so **two sites referencing one source draw
 INDEPENDENT sequences**. That is what makes a reference safe.
 
@@ -858,8 +859,8 @@ keeps `$tick`/`$population`/`$region:` from being shadowed), and so is a
 `$`-prefixed RULE name. A `$`-prefixed CELL key is refused unless it is exactly
 the key that row's shape mints — `$value` on a slot-addressable row, and nothing
 else. (The rule used to police VALUES too, because a generator's draw position
-and dealt decks were CELLS an author could hand-write; draw bookkeeping now lives
-in typed row FIELDS at the site (`drawCursor`/`drawDecks`), refused by the
+and drawn masks were CELLS an author could hand-write; draw bookkeeping now lives
+in typed row FIELDS at the site (`drawCursor`/`drawnMasks`), refused by the
 field's own range check instead of by a carve-out in the cell namespace.)
 
 There is **no `$type`** and no `rows` member — both are retired spellings of

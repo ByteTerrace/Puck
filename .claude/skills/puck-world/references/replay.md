@@ -539,8 +539,8 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   the drive's `default:` arm throws `WorldReplayCodecException`
   rather than dropping an unhandled kind.
 
-Discrete state authority replay includes all four words of every 256-bit dealt
-mask, phase readiness/generation/deadlines, ordered zone cells, movement
-allowances, and knowledge last-seen stamps. Private `streamDraw` keys persist
+Discrete state authority replay includes all four words of every 256-bit drawn
+mask, a phase row's generation, ordered zone cells, movement allowances, and
+knowledge last-seen stamps. Private `streamDraw` keys persist
 in authority documents and tapes; presentation observations omit keys and draw
 bookkeeping. Restrict authority tapes and Replica-tier access accordingly.

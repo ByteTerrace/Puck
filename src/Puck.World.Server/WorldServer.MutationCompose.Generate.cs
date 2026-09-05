@@ -6,7 +6,7 @@ namespace Puck.World.Server;
 public sealed partial class WorldServer {
     // Composes Generate as a PURE function of (candidate document, instance identity): the site's source resolves
     // from the document, WorldGeneratorEngine SEEKS the stream to the position the site's own DrawCursor records, and
-    // BOTH the drawn value and the advanced cursor/decks land in the SAME candidate. Nothing lives outside the
+    // BOTH the drawn value and the advanced cursor/masks land in the SAME candidate. Nothing lives outside the
     // document, which is what makes world.undo rewind a draw bit-identically with no bookkeeping to reconcile. The
     // sampling itself lives in Puck.World.Schema because the BOOT resolver — which runs before this server exists —
     // must reach the identical code.
@@ -23,8 +23,8 @@ public sealed partial class WorldServer {
         }
 
         // A lattice row painted by a draw fill: 'generate' advances the row's pass — one whole-field run of its
-        // stream — in the document; the apply side then repaints the field at the new cursor/decks. The pass at the
-        // CURRENT cursor is fired here only for its tail (the decks it ends with), never for its values.
+        // stream — in the document; the apply side then repaints the field at the new cursor/masks. The pass at the
+        // CURRENT cursor is fired here only for its tail (the masks it ends with), never for its values.
         if (siteRow.Lattice is { } latticeTrait) {
             if (WorldLatticeFill.FindDraw(trait: latticeTrait) is not { } fill) {
                 reason = $"state row '{mutation.Row}' is a lattice row with no draw paint — 'generate' redraws a draw site or a lattice row painted by a draw fill";
@@ -57,9 +57,9 @@ public sealed partial class WorldServer {
                 ),
                 stream: WorldGeneratorEngine.ComputeStreamId(site: fillSite),
                 cursor: siteRow.DrawCursor,
-                decks: siteRow.DrawDecks,
+                masks: siteRow.DrawnMasks,
                 sampleCount: cellCount,
-                decksAfter: out var decksAfter,
+                masksAfter: out var masksAfter,
                 reason: out var fillFireReason
             )) {
                 reason = $"state row '{mutation.Row}' draw fill {fillFireReason}";
@@ -69,7 +69,7 @@ public sealed partial class WorldServer {
 
             candidate = current.WithWorldState(rows: Upsert(
                 list: current.State,
-                item: (siteRow with { DrawCursor = (siteRow.DrawCursor + cellCount), DrawDecks = WorldGeneratorEngine.DecksAfter(generator: fillSource, fired: decksAfter, previous: siteRow.DrawDecks) }),
+                item: (siteRow with { DrawCursor = (siteRow.DrawCursor + cellCount), DrawnMasks = WorldGeneratorEngine.MasksAfter(generator: fillSource, fired: masksAfter, previous: siteRow.DrawnMasks) }),
                 keyOf: static (WorldStateRow row) => row.Name
             ));
             reason = string.Empty;
@@ -139,7 +139,7 @@ public sealed partial class WorldServer {
             ),
             stream: WorldGeneratorEngine.ComputeStreamId(site: site),
             cursor: siteRow.DrawCursor,
-            decks: siteRow.DrawDecks,
+            masks: siteRow.DrawnMasks,
             result: out var fired,
             secret: draw.Secret,
             reason: out var fireReason
@@ -173,7 +173,7 @@ public sealed partial class WorldServer {
         );
         var state = Upsert(
             list: current.State,
-            item: (siteRow with { Cells = [cell], DrawCursor = (siteRow.DrawCursor + fired.Samples), DrawDecks = WorldGeneratorEngine.DecksAfter(generator: generator, fired: fired.Decks, previous: siteRow.DrawDecks) }),
+            item: (siteRow with { Cells = [cell], DrawCursor = (siteRow.DrawCursor + fired.Samples), DrawnMasks = WorldGeneratorEngine.MasksAfter(generator: generator, fired: fired.Masks, previous: siteRow.DrawnMasks) }),
             keyOf: static (WorldStateRow row) => row.Name
         );
 

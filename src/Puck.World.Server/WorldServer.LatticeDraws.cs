@@ -3,7 +3,7 @@ using System.Buffers;
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
-    // Paints every lattice row's draw fill at the pass its cursor/decks name — the whole-field counterpart of the
+    // Paints every lattice row's draw fill at the pass its cursor/masks name — the whole-field counterpart of the
     // boot resolver's first fill for a state-row site. Runs once at construction (the lattice is allocated by then
     // and never reallocated for the server's life), and again for one row after a Generate on it advances that
     // row's pass. Reactions then evolve the drawn cells like any other paint.
@@ -55,9 +55,9 @@ public sealed partial class WorldServer {
                 ),
                 stream: WorldGeneratorEngine.ComputeStreamId(site: site),
                 cursor: row.DrawCursor,
-                decks: row.DrawDecks,
+                masks: row.DrawnMasks,
                 values: pass,
-                decksAfter: out _,
+                masksAfter: out _,
                 reason: out var fireReason
             )) {
                 throw new InvalidOperationException(message: $"state row '{row.Name}' draw fill {fireReason} (a validated document must still draw when it paints).");
@@ -85,7 +85,7 @@ public sealed partial class WorldServer {
                 (WorldDefinitionRows.FindStateRow(rows: previous.State, name: row.Name.Value) is { } oldRow) &&
                 (
                     (oldRow.DrawCursor != row.DrawCursor) ||
-                    !SameDecks(left: oldRow.DrawDecks, right: row.DrawDecks) ||
+                    !SameMasks(left: oldRow.DrawnMasks, right: row.DrawnMasks) ||
                     !Equals(objA: WorldLatticeFill.FindDraw(trait: oldRow.Lattice), objB: fill)
                 )
             ) {
@@ -96,7 +96,7 @@ public sealed partial class WorldServer {
             }
         }
     }
-    private static bool SameDecks(IReadOnlyList<ClosedBitset256>? left, IReadOnlyList<ClosedBitset256>? right) {
+    private static bool SameMasks(IReadOnlyList<ClosedBitset256>? left, IReadOnlyList<ClosedBitset256>? right) {
         var leftCount = (left?.Count ?? 0);
 
         if (leftCount != (right?.Count ?? 0)) {

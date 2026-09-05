@@ -79,7 +79,8 @@ public sealed partial class WorldServer {
                 instanceIdentity: InstanceIdentity,
                 candidate: out var next,
                 reason: out var composeReason,
-                evictedKey: out _
+                evictedKey: out _,
+                patterns: m_patterns
             )) {
                 var composeRefusal = $"undo refused: replay failed at journal entry {index} ({Describe(mutation: entry.Mutation)}) — {composeReason}";
 

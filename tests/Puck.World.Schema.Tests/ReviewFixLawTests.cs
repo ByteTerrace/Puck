@@ -7,7 +7,7 @@ namespace Puck.World.Schema.Tests;
 
 /// <summary>
 /// Laws pinning the review corrections around the state traits and draw sites: the runtime cell validator refuses
-/// every shape the boot walk refuses, a drive-gate row never carries a cycling cell, persisted dealt masks must fit
+/// every shape the boot walk refuses, a drive-gate row never carries a cycling cell, persisted drawn masks must fit
 /// their source, a fractional comparand lowers to the exact integer gate, a rule's generate reaches a lattice draw
 /// fill, dynamics state rides the fixed spelling on every row kind, and a motion row's ground-stick bias compiles
 /// independently of the kit's own speed.
@@ -70,26 +70,26 @@ public sealed class ReviewFixLawTests {
         Assert.Contains(expectedSubstring: "declares cycle on a gatesDrive row", actualString: Refusal(definition: gate));
     }
     [Fact]
-    public void PersistedDecks_MustFitTheSitesSource() {
-        static WorldStateRow Site(WorldGenerator generator, IReadOnlyList<ClosedBitset256>? decks) => new(
+    public void PersistedMasks_MustFitTheSitesSource() {
+        static WorldStateRow Site(WorldGenerator generator, IReadOnlyList<ClosedBitset256>? masks) => new(
             Name: WorldCellName.Parse(candidate: "loot"),
             Kind: CellKind.Int,
             Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 1)],
             Draw: new WorldDraw(Generator: generator, Timing: WorldDrawTiming.Event),
-            DrawDecks: decks
+            DrawnMasks: masks
         );
-        var bag = new WorldGenerator(Source: WorldGeneratorSource.WeightedNumeric, Mode: WorldGeneratorMode.ReshuffleOnExhaustion, Weighted: [new WorldGeneratorWeightedNumeric(Value: 1, Weight: 1UL), new WorldGeneratorWeightedNumeric(Value: 2, Weight: 1UL)]);
+        var bag = new WorldGenerator(Source: WorldGeneratorSource.WeightedNumeric, Mode: WorldGeneratorMode.RestartOnExhaustion, Weighted: [new WorldGeneratorWeightedNumeric(Value: 1, Weight: 1UL), new WorldGeneratorWeightedNumeric(Value: 2, Weight: 1UL)]);
         var plain = new WorldGenerator(Source: WorldGeneratorSource.UniformRange, RangeMin: 0, RangeMax: 9);
 
-        Assert.Equal(expected: string.Empty, actual: Refusal(definition: Definition(rows: [Site(generator: bag, decks: [new(Word0: 0b11UL)])])));
-        Assert.Contains(expectedSubstring: "exactly one", actualString: Refusal(definition: Definition(rows: [Site(generator: bag, decks: [new(Word0: 5UL), new(Word0: 0UL), new(Word0: 0UL)])])));
-        Assert.Contains(expectedSubstring: "marks a card past the 2", actualString: Refusal(definition: Definition(rows: [Site(generator: bag, decks: [new(Word0: 0b101UL)])])));
-        Assert.Contains(expectedSubstring: "never deals", actualString: Refusal(definition: Definition(rows: [Site(generator: plain, decks: [new(Word0: 1UL)])])));
+        Assert.Equal(expected: string.Empty, actual: Refusal(definition: Definition(rows: [Site(generator: bag, masks: [new(Word0: 0b11UL)])])));
+        Assert.Contains(expectedSubstring: "exactly one", actualString: Refusal(definition: Definition(rows: [Site(generator: bag, masks: [new(Word0: 5UL), new(Word0: 0UL), new(Word0: 0UL)])])));
+        Assert.Contains(expectedSubstring: "marks an entry past the 2", actualString: Refusal(definition: Definition(rows: [Site(generator: bag, masks: [new(Word0: 0b101UL)])])));
+        Assert.Contains(expectedSubstring: "never exhausts", actualString: Refusal(definition: Definition(rows: [Site(generator: plain, masks: [new(Word0: 1UL)])])));
 
-        // The engine sheds masks a non-dealing source cannot own, so a re-authored site self-heals on its next draw.
-        Assert.Null(@object: WorldGeneratorEngine.DecksAfter(generator: plain, fired: null, previous: [new(Word0: 1)]));
-        Assert.Equal(expected: new ClosedBitset256[] { new(Word0: 3) }, actual: WorldGeneratorEngine.DecksAfter(generator: bag, fired: [new(Word0: 3)], previous: [new(Word0: 1)]));
-        Assert.Equal(expected: new ClosedBitset256[] { new(Word0: 1) }, actual: WorldGeneratorEngine.DecksAfter(generator: bag, fired: null, previous: [new(Word0: 1)]));
+        // The engine sheds masks a non-exhausting source cannot own, so a re-authored site self-heals on its next draw.
+        Assert.Null(@object: WorldGeneratorEngine.MasksAfter(generator: plain, fired: null, previous: [new(Word0: 1)]));
+        Assert.Equal(expected: new ClosedBitset256[] { new(Word0: 3) }, actual: WorldGeneratorEngine.MasksAfter(generator: bag, fired: [new(Word0: 3)], previous: [new(Word0: 1)]));
+        Assert.Equal(expected: new ClosedBitset256[] { new(Word0: 1) }, actual: WorldGeneratorEngine.MasksAfter(generator: bag, fired: null, previous: [new(Word0: 1)]));
     }
     [Fact]
     public void AFractionalComparand_LowersToTheExactIntegerGate() {

@@ -267,7 +267,7 @@ Rules the catalog encodes:
 
 - **A draw site's own bookkeeping.** `Generate` names ONE row — the SITE — and
   writes its drawn slot cell together with the site's own `drawCursor` (plus
-  `drawDecks` under a deck mode) in one candidate. The row is the authority
+  `drawnMasks` under an exhausting mode) in one candidate. The row is the authority
   subject; the cursor advance is engine bookkeeping intrinsic to drawing, while
   re-authoring the site's facet, or the `generators` row it references, is an
   `UpsertStateRow` against that row, gated there. Sampling itself lives in
