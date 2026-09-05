@@ -1346,12 +1346,12 @@ shim between old and new spellings at any phase.
 An author reaches `Puck.Maths` from an expression by the name of the thing —
 `pair(x, y)`/`pairX`/`pairY` and the Szudzik algebra, `morton`/`mortonX`/
 `mortonY`, `hilbert(order, x, y)`/`hilbertX`/`hilbertY`, the hex family over
-`HexagonalIndex` (`hex(q, r)`, `hexQ`, `hexR`, `hexRadius`, `hexNorm`,
-`hexDistance`, `hexNeighbor`, `hexRotate`, `hexConjugate`, `hexSwap`,
+`HexagonalIndex` (`hex(q, r)`, `hexQ`, `hexR`, `hexRadius`, `hexEuclideanSquared`,
+`hexDistance`, `hexNeighbor`, `hexRotate`, `hexMirror`, `hexSwap`,
 `hexAdd`, `hexSubtract`, `hexMultiply`, `hexScale`, `hexTranslate`), the square
 family over `SquareIndex` on the same spellings (Chebyshev as `squareRadius`/
 `squareChebyshev`, Manhattan as `squareLength`/`squareDistance`), `gcd`/`lcm`,
-the floored `mod` with `cycleForward`/`cycleDistance` over an m-cycle, `mex`
+the floored `mod` with `cycleForward`/`cycleDistance` over an m-cycle, `smallestMissing`
 over a 64-bit option set, `isPrime` and the bounded `prime(i)` table (a
 next-prime or n-th-prime search is unbounded on the tick path and stays a
 generator draw source's concern), the layer
@@ -1364,11 +1364,11 @@ the kind it means (`sin`/`cos` fixed, `sqrt` both, the rest int).
 `ModularTransform` stays a C# concern: a quasicrystal inflation would arrive as
 a generator draw source, not as an author-facing matrix. The combinatorial and
 factorial number systems over [Puck.Maths `Combinatorics`](../src/Puck.Maths/README.md#combination-and-permutation-ranks)
-are calls over one cell each: a subset is a bitmask (`combRank`/`combUnrank`/
-`combElement`, colex, n ≤ 64 — a poker hand's identity is one rank below
-`binomial(52, 5)`) and a permutation is nibble-packed (`permRank`/`permUnrank`/
-`permElement`, Lehmer codes, n ≤ 16 — a turn order or a short deck in one
-cell), with `binomial` and `factorial` beside them; a permutation longer than
+are calls over one cell each: a subset is a bitmask (`subsetRank`/`subsetAt`/
+`subsetMember`, colex, n ≤ 64 — a poker hand's identity is one rank below
+`choose(52, 5)`) and a permutation is nibble-packed (`arrangementRank`/`arrangementAt`/
+`arrangementMember`, Lehmer codes, n ≤ 16 — a turn order or a short deck in one
+cell), with `choose` and `factorial` beside them; a permutation longer than
 sixteen is row-shaped and waits on a reduction operand.
 
 **Hex boards have grid parity, on one convention.** A hex topology is
@@ -1384,6 +1384,19 @@ The hex line game's table (`games/hexlines.world.json`) is the first board on
 that convention; its tiles are placed by the same formula the engine answers
 with, and the law that proves them recomputes both sides from
 `HexagonalIndex` rather than from a second copy of the positions.
+
+**A board is a graph; the regular kinds are generators onto it.** The compiled
+topology was always a flat adjacency table with centres — every board query
+indexes it without knowing the shape — so the `graph` topology kind authors
+that table directly: cells with ids and centres, directions each naming their
+opposite, edges filling one slot per (cell, direction) and the reverse slot
+unless one-way. A territory map, a star board, or a tiling a tool emits is a
+document, not a new runtime; the constraints are the table's own — at most
+4,096 cells, at most 64 directions (a `$match:` direction mask is one word),
+nearest-centre resolution within half a cell size, no axial offset, and the
+identity as its whole symmetry group. Archimedean tilings and a Penrose
+inflation, when wanted, are generators that emit a graph, on the same terms
+`radius` generates a hex disk.
 
 **Placements compose, and a game addresses its bodies by placement.** A
 placement may name a `parent`: its position and yaw become a local offset and

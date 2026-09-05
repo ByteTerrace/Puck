@@ -20,7 +20,7 @@ process that composes everything is [`Puck.World`](../Puck.World/README.md).
 ## Discrete boards, cards, and turns
 
 The discrete substrate shares `state.lattices` with physical fields. Declare a
-`state.lattices` entry `$type: "grid"`, `"ring"`, or `"hex"` (`Puck.State.LatticeTopology`'s
+`state.lattices` entry `$type: "grid"`, `"ring"`, `"hex"`, or `"graph"` (`Puck.State.LatticeTopology`'s
 discrete cases — a `"box"` case exists too, for a 3-layer discrete board; the document's own
 `"field"` case is `WorldFieldTopology`, registered through `WorldJsonVocabulary`) and bind an
 integer/boolean row through `domain: { "$type": "cellsOf", "topology": "map", "empty": 0 }`. Only
@@ -38,7 +38,16 @@ Hexes use `radius` over `Puck.Maths.HexagonalIndex`: ordinal `i` is index `i`
 cellSize · (q − r/2, 0, r·√3/2). Hex directions are
 `HexagonalCoordinate.Direction(0..5)`, counterclockwise from +q, which on the
 board reads `E`, `SE`, `SW`, `W`, `NW`, `NE` — the same order `hexNeighbor`
-counts.
+counts. A graph is its adjacency table authored directly: `cells: [{id,
+centre}]` (centre relative to `origin`, world units; ordinal `i` is
+`cells[i]`), `directions: [{name, opposite}]` (a symmetric link names
+itself), and `edges: [{from, to, direction, oneWay?}]` — an edge fills the
+source's slot along its direction and, unless `oneWay`, the destination's slot
+along the opposite, so a cell with k neighbours spreads its edges over k
+distinct directions; a territory map (Risk), a star board (Nine Men's Morris),
+or a tiling a tool emits. `$board:cellOf` resolves the nearest centre within
+half a `cellSize`; `$board:offset` refuses a graph (there is no axis); its
+symmetry group is the identity, so `$board:canonical` is the plain fingerprint.
 All shapes still carry the registry's required `origin` and `cellSize` fields.
 Missing board entries read as the declared `empty` value. Wrapped scans stop
 before revisiting their origin.

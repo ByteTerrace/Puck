@@ -1,7 +1,7 @@
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
-    // The BOARD facet's whole contract: Topology names a declared Grid or Hex discrete topology, at most one placement
+    // The BOARD facet's whole contract: Topology names a declared Grid, Hex, or Graph discrete topology, at most one placement
     // carries it, Occupancy names a board row bound to that SAME topology, and every optional convenience binding
     // (Turn/Verdict/Move/Plan) names a declared row — existence only, since the engine never interprets them.
     private static void ValidateBoardFacet(WorldPlacementBoard? board, WorldDefinition definition, string path,
@@ -10,8 +10,8 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        if (WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology || topology.Kind is not (TopologyKind.Grid or TopologyKind.Hex)) {
-            errors.Add(item: $"{path}.board.topology '{board.Topology}' must name a declared Grid or Hex topology in state.lattices.");
+        if (WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology || topology.Kind is not (TopologyKind.Grid or TopologyKind.Hex or TopologyKind.Graph)) {
+            errors.Add(item: $"{path}.board.topology '{board.Topology}' must name a declared Grid, Hex, or Graph topology in state.lattices.");
         } else if (!boardTopologies.Add(item: board.Topology)) {
             errors.Add(item: $"{path}.board.topology '{board.Topology}' is already carried by another placement — a topology is anchored by at most one tabletop.");
         }

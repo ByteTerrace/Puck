@@ -67,8 +67,77 @@ public static class TopologyCompilation {
         LatticeTopology.Ring ring => TryValidateRing(ring, out reason),
         LatticeTopology.Hex hex => TryValidateHex(hex, out reason),
         LatticeTopology.Box box => TryValidateBox(box, out reason),
-        _ => Refuse(out reason, "a discrete topology requires kind grid, ring, hex, or box"),
+        LatticeTopology.Graph graph => TryValidateGraph(graph, out reason),
+        _ => Refuse(out reason, "a discrete topology requires kind grid, ring, hex, box, or graph"),
     };
+
+    // 1..MaxCells cells with distinct non-empty ids and Q48.16 centres; 1..MaxDirections distinct directions whose
+    // opposites are declared and involutive; edges over declared ids and directions, never a self-loop, and never two
+    // edges (or an edge and another's implied reverse) claiming the same (cell, direction) slot.
+    private static bool TryValidateGraph(LatticeTopology.Graph graph, out string reason) {
+        if (!TryValidateFrame(graph.CellSize, graph.Origin, out reason)) {
+            return false;
+        }
+        if (graph.Cells is not { Count: >= 1 and <= MaxCells }) {
+            return Refuse(out reason, $"a graph topology requires 1..{MaxCells} cells");
+        }
+        var ids = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var index = 0; index < graph.Cells.Count; index++) {
+            var cell = graph.Cells[index];
+            if (cell is null || string.IsNullOrEmpty(cell.Id) || cell.Centre is null) {
+                return Refuse(out reason, $"cells[{index}] requires an id and a centre");
+            }
+            if (!ids.TryAdd(cell.Id, index)) {
+                return Refuse(out reason, $"cells[{index}] repeats id '{cell.Id}'");
+            }
+            if (!FitsFixed(cell.Centre.X) || !FitsFixed(cell.Centre.Y) || !FitsFixed(cell.Centre.Z)) {
+                return Refuse(out reason, $"cells[{index}] '{cell.Id}' centre must fit Q48.16");
+            }
+        }
+        if (graph.Directions is not { Count: >= 1 and <= MaxDirections }) {
+            return Refuse(out reason, $"a graph topology requires 1..{MaxDirections} directions");
+        }
+        var slots = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var index = 0; index < graph.Directions.Count; index++) {
+            var direction = graph.Directions[index];
+            if (direction is null || string.IsNullOrEmpty(direction.Name) || string.IsNullOrEmpty(direction.Opposite)) {
+                return Refuse(out reason, $"directions[{index}] requires a name and an opposite");
+            }
+            if (!slots.TryAdd(direction.Name, index)) {
+                return Refuse(out reason, $"directions[{index}] repeats name '{direction.Name}'");
+            }
+        }
+        for (var index = 0; index < graph.Directions.Count; index++) {
+            var direction = graph.Directions[index];
+            if (!slots.TryGetValue(direction.Opposite, out var opposite)) {
+                return Refuse(out reason, $"direction '{direction.Name}' names undeclared opposite '{direction.Opposite}'");
+            }
+            if (!string.Equals(graph.Directions[opposite].Opposite, direction.Name, StringComparison.Ordinal)) {
+                return Refuse(out reason, $"direction '{direction.Name}' names opposite '{direction.Opposite}', whose own opposite is '{graph.Directions[opposite].Opposite}'");
+            }
+        }
+        var claimed = new HashSet<(int Cell, int Direction)>();
+        for (var index = 0; index < (graph.Edges?.Count ?? 0); index++) {
+            var edge = graph.Edges![index];
+            if (edge is null || !ids.TryGetValue(edge.From ?? string.Empty, out var from) || !ids.TryGetValue(edge.To ?? string.Empty, out var to)) {
+                return Refuse(out reason, $"edges[{index}] names an undeclared cell");
+            }
+            if (!slots.TryGetValue(edge.Direction ?? string.Empty, out var direction)) {
+                return Refuse(out reason, $"edges[{index}] names undeclared direction '{edge.Direction}'");
+            }
+            if (from == to) {
+                return Refuse(out reason, $"edges[{index}] joins '{edge.From}' to itself");
+            }
+            if (!claimed.Add((from, direction))) {
+                return Refuse(out reason, $"edges[{index}] claims '{edge.From}' along '{edge.Direction}', which another edge already fills");
+            }
+            if (!edge.OneWay && !claimed.Add((to, slots[graph.Directions[direction].Opposite]))) {
+                return Refuse(out reason, $"edges[{index}] implies '{edge.To}' along '{graph.Directions[direction].Opposite}', which another edge already fills");
+            }
+        }
+        reason = string.Empty;
+        return true;
+    }
 
     private static bool Refuse(out string reason, string detail) {
         reason = detail;
@@ -254,6 +323,7 @@ public static class TopologyCompilation {
             LatticeTopology.Ring ring => (ring.Width, 1, 1, TopologyWrap.None, 0f, 0f, 0, ring.Directions, ring.ElementAliases),
             LatticeTopology.Hex hex => (1, 1, 1, TopologyWrap.None, 0f, 0f, hex.Radius, hex.Directions, hex.ElementAliases),
             LatticeTopology.Box box => (box.Width, box.Depth, box.Layers, TopologyWrap.None, 0f, box.LayerHeight, 0, box.Directions, box.ElementAliases),
+            LatticeTopology.Graph graph => (graph.Cells.Count, 1, 1, TopologyWrap.None, 0f, 0f, 0, null, null),
             _ => throw new InvalidOperationException($"'{topology?.Kind}' is not a discrete TopologyKind"),
         };
 
@@ -278,6 +348,10 @@ public static class TopologyCompilation {
     /// <returns>The compiled topology.</returns>
     public static CompiledTopology Compile(LatticeTopology topology, Vector3 anchorOffset) {
         ArgumentNullException.ThrowIfNull(argument: topology);
+
+        if (topology is LatticeTopology.Graph graph) {
+            return CompileGraph(graph: graph, anchorOffset: anchorOffset);
+        }
 
         // Cells are (X, Y, Z) triples: a grid or ring keeps Z at 0 and Y as its depth axis, a hex uses (q, r), a box
         // fills layers along Z. Every kind's directions are steps in the same triple, so one neighbour loop serves all.
@@ -362,5 +436,61 @@ public static class TopologyCompilation {
             directionNames);
         compiled.InstallElementAliases(elementAliases);
         return compiled;
+    }
+
+    // A validated graph (TryValidateGraph) compiles straight into the flat adjacency table every other kind fills
+    // through its coordinates: slot (cell, direction) holds the edge's destination, the implied reverse edge fills
+    // the destination's opposite slot, and every unfilled slot reads -1.
+    private static CompiledTopology CompileGraph(LatticeTopology.Graph graph, Vector3 anchorOffset) {
+        var count = graph.Cells.Count;
+        var directionCount = graph.Directions.Count;
+        var ids = new Dictionary<string, int>(StringComparer.Ordinal);
+        var centres = new FixedVector3[count];
+        for (var index = 0; index < count; index++) {
+            var cell = graph.Cells[index];
+            ids.Add(cell.Id, index);
+            centres[index] = new FixedVector3(
+                X: FixedQ4816.FromDouble(cell.Centre.X),
+                Y: FixedQ4816.FromDouble(cell.Centre.Y),
+                Z: FixedQ4816.FromDouble(cell.Centre.Z)
+            );
+        }
+        var slots = new Dictionary<string, int>(StringComparer.Ordinal);
+        var directionNames = new string[directionCount];
+        for (var index = 0; index < directionCount; index++) {
+            slots.Add(graph.Directions[index].Name, index);
+            directionNames[index] = graph.Directions[index].Name;
+        }
+        var opposite = new int[directionCount];
+        for (var index = 0; index < directionCount; index++) {
+            opposite[index] = slots[graph.Directions[index].Opposite];
+        }
+        var neighbours = new int[count * directionCount];
+        Array.Fill(neighbours, -1);
+        foreach (var edge in graph.Edges ?? []) {
+            var from = ids[edge.From];
+            var to = ids[edge.To];
+            var direction = slots[edge.Direction];
+            neighbours[(from * directionCount) + direction] = to;
+            if (!edge.OneWay) {
+                neighbours[(to * directionCount) + opposite[direction]] = from;
+            }
+        }
+        var identity = new int[count];
+        for (var index = 0; index < count; index++) { identity[index] = index; }
+        return new CompiledTopology(TopologyKind.Graph, count, directionCount, neighbours, opposite, count, 1, 0, TopologyWrap.None,
+            new FixedVector3(
+                X: FixedQ4816.FromDouble(graph.Origin.X + anchorOffset.X),
+                Y: FixedQ4816.FromDouble(graph.Origin.Y + anchorOffset.Y),
+                Z: FixedQ4816.FromDouble(graph.Origin.Z + anchorOffset.Z)
+            ),
+            FixedQ4816.FromDouble(graph.CellSize),
+            FixedQ4816.Zero,
+            [identity],
+            ["identity"],
+            1,
+            FixedQ4816.Zero,
+            directionNames,
+            centres);
     }
 }

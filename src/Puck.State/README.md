@@ -58,8 +58,8 @@ Nothing here carries a `World` name — a state library names no world.
   `StatePhase`/`PhaseGuard` (a guarded submission generation).
 - *Domains:* the `StateDomain` union (`slot`, `keys`, `keysOf`, `cellsOf`,
   `ring`), closed over `Union.cs`' `[Union]` marker.
-- *Topologies:* `LatticeTopology` (`grid`, `ring`, `hex`, `box` — a host
-  registers its dense `field` case as a further derived record),
+- *Topologies:* `LatticeTopology` (`grid`, `ring`, `hex`, `box`, `graph` — a
+  host registers its dense `field` case as a further derived record),
   `TopologyKind`/`TopologyWrap`/`TopologyDirection`/`TopologyElementAlias`,
   `CompiledTopology` (adjacency, opposites, point-group images, element
   aliases, cell centres, position-to-cell, axial offsets), and
@@ -68,6 +68,13 @@ Nothing here carries a `World` name — a state library names no world.
   `i` is index `i` (rings outward, consecutive indices adjacent), its six
   directions are `HexagonalCoordinate.Direction(0..5)` named `E, SE, SW, W,
   NW, NE`, and cell `(q, r)` sits at origin + cellSize · (q − r/2, 0, r·√3/2).
+  A graph topology is the adjacency table authored directly: `cells` with ids
+  and centres (relative to origin, world units), `directions` each naming its
+  opposite, and `edges` (`from`, `to`, `direction`, optional `oneWay`) that
+  fill one slot per (cell, direction) and, unless one-way, the reverse slot —
+  a territory map, a star board, or any tiling a tool emits; position-to-cell
+  is the nearest centre within half a `cellSize`, there is no axial offset, and
+  the symmetry group is the identity.
 - *The catalog and the reader:* `StateCatalog` compiles a section into
   `StateDescriptor`s and catalog-bound `StateHandle`s by `StateLane`
   (`Document`, `Participant`, `Identity`) and `StateStorageShape`;
@@ -93,26 +100,26 @@ Nothing here carries a `World` name — a state library names no world.
   `pairMax`, `pairMin`, `pairSum`, `pairDifference`, `pairTranslate`,
   `pairScale`); `morton`/`mortonX`/`mortonY`; `hilbert(order, x, y)`/
   `hilbertX`/`hilbertY`; the hex family over `HexagonalIndex` (`hex(q, r)`,
-  `hexQ`, `hexR`, `hexRadius`, `hexNorm`, `hexDistance`, `hexNeighbor`,
-  `hexRotate`, `hexConjugate`, `hexSwap`, `hexAdd`, `hexSubtract`,
+  `hexQ`, `hexR`, `hexRadius`, `hexEuclideanSquared`, `hexDistance`, `hexNeighbor`,
+  `hexRotate`, `hexMirror`, `hexSwap`, `hexAdd`, `hexSubtract`,
   `hexMultiply`, `hexScale`, `hexTranslate`); the square family over
   `SquareIndex` on the same spellings (`square(x, y)`, `squareX`, `squareY`,
-  `squareRadius` (Chebyshev), `squareLength` (Manhattan), `squareNorm`,
+  `squareRadius` (Chebyshev), `squareLength` (Manhattan), `squareEuclideanSquared`,
   `squareDistance` (Manhattan), `squareChebyshev`, `squareNeighbor` (E, N, W,
-  S), `squareRotate` (quarter turns), `squareConjugate`, `squareSwap`,
+  S), `squareRotate` (quarter turns), `squareMirror`, `squareSwap`,
   `squareAdd`, `squareSubtract`, `squareMultiply`, `squareScale`,
   `squareTranslate`); `gcd`/`lcm`; the floored `mod(a, m)` with
-  `cycleForward(a, b, m)` and `cycleDistance(a, b, m)` over an m-cycle; `mex`
-  (the smallest clear bit of a 64-bit set); `isPrime(n)` (exact over 64 bits
+  `cycleForward(a, b, m)` and `cycleDistance(a, b, m)` over an m-cycle; `smallestMissing(mask)`
+  (the smallest non-negative integer missing from a 64-bit set); `isPrime(n)` (exact over 64 bits
   in bounded work) and `prime(i)` (the first 256 primes, derived once) — never
   a next-prime or n-th-prime search, which is unbounded on the tick path and
-  belongs to a generator draw source; `binomial(n, k)` and `factorial(n)`
+  belongs to a generator draw source; `choose(n, k)` and `factorial(n)`
   (n ≤ 20); the combinatorial number system over a subset spelled as a bitmask
-  (`combRank(n, mask)`, `combUnrank(n, k, rank)`, `combElement(n, k, rank, i)`,
-  colexicographic, n ≤ 64 — a poker hand is one rank below `binomial(52, 5)`);
+  (`subsetRank(n, mask)`, `subsetAt(n, k, rank)`, `subsetMember(n, k, rank, i)`,
+  colexicographic, n ≤ 64 — a poker hand is one rank below `choose(52, 5)`);
   the factorial number system over a permutation packed as nibbles, position
-  i in bits 4i..4i+3 (`permRank(n, packed)`, `permUnrank(n, rank)`,
-  `permElement(n, rank, i)`, lexicographic Lehmer codes, n ≤ 16); the layer family over
+  i in bits 4i..4i+3 (`arrangementRank(n, packed)`, `arrangementAt(n, rank)`,
+  `arrangementMember(n, rank, i)`, lexicographic Lehmer codes, n ≤ 16); the layer family over
   `LayerSequence` (`layer`, `layerOffset`, `layerStart`, `layerSize`, each
   `(index-or-layer, start, step, seed)`); and `sqrt` (int floor root or fixed
   root), `sin`, `cos` (fixed radians). Every function is int-only except

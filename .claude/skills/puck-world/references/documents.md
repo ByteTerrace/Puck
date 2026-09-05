@@ -256,20 +256,20 @@ tokens (`ExpressionSpelling`) and writes back as a string. Beside arithmetic, co
 and the board ops, the call vocabulary carries one Maths family per prefix: `pair(x, y)`/`pairX`/`pairY` and
 the Szudzik algebra (`pairSwap`, `pairMax`, `pairMin`, `pairSum`, `pairDifference`, `pairTranslate`,
 `pairScale`); `morton`/`mortonX`/`mortonY`; `hilbert(order, x, y)`/`hilbertX`/`hilbertY`; the hex family
-over `HexagonalIndex` (`hex(q, r)`, `hexQ`, `hexR`, `hexRadius`, `hexNorm`, `hexDistance`, `hexNeighbor`,
-`hexRotate`, `hexConjugate`, `hexSwap`, `hexAdd`, `hexSubtract`, `hexMultiply`, `hexScale`, `hexTranslate`); the
+over `HexagonalIndex` (`hex(q, r)`, `hexQ`, `hexR`, `hexRadius`, `hexEuclideanSquared`, `hexDistance`, `hexNeighbor`,
+`hexRotate`, `hexMirror`, `hexSwap`, `hexAdd`, `hexSubtract`, `hexMultiply`, `hexScale`, `hexTranslate`); the
 square family over `SquareIndex` on the same spellings (`square(x, y)`, `squareX`/`squareY`, `squareRadius`
 (Chebyshev), `squareLength`/`squareDistance` (Manhattan), `squareChebyshev`, `squareNeighbor` E/N/W/S,
 `squareRotate` quarter turns, …) — a shell-ordered index over Z², not a grid topology's row-major ordinal, so a
 grid cell still bridges through `%`/`/` or `$board:offset`; `gcd`/`lcm` (`gcd(dx, dy) == 1` is a lattice line
 with no interior point); the floored `mod(a, m)` with `cycleForward(a, b, m)`/`cycleDistance(a, b, m)` for
-track and pit races (`%` stays C truncation); `mex(mask)`, the Sprague–Grundy value of a set of options; `isPrime(n)` (exact, bounded) and `prime(i)` for
+track and pit races (`%` stays C truncation); `smallestMissing(mask)`, the smallest value missing from a 64-bit set (the Sprague–Grundy value of a set of options); `isPrime(n)` (exact, bounded) and `prime(i)` for
 i in 0..255 (a Gödel multiset in one cell: add is `* prime(k)`, presence is `% prime(k) == 0`) — no next-prime or
-n-th-prime search, which is unbounded and belongs to a generator draw source; `binomial(n, k)`, `factorial(n)`
-(n ≤ 20); a subset as a bitmask — `combRank(n, mask)` (colex rank below `binomial(n, popCount(mask))`, n ≤ 64),
-`combUnrank(n, k, rank)`, `combElement(n, k, rank, i)` — so a poker hand or a drafted set is one cell; a
-permutation of 0..n−1 packed as nibbles (position i in bits 4i..4i+3, n ≤ 16) — `permRank(n, packed)`
-(lexicographic Lehmer code below `factorial(n)`), `permUnrank(n, rank)`, `permElement(n, rank, i)` — so a
+n-th-prime search, which is unbounded and belongs to a generator draw source; `choose(n, k)`, `factorial(n)`
+(n ≤ 20); a subset as a bitmask — `subsetRank(n, mask)` (colex rank below `choose(n, popCount(mask))`, n ≤ 64),
+`subsetAt(n, k, rank)`, `subsetMember(n, k, rank, i)` — so a poker hand or a drafted set is one cell; a
+permutation of 0..n−1 packed as nibbles (position i in bits 4i..4i+3, n ≤ 16) — `arrangementRank(n, packed)`
+(lexicographic Lehmer code below `factorial(n)`), `arrangementAt(n, rank)`, `arrangementMember(n, rank, i)` — so a
 turn order or a shuffled short deck is one cell, read back with `bitField(packed, 4 * i, 4)`;
 the layer family over `LayerSequence` (`layer`, `layerOffset`, `layerStart`, `layerSize`, each
 `(index-or-layer, start, step, seed)` — `layer(i, 6, 6, 1)` is `hexRadius(i)`); and `sqrt` (both kinds),
@@ -734,12 +734,16 @@ spelling). `state.lattices` declares one or more topologies (name, origin,
 `cellSize`, `width` × `depth` × `layers`, `stepEveryTicks`, `reactions`); at
 most one is `Field`-kind and drives THIS trait (`WorldTopologyCompilation.
 FindPhysical` — reactions, lattice-derived geometry) — the rest are discrete
-`Grid`/`Ring`/`Hex` topologies: a placement's `board` facet
-(`$board:cellOf`/`offset`, `world.tabletop`) anchors a `Grid` or a `Hex`
-topology (`Ring` refuses it) — a grid resolves positions against its
+`Grid`/`Ring`/`Hex`/`Graph` topologies: a placement's `board` facet
+(`$board:cellOf`/`offset`, `world.tabletop`) anchors a `Grid`, a `Hex`, or a
+`Graph` topology (`Ring` refuses it) — a grid resolves positions against its
 rectangular X/Z frame, a hex against its lattice (cell `(q, r)` at origin +
 cellSize · (q − r/2, 0, r·√3/2), ordinals in `HexagonalIndex` ring order,
-directions `E, SE, SW, W, NW, NE`) — and `cellSize` must quantize to a
+directions `E, SE, SW, W, NW, NE`), a graph to the nearest authored centre
+within half a cell size (`cells: [{id, centre}]`, `directions: [{name,
+opposite}]`, `edges: [{from, to, direction, oneWay?}]`; one neighbour per
+(cell, direction) slot, so k neighbours need k directions; `offset` refuses
+it; identity symmetry only) — and `cellSize` must quantize to a
 positive Q48.16 value — it is the divisor `$board:cellOf` resolves world
 positions against (the garden's `chessBoard` alongside its own `pondBasin`
 water field — see `Puck.World.Schema/README.md`'s tabletop-primitive

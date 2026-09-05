@@ -294,6 +294,121 @@
             "additionalProperties": false
           },
           {
+            "description": "An explicit graph. Cell i is cells[i]; its centre is relative to origin in world units, and cellSize is the resolution radius \u2014 a position within half a cell size of a centre resolves to it, nearest first. Every direction is a slot: an edge from a cell along a direction fills that slot, and unless OneWay also fills the destination\u0027s slot along the direction\u0027s opposite, so a cell with k neighbours needs k distinct directions among its edges. Symmetry is the identity alone.",
+            "properties": {
+              "$type": {
+                "const": "graph"
+              },
+              "cells": {
+                "description": "The cells, in ordinal order.",
+                "type": "array",
+                "items": {
+                  "description": "One cell of a Graph.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "id": {
+                      "description": "The id edges name it by; distinct within the graph.",
+                      "type": "string"
+                    },
+                    "centre": {
+                      "description": "The centre, relative to the topology\u0027s origin, in world units."
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "centre"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "directions": {
+                "description": "The direction slots, each naming its opposite (possibly itself).",
+                "type": "array",
+                "items": {
+                  "description": "One direction slot of a Graph.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "name": {
+                      "description": "The direction\u0027s name, as rules and patterns spell it.",
+                      "type": "string"
+                    },
+                    "opposite": {
+                      "description": "The direction an edge is followed back along; a symmetric link names itself.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "opposite"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "edges": {
+                "description": "The edges.",
+                "type": "array",
+                "items": {
+                  "description": "One edge of a Graph: From reaches To along Direction, and unless OneWay, To reaches From along the direction\u0027s opposite.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "from": {
+                      "description": "The source cell id.",
+                      "type": "string"
+                    },
+                    "to": {
+                      "description": "The destination cell id.",
+                      "type": "string"
+                    },
+                    "direction": {
+                      "description": "The direction slot.",
+                      "type": "string"
+                    },
+                    "oneWay": {
+                      "description": "Whether the reverse edge is left unfilled (a ladder, a one-way street).",
+                      "type": "boolean",
+                      "default": false
+                    }
+                  },
+                  "required": [
+                    "from",
+                    "to",
+                    "direction"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "name": {
+                "description": "The topology\u0027s name \u2014 what a row\u0027s cellsOf domain references.",
+                "type": "string"
+              },
+              "origin": {
+                "description": "The minimum corner, world units."
+              },
+              "cellSize": {
+                "description": "The cubic cell edge, world units.",
+                "type": "number"
+              }
+            },
+            "required": [
+              "cells",
+              "directions",
+              "edges",
+              "name",
+              "origin",
+              "cellSize"
+            ],
+            "additionalProperties": false
+          },
+          {
             "description": "The physical state.lattices topology: a scalar field over the lattice\u0027s footprint, evolved by reactions each StepEveryTicks \u2014 the document\u0027s own case of LatticeTopology, registered under the field discriminator beside the engine\u0027s discrete cases.",
             "properties": {
               "$type": {

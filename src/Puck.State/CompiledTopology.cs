@@ -22,10 +22,13 @@ public sealed partial class CompiledTopology {
     private readonly FixedVector3 m_origin;
     private readonly FixedQ4816 m_cellSize;
     private readonly FixedQ4816 m_band;
+    // Authored centres relative to the origin, present for a Graph alone; every other kind derives its centres.
+    private readonly FixedVector3[]? m_cellCentres;
 
     internal CompiledTopology(TopologyKind kind, int count, int directions, int[] neighbours, int[] opposite,
         int width, int depth, int radius, TopologyWrap wrap, FixedVector3 origin, FixedQ4816 cellSize, FixedQ4816 band,
-        int[][] images, string[] elementNames, int layers, FixedQ4816 layerHeight, string[] directionNames) {
+        int[][] images, string[] elementNames, int layers, FixedQ4816 layerHeight, string[] directionNames, FixedVector3[]? cellCentres = null) {
+        m_cellCentres = cellCentres;
         m_band = band;
         m_layers = layers;
         m_layerHeight = layerHeight;
@@ -83,6 +86,10 @@ public sealed partial class CompiledTopology {
     /// <param name="cell">The cell ordinal.</param>
     public FixedVector3 CellCentre(int cell) {
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: ((uint)cell), other: ((uint)CellCount));
+        if (m_cellCentres is { } centres) {
+            var centre = centres[cell];
+            return new FixedVector3(X: (m_origin.X + centre.X), Y: (m_origin.Y + centre.Y), Z: (m_origin.Z + centre.Z));
+        }
         if (Kind == TopologyKind.Hex) {
             var coordinate = new HexagonalIndex(value: cell).ToCoordinate();
             var q = FixedQ4816.FromInteger(value: coordinate.Q);
@@ -110,6 +117,9 @@ public sealed partial class CompiledTopology {
     /// <returns>Whether the position lies over a declared cell.</returns>
     public bool TryCellOf(in FixedVector3 position, out int cell) {
         cell = -1;
+        if (m_cellCentres is { } centres) {
+            return TryNearestCellOf(position: in position, centres: centres, cell: out cell);
+        }
         if (Kind == TopologyKind.Hex) {
             return TryHexCellOf(position: in position, cell: out cell);
         }
@@ -155,6 +165,26 @@ public sealed partial class CompiledTopology {
         "U", "UN", "UNE", "UE", "USE", "US", "USW", "UW", "UNW",
         "D", "DN", "DNE", "DE", "DSE", "DS", "DSW", "DW", "DNW",
     ];
+
+    // The nearest authored centre within half a cell size, lowest ordinal on a tie; squared distances in raw Q48.16
+    // units cannot overflow an Int128.
+    private bool TryNearestCellOf(in FixedVector3 position, FixedVector3[] centres, out int cell) {
+        cell = -1;
+        var half = ((Int128)(m_cellSize.Value >> 1));
+        var best = ((half * half) + Int128.One);
+        for (var index = 0; index < centres.Length; index++) {
+            var centre = centres[index];
+            var dx = (((Int128)position.X.Value) - (((Int128)m_origin.X.Value) + centre.X.Value));
+            var dy = (((Int128)position.Y.Value) - (((Int128)m_origin.Y.Value) + centre.Y.Value));
+            var dz = (((Int128)position.Z.Value) - (((Int128)m_origin.Z.Value) + centre.Z.Value));
+            var distance = ((dx * dx) + (dy * dy) + (dz * dz));
+            if (distance < best) {
+                best = distance;
+                cell = index;
+            }
+        }
+        return (cell >= 0);
+    }
 
     private bool TryHexCellOf(in FixedVector3 position, out int cell) {
         cell = -1;

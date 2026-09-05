@@ -70,6 +70,8 @@ public sealed class WorldTabletopCommandModule(IWorldConsoleAuthority authority)
                     .Append(value: " cellSize=").Append(value: DescribeFixed(topology.CellSize));
                 if (topology.Kind == TopologyKind.Hex) {
                     _ = text.Append(value: " radius=").Append(value: topology.Radius);
+                } else if (topology.Kind == TopologyKind.Graph) {
+                    _ = text.Append(value: " cells=").Append(value: topology.CellCount);
                 } else {
                     _ = text.Append(value: " width=").Append(value: topology.Width).Append(value: " depth=").Append(value: topology.Depth);
                 }

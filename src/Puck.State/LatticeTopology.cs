@@ -16,6 +16,9 @@ public enum TopologyKind : byte {
     Ring,
     /// <summary>A hexagonal disk of the given radius, indexed in <c>HexagonalIndex</c> order: rings outward from the origin, consecutive indices adjacent.</summary>
     Hex,
+    /// <summary>An explicit graph: authored cells with centres and directed edges along named direction slots — a
+    /// territory map, a star board, or any tiling a tool emits — with no axial structure and identity symmetry alone.</summary>
+    Graph,
     /// <summary>A box of width by layers by depth cells with the 26 space directions, indexed by (layer times depth
     /// plus z) times width plus x.</summary>
     Box,
@@ -66,6 +69,7 @@ public interface IDiscreteLatticeTopology {
 [JsonDerivedType(typeof(Ring), typeDiscriminator: "ring")]
 [JsonDerivedType(typeof(Hex), typeDiscriminator: "hex")]
 [JsonDerivedType(typeof(Box), typeDiscriminator: "box")]
+[JsonDerivedType(typeof(Graph), typeDiscriminator: "graph")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public abstract record LatticeTopology(string Name, DocumentVector3 Origin, float CellSize) {
     /// <summary>A dense field or a discrete grid, ring, hex, or box — the case's own kind, never authored.</summary>
@@ -151,6 +155,25 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
         [JsonIgnore]
         public override TopologyKind Kind => TopologyKind.Box;
     }
+    /// <summary>An explicit graph. Cell <c>i</c> is <c>cells[i]</c>; its centre is relative to <c>origin</c> in world
+    /// units, and <c>cellSize</c> is the resolution radius — a position within half a cell size of a centre resolves to
+    /// it, nearest first. Every direction is a slot: an edge from a cell along a direction fills that slot, and unless
+    /// <see cref="GraphEdge.OneWay"/> also fills the destination's slot along the direction's opposite, so a cell with
+    /// k neighbours needs k distinct directions among its edges. Symmetry is the identity alone.</summary>
+    /// <param name="Name">The topology's name.</param>
+    /// <param name="Origin">The frame every centre is relative to.</param>
+    /// <param name="CellSize">The resolution diameter of a cell, in world units.</param>
+    /// <param name="Cells">The cells, in ordinal order.</param>
+    /// <param name="Directions">The direction slots, each naming its opposite (possibly itself).</param>
+    /// <param name="Edges">The edges.</param>
+    public sealed record Graph(
+        string Name, DocumentVector3 Origin, float CellSize,
+        IReadOnlyList<GraphCell> Cells, IReadOnlyList<GraphDirection> Directions, IReadOnlyList<GraphEdge> Edges
+    ) : LatticeTopology(Name, Origin, CellSize) {
+        /// <inheritdoc/>
+        [JsonIgnore]
+        public override TopologyKind Kind => TopologyKind.Graph;
+    }
 }
 /// <summary>One authored direction of a discrete <see cref="LatticeTopology"/>: the (X, Y, Z) cell step a
 /// neighbour walk, ray, or leaper offset takes, and the case-sensitive token a rule or <c>$board:</c>/<c>$match:</c>
@@ -170,3 +193,23 @@ public sealed record TopologyDirection(string Name, int X, int Y, int Z = 0);
 /// alias resolves to.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record TopologyElementAlias(string Name, string Element);
+
+/// <summary>One cell of a <see cref="LatticeTopology.Graph"/>.</summary>
+/// <param name="Id">The id edges name it by; distinct within the graph.</param>
+/// <param name="Centre">The centre, relative to the topology's origin, in world units.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record GraphCell(string Id, DocumentVector3 Centre);
+/// <summary>One direction slot of a <see cref="LatticeTopology.Graph"/>.</summary>
+/// <param name="Name">The direction's name, as rules and patterns spell it.</param>
+/// <param name="Opposite">The direction an edge is followed back along; a symmetric link names itself.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record GraphDirection(string Name, string Opposite);
+/// <summary>One edge of a <see cref="LatticeTopology.Graph"/>: <paramref name="From"/> reaches <paramref name="To"/>
+/// along <paramref name="Direction"/>, and unless <paramref name="OneWay"/>, <paramref name="To"/> reaches
+/// <paramref name="From"/> along the direction's opposite.</summary>
+/// <param name="From">The source cell id.</param>
+/// <param name="To">The destination cell id.</param>
+/// <param name="Direction">The direction slot.</param>
+/// <param name="OneWay">Whether the reverse edge is left unfilled (a ladder, a one-way street).</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record GraphEdge(string From, string To, string Direction, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool OneWay = false);

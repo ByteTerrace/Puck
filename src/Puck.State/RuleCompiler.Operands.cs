@@ -530,8 +530,8 @@ public static partial class RuleCompiler {
         if (kind is BoardQueryKind.Mask && topology.CellCount > BoardMask.MaxCells) {
             throw Invalid($"{tokens[1]} reads at most {BoardMask.MaxCells} cells as bits; '{board.Topology}' has {topology.CellCount}");
         }
-        if (kind is BoardQueryKind.Offset && topology.Kind != TopologyKind.Grid) {
-            throw Invalid($"'{tokens[1]}' requires a Grid topology, not {topology.Kind}");
+        if (kind is BoardQueryKind.Offset && topology.Kind is not (TopologyKind.Grid or TopologyKind.Hex)) {
+            throw Invalid($"'{tokens[1]}' requires a Grid or Hex topology, not {topology.Kind}");
         }
         CompiledCellRef? keyFrom = null;
         if (kind is not (BoardQueryKind.Mask or BoardQueryKind.Canonical)) {
