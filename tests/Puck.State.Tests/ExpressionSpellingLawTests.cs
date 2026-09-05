@@ -51,6 +51,8 @@ public sealed class ExpressionSpellingLawTests {
         Assert.Equal([S("hp", "$each")], Parse("hp[$each]"));
         Assert.Equal([S("seat-1", "0")], Parse("`seat-1`[0]"));
         Assert.Equal([S("$table:armor:$each"), C(2m), new ValueToken.Multiply()], Parse("$table:armor:$each * 2"));
+        Assert.Equal([S("$board:mask:board:-6:-6"), C(1m), new ValueToken.Subtract()], Parse("$board:mask:board:-6:-6 - 1"));
+        Assert.Equal("$board:mask:board:-6:-6 - 1", ExpressionSpelling.Print([S("$board:mask:board:-6:-6"), C(1m), new ValueToken.Subtract()]));
         Assert.Equal([S("$table:armor:$each")], Parse("$table:armor[$each]"));
         Assert.Equal([S("$table:moves:power:$bind:move")], Parse("$table:moves:power[$bind:move]"));
         Assert.Equal([S("$table:moves:power:$cell:turn:move")], Parse("$table:moves:power[$cell:turn:move]"));

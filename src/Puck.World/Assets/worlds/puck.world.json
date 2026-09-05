@@ -474,15 +474,7 @@
         "effects": [
           {
             "$type": "setState",
-            "expression": {
-              "tokens": [
-                {
-                  "$type": "state",
-                  "key": "$left",
-                  "name": "self"
-                }
-              ]
-            },
+            "expression": "self[$left]",
             "key": "0",
             "state": "boneHolder"
           },
@@ -494,14 +486,7 @@
           },
           {
             "$type": "setState",
-            "expression": {
-              "tokens": [
-                {
-                  "$type": "state",
-                  "name": "eventSeq"
-                }
-              ]
-            },
+            "expression": "eventSeq",
             "state": "claimSeq"
           },
           {
@@ -980,15 +965,7 @@
             "channels": {},
             "flock": {
               "alignment": 0.4,
-              "alignmentAffinity": {
-                "tokens": [
-                  {
-                    "$type": "state",
-                    "key": "$pair:left:cell:boneHolder:0",
-                    "name": "boneHolderTrust"
-                  }
-                ]
-              },
+              "alignmentAffinity": "boneHolderTrust[$pair:left:cell:boneHolder:0]",
               "arrivalDistance": 1.2,
               "candidateBudget": 16,
               "cohesion": 0.6,
@@ -6927,29 +6904,7 @@
       "effects": [
         {
           "$type": "addState",
-          "expression": {
-            "tokens": [
-              {
-                "$type": "constant",
-                "value": 1
-              },
-              {
-                "$type": "state",
-                "key": "$pair:each:cell:boneHolder:0",
-                "name": "boneHolderTrust"
-              },
-              {
-                "$type": "subtract"
-              },
-              {
-                "$type": "constant",
-                "value": 0.3
-              },
-              {
-                "$type": "multiply"
-              }
-            ]
-          },
+          "expression": "(1 - boneHolderTrust[$pair:each:cell:boneHolder:0]) * 0.3",
           "key": "$pair:each:cell:boneHolder:0",
           "state": "boneHolderTrust"
         }
@@ -6994,15 +6949,7 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": {
-            "tokens": [
-              {
-                "$type": "state",
-                "key": "$each",
-                "name": "self"
-              }
-            ]
-          },
+          "expression": "self[$each]",
           "key": "0",
           "state": "reporter"
         }
@@ -7054,57 +7001,13 @@
       "effects": [
         {
           "$type": "addState",
-          "expression": {
-            "tokens": [
-              {
-                "$type": "constant",
-                "value": 1
-              },
-              {
-                "$type": "state",
-                "key": "$pair:each:cell:boneHolder:0",
-                "name": "boneHolderTrust"
-              },
-              {
-                "$type": "subtract"
-              },
-              {
-                "$type": "constant",
-                "value": 0.15
-              },
-              {
-                "$type": "multiply"
-              }
-            ]
-          },
+          "expression": "(1 - boneHolderTrust[$pair:each:cell:boneHolder:0]) * 0.15",
           "key": "$pair:each:cell:boneHolder:0",
           "state": "boneHolderTrust"
         },
         {
           "$type": "setState",
-          "expression": {
-            "tokens": [
-              {
-                "$type": "state",
-                "key": "0",
-                "name": "boneHolder"
-              },
-              {
-                "$type": "constant",
-                "value": 32
-              },
-              {
-                "$type": "shiftLeft"
-              },
-              {
-                "$type": "state",
-                "name": "claimSeq"
-              },
-              {
-                "$type": "bitOr"
-              }
-            ]
-          },
+          "expression": "boneHolder[0] << 32 | claimSeq",
           "key": "$each",
           "state": "boneHolderClaimMark"
         }
@@ -7159,38 +7062,8 @@
             "$type": "compareValue",
             "comparison": "NotEqual",
             "kind": "Int",
-            "left": {
-              "tokens": [
-                {
-                  "$type": "state",
-                  "key": "$each",
-                  "name": "boneHolderClaimMark"
-                }
-              ]
-            },
-            "right": {
-              "tokens": [
-                {
-                  "$type": "state",
-                  "key": "0",
-                  "name": "boneHolder"
-                },
-                {
-                  "$type": "constant",
-                  "value": 32
-                },
-                {
-                  "$type": "shiftLeft"
-                },
-                {
-                  "$type": "state",
-                  "name": "claimSeq"
-                },
-                {
-                  "$type": "bitOr"
-                }
-              ]
-            }
+            "left": "boneHolderClaimMark[$each]",
+            "right": "boneHolder[0] << 32 | claimSeq"
           }
         ]
       },
@@ -7265,22 +7138,7 @@
               "requiresLineOfSight": false,
               "retainCurrent": true
             },
-            "score": {
-              "tokens": [
-                {
-                  "$type": "state",
-                  "key": "$pair:left:cell:boneHolder:0",
-                  "name": "boneHolderTrust"
-                },
-                {
-                  "$type": "constant",
-                  "value": 2.0
-                },
-                {
-                  "$type": "multiply"
-                }
-              ]
-            }
+            "score": "boneHolderTrust[$pair:left:cell:boneHolder:0] * 2.0"
           },
           {
             "effects": [
@@ -7299,14 +7157,7 @@
               "value": 6
             },
             "name": "visitor",
-            "score": {
-              "tokens": [
-                {
-                  "$type": "constant",
-                  "value": 0.6
-                }
-              ]
-            }
+            "score": "0.6"
           },
           {
             "effects": [
@@ -7318,14 +7169,7 @@
               }
             ],
             "name": "alone",
-            "score": {
-              "tokens": [
-                {
-                  "$type": "constant",
-                  "value": 0.05
-                }
-              ]
-            }
+            "score": "0.05"
           }
         ],
         "periodSeconds": 1.0,
@@ -7359,14 +7203,7 @@
               "value": 10
             },
             "name": "stalk",
-            "score": {
-              "tokens": [
-                {
-                  "$type": "constant",
-                  "value": 1
-                }
-              ]
-            }
+            "score": "1"
           },
           {
             "effects": [
@@ -7378,14 +7215,7 @@
               }
             ],
             "name": "lurk",
-            "score": {
-              "tokens": [
-                {
-                  "$type": "constant",
-                  "value": 0.1
-                }
-              ]
-            }
+            "score": "0.1"
           }
         ],
         "periodSeconds": 0.5,

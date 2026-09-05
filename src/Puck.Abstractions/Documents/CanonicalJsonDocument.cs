@@ -8,7 +8,10 @@ namespace Puck.Abstractions.Documents;
 /// newlines, two-space indentation, and exactly one trailing newline at EOF, so a load then save reproduces a file
 /// byte-for-byte and every document stays diffable and git-friendly.</summary>
 public static class CanonicalJsonDocument {
+    // Relaxed escaping: these documents are read by this engine and by people, never embedded in HTML, so an
+    // authored "a + b < c" or an em-dash is written as itself rather than as a \u escape.
     private static readonly JsonWriterOptions WriterOptions = new() {
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         Indented = true,
         NewLine = "\n",
     };

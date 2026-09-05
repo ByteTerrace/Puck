@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 using Xunit;
@@ -147,8 +148,12 @@ public sealed class GardenSplitLawTests {
     // comparison must ignore it; every other shape (object member order, scalar/mixed arrays) is left exactly as
     // JsonNode.DeepEquals already treats it (objects compare member-wise regardless of order; DeepEquals is what
     // decides scalars).
+    // An expression reads the same whether authored as an infix string or a postfix token object; both sides are
+    // compared in the printed spelling, so a document that moved between the two spellings still matches.
     private static JsonNode? Canonicalize(JsonNode? node) {
         switch (node) {
+            case JsonObject { Count: 1 } tokensObject when tokensObject["tokens"] is JsonArray:
+                return JsonValue.Create(Spell(tokensObject));
             case JsonObject asObject: {
                 var result = new JsonObject();
 
@@ -263,7 +268,7 @@ public sealed class GardenSplitLawTests {
                 }
 
                 if ((nameValue.GetValue<string>() == "tabletop-shape-pawn-pick") && (ruleObject["effects"] is JsonArray pickEffects) && (pickEffects[0] is JsonObject pickEffect)) {
-                    ((JsonObject)((JsonArray)((JsonObject)pickEffect["expression"]!)["tokens"]!)[1]!)["value"] = 0;
+                    pickEffect["expression"] = RespellConstant(pickEffect["expression"]!, index: 1, value: 0m);
                 }
 
                 RevertSettleHoldGate(ruleObject["gate"] as JsonObject);
@@ -713,5 +718,17 @@ public sealed class GardenSplitLawTests {
                 Assert.Equal("tabletop", placement.Parent);
             }
         }
+    }
+
+    private static string Spell(JsonObject tokensObject) =>
+        ExpressionSpelling.Print(JsonSerializer.Deserialize(tokensObject.ToJsonString(), WorldJsonContext.Default.ValueExpressionTokens)!.Tokens);
+    // Rewrites one constant token of an expression in either spelling, returning the infix spelling.
+    private static JsonNode RespellConstant(JsonNode expression, int index, decimal value) {
+        var text = (expression is JsonObject tokensObject) ? Spell(tokensObject) : expression.GetValue<string>();
+        Assert.True(ExpressionSpelling.TryParse(text, out var tokens, out var error), error);
+        var edited = tokens.ToArray();
+        Assert.IsType<ValueToken.Constant>(edited[index]);
+        edited[index] = new ValueToken.Constant(value);
+        return JsonValue.Create(ExpressionSpelling.Print(edited));
     }
 }

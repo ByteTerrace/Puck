@@ -20,7 +20,8 @@ namespace Puck.State;
 /// <c>select(condition, whenTrue, whenFalse)</c>.</item>
 /// <item>A state read is its row name, keyed as <c>row[key]</c>. A bare name starts with a letter, <c>_</c>, or
 /// <c>$</c> and continues with letters, digits, <c>_</c>, <c>$</c>, and <c>.</c>; a reserved channel (one starting
-/// with <c>$</c>) may also carry <c>:</c> between name characters, so <c>$table:armor:$each</c> is one name. Any
+/// with <c>$</c>) may also carry <c>:</c> between name characters and a signed segment after a colon, so
+/// <c>$table:armor:$each</c> and <c>$board:mask:board:-6:-6</c> are one name each. Any
 /// other name — one carrying a hyphen or a space — is spelled between backquotes: <c>`seat-1`</c>. A key is a bare
 /// name, a number, or a backquoted name.</item>
 /// <item>A table read indexes with the same brackets: <c>$table:moves:power[$bind:move]</c> is the
@@ -140,7 +141,10 @@ public static class ExpressionSpelling {
             if (IsNamePart(character)) {
                 continue;
             }
-            if (reserved && character == ':' && index + 1 < name.Length && IsNamePart(name[index + 1])) {
+            if (reserved && character == ':' && index + 1 < name.Length && (IsNamePart(name[index + 1]) || IsSignedSegment(name, index + 1))) {
+                continue;
+            }
+            if (reserved && character == '-' && index > 0 && name[index - 1] == ':' && index + 1 < name.Length && char.IsAsciiDigit(name[index + 1])) {
                 continue;
             }
             return false;
@@ -148,6 +152,9 @@ public static class ExpressionSpelling {
         return !Calls.ContainsKey(key: name);
     }
 
+    // ":-6" inside a reserved name is a signed offset segment, never a subtraction: a name cannot end in a colon.
+    private static bool IsSignedSegment(string text, int index) =>
+        (index + 1 < text.Length && text[index] == '-' && char.IsAsciiDigit(c: text[index + 1]));
     private static bool IsNameStart(char character) => (char.IsLetter(c: character) || character == '_' || character == '$');
     private static bool IsNamePart(char character) => (char.IsLetterOrDigit(c: character) || character == '_' || character == '$' || character == '.');
 
@@ -470,6 +477,10 @@ public static class ExpressionSpelling {
                     }
                     if (reserved && text[end] == ':' && end + 1 < text.Length && IsNamePart(character: text[end + 1])) {
                         end++;
+                        continue;
+                    }
+                    if (reserved && text[end] == ':' && IsSignedSegment(text, end + 1)) {
+                        end += 2;
                         continue;
                     }
                     break;

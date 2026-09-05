@@ -1291,7 +1291,9 @@ atomicity mechanism where making the boundary explicit was the fix).
 is authored as an infix string as well as a token list: the string is syntax
 over the same postfix tokens — one parser, one printer, no second evaluator, no
 new cost — so the authoring surface stops being the reason a rule is hard to
-read without the engine gaining a language. Debugging a rule is a read-back,
+read without the engine gaining a language; the shipped games author every
+expression in it, and the canonical writer stops escaping `+ < > &` so the
+file reads as the author wrote it. Debugging a rule is a read-back,
 not a debugger: `world.rule.trace` captures a rule's next evaluations with
 every binding value, every gate conjunct's compared values and verdict, and
 every effect's computed value and outcome, as an observer that leaves the

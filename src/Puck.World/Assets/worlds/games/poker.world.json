@@ -2841,25 +2841,7 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": {
-            "tokens": [
-              {
-                "$type": "state",
-                "name": "$match:pairAny:combinedByRank1"
-              },
-              {
-                "$type": "constant",
-                "value": 1
-              },
-              {
-                "$type": "constant",
-                "value": 0
-              },
-              {
-                "$type": "select"
-              }
-            ]
-          },
+          "expression": "$match:pairAny:combinedByRank1 ? 1 : 0",
           "state": "strength1"
         }
       ],
@@ -2876,25 +2858,7 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": {
-            "tokens": [
-              {
-                "$type": "state",
-                "name": "$match:pairAny:combinedByRank2"
-              },
-              {
-                "$type": "constant",
-                "value": 1
-              },
-              {
-                "$type": "constant",
-                "value": 0
-              },
-              {
-                "$type": "select"
-              }
-            ]
-          },
+          "expression": "$match:pairAny:combinedByRank2 ? 1 : 0",
           "state": "strength2"
         },
         {
@@ -3060,35 +3024,7 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": {
-            "tokens": [
-              {
-                "$type": "state",
-                "name": "$reduce:count:deck"
-              },
-              {
-                "$type": "state",
-                "name": "$reduce:count:hand1"
-              },
-              {
-                "$type": "add"
-              },
-              {
-                "$type": "state",
-                "name": "$reduce:count:hand2"
-              },
-              {
-                "$type": "add"
-              },
-              {
-                "$type": "state",
-                "name": "$reduce:count:community"
-              },
-              {
-                "$type": "add"
-              }
-            ]
-          },
+          "expression": "$reduce:count:deck + $reduce:count:hand1 + $reduce:count:hand2 + $reduce:count:community",
           "state": "cardsZoneTotal"
         }
       ],
