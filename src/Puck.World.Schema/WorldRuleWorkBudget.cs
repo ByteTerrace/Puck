@@ -1,5 +1,18 @@
 namespace Puck.World;
 
+/// <summary>One rule's or interaction's line in the per-tick work sheet.</summary>
+/// <param name="Name">The rule or interaction name.</param>
+/// <param name="IsInteraction">Whether the line is an interaction's.</param>
+/// <param name="Multiplier">How many evaluations one tick can run: a <c>forEach</c> row's capacity, an interaction's
+/// carrier or pair count, or 1.</param>
+/// <param name="UnitCost">The cost of one evaluation.</param>
+/// <param name="WorkUnits">The line's total, <see cref="Multiplier"/> times <see cref="UnitCost"/>.</param>
+/// <param name="ExclusiveCell">The <c>row.key</c> cell whose literal value the gate pins, or <see langword="null"/>
+/// when the line sums into the total unconditionally.</param>
+/// <param name="ExclusiveValue">The pinned value; lines pinning the same cell to different values price at their
+/// costliest value rather than their sum.</param>
+public readonly record struct WorldRuleWorkContributor(string Name, bool IsInteraction, long Multiplier, long UnitCost, long WorkUnits, string? ExclusiveCell, long ExclusiveValue);
+
 /// <summary>The statically derived worst-case rule, interaction, and flock-affinity work admitted for one tick.</summary>
 /// <param name="RuleRows">The authored ordinary-rule count.</param>
 /// <param name="InteractionRows">The authored interaction count.</param>
@@ -18,50 +31,17 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
 
         var rules = WorldRuleCompiler.CompileAll(definition: definition);
         var interactions = WorldRuleCompiler.CompileAllInteractions(definition: definition);
-        var slots = 0L;
-        var work = 0L;
         var decisionScales = new HashSet<long>();
 
-        // Rules whose gates each require one literal cell to EQUAL a distinct constant can never fire on the same tick:
-        // the sheet charges such a group its most expensive value's rules, not their sum. Rules sharing a value, or
-        // gated on anything else, still sum.
-        var exclusive = new Dictionary<(string Row, string Key), Dictionary<long, long>>();
         foreach (var rule in rules) {
             if (rule.Decision is { } decision) {
                 foreach (var option in decision.Options) {
                     if (option.Neighbors is { } neighbors) { decisionScales.Add(neighbors.CellWidth.Value); }
                 }
             }
-            var multiplier = ((rule.ForEach is { } rowName)
-                ? (RowCapacity(definition, rowName))
-                : 1
-            );
-            slots = SaturatingAdd(left: slots, right: multiplier);
-            var cost = SaturatingMultiply(left: multiplier, right: RuleCost(rule: rule, definition: definition));
-            if (TryExclusiveGate(rule.Gate, out var cell, out var value)) {
-                if (!exclusive.TryGetValue(cell, out var byValue)) {
-                    byValue = [];
-                    exclusive[cell] = byValue;
-                }
-                byValue[value] = SaturatingAdd(left: byValue.GetValueOrDefault(value), right: cost);
-            } else {
-                work = SaturatingAdd(left: work, right: cost);
-            }
-        }
-        foreach (var group in exclusive.Values) {
-            var worst = 0L;
-            foreach (var sum in group.Values) { worst = Math.Max(worst, sum); }
-            work = SaturatingAdd(left: work, right: worst);
         }
 
-        foreach (var interaction in interactions) {
-            var multiplier = ((interaction.Interaction?.CoOccurrence == WorldInteractionCoOccurrence.Distance)
-                ? ((long)definition.Population.Capacity * Math.Max(val1: 0, val2: (definition.Population.Capacity - 1)))
-                : definition.Population.Capacity
-            );
-            slots = SaturatingAdd(left: slots, right: multiplier);
-            work = SaturatingAdd(left: work, right: SaturatingMultiply(left: multiplier, right: RuleCost(rule: interaction, definition: definition)));
-        }
+        var (slots, work) = Tally(contributors: Enumerate(definition: definition, rules: rules, interactions: interactions));
 
         var flockCost = FlockAffinityCost(definition);
         var imagePoints = decisionScales.Count == 0 ? 0 : definition.Population.Capacity;
@@ -79,6 +59,104 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             DecisionGridBuildsPerTick: decisionScales.Count,
             DecisionGridPointsPerTick: gridPoints
         );
+    }
+
+    /// <summary>Lists every rule's and interaction's line in the work sheet, costliest first — the breakdown behind
+    /// <see cref="WorkUnitsPerTick"/>'s one total.</summary>
+    /// <param name="definition">The validated world.</param>
+    /// <returns>The lines, by descending <see cref="WorldRuleWorkContributor.WorkUnits"/> then name.</returns>
+    public static IReadOnlyList<WorldRuleWorkContributor> Contributors(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var contributors = Enumerate(
+            definition: definition,
+            rules: WorldRuleCompiler.CompileAll(definition: definition),
+            interactions: WorldRuleCompiler.CompileAllInteractions(definition: definition)
+        );
+
+        contributors.Sort(comparison: static (left, right) => {
+            var byWork = right.WorkUnits.CompareTo(value: left.WorkUnits);
+
+            return ((byWork != 0) ? byWork : string.CompareOrdinal(strA: left.Name, strB: right.Name));
+        });
+
+        return contributors;
+    }
+
+    private static List<WorldRuleWorkContributor> Enumerate(WorldDefinition definition, CompiledWorldRule[] rules, CompiledWorldRule[] interactions) {
+        var contributors = new List<WorldRuleWorkContributor>(capacity: rules.Length + interactions.Length);
+
+        foreach (var rule in rules) {
+            var multiplier = ((rule.ForEach is { } rowName)
+                ? (RowCapacity(definition, rowName))
+                : 1
+            );
+            var unit = RuleCost(rule: rule, definition: definition);
+            var exclusive = TryExclusiveGate(rule.Gate, out var cell, out var value);
+
+            contributors.Add(item: new WorldRuleWorkContributor(
+                Name: rule.Name,
+                IsInteraction: false,
+                Multiplier: multiplier,
+                UnitCost: unit,
+                WorkUnits: SaturatingMultiply(left: multiplier, right: unit),
+                ExclusiveCell: (exclusive ? $"{cell.Row}.{cell.Key}" : null),
+                ExclusiveValue: value
+            ));
+        }
+
+        foreach (var interaction in interactions) {
+            var multiplier = ((interaction.Interaction?.CoOccurrence == WorldInteractionCoOccurrence.Distance)
+                ? ((long)definition.Population.Capacity * Math.Max(val1: 0, val2: (definition.Population.Capacity - 1)))
+                : definition.Population.Capacity
+            );
+            var unit = RuleCost(rule: interaction, definition: definition);
+
+            contributors.Add(item: new WorldRuleWorkContributor(
+                Name: interaction.Name,
+                IsInteraction: true,
+                Multiplier: multiplier,
+                UnitCost: unit,
+                WorkUnits: SaturatingMultiply(left: multiplier, right: unit),
+                ExclusiveCell: null,
+                ExclusiveValue: 0L
+            ));
+        }
+
+        return contributors;
+    }
+
+    // Rules whose gates each require one literal cell to EQUAL a distinct constant can never fire on the same tick:
+    // the sheet charges such a group its most expensive value's rules, not their sum. Rules sharing a value, or
+    // gated on anything else, still sum.
+    private static (long Slots, long Work) Tally(List<WorldRuleWorkContributor> contributors) {
+        var slots = 0L;
+        var work = 0L;
+        var exclusive = new Dictionary<string, Dictionary<long, long>>(comparer: StringComparer.Ordinal);
+
+        foreach (var contributor in contributors) {
+            slots = SaturatingAdd(left: slots, right: contributor.Multiplier);
+
+            if (contributor.ExclusiveCell is { } cell) {
+                if (!exclusive.TryGetValue(cell, out var byValue)) {
+                    byValue = [];
+                    exclusive[cell] = byValue;
+                }
+                byValue[contributor.ExclusiveValue] = SaturatingAdd(left: byValue.GetValueOrDefault(contributor.ExclusiveValue), right: contributor.WorkUnits);
+            } else {
+                work = SaturatingAdd(left: work, right: contributor.WorkUnits);
+            }
+        }
+
+        foreach (var group in exclusive.Values) {
+            var worst = 0L;
+
+            foreach (var sum in group.Values) { worst = Math.Max(worst, sum); }
+
+            work = SaturatingAdd(left: work, right: worst);
+        }
+
+        return (slots, work);
     }
 
     // A gate that is one literal-keyed state cell compared Equal to a constant, or an All of conjuncts one of which

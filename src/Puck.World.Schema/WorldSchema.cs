@@ -237,12 +237,33 @@ public static class WorldSchema {
     // grammar like GrantSubject's "body:<n>" — see WorldSchema's own sweep notes) and is left exactly as the
     // exporter produced it. Never widens an ALREADY-typed node (a $type union arm, a native enum) — only ever adds to the fully
     // permissive `{}` AsObjectNode just promoted.
-    private static void ApplyConverterVocabulary(JsonObject obj, Type propertyType) {
+    private static void ApplyConverterVocabulary(JsonObject obj, Type propertyType, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode, NestedExports? nested) {
         if (
             obj.ContainsKey(propertyName: "type") ||
             obj.ContainsKey(propertyName: "enum") ||
             obj.ContainsKey(propertyName: "anyOf")
         ) {
+            return;
+        }
+
+        if (TryGetNodeConverter(
+            propertyType: propertyType,
+            converter: out var nodeConverter
+        )) {
+            // The converter describes its own node; an object arm it references is exported through the same
+            // transform so its members are described and hoisted like any other shape.
+            var shape = nodeConverter.BuildSchema(exportType: type => ExportNested(
+                index: index,
+                nested: nested,
+                type: type,
+                typesByNode: typesByNode
+            ));
+
+            foreach (var (name, value) in shape.ToList()) {
+                shape.Remove(propertyName: name);
+                obj[name] = value;
+            }
+
             return;
         }
 
@@ -676,10 +697,12 @@ public static class WorldSchema {
     private static (JsonObject Root, Dictionary<JsonNode, Type> TypesByNode) ExportMergedWithTypes() {
         var index = XmlDocIndex.Value;
         var typesByNode = new Dictionary<JsonNode, Type>(comparer: ReferenceEqualityComparer.Instance);
+        NestedExports? nested = null;
         var exporterOptions = new JsonSchemaExporterOptions {
             TransformSchemaNode = (context, node) => Transform(
             context: context,
             index: index,
+            nested: nested,
             node: node,
             typesByNode: typesByNode
         ),
@@ -1519,7 +1542,7 @@ public static class WorldSchema {
             : null
         );
     }
-    private static void RestoreSkippedProperty(JsonObject propertyObject, Type ownerType, string jsonName, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode) {
+    private static void RestoreSkippedProperty(JsonObject propertyObject, Type ownerType, string jsonName, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode, NestedExports? nested) {
         var property = FindPropertyByJsonName(
             jsonName: jsonName,
             ownerType: ownerType
@@ -1532,8 +1555,11 @@ public static class WorldSchema {
         typesByNode[propertyObject] = property.PropertyType;
 
         ApplyConverterVocabulary(
+            index: index,
+            nested: nested,
             obj: propertyObject,
-            propertyType: property.PropertyType
+            propertyType: property.PropertyType,
+            typesByNode: typesByNode
         );
 
         if (
@@ -1556,7 +1582,7 @@ public static class WorldSchema {
     // typesByNode carries no entry for it (Transform unconditionally records one for every node it visits, even a
     // node with no resolvable description). Every other node in typesByNode was already fully annotated by
     // Transform itself and is left alone.
-    private static void RestoreSkippedPropertyAnnotations(JsonNode node, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode) {
+    private static void RestoreSkippedPropertyAnnotations(JsonNode node, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode, NestedExports? nested) {
         if (node is JsonObject obj) {
             if (
                 typesByNode.TryGetValue(
@@ -1574,6 +1600,7 @@ public static class WorldSchema {
                         RestoreSkippedProperty(
                             index: index,
                             jsonName: jsonName,
+                            nested: nested,
                             ownerType: ownerType,
                             propertyObject: propertyObject,
                             typesByNode: typesByNode
@@ -1586,6 +1613,7 @@ public static class WorldSchema {
                 if (child is not null) {
                     RestoreSkippedPropertyAnnotations(
                         index: index,
+                        nested: nested,
                         node: child,
                         typesByNode: typesByNode
                     );
@@ -1596,6 +1624,7 @@ public static class WorldSchema {
                 if (child is not null) {
                     RestoreSkippedPropertyAnnotations(
                         index: index,
+                        nested: nested,
                         node: child,
                         typesByNode: typesByNode
                     );
@@ -1672,7 +1701,7 @@ public static class WorldSchema {
     // assembly's XML documentation, teaches a custom-converted node its own "type"/"enum" (see
     // ApplyConverterVocabulary), and — at the document root only, when the root type has one — the Extensions bag's
     // reserved-prefix carve-out.
-    private static JsonNode Transform(JsonSchemaExporterContext context, IReadOnlyDictionary<string, XElement>? index, JsonNode node, Dictionary<JsonNode, Type> typesByNode) {
+    private static JsonNode Transform(JsonSchemaExporterContext context, IReadOnlyDictionary<string, XElement>? index, JsonNode node, Dictionary<JsonNode, Type> typesByNode, NestedExports? nested) {
         if (
             (node is JsonObject alreadyRef) &&
             alreadyRef.ContainsKey(propertyName: "$ref")
@@ -1699,8 +1728,11 @@ public static class WorldSchema {
         typesByNode[obj] = context.TypeInfo.Type;
 
         ApplyConverterVocabulary(
+            index: index,
+            nested: nested,
             obj: obj,
-            propertyType: context.TypeInfo.Type
+            propertyType: context.TypeInfo.Type,
+            typesByNode: typesByNode
         );
 
         if (description is not null) {
@@ -1773,6 +1805,92 @@ public static class WorldSchema {
         text = null;
 
         return false;
+    }
+    // A nested export's occurrences within one unsplit document: the first exports in full and every later one is
+    // a placeholder ResolveNestedRefs repoints at it by JSON pointer once the tree is final — the same device the
+    // exporter's own cache uses for a repeated type. The split export passes no cache: its hoist dedups by content.
+    private sealed class NestedExports {
+        public Dictionary<Type, JsonNode> First { get; } = [];
+        public List<(Type Type, JsonObject Placeholder)> Later { get; } = [];
+    }
+    private static JsonNode ExportNested(Type type, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode, NestedExports? nested) {
+        if ((nested is not null) && nested.First.ContainsKey(key: type)) {
+            var placeholder = new JsonObject();
+
+            nested.Later.Add(item: (type, placeholder));
+
+            return placeholder;
+        }
+
+        var exporterOptions = new JsonSchemaExporterOptions {
+            TransformSchemaNode = (context, node) => Transform(
+            context: context,
+            index: index,
+            nested: nested,
+            node: node,
+            typesByNode: typesByNode
+        ),
+            TreatNullObliviousAsNonNullable = true,
+        };
+        var exported = WorldJsonContext.Default.Options.GetJsonSchemaAsNode(
+            type: type,
+            exporterOptions: exporterOptions
+        );
+
+        nested?.First.Add(
+            key: type,
+            value: exported
+        );
+
+        return exported;
+    }
+    private static void ResolveNestedRefs(JsonObject root, NestedExports nested) {
+        foreach (var (type, placeholder) in nested.Later) {
+            var pointer = JsonPointerOf(
+                node: nested.First[type],
+                root: root
+            ) ?? throw new InvalidOperationException(message: $"the first export of {type.Name} is no longer in the document");
+
+            placeholder["$ref"] = $"#{pointer}";
+        }
+    }
+    // The document-absolute JSON pointer of node under root, by parent-chain walk; null when node is not in root.
+    private static string? JsonPointerOf(JsonNode node, JsonObject root) {
+        var segments = new List<string>();
+        var cursor = node;
+
+        while (!ReferenceEquals(cursor, root)) {
+            var parent = cursor.Parent;
+
+            if (parent is null) {
+                return null;
+            }
+
+            segments.Add(item: (parent is JsonArray array)
+                ? array.IndexOf(item: cursor).ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
+                : cursor.GetPropertyName().Replace(oldValue: "~", newValue: "~0", comparisonType: StringComparison.Ordinal).Replace(oldValue: "/", newValue: "~1", comparisonType: StringComparison.Ordinal));
+            cursor = parent;
+        }
+
+        segments.Reverse();
+
+        return string.Concat(values: segments.Select(selector: static segment => "/" + segment));
+    }
+    private static bool TryGetNodeConverter(Type propertyType, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IJsonSchemaNodeConverter? converter) {
+        var effectiveType = (Nullable.GetUnderlyingType(nullableType: propertyType) ?? propertyType);
+        JsonConverter? resolved;
+
+        try {
+            resolved = WorldJsonContext.Default.Options.GetConverter(typeToConvert: effectiveType);
+        } catch (NotSupportedException) {
+            converter = null;
+
+            return false;
+        }
+
+        converter = (resolved as IJsonSchemaNodeConverter);
+
+        return (converter is not null);
     }
     // Resolves propertyType's OWN registered converter — unwrapping Nullable<T> first, since a value type's
     // nullable annotation is a distinct CLR type (System.Nullable<T>) the Converters array never names directly —
@@ -1908,6 +2026,7 @@ public static class WorldSchema {
         RestoreSkippedPropertyAnnotations(
             node: merged,
             index: XmlDocIndex.Value,
+            nested: null,
             typesByNode: typesByNode
         );
 
@@ -2065,10 +2184,12 @@ public static class WorldSchema {
 
         var index = XmlDocIndex.Value;
         var typesByNode = new Dictionary<JsonNode, Type>(comparer: ReferenceEqualityComparer.Instance);
+        var nested = new NestedExports();
         var exporterOptions = new JsonSchemaExporterOptions {
             TransformSchemaNode = (context, node) => Transform(
             context: context,
             index: index,
+            nested: nested,
             node: node,
             typesByNode: typesByNode
         ),
@@ -2103,11 +2224,16 @@ public static class WorldSchema {
 
         RestoreSkippedPropertyAnnotations(
             index: index,
+            nested: nested,
             node: root,
             typesByNode: typesByNode
         );
         ApplyPostRenderExtensions(
             extensions: postRenderExtensions,
+            root: root
+        );
+        ResolveNestedRefs(
+            nested: nested,
             root: root
         );
 
@@ -2120,10 +2246,12 @@ public static class WorldSchema {
     public static JsonObject ExportSilo() {
         var index = XmlDocIndex.Value;
         var typesByNode = new Dictionary<JsonNode, Type>(comparer: ReferenceEqualityComparer.Instance);
+        var nested = new NestedExports();
         var exporterOptions = new JsonSchemaExporterOptions {
             TransformSchemaNode = (context, node) => Transform(
             context: context,
             index: index,
+            nested: nested,
             node: node,
             typesByNode: typesByNode
         ),
@@ -2158,8 +2286,13 @@ public static class WorldSchema {
 
         RestoreSkippedPropertyAnnotations(
             index: index,
+            nested: nested,
             node: root,
             typesByNode: typesByNode
+        );
+        ResolveNestedRefs(
+            nested: nested,
+            root: root
         );
 
         return root;

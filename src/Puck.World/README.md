@@ -1188,4 +1188,8 @@ includes legal/blocked moves, ray flips, ordered card transfer, and replay.
 rule select eligible actions by highest score or weighted chance, with authored
 reconsideration, commitment, and interrupts. Inspect them with `world.decisions`;
 `world.rules` identifies policy-bearing rules and `world.budget` includes their
-worst-case work. The Schema reference includes a complete rule example.
+worst-case work (`world.budget.rules` breaks the total down by rule). To
+debug one rule, `world.rule.trace <rule>` captures its next evaluations —
+bindings, each gate conjunct's values and verdict, each effect's value and
+outcome — and prints them after a `world.wait`. The Schema reference includes a
+complete rule example.

@@ -72,7 +72,7 @@
         "default": 64
       },
       "value": {
-        "$ref": "./common.schema.json#/$defs/WorldValueExpressionNullable",
+        "$ref": "./common.schema.json#/$defs/WorldValueExpression",
         "description": "For a zone source, an expression in the pattern\u0027s kind evaluated once per token in pile order, where a state token keyed $token reads that token\u0027s cell of a row keyed over the zone\u0027s token domain: the word over a tuple of attributes (suit * 16 \u002B rank) rather than one. Exclusive with Attribute.",
         "default": null
       }

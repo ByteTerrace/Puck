@@ -599,12 +599,12 @@
                       "default": null
                     },
                     "cohesionAffinity": {
-                      "$ref": "./common.schema.json#/$defs/WorldValueExpressionNullable",
+                      "$ref": "./common.schema.json#/$defs/WorldValueExpression",
                       "description": "Optional Fixed expression weighting each retained neighbor in the centroid. Left is the observer, right the neighbor. State-backed facts only; sampled at UpdateSeconds, clamped to [0,1], arithmetic failure reads zero, absent reads one. This does not filter separation or increase the candidate budget.",
                       "default": null
                     },
                     "alignmentAffinity": {
-                      "$ref": "./common.schema.json#/$defs/WorldValueExpressionNullable",
+                      "$ref": "./common.schema.json#/$defs/WorldValueExpression",
                       "description": "Independent Fixed expression weighting each retained neighbor\u0027s heading, under the same contract as CohesionAffinity. Affinities select relative influence; the outer Alignment and Cohesion weights set term strength.",
                       "default": null
                     }

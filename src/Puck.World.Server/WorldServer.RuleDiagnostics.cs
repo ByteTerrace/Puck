@@ -44,6 +44,8 @@ public sealed partial class WorldServer {
         var count = m_ruleRefusalCounts[index];
         count = ((count == ulong.MaxValue) ? count : (count + 1UL));
         m_ruleRefusalCounts[index] = count;
+        m_ruleRefusalSerial++;
+        m_lastRuleRefusal = $"{refusal}: {detail}";
         m_ruleRefusalLatest[index] = new WorldRuleRuntimeDiagnostic(
             Refusal: refusal,
             Count: count,

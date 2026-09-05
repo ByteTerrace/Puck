@@ -4685,453 +4685,461 @@
                             },
                             "left": {
                               "description": "Left numeric expression.",
-                              "type": "object",
-                              "properties": {
-                                "tokens": {
-                                  "description": "The postfix tokens, in evaluation order.",
-                                  "type": "array",
-                                  "items": {
-                                    "description": "One authored token in a WorldValueExpression.",
-                                    "type": [
-                                      "object",
-                                      "null"
-                                    ],
-                                    "required": [
-                                      "$type"
-                                    ],
-                                    "anyOf": [
-                                      {
-                                        "description": "An exact authored decimal, converted to the destination row\u0027s numeric kind at compile time.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "constant"
-                                          },
-                                          "value": {
-                                            "description": "The exact decimal literal.",
-                                            "type": "number"
-                                          }
-                                        },
+                              "anyOf": [
+                                {
+                                  "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 4096
+                                },
+                                {
+                                  "description": "The postfix object spelling of a WorldValueExpression: { \u0022tokens\u0022: [...] }. The converter reads this shape when an expression is authored as tokens and writes it back for an expression that carries no infix text.",
+                                  "type": "object",
+                                  "properties": {
+                                    "tokens": {
+                                      "description": "The postfix tokens, in evaluation order.",
+                                      "type": "array",
+                                      "items": {
+                                        "description": "One authored token in a WorldValueExpression.",
+                                        "type": "object",
                                         "required": [
-                                          "value"
+                                          "$type"
                                         ],
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "A live state cell or reserved world-rule channel.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "state"
-                                          },
-                                          "name": {
-                                            "description": "The state row or reserved-channel name.",
-                                            "type": "string"
-                                          },
-                                          "key": {
-                                            "description": "The optional keyed-row cell.",
-                                            "type": [
-                                              "string",
-                                              "null"
+                                        "anyOf": [
+                                          {
+                                            "description": "An exact authored decimal, converted to the destination row\u0027s numeric kind at compile time.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "constant"
+                                              },
+                                              "value": {
+                                                "description": "The exact decimal literal.",
+                                                "type": "number"
+                                              }
+                                            },
+                                            "required": [
+                                              "value"
                                             ],
-                                            "default": null
-                                          }
-                                        },
-                                        "required": [
-                                          "name"
-                                        ],
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes two values and pushes their sum.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "add"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes two values and pushes left minus right.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "subtract"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes two values and pushes their product in the destination row\u0027s numeric domain.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "multiply"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes two values and pushes left divided by right; zero fails evaluation. The caller closes a gate, rejects an effect/decision candidate, or supplies zero affinity according to its own contract.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "divide"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes two values and pushes the lesser.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "min"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes two values and pushes the greater.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "max"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes value, minimum, maximum (in that authored order) and pushes the inclusive clamp.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "clamp"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes two values and pushes the remainder of left divided by right, truncating toward zero (Int: 37 % 40 = 37; Fixed: the raw remainder, so 2.5 % 1 = 0.5). A zero divisor fails evaluation; a divisor of -1 yields zero.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "modulo"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes two Int values and pushes their bitwise AND. Int expressions only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "bitAnd"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes two Int values and pushes their bitwise OR. Int expressions only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "bitOr"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes two Int values and pushes their bitwise XOR. Int expressions only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "bitXor"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes one Int value and pushes its bitwise complement. Int expressions only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "bitNot"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes value, count and pushes value shifted left by count bits; bits leave the top without refusal, so 1 shiftLeft 63 is the sign bit. A count outside 0..63 fails evaluation. Int only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "shiftLeft"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes value, count and pushes the arithmetic (sign-propagating) right shift. A count outside 0..63 fails evaluation. Int only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "shiftRight"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes value, count and pushes the logical (zero-filling) right shift, the bitboard walk. A count outside 0..63 fails evaluation. Int only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "shiftRightLogical"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes two same-kind values and pushes Int 1 when equal, else 0.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "equal"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes two same-kind values and pushes Int 1 when unequal, else 0.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "notEqual"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes two same-kind values and pushes Int 1 when left is less than right, else 0.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "less"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes two same-kind values and pushes Int 1 when left is at most right, else 0.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "lessOrEqual"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes two same-kind values and pushes Int 1 when left is greater than right, else 0.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "greater"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes two same-kind values and pushes Int 1 when left is at least right, else 0.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "greaterOrEqual"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes condition, whenTrue, whenFalse (in that authored order) and pushes whenTrue when the Int condition is nonzero, else whenFalse. The two branches must share a kind; the result takes it.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "select"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes one Int value and pushes the number of set bits (0..64): a bitboard\u0027s piece count. Int only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "popCount"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes one Int value and pushes the count of zero bits above the highest set bit (64 for zero): 63 - leadingZeroCount is the highest set square, the integer log2. Int only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "leadingZeroCount"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes one Int value and pushes the count of zero bits below the lowest set bit (64 for zero): the lowest occupied square\u0027s index. Int only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "trailingZeroCount"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes one Int value and pushes its lowest set bit alone (x \u0026 -x; zero for zero): the next piece to visit. Int only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "lowestSetBit"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes one Int value and pushes it with its lowest set bit cleared (x \u0026 (x - 1)): the remaining pieces after a visit. Int only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "clearLowestSetBit"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes value, count and pushes the 64-bit left rotation; a count outside 0..63 fails evaluation. Int only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "rotateLeft"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes value, count and pushes the 64-bit right rotation; a count outside 0..63 fails evaluation. Int only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "rotateRight"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes one Int value and pushes its eight bytes in reverse order: on an 8x8 bitboard, the board flipped rank for rank (a vertical mirror). Int only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "byteSwap"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes one Int value and pushes its 64 bits in reverse order: on an 8x8 bitboard, the board rotated a half turn. Int only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "bitReverse"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes one value and pushes its negation in the same kind; the carrier\u0027s minimum fails evaluation.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "negate"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes one value and pushes its magnitude in the same kind; the carrier\u0027s minimum fails evaluation.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "abs"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes one value of either kind and pushes Int -1, 0, or 1 by its sign.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "sign"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes value, mask and pushes the bits of value at the mask\u0027s set positions, packed toward bit 0 in order (pext): a bitboard\u0027s occupancy along a chosen set of squares as a dense index. Int only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "parallelBitExtract"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes value, mask and pushes the low bits of value scattered to the mask\u0027s set positions in order (pdep): a dense index back onto its squares. Int only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "parallelBitDeposit"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes value, offset, width and pushes the unsigned field of width bits starting at bit offset; width outside 1..64 or offset \u002B width above 64 fails evaluation. Int only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "bitField"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes value, field, offset, width and pushes value with the width bits at offset replaced by the low bits of field; the same bounds as BitField. Int only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "bitInsert"
-                                          }
-                                        },
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes one Int mask over the named topology\u0027s cells (bit c is cell ordinal c, at most 64 cells) and pushes it with every set bit moved to that cell\u0027s neighbour in the named direction; a cell with no neighbour that way drops its bit instead of wrapping, so an attack map never crosses an edge. Int only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "boardShift"
+                                            "additionalProperties": false
                                           },
-                                          "topology": {
-                                            "description": "A discrete topology of state.lattices with at most 64 cells.",
-                                            "type": "string"
+                                          {
+                                            "description": "A live state cell or reserved world-rule channel.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "state"
+                                              },
+                                              "name": {
+                                                "description": "The state row or reserved-channel name.",
+                                                "type": "string"
+                                              },
+                                              "key": {
+                                                "description": "The optional keyed-row cell.",
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ],
+                                                "default": null
+                                              }
+                                            },
+                                            "required": [
+                                              "name"
+                                            ],
+                                            "additionalProperties": false
                                           },
-                                          "direction": {
-                                            "description": "A direction of that topology.",
-                                            "type": "string"
+                                          {
+                                            "description": "Consumes two values and pushes their sum.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "add"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes two values and pushes left minus right.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "subtract"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes two values and pushes their product in the destination row\u0027s numeric domain.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "multiply"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes two values and pushes left divided by right; zero fails evaluation. The caller closes a gate, rejects an effect/decision candidate, or supplies zero affinity according to its own contract.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "divide"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes two values and pushes the lesser.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "min"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes two values and pushes the greater.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "max"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes value, minimum, maximum (in that authored order) and pushes the inclusive clamp.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "clamp"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes two values and pushes the remainder of left divided by right, truncating toward zero (Int: 37 % 40 = 37; Fixed: the raw remainder, so 2.5 % 1 = 0.5). A zero divisor fails evaluation; a divisor of -1 yields zero.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "modulo"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes two Int values and pushes their bitwise AND. Int expressions only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "bitAnd"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes two Int values and pushes their bitwise OR. Int expressions only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "bitOr"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes two Int values and pushes their bitwise XOR. Int expressions only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "bitXor"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes one Int value and pushes its bitwise complement. Int expressions only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "bitNot"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes value, count and pushes value shifted left by count bits; bits leave the top without refusal, so 1 shiftLeft 63 is the sign bit. A count outside 0..63 fails evaluation. Int only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "shiftLeft"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes value, count and pushes the arithmetic (sign-propagating) right shift. A count outside 0..63 fails evaluation. Int only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "shiftRight"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes value, count and pushes the logical (zero-filling) right shift, the bitboard walk. A count outside 0..63 fails evaluation. Int only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "shiftRightLogical"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes two same-kind values and pushes Int 1 when equal, else 0.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "equal"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes two same-kind values and pushes Int 1 when unequal, else 0.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "notEqual"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes two same-kind values and pushes Int 1 when left is less than right, else 0.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "less"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes two same-kind values and pushes Int 1 when left is at most right, else 0.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "lessOrEqual"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes two same-kind values and pushes Int 1 when left is greater than right, else 0.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "greater"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes two same-kind values and pushes Int 1 when left is at least right, else 0.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "greaterOrEqual"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes condition, whenTrue, whenFalse (in that authored order) and pushes whenTrue when the Int condition is nonzero, else whenFalse. The two branches must share a kind; the result takes it.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "select"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes one Int value and pushes the number of set bits (0..64): a bitboard\u0027s piece count. Int only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "popCount"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes one Int value and pushes the count of zero bits above the highest set bit (64 for zero): 63 - leadingZeroCount is the highest set square, the integer log2. Int only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "leadingZeroCount"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes one Int value and pushes the count of zero bits below the lowest set bit (64 for zero): the lowest occupied square\u0027s index. Int only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "trailingZeroCount"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes one Int value and pushes its lowest set bit alone (x \u0026 -x; zero for zero): the next piece to visit. Int only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "lowestSetBit"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes one Int value and pushes it with its lowest set bit cleared (x \u0026 (x - 1)): the remaining pieces after a visit. Int only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "clearLowestSetBit"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes value, count and pushes the 64-bit left rotation; a count outside 0..63 fails evaluation. Int only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "rotateLeft"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes value, count and pushes the 64-bit right rotation; a count outside 0..63 fails evaluation. Int only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "rotateRight"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes one Int value and pushes its eight bytes in reverse order: on an 8x8 bitboard, the board flipped rank for rank (a vertical mirror). Int only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "byteSwap"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes one Int value and pushes its 64 bits in reverse order: on an 8x8 bitboard, the board rotated a half turn. Int only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "bitReverse"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes one value and pushes its negation in the same kind; the carrier\u0027s minimum fails evaluation.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "negate"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes one value and pushes its magnitude in the same kind; the carrier\u0027s minimum fails evaluation.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "abs"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes one value of either kind and pushes Int -1, 0, or 1 by its sign.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "sign"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes value, mask and pushes the bits of value at the mask\u0027s set positions, packed toward bit 0 in order (pext): a bitboard\u0027s occupancy along a chosen set of squares as a dense index. Int only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "parallelBitExtract"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes value, mask and pushes the low bits of value scattered to the mask\u0027s set positions in order (pdep): a dense index back onto its squares. Int only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "parallelBitDeposit"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes value, offset, width and pushes the unsigned field of width bits starting at bit offset; width outside 1..64 or offset \u002B width above 64 fails evaluation. Int only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "bitField"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes value, field, offset, width and pushes value with the width bits at offset replaced by the low bits of field; the same bounds as BitField. Int only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "bitInsert"
+                                              }
+                                            },
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes one Int mask over the named topology\u0027s cells (bit c is cell ordinal c, at most 64 cells) and pushes it with every set bit moved to that cell\u0027s neighbour in the named direction; a cell with no neighbour that way drops its bit instead of wrapping, so an attack map never crosses an edge. Int only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "boardShift"
+                                              },
+                                              "topology": {
+                                                "description": "A discrete topology of state.lattices with at most 64 cells.",
+                                                "type": "string"
+                                              },
+                                              "direction": {
+                                                "description": "A direction of that topology.",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "topology",
+                                              "direction"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "description": "Consumes one Int mask over the named topology\u0027s cells and pushes it carried through a point-group element of that topology (a rotation or mirror of the board), so a rule authored from one side\u0027s view reads the other side\u0027s board through the half turn. Int only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "boardImage"
+                                              },
+                                              "topology": {
+                                                "description": "A discrete topology of state.lattices with at most 64 cells.",
+                                                "type": "string"
+                                              },
+                                              "element": {
+                                                "description": "An element name world.topology lists for that topology.",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "topology",
+                                              "element"
+                                            ],
+                                            "additionalProperties": false
                                           }
-                                        },
-                                        "required": [
-                                          "topology",
-                                          "direction"
-                                        ],
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Consumes one Int mask over the named topology\u0027s cells and pushes it carried through a point-group element of that topology (a rotation or mirror of the board), so a rule authored from one side\u0027s view reads the other side\u0027s board through the half turn. Int only.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "boardImage"
-                                          },
-                                          "topology": {
-                                            "description": "A discrete topology of state.lattices with at most 64 cells.",
-                                            "type": "string"
-                                          },
-                                          "element": {
-                                            "description": "An element name world.topology lists for that topology.",
-                                            "type": "string"
-                                          }
-                                        },
-                                        "required": [
-                                          "topology",
-                                          "element"
-                                        ],
-                                        "additionalProperties": false
+                                        ]
                                       }
-                                    ]
-                                  }
+                                    }
+                                  },
+                                  "required": [
+                                    "tokens"
+                                  ],
+                                  "additionalProperties": false
                                 }
-                              },
-                              "required": [
-                                "tokens"
-                              ],
-                              "additionalProperties": false
+                              ]
                             },
                             "comparison": {
                               "description": "The comparison operation.",
@@ -5146,16 +5154,17 @@
                             },
                             "right": {
                               "description": "Right numeric expression.",
-                              "type": "object",
-                              "properties": {
-                                "tokens": {
-                                  "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens"
+                              "anyOf": [
+                                {
+                                  "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 4096
+                                },
+                                {
+                                  "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/anyOf/1"
                                 }
-                              },
-                              "required": [
-                                "tokens"
-                              ],
-                              "additionalProperties": false
+                              ]
                             },
                             "kind": {
                               "description": "The common Int or Fixed domain; no implicit conversion is performed.",
@@ -5331,7 +5340,18 @@
                                         "const": "compareValue"
                                       },
                                       "left": {
-                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left"
+                                        "description": "Left numeric expression.",
+                                        "anyOf": [
+                                          {
+                                            "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 4096
+                                          },
+                                          {
+                                            "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/anyOf/1"
+                                          }
+                                        ]
                                       },
                                       "comparison": {
                                         "description": "The comparison operation.",
@@ -5345,7 +5365,18 @@
                                         ]
                                       },
                                       "right": {
-                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/right"
+                                        "description": "Right numeric expression.",
+                                        "anyOf": [
+                                          {
+                                            "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 4096
+                                          },
+                                          {
+                                            "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/anyOf/1"
+                                          }
+                                        ]
                                       },
                                       "kind": {
                                         "description": "The common Int or Fixed domain; no implicit conversion is performed.",
@@ -5550,7 +5581,18 @@
                                                 "const": "compareValue"
                                               },
                                               "left": {
-                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left"
+                                                "description": "Left numeric expression.",
+                                                "anyOf": [
+                                                  {
+                                                    "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 4096
+                                                  },
+                                                  {
+                                                    "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/anyOf/1"
+                                                  }
+                                                ]
                                               },
                                               "comparison": {
                                                 "description": "The comparison operation.",
@@ -5564,7 +5606,18 @@
                                                 ]
                                               },
                                               "right": {
-                                                "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/right"
+                                                "description": "Right numeric expression.",
+                                                "anyOf": [
+                                                  {
+                                                    "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 4096
+                                                  },
+                                                  {
+                                                    "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/anyOf/1"
+                                                  }
+                                                ]
                                               },
                                               "kind": {
                                                 "description": "The common Int or Fixed domain; no implicit conversion is performed.",
@@ -11653,20 +11706,18 @@
                         },
                         "expression": {
                           "description": "World scope only: a bounded numeric expression evaluated in the destination row\u0027s integer or fixed-point domain. Exactly one source spelling is authored.",
-                          "type": [
-                            "object",
-                            "null"
-                          ],
-                          "properties": {
-                            "tokens": {
-                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens"
+                          "default": null,
+                          "anyOf": [
+                            {
+                              "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4096
+                            },
+                            {
+                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/anyOf/1"
                             }
-                          },
-                          "required": [
-                            "tokens"
-                          ],
-                          "additionalProperties": false,
-                          "default": null
+                          ]
                         }
                       },
                       "required": [
@@ -11735,20 +11786,18 @@
                         },
                         "expression": {
                           "description": "World scope only \u2014 see Expression.",
-                          "type": [
-                            "object",
-                            "null"
-                          ],
-                          "properties": {
-                            "tokens": {
-                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens"
+                          "default": null,
+                          "anyOf": [
+                            {
+                              "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4096
+                            },
+                            {
+                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/anyOf/1"
                             }
-                          },
-                          "required": [
-                            "tokens"
-                          ],
-                          "additionalProperties": false,
-                          "default": null
+                          ]
                         }
                       },
                       "required": [
@@ -11792,20 +11841,18 @@
                         },
                         "expression": {
                           "description": "A bounded numeric expression evaluated in the row\u0027s kind.",
-                          "type": [
-                            "object",
-                            "null"
-                          ],
-                          "properties": {
-                            "tokens": {
-                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens"
+                          "default": null,
+                          "anyOf": [
+                            {
+                              "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4096
+                            },
+                            {
+                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/anyOf/1"
                             }
-                          },
-                          "required": [
-                            "tokens"
-                          ],
-                          "additionalProperties": false,
-                          "default": null
+                          ]
                         }
                       },
                       "required": [
@@ -12777,20 +12824,18 @@
                                   },
                                   "expression": {
                                     "description": "The bounded postfix numeric source.",
-                                    "type": [
-                                      "object",
-                                      "null"
-                                    ],
-                                    "properties": {
-                                      "tokens": {
-                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens"
+                                    "default": null,
+                                    "anyOf": [
+                                      {
+                                        "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 4096
+                                      },
+                                      {
+                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/anyOf/1"
                                       }
-                                    },
-                                    "required": [
-                                      "tokens"
-                                    ],
-                                    "additionalProperties": false,
-                                    "default": null
+                                    ]
                                   }
                                 },
                                 "required": [
@@ -12850,20 +12895,18 @@
                                   },
                                   "expression": {
                                     "description": "The bounded postfix numeric source.",
-                                    "type": [
-                                      "object",
-                                      "null"
-                                    ],
-                                    "properties": {
-                                      "tokens": {
-                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/properties/tokens"
+                                    "default": null,
+                                    "anyOf": [
+                                      {
+                                        "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 4096
+                                      },
+                                      {
+                                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/3/properties/left/anyOf/1"
                                       }
-                                    },
-                                    "required": [
-                                      "tokens"
-                                    ],
-                                    "additionalProperties": false,
-                                    "default": null
+                                    ]
                                   }
                                 },
                                 "required": [
