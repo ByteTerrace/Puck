@@ -1009,8 +1009,8 @@ public sealed partial class WorldBody {
     }
     // Integrates ONE gravity channel whatever sources it — the world's solved field when it authors one, the row's
     // own arc otherwise. The rise/fall asymmetry is SHAPING, not a source — under a solved field it rides as the
-    // row's authored Rise:Fall ratio so a floaty top of the arc survives on a planetoid, and the row's own Terminal
-    // clamps either way. `scale` is the fraction of the arc still reaching the body — a lift row's own fraction
+    // row's authored Rise:Fall ratio so a floaty top of the arc survives on a planetoid, and the row's own
+    // hold.Envelope.SinkSpeed clamps either way. `scale` is the fraction of the arc still reaching the body — a lift row's own fraction
     // cancels the rest; one is the unscaled arc. m_scale (the body's own geometric scale, distinct from `scale`)
     // multiplies both the acceleration and the terminal speed, so a shrunk body falls proportionally slower and
     // settles under proportionally less overshoot than its own tiny collider skin margin.
@@ -1105,10 +1105,12 @@ public sealed partial class WorldBody {
         m_verticalVelocityAccumulator.Reset();
         scratch.DirectVerticalVelocity = ((drive * scratch.MoveSpeed) * hold.Thrust);
     }
-    // The world's own gravity-up projected against the field's own plane never resolves below this alignment: past
-    // roughly an 87-degree tilt between the two, the ray a body would have to travel along its own up to reach the
-    // field's horizontal plane blows up (division by a near-zero denominator), so the medium law treats that tick as
-    // no medium at all rather than wrap a division into a nonsense displacement.
+    // The floor on |Dot(gravity-up, field normal)| the displacement divide (surface.Point - position) / alignment
+    // below is trusted at: past roughly an 87-degree tilt between the two, the ray a body would have to travel
+    // along its own up to reach the field's horizontal plane blows up (division by a near-zero denominator), so the
+    // medium law treats that tick as no medium at all rather than wrap the division into a nonsense displacement. A
+    // tolerance rather than a feel knob, the same register as HoldTrackAlignment: it separates a genuinely
+    // near-tangent field from an ordinary tilt, far past any angle an authored gravity/medium pairing runs at.
     private static readonly FixedQ4816 MinMediumUpAlignment = FixedQ4816.FromDouble(value: 0.05);
 
     // The one medium law. The body's own commanded thrust is folded into the medium's drift before the convergence
