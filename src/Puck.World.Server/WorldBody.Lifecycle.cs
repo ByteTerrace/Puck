@@ -202,7 +202,7 @@ public sealed partial class WorldBody {
         );
     }
     /// <summary>Enqueues a timed scripted segment onto the tape: while it is live it drives the avatar with
-    /// <paramref name="intent"/>, overriding the held keys (or, on a population entry, its wander), for
+    /// <paramref name="intent"/>, overriding the held keys (or, on a population entry, its producer), for
     /// <paramref name="seconds"/> of advance time. All six channels are clamped to <c>[-1, 1]</c> — the planar three
     /// three leave the 6DOF three at their zero default, and <c>body.fly</c>'s full six carry all of them.
     /// A non-positive duration is ignored.</summary>
@@ -467,24 +467,51 @@ public sealed partial class WorldBody {
         m_carry = carry;
 
         var previousTetherFacet = m_tetherFacet;
-        var hadTetherFacet = (previousTetherFacet is not null);
 
         m_tetherFacet = tether;
 
-        if (hadTetherFacet != (tether is not null)) {
-            // The tether facet's own presence just changed (a document mutation swapped this slot's kit) — drop any
-            // live attach rather than let it dangle against ordinals a new (or absent) facet no longer resolves.
+        // Facet IDENTITY minus ModeState, not presence: a kit swap between two kits that both author a tether facet
+        // still changes which ordinals/params a live attach is judged against, so it must reset here too — presence
+        // alone would miss it, leaving the old FixedTetherConstraint and edge bits standing against the new facet.
+        // ModeState is excluded because it is orthogonal bookkeeping (cleared/republished on its own ordinal below);
+        // a retune changing only the modeState slot keeps a live attach rather than dropping it needlessly.
+        static FixedWorldTether? WithoutModeState(FixedWorldTether? facet) => (facet is { } value
+            ? (value with { ModeStateOrdinal = -1 })
+            : null
+        );
+        var tetherFacetChanged = (WithoutModeState(facet: previousTetherFacet) != WithoutModeState(facet: tether));
+        var tetherEdgeBindingChanged = (
+            (previousTetherFacet?.AttachChannelOrdinal ?? -1) != (tether?.AttachChannelOrdinal ?? -1) ||
+            (previousTetherFacet?.AttachThreshold ?? FixedQ4816.Zero) != (tether?.AttachThreshold ?? FixedQ4816.Zero) ||
+            (previousTetherFacet?.DetachChannelOrdinal ?? -1) != (tether?.DetachChannelOrdinal ?? -1) ||
+            (previousTetherFacet?.DetachThreshold ?? FixedQ4816.Zero) != (tether?.DetachThreshold ?? FixedQ4816.Zero)
+        );
+        var previousModeStateOrdinal = (previousTetherFacet?.ModeStateOrdinal ?? -1);
+        var modeStateOrdinal = (tether?.ModeStateOrdinal ?? -1);
+
+        if (tetherFacetChanged) {
+            // The tether facet's own identity just changed (a document mutation swapped this slot's kit to one
+            // gaining, losing, or simply authoring a DIFFERENT tether facet) — drop any live attach rather than let
+            // it dangle against ordinals/params a new facet no longer resolves, or a kept facet's own retuned values.
             ClearTether();
+
+            // When the facet keeps the same mode row, the ordinal-change block below does not run; publish the
+            // cleared attach fact here rather than leaving the durable row at 1 after the rope is gone.
+            if (previousModeStateOrdinal == modeStateOrdinal) {
+                WriteTetherModeState();
+            }
+        }
+        if (tetherEdgeBindingChanged) {
+            // Each bit belongs to the old ordinal/threshold pair. Keeping it after either binding changes would make
+            // the first press under the new facet depend on a different channel's previous sample.
             m_attachPreviousBit = false;
             m_detachPreviousBit = false;
-
+        }
+        if (previousModeStateOrdinal != modeStateOrdinal) {
             // The OLD facet's modeState row (bodyState/identityState declarations are world-global, so its ordinal
             // resolves identically under any kit) may still read 1 from before the swap — CompileActionState just
-            // preserved every Durable slot's value across this recompile by name. Zero it directly: WriteTetherModeState
-            // reads the NEW facet (already null on a loss, or a different ordinal on a gain), so it cannot be the one
-            // to clear the old bit.
-            var previousModeStateOrdinal = (previousTetherFacet?.ModeStateOrdinal ?? -1);
-
+            // preserved every Durable slot's value across this recompile by name. Zero it directly before publishing
+            // the live attach fact through the new facet's ordinal.
             if (previousModeStateOrdinal >= 0) {
                 ApplyRawState(
                     reason: "tether.mode",
@@ -494,6 +521,8 @@ public sealed partial class WorldBody {
                 );
                 MarkDurableDirty(slot: previousModeStateOrdinal);
             }
+
+            WriteTetherModeState();
         }
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
@@ -921,7 +950,7 @@ public sealed partial class WorldBody {
     public bool InMedium => m_inMedium;
     /// <summary>Gets the avatar's current heading in radians (0 = facing -Z; increases turning left / counter-clockwise).
     /// Under the grounded program this returns the authoritative heading scalar <c>m_yaw</c> directly (the orientation is a
-    /// pure yaw rotation built from it, so decomposing it back out would be a redundant round-trip on the hot wander
+    /// pure yaw rotation built from it, so decomposing it back out would be a redundant round-trip on the hot steering
     /// path). Under the free program, where the full attitude is authoritative and <c>m_yaw</c> is inert, it is the yaw
     /// component of <see cref="Orientation"/>. The <c>body.where</c> read-back and <see cref="DescribePose"/> decompose
     /// the canonical orientation directly, bypassing this property.</summary>

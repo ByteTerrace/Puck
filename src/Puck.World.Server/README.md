@@ -625,7 +625,11 @@ at kit compile time, is written `1`/`0` on every transition
 kit swap that changes the facet's own presence (`RecompileKit`) drops any
 live attach rather than let it dangle against ordinals the new (or absent)
 facet no longer resolves, on the same terms a rigid-facet swap resets
-solver-owned fields. `IntegrationResidue.Tether` (`WorldBody.TetherResidue`)
+solver-owned fields. Any other tether-facet retune drops a live attach and
+publishes the cleared fact through its retained `modeState`. A changed attach/detach binding resets its old edge
+history, and a changed `modeState` ordinal clears the old row and publishes
+the live attach fact through the new one. `IntegrationResidue.Tether`
+(`WorldBody.TetherResidue`)
 carries the attach/detach previous-bits and the complete rope state
 (length, min length, reel remainder, anchor) through
 `WorldAuthorityCheckpointCodec` and the authoritative hash; a cross-world

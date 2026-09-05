@@ -446,6 +446,53 @@ public sealed class TetherLawTests {
         Assert.Contains(actualString: deniedReason, expectedSubstring: "Counter");
     }
     [Fact]
+    public void LiveTetherToTetherKitSwap_ClearsALiveAttach_WhereAKitSwapKeepingTheSameFacetDoesNot() {
+        // A genuinely different facet (MaxAnchorDistance halved) dropped through the ordinary kit-retune path — the
+        // live FixedTetherConstraint must not keep standing against a reach the new facet no longer authors.
+        var changedDocument = BuildTetherDocument(includeWall: false, modeState: "tethered");
+
+        using var changedFixture = Fixtures.FreshServer(definition: changedDocument);
+        var changedBody = JoinBody(fixture: changedFixture);
+
+        changedBody.SubmitIntent(intent: Attach());
+        changedFixture.Step();
+        Assert.NotNull(@object: changedBody.TetherLength);
+
+        var retunedKit = changedFixture.Server.Definition.Kits[0] with {
+            Tether = changedFixture.Server.Definition.Kits[0].Tether! with { MaxAnchorDistance = 10f },
+        };
+
+        changedFixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertKit(Principal: WorldPrincipal.Console, Kit: retunedKit));
+        changedFixture.Step();
+
+        Assert.Null(@object: changedBody.TetherLength);
+        Assert.True(condition: changedBody.TryDescribeActionState(name: "tethered", kind: out _, lifetime: out _, playerWritable: out _, value: out var clearedMode, timerTicks: out _));
+        Assert.Equal(expected: FixedQ4816.Zero, actual: clearedMode);
+
+        // THE CONTROL: the same kit swap through the same mutation path, but retuning a field OTHER than Tether —
+        // RecompileKit still runs (the kit genuinely swaps), yet the facet itself is unchanged, so the live attach
+        // survives, proving the reset above keys on facet inequality rather than firing on every kit retune.
+        var sameDocument = BuildTetherDocument(includeWall: false);
+
+        using var sameFixture = Fixtures.FreshServer(definition: sameDocument);
+        var sameBody = JoinBody(fixture: sameFixture);
+
+        sameBody.SubmitIntent(intent: Attach());
+        sameFixture.Step();
+        Assert.NotNull(@object: sameBody.TetherLength);
+
+        var retunedSpeedKit = sameFixture.Server.Definition.Kits[0] with {
+            Motion = (sameFixture.Server.Definition.Kits[0].Motion! with {
+                Speed = (sameFixture.Server.Definition.Kits[0].Motion!.Speed! with { Value = 9f }),
+            }),
+        };
+
+        sameFixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertKit(Principal: WorldPrincipal.Console, Kit: retunedSpeedKit));
+        sameFixture.Step();
+
+        Assert.NotNull(@object: sameBody.TetherLength);
+    }
+    [Fact]
     public void KitWithNoTetherFacet_RefusesAttachThroughTheTickPath_WhereATetherFacetIsAdmitted() {
         var withoutFacet = Fixtures.BuildDocument();
 
