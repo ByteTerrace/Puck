@@ -542,7 +542,8 @@ public sealed partial class WorldBody {
 
         // A body the rest latch has closed stays FROZEN — position, orientation, and both contact latches held
         // bit-identical — until something wakes it: TryApplyRigidImpulse, CommitRigidHandle (a dynamic-pair
-        // impulse), ApplyRigidPositionalCorrection (a dynamic-pair depenetration), or Pose (a hard teleport — see
+        // impulse), ApplyRigidPositionalCorrection (a dynamic-pair depenetration), Pose (a hard teleport), or
+        // SetContactField (a live solid edit replacing the static world it rested against — both in
         // WorldBody.Lifecycle.cs), each of which clears m_resting itself. `$physics:quiescent`/`world.rigid`/
         // `body.where`'s own "resting" fact all read this latch directly, so this IS what those facts mean: a body
         // actually at rest has nothing left to solve, and re-deriving gravity/contact against it every tick (the

@@ -569,9 +569,25 @@ public sealed partial class WorldBody {
         m_home = home;
     }
     /// <summary>Sets (or clears) the world contact field this body's grounded integrator solves its swept position
-    /// against — the population hands it the live field on activation and every rebuild.</summary>
+    /// against — the population hands it the live field on activation and every rebuild. A rigid kit whose field
+    /// REFERENCE changes is woken: its rest latch was derived against the old static world (see
+    /// <see cref="AdvanceRigid"/>'s rest-latch fast path), and a live solid edit that moved or removed the floor
+    /// beneath it must let it fall rather than leave it frozen in the air — a checkpoint restore hands the field to a
+    /// fresh body BEFORE <see cref="ApplyIntegrationResidue"/> re-applies the captured latch, so a restore is never
+    /// perturbed by this wake.</summary>
     /// <param name="field">The world contact field.</param>
     public void SetContactField(IContactField? field) {
+        if (
+            (m_rigid is not null) &&
+            !ReferenceEquals(
+                objA: m_contactField,
+                objB: field
+            )
+        ) {
+            m_resting = false;
+            m_restingHoldTicks = 0UL;
+        }
+
         m_contactField = field;
     }
     /// <summary>Sets the contact field together with the body-frame policy compiled from the same live definition.

@@ -433,13 +433,13 @@ one PER-PIECE `board`-write rule (never a single rule spanning every piece)
 commits that piece's own code at its own cell — a piece whose body has left
 the frame (captured, knocked clear) refuses only its own write; it never
 costs its neighbours theirs, since a rule's own contiguous run of state
-effects preflights and applies as one atomic candidate. A `body.pose`-driven
-proof at the piece's resting height must pair the pose with a negligible
-`body.impulse` wake — a bare pose that leaves the piece on its support is a
-kinematic write that does not disturb the rigid census, so nothing
-re-derives from it alone; a pose that drops the piece onto or above its
-support un-rests it and crosses `$physics:quiescent`'s Edge on settle with no
-impulse at all. Wake a piece along Y: the `piece` kit's own high
+effects preflights and applies as one atomic candidate. A `body.pose`
+teleport clears the piece's rest latch (`WorldBody.Pose`), so a bare pose at
+the piece's resting height already un-rests it and re-settles it, crossing
+`$physics:quiescent`'s Edge on the settle with no impulse at all; a pose
+that drops the piece onto or above its support does the same through a real
+fall. Pair the pose with a `body.impulse` wake only when the proof wants the
+unsettled window to be impulse-shaped. Wake a piece along Y: the `piece` kit's own high
 rolling/Coulomb friction couples a horizontal wake into spin (the ball's
 known rolling-friction overshoot, here on a lighter body), so the unsettled
 window can run long enough to drift the piece across a cell boundary before

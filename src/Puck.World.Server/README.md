@@ -553,8 +553,11 @@ scales with the body's own live `Scale` (a spatial rate, like a hold's own
 travel speed), the ANGULAR one does not (no length dimension). Once the latch
 closes, `WorldBody.AdvanceRigid` stops integrating that body entirely — position,
 orientation, and both contact latches hold bit-identical every tick — until
-something wakes it (`TryApplyRigidImpulse`, `CommitRigidHandle`, or
-`ApplyRigidPositionalCorrection`, each of which clears the latch itself): this
+something wakes it (`TryApplyRigidImpulse`, `CommitRigidHandle`,
+`ApplyRigidPositionalCorrection`, a `Pose` teleport, or `SetContactField`
+handing it a different field reference — a live solid edit that moved or
+removed the floor it rested against — each of which clears the latch
+itself): this
 is what makes `$physics:quiescent`/the `resting` fact mean a body is not
 moving, rather than merely reporting zero velocity at the instant the latch
 last closed. `body.impulse`

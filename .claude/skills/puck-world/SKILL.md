@@ -354,8 +354,9 @@ choosing fixed-point primitives on sim value paths.
   (`Puck.Physics.FixedColliderBounds.BoxAxes`), not the coarser world-bounds
   approximation every other volume pair still uses. Once the resting latch
   closes, `AdvanceRigid` stops integrating that body entirely until something
-  wakes it (an impulse, a dynamic-pair impulse or depenetration, or a hard
-  teleport) — this is what makes `Resting`/`$physics:quiescent` mean the body
+  wakes it (an impulse, a dynamic-pair impulse or depenetration, a hard
+  teleport, or a live solid edit replacing the contact field it rested
+  against) — this is what makes `Resting`/`$physics:quiescent` mean the body
   is not moving. `body.impulse`, `world.rigid`, `world.budget`, and the
   `$physics:quiescent` rule operand are the console/rule surface; see
   [references/documents.md](references/documents.md#crowd-scale-policies)

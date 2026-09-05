@@ -241,9 +241,9 @@ public sealed class WorldRigidDynamicsLawTests {
         tipped.Pose(x: -1.5f, y: baseRestY, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: tippedRoll);
         control.Pose(x: 1.5f, y: baseRestY, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
 
-        // A bare pose at the resting height is a kinematic write the rigid census never re-derives from (see
-        // Puck.World/README.md's own note on this) — a negligible vertical wake crosses $physics:quiescent's Edge
-        // without adding enough energy to matter next to gravity's own pull over the run below.
+        // A hard pose already clears the rest latch (WorldBody.Pose), so both boxes re-enter the solver on their
+        // own; the negligible vertical wake is kept as the explicit, impulse-shaped "this body is live" statement
+        // the law reads best with, adding no energy that matters next to gravity's own pull over the run below.
         var wake = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.FromDouble(value: 0.01d), Z: FixedQ4816.Zero);
 
         Assert.True(condition: tipped.TryApplyRigidImpulse(impulse: wake, velocityCeiling: FixedQ4816.FromDouble(value: 1_000d)));
@@ -284,5 +284,51 @@ public sealed class WorldRigidDynamicsLawTests {
         // without ever closing the hold window — see Resting's own remarks.
         Assert.True(condition: control.Resting,
             userMessage: $"the control box's speed read low but never actually latched to rest (v={control.RigidVelocity}, holdTicks={control.RigidRestingHoldTicks})");
+    }
+
+    /// <summary>A body the rest latch has frozen (<c>WorldBody.AdvanceRigid</c>'s fast path) must WAKE when a live
+    /// solid edit replaces the static world it rested against: lower the floor placement under a settled box and the
+    /// box falls to the new floor rather than hanging frozen in the air with <c>resting=1</c>. The discriminating
+    /// case for <c>WorldBody.SetContactField</c>'s wake — without it the freeze holds the box bit-identical at its
+    /// old height forever, since nothing else ever touches it.</summary>
+    [Fact]
+    public void ARestingBoxWakesAndFallsWhenALiveSolidEditLowersItsFloor() {
+        using var fixture = Fixtures.FreshServer(definition: BoxOnFloorDocument());
+        var seat = WorldPrincipal.Seat(slot: 0);
+
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(seat, seat.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
+
+        var box = fixture.Server.Body(index: 0)!;
+        var baseRestY = (FloorTopY + BoxHalfExtents.Y);
+
+        // Dropped from just above its rest height so the latch closes from a genuine settle, never a bare pose.
+        box.Pose(x: 0f, y: (baseRestY + 0.1f), z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+
+        for (var tick = 0; ((tick < 2_400) && !box.Resting); tick++) {
+            fixture.Step();
+        }
+
+        Assert.True(condition: box.Resting, userMessage: $"the box never settled on the floor (v={box.RigidVelocity}, y={(double)box.FixedPosition.Y:0.###})");
+
+        var restY = box.FixedPosition.Y;
+        var floor = WorldDefinitionRows.FindPlacement(id: "floor", placements: fixture.Server.Definition.Placements)!;
+        const float Drop = 5f;
+
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertPlacement(
+            Placement: (floor with { Position = (floor.Position - new Vector3(x: 0f, y: Drop, z: 0f)) }),
+            Principal: WorldPrincipal.Console
+        ));
+        fixture.Step();
+
+        var lowered = WorldDefinitionRows.FindPlacement(id: "floor", placements: fixture.Server.Definition.Placements)!;
+
+        Assert.Equal(expected: (floor.Position.Y - Drop), actual: lowered.Position.Y);
+
+        for (var tick = 0; (tick < 240); tick++) {
+            fixture.Step();
+        }
+
+        Assert.True(condition: (box.FixedPosition.Y < (restY - FixedQ4816.FromDouble(value: 1d))),
+            userMessage: $"the box stayed frozen at its old rest height after the floor dropped away (y={(double)box.FixedPosition.Y:0.###}, rest={(double)restY:0.###}, resting={box.Resting})");
     }
 }
