@@ -444,7 +444,7 @@ public abstract record ActionEffect {
     /// through its own accumulator on top of the body's compiled motion — integration itself is untouched.</summary>
     public sealed record PlanarImpulse(DocumentVector3 BodyDirection, float Speed, float DurationSeconds, ActionTarget Target = ActionTarget.Self) : ActionEffect;
     /// <summary>World scope only: pushes one numeric value into a history row's ring (see
-    /// <see cref="WorldStateHistory"/>), the same source spellings as <see cref="SetState"/> minus text: exactly one
+    /// <see cref="WorldStateDomain.Ring"/>), the same source spellings as <see cref="SetState"/> minus text: exactly one
     /// of <paramref name="Value"/>, <paramref name="FromState"/>, or <paramref name="Expression"/>.</summary>
     /// <param name="State">The history row.</param>
     /// <param name="Value">An exact decimal literal in the row's kind.</param>

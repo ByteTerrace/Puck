@@ -72,7 +72,7 @@ public sealed class WorldTopologyDirectionLawTests {
         var orthogonal = new WorldTopologyDirection[] {
             new("north", 0, -1), new("south", 0, 1), new("east", 1, 0), new("west", -1, 0),
         };
-        var board = new WorldStateRow(WorldCellName.Parse("board"), CellKind.Int, Board: new("grid"));
+        var board = new WorldStateRow(WorldCellName.Parse("board"), CellKind.Int, Domain: new WorldStateDomain.CellsOf("grid"));
         var slot = new WorldStateRow(WorldCellName.Parse("neighbour"), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
         WorldDefinition Document(string direction) => Fixtures.BuildDocument() with {
             StateRaw = new(World: [board, slot], Lattices: [Grid() with { Directions = orthogonal }]),

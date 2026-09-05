@@ -25,7 +25,7 @@ public sealed partial class WorldServer {
         // A lattice row painted by a draw fill: 'generate' advances the row's pass — one whole-field run of its
         // stream — in the document; the apply side then repaints the field at the new cursor/masks. The pass at the
         // CURRENT cursor is fired here only for its tail (the masks it ends with), never for its values.
-        if (siteRow.Lattice is { } latticeTrait) {
+        if (siteRow.Field is { } latticeTrait) {
             if (WorldLatticeFill.FindDraw(trait: latticeTrait) is not { } fill) {
                 reason = $"state row '{mutation.Row}' is a lattice row with no draw paint — 'generate' redraws a draw site or a lattice row painted by a draw fill";
 

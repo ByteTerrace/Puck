@@ -29,11 +29,17 @@ public sealed class WorldDeckAndDisclosureLawTests {
     }
 
     [Fact]
-    public void ShuffleRefusesUnorderedZonesAndBootOnlySites() {
+    public void ShuffleAdmitsAnUnorderedKeyedRowButRefusesASlotAndBootOnlySites() {
+        // keysOf collapsed the old ordered-zone/unordered-attribute-row split into one shape: cell order is either
+        // gameplay-meaningful (a pile) or incidental, but a keyed row's cells can always be permuted either way.
         var unordered = Deck(4) with { };
-        unordered = unordered with { StateRaw = unordered.StateRaw! with { World = unordered.StateRaw.World!.Select(r => r.Name.Value == "deck" ? r with { Zone = new("cards", Ordered: false) } : r).ToArray() } };
-        Assert.False(WorldStateTransforms.TryApply(unordered, new WorldStateTransform.Shuffle("deck", "dice"), WorldPrincipal.World, 0, "test", out _, out var reason));
-        Assert.Contains("ordered zone", reason);
+        unordered = unordered with { StateRaw = unordered.StateRaw! with { World = unordered.StateRaw.World!.Select(r => r.Name.Value == "deck" ? r with { Domain = new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: false) } : r).ToArray() } };
+        Assert.True(WorldStateTransforms.TryApply(unordered, new WorldStateTransform.Shuffle("deck", "dice"), WorldPrincipal.World, 0, "test", out _, out var unorderedReason), unorderedReason);
+
+        var slotOnly = Deck(4) with { };
+        slotOnly = slotOnly with { StateRaw = slotOnly.StateRaw! with { World = slotOnly.StateRaw.World!.Select(r => r.Name.Value == "deck" ? r with { Domain = null, Capacity = null, Cells = [new(WorldStateRow.SlotKey, 0)] } : r).ToArray() } };
+        Assert.False(WorldStateTransforms.TryApply(slotOnly, new WorldStateTransform.Shuffle("deck", "dice"), WorldPrincipal.World, 0, "test", out _, out var reason));
+        Assert.Contains("keyed row", reason);
 
         var bootSite = Deck(4);
         bootSite = bootSite with { StateRaw = bootSite.StateRaw! with { World = bootSite.StateRaw.World!.Select(r => r.Name.Value == "dice" ? r with { Draw = r.Draw! with { Timing = WorldDrawTiming.Boot } } : r).ToArray() } };
@@ -78,8 +84,8 @@ public sealed class WorldDeckAndDisclosureLawTests {
         var keys = Enumerable.Range(0, count).Select(i => $"c{i}").ToArray();
         return Fixtures.BuildDocument() with {
             StateRaw = new(World: [
-                new(Name("cards"), CellKind.Int, Cells: keys.Select(k => Cell(k)).ToArray(), Tokens: new(), Capacity: count),
-                new(Name("deck"), CellKind.Bool, Cells: keys.Select(k => Cell(k)).ToArray(), Zone: new("cards", Ordered: true), Capacity: count),
+                new(Name("cards"), CellKind.Int, Cells: keys.Select(k => Cell(k)).ToArray(), Capacity: count),
+                new(Name("deck"), CellKind.Bool, Cells: keys.Select(k => Cell(k)).ToArray(), Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true), Capacity: count),
                 new(Name("dice"), CellKind.Int, Draw: new WorldDraw(Generator: new WorldGenerator(Source: WorldGeneratorSource.StreamDraw), Timing: WorldDrawTiming.Event)),
             ]),
             Rules = [],
@@ -87,8 +93,8 @@ public sealed class WorldDeckAndDisclosureLawTests {
     }
     private static WorldDefinition Hand(WorldHiddenCells hidden) => Fixtures.BuildDocument() with {
         StateRaw = new(World: [
-            new(Name("cards"), CellKind.Int, Cells: [Cell("ace", 101), Cell("king", 202)], Tokens: new(), Visibility: new()),
-            new(Name("hand"), CellKind.Bool, Cells: [Cell("ace") with { Visibility = new(["seat1"]) }, Cell("king") with { Visibility = new(["seat1"]) }], Zone: new("cards", Ordered: true), Visibility: new(Hidden: hidden)),
+            new(Name("cards"), CellKind.Int, Cells: [Cell("ace", 101), Cell("king", 202)], Visibility: new()),
+            new(Name("hand"), CellKind.Bool, Cells: [Cell("ace") with { Visibility = new(["seat1"]) }, Cell("king") with { Visibility = new(["seat1"]) }], Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("cards"), Ordered: true), Visibility: new(Hidden: hidden)),
         ]),
         Rules = [],
     };

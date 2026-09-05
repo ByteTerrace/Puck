@@ -145,15 +145,14 @@ public sealed partial class WorldStateCommandModule {
         if (row.Phase is { } phase) {
             return $" phase sequence={phase.Sequence}";
         }
-        if (row.Board is { } board) {
-            return $" topology={board.Topology} empty={board.Empty}";
-        }
-        if (row.History is { } history) {
-            return $" history capacity={history.Capacity} empty={history.Empty} cursor={row.HistoryCursor} held={Math.Min(row.HistoryCursor, history.Capacity)}";
-        }
-        if (row.Zone is { } zone) {
-            return $" tokens={zone.Tokens} ordered={zone.Ordered}";
-        }
-        return row.KeysFrom is { } keys ? $" keysFrom={keys} valuesFrom={row.ValuesFrom ?? "none"}" : row.Tokens is { } tokens ? $" tokenCapacity={tokens.Capacity}" : string.Empty;
+        var domain = row.EffectiveDomain switch {
+            WorldStateDomain.Slot => "domain=slot",
+            WorldStateDomain.Keys => "domain=keys",
+            WorldStateDomain.KeysOf keysOf => $"domain=keysOf row={keysOf.Row} ordered={keysOf.Ordered}",
+            WorldStateDomain.CellsOf cellsOf => $"domain=cellsOf topology={cellsOf.Topology} empty={cellsOf.Empty}",
+            WorldStateDomain.Ring ring => $"domain=ring capacity={ring.Capacity} empty={ring.Empty} cursor={row.HistoryCursor} held={Math.Min(row.HistoryCursor, ring.Capacity)}",
+            var other => throw new InvalidOperationException($"unknown state domain '{other.GetType().Name}'"),
+        };
+        return row.ValuesFrom is { } valuesFrom ? $" {domain} valuesFrom={valuesFrom}" : $" {domain}";
     }
 }

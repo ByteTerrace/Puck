@@ -10,7 +10,6 @@
         "name": "tiles",
         "kind": "fixed",
         "lattice": {
-          "topology": "grid",
           "initial": 0,
           "min": 0,
           "max": 4,
@@ -39,6 +38,10 @@
               }
             }
           ]
+        },
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "grid"
         }
       }
     ],

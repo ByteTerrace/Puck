@@ -52,13 +52,16 @@
         "name": "water",
         "kind": "fixed",
         "lattice": {
-          "topology": "pool",
           "initial": 0,
           "min": 0,
           "max": 1,
           "heightScale": 5,
           "color": "#3B7BD6",
           "medium": {}
+        },
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "pool"
         }
       }
     ],

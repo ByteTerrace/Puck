@@ -7,7 +7,7 @@ public static class WorldBoardQueries {
     /// <param name="topology">The compiled addressing.</param>
     /// <param name="values">Scratch storage with at least CellCount entries.</param>
     public static void Read(WorldStateRow row, CompiledWorldTopology topology, Span<long> values) {
-        values[..topology.CellCount].Fill(row.Board!.Empty);
+        values[..topology.CellCount].Fill(((WorldStateDomain.CellsOf)row.EffectiveDomain).Empty);
         var cells = row.Cells;
         for (var cellIndex = 0; cellIndex < (cells?.Count ?? 0); cellIndex++) {
             var cell = cells![cellIndex];
@@ -263,7 +263,7 @@ public sealed partial class WorldServer {
             text: out _,
             tick: tick
         ) ||
-            (row.Board is null)
+            (row.EffectiveDomain is not WorldStateDomain.CellsOf rowBoard)
         ) {
             return -1;
         }
@@ -276,6 +276,6 @@ public sealed partial class WorldServer {
         WorldBoardQueries.Read(row, query.Topology, values);
         var key = ResolveOperandKey(operand.Key, operand.KeyFrom, tick);
         var source = key is not null && query.Topology.TryCell(key, out var sourceCell) ? sourceCell : -1;
-        return WorldBoardQueries.Evaluate(query, values, row.Board.Empty, source);
+        return WorldBoardQueries.Evaluate(query, values, rowBoard.Empty, source);
     }
 }

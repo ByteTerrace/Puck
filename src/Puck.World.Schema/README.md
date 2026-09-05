@@ -130,12 +130,17 @@ destination cell's entry cost. Negative terrain is impassable. Equal-cost
 nodes settle by ordinal; the visit bound counts settled nodes. A path budget
 refusal is distinct from proof that no route exists.
 
-`tokens: { "capacity": 256 }` declares stable token identities. `keysFrom`
-restricts an attribute row to those identities; `valuesFrom` additionally
-restricts integer positions to a named topology. A `zone: { "tokens": "cards",
-"ordered": true }` row contains boolean membership cells. For any domain
-with zones, every token belongs to exactly one zone. Cell order is pile order;
-two cards with equal ranks still have different keys. Drawn-generator masks
+A plain keyed row with a declared `capacity` IS the stable token-identity
+domain — no dedicated facet, just `WorldStateDomain.Keys` (`Domain` omitted or
+`{"$type": "keys"}`). Another row's `domain: {"$type": "keysOf", "row":
+"cards"}` restricts its keys to that domain's; `valuesFrom` additionally
+restricts integer positions to a named topology. A `domain: {"$type": "keysOf",
+"row": "cards", "ordered": true}` row contains boolean membership cells. The
+"every token belongs to exactly one zone" invariant is not engine law — it is
+an authored rule (the garden's `cardsZoneAccounting`/`cardsZoneInvariant`
+sums `$reduce:count:` over every zone against the domain's own capacity).
+Cell order is pile order; two cards with equal ranks still have different
+keys. Drawn-generator masks
 are separate from these piles: each `drawnMasks` mask is four 64-bit words,
 serialized as exactly 64 hexadecimal digits, and supports 256 drawn entries.
 
@@ -874,9 +879,11 @@ consolidation.
 
 A lattice is not a separate section: `state.lattices` (`WorldStateLatticeTopology`
 — name, origin, `cellSize`, `width`×`depth`×`layers`, `stepEveryTicks`,
-`reactions`) plus a `lattice` trait on ordinary `fixed`-kind `state.world` rows
-(`WorldStateLatticeTrait` — `topology`, `initial`/`min`/`max`, optional
-`heightScale`/`color`, `paint`) is the whole spelling.
+`reactions`) plus a `domain: {"$type": "cellsOf", "topology": …}` and a
+`lattice` trait on ordinary `fixed`-kind `state.world` rows
+(`WorldStateFieldTrait` — `initial`/`min`/`max`, optional
+`heightScale`/`color`, `paint`; the topology itself lives on `domain`, shared
+with a discrete board's own `cellsOf` case) is the whole spelling.
 `WorldFieldsSection.Compile(state)` assembles the runtime composite
 (`WorldDefinition.Fields`, cached, never an authored member); `ToStateSection`
 is its inverse, for the projection reconstruction that must hand a client-side

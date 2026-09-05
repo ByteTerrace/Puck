@@ -13,7 +13,7 @@ public static partial class WorldDefinitionValidator {
                 errors.Add($"state row '{row.Name}': phaseOf must name a distinct phase protocol row.");
             }
 
-            storage += row.Capacity ?? (row.Board is { } board ? WorldTopologyCompilation.Find(definition.StateRaw, board.Topology)?.CellCount ?? row.CellCeiling : row.CellCeiling);
+            storage += row.Capacity ?? (row.EffectiveDomain is WorldStateDomain.CellsOf board ? WorldTopologyCompilation.Find(definition.StateRaw, board.Topology)?.CellCount ?? row.CellCeiling : row.CellCeiling);
             ValidateVisibility(row.Visibility, row.Name.Value, errors);
             ValidateReadersFrom(definition, row.Visibility, row.Name.Value, errors);
             if (row.Draw is { Secret: { } secret } draw && (secret.IsEmpty || row.Kind != CellKind.Int || !WorldGeneratorEngine.TryResolveSource(definition.Generators, draw, out var generator, out _) || generator.Source != WorldGeneratorSource.StreamDraw || generator.Mode != WorldGeneratorMode.WithReplacement)) {
@@ -44,8 +44,10 @@ public static partial class WorldDefinitionValidator {
 
             var source = WorldDefinitionRows.FindStateRow(definition.State, knowledge.Source);
             var mask = WorldDefinitionRows.FindStateRow(definition.State, knowledge.Mask);
-            if (row.Board is null || row.Visibility is null || source?.Board is null || mask?.Board is null || source.Knowledge is not null || mask.Knowledge is not null ||
-                source.Board.Topology != row.Board.Topology || mask.Board.Topology != row.Board.Topology || source.Kind != row.Kind || mask.Kind != CellKind.Bool ||
+            if (row.EffectiveDomain is not WorldStateDomain.CellsOf rowBoard || row.Visibility is null ||
+                source?.EffectiveDomain is not WorldStateDomain.CellsOf sourceBoard || mask?.EffectiveDomain is not WorldStateDomain.CellsOf maskBoard ||
+                source.Knowledge is not null || mask.Knowledge is not null ||
+                sourceBoard.Topology != rowBoard.Topology || maskBoard.Topology != rowBoard.Topology || source.Kind != row.Kind || mask.Kind != CellKind.Bool ||
                 row.Name.Value == knowledge.Source || row.Name.Value == knowledge.Mask || row.Min != source.Min || row.Max != source.Max || row.NonNegative != source.NonNegative) {
                 errors.Add($"state row '{row.Name}': knowledge requires an explicit audience and distinct compatible source/mask boards with the same value envelope.");
             }

@@ -749,7 +749,7 @@ public static partial class WorldRuleCompiler {
 
         // A lattice row painted by a draw fill is a generate target too: one whole-field pass per firing, with no
         // timing of its own, resolved through the same source walk a slot site takes.
-        var draw = (row.Draw ?? ((WorldLatticeFill.FindDraw(trait: row.Lattice) is { } fill)
+        var draw = (row.Draw ?? ((WorldLatticeFill.FindDraw(trait: row.Field) is { } fill)
             ? new WorldDraw(Source: fill.Source, Generator: fill.Generator, Timing: WorldDrawTiming.Event)
             : null));
 

@@ -80,7 +80,7 @@ public sealed class PlacementResponseValidationLawTests {
             new WorldStateRow(
                 Name: WorldCellName.Parse(candidate: FieldName),
                 Kind: CellKind.Fixed,
-                Lattice: new WorldStateLatticeTrait(Topology: "world", Initial: 0f, Min: 0f, Max: 1f)
+                Domain: new WorldStateDomain.CellsOf(Topology: "world"), Field: new WorldStateFieldTrait(Initial: 0f, Min: 0f, Max: 1f)
             ),
         ],
         Lattices: [

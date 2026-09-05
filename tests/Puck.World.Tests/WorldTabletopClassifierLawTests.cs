@@ -95,8 +95,8 @@ public sealed class WorldTabletopClassifierLawTests {
 
         return document with {
             StateRaw = new WorldStateSection(World: [
-                new WorldStateRow(WorldCellName.Parse(Board), CellKind.Int, Min: -6, Max: 6, Cells: Cells(current), Board: new WorldStateBoard("board")),
-                new WorldStateRow(WorldCellName.Parse(Prev), CellKind.Int, Min: -6, Max: 6, Cells: Cells(previous), Board: new WorldStateBoard("board")),
+                new WorldStateRow(WorldCellName.Parse(Board), CellKind.Int, Min: -6, Max: 6, Cells: Cells(current), Domain: new WorldStateDomain.CellsOf("board")),
+                new WorldStateRow(WorldCellName.Parse(Prev), CellKind.Int, Min: -6, Max: 6, Cells: Cells(previous), Domain: new WorldStateDomain.CellsOf("board")),
                 Slot("ownVac", 0, 65535), Slot("ownOcc", 0, 65535), Slot("otherVac", 0, 65535), Slot("otherOcc", 0, 65535),
                 Slot("quiet", 0, 1), Slot("capture", 0, 1), Slot("castle", 0, 1), Slot("noChange", 0, 1),
                 Slot("fromCell", -6, 16), Slot("toCell", -6, 16), Slot("capturedCell", -6, 16),

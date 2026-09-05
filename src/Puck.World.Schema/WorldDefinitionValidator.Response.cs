@@ -90,7 +90,7 @@ public static partial class WorldDefinitionValidator {
                 } else if (
                     (declared.Kind != CellKind.Fixed) ||
                     declared.IsKeyed ||
-                    (declared.Lattice is not null)
+                    (declared.Field is not null)
                 ) {
                     errors.Add(item: $"{entryPath}.when.value references state row '{row}', which must be a scalar kind=fixed row.");
                 }

@@ -821,13 +821,37 @@ by any document, so the ceiling narrows rather than a multi-word cell-set
 type getting built to fill it — the next world that needs board algebra past
 64 cells is what should motivate that representation, not this pass.
 
-**The row-domain facet collapse remains fully blocked.** `keysOf`, `cellsOf`,
-and `ring` name nothing anywhere in the tree; only handle completion, the
-union rewrite's stated first step above, has landed of that precursor work.
-Deleting the `Tokens`/`Zone`/`KeysFrom`/`Board`/`Lattice`/`History` facets
-today deletes the tabletop primitive, the poker zones, and the island's
-fire/ice/water lattice with no replacement standing in, so it stays
-unstarted until the row-domain union itself ships.
+**The row-domain facet collapse has landed (owner decision).** `WorldStateRow`
+carries one `Domain` (`WorldStateDomain`: `Slot`, `Keys`, `KeysOf(row,
+ordered)`, `CellsOf(topology, empty)`, `Ring(capacity, empty)`), built to the
+same sealed-case-class-plus-`[Union]`-marker pattern the compiled-operand
+rewrite above is landing (shared `UnionPolyfill.cs`). `IsKeyed`/`IsSlot`/
+`CellCeiling` are one switch over it; an unauthored row still infers `Slot`
+or `Keys` from `cells`/`capacity` alone, so a plain row spells nothing new.
+`Tokens`/`Zone`/`KeysFrom`/`Board`/`History` are deleted outright; `Lattice`
+survives only as `WorldStateFieldTrait` (the physical-field row's leftover
+parameters — `initial`/`min`/`max`/`heightScale`/`color`/`paint`/`medium`),
+its own `topology` member folded into `Domain.CellsOf` since a `Field`-kind
+`CellsOf` row and a discrete board are now one case, split by `Kind` alone.
+The document's own token-domain declaration is simply a `Keys` row whose
+`capacity` is the domain size — no second facet — and other rows address its
+keys through `KeysOf`; `ordered: true` is what a pile/zone needs, `ordered:
+false` (the default) is a plain keyed attribute row. The "every token belongs
+to exactly one zone" invariant is no longer engine law: it is an authored
+rule in the garden (`cardsZoneAccounting`/`cardsZoneInvariant`, summing
+`$reduce:count:` over `deck`/`hand1`/`hand2`/`community` against the `cards`
+domain's capacity) — a card leaving the tracked total moves a flag, never a
+validator refusal. Every shipped and canary world is migrated to the `domain`
+member once; the `capture`-scope `world.state.hash` (what `world.state.hash`
+reports by default, and the actual simulated trajectory) is unchanged for
+both the garden and the frozen island. The `authoritative`/replay-tape scope
+— what `replay.verify` checks — moves, unavoidably: it used to hash a
+now-collapsed `Tokens.Capacity` slot distinct from a row's own generic
+`Capacity`, and real documents already carry ordinary capacity-bounded rows
+(`hound`/`spider`/`pieceCell`/…) representation-identical to the old token
+declaration post-collapse, so the old byte, which one distinction ended up
+in, cannot be reconstructed from the new shape without keeping the very
+facet this change deletes.
 
 **The generator's card nouns are renamed to its actual primitive: multiset sampling
 (owner decision, Lane 2c).** `WorldGenerator` draws from a weighted entry set with

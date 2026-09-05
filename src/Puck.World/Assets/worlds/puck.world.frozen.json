@@ -6112,6 +6112,10 @@
         "name": "colors"
       },
       {
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "island"
+        },
         "kind": "fixed",
         "lattice": {
           "color": "#6B4A34",
@@ -6184,12 +6188,15 @@
               "minZ": -26,
               "value": 0.15
             }
-          ],
-          "topology": "island"
+          ]
         },
         "name": "dirt"
       },
       {
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "island"
+        },
         "kind": "fixed",
         "lattice": {
           "color": "#3E8FD0",
@@ -6207,12 +6214,15 @@
               "minZ": -7,
               "value": 3.0
             }
-          ],
-          "topology": "island"
+          ]
         },
         "name": "water"
       },
       {
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "island"
+        },
         "kind": "fixed",
         "lattice": {
           "color": "#5FA04A",
@@ -6237,46 +6247,58 @@
               "minZ": -12,
               "value": 0.8
             }
-          ],
-          "topology": "island"
+          ]
         },
         "name": "grass"
       },
       {
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "island"
+        },
         "kind": "fixed",
         "lattice": {
           "initial": 0,
           "max": 15,
-          "min": -5,
-          "topology": "island"
+          "min": -5
         },
         "name": "heat"
       },
       {
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "island"
+        },
         "kind": "fixed",
         "lattice": {
           "color": "#FF5A1F",
           "heightScale": 0.22,
           "initial": 0,
           "max": 1,
-          "min": 0,
-          "topology": "island"
+          "min": 0
         },
         "name": "fire"
       },
       {
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "island"
+        },
         "kind": "fixed",
         "lattice": {
           "color": "#2A2320",
           "heightScale": 0.15,
           "initial": 0,
           "max": 1,
-          "min": 0,
-          "topology": "island"
+          "min": 0
         },
         "name": "char"
       },
       {
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "island"
+        },
         "kind": "fixed",
         "lattice": {
           "color": "#D8F1FF",
@@ -6293,8 +6315,7 @@
               "minZ": 5,
               "value": 1
             }
-          ],
-          "topology": "island"
+          ]
         },
         "name": "ice"
       },

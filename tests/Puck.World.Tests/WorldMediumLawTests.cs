@@ -164,7 +164,7 @@ public sealed class WorldMediumLawTests {
                     new WorldStateRow(
                         Name: WorldCellName.Parse(candidate: "medium"),
                         Kind: CellKind.Fixed,
-                        Lattice: new WorldStateLatticeTrait(Topology: "world", Medium: new WorldLatticeMedium())
+                        Domain: new WorldStateDomain.CellsOf(Topology: "world"), Field: new WorldStateFieldTrait(Medium: new WorldLatticeMedium())
                     ),
                 ],
                 Lattices: [Topology()]
@@ -184,7 +184,7 @@ public sealed class WorldMediumLawTests {
                     new WorldStateRow(
                         Name: WorldCellName.Parse(candidate: "medium"),
                         Kind: CellKind.Fixed,
-                        Lattice: new WorldStateLatticeTrait(Topology: "world", HeightScale: 5f, Color: "#3B7BD6")
+                        Domain: new WorldStateDomain.CellsOf(Topology: "world"), Field: new WorldStateFieldTrait(HeightScale: 5f, Color: "#3B7BD6")
                     ),
                 ],
                 Lattices: [Topology()]
@@ -400,8 +400,7 @@ public sealed class WorldMediumLawTests {
     }
     [Fact]
     public void AMediumRowSurvivesCompileDecompileRoundTripExactly() {
-        var trait = new WorldStateLatticeTrait(
-            Topology: "world",
+        var trait = new WorldStateFieldTrait(
             Initial: 0.5f,
             Min: 0f,
             Max: 1f,
@@ -410,7 +409,7 @@ public sealed class WorldMediumLawTests {
             Medium: new WorldLatticeMedium()
         );
         var state = new WorldStateSection(
-            World: [new WorldStateRow(Name: WorldCellName.Parse(candidate: "medium"), Kind: CellKind.Fixed, Lattice: trait)],
+            World: [new WorldStateRow(Name: WorldCellName.Parse(candidate: "medium"), Kind: CellKind.Fixed, Domain: new WorldStateDomain.CellsOf(Topology: "world"), Field: trait)],
             Lattices: [Topology()]
         );
         var compiled = WorldFieldsSection.Compile(state: state)!;
@@ -419,12 +418,11 @@ public sealed class WorldMediumLawTests {
 
         var decompiled = WorldFieldsSection.ToStateSection(composite: compiled);
 
-        Assert.Equal(expected: trait, actual: decompiled.World![0].Lattice);
+        Assert.Equal(expected: trait, actual: decompiled.World![0].Field);
     }
     [Fact]
     public void AMediumRowSurvivesWorldSaveRoundTripExactly() {
-        var trait = new WorldStateLatticeTrait(
-            Topology: "world",
+        var trait = new WorldStateFieldTrait(
             Initial: 0.5f,
             Min: 0f,
             Max: 1f,
@@ -434,14 +432,14 @@ public sealed class WorldMediumLawTests {
         );
         var document = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(
-                World: [new WorldStateRow(Name: WorldCellName.Parse(candidate: "medium"), Kind: CellKind.Fixed, Lattice: trait)],
+                World: [new WorldStateRow(Name: WorldCellName.Parse(candidate: "medium"), Kind: CellKind.Fixed, Domain: new WorldStateDomain.CellsOf(Topology: "world"), Field: trait)],
                 Lattices: [Topology()]
             ),
         };
         var roundTripped = WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: document));
         var row = Assert.Single(collection: roundTripped.State);
 
-        Assert.Equal(expected: trait, actual: row.Lattice);
+        Assert.Equal(expected: trait, actual: row.Field);
     }
     /// <summary>A medium displaces a body by its own law, so a Medium row applies no arc: authoring a Gravity kind
     /// on one refuses by name, where the same row holding None is admitted.</summary>

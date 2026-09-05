@@ -35,12 +35,6 @@ public enum WorldTopologyWrap : byte {
     Both,
 }
 
-/// <summary>Addresses a keyed numeric state row by cells of a named discrete topology.</summary>
-/// <param name="Topology">The name in state.lattices.</param>
-/// <param name="Empty">The raw value of an unoccupied or unauthored cell.</param>
-[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldStateBoard(string Topology, long Empty = 0);
-
 /// <summary>A compiled immutable adjacency table. Absent neighbours are -1. Direction names come from the
 /// topology's own <see cref="WorldStateLatticeTopology.Directions"/> when authored; the unauthored default matches
 /// what every kind carried before that field existed — Grid N, NE, E, SE, S, SW, W, NW; Hex E, NE, NW, W, SW, SE;
