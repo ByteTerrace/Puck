@@ -28,8 +28,8 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
         Assert.Equal(["wide", "p0", "p1", "narrow", "plain"], lines.Select(line => line.Name));
         Assert.Equal(4096L, lines[0].Multiplier);
         Assert.Equal(lines[0].Multiplier * lines[0].UnitCost, lines[0].WorkUnits);
-        Assert.Equal([$"phase.{WorldStateRow.SlotKey}=0"], lines[1].Discriminators);
-        Assert.Equal([$"phase.{WorldStateRow.SlotKey}=1"], lines[2].Discriminators);
+        Assert.Equal([$"phase.{WorldStateRow.SlotKey}=0"], lines[1].Discriminators.Select(pinned => pinned.Describe()));
+        Assert.Equal([$"phase.{WorldStateRow.SlotKey}=1"], lines[2].Discriminators.Select(pinned => pinned.Describe()));
         Assert.Empty(lines[0].Discriminators);
 
         // p0 and p1 are exclusive on phase, so the total carries one of them, not both.

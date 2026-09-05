@@ -56,6 +56,10 @@ public sealed class WorldExpressionSyntaxLawTests {
         Assert.Equal([S("$table:moves:power:$bind:move")], Parse("$table:moves:power[$bind:move]"));
         Assert.Equal([S("$table:moves:power:$cell:turn:move")], Parse("$table:moves:power[$cell:turn:move]"));
         Assert.Equal([S("$table:armor:7")], Parse("$table:armor[7]"));
+        Assert.Equal([S("buffs", "$cell:minion:$each")], Parse("buffs[minion[$each]]"));
+        Assert.Equal([S("buffs", "$cell:minion:$cell:squad:$each")], Parse("buffs[minion[squad[$each]]]"));
+        Assert.Equal([S("$table:t:$cell:minion:$each")], Parse("$table:t[minion[$each]]"));
+        Assert.Equal("buffs[minion[$each]]", WorldExpressionSyntax.Print([S("buffs", "$cell:minion:$each")]));
         Assert.Equal("$table:moves:power[$bind:move] + $table:armor[7]", WorldExpressionSyntax.Print([S("$table:moves:power:$bind:move"), S("$table:armor:7"), new WorldValueToken.Add()]));
         Assert.Equal([S("damage"), S("hp"), new WorldValueToken.Min()], Parse("min(damage, hp)"));
         Assert.Equal([S("v"), C(0m), C(10m), new WorldValueToken.Clamp()], Parse("clamp(v, 0, 10)"));
@@ -99,6 +103,7 @@ public sealed class WorldExpressionSyntaxLawTests {
     [InlineData("clamp(v, 0, 10) >> popCount(m) == 3 ? 0.5 : 1.25")]
     [InlineData("bitInsert(v, f, 8, 4) | parallelBitExtract(v, 0xFF)")]
     [InlineData("$table:moves:power[$bind:move] * $table:armor[$each]")]
+    [InlineData("buffs[minion[$each]] + $table:t[minion[owner]]")]
     public void PrintingIsTheInverseOfParsingWithOnlyTheParenthesesPrecedenceNeeds(string text) {
         var tokens = Parse(text);
         var printed = WorldExpressionSyntax.Print(tokens);

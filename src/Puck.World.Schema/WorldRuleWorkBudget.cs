@@ -7,11 +7,38 @@ namespace Puck.World;
 /// carrier or pair count, or 1.</param>
 /// <param name="UnitCost">The cost of one evaluation.</param>
 /// <param name="WorkUnits">The line's total, <see cref="Multiplier"/> times <see cref="UnitCost"/>.</param>
-/// <param name="Discriminators">The literal cells the gate pins to constants, as <c>row.key=value</c> in cell order;
-/// empty when the line sums into the total unconditionally. Lines pinning the same cell to different values price
-/// at their costliest values rather than their sum, one value more per rule that can write the cell in a tick, and
-/// a line pinning a further cell nests under the lines pinning fewer.</param>
-public readonly record struct WorldRuleWorkContributor(string Name, bool IsInteraction, long Multiplier, long UnitCost, long WorkUnits, IReadOnlyList<string> Discriminators);
+/// <param name="Discriminators">The literal cells the gate pins to ranges, in cell order; empty when the line sums
+/// into the total unconditionally. Lines pinning the same cell to disjoint ranges price at their costliest ranges
+/// rather than their sum, one range more per rule that can write the cell in a tick, and a line pinning a further
+/// cell nests under the lines pinning fewer.</param>
+public readonly record struct WorldRuleWorkContributor(string Name, bool IsInteraction, long Multiplier, long UnitCost, long WorkUnits, IReadOnlyList<WorldRulePinnedCell> Discriminators);
+
+/// <summary>One literal cell a gate pins: the inclusive raw range the cell must lie in for the gate to hold, in the
+/// row's own encoding (fixed-point rows carry raw bits).</summary>
+/// <param name="Cell">The <c>row.key</c> cell.</param>
+/// <param name="Low">The lowest admitted raw value; <see cref="long.MinValue"/> when unbounded below.</param>
+/// <param name="High">The highest admitted raw value; <see cref="long.MaxValue"/> when unbounded above. Below
+/// <see cref="Low"/> when the gate can never hold.</param>
+public readonly record struct WorldRulePinnedCell(string Cell, long Low, long High) {
+    /// <summary>Gets a value indicating whether the range is empty, so the gate can never hold.</summary>
+    public bool IsEmpty => (High < Low);
+    /// <summary>Gets a value indicating whether a raw value lies in the range.</summary>
+    /// <param name="value">The raw value.</param>
+    public bool Contains(long value) => ((Low <= value) && (value <= High));
+    /// <summary>Gets a value indicating whether two ranges share no value.</summary>
+    /// <param name="other">The other range.</param>
+    public bool Disjoint(WorldRulePinnedCell other) => ((High < other.Low) || (other.High < Low));
+    /// <summary>Formats the pin as <c>cell=v</c>, <c>cell&lt;=v</c>, <c>cell&gt;=v</c>, <c>cell=lo..hi</c>, or
+    /// <c>cell=never</c>.</summary>
+    public string Describe() {
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+        if (IsEmpty) { return $"{Cell}=never"; }
+        if (Low == High) { return $"{Cell}={Low.ToString(provider: culture)}"; }
+        if (Low == long.MinValue) { return $"{Cell}<={High.ToString(provider: culture)}"; }
+        if (High == long.MaxValue) { return $"{Cell}>={Low.ToString(provider: culture)}"; }
+        return $"{Cell}={Low.ToString(provider: culture)}..{High.ToString(provider: culture)}";
+    }
+}
 
 /// <summary>The statically derived worst-case rule, interaction, and flock-affinity work admitted for one tick.</summary>
 /// <param name="RuleRows">The authored ordinary-rule count.</param>
@@ -102,7 +129,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 Multiplier: multiplier,
                 UnitCost: unit,
                 WorkUnits: SaturatingMultiply(left: multiplier, right: unit),
-                Discriminators: Discriminators(gate: rule.Gate)
+                Discriminators: PinnedCells(gate: rule.Gate, contradictory: out _)
             ));
         }
 
@@ -126,66 +153,33 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         return contributors;
     }
 
-    // Rules whose gates pin the same literal cells to distinct constants cannot all fire on one tick: the sheet
-    // charges a set of such rules its costliest values rather than their sum. Each line sits at the node of the
-    // trie its pinned cells spell (in cell order, so "phase=1, sub=0" and "sub=0, phase=1" share a node); a node's
-    // worst case is its own lines plus, per further cell its children pin, the costliest child values — one value,
-    // plus one more per rule that can write that cell during the tick, since effects apply immediately and a rule
-    // advancing a phase lets the next phase's rules fire in the same tick. Children pinning different cells are
-    // not exclusive of each other and sum.
-    private static (long Slots, long Work) Tally(List<WorldRuleWorkContributor> contributors, Dictionary<string, long> writers) {
-        var slots = 0L;
-        var root = new ExclusionNode();
+    /// <summary>Lists the rules whose gates can never hold: a literal cell pinned to an empty range.</summary>
+    /// <param name="definition">The world.</param>
+    /// <returns>Each such rule and the cell it pins empty.</returns>
+    public static IReadOnlyList<(string Rule, string Cell)> ContradictoryGates(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        var result = new List<(string, string)>();
 
-        foreach (var contributor in contributors) {
-            slots = SaturatingAdd(left: slots, right: contributor.Multiplier);
-            var node = root;
-
-            foreach (var discriminator in contributor.Discriminators) {
-                var separator = discriminator.LastIndexOf(value: '=');
-                var cell = discriminator[..separator];
-                var value = long.Parse(s: discriminator.AsSpan(start: separator + 1), provider: System.Globalization.CultureInfo.InvariantCulture);
-
-                if (!node.Children.TryGetValue(cell, out var byValue)) {
-                    byValue = [];
-                    node.Children[cell] = byValue;
+        foreach (var rule in WorldRuleCompiler.CompileAll(definition: definition)) {
+            foreach (var pinned in PinnedCells(gate: rule.Gate, contradictory: out _)) {
+                if (pinned.IsEmpty) {
+                    result.Add(item: (rule.Name, pinned.Cell));
                 }
-                if (!byValue.TryGetValue(value, out var child)) {
-                    child = new ExclusionNode();
-                    byValue[value] = child;
-                }
-                node = child;
             }
-
-            node.Own = SaturatingAdd(left: node.Own, right: contributor.WorkUnits);
         }
 
-        return (slots, Worst(node: root, writers: writers));
+        return result;
     }
-    private sealed class ExclusionNode {
-        public long Own { get; set; }
-        public Dictionary<string, Dictionary<long, ExclusionNode>> Children { get; } = new(comparer: StringComparer.Ordinal);
-    }
-    private static long Worst(ExclusionNode node, Dictionary<string, long> writers) {
-        var total = node.Own;
 
-        foreach (var (cell, byValue) in node.Children) {
-            var worsts = new List<long>(capacity: byValue.Count);
-
-            foreach (var child in byValue.Values) { worsts.Add(item: Worst(node: child, writers: writers)); }
-
-            worsts.Sort(comparison: static (left, right) => right.CompareTo(value: left));
-            var admitted = (int)Math.Min(val1: worsts.Count, val2: SaturatingAdd(left: 1L, right: writers.GetValueOrDefault(cell)));
-
-            for (var index = 0; index < admitted; index++) { total = SaturatingAdd(left: total, right: worsts[index]); }
-        }
-
-        return total;
-    }
-    // Every literal cell the gate pins Equal to a constant, as "row.key=value" in cell order: a single Compare, or the
-    // Compare conjuncts of a top-level All (other conjuncts narrow the gate further and cost nothing here). A cell
-    // pinned twice keeps its first value.
-    private static string[] Discriminators(CompiledWorldPredicate[] gate) {
+    /// <summary>Reads the literal cells a gate pins to ranges: a single comparison against a constant, or the
+    /// comparison conjuncts of a top-level <c>all</c>, intersected per cell. Other conjuncts narrow the gate further
+    /// and pin nothing here; <c>notEqual</c> pins nothing.</summary>
+    /// <param name="gate">The compiled gate.</param>
+    /// <param name="contradictory">Whether some cell's range came out empty, so the gate can never hold.</param>
+    /// <returns>The pins in cell order.</returns>
+    public static IReadOnlyList<WorldRulePinnedCell> PinnedCells(CompiledWorldPredicate[] gate, out bool contradictory) {
+        ArgumentNullException.ThrowIfNull(argument: gate);
+        contradictory = false;
         if (gate.Length == 0) {
             return [];
         }
@@ -198,27 +192,118 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         } else {
             return [];
         }
-        var pinned = new SortedDictionary<string, long>(comparer: StringComparer.Ordinal);
+        var pinned = new SortedDictionary<string, (long Low, long High)>(comparer: StringComparer.Ordinal);
         for (var index = 0; index < conjuncts; index++) {
             var predicate = gate[index];
             if (predicate.Kind != CompiledWorldPredicateKind.Compare) {
                 return [];
             }
-            if (predicate.Comparison == Puck.Physics.Motion.ActionStateComparison.Equal && predicate.Comparand is null && predicate.LeftExpression is null &&
-                predicate.Left is { Value: StateCellOperand { Key: { } key, KeyFrom: null } state }) {
-                pinned.TryAdd(key: $"{state.Row}.{key}", value: predicate.Value);
+            if (predicate.Comparand is not null || predicate.LeftExpression is not null ||
+                predicate.Left is not { Value: StateCellOperand { Key: { } key, KeyFrom: null } state }) {
+                continue;
             }
+            var value = predicate.Value;
+            (long Low, long High) range = predicate.Comparison switch {
+                Puck.Physics.Motion.ActionStateComparison.Equal => (value, value),
+                Puck.Physics.Motion.ActionStateComparison.Less => (long.MinValue, (value == long.MinValue) ? long.MinValue : value - 1),
+                Puck.Physics.Motion.ActionStateComparison.LessOrEqual => (long.MinValue, value),
+                Puck.Physics.Motion.ActionStateComparison.Greater => ((value == long.MaxValue) ? long.MaxValue : value + 1, long.MaxValue),
+                Puck.Physics.Motion.ActionStateComparison.GreaterOrEqual => (value, long.MaxValue),
+                _ => (long.MinValue, long.MaxValue),
+            };
+            if (predicate.Comparison == Puck.Physics.Motion.ActionStateComparison.Less && value == long.MinValue) { range = (1L, 0L); }
+            if (predicate.Comparison == Puck.Physics.Motion.ActionStateComparison.Greater && value == long.MaxValue) { range = (1L, 0L); }
+            if (range == (long.MinValue, long.MaxValue)) {
+                continue;
+            }
+            var cell = $"{state.Row}.{key}";
+            pinned[cell] = (pinned.TryGetValue(cell, out var existing)
+                ? (Math.Max(existing.Low, range.Low), Math.Min(existing.High, range.High))
+                : range);
         }
-        var result = new string[pinned.Count];
+        var result = new WorldRulePinnedCell[pinned.Count];
         var position = 0;
-        foreach (var (cell, value) in pinned) {
-            result[position++] = $"{cell}={value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}";
+        foreach (var (cell, (low, high)) in pinned) {
+            result[position++] = new WorldRulePinnedCell(Cell: cell, Low: low, High: high);
+            contradictory |= (high < low);
         }
         return result;
     }
+
+    // Rules whose gates pin the same literal cells to disjoint ranges cannot all fire on one tick: the sheet
+    // charges a set of such rules its costliest ranges rather than their sum. Each line sits at the node of the
+    // trie its pinned cells spell (in cell order, so "phase=1, sub=0" and "sub=0, phase=1" share a node); a node's
+    // worst case is its own lines plus, per further cell its children pin, the costliest points of that cell —
+    // the lines whose ranges contain one value summed, taken for one value plus one more per rule evaluation that
+    // can write the cell during the tick, since effects apply immediately and a rule advancing a phase lets the
+    // next phase's rules fire in the same tick. Children pinning different cells are not exclusive of each other
+    // and sum.
+    private static (long Slots, long Work) Tally(List<WorldRuleWorkContributor> contributors, Dictionary<string, long> writers) {
+        var slots = 0L;
+        var root = new ExclusionNode();
+
+        foreach (var contributor in contributors) {
+            slots = SaturatingAdd(left: slots, right: contributor.Multiplier);
+            var node = root;
+
+            foreach (var pinned in contributor.Discriminators) {
+                if (!node.Children.TryGetValue(pinned.Cell, out var ranges)) {
+                    ranges = [];
+                    node.Children[pinned.Cell] = ranges;
+                }
+                var child = default(ExclusionNode);
+                foreach (var (range, existing) in ranges) {
+                    if (range.Low == pinned.Low && range.High == pinned.High) {
+                        child = existing;
+                        break;
+                    }
+                }
+                if (child is null) {
+                    child = new ExclusionNode();
+                    ranges.Add(item: (pinned, child));
+                }
+                node = child;
+            }
+
+            node.Own = SaturatingAdd(left: node.Own, right: contributor.WorkUnits);
+        }
+
+        return (slots, Worst(node: root, writers: writers));
+    }
+    private sealed class ExclusionNode {
+        public long Own { get; set; }
+        public Dictionary<string, List<(WorldRulePinnedCell Range, ExclusionNode Child)>> Children { get; } = new(comparer: StringComparer.Ordinal);
+    }
+    private static long Worst(ExclusionNode node, Dictionary<string, long> writers) {
+        var total = node.Own;
+
+        foreach (var (cell, ranges) in node.Children) {
+            var worsts = new long[ranges.Count];
+            for (var index = 0; index < ranges.Count; index++) { worsts[index] = Worst(node: ranges[index].Child, writers: writers); }
+
+            // Every range's low end is a candidate value of the cell; the lines whose ranges contain it can fire
+            // together. An empty range contains nothing and its lines never fire.
+            var sums = new List<long>(capacity: ranges.Count);
+            foreach (var (candidate, _) in ranges) {
+                if (candidate.IsEmpty) { continue; }
+                var sum = 0L;
+                for (var index = 0; index < ranges.Count; index++) {
+                    if (ranges[index].Range.Contains(value: candidate.Low)) { sum = SaturatingAdd(left: sum, right: worsts[index]); }
+                }
+                sums.Add(item: sum);
+            }
+
+            sums.Sort(comparison: static (left, right) => right.CompareTo(value: left));
+            var admitted = (int)Math.Min(val1: sums.Count, val2: SaturatingAdd(left: 1L, right: writers.GetValueOrDefault(cell)));
+
+            for (var index = 0; index < admitted; index++) { total = SaturatingAdd(left: total, right: sums[index]); }
+        }
+
+        return total;
+    }
     // How many times per tick each "row.key" cell can be written by a rule, counted per evaluation (a forEach rule
-    // writing a slot once per key writes it capacity times). An effect addressing a row without a literal key — a
-    // "$cell:" indirection, a push, a generate, a transform — counts against every cell of that row.
+    // writing a slot once per key writes it capacity times). A write addressing a row without a literal key counts
+    // against every cell of that row.
     private static Dictionary<string, long> CountWriters(WorldDefinition definition, CompiledWorldRule[] rules, CompiledWorldRule[] interactions) {
         var byCell = new Dictionary<string, long>(comparer: StringComparer.Ordinal);
         var byRow = new Dictionary<string, long>(comparer: StringComparer.Ordinal);
@@ -237,69 +322,24 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
 
         var writers = new Dictionary<string, long>(comparer: StringComparer.Ordinal);
         foreach (var (cell, count) in byCell) {
-            var row = cell[..cell.LastIndexOf(value: '.')];
-            writers[cell] = SaturatingAdd(left: count, right: byRow.GetValueOrDefault(row));
+            writers[cell] = SaturatingAdd(left: count, right: byRow.GetValueOrDefault(cell[..cell.LastIndexOf(value: '.')]));
         }
-        foreach (var (row, count) in byRow) {
-            foreach (var rule in rules) {
-                foreach (var discriminator in Discriminators(gate: rule.Gate)) {
-                    var cell = discriminator[..discriminator.LastIndexOf(value: '=')];
-                    if (!writers.ContainsKey(key: cell) && string.Equals(a: cell[..cell.LastIndexOf(value: '.')], b: row, comparisonType: StringComparison.Ordinal)) {
-                        writers[cell] = count;
-                    }
+        foreach (var rule in rules) {
+            foreach (var pinned in PinnedCells(gate: rule.Gate, contradictory: out _)) {
+                if (!writers.ContainsKey(key: pinned.Cell)) {
+                    writers[pinned.Cell] = byRow.GetValueOrDefault(pinned.Cell[..pinned.Cell.LastIndexOf(value: '.')]);
                 }
             }
         }
         return writers;
     }
     private static void CountRuleWriters(CompiledWorldRule rule, long multiplier, Dictionary<string, long> byCell, Dictionary<string, long> byRow) {
-        CountEffectWriters(effects: rule.Effects, multiplier: multiplier, byCell: byCell, byRow: byRow);
-        if (rule.Decision is { } decision) {
-            CountEffectWriters(effects: decision.OnNoChoice, multiplier: multiplier, byCell: byCell, byRow: byRow);
-            foreach (var option in decision.Options) {
-                CountEffectWriters(effects: option.Effects, multiplier: multiplier, byCell: byCell, byRow: byRow);
-            }
-        }
-    }
-    private static void CountEffectWriters(CompiledWorldEffect[] effects, long multiplier, Dictionary<string, long> byCell, Dictionary<string, long> byRow) {
-        foreach (var effect in effects) {
-            switch (effect.Value) {
-                case TransactionEffect transaction:
-                    CountEffectWriters(effects: transaction.Effects, multiplier: multiplier, byCell: byCell, byRow: byRow);
-                    CountEffectWriters(effects: transaction.OnFailure, multiplier: multiplier, byCell: byCell, byRow: byRow);
-                    break;
-                case IStateWriteEffect write:
-                    Count(write.KeyFrom is null ? byCell : byRow, write.KeyFrom is null ? $"{write.Row}.{write.Key}" : write.Row, multiplier);
-                    break;
-                case RemoveStateCellEffect remove:
-                    Count(remove.KeyFrom is null ? byCell : byRow, remove.KeyFrom is null ? $"{remove.Row}.{remove.Key}" : remove.Row, multiplier);
-                    break;
-                case GenerateEffect generate:
-                    Count(byRow, generate.Row, multiplier);
-                    break;
-                case PushStateEffect push:
-                    Count(byRow, push.Row, multiplier);
-                    break;
-                case TransformStateEffect transform:
-                    foreach (var row in TransformRows(transform.Transform)) { Count(byRow, row, multiplier); }
-                    break;
-            }
-        }
-
-        static void Count(Dictionary<string, long> into, string key, long multiplier) =>
+        foreach (var write in WorldRuleDataflow.Writes(rule: rule)) {
+            var into = ((write.Key is null) ? byRow : byCell);
+            var key = ((write.Key is null) ? write.Row : $"{write.Row}.{write.Key}");
             into[key] = SaturatingAdd(left: into.GetValueOrDefault(key), right: multiplier);
+        }
     }
-    private static IEnumerable<string> TransformRows(WorldStateTransform transform) => transform switch {
-        WorldStateTransform.Transfer transfer => [transfer.From, transfer.To],
-        WorldStateTransform.SetRay ray => [ray.Row],
-        WorldStateTransform.Shuffle shuffle => [shuffle.Row],
-        WorldStateTransform.SortZone zone => [zone.Row],
-        WorldStateTransform.SortKeyed keyed => [keyed.Row],
-        WorldStateTransform.WriteSet set => [set.Row],
-        WorldStateTransform.Push push => [push.Row],
-        WorldStateTransform.Observe observe => [observe.Row],
-        _ => [],
-    };
     private static long RuleCost(CompiledWorldRule rule, WorldDefinition definition) {
         var cost = SaturatingAdd(1, PredicateCost(rule.Gate, definition));
         foreach (var binding in (rule.Bindings ?? [])) {

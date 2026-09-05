@@ -1272,10 +1272,16 @@ work budget is the bound — and a row's cell bound is the one cell bound every
 domain shares (4096), with an unauthored capacity getting 128 of room; a
 registry-sized row authors its capacity. The work sheet also stops charging
 mutually exclusive rules together: rules whose gates pin literal cells to
-distinct constants are priced as a trie of the cells they pin — the costliest
+disjoint ranges are priced as a trie of the cells they pin — the costliest
 values at each cell, one more value per rule that can write the cell in a tick
 since effects apply immediately — which tightens the bound without loosening
-the guarantee. Refused on
+the guarantee; the same interval pass refuses a gate that can never hold. What
+the document order decides silently is a read-back, not a scheduler:
+`world.rule.hazards` names each earlier read of a later write and each pair of
+same-tick writes with a set among them. Refused: an SMT solver behind the
+budget (interval intersection over literal cells is the whole of what the
+sheet can honestly claim; an invariant like "these flags are exclusive" is the
+author's, not the compiler's), and reordering rules for the author. Refused on
 the same review: a fixed
 C# "recipe executor" (game nouns in the engine), a `copyCells` transform
 (derivable from `forEach`), and a per-effect `isolate` flag (a second

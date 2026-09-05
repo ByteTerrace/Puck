@@ -1425,15 +1425,17 @@ from in the same rule. At most 16 per rule; each expression prices into
 for that evaluation and reports an `Arithmetic` refusal. `world.rules` lists
 each rule's bindings by name and kind. The rule count itself has no ceiling of
 its own: the per-tick work budget is the bound. That budget is worst-case but
-not blind: rules whose gates pin the same literal cells to distinct constants (a
-phase id, a mode, a phase and a subphase) cannot all fire on one tick, so the
-sheet prices them as a trie of the cells they pin — at each cell the costliest
-values, one value plus one more per rule that can write that cell during the
-tick (effects apply immediately, so a rule advancing the phase lets the next
-phase's rules fire in the same tick), and lines pinning a further cell nest
-under the lines pinning fewer. Rules sharing every pinned value, pinning
-different cells, or gated on anything else still sum. `world.budget.rules`
-shows each line's pinned cells.
+not blind: rules whose gates pin the same literal cells to disjoint ranges (a
+phase id, a mode, `hp <= 0` against `hp > 0`, a phase and a subphase) cannot
+all fire on one tick, so the sheet prices them as a trie of the cells they pin
+— at each cell the costliest values of that cell (the lines whose ranges
+contain it, summed), one value plus one more per rule that can write that cell
+during the tick (effects apply immediately, so a rule advancing the phase lets
+the next phase's rules fire in the same tick), and lines pinning a further
+cell nest under the lines pinning fewer. Rules whose ranges overlap, pinning
+different cells, or gated on anything else still sum. A gate whose
+comparisons pin a cell to an empty range can never hold and is refused by
+name. `world.budget.rules` shows each line's pinned cells.
 
 An option may expand into nearby individuals through `neighbors`. The enclosing
 rule must name a numeric keyed `forEach` row whose keys identify observers.
@@ -1701,7 +1703,9 @@ C precedence over `+ - * / %`, `& | ^ ~`, `<< >> >>>`, `== != < <= > >=`, and
 direction)`, ...), a state read as its row name keyed `row[key]` (backquoted,
 `` `seat-1` ``, when the name is not a bare identifier; a `$`-channel carries
 its colons), a table read indexed the same way (`$table:moves:power[$bind:move]`
-is `$table:moves:power:$bind:move`), decimal or `0x` literals — or as the postfix `{ "tokens": [...] }`
+is `$table:moves:power:$bind:move`), a key read from another cell as nested
+brackets (`buffs[minion[$each]]` is the `$cell:minion:$each` indirection — a
+two-hop join in one read), decimal or `0x` literals — or as the postfix `{ "tokens": [...] }`
 object. The string is syntax only: it parses to exactly the tokens an author
 could have written by hand (`WorldExpressionSyntax`), the compiler proves and
 prices the tokens the same way, and the document writes back whichever
@@ -1820,7 +1824,11 @@ computed value, and outcome: applied, refused with the reason, emitted, or
 skipped because the write could not move its destination. The capture is an
 observer — a traced run hashes identically to an untraced one — and
 `world.rule.trace off` disarms it. With `replay.verify` to reach the tick, this
-is the breakpoint.
+is the breakpoint. `world.rule.hazards` lists what the rules' document order
+decides silently: an earlier rule reading a cell a later rule writes (it sees
+the previous tick's value), and two rules writing one cell in a tick with a
+set among them (the later wins, or a set discards an earlier add); a pair whose
+gates pin one cell to disjoint ranges never fires together and is not listed.
 
 The high-frequency `UpsertStateCell` path validates only the addressed mutable
 cell and installs only value-derived state. Declaration-shape mutations retain
