@@ -10,6 +10,8 @@ namespace Puck.World.Tests;
 /// <summary>Pins the compositional rule extensions at their authoring, deterministic execution, and atomicity
 /// boundaries.</summary>
 public sealed class WorldRuleExtensionLawTests {
+    // A rule count large enough to saturate the work budget and to exercise per-rule key resolution at scale.
+    private const int ManyRules = 128;
     [Fact]
     public void ExtendedVocabularyRoundTripsThroughTheStrictWorldDocumentWireShape() {
         var definition = Document(
@@ -236,7 +238,7 @@ public sealed class WorldRuleExtensionLawTests {
         var effects = Enumerable.Range(start: 0, count: WorldRuleCapacity.MaxEffectsPerRule)
             .Select(static _ => (ActionEffect)new ActionEffect.AddState(State: "counter", Value: 1m))
             .ToArray();
-        var rules = Enumerable.Range(start: 0, count: WorldRuleCapacity.MaxRules)
+        var rules = Enumerable.Range(start: 0, count: ManyRules)
             .Select(index => new WorldRule(Name: Name($"heavy{index}"), Effects: effects))
             .ToArray();
         var definition = Document(state: [Slot("counter", 0L)], rules: rules);
@@ -250,18 +252,18 @@ public sealed class WorldRuleExtensionLawTests {
 
     [Fact]
     public void DynamicBodyKeysDoNotAllocatePerRuleEvaluationAfterWarmup() {
-        static WorldRule[] Rules(string key) => Enumerable.Range(start: 0, count: WorldRuleCapacity.MaxRules)
+        static WorldRule[] Rules(string key) => Enumerable.Range(start: 0, count: ManyRules)
             .Select(index => new WorldRule(
                 Name: WorldCellName.Parse(candidate: $"key-{index}"),
                 Gate: new ActionPredicate.CompareState(State: "values", Comparison: ActionStateComparison.Equal, Value: 2m, Key: key),
                 Effects: [new ActionEffect.SetState(State: "target", Value: 1m)]
             )).ToArray();
         var state = new WorldStateRow[] {
-            Keyed("index", 1, [Cell("source", WorldRuleCapacity.MaxRules - 1)]),
+            Keyed("index", 1, [Cell("source", ManyRules - 1)]),
             Keyed(
                 "values",
-                WorldRuleCapacity.MaxRules,
-                [Cell((WorldRuleCapacity.MaxRules - 1).ToString(System.Globalization.CultureInfo.InvariantCulture), 1L)]
+                ManyRules,
+                [Cell((ManyRules - 1).ToString(System.Globalization.CultureInfo.InvariantCulture), 1L)]
             ),
             Slot("target", 0L),
         };
@@ -271,7 +273,7 @@ public sealed class WorldRuleExtensionLawTests {
             ],
             rules: Rules(key: "$cell:index:source")
         );
-        var staticDefinition = Document(state: state, rules: Rules(key: (WorldRuleCapacity.MaxRules - 1).ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        var staticDefinition = Document(state: state, rules: Rules(key: (ManyRules - 1).ToString(System.Globalization.CultureInfo.InvariantCulture)));
         using var dynamicFixture = Fixtures.FreshServer(definition: dynamicDefinition);
         using var staticFixture = Fixtures.FreshServer(definition: staticDefinition);
 

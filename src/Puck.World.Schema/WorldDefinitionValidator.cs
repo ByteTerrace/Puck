@@ -111,6 +111,30 @@ public static partial class WorldDefinitionValidator {
     // vocabulary — which this document family's own project cannot reference without inverting the dependency; and a
     // layer/embellishment `gainThousandths` rides the same CreationSoundDocument.MaxLevel ceiling ValidateCues
     // enforces on a cue row, so the ceiling stays the one place — this validator — that enforces it everywhere.
+    private static AssetCheck? CheckTable(WorldTableRow row) {
+        if (!WorldAssetRowLoader.TryLoadTable(
+            document: out var document,
+            error: out var loadError,
+            row: row
+        )) {
+            return new AssetCheck(
+                CanonicalHash: null,
+                Violations: [("source", loadError!)]
+            );
+        }
+
+        return CheckAsset(
+            document: document,
+            source: row.Name,
+            validate: static document => TableCanonicalizer.Validate(document: document),
+            path: static violation => violation.Path,
+            message: static violation => violation.Message,
+            canonicalHash: static (document, source) => TableCanonicalizer.Canonicalize(
+                document: document,
+                source: source
+            ).Hash
+        );
+    }
     private static AssetCheck? CheckMusic(WorldMusicRow row, HashSet<string> tuneIds, HashSet<string> patchIds) {
         if (!WorldAssetRowLoader.TryLoadMusic(
             document: out var document,
@@ -1100,6 +1124,15 @@ public static partial class WorldDefinitionValidator {
                 row: row,
                 tuneIds: tuneIds
             ),
+            errors: errors
+        );
+
+        _ = ValidateOptionalAssets(
+            rows: definition.Tables,
+            section: "tables",
+            id: static row => row.Name,
+            hash: static row => row.Hash,
+            check: CheckTable,
             errors: errors
         );
 

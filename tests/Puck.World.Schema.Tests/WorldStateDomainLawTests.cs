@@ -150,12 +150,15 @@ public sealed class WorldStateDomainLawTests {
     }
 
     [Fact]
-    public void CellCeiling_WidensPastTheOrdinaryCapForATopologyOrTokenLinkedDomain() {
+    public void CellCeiling_HonoursAnAuthoredCapacityUpToTheOneBoundAndDefaultsTheRoomOtherwise() {
         var ordinary = new WorldStateRow(WorldCellName.Parse("plain"), CellKind.Int, Capacity: 200);
         var linked = new WorldStateRow(WorldCellName.Parse("linked"), CellKind.Int, Domain: new WorldStateDomain.KeysOf(WorldCellName.Parse("domain")), Capacity: 200);
+        var unauthored = new WorldStateRow(WorldCellName.Parse("room"), CellKind.Int, Cells: [new WorldStateCell(WorldCellName.Parse("a"), 0L)]);
+        var oversized = new WorldStateRow(WorldCellName.Parse("big"), CellKind.Int, Capacity: WorldStateCapacity.MaxCellsPerRow + 1);
 
-        // Control: an ordinary keyed row narrows to the 128-cell ceiling even when it authors more.
-        Assert.Equal(expected: WorldStateCapacity.MaxCellsPerRow, actual: ordinary.CellCeiling);
+        Assert.Equal(expected: 200, actual: ordinary.CellCeiling);
         Assert.Equal(expected: 200, actual: linked.CellCeiling);
+        Assert.Equal(expected: WorldStateCapacity.DefaultCellRoom, actual: unauthored.CellCeiling);
+        Assert.Equal(expected: WorldStateCapacity.MaxCellsPerRow, actual: oversized.CellCeiling);
     }
 }

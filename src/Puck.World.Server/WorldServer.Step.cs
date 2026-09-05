@@ -257,6 +257,19 @@ public sealed partial class WorldServer {
     // a bound entry that is not evaluated this tick (the pair left range, the carrier lost its tag or despawned) is
     // closed by the enclosing sweep, which is what re-arms an Edge interaction whose synthesized gate is always open.
     private bool EvaluateOnce(CompiledWorldRule rule, RuleLatch latch, Dictionary<LatchKey, bool> bindings, LatchKey binding, ulong tick, ulong stepTicks) {
+        m_tableKeyMissingRule = rule.Name;
+        // Bound values first, in declared order, each visible to the ones after it and to the gate and effects. A
+        // binding that cannot evaluate (overflow, a divide by zero) closes the gate for this evaluation and is
+        // reported once per category like any effect's arithmetic refusal.
+        var bound = (rule.Bindings ?? []);
+        for (var ordinal = 0; ordinal < bound.Length; ordinal++) {
+            var declared = bound[ordinal];
+            if (!TryEvaluateExpression(program: declared.Expression, kind: declared.Kind, tick: tick, value: out var value)) {
+                ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.Arithmetic, ruleName: rule.Name, effect: $"binding '{declared.Name}'", tick: tick, detail: "the binding's expression overflowed, divided by zero, or produced an invalid stack result");
+                return false;
+            }
+            m_ruleBindingValues[ordinal] = value;
+        }
         var open = RuleGateOpen(
             gate: rule.Gate,
             tick: tick
@@ -280,35 +293,15 @@ public sealed partial class WorldServer {
 
         return FireWorldRuleEffects(effects: rule.Effects, ruleName: rule.Name, tick: tick, stepTicks: stepTicks);
     }
-    private static bool IsAtomicStateEffect(WorldRuleEffectKind kind) => kind is
-        WorldRuleEffectKind.Write or WorldRuleEffectKind.Countdown or WorldRuleEffectKind.RemoveStateCell or WorldRuleEffectKind.ScheduleState;
+    // Every top-level effect is its own boundary: each performs its own refusal-suppressing preflight and either
+    // installs or refuses alone, so a later effect's refusal never rolls back an earlier sibling's write. The one
+    // atomic group is the explicit `transaction` effect (FireWorldRuleTransaction), which preflights its whole branch
+    // as one candidate before any of it installs.
     private bool FireWorldRuleEffects(CompiledWorldEffect[] effects, string ruleName, ulong tick, ulong stepTicks) {
         var applied = false;
 
-        for (var index = 0; index < effects.Length;) {
-            if (IsAtomicStateEffect(kind: effects[index].Kind)) {
-                var end = (index + 1);
-
-                while ((end < effects.Length) && IsAtomicStateEffect(kind: effects[end].Kind)) {
-                    end++;
-                }
-
-                // A single effect performs its own refusal-suppressing preflight. A longer run preflights as one
-                // candidate so no earlier write leaks when a later one refuses.
-                var preflighted = ((end - index) > 1);
-                if (!preflighted || PreflightWorldRuleStateEffects(effects: effects, ruleName: ruleName, start: index, end: end, tick: tick, stepTicks: stepTicks)) {
-                    for (; index < end; index++) {
-                        applied |= FireWorldRuleEffect(effect: effects[index], ruleName: ruleName, stepTicks: stepTicks, tick: tick, strict: preflighted);
-                    }
-                } else {
-                    index = end;
-                }
-
-                continue;
-            }
-
+        for (var index = 0; index < effects.Length; index++) {
             applied |= FireWorldRuleEffect(effect: effects[index], ruleName: ruleName, stepTicks: stepTicks, tick: tick);
-            index++;
         }
 
         return applied;
@@ -587,7 +580,7 @@ public sealed partial class WorldServer {
 
         // An ordinary rule mutation is preflighted before it reaches the loud mutation door. This turns a standing
         // Level-rule refusal into one bounded structured diagnostic instead of one rejection line per tick. A
-        // transaction/contiguous-run commit passes strict=true because its whole branch was already preflighted.
+        // transaction commit passes strict=true because its whole branch was already preflighted.
         if (!preflight && !strict) {
             var installed = m_definition;
             m_ruleStatePreflightRejected = false;
@@ -889,6 +882,11 @@ public sealed partial class WorldServer {
                 }
                 if (token.Operation == WorldExpressionOp.Operand) {
                     var fact = ReadWorldFact(operand: token.Operand!.Value, tick: tick);
+                    if (m_tableKeyMissing) {
+                        m_tableKeyMissing = false;
+                        value = 0L;
+                        return false;
+                    }
                     if (fact.IsForever) {
                         value = 0L;
                         return false;
@@ -1214,35 +1212,6 @@ public sealed partial class WorldServer {
 
         return true;
     }
-    // A contiguous run of state effects is one transaction boundary. Compose and validate the entire ordered run
-    // against a private candidate first; only a clean run is replayed through the ordinary apply/journal door. Live
-    // fromState reads still see every preceding candidate write because m_definition is temporarily the candidate,
-    // but no candidate escapes this synchronous preflight and the installed definition is restored in finally.
-    private bool PreflightWorldRuleStateEffects(CompiledWorldEffect[] effects, string ruleName, int start, int end, ulong tick, ulong stepTicks) {
-        var installed = m_definition;
-        m_ruleStatePreflightRejected = false;
-
-        try {
-            for (var index = start; index < end; index++) {
-                _ = FireWorldRuleEffect(
-                    effect: effects[index],
-                    ruleName: ruleName,
-                    stepTicks: stepTicks,
-                    tick: tick,
-                    preflight: true
-                );
-
-                if (m_ruleStatePreflightRejected) {
-                    return false;
-                }
-            }
-
-            return true;
-        } finally {
-            m_definition = installed;
-            m_ruleStatePreflightRejected = false;
-        }
-    }
     // Body state, not document state: the same WorldBody.Pose door ApplyCommand's SnapPose arm (body.pose) uses,
     // but as the world's own act — no drive-gate or grant check, since a gated body is one a rule still needs to
     // move.
@@ -1321,6 +1290,7 @@ public sealed partial class WorldServer {
     // UNWRAPPED because WorldDefinitionValidator already compiled this exact candidate and refused it if it could
     // not — the same trusted-second-call shape every other derived-state rebuild in Install has.
     private void RecompileRules(WorldDefinition definition) {
+        m_tables = CompileTables(definition: definition);
         m_rules = WorldRuleCompiler.CompileAll(definition: definition);
         m_interactions = WorldRuleCompiler.CompileAllInteractions(definition: definition);
 
@@ -1331,6 +1301,15 @@ public sealed partial class WorldServer {
         m_population.BindFlockAffinities(definition, EvaluateFlockAffinity);
     }
     private bool RuleGateOpen(CompiledWorldPredicate[] gate, ulong tick) {
+        m_tableKeyMissing = false;
+        var open = RuleGateOpenCore(gate: gate, tick: tick);
+        if (m_tableKeyMissing) {
+            m_tableKeyMissing = false;
+            return false;
+        }
+        return open;
+    }
+    private bool RuleGateOpenCore(CompiledWorldPredicate[] gate, ulong tick) {
         if (gate.Length == 0) {
             return true;
         }

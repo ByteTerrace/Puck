@@ -1098,6 +1098,12 @@ public static partial class WorldRuleCompiler {
         if (name.StartsWith(WorldRuleFacts.ClockPrefix, StringComparison.Ordinal)) {
             return ResolveClockOperand(name, key, ruleName, definition);
         }
+        if (name.StartsWith(WorldRuleFacts.BindPrefix, StringComparison.Ordinal)) {
+            return ResolveBindingOperand(name, key, ruleName, keyFieldLabel);
+        }
+        if (name.StartsWith(WorldRuleFacts.TablePrefix, StringComparison.Ordinal)) {
+            return ResolveTableOperand(name, key, ruleName, definition, keyFieldLabel);
+        }
         var describe = $"{name}{((key is { } spelledKey)
             ? $".{spelledKey}"
             : string.Empty)}";
@@ -2098,6 +2104,7 @@ public static partial class WorldRuleCompiler {
         );
 
         try {
+            var bindings = CompileBindings(rule: rule, definition: definition);
             var gate = new List<CompiledWorldPredicate>();
 
             FlattenPredicate(
@@ -2126,10 +2133,12 @@ public static partial class WorldRuleCompiler {
                     subject: "rule"
                 ),
                 ForEach: rule.ForEach,
-                Decision: CompileDecision(rule, definition)
+                Decision: CompileDecision(rule, definition),
+                Bindings: bindings
             );
         } finally {
             s_bindingScope = null;
+            s_ruleBindings = null;
         }
     }
     /// <summary>Compiles every rule in the definition's <c>rules</c> section, in document order.</summary>
@@ -2145,9 +2154,6 @@ public static partial class WorldRuleCompiler {
 
         if (rules.Count == 0) {
             return [];
-        }
-        if (rules.Count > WorldRuleCapacity.MaxRules) {
-            throw new WorldRuleException(refusal: WorldRuleRefusal.EffectKindInadmissible, ruleName: "<rules>", detail: $"declares {rules.Count} rows, exceeding the {WorldRuleCapacity.MaxRules}-rule ceiling");
         }
 
         var seen = new HashSet<string>(

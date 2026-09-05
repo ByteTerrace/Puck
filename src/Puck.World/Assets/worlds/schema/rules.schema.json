@@ -191,6 +191,46 @@
         ],
         "additionalProperties": false,
         "default": null
+      },
+      "bindings": {
+        "description": "The values bound once per evaluation, in declared order, read as $bind:\u003Cname\u003E.",
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "description": "A value bound once per evaluation of the rule that declares it, after the forEach key and before the gate, in declared order \u2014 a later binding, the gate, and every effect read it as $bind:\u003Cname\u003E; an earlier binding cannot. The value is never stored: it lives on the evaluation and is recomputed at the next one.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "name": {
+              "description": "The binding\u0027s name \u2014 the token after BindPrefix.",
+              "type": "string"
+            },
+            "kind": {
+              "description": "The value\u0027s cell kind, Int or Fixed.",
+              "enum": [
+                "Int",
+                "Fixed",
+                "Bool",
+                "Text"
+              ]
+            },
+            "expression": {
+              "$ref": "./common.schema.json#/$defs/WorldValueExpression",
+              "description": "The postfix expression, evaluated in that kind."
+            }
+          },
+          "required": [
+            "name",
+            "kind",
+            "expression"
+          ],
+          "additionalProperties": false
+        },
+        "default": null
       }
     },
     "required": [

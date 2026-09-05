@@ -200,6 +200,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     // never to throw. Recomputed unconditionally: rules and state rows are both small-capacity sections, so there is
     // no AffectsRules classification predicate earning its keep here.
     private CompiledWorldRule[] m_rules = [];
+    private CompiledWorldTable[] m_tables = [];
     // The EDGE latch, keyed by rule name and deliberately OUTSIDE m_rules: a rule's own effect installs a new
     // definition, which recompiles m_rules, so a latch living in the compiled record would clear itself every time it
     // fired — which is exactly the 503-entries-in-500-ticks shape edge mode exists to close. Surviving names keep
@@ -590,6 +591,8 @@ public sealed partial class WorldServer : IWorldServerHost {
         m_federatedIntents = new FederatedIntentState[population.Capacity];
         m_snapshotEntries = new EntitySnapshot[population.Capacity];
         m_events = new WorldEventFeed(capacity: population.Capacity);
+
+        m_tables = CompileTables(definition: definition);
 
         if ((definition.Music is { Count: > 0 } music) && (music[0] is { } row)) {
             // The row's Source/Hash were already proven to load, canonicalize, and pin-verify by

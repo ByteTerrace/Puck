@@ -65,6 +65,9 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
 
     private static long RuleCost(CompiledWorldRule rule, WorldDefinition definition) {
         var cost = SaturatingAdd(1, PredicateCost(rule.Gate, definition));
+        foreach (var binding in (rule.Bindings ?? [])) {
+            cost = SaturatingAdd(left: cost, right: ExpressionCost(binding.Expression, definition));
+        }
         foreach (var effect in rule.Effects) {
             cost = SaturatingAdd(left: cost, right: EffectCost(effect: effect, definition: definition));
         }
@@ -260,6 +263,10 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         // capacity-wide scan, so it is priced on the same terms rather than read as a free operand.
         if (operand.Value is NearestOperand or RegionOccupancyOperand or PhysicsQuiescentOperand) {
             return definition.Population.Capacity;
+        }
+        if (operand.Value is TableOperand table) {
+            // A binary search over the sorted keys, plus the key read.
+            return 2L + System.Numerics.BitOperations.Log2((uint)Math.Max(table.EntryCount, 1));
         }
         if (operand.Value is PatternOperand pattern) {
             // Reached only when pattern.Board is null (a board-sourced pattern already returned above).

@@ -111,6 +111,10 @@ public readonly partial struct CompiledWorldOperand : IUnion {
     public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out HistoryOperand? value) => TryGetCore(out value);
     /// <summary>Reads the carried case as a <see cref="ClockOperand"/> when it holds one.</summary>
     public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ClockOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="BindingOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out BindingOperand? value) => TryGetCore(out value);
+    /// <summary>Reads the carried case as a <see cref="TableOperand"/> when it holds one.</summary>
+    public bool TryGetValue([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out TableOperand? value) => TryGetCore(out value);
 
     /// <summary>Constructs a carrier over a <see cref="StateCellOperand"/> case.</summary>
     public CompiledWorldOperand(StateCellOperand value) => m_value = value;
@@ -156,4 +160,8 @@ public readonly partial struct CompiledWorldOperand : IUnion {
     public CompiledWorldOperand(HistoryOperand value) => m_value = value;
     /// <summary>Constructs a carrier over a <see cref="ClockOperand"/> case.</summary>
     public CompiledWorldOperand(ClockOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="BindingOperand"/> case.</summary>
+    public CompiledWorldOperand(BindingOperand value) => m_value = value;
+    /// <summary>Constructs a carrier over a <see cref="TableOperand"/> case.</summary>
+    public CompiledWorldOperand(TableOperand value) => m_value = value;
 }

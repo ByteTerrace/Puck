@@ -69,6 +69,19 @@ public sealed partial class WorldStateCommandModule {
                 return new CommandResult(Output: server.DescribePatterns());
             });
         yield return CommandDefinition.WithWireArgs(
+            name: "world.tables", bindability: CommandBindability.Unbindable,
+            description: "Echoes every static lookup table the document references: name, value kind, and entry count.",
+            routing: CommandRouting.Immediate,
+            handler: (context, args) => {
+                if (CommandResult.RequireNoArguments(args, "world.tables") is { } refusal) {
+                    return refusal;
+                }
+                if (!authority.TryResolveServer(context, "world.tables", out var server, out var error)) {
+                    return error;
+                }
+                return new CommandResult(Output: server.DescribeTables());
+            });
+        yield return CommandDefinition.WithWireArgs(
             name: "world.topology", bindability: CommandBindability.Unbindable,
             description: "Lists a discrete topology's point-group elements, and with a cell key, that cell's image under each: world.topology <topology> [<cell>].",
             routing: CommandRouting.Immediate,

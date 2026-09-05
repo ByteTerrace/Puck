@@ -240,7 +240,14 @@ another text cell. Two indirections make "the body my `target` cell names"
 addressable: a key spelled `$cell:<row>:<key>` resolves to that cell's integer
 value at every read/firing (effect `key`/`fromKey`, `compareState`
 `key`/`comparandKey`), and a body-reference token `cell:<row>:<key>` does the
-same inside `$distance:`/`$los:`/`$nearest:`. `$symmetry:<function>[:<argument>]:<row>`
+same inside `$distance:`/`$los:`/`$nearest:`. `$bind:<name>` reads a value the
+enclosing rule's `bindings` list computed for this evaluation (feed-forward,
+declared order, never stored). `$table:<name>[:<column>]:<key>` reads a static
+`tables` document (`puck.table.v1`, hash-pinned, outside simulation state) by an
+integer literal, a `$cell:` indirection, `$each`, or an int `$bind:`; a missing
+dynamic key is a `TableKeyMissing` refusal, never a value. Every top-level
+state effect is its own boundary; only a `transaction` groups effects
+atomically. `$symmetry:<function>[:<argument>]:<row>`
 reads a cell holding a symmetry-lattice node (0..239) through `ring`, `antipode`,
 `canonicalRay`, `cycle:<steps>`, `reflect:<node|cell:<row>[.<key>]>`,
 `orthogonal:<node|cell:…>` (1/0), `innerProduct:<node|cell:…>` (−2..2; 1 is a

@@ -72,7 +72,7 @@ public sealed class WorldStateLiteralLawTests {
     }
 
     [Fact]
-    public void ConsecutiveStateEffects_AreAtomicWhenALaterWriteRefuses() {
+    public void ConsecutiveStateEffects_AreIndependentWhenALaterWriteRefuses() {
         var first = WorldCellName.Parse(candidate: "atomic-first");
         var second = WorldCellName.Parse(candidate: "atomic-second");
         var definition = Fixtures.BuildDocument() with {
@@ -93,10 +93,8 @@ public sealed class WorldStateLiteralLawTests {
         using var fixture = Fixtures.FreshServer(definition: definition);
         fixture.Step();
 
-        Assert.All(
-            collection: fixture.Server.Definition.State,
-            action: static row => Assert.Equal(expected: 0L, actual: row.Cells!.Single().Value)
-        );
+        Assert.Equal(expected: 1L, actual: fixture.Server.Definition.State.Single(row => row.Name == first).Cells!.Single().Value);
+        Assert.Equal(expected: 0L, actual: fixture.Server.Definition.State.Single(row => row.Name == second).Cells!.Single().Value);
     }
 
     [Fact]

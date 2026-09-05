@@ -305,6 +305,9 @@ public sealed partial class WorldServer {
             }
 
             var held = latch.Held(name: rule.Name);
+            var boundValues = ((rule.Bindings is { Length: > 0 } declared)
+                ? $" bind [{string.Join(separator: ", ", values: declared.Select(selector: static b => $"{b.Name}:{b.Kind.ToString().ToLowerInvariant()}"))}]"
+                : string.Empty);
             var scope = ((rule.Interaction is { } interaction)
                 ? $" {interaction.CoOccurrence.ToString().ToLowerInvariant()} {interaction.Left} x {interaction.Right}{((interaction.CoOccurrence == WorldInteractionCoOccurrence.Distance)
                     ? $" <= {((double)interaction.Range)}"
@@ -314,7 +317,7 @@ public sealed partial class WorldServer {
                     : string.Empty)
             );
 
-            lines.Add(item: $"{rule.Name} mode={rule.Mode.ToString().ToLowerInvariant()}{scope} latch={(held
+            lines.Add(item: $"{rule.Name} mode={rule.Mode.ToString().ToLowerInvariant()}{scope}{boundValues} latch={(held
                 ? "held"
                 : "open")} when {gate} -> {effects}");
         }
