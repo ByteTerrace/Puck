@@ -1,0 +1,94 @@
+[
+  {
+    "Id": "integer.fermat-mask-bit-oracle",
+    "Tier": "Default",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "The internal NthFermatMask<T> kernel, invoked directly by a reflection-created delegate for every legal exponent in all twelve built-in fixed-width integer carriers, including both 128-bit signs and the final half-word mask.",
+        "Against": "Oracles.RepeatPatternBits assembles individual destination bits from a block of ones in BigInteger. It shares no Fermat quotient, replication multiplication, machine-word decomposition or subject helper. ENVELOPE: the internal kernel requires valid exponents; invalid indices and custom carriers are outside this statement.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.replication-mask-bit-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "ReplicationMask"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "ReplicationMask<T> for every legal block width over all twelve built-in fixed-width integer carriers, signed and unsigned through 128 bits including native integers.",
+        "Against": "Oracles.RepeatPatternBits assembles individual destination bits by their block position from pattern one; no geometric-series division, signed-halving trick, or subject helper is shared. ENVELOPE: native widths follow the executing host; custom IBinaryInteger implementations are not instantiated.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.repeat-bits-bit-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "RepeatBits"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "RepeatBits<T> over all twelve built-in fixed-width integer carriers; two domain words supply up to 128 pattern bits and another chooses a legal block width. The pattern is masked to its admitted block before the subject is called.",
+        "Against": "Oracles.RepeatPatternBits copies each source bit to its periodic destinations using BigInteger; it does not multiply by a replication mask or call a subject. The separate periodic-mask-boundaries case checks rejected patterns and every legal width. ENVELOPE: seeded and rolling domain samples, not a full-width exhaustive sweep.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.periodic-mask-boundaries",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "ReplicationMask"
+      },
+      {
+        "Type": "Puck.Maths.BinaryIntegerFunctions",
+        "Name": "RepeatBits"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "RepeatBits<T> at zero, one, an all-ones block and its top bit for every legal width in all twelve carriers; every legal byte pattern is also checked as byte and sbyte.",
+        "Against": "Oracles.RepeatPatternBits assembles bits independently; whole-word signed negative patterns and repeated patterns setting the sign bit are compared as exact word bits.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Both mask members refuse nonpositive, oversized and non-dividing widths with ArgumentOutOfRangeException naming blockWidth. RepeatBits refuses spilling patterns with the same exception naming value. BigInteger is refused with NotSupportedException because no word width exists. Extreme int widths also exercise the replication guard.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

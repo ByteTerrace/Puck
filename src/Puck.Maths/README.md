@@ -340,6 +340,21 @@ surface, including parameters, return values, and exceptions.
 The chooser above is the quickest way into these types. The API reference is
 the place to check a particular overload or failure condition.
 
+For repeating bit patterns, `BinaryIntegerFunctions.ReplicationMask<T>` places
+one bit at the bottom of each block: `8.ReplicationMask<uint>()` gives
+`0x01010101`. Multiplying by a pattern that fits in one block copies it across
+the word; `0xABu.RepeatBits(8)` gives `0xABABABAB`. Both functions require a block
+width that divides the fixed word width exactly. Signed types carry the same
+bits, so the repeated result can be negative; a whole-word block returns the
+input unchanged. `BigInteger` has no fixed word width and is refused. The
+[source documentation](BinaryIntegerFunctions.cs) derives the replication
+constant from a geometric series.
+
+The internal Fermat masks used by bit permutations share these repetition
+primitives. For 128-bit words, proper blocks repeat within a 64-bit half first,
+then that half is copied. This keeps wide division and multiplication out of
+mask construction and allows constant masks to fold into constant loads.
+
 ---
 
 ## 🗺️ Where to go next

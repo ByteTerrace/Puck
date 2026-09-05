@@ -718,6 +718,22 @@
       ]
     },
     {
+      "Id": "Puck.Maths.BinaryIntegerFunctions.RepeatBits(T,System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.periodic-mask-boundaries",
+        "integer.repeat-bits-bit-oracle"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.BinaryIntegerFunctions.ReplicationMask(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.periodic-mask-boundaries",
+        "integer.replication-mask-bit-oracle"
+      ]
+    },
+    {
       "Id": "Puck.Maths.BinaryIntegerFunctions.ReverseBits(T)",
       "State": "covered",
       "CoveredBy": [
