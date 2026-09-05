@@ -57,7 +57,16 @@ public static class WorldStateReader {
     /// <param name="row">The resolved row.</param>
     /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
     /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> when the row resolves.</returns>
+    /// <returns><see langword="true"/> when the row resolves. Never returns <see langword="false"/>: a handle either
+    /// addresses a row in the current catalog or the call throws, which is the one rule every per-tick handle read in
+    /// <c>WorldServer</c> follows (<c>ReadStateFact</c>, <c>ReadReduction</c>, <c>ResolveArgBody</c>,
+    /// <c>ResolveNearestBody</c>, <c>ResolveBodyRef</c>, <c>ReadSymmetry</c>, <c>ReadBoardFact</c>, <c>ReadPhaseFact</c>
+    /// — every reader a world rule compiles a <see cref="WorldStateHandle"/> for). This differs from
+    /// <see cref="TryRead"/>'s name-resolving door, which reads an unknown row as absent: a compiled handle is only
+    /// ever minted against a row <see cref="WorldRuleCompiler.CompileAll"/> already proved present in the SAME
+    /// document, and every document install revalidates by recompiling every rule against it — so an installed
+    /// document can never carry a rule whose compiled row a handle addresses has vanished. A throw here is therefore
+    /// a caught invariant violation, never a reachable "the row is gone" case a rule needs to tolerate.</returns>
     /// <exception cref="ArgumentException"><paramref name="catalog"/> is not the definition's current catalog, or
     /// <paramref name="handle"/> does not address a world-owned row in it.</exception>
     public static bool TryReadHandle(
@@ -139,8 +148,6 @@ public static class WorldStateReader {
         TState state,
         Func<int, TState, bool> isCandidateIndex
     ) {
-        ArgumentNullException.ThrowIfNull(argument: isCandidateIndex);
-
         if (!TryRead(
             definition: definition,
             key: null,
@@ -152,6 +159,51 @@ public static class WorldStateReader {
         )) {
             return null;
         }
+
+        return ArgExtremumOverRow(declared: declared, op: op, tick: tick, state: state, isCandidateIndex: isCandidateIndex);
+    }
+    /// <summary>Finds the winning cell like <see cref="ArgExtremum{TState}(WorldDefinition,string,WorldStateReduceOp,ulong,TState,Func{int,TState,bool})"/>,
+    /// resolving the row through a compiled <paramref name="handle"/> instead of a name scan.</summary>
+    /// <typeparam name="TState">The caller's filter-state carrier.</typeparam>
+    /// <param name="definition">The document to read.</param>
+    /// <param name="catalog">The document's current state catalog.</param>
+    /// <param name="handle">The compiled handle for the row to search.</param>
+    /// <param name="op">The extremum to find.</param>
+    /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="state">State passed to <paramref name="isCandidateIndex"/>.</param>
+    /// <param name="isCandidateIndex">The allocation-free candidate predicate.</param>
+    /// <returns>The winning cell key, or <see langword="null"/> when none qualifies.</returns>
+    /// <exception cref="ArgumentException"><paramref name="handle"/> does not address a current world-owned row.</exception>
+    public static string? ArgExtremum<TState>(
+        WorldDefinition definition,
+        WorldStateCatalog catalog,
+        WorldStateHandle handle,
+        WorldStateReduceOp op,
+        ulong tick,
+        TState state,
+        Func<int, TState, bool> isCandidateIndex
+    ) {
+        _ = TryReadHandle(
+            catalog: catalog,
+            definition: definition,
+            handle: handle,
+            key: null,
+            rawValue: out _,
+            row: out var declared,
+            text: out _,
+            tick: tick
+        );
+
+        return ArgExtremumOverRow(declared: declared!, op: op, tick: tick, state: state, isCandidateIndex: isCandidateIndex);
+    }
+    private static string? ArgExtremumOverRow<TState>(
+        WorldStateRow declared,
+        WorldStateReduceOp op,
+        ulong tick,
+        TState state,
+        Func<int, TState, bool> isCandidateIndex
+    ) {
+        ArgumentNullException.ThrowIfNull(argument: isCandidateIndex);
 
         var bestIndex = -1;
         string? bestKey = null;
