@@ -24,16 +24,15 @@ public sealed class MachineHost : QueuedMachineHost, IMachineMemoryPeek, IReconf
     /// <summary>The finite number of exact tick/input segments that may be accepted but incomplete.</summary>
     public const int DefaultMaximumPendingSteps = 8;
 
-    // The CURRENT model — construction-fixed at boot, then live-mutable through TryReconfigure (the dmg<->cgb<->agb
-    // device swap). The dmgSpeed fairness pin is construction-fixed (it sizes the deterministic tick->cycle budget).
+    // The CURRENT revision — construction-fixed at boot, then live-mutable through TryReconfigure (the device swap).
+    // The dmgSpeed fairness pin is construction-fixed (it sizes the deterministic tick->cycle budget).
     private ConsoleModel m_model;
 
     private readonly bool m_dmgSpeed;
 
     /// <summary>Initializes a new machine host. When <paramref name="cartridgeRom"/> is non-null the machine assembles
     /// at once; a null ROM leaves the host UNASSIGNED (a dark framebuffer) until <see cref="QueuedMachineHost.LoadContent"/> runs.</summary>
-    /// <param name="model">The hardware model to emulate (<see cref="ConsoleModel.Dmg"/>/<see cref="ConsoleModel.Cgb"/>/
-    /// <see cref="ConsoleModel.Agb"/>).</param>
+    /// <param name="model">The hardware revision to emulate.</param>
     /// <param name="cartridgeRom">The cartridge ROM image, or <see langword="null"/> to start empty.</param>
     /// <param name="savePath">The cartridge's battery-save path (conventionally <c>&lt;romPath&gt;.sav</c>), or
     /// <see langword="null"/> for an in-memory-only save.</param>

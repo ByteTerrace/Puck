@@ -71,6 +71,10 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
     /// <inheritdoc/>
     public ReadOnlySpan<uint> Framebuffer =>
         m_framebuffer.Pixels;
+    /// <summary>Gets the core's machine instance — the seam a cable link's group core resolves the serial port and the
+    /// pair-stepper's machine driver through. Touch it only from the thread currently stepping this core.</summary>
+    public MachineInstance Instance =>
+        m_machine;
 
     /// <inheritdoc/>
     public void ApplyInput(in MachinePadState input) =>
@@ -139,7 +143,7 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
             return false;
         }
 
-        // The live device swap (dmg<->cgb<->agb): retarget the emulated hardware WITHOUT a reboot, poking the game's
+        // The live device swap: retarget the emulated hardware WITHOUT a reboot, poking the game's
         // cached detection flag (from the recipe table, keyed by title) so a dual-mode cartridge re-renders natively.
         // The fairness pin is construction-fixed (it sizes the tick->cycle budget for determinism), so options only
         // move the model here; a bare capability flip with no recipe is honest, not a fake native retarget.

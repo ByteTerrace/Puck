@@ -139,15 +139,25 @@ internal static class Bess {
         return true;
     }
     /// <summary>Maps a <see cref="ConsoleModel"/> to the spec's 4-character model identifier.</summary>
-    /// <param name="model">The model to encode.</param>
+    /// <param name="model">The revision to encode.</param>
     /// <returns>The 4 ASCII bytes (family, model, revision, padding).</returns>
     public static byte[] ModelTag(ConsoleModel model) =>
-        model switch {
-            ConsoleModel.Dmg => "GD  "u8.ToArray(),
-            ConsoleModel.Cgb => "CCE "u8.ToArray(),
-            // The Advance's Dmg/Cgb-compatibility mode: family 'C' (the Cgb/Agb family), model 'A' (the Agb line).
-            _ => "CA  "u8.ToArray(),
-        };
+        Encoding.ASCII.GetBytes(s: model switch {
+            ConsoleModel.Dmg0 => "GD0 ",
+            ConsoleModel.DmgB => "GDB ",
+            ConsoleModel.DmgC => "GD  ",
+            ConsoleModel.Mgb => "GM  ",
+            ConsoleModel.Sgb => "SN  ",
+            ConsoleModel.Sgb2 => "S2  ",
+            ConsoleModel.Cgb0 => "CC0 ",
+            ConsoleModel.CgbA => "CCA ",
+            ConsoleModel.CgbB => "CCB ",
+            ConsoleModel.CgbC => "CCC ",
+            ConsoleModel.CgbD => "CCD ",
+            ConsoleModel.CgbE => "CCE ",
+            // The Advanced console's compatibility mode: family 'C' (the Color/Advanced family), model 'A'.
+            _ => "CA  ",
+        });
 
     private static void WriteTag(List<byte> destination, string tag) {
         var bytes = new byte[4];

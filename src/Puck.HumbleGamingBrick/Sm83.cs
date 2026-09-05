@@ -3,6 +3,15 @@ using Puck.HumbleGamingBrick.Timing;
 
 namespace Puck.HumbleGamingBrick;
 
+/// <summary>Host-side co-simulation trace sink for <see cref="Sm83"/> (Puck.HumbleGamingBrick.Post's CosimDiagnostic).
+/// Never serialized and never touched by the battery — a plain nullable field the hot fetch/dispatch path tests once,
+/// the same dormant-guard shape as <c>SystemBus</c>'s debug watchpoints.</summary>
+public interface ICpuTraceSink {
+    /// <summary>Fires once per real instruction dispatch, at the boundary before it runs: <paramref name="pc"/> is the
+    /// address the CPU is about to fetch from, and every register reflects the state left by the PRIOR instruction.</summary>
+    void OnInstructionBoundary(ushort pc, byte a, byte f, byte b, byte c, byte d, byte e, byte h, byte l, ushort sp);
+}
+
 /// <summary>
 /// The SM83 core (the LR35902's CPU), the machine's bus master. It executes one instruction per
 /// <see cref="StepInstruction"/>; running the program is what drives the machine's timeline forward. Memory is reached
@@ -21,6 +30,9 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
 
     private readonly ISystemBus m_bus;
     private readonly ComponentClock m_componentClock;
+    // Dormant co-simulation trace seam: null on every battery run and every ordinary boot, so the fetch/dispatch path
+    // pays one predicted-not-taken field test (see the guarded call in StepInstruction) and nothing else.
+    private ICpuTraceSink? m_traceSink;
     // Concrete-typed like SystemBus's own collaborators: each interface below has exactly one production
     // implementation, and only ISystemBus is ever substituted (Sm83SstHarness's SST bus), so these calls devirtualize.
     private readonly HdmaController m_hdma;
@@ -254,6 +266,29 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
             return;
         }
 
+        // EI's delayed enable lands here: after the arbitration above has already used this step's PRE-flip IME (so a
+        // pending interrupt cannot preempt the instruction the delay promised would run), but before this step's own
+        // fetch and dispatch (so that instruction's own logic — HALT's bug check is the one that reads IME mid-dispatch
+        // — observes the flip the instant it lands rather than one whole instruction late). Landing the flip after
+        // Execute instead would leave HALT one step behind real hardware: EI immediately followed by HALT with an
+        // interrupt already pending would halt for real rather than falling straight through into dispatch.
+        AdvanceInterruptEnable();
+
+        if (m_traceSink is not null) {
+            m_traceSink.OnInstructionBoundary(
+                a: m_a,
+                b: m_b,
+                c: m_c,
+                d: m_d,
+                e: m_e,
+                f: m_f,
+                h: m_h,
+                l: m_l,
+                pc: m_programCounter,
+                sp: m_stackPointer
+            );
+        }
+
         byte opcode;
 
         if (m_haltBug) {
@@ -266,11 +301,14 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         }
 
         Execute(opcode: opcode);
-        AdvanceInterruptEnable();
     }
     /// <inheritdoc/>
     public void ApplyModel(ConsoleModel model) =>
         m_supportsColor = model.SupportsColor();
+    /// <summary>Arms or clears the co-simulation trace sink. Host-side debug state — never snapshotted, never touched
+    /// by the battery.</summary>
+    public void SetTraceSink(ICpuTraceSink? sink) =>
+        m_traceSink = sink;
     /// <inheritdoc/>
     public void SaveState(StateWriter writer) {
         writer.WriteByte(value: m_a);
@@ -312,57 +350,38 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         m_componentClock.IsDoubleSpeed = m_key1.IsDoubleSpeed;
     }
 
-    // The boot ROM's documented register handoff, which differs per model. The CGB leaves A = 0x11, the value ROMs test
-    // to detect Color hardware; the flags follow the standard post-boot values. A monochrome cartridge on Color hardware
-    // takes the boot ROM's compatibility path, which leaves the title checksum in B (first-party titles only), 0x08 in E,
-    // and HL pointing where the palette/logo work ended — 0x991A for the copy-logo checksums, 0x007C otherwise. The AGB
-    // boot ROM hands off the CGB state after one extra `inc b` — the single register difference cartridges probe to
-    // detect Advance hardware — so B is one higher and F carries the increment's flags.
+    // The boot ROM's register handoff, per family. A F B C D E H L, with SP = 0xFFFE and PC = 0x0100 everywhere:
+    //
+    //   DMG0  01 00 FF 13 00 C1 84 03      SGB   01 00 00 14 00 00 C0 60
+    //   DMG   01 B0 00 13 00 D8 01 4D      SGB2  FF 00 00 14 00 00 C0 60
+    //   MGB   FF B0 00 13 00 D8 01 4D      CGB   11 80 00 00 FF 56 00 0D
+    //
+    // The DMG and MGB flags hold for a nonzero header checksum; hardware clears carry and half-carry (F = 0x80) when it
+    // is zero, which is not modelled. A monochrome cartridge on Color hardware takes the boot ROM's compatibility path
+    // instead, which leaves the title checksum in B (first-party titles only), 0x08 in E, and HL pointing where the
+    // palette/logo work ended — 0x991A for the copy-logo checksums, 0x007C otherwise.
     private void SeedPostBootState(ConsoleModel model, CartridgeHeader header) {
-        if (
-            model.SupportsColor() &&
-            !header.SupportsColor
-        ) {
-            var checksum = (header.IsFirstPartyGame
-                ? header.TitleChecksum
-                : (byte)0x00);
-            var copyLogo = ((checksum == 0x43) || (checksum == 0x58));
+        switch (model.Family()) {
+            case ConsoleFamily.Cgb:
+            case ConsoleFamily.Agb:
+            case ConsoleFamily.Ags:
+                SeedColorHandoff(header: header);
 
-            m_a = 0x11;
-            m_f = 0x80;
-            m_b = checksum;
-            m_c = 0x00;
-            m_d = 0x00;
-            m_e = 0x08;
-            m_h = (copyLogo
-                ? (byte)0x99
-                : (byte)0x00);
-            m_l = (copyLogo
-                ? (byte)0x1A
-                : (byte)0x7C);
-        } else if (model.SupportsColor()) {
-            m_a = 0x11;
-            m_f = 0x80;
-            m_b = 0x00;
-            m_c = 0x00;
-            m_d = 0xFF;
-            m_e = 0x56;
-            m_h = 0x00;
-            m_l = 0x0D;
-        } else {
-            m_a = 0x01;
-            m_f = 0xB0;
-            m_b = 0x00;
-            m_c = 0x13;
-            m_d = 0x00;
-            m_e = 0xD8;
-            m_h = 0x01;
-            m_l = 0x4D;
+                break;
+            case ConsoleFamily.Sgb:
+            case ConsoleFamily.Sgb2:
+                SeedSuperHandoff(model: model);
+
+                break;
+            default:
+                SeedMonochromeHandoff(model: model);
+
+                break;
         }
 
-        // The AGB's extra `inc b`: zero and half-carry reflect the increment, subtract clears, carry is untouched
-        // (both CGB handoff paths leave it clear).
-        if (model == ConsoleModel.Agb) {
+        // The Advanced boot ROM's extra `inc b`: zero and half-carry reflect the increment, subtract clears, carry is
+        // untouched (both Color handoff paths leave it clear).
+        if (model.HasAgbBootHandoff()) {
             var incremented = ((byte)(m_b + 1));
 
             m_f = ((byte)(((incremented == 0x00)
@@ -375,6 +394,73 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
 
         m_stackPointer = 0xFFFE;
         m_programCounter = 0x0100;
+    }
+    private void SeedColorHandoff(CartridgeHeader header) {
+        m_a = 0x11;
+        m_f = 0x80;
+        m_c = 0x00;
+
+        if (header.SupportsColor) {
+            m_b = 0x00;
+            m_d = 0xFF;
+            m_e = 0x56;
+            m_h = 0x00;
+            m_l = 0x0D;
+
+            return;
+        }
+
+        var checksum = (header.IsFirstPartyGame
+            ? header.TitleChecksum
+            : (byte)0x00);
+        var copyLogo = ((checksum == 0x43) || (checksum == 0x58));
+
+        m_b = checksum;
+        m_d = 0x00;
+        m_e = 0x08;
+        m_h = (copyLogo
+            ? (byte)0x99
+            : (byte)0x00);
+        m_l = (copyLogo
+            ? (byte)0x1A
+            : (byte)0x7C);
+    }
+    private void SeedMonochromeHandoff(ConsoleModel model) {
+        if (model == ConsoleModel.Dmg0) {
+            m_a = 0x01;
+            m_f = 0x00;
+            m_b = 0xFF;
+            m_c = 0x13;
+            m_d = 0x00;
+            m_e = 0xC1;
+            m_h = 0x84;
+            m_l = 0x03;
+
+            return;
+        }
+
+        m_a = ((model == ConsoleModel.Mgb)
+            ? (byte)0xFF
+            : (byte)0x01);
+        m_f = 0xB0;
+        m_b = 0x00;
+        m_c = 0x13;
+        m_d = 0x00;
+        m_e = 0xD8;
+        m_h = 0x01;
+        m_l = 0x4D;
+    }
+    private void SeedSuperHandoff(ConsoleModel model) {
+        m_a = ((model == ConsoleModel.Sgb2)
+            ? (byte)0xFF
+            : (byte)0x01);
+        m_f = 0x00;
+        m_b = 0x00;
+        m_c = 0x14;
+        m_d = 0x00;
+        m_e = 0x00;
+        m_h = 0xC0;
+        m_l = 0x60;
     }
     private void ServiceInterrupt() {
         // Dispatch costs five machine cycles: two internal, the two-byte push of PC, and the jump to the vector. The

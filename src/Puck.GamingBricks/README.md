@@ -29,6 +29,10 @@ of its own — that lives in each brick that references it.
 - *Machine-neutral time travel:* `MachineTimeTravel<TInput>` builds bounded
   rewind, persistent-fork runahead, and capped fast-forward over the small
   `ITimeTravelMachineCore<TInput>` adapter.
+- *Owned cable links:* `LinkedMachineGroup` takes ownership of two or more
+  workers' cores, steps them as one group through an `IMachineGroupCore`
+  medium, and publishes each member back through its own worker — with the
+  group's own bounded queue, backpressure, and coupled time travel.
 - *Shared contract proof:* `QueuedHostContractProbe` drives the neutral
   `IScreenMachine`/`IQueuedScreenMachine` surface through the same checks —
   backpressure, frame publication, audio, coherent memory access,
@@ -138,6 +142,42 @@ feedback and pixels from the landing. Memory pokes or instruction-granular
 advances that the frame-oriented replay log cannot reproduce invalidate stale
 history rather than pretending it remains safe.
 
+## 🔗 Cable-linked groups
+
+A *link* is an object that owns its members' cores. `LinkedMachineGroup` forms
+one by quiescing each member's `QueuedMachineWorker` at a frame boundary
+(`LendCore`) and lending its core to the group's single execution thread, where
+an `IMachineGroupCore` — the medium plus its deterministic interleave — advances
+every member through one shared cycle budget.
+
+- *One publication path.* After each group step the members publish through
+  their own workers (`PublishLentStep`): the same framebuffer, audio ring,
+  feedback, and completed-step count a host already reads. Nothing above the
+  worker changes when a cable goes in.
+- *Per-seat input.* `MachineLinkPads` carries one `MachinePadState` per seat, in
+  cable order, and is the held-input image the group's rewind ring replays.
+- *One unit for the queue.* `Submit` accepts exact (tick budget, seat inputs)
+  segments up to a finite pending window and backpressures at capacity;
+  `IMachineLink.Step` is the synchronous submit-and-drain path. A lent member's
+  own `Step`/`Submit` refuses work, and its peek/poke/reconfigure/flush marshal
+  onto the link thread through `IMachineCoreLender`.
+- *Coupled time travel.* One `MachineTimeTravel<MachineLinkPads>` rides the group
+  core, whose state image holds every member's snapshot **and** the medium's own
+  pacing state, so a rewind lands the members and the interleave together and
+  the resumed future matches the un-rewound run. Fast-forward repeats the exact
+  segment for the whole group. Runahead is refused: a lookahead would have to
+  fork every member and the medium, and a peer's future is not a function of
+  held input.
+- *Severing.* `Dispose` stops the group thread, disconnects the medium at once —
+  an unfinished externally-clocked transfer stays pending, as an unplugged
+  cable's does — and returns each core to its own worker with the group's
+  tick-to-cycle accumulator phase, so the conversion carries no drift across the
+  seam. Disposing a member while it is lent severs the link first.
+
+Cross-process transport is out of scope here. The seam it would carry is the
+group core's serializable state image plus each submitted segment; nothing in
+this project reaches beyond the process.
+
 ## 📋 Core types
 
 | Area | Types | Purpose |
@@ -147,6 +187,7 @@ history rather than pretending it remains safe.
 | Fork lifecycle | `ISnapshotableMachine`, `MachineInstance<TMachine, TConfiguration>`, `MachineFork<TMachine, TConfiguration>`, `MachineInstancePool<TMachine, TConfiguration>` | Pooled, ABA-safe forked-instance rentals |
 | Queued machines | `QueuedMachineHost`, `QueuedMachineWorker`, `IQueuedMachineCore` | Ordered off-thread emulation and complete-frame publication |
 | Time travel | `MachineTimeTravel<TInput>`, `ITimeTravelMachineCore<TInput>`, `ITimeTravelLookahead<TInput>` | Bounded rewind, persistent runahead, and fast-forward |
+| Cable links | `LinkedMachineGroup`, `IMachineGroupCore`, `IMachineCoreLender`, `MachineLinkPads` | Group-owned cores, per-seat input, and coupled time travel |
 | Contract proof | `QueuedHostContractProbe`, `QueuedHostProbeResult` | Shared observable checks for concrete queued hosts |
 
 Each brick re-exposes the closed generics under its own bare name through a

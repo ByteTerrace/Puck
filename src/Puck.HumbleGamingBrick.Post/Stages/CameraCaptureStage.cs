@@ -349,7 +349,7 @@ internal sealed class CameraCaptureStage : IPostStage<PostContext> {
     private static MachineInstance BuildCamera(ICameraSensor sensor) {
         // Header type 0xFC = camera cartridge; RAM-size 0x04 = 128 KiB (16 banks), as the real cart carries.
         var machine = PostMachine.Build(
-            model: ConsoleModel.Dmg,
+            model: ConsoleModel.DmgC,
             rom: SyntheticRom.Create(
                 cartridgeType: 0xFC,
                 ramSize: 0x04

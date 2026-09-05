@@ -4,7 +4,7 @@ namespace Puck.HumbleGamingBrick.Post;
 
 /// <summary>
 /// Tier-C stage that replays a commercial game across a cross-generation
-/// pair. Two SM83 machines of different costumes — a Color (<see cref="ConsoleModel.Cgb"/>) console and an Advance
+/// pair. Two SM83 machines of different costumes — a Color (<see cref="ConsoleModel.CgbE"/>) console and an Advance
 /// (<see cref="ConsoleModel.Agb"/>) console, the same GB-family cartridge in both, which by the carry-forward rule is
 /// one SM83 core under two capability gates — run the game from power-on under frozen per-machine input scripts, through
 /// a <see cref="SerialLinkSession"/>, to its in-game two-player link handshake. The gate asserts REAL serial traffic
@@ -87,7 +87,7 @@ internal sealed class LinkGameReplayStage : IPostStage<PostContext> {
     // both walking the frozen menu script to the handshake. Self-contained so the determinism leg repeats it exactly.
     private static LinkReplayResult RunLinkedGame(byte[] rom) {
         using var cgb = PostMachine.Build(
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             rom: rom
         );
         using var agb = PostMachine.Build(

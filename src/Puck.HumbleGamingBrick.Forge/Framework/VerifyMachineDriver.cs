@@ -15,7 +15,7 @@ public sealed class VerifyMachineDriver : IDisposable {
     public VerifyMachineDriver(byte[] rom, string label) {
         m_label = label;
         m_machine = MachineFactory.Create(
-            configuration: new MachineConfiguration(model: ConsoleModel.Cgb, cartridgeRom: rom),
+            configuration: new MachineConfiguration(model: ConsoleModel.CgbE, cartridgeRom: rom),
             compose: static services => services.AddHumbleGamingBrickComponents()
         );
         m_bus = m_machine.GetRequiredService<ISystemBus>();

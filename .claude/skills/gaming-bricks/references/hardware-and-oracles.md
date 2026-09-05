@@ -19,8 +19,10 @@ source and the two Post READMEs.
   inputs or configuration. Do not introduce wall-clock time, randomness, or
   floating point into emulated logic.
 - GB software runs through one shared SM83 core parameterized by
-  `ConsoleModel` capabilities for `Dmg`, `Cgb`, and `Agb`. Do not fork the core
-  into per-console implementations merely to express hardware capabilities.
+  `ConsoleModel`, which is revision-valued (`Dmg0`…`DmgC`, `Mgb`, `Sgb`,
+  `Sgb2`, `Cgb0`…`CgbE`, `Agb`, `Ags`). Components ask a named question on
+  `ConsoleModelExtensions` and cache the answer through `ApplyModel`; do not
+  fork the core, and do not switch on a revision inside `Sm83`/`Ppu`/`Apu`.
 - The ARM7TDMI core is the separate GBA-native machine. Cartridge selection
   chooses between the compatibility costume and native machine; both share
   the master-clock and link abstractions where the hardware does.
@@ -65,9 +67,30 @@ normal-clock transfer.
 
 ### Audio
 
-Integer PCM12/PCM34 channel outputs are the emulated contract. Floating-point
-mixing is presentation only and must never feed state. The frame sequencer is
-DIV-driven from bit 12, or bit 13 in double-speed mode.
+Integer PCM12/PCM34 channel outputs are the emulated contract, and they are
+latched: a channel publishes a new level only when its generator steps, its
+envelope moves, or a register write reaches it, and a channel whose DAC is off
+holds the level it last published. Floating-point mixing is presentation only
+and must never feed state.
+
+The unit runs on two clocks. Its CPU-domain tick follows the DIV-APU bit —
+bit 12 of the DIV counter, or bit 13 in double-speed mode: the falling edge
+advances the 512 Hz divider (length at 256 Hz, sweep at 128 Hz, the envelope
+reload pre-count at 64 Hz), and the rising edge half a period later arms the
+envelope clocks, which the next falling edge steps. The generators — duty
+positions, the wave fetcher, and the noise counter that clocks the LFSR — run
+on a fixed 2 MiHz audio clock, two whole dots per tick, derived by halving the
+per-dot stream `ApuGeneratorClock` delivers. The noise channel is a 14-bit
+counter with an edge detector on the NR43-selected bit, not a shift-scaled
+period, which is why two (divisor, shift) pairs naming one rate step the LFSR
+at the same instants.
+
+A read and a write reach the unit at different points inside their machine
+cycle (`Sm83.Decode`'s `LeadingTCyclesBeforeRead`/`Write`), so a read observes
+one more audio tick than the write that set the event up. The generators carry
+that skew in their countdown loads; the write-side predicates undo it by
+looking one tick ahead (`PeekSquare`, `PeekWaveFetch`). Move one and the other
+has to move with it.
 
 ## 3. Snapshots and host boundaries
 
@@ -102,20 +125,51 @@ alias in that project's `GlobalUsings.cs` — searching for a declared
 Treat the STAT and memory-lock schedule as one coupled contract. Do not adjust
 one lag constant in isolation.
 
-- Mode 0 emerges when the 160th pixel is popped: normally dot 251 plus
-  `SCX % 8`; the first line after LCD enable has no entry latency and is four
-  dots earlier. This internal mode-3-to-0 edge drives HDMA.
-- CPU-visible state trails that edge through `PpuTimingParameters` and `Ppu`:
-  polled STAT by four dots; mode-0 interrupt by five dots, reduced by one on
-  Color at single speed; VRAM-read unlock by four; VRAM-write and OAM-write
-  unlock by five; OAM-read unlock by six.
+- A visible line's schedule, in dots from the line boundary: LY register write
+  and OAM STAT pulse at 2, polled mode 2 at 3, polled mode 3 with the memory
+  locks at 83, the pixel loop engaging at 88, screen column 0 at 96 + `SCX % 8`,
+  the internal mode-3-to-0 edge (the 160th pixel popping) with the polled STAT
+  flip and the VRAM unlocks at 255 + `SCX % 8`, and the mode-0 interrupt at
+  256 + `SCX % 8`. The internal edge drives HDMA.
+- SameBoy's own line runs three dots ahead of that, its schedule numbered one
+  dot higher (its LX 3 is our dot 2). The gap accumulates on the first line
+  after an LCD enable, which we run 452 dots long where SameBoy runs 448 —
+  measured exactly on `lcdon_timing-GS`, whose line-0 origin both emulators put
+  at the same cycle, with SameBoy showing polled mode 3 at LX 78 (object memory
+  closing to writes at 76), its pixel loop at 83, mode 0 at 250, and line 1
+  starting 448 dots in.
+- Setting our first line to 449 dots with line 0's own group at 78/78/83 puts
+  every polled STAT and LY edge, first line included, on SameBoy's exact dot —
+  verified against the per-dot trace on two separate LCD enables — and takes the
+  mealybug/AGE error from 59.6k to 51.3k differing pixels. It also fails
+  `lcdon_timing`, `lcdon_write_timing` and `intr_2_mode0_timing_sprites`,
+  because a dot-identical PPU is not enough: `Sm83`'s read dot-phase latches an
+  I/O read on the access's third T-cycle where SameBoy latches it on the first
+  (`LeadingTCyclesBeforeRead`, itself pinned by the memory-timing family), so
+  with identical PPUs the two CPUs sample STAT two cycles apart. Our 452-dot
+  first line is the compensation for that. Four decompositions were measured and
+  refuted: shifting the whole schedule a dot (breaks the interrupt family, which
+  is sampled at the instruction boundary and not through the read path), giving
+  the polled register view its own phase of one or three dots (breaks
+  `hblank_ly_scx_timing`, which reads LY), and matching SameBoy's read
+  dot-phase (breaks more than it fixes). Closing this is the open frontier: it
+  costs three to four columns on every mid-mode-3 register signature, and it is
+  what keeps `m3_lcdc_win_en_change_multiple` off pixel-exact.
+- CPU-visible state trails the internal edge by: polled STAT, VRAM read and
+  VRAM write, and OAM write by zero dots; OAM read by zero on monochrome and
+  one on Color; the mode-0 interrupt by one, reduced to zero on Color at single
+  speed. Double speed adds one dot to the polled STAT flip.
 - STAT mode 0 and VRAM-read availability change together. Pokémon Gold's
   Trade Center poll-STAT-then-read path depends on that ordering.
-- The OAM STAT pulse fires one dot after the LY write. Its tail overlaps the
-  comparison-valid dot so a held LY=LYC condition does not retrigger.
+- The OAM STAT pulse fires on the LY write, one dot before STAT shows mode 2.
+  Its tail overlaps the comparison-valid dot so a held LY=LYC condition does
+  not retrigger.
 - OAM writes remain available during the scan's first machine cycle and the
-  mode-3 entry-latency dots. VRAM writes also land during entry latency;
-  reads do not.
+  first four entry-latency dots. VRAM writes also land there; reads do not.
+- The window hand-over is immediate — the WX match drops the background FIFO
+  and rewinds the fetcher, and the classic window penalty is the refill. There
+  is no separate activation stall beyond the one extra dot monochrome silicon
+  spends when WX is 0 with a non-zero `SCX % 8`.
 - Tick the object fetcher before the pixel pop. From the second background
   tile onward, `ObjectFetchDot` may treat the high-data-byte address dot as
   ready once the first push has landed; the first fetch retains the read-dot
@@ -123,9 +177,15 @@ one lag constant in isolation.
   advances its fetcher after the pop, so from the line's second tile the
   check-time fetcher state trails it by one step, and the allowance
   reconciles the two while the object stall stays dot-exact against SameBoy,
-  including `intr_2_mode0_timing_sprites`.
+  including `intr_2_mode0_timing_sprites`. Reordering to pop-then-fetch and
+  dropping the allowance is only correct together with the three-dot line
+  alignment above; on its own it moves every mid-line register sample a dot
+  the wrong way.
 - The remaining PPU frontier is the mealybug `m3_*` sub-dot register
-  signatures.
+  signatures: the line alignment above, then the CPU-side register write
+  conflicts SameBoy models in `sm83_cpu.c` (`tile_sel_glitch`,
+  `wx_just_changed`, `disable_window_pixel_insertion_glitch`), which several
+  `m3_lcdc_*` and `m3_wx_*` signatures turn on.
 
 The acceptance cases pinning this schedule by name: `hblank_ly_scx_timing`
 (its 51/50/49 SCX pattern), the `intr_2_*` family, `intr_1_2`,

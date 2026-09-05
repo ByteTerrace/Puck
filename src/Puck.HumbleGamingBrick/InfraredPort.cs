@@ -27,8 +27,7 @@ namespace Puck.HumbleGamingBrick;
 /// </summary>
 public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IModeSwitchable {
     // RP read-back: keep the written bits 7-6 (data enable) and bit 0 (LED); force the unused bits (1-5) high.
-    // 0x3E = 0b0011_1110 — bit 1 defaults high (no light), bits 2-5 are wired high. (Hardware also sets bit 4 except on
-    // the CGB-E revision; Puck has one generic Color costume, so the common non-CGB-E read is used.)
+    // 0x3E = 0b0011_1110 — bit 1 defaults high (no light), bits 2-5 are wired high.
     private const byte ReadBackKeepMask = 0xC1;
     private const byte ReadBackHighBits = 0x3E;
     // The data-read-enable gate: light is reported on bit 1 only when bits 7-6 are BOTH set.
@@ -61,7 +60,7 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
 
     /// <summary>Gets or sets whether a HuC1/HuC3 cartridge's IR window is wired to this transceiver. Set once by the
     /// component factory when such a cartridge is loaded (see <see cref="IInfraredCartridge"/>); widens hardware
-    /// self-sensing to the Advanced costume, exactly as it does on real hardware (see <see cref="ReceivedLight"/>). Not
+    /// self-sensing to the Advanced console, exactly as it does on real hardware (see <see cref="ReceivedLight"/>). Not
     /// serialized: the attached cartridge's mapper kind is immutable machine composition, not emulated state, the same
     /// category as <see cref="ModelState"/>'s boot wiring.</summary>
     internal bool HasHuCCartridge { get; set; }
@@ -78,10 +77,9 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
     /// (memory.c ~line 728), a per-view split SameBoy's own comment flags as an interaction inaccuracy ("the way this
     /// thing works makes the CGB IR port behave inaccurately when used together with HUC1/3 IR ports", timing.c ~line
     /// 133). Puck's one shared transceiver deliberately does not fork that per-view split: RP, HuC1, and HuC3 all read
-    /// the same <see cref="ReceivedLight"/> value, so the CGB costume (our stand-in for CGB-E-and-earlier) senses peer
-    /// light plus its own RP LED bit plus its own cart LED latch unconditionally, and the Agb costume (newer-than-CGB-E)
-    /// senses peer light plus its own emitted light only when a HuC1/HuC3 cartridge is present — matching Puck's
-    /// existing correct AGB-RP-no-self-sense behavior when no HuC cartridge is loaded.
+    /// the same <see cref="ReceivedLight"/> value, so a Color stepping senses peer light plus its own RP LED bit plus
+    /// its own cart LED latch unconditionally, and the Advanced console senses peer light plus its own emitted light
+    /// only when a HuC1/HuC3 cartridge is present.
     /// </remarks>
     public bool ReceivedLight =>
         ((m_peer?.EmittedLight ?? false) || (SelfSensingEnabled && ((IInfraredPeer)this).EmittedLight));
@@ -95,11 +93,11 @@ public sealed class InfraredPort : IInfrared, IInfraredPeer, ISnapshotable, IMod
     bool IInfraredPeer.EmittedLight =>
         (((m_register & LedOutBit) != 0) || m_cartLightOut);
 
-    // Whether this machine's own emitted light feeds back into ReceivedLight: always for the CGB costume; only with a
-    // HuC1/HuC3 cartridge present for the Agb costume (or a bare Dmg — HuC IR works on monochrome hardware too). See the
-    // ReceivedLight remarks for the SameBoy citation.
+    // Whether this machine's own emitted light feeds back into ReceivedLight: always on the Color steppings, which sense
+    // their own lit LED; only with a HuC1/HuC3 cartridge present on the Advanced console (or on monochrome hardware,
+    // where HuC IR works too). See the ReceivedLight remarks for the SameBoy citation.
     private bool SelfSensingEnabled =>
-        ((m_model == ConsoleModel.Cgb) || HasHuCCartridge);
+        (m_model.SensesOwnInfraredLight() || HasHuCCartridge);
 
     /// <inheritdoc/>
     public void ApplyModel(ConsoleModel model) =>

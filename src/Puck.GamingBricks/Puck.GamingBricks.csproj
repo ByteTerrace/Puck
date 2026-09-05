@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <Description>The machine-neutral substrate every GamingBrick core builds on: little-endian whole-state snapshot serialization with section-localized divergence reporting, a pooled forked-instance lifecycle, bounded rewind/runahead/fast-forward time travel, and a queued off-thread host that turns a core into a backpressured emulation worker. It carries no console-specific CPU, PPU, or cartridge logic of its own — that lives in each brick that references it.</Description>
+        <Description>The machine-neutral substrate every GamingBrick core builds on: little-endian whole-state snapshot serialization with section-localized divergence reporting, a pooled forked-instance lifecycle, bounded rewind/runahead/fast-forward time travel, a queued off-thread host that turns a core into a backpressured emulation worker, and a cable-link substrate that takes ownership of several such workers' cores and steps them as one deterministically interleaved group. It carries no console-specific CPU, PPU, or cartridge logic of its own — that lives in each brick that references it.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.GamingBricks</PackageId>
         <PackageTags>determinism;emulation;fork;queued-host;snapshot;time-travel</PackageTags>

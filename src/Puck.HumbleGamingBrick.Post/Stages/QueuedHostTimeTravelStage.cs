@@ -26,11 +26,11 @@ internal sealed class QueuedHostTimeTravelStage : IPostStage<PostContext> {
     public PostStageOutcome Run(PostContext context) {
         var result = QueuedHostContractProbe.VerifyTimeTravel(
             withContent: () => new MachineHost(
-                model: ConsoleModel.Dmg,
+                model: ConsoleModel.DmgC,
                 cartridgeRom: SyntheticRom.Create()
             ),
             withAudio: () => new MachineHost(
-                model: ConsoleModel.Dmg,
+                model: ConsoleModel.DmgC,
                 cartridgeRom: SyntheticRom.Create(),
                 audioSampleRate: RequestedSampleRate
             ),

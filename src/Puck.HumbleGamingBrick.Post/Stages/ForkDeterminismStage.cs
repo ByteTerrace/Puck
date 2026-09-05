@@ -23,7 +23,7 @@ internal sealed class ForkDeterminismStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
         using var parent = PostMachine.Build(
-            model: ConsoleModel.Dmg,
+            model: ConsoleModel.DmgC,
             rom: SyntheticRom.Create()
         );
 

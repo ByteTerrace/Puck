@@ -34,6 +34,7 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
     private const byte TransferActive = 0x80;
     private const byte UnusedBits = 0x7C;
 
+    private readonly DmgCompatibilityState m_dmgCompatibility;
     private readonly IInterruptController m_interrupts;
     private readonly IKey1 m_key1;
     private readonly ITimer m_timer;
@@ -57,13 +58,17 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
     /// <param name="timer">The divider/timer block, read for the shift-clock edge.</param>
     /// <param name="key1">The speed-switch/stop unit.</param>
     /// <param name="configuration">The machine configuration, which gates the Color-only fast-clock bit.</param>
+    /// <param name="dmgCompatibility">The shared DMG-compatibility authority: the fast-clock bit does not exist while
+    /// Color silicon runs a compatibility-mode cartridge either, exactly like every other Color-only register.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public SerialComponent(IInterruptController interrupts, ITimer timer, IKey1 key1, MachineConfiguration configuration) {
+    public SerialComponent(IInterruptController interrupts, ITimer timer, IKey1 key1, MachineConfiguration configuration, DmgCompatibilityState dmgCompatibility) {
         ArgumentNullException.ThrowIfNull(argument: interrupts);
         ArgumentNullException.ThrowIfNull(argument: timer);
         ArgumentNullException.ThrowIfNull(argument: key1);
         ArgumentNullException.ThrowIfNull(argument: configuration);
+        ArgumentNullException.ThrowIfNull(argument: dmgCompatibility);
 
+        m_dmgCompatibility = dmgCompatibility;
         m_interrupts = interrupts;
         m_key1 = key1;
         m_timer = timer;
@@ -92,9 +97,9 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
     /// raises its serial interrupt — carrying the final shifted-in byte (SB). It fires for BOTH roles: an internal-clock
     /// (master) transfer completing in <see cref="Tick"/> and an external-clock (slave) transfer completing under the
     /// peer's clock. Like <see cref="ByteTransmitted"/> it is a pure host-side observation seam — never serialized, so
-    /// setting it cannot perturb determinism, and <see langword="null"/> in a normal run — the honest way a link harness
-    /// counts completed exchanges (serial IRQs) on each side of a cable, master and slave alike, without the cartridge's
-    /// cooperation.</summary>
+    /// setting it cannot perturb determinism — the honest way a link harness or a live cable link counts completed
+    /// exchanges (serial IRQs) on each side, master and slave alike, without the cartridge's cooperation. An observer
+    /// that replaces an existing one must chain to it, since a live link holds one for the cable's lifetime.</summary>
     public Action<byte>? TransferCompleted { get; set; }
     /// <summary>Gets whether a link peer is attached (see <see cref="SerialLinkSession"/>).</summary>
     public bool IsLinked =>
@@ -139,11 +144,16 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
             CompleteTransfer();
         }
     }
+    // Whether the fast-clock bit (SC bit 1) exists at all: Color silicon running a compatibility-mode cartridge
+    // cannot reach it either, the same "CGB mode only" fact KEY1/RP/SVBK answer through DmgCompatibilityState.
+    private bool HasFastClock =>
+        (m_supportsColor && !m_dmgCompatibility.IsActive);
+
     /// <inheritdoc/>
     public byte ReadRegister(ushort address) =>
         ((address == MemoryMap.SerialData)
         ? m_data
-        : (byte)(m_control | UnusedBits | (m_supportsColor
+        : (byte)(m_control | UnusedBits | (HasFastClock
             ? (byte)0x00
             : FastClock)));
     /// <inheritdoc/>
@@ -156,9 +166,9 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
             return;
         }
 
-        // The fast-clock bit does not exist on DMG silicon: a write to it is simply dropped, so it can never surface
-        // through DivBit() or a later read.
-        m_control = ((byte)(value & (m_supportsColor
+        // The fast-clock bit does not exist on DMG silicon, or on Color silicon running a compatibility-mode
+        // cartridge: a write to it is simply dropped, so it can never surface through DivBit() or a later read.
+        m_control = ((byte)(value & (HasFastClock
             ? MeaningfulMask
             : (byte)(MeaningfulMask & ~FastClock))));
 

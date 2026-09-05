@@ -10,6 +10,8 @@ namespace Puck.HumbleGamingBrick;
 public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
     // The boot overlay's read windows: every model maps the first 256 bytes; Color additionally maps 0x200-0x8FF,
     // leaving the cartridge header visible through the 0x100-0x1FF hole.
+    /// <summary>The KEY0 value the Color boot ROM writes for a cartridge without the color flag.</summary>
+
     private const ushort BootRomLowEnd = 0x00FF;
     private const ushort CgbBootRomHighEnd = 0x08FF;
     private const ushort CgbBootRomHighStart = 0x0200;
@@ -24,6 +26,7 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
     private readonly ApuComponent m_apu;
     private readonly byte[]? m_bootRom;
     private readonly ICartridgeSlot m_cartridgeSlot;
+    private readonly DmgCompatibilityState m_dmgCompatibility;
     private readonly HdmaController m_hdma;
     private readonly InfraredPort m_infrared;
     private readonly InterruptController m_interrupts;
@@ -73,8 +76,10 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
     /// <param name="serial">The serial port backing SB and SC.</param>
     /// <param name="timer">The divider/timer block backing DIV, TIMA, TMA, and TAC.</param>
     /// <param name="configuration">The machine configuration, which gates Color-only registers.</param>
+    /// <param name="dmgCompatibility">The shared DMG-compatibility authority, sealing the Color-only registers a
+    /// compatibility-mode cartridge cannot reach.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public SystemBus(ApuComponent apu, ICartridgeSlot cartridgeSlot, HdmaController hdma, InfraredPort infrared, InterruptController interrupts, JoypadComponent joypad, Key1Component key1, SystemMemory memory, OamDmaController oamDma, Ppu ppu, SerialComponent serial, TimerComponent timer, MachineConfiguration configuration) {
+    public SystemBus(ApuComponent apu, ICartridgeSlot cartridgeSlot, HdmaController hdma, InfraredPort infrared, InterruptController interrupts, JoypadComponent joypad, Key1Component key1, SystemMemory memory, OamDmaController oamDma, Ppu ppu, SerialComponent serial, TimerComponent timer, MachineConfiguration configuration, DmgCompatibilityState dmgCompatibility) {
         ArgumentNullException.ThrowIfNull(argument: apu);
         ArgumentNullException.ThrowIfNull(argument: cartridgeSlot);
         ArgumentNullException.ThrowIfNull(argument: hdma);
@@ -88,11 +93,13 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
         ArgumentNullException.ThrowIfNull(argument: serial);
         ArgumentNullException.ThrowIfNull(argument: timer);
         ArgumentNullException.ThrowIfNull(argument: configuration);
+        ArgumentNullException.ThrowIfNull(argument: dmgCompatibility);
 
         m_apu = apu;
         m_bootRom = configuration.BootRom;
         m_bootRomMapped = (configuration.BootRom is not null);
         m_cartridgeSlot = cartridgeSlot;
+        m_dmgCompatibility = dmgCompatibility;
         m_hdma = hdma;
         m_infrared = infrared;
         m_interrupts = interrupts;
@@ -110,6 +117,22 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             array: m_ioRegisters,
             value: ((byte)0xFF)
         );
+
+        // The Color undocumented registers reset to 0x00 (Pan Docs "CGB Registers"), unlike the 0xFF the fallback
+        // page above uses for a genuinely unbacked address; ReadColorIoRegister masks them to 0xFF on non-Color
+        // hardware regardless of this seed.
+        m_ioRegisters[(0xFF72 - MemoryMap.IoRegistersStart)] = 0x00;
+        m_ioRegisters[(0xFF73 - MemoryMap.IoRegistersStart)] = 0x00;
+        m_ioRegisters[(0xFF74 - MemoryMap.IoRegistersStart)] = 0x00;
+        m_ioRegisters[(0xFF75 - MemoryMap.IoRegistersStart)] = 0x00;
+        // KEY0 is undecoded, so it lives in the fallback byte page. Without a boot ROM the Color handoff is seeded, and
+        // that includes the compatibility-mode byte the Color boot ROM writes for a cartridge without the color flag.
+        if (
+            (configuration.BootRom is null) &&
+            dmgCompatibility.IsActive
+        ) {
+            m_ioRegisters[(MemoryMap.SystemModeSelect - MemoryMap.IoRegistersStart)] = DmgCompatibilityState.Key0CompatibilityBit;
+        }
 
         RefreshCartridgeWindowCache();
     }
@@ -758,6 +781,13 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
                 return ReadColorIoRegister(address: address);
         }
     }
+    // Whether Color-only hardware is both present AND reachable: false either on monochrome silicon or while Color
+    // silicon is running DMG-compatibility mode, where KEY1/RP/VBK/SVBK/HDMA/OPRI are the same "not on this console"
+    // fact a compatibility-mode cartridge already can't tell apart from monochrome hardware (Pan Docs "Power-Up
+    // Sequence" — every one of these registers reads $FF outside CGB mode). The palette index ports are the one
+    // exception (Ppu.ReadRegister answers those directly; only the DATA ports fold this same gate in there).
+    private bool IsColorNative =>
+        (m_supportsColor && !m_dmgCompatibility.IsActive);
     // The Color-only register page: everything here reads open bus (0xFF) on a monochrome machine, as does any
     // unmapped I/O address on either model, regardless of any write that landed there.
     private byte ReadColorIoRegister(ushort address) {
@@ -772,22 +802,45 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             case MemoryMap.ObjectColorPaletteData:
                 return m_ppu.ReadRegister(address: address);
             case MemoryMap.SpeedSwitch:
-                return m_key1.ReadRegister();
+                return (IsColorNative
+                    ? m_key1.ReadRegister()
+                    : (byte)0xFF);
             case MemoryMap.HdmaSourceHigh:
             case MemoryMap.HdmaSourceLow:
             case MemoryMap.HdmaDestinationHigh:
             case MemoryMap.HdmaDestinationLow:
             case MemoryMap.HdmaControl:
-                return m_hdma.ReadRegister(address: address);
+                return (IsColorNative
+                    ? m_hdma.ReadRegister(address: address)
+                    : (byte)0xFF);
             case MemoryMap.InfraredPort:
-                return m_infrared.ReadRegister();
+                return (IsColorNative
+                    ? m_infrared.ReadRegister()
+                    : (byte)0xFF);
+            // VBK stays live in DMG-compatibility mode (Mooneye's misc/boot_hwio-C pins 0xFE there, unlike KEY1/RP/
+            // HDMA/SVBK): the bank-select bit exists on the silicon either way, it is only bank-0 VRAM that
+            // compatibility-mode rendering ever reads (Ppu.m_cgbNative).
             case MemoryMap.VramBankSelect:
                 return ((byte)(0xFE | m_memory.VideoRamBank));
             case MemoryMap.WorkRamBankSelect:
-                return ((byte)(0xF8 | m_memory.WorkRamBank));
+                return (IsColorNative
+                    ? ((byte)(0xF8 | m_memory.WorkRamBank))
+                    : (byte)0xFF);
+            case 0xFF74:
+                // Sealed in DMG-compatibility mode (Pan Docs "CGB Registers": "Otherwise, this register is
+                // read-only, and locked at value $FF") — unlike FF72/FF73/FF75, which stay live either way.
+                return (IsColorNative
+                    ? m_ioRegisters[(address - MemoryMap.IoRegistersStart)]
+                    : (byte)0xFF);
+            case MemoryMap.ObjectPriorityMode:
+                // Not independently backed: this engine already derives object-priority mode from the same
+                // compatibility fact (Ppu's m_cgbNative), so a native machine's fixed CGB-style answer (bit 0 clear)
+                // is the only value there is to read back.
+                return (IsColorNative
+                    ? (byte)0xFE
+                    : (byte)0xFF);
             case 0xFF72:
             case 0xFF73:
-            case 0xFF74:
                 // The Color's undocumented fully-readable/writable registers.
                 return m_ioRegisters[(address - MemoryMap.IoRegistersStart)];
             case 0xFF75:
@@ -880,7 +933,7 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
 
                 break;
             case MemoryMap.SpeedSwitch:
-                if (m_supportsColor) {
+                if (IsColorNative) {
                     m_key1.WriteRegister(value: value);
                 }
 
@@ -890,7 +943,7 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
             case MemoryMap.HdmaDestinationHigh:
             case MemoryMap.HdmaDestinationLow:
             case MemoryMap.HdmaControl:
-                if (m_supportsColor) {
+                if (IsColorNative) {
                     m_hdma.WriteRegister(
                         address: address,
                         value: value
@@ -899,22 +952,35 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
 
                 break;
             case MemoryMap.InfraredPort:
-                if (m_supportsColor) {
+                if (IsColorNative) {
                     m_infrared.WriteRegister(value: value);
                 }
 
                 break;
             case MemoryMap.VramBankSelect:
+                // Stays live in DMG-compatibility mode — see the matching read case's remarks.
                 if (m_supportsColor) {
                     m_memory.VideoRamBank = value;
                 }
 
                 break;
             case MemoryMap.WorkRamBankSelect:
-                if (m_supportsColor) {
+                if (IsColorNative) {
                     m_memory.WorkRamBank = value;
                 }
 
+                break;
+            case MemoryMap.SystemModeSelect:
+                // A real boot ROM's one-time write: confirms (or, for a hand-authored header a boot ROM disagrees
+                // with, corrects) the DMG-compatibility fact every other Color-only register above answers through.
+                if (m_supportsColor) {
+                    m_dmgCompatibility.ApplyKey0(value: value);
+                }
+
+                break;
+            case MemoryMap.ObjectPriorityMode:
+                // Not independently backed — see ReadColorIoRegister. Accepted (matching hardware, which leaves the
+                // write itself harmless once the mode is fixed) with nothing further to record.
                 break;
             default:
                 m_ioRegisters[(address - MemoryMap.IoRegistersStart)] = value;

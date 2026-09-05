@@ -30,8 +30,9 @@ public abstract class QueuedMachineHost : IScreenMachine, IQueuedScreenMachine, 
         );
     }
 
-    /// <summary>Gets the worker used by machine-specific interfaces.</summary>
-    protected QueuedMachineWorker Worker => m_worker;
+    /// <summary>Gets the worker used by machine-specific interfaces and by the cable-link substrate, which lends this
+    /// host's core to a <see cref="LinkedMachineGroup"/> through it.</summary>
+    public QueuedMachineWorker Worker => m_worker;
 
     /// <inheritdoc/>
     public long BackpressureEvents => m_worker.BackpressureEvents;
