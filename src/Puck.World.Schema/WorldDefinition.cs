@@ -81,7 +81,6 @@ public sealed record WorldDefinition(
     [property: JsonPropertyName("seatModes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSeatModeFamily>? SeatModesRaw = null,
     [property: JsonPropertyName("probes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldProbe>? ProbesRaw = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCapturesSection? Captures = null,
-    [property: JsonPropertyName("attachment"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldAttachmentSection? AttachmentRaw = null,
     [property: JsonPropertyName("curves"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCurveRow>? CurvesRaw = null,
     [property: JsonPropertyName("navigation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldNavigationSection? NavigationRaw = null,
     [property: JsonPropertyName("patterns"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPatternRow>? PatternsRaw = null
@@ -92,10 +91,6 @@ public sealed record WorldDefinition(
     /// <summary>Gets the data-side addon descriptors — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldAddonRow> Addons => (AddonsRaw ?? []);
-    /// <summary>Gets the climb/grapple authoring surface — ABSENT resolves to <see cref="WorldAttachmentSection.Absent"/>
-    /// (disabled; no attach channel reaches any body). The engine holds no attachment policy of its own.</summary>
-    [JsonIgnore]
-    public WorldAttachmentSection Attachment => (AttachmentRaw ?? WorldAttachmentSection.Absent);
     /// <summary>Gets the runtime lattice composite compiled from the state section's topology and lattice-shaped
     /// rows, or <see langword="null"/> when the state section declares no lattice. The state section is the single
     /// authored source; this accessor is the engine's compiled view of it.</summary>

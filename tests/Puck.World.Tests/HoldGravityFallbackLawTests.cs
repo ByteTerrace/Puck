@@ -277,13 +277,14 @@ public sealed class HoldGravityFallbackLawTests {
     public void NoHoldsGravityFallback_ReproducesTheRecordedTrace_WhereFallChangedDiverges() {
         static string[] Trace(float fall) {
             var lines = new string[240];
-            var gravity = new WorldHoldGravity(Fall: fall, Rise: 28f, Terminal: 40f);
+            var gravity = new WorldHoldGravity(Fall: fall, Rise: 28f);
+            var envelope = new WorldHoldEnvelope(SinkSpeed: 40f);
             var document = Fixtures.BuildDocument();
             var kits = document.Kits.ToList();
             var motion = kits[0].Motion! with {
                 Holds = [
-                    new WorldHold(Bond: BodyHoldBond.Surface, Cone: new System.Numerics.Vector2(x: 0f, y: 60f), Gravity: gravity, Hold: BodyHoldKind.Gravity, Name: "ground", Reach: 1.2f),
-                    new WorldHold(Bond: BodyHoldBond.Free, Gravity: gravity, Hold: BodyHoldKind.Gravity, Name: "air"),
+                    new WorldHold(Bond: BodyHoldBond.Surface, Cone: new System.Numerics.Vector2(x: 0f, y: 60f), Envelope: envelope, Gravity: gravity, Hold: BodyHoldKind.Gravity, Name: "ground", Reach: 1.2f),
+                    new WorldHold(Bond: BodyHoldBond.Free, Envelope: envelope, Gravity: gravity, Hold: BodyHoldKind.Gravity, Name: "air"),
                 ],
             };
 

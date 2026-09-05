@@ -19,7 +19,7 @@ public sealed class BodyMotionProgramWireShapeLawTests {
   "kind": "Producer",
   "operations": [
     "SenseNearestInCone",
-    "ProduceAttendIntent"
+    "ProduceSteeringIntent"
   ],
   "target": {
     "$type": "curve",
@@ -30,12 +30,12 @@ public sealed class BodyMotionProgramWireShapeLawTests {
 """;
     private const string SensedProducerJson = """
 {
-  "name": "wander",
+  "name": "steering",
   "version": "puck.body-motion.v1",
   "kind": "Producer",
   "operations": [
     "SenseNearestInCone",
-    "ProduceAttendIntent"
+    "ProduceSteeringIntent"
   ],
   "target": {
     "$type": "sensed",
@@ -53,7 +53,7 @@ public sealed class BodyMotionProgramWireShapeLawTests {
             Name: "track",
             Version: BodyMotionProgram.CurrentVersion,
             Kind: BodyProgramKind.Producer,
-            Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.ProduceAttendIntent],
+            Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.ProduceSteeringIntent],
             Target: new BodyTargetSource.CurveFollow(
                 Curve: "loop",
                 Rate: 2f
@@ -82,10 +82,10 @@ public sealed class BodyMotionProgramWireShapeLawTests {
     [Fact]
     public void AuthoredRowRoundTripsThroughItsPinnedSpelling() {
         var program = new BodyMotionProgram(
-            Name: "wander",
+            Name: "steering",
             Version: BodyMotionProgram.CurrentVersion,
             Kind: BodyProgramKind.Producer,
-            Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.ProduceAttendIntent],
+            Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.ProduceSteeringIntent],
             Target: new BodyTargetSource.Sensed(
                 HalfAngleDegrees: 45f,
                 Range: 12f,

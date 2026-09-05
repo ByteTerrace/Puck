@@ -89,15 +89,15 @@ public sealed partial class WorldBody {
             // integration, so the snapshot holds it stable). The action track below still advances, so a timed press
             // drains identically whether the intent drives the avatar or the route target.
         } else {
-            // The attachment surface reads its own attach/detach/reel channels directly (never through the kit's
-            // action table — see WorldBody.Attachment.cs), so it runs here, ahead of the program dispatch below, on
-            // the SAME "intent reaches the avatar" gate as everything else in this branch. A detach that fires this
-            // tick falls through to the ordinary ExecuteProgram path below in the SAME tick, already carrying the
-            // momentum Detach wrote into the vertical/planar channels. Gravity stays on while a tether holds and
-            // the kit's own program keeps integrating; WorldPopulation.ResolveTethers clamps the result to the rope
-            // AFTER every body this tick has advanced.
-            ProcessAttachmentIntent(intent: in intent);
-            ProcessReel(
+            // The tether facet reads its own attach/detach/reel channels directly (never through the kit's action
+            // table — see WorldBody.Tether.cs), so it runs here, ahead of the program dispatch below, on the SAME
+            // "intent reaches the avatar" gate as everything else in this branch. A detach that fires this tick
+            // falls through to the ordinary ExecuteProgram path below in the SAME tick, already carrying the
+            // momentum DetachTether wrote into the vertical/planar channels. Gravity stays on while a tether holds
+            // and the kit's own program keeps integrating; WorldPopulation.ResolveTethers clamps the result to the
+            // rope AFTER every body this tick has advanced.
+            ProcessTetherIntent(intent: in intent);
+            ProcessTetherReel(
                 intent: in intent,
                 stepTicks: stepTicks
             );
@@ -516,11 +516,8 @@ public sealed partial class WorldBody {
                     scratch: ref scratch
                 );
                 break;
-            case BodyMotionOp.ProduceWanderIntent:
-                ProduceWanderIntent(scratch: ref scratch);
-                break;
-            case BodyMotionOp.ProduceAttendIntent:
-                ProduceAttendIntent(scratch: ref scratch);
+            case BodyMotionOp.ProduceSteeringIntent:
+                ProduceSteeringIntent(scratch: ref scratch);
                 break;
             case BodyMotionOp.ProduceFlockIntent:
                 ProduceFlockIntent(scratch: ref scratch);
@@ -742,9 +739,9 @@ public sealed partial class WorldBody {
             x: -dz,
             y: -dx
         );
-        var yawRate = (scratch.Producer!.Scalar(name: "inwardGain") * WrapPi(angle: (targetYaw - FixedYaw)));
+        var yawRate = (scratch.Producer!.Scalar(BodyProducerParameter.InwardGain) * WrapPi(angle: (targetYaw - FixedYaw)));
         var turn = FixedQ4816.Clamp(
-            value: (yawRate / scratch.Producer.Scalar(name: "turnScale")),
+            value: (yawRate / scratch.Producer.Scalar(BodyProducerParameter.TurnScale)),
             minimum: NegativeOne,
             maximum: FixedQ4816.One
         );
@@ -923,23 +920,45 @@ public sealed partial class WorldBody {
 
         return (value / FixedQ4816.FromInteger(value: checked((long)(EngineTicks.PerSecond / stepTicks))));
     }
-    private void ProduceAttendIntent(ref BodyMotionScratch scratch) {
-        if (!scratch.SensorTarget.Exists) {
-            return;
+    // The body's own resolved up may differ from world Y (a tilted planetoid surface, a wall run) — a producer's
+    // "preferred altitude" is a distance from the world origin along that axis, not a literal world-Y coordinate.
+    // Under the ordinary UnitY up this is exactly the .Y component every world read before the term generalized.
+    private FixedQ4816 AlongUp(in FixedVector3 point) => FixedVector3.Dot(
+        left: point,
+        right: m_up
+    );
+    // One steering intent, dispatched per tick on whether this tick's SenseNearestInCone found a target. The roam
+    // shape runs first, and only when the producer's own compiled RoamActive says the kit authored it — its
+    // oscillator (state.Phase/ActivityPhase) then advances every tick regardless of which shape ends up steering, so
+    // losing a sensed target resumes roam from the phase it would already be at rather than one frozen at the moment
+    // sensing began; the approach shape, when a target exists, then overwrites its computed intent outright. A
+    // program authoring both shapes (a stalking predator) takes both across its lifetime; a producer authoring no
+    // roam scalars at all (an approach-only follower) leaves this tick's Intent exactly as handed in — a hold — on any
+    // tick sensing finds nothing, rather than resuming a roam it never wanted.
+    private void ProduceSteeringIntent(ref BodyMotionScratch scratch) {
+        if (scratch.Producer!.RoamActive) {
+            ProduceRoamIntent(scratch: ref scratch);
         }
 
+        if (scratch.SensorTarget.Exists) {
+            ProduceApproachIntent(scratch: ref scratch);
+        }
+    }
+    private void ProduceApproachIntent(ref BodyMotionScratch scratch) {
         var producer = scratch.Producer!;
-        var standoff = producer.Scalar(name: "standoffRadius");
+        var standoff = producer.Scalar(BodyProducerParameter.StandoffRadius);
         var forward = ((scratch.SensorTarget.DistanceSquared > (standoff * standoff))
-            ? producer.Scalar(name: "approach")
+            ? producer.Scalar(BodyProducerParameter.Approach)
             : FixedQ4816.Zero
         );
-        var strafe = producer.Scalar(name: "orbit");
+        var strafe = producer.Scalar(BodyProducerParameter.Orbit);
         var followsVolume = producer.Target is { Source: BodyTargetSource.Navigated, NavigationKind: not WorldNavigationKind.Surface };
-        var preferredAltitude = (followsVolume ? scratch.SensorTarget.Position.Y : scratch.ProducerState.PreferredAltitude);
+        var preferredAltitude = (followsVolume ? AlongUp(point: scratch.SensorTarget.Position) : scratch.ProducerState.PreferredAltitude);
+        // Its own gain, distinct from the roam shape's AltitudeGain (ProduceRoamIntent) — the two shapes are
+        // independently authorable, so zeroing one's altitude term never zeroes the other's.
         var up = (followsVolume || m_bodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
             ? FixedQ4816.Clamp(
-                value: ((preferredAltitude - m_position.Y) * producer.Scalar(name: "altitudeGain")),
+                value: ((preferredAltitude - AlongUp(point: m_position)) * producer.Scalar(BodyProducerParameter.ApproachAltitudeGain)),
                 minimum: NegativeOne,
                 maximum: FixedQ4816.One
             )
@@ -974,7 +993,7 @@ public sealed partial class WorldBody {
             );
         }
     }
-    private void ProduceWanderIntent(ref BodyMotionScratch scratch) {
+    private void ProduceRoamIntent(ref BodyMotionScratch scratch) {
         var producer = scratch.Producer!;
         var state = scratch.ProducerState;
 
@@ -988,56 +1007,56 @@ public sealed partial class WorldBody {
         );
 
         // Measured from the body's own HOME, never the world origin: a population spread over several placements
-        // steers back to the ground it was activated on, instead of every wanderer in the world converging on (0, 0).
+        // steers back to the ground it was activated on, instead of every roaming body converging on (0, 0).
         // A body with no home (the zero default) reads exactly as it did when the origin was the only anchor.
         var planarX = (m_position.X - m_home.X);
         var planarZ = (m_position.Z - m_home.Z);
-        var yawRate = (producer.Scalar(name: "weaveAmplitude") * FixedQ4816.Sin(angle: state.Phase));
+        var yawRate = (producer.Scalar(BodyProducerParameter.WeaveAmplitude) * FixedQ4816.Sin(angle: state.Phase));
         var radius = FixedQ4816.Sqrt(value: ((planarX * planarX) + (planarZ * planarZ)));
 
-        if (radius > producer.Scalar(name: "softRadius")) {
+        if (radius > producer.Scalar(BodyProducerParameter.SoftRadius)) {
             var inwardYaw = FixedQ4816.Atan2(
                 x: planarZ,
                 y: planarX
             );
 
-            yawRate += (producer.Scalar(name: "inwardGain") * WrapPi(angle: (inwardYaw - FixedYaw)));
+            yawRate += (producer.Scalar(BodyProducerParameter.InwardGain) * WrapPi(angle: (inwardYaw - FixedYaw)));
         }
 
         var turn = FixedQ4816.Clamp(
-            value: (yawRate / producer.Scalar(name: "turnScale")),
+            value: (yawRate / producer.Scalar(BodyProducerParameter.TurnScale)),
             minimum: NegativeOne,
             maximum: FixedQ4816.One
         );
         var wave = FixedQ4816.Sin(angle: state.ActivityPhase);
         var altitudeCorrection = FixedQ4816.Clamp(
-            value: ((state.PreferredAltitude - m_position.Y) * producer.Scalar(name: "altitudeGain")),
+            value: ((state.PreferredAltitude - AlongUp(point: m_position)) * producer.Scalar(BodyProducerParameter.AltitudeGain)),
             minimum: NegativeOne,
             maximum: FixedQ4816.One
         );
 
         if (m_bodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)) {
             scratch.Intent = m_roleOrdinals.Intent(
-                moveAdvance: producer.Scalar(name: "forward"),
-                moveStrafe: (wave * producer.Scalar(name: "strafeWave")),
+                moveAdvance: producer.Scalar(BodyProducerParameter.Forward),
+                moveStrafe: (wave * producer.Scalar(BodyProducerParameter.StrafeWave)),
                 turn: turn,
-                moveUp: (altitudeCorrection + (wave * producer.Scalar(name: "upWave"))),
-                pitch: (wave * producer.Scalar(name: "pitchWave")),
-                roll: (-turn * producer.Scalar(name: "rollTurn"))
+                moveUp: (altitudeCorrection + (wave * producer.Scalar(BodyProducerParameter.UpWave))),
+                pitch: (wave * producer.Scalar(BodyProducerParameter.PitchWave)),
+                roll: (-turn * producer.Scalar(BodyProducerParameter.RollTurn))
             );
         } else {
             var angularIntent = FixedQ4816.Clamp(
-                value: (turn + (wave * producer.Scalar(name: "turnWave"))),
+                value: (turn + (wave * producer.Scalar(BodyProducerParameter.TurnWave))),
                 minimum: NegativeOne,
                 maximum: FixedQ4816.One
             );
-            var forward = producer.Scalar(name: "forward");
-            var strafe = (wave * producer.Scalar(name: "strafeWave"));
+            var forward = producer.Scalar(BodyProducerParameter.Forward);
+            var strafe = (wave * producer.Scalar(BodyProducerParameter.StrafeWave));
 
             if (m_tuning.MoveFrame == MotionMoveFrame.World) {
                 // A producer owns a body-relative steering decision even when a seat-facing kit consumes world-frame
                 // axes. Resolve that decision through the same yaw convention SnapYawToPlanarIntent reads; otherwise
-                // the Turn channel is deliberately inert under World and every wanderer can only march toward -Z.
+                // the Turn channel is deliberately inert under World and every roamer can only march toward -Z.
                 var targetYaw = (FixedYaw + PerStep(
                     stepTicks: scratch.StepTicks,
                     value: (angularIntent * scratch.TurnSpeed)
@@ -1045,7 +1064,7 @@ public sealed partial class WorldBody {
 
                 var (sinYaw, cosYaw) = FixedQ4816.SinCos(angle: targetYaw);
                 // The Turn role carries the same angular intent, so the heading integrates toward targetYaw (the
-                // facing snap turns the ATTITUDE only; without this the wanderer's heading would never advance).
+                // facing snap turns the ATTITUDE only; without this the roamer's heading would never advance).
                 scratch.Intent = m_roleOrdinals.Intent(
                     moveAdvance: ((forward * cosYaw) + (strafe * sinYaw)),
                     moveStrafe: ((-forward * sinYaw) + (strafe * cosYaw)),
@@ -1059,8 +1078,8 @@ public sealed partial class WorldBody {
                 );
             }
 
-            var press = producer.Channel(name: "press");
-            var threshold = producer.Scalar(name: "pressThreshold");
+            var press = producer.Channel(BodyProducerParameter.Press);
+            var threshold = producer.Scalar(BodyProducerParameter.PressThreshold);
 
             if (
                 (press >= 0) &&
@@ -1086,8 +1105,8 @@ public sealed partial class WorldBody {
 
         // A hard teleport also clears observations about the prior support/medium.
         Array.Clear(array: m_motionRecency);
-        m_submerged = false;
-        m_atSurface = false;
+        m_inMedium = false;
+        m_atMediumBand = false;
     }
 
     // Stops integrated locomotion without claiming a teleport, changing support facts, or cancelling timed actions.
@@ -1718,11 +1737,11 @@ public sealed partial class WorldBody {
         // Release-radius hysteresis exists to damp flicker among a COMPETITIVELY sensed population (Sensed alone);
         // a Designated register and a Curve follow-point are each a single deterministic candidate every tick with
         // nothing to flicker against, so both take the fresh candidate outright. Flocks retain observations on
-        // their own bounded perception cadence and do not consume attend's release-radius scalar.
+        // their own bounded perception cadence and do not consume the approach shape's release-radius scalar.
         if (producer.Flock is not null || producer.Target?.Source is not BodyTargetSource.Sensed) {
             scratch.SensorTarget = candidate;
         } else {
-            var release = producer.Scalar(name: "releaseRadius");
+            var release = producer.Scalar(BodyProducerParameter.ReleaseRadius);
 
             if (
                 current.Exists &&
@@ -1825,13 +1844,13 @@ public sealed partial class WorldBody {
     // converge each at its own authored rate, and recompose — the anisotropy a kart's feel needs and the isotropic
     // MoveToward cannot express. Longitudinal follows the bipolar throttle (accelerate toward the commanded fraction
     // of scratch.MoveSpeed — the resolved, envelope-clamped move speed, the same value EffectiveMoveSpeed echoes;
-    // back-throttle brakes while moving forward and reverses from rest at the unenveloped reverse speed; the
-    // over-speed excess bleeds at release, which is also the centered-throttle coast). A held speed multiplier
-    // applies to scratch.MoveSpeed AFTER the clamp, on top of the resolved base rate, never inside it — the envelope
-    // pins the base, the boost rides on top. Lateral and residual slip converge to zero at the row's own grip — a
-    // held-gated drift row authored ahead of the ordinary anisotropic row is how a kart's grip swaps while held. A
-    // contact-pinned variant (turn.pitchRate zero) has no drive or grip authority while airborne: a launched kart
-    // holds its velocity and gravity owns the arc.
+    // back-throttle reverses sign while moving forward and travels backward from rest at the unenveloped backward
+    // speed; the over-speed excess bleeds at release, which is also the centered-throttle coast). A held speed
+    // multiplier applies to scratch.MoveSpeed AFTER the clamp, on top of the resolved base rate, never inside it —
+    // the envelope pins the base, the boost rides on top. Lateral and residual slip converge to zero at the row's
+    // own lateral rate — a held-gated drift row authored ahead of the ordinary anisotropic row is how a kart's
+    // lateral grip swaps while held. A contact-pinned variant (turn.pitchRate zero) has no drive or lateral
+    // authority while airborne: a launched kart holds its velocity and gravity owns the arc.
     private void ShapeAnisotropicVelocityRow(in FixedShapingAlong along, in FixedShapingAcross across, ref BodyMotionScratch scratch) {
         var throttle = Role(
             intent: in scratch.Intent,
@@ -1871,10 +1890,10 @@ public sealed partial class WorldBody {
             } else if (throttle < FixedQ4816.Zero) {
                 if (longitudinal > FixedQ4816.Zero) {
                     target = FixedQ4816.Zero;
-                    rate = along.Brake;
-                    instant = ShapingInstant.Brake;
+                    rate = along.ReversalRate;
+                    instant = ShapingInstant.Reversal;
                 } else {
-                    target = (throttle * along.Reverse);
+                    target = (throttle * along.BackwardSpeed);
                     rate = along.Engage;
                     instant = ShapingInstant.Engage;
                 }
@@ -1909,7 +1928,7 @@ public sealed partial class WorldBody {
                     target: FixedQ4816.Zero,
                     maxDelta: m_driveLatAccumulator.Integrate(
                         elapsedTicks: scratch.StepTicks,
-                        ratePerSecond: across.Grip
+                        ratePerSecond: across.Lateral
                     )
                 );
                 residual = FixedVector3.MoveToward(
@@ -1917,7 +1936,7 @@ public sealed partial class WorldBody {
                     target: default,
                     maxDelta: m_driveResidualAccumulator.Integrate(
                         elapsedTicks: scratch.StepTicks,
-                        ratePerSecond: across.Grip
+                        ratePerSecond: across.Lateral
                     )
                 );
             }

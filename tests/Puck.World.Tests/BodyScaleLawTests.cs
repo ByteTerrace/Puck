@@ -166,7 +166,8 @@ public sealed class BodyScaleLawTests {
         template: definition
     );
 
-    // A body's own gravity fall/rise/terminal, its wall hold's travel speed, and its grip pull rate are all
+    // A body's own gravity fall/rise/envelope (including a medium's idle/settle target), its wall hold's travel
+    // speed, and its pull rate are all
     // authored at full body scale; WorldBody.Hold.cs multiplies each by m_scale so a shrunk body settles onto and
     // depenetrates from the ground at a proportionally gentler rate. Without that scaling the UNSCALED one-tick
     // fall a grounded body's contact resolve routinely catches and corrects every tick overshoots a small enough
@@ -263,7 +264,7 @@ public sealed class BodyScaleLawTests {
                 Motion = kit.Motion with {
                     Speed = kit.Motion.Speed with { Value = 4f },
                     Holds = [
-                        kit.Motion.Holds![0] with { Gravity = new WorldHoldGravity(Fall: 46f, Rise: 28f, Terminal: 40f) },
+                        kit.Motion.Holds![0] with { Envelope = new WorldHoldEnvelope(SinkSpeed: 40f), Gravity = new WorldHoldGravity(Fall: 46f, Rise: 28f) },
                     ],
                 },
             }).ToArray(),

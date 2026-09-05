@@ -8,7 +8,7 @@ public sealed partial class WorldPopulation {
     /// <summary>Gets the latest peer-advance cadence work. Counts only bodies whose kit authors a nonzero cadence.</summary>
     public WorldAutonomyStatistics AutonomyStatistics { get; private set; }
     private static void ApplyVariation(Entry entry, CompiledBodyProducer producer, FixedQ4816 phase, FixedQ4816 weaveUnit, FixedQ4816 activityUnit, bool resetPhase) {
-        entry.ProducerState.WeaveFrequency = (producer.Scalar(name: "weaveFrequencyBase") + (producer.Scalar(name: "weaveFrequencyRange") * weaveUnit));
+        entry.ProducerState.WeaveFrequency = (producer.Scalar(BodyProducerParameter.WeaveFrequencyBase) + (producer.Scalar(BodyProducerParameter.WeaveFrequencyRange) * weaveUnit));
 
         if (resetPhase) {
             entry.ProducerState.AcquiredTarget = -1;
@@ -16,7 +16,7 @@ public sealed partial class WorldPopulation {
             entry.NavigationState.Clear();
             entry.ProducerState.Phase = phase;
             entry.ProducerState.ActivityPhase = (phase + (TwoPi * activityUnit));
-            entry.ProducerState.ActivityRate = (producer.Scalar(name: "activityRateBase") + (producer.Scalar(name: "activityRateRange") * activityUnit));
+            entry.ProducerState.ActivityRate = (producer.Scalar(BodyProducerParameter.ActivityRateBase) + (producer.Scalar(BodyProducerParameter.ActivityRateRange) * activityUnit));
         }
     }
     internal bool HasLineOfSight(in FixedVector3 from, in FixedQuaternion fromOrientation, in FixedVector3 to, in FixedQuaternion toOrientation) {
@@ -60,7 +60,7 @@ public sealed partial class WorldPopulation {
     }
     private FixedQ4816 PreferredAltitudeFor(in FixedWorldKit kit, CompiledBodyProducer producer, FixedQ4816 altitudeUnit) {
         return (kit.BodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
-            ? (producer.Scalar(name: "altitudeBase") + (producer.Scalar(name: "altitudeRange") * altitudeUnit))
+            ? (producer.Scalar(BodyProducerParameter.AltitudeBase) + (producer.Scalar(BodyProducerParameter.AltitudeRange) * altitudeUnit))
             : FixedQ4816.Zero
         );
     }
@@ -331,15 +331,15 @@ Replan:
         return count;
     }
 
-    // The altitude a wander entity holds: a free kit's authored base plus its per-index range sample; a grounded kit
+    // The altitude a roaming producer holds: a free kit's authored base plus its per-index range sample; a grounded kit
     // starts at the authored spawn point or the world origin and lets contact geometry settle it.
     private static CompiledBodyProducer? SeedProducer(in FixedWorldKit kit) =>
-        kit.Producers.Values.FirstOrDefault(predicate: producer => producer.Program.Contains(operation: BodyMotionOp.ProduceWanderIntent));
-    // Seed a seat's wander-producer dynamics from its slot alone (no RNG) — the parameters body.control producer:<name>
-    // steers by, parallel to the independently authored peer variation. A seat has no wander spawn/color seeding — the
-    // definition spawns it and its profile colors it.
-    private void SeedSeatWander(int slot, bool resetPhase = true) {
-        // A kit that declares no wander producer (a bare seat kit) has no wander dynamics to seed.
+        kit.Producers.Values.FirstOrDefault(predicate: producer => producer.RoamActive);
+    // Seed a seat's steering-producer oscillator and altitude from its slot alone (no RNG) — the parameters
+    // body.control producer:<name> steers by, parallel to the independently authored peer variation. A seat has no
+    // producer spawn/color seeding — the definition spawns it and its profile colors it.
+    private void SeedSeatSteeringProducer(int slot, bool resetPhase = true) {
+        // A kit that declares no active roam shape (a bare or approach-only seat kit) has no oscillator/altitude to seed.
         if (SeedProducer(kit: m_kits[m_seatKit]) is not { } producer) {
             return;
         }
@@ -375,7 +375,7 @@ Replan:
     }
     // Seed a simulated entry's static per-index data from the authored distribution and independent sequences. Baked
     // for every entry at construction so its color and spawn are valid regardless of producer kind. A
-    // live Rebuild re-derives the kit/wander-dependent statics with resetPhase: false, which keeps the running wander
+    // live Rebuild re-derives the kit/producer-dependent statics with resetPhase: false, which keeps the running roam
     // phase/activity so the retune does not jerk the crowd.
     private void SeedSimulated(int index, bool resetPhase = true) {
         var offset = (index - LocalSeatCount);
@@ -578,7 +578,7 @@ Replan:
             body.SetMediumSurface(surface: fields.MediumSurface(position: body.FixedPosition));
         }
     }
-    /// <summary>Advances every active seat body by one exact simulation tick: a wander-sourced seat gets this tick's
+    /// <summary>Advances every active seat body by one exact simulation tick: a producer-sourced seat gets this tick's
     /// producer image staged first (the same deterministic path as a peer), then the body integrates its submitted
     /// intent per the merge rule. Runs after <see cref="AdvanceSimulated"/> in the server step, so the
     /// population advances before seats.</summary>

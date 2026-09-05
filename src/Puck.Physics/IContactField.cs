@@ -76,8 +76,8 @@ public interface IContactField {
 
         return false;
     }
-    /// <summary>Finds the best grapple anchor candidate along an aim direction — the directed attach query
-    /// (<see cref="FixedSurfaceQuery.TryNearestDirected"/>), independent of any holdability policy: a grapple
+    /// <summary>Finds the best tether anchor candidate along an aim direction — the directed attach query
+    /// (<see cref="FixedSurfaceQuery.TryNearestDirected"/>), independent of any holdability policy: a tether
     /// anchors to any surface within the cone, holdable or not. The default declines, matching
     /// <see cref="TryHoldableSurfaceAlongDirection"/>.</summary>
     /// <param name="origin">The world-space aim origin (a body's own position).</param>

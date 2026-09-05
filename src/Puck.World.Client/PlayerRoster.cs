@@ -1346,7 +1346,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, ICommandPrincipal
             var possessed = (((live is { } liveBody) && (liveBody.Source != IntentSource.Live))
                 ? ((liveBody.Source == IntentSource.Idle)
                     ? " idle"
-                    : " wander")
+                    : " producer")
                 : ""
             );
             var pose = (live?.Pose ?? "pos=(?, ?) yaw=?°");

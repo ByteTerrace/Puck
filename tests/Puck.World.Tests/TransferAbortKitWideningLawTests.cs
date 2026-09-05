@@ -56,7 +56,7 @@ public sealed class TransferAbortKitWideningLawTests {
         // BodyMotionProgramName's own law needs: a name distinct from the kit's own default to switch TO and prove
         // the switch survives an abort/restore.
         var driveGroundAlt = driveGround with { Name = "drive-ground-alt" };
-        var wander = new BodyMotionProgram(Name: "wander", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceWanderIntent]);
+        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
 
         var kit = new WorldKit(
             Name: "kart-test",
@@ -67,20 +67,21 @@ public sealed class TransferAbortKitWideningLawTests {
                 Holds: [
                     new WorldHold(
                         Bond: BodyHoldBond.Free,
-                        Gravity: new WorldHoldGravity(Fall: 26f, Rise: 14f, Terminal: 30f),
+                        Envelope: new WorldHoldEnvelope(SinkSpeed: 30f),
+                        Gravity: new WorldHoldGravity(Fall: 26f, Rise: 14f),
                         Hold: BodyHoldKind.Gravity,
                         Name: "air"
                     ),
                 ],
                 Shaping: [
                     new WorldShaping(
-                        Along: new WorldShapingAlong(Engage: 7f, Brake: 18f, Release: 4f, Reverse: 5f),
-                        Across: new WorldShapingAcross(Grip: 22f)
+                        Along: new WorldShapingAlong(Engage: 7f, ReversalRate: 18f, Release: 4f, BackwardSpeed: 5f),
+                        Across: new WorldShapingAcross(Lateral: 22f)
                     ),
                 ]
             ),
             ProducersRaw: new Dictionary<string, BodyProgramParameters> {
-                ["wander"] = Fixtures.TravelerWanderParameters,
+                ["roam"] = Fixtures.TravelerRoamParameters,
             },
             ActionsRaw: new Dictionary<string, ActionSpec> {
                 // ONE authored action, bound OnFact only (no OnPress/OnRelease needed) — exercises the lane action
@@ -101,7 +102,7 @@ public sealed class TransferAbortKitWideningLawTests {
 
         return Fixtures.BuildDocument() with {
             ChannelsRaw = channels,
-            BodyMotionProgramsRaw = [driveGround, driveGroundAlt, wander],
+            BodyMotionProgramsRaw = [driveGround, driveGroundAlt, roam],
             KitRowsRaw = [kit],
             DefaultSeatKitRaw = "kart-test",
             StateRaw = new WorldStateSection(World: Fixtures.BuildDocument().State, Identity: [new ActionStateSlot(Name: "surgeCounter", Kind: ActionStateKind.Counter, Initial: 0f)]),
@@ -134,7 +135,7 @@ public sealed class TransferAbortKitWideningLawTests {
             ]
         );
         var mediumAlt = medium with { Name = "medium-alt" };
-        var wander = new BodyMotionProgram(Name: "wander", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceWanderIntent]);
+        var roam = new BodyMotionProgram(Name: "roam", Version: "puck.body-motion.v1", Kind: BodyProgramKind.Producer, Operations: [BodyMotionOp.ProduceSteeringIntent]);
 
         var kit = new WorldKit(
             Name: "diver-test",
@@ -152,13 +153,12 @@ public sealed class TransferAbortKitWideningLawTests {
                 Holds: [
                     new WorldHold(
                         Bond: BodyHoldBond.Medium,
+                        Envelope: new WorldHoldEnvelope(RiseSpeed: 2.4f, SinkSpeed: 3f),
                         Hold: BodyHoldKind.None,
                         Medium: new WorldHoldMedium(
-                            Buoyancy: 0.5f,
-                            FloatDepth: 1f,
-                            MaxRiseSpeed: 2.4f,
-                            MaxSinkSpeed: 3f,
-                            SurfaceSettleRate: 6f
+                            EquilibriumOffset: 1f,
+                            IdleDrift: 0.5f,
+                            SettleRate: 6f
                         ),
                         Name: "water",
                         Thrust: 0.75f
@@ -168,14 +168,15 @@ public sealed class TransferAbortKitWideningLawTests {
                     // exercises, so this row is never actually taken.
                     new WorldHold(
                         Bond: BodyHoldBond.Free,
-                        Gravity: new WorldHoldGravity(Fall: 1f, Rise: 1f, Terminal: 1f),
+                        Envelope: new WorldHoldEnvelope(SinkSpeed: 1f),
+                        Gravity: new WorldHoldGravity(Fall: 1f, Rise: 1f),
                         Hold: BodyHoldKind.Gravity,
                         Name: "air"
                     ),
                 ]
             ),
             ProducersRaw: new Dictionary<string, BodyProgramParameters> {
-                ["wander"] = Fixtures.TravelerWanderParameters,
+                ["roam"] = Fixtures.TravelerRoamParameters,
             },
             ActionsRaw: new Dictionary<string, ActionSpec> {
                 // Mirrors the drive kit's own "surge" action above, gated on Rising instead of Falling (a diver
@@ -192,7 +193,7 @@ public sealed class TransferAbortKitWideningLawTests {
 
         return Fixtures.BuildDocument() with {
             ChannelsRaw = channels,
-            BodyMotionProgramsRaw = [medium, mediumAlt, wander],
+            BodyMotionProgramsRaw = [medium, mediumAlt, roam],
             KitRowsRaw = [kit],
             DefaultSeatKitRaw = "diver-test",
             // REQUIRED: WorldDefinitionValidator refuses a kit authoring a Medium hold when the world authors no

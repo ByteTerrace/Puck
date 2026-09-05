@@ -28,8 +28,7 @@ public sealed class BodyMotionProgramCompilerLawTests {
     ];
     private static readonly BodyMotionOp[] ProducerSelectable = [
         BodyMotionOp.SenseNearestInCone,
-        BodyMotionOp.ProduceWanderIntent,
-        BodyMotionOp.ProduceAttendIntent,
+        BodyMotionOp.ProduceSteeringIntent,
         BodyMotionOp.ProduceFlockIntent,
         BodyMotionOp.FaceSensorTarget,
     ];

@@ -7,26 +7,24 @@ using Puck.World.Server;
 namespace Puck.World;
 
 internal sealed partial class PlayerCommandModule {
-    private static string DescribeAttachmentFixed(FixedQ4816 value) => ((double)value).ToString(
+    private static string DescribeTetherFixed(FixedQ4816 value) => ((double)value).ToString(
         format: "0.#####",
         provider: CultureInfo.InvariantCulture
     );
-    private static string DescribeAttachmentMode(WorldBodyAttachmentMode mode) => (mode switch {
-        WorldBodyAttachmentMode.Grapple => "grapple",
-        _ => "none",
-    });
-    // The body.attachment read-back: mode, anchor, and rope length. Surface holds are body.hold's to answer.
-    private static string DescribeAttachment(int index, WorldBody body) {
-        var anchor = ((body.AttachmentAnchor is { } point)
-            ? $"({DescribeAttachmentFixed(value: point.X)}, {DescribeAttachmentFixed(value: point.Y)}, {DescribeAttachmentFixed(value: point.Z)})"
+    // The body.tether read-back: whether attached, the anchor, and the rope length. Surface holds are body.hold's
+    // to answer.
+    private static string DescribeTether(int index, WorldBody body) {
+        var attached = (body.TetherLength is not null);
+        var anchor = (attached
+            ? $"({DescribeTetherFixed(value: body.TetherAnchorPointOrLocalOffset.X)}, {DescribeTetherFixed(value: body.TetherAnchorPointOrLocalOffset.Y)}, {DescribeTetherFixed(value: body.TetherAnchorPointOrLocalOffset.Z)})"
             : "n/a"
         );
-        var rope = ((body.AttachmentRopeLength is { } length)
-            ? DescribeAttachmentFixed(value: length)
+        var rope = ((body.TetherLength is { } length)
+            ? DescribeTetherFixed(value: length)
             : "n/a"
         );
 
-        return $"[body.attachment: body:{index} mode={DescribeAttachmentMode(mode: body.AttachmentMode)} anchor={anchor} rope={rope}]";
+        return $"[body.tether: body:{index} attached={(attached ? "yes" : "no")} anchor={anchor} rope={rope}]";
     }
     // The body.hold read-back: which row of the kit's ordered hold list holds the body, the surface normal it holds
     // (n/a for a free hold), and what the row still has left to spend (n/a for a row that spends nothing).
@@ -37,17 +35,16 @@ internal sealed partial class PlayerCommandModule {
 
         var normal = body.HoldNormal;
         var spend = ((body.HoldSpendRemaining is { } remaining)
-            ? DescribeAttachmentFixed(value: remaining)
+            ? DescribeTetherFixed(value: remaining)
             : "n/a"
         );
 
-        return $"[body.hold: body:{index} hold={name} normal={((normal == Puck.Maths.FixedVector3.Zero) ? "n/a" : $"({DescribeAttachmentFixed(value: normal.X)}, {DescribeAttachmentFixed(value: normal.Y)}, {DescribeAttachmentFixed(value: normal.Z)})")} spend={spend}]";
+        return $"[body.hold: body:{index} hold={name} normal={((normal == Puck.Maths.FixedVector3.Zero) ? "n/a" : $"({DescribeTetherFixed(value: normal.X)}, {DescribeTetherFixed(value: normal.Y)}, {DescribeTetherFixed(value: normal.Z)})")} spend={spend}]";
     }
-    // Shared front matter for body.attach/body.detach: resolve the target, refuse by name when the world authors no
-    // attachment section or no channel for this lane (a world authoring nothing keeps today's behavior — see
-    // WorldAttachmentSection.Absent), then press the resolved ordinal for one host step — the same edge a bound pad
-    // chord would fire, scripted.
-    private CommandResult PressAttachmentLane(CommandContext context, in WireArgs args, int ordinal, string laneName, string verb) {
+    // Shared front matter for body.attach/body.detach: resolve the target, refuse by name when the target's OWN kit
+    // carries no tether facet or no channel for this lane (a kit authoring none keeps every body's tether inert),
+    // then press the resolved ordinal for one host step — the same edge a bound pad chord would fire, scripted.
+    private CommandResult PressTetherLane(CommandContext context, in WireArgs args, Func<WorldBody, int> ordinalOf, string laneName, string verb) {
         var (player, index, error) = ResolveTarget(
             args: in args,
             requiredCount: 0,
@@ -58,12 +55,14 @@ internal sealed partial class PlayerCommandModule {
             return CommandResult.Error(output: error!);
         }
 
-        if (!m_population.CompiledAttachment.Enabled) {
-            return CommandResult.Error(output: $"[{verb}: the world authors no attachment section — see world.attach-policy]");
+        if (!player.HasTetherFacet) {
+            return CommandResult.Error(output: $"[{verb}: body:{index}'s kit authors no tether facet]");
         }
 
+        var ordinal = ordinalOf(player);
+
         if (ordinal < 0) {
-            return CommandResult.Error(output: $"[{verb}: the world's attachment section declares no {laneName} channel]");
+            return CommandResult.Error(output: $"[{verb}: body:{index}'s kit tether facet declares no {laneName} channel]");
         }
 
         if (ReplayDriveError(verb: verb) is { } driveError) {
@@ -84,29 +83,29 @@ internal sealed partial class PlayerCommandModule {
             return new CommandResult(Output: $"[{verb}: body:{index} refused → {refusal}]");
         }
 
-        return new CommandResult(Output: DescribeAttachment(
+        return new CommandResult(Output: DescribeTether(
             body: player,
             index: index
         ));
     }
-    private CommandResult AttachHandler(CommandContext context, WireArgs args) => PressAttachmentLane(
+    private CommandResult AttachHandler(CommandContext context, WireArgs args) => PressTetherLane(
         args: in args,
         context: context,
         laneName: "attach",
-        ordinal: m_population.CompiledAttachment.AttachChannelOrdinal,
+        ordinalOf: static body => body.TetherAttachChannelOrdinal,
         verb: "body.attach"
     );
-    private CommandResult DetachHandler(CommandContext context, WireArgs args) => PressAttachmentLane(
+    private CommandResult DetachHandler(CommandContext context, WireArgs args) => PressTetherLane(
         args: in args,
         context: context,
         laneName: "detach",
-        ordinal: m_population.CompiledAttachment.DetachChannelOrdinal,
+        ordinalOf: static body => body.TetherDetachChannelOrdinal,
         verb: "body.detach"
     );
-    // body.reel <rate> [holdSeconds] [body]: <rate> is bipolar (-1 reels in, +1 reels out, magnitude scales
-    // FixedWorldAttachment.ReelRate — see ProcessReel). Meaningless outside Grapple; pressing it while climbing or
-    // unattached is accepted (the channel value changes) but read by nothing, exactly like an unbound composition
-    // channel today.
+    // body.reel <rate> [holdSeconds] [body]: <rate> is bipolar (-1 reels in, +1 reels out, magnitude scales the
+    // kit's tether facet lengthRate — see ProcessTetherReel). Meaningless while unattached; pressing it while
+    // climbing or unattached is accepted (the channel value changes) but read by nothing, exactly like an unbound
+    // composition channel today.
     private CommandResult ReelHandler(CommandContext context, WireArgs args) {
         if (args.Count is (< 1 or > 3)) {
             return CommandResult.Error(output: "[body.reel: expected <rate> — plus an optional hold time and body index]");
@@ -137,14 +136,14 @@ internal sealed partial class PlayerCommandModule {
             return CommandResult.Error(output: error!);
         }
 
-        var ordinal = m_population.CompiledAttachment.ReelChannelOrdinal;
-
-        if (!m_population.CompiledAttachment.Enabled) {
-            return CommandResult.Error(output: "[body.reel: the world authors no attachment section — see world.attach-policy]");
+        if (!player.HasTetherFacet) {
+            return CommandResult.Error(output: $"[body.reel: body:{index}'s kit authors no tether facet]");
         }
 
+        var ordinal = player.TetherReelChannelOrdinal;
+
         if (ordinal < 0) {
-            return CommandResult.Error(output: "[body.reel: the world's attachment section declares no reel channel]");
+            return CommandResult.Error(output: $"[body.reel: body:{index}'s kit tether facet declares no reel channel]");
         }
 
         float? holdSeconds = null;
@@ -178,7 +177,7 @@ internal sealed partial class PlayerCommandModule {
             return new CommandResult(Output: $"[body.reel: body:{index} refused → {refusal}]");
         }
 
-        return new CommandResult(Output: DescribeAttachment(
+        return new CommandResult(Output: DescribeTether(
             body: player,
             index: index
         ));
@@ -203,53 +202,53 @@ internal sealed partial class PlayerCommandModule {
             index: index
         ));
     }
-    private CommandResult AttachmentHandler(CommandContext context, WireArgs args) {
+    private CommandResult TetherHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Error(output: "[body.attachment: expected at most 1 value — an optional body index]");
+            return CommandResult.Error(output: "[body.tether: expected at most 1 value — an optional body index]");
         }
 
         var (player, index, error) = ResolveTarget(
             args: in args,
             requiredCount: 0,
-            verb: "body.attachment"
+            verb: "body.tether"
         );
 
         if (player is null) {
             return CommandResult.Error(output: error!);
         }
 
-        return new CommandResult(Output: DescribeAttachment(
+        return new CommandResult(Output: DescribeTether(
             body: player,
             index: index
         ));
     }
-    private IEnumerable<CommandDefinition> AttachmentVerbs() {
+    private IEnumerable<CommandDefinition> TetherVerbs() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "body.attach",
-            description: "Throws the grapple: body.attach [body] presses the world's authored attachment.attachChannel for one host step — the body's facing tries an anchor within attachment.grappleMaxDistance/grappleAssistHalfAngleDegrees. A body already attached ignores it (body.detach first). Refuses by name when the world authors no attachment section or no attachChannel. Echoes the body.attachment read-back.",
+            description: "Attaches the tether: body.attach [body] presses the target's own kit tether facet's attachChannel for one host step — the body's facing tries an anchor within the facet's maxAnchorDistance/aimHalfAngleDegrees. A body already attached ignores it (body.detach first). Refuses by name when the target's kit authors no tether facet or no attachChannel. Echoes the body.tether read-back.",
             handler: AttachHandler,
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "body.detach",
-            description: "Clears an active tether: body.detach [body] presses attachment.detachChannel for one host step. Restores ordinary locomotion, carrying the released velocity scaled by attachment.releaseMomentumScale. A friendly no-op when unattached. Echoes the body.attachment read-back.",
+            description: "Clears an active tether: body.detach [body] presses the target's own kit tether facet's detachChannel for one host step. Restores ordinary locomotion, carrying the released velocity scaled by the facet's releaseVelocityScale. A friendly no-op when unattached. Echoes the body.tether read-back.",
             handler: DetachHandler,
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "body.reel",
-            description: "Holds the grapple rope's reel channel: body.reel <rate> [holdSeconds] [body] — <rate> is bipolar [-1, 1] (negative reels in, positive reels out), scaling attachment.reelRate; [holdSeconds] how long it reads held (default one host step). Meaningless outside Grapple mode. Echoes the body.attachment read-back.",
+            description: "Holds the tether's reel channel: body.reel <rate> [holdSeconds] [body] — <rate> is bipolar [-1, 1] (negative reels in, positive reels out), scaling the target's own kit tether facet's lengthRate; [holdSeconds] how long it reads held (default one host step). Meaningless while unattached. Echoes the body.tether read-back.",
             handler: ReelHandler,
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
-            name: "body.attachment",
-            description: "Echoes a body's attachment state: body.attachment [body] — [body.attachment: body:<n> mode=<none|grapple> anchor=(x, y, z) rope=<length|n/a>]. anchor and rope read n/a while unattached. Surface holds are body.hold's to echo.",
-            handler: AttachmentHandler
+            name: "body.tether",
+            description: "Echoes a body's tether state: body.tether [body] — [body.tether: body:<n> attached=<yes|no> anchor=(x, y, z) rope=<length|n/a>]. anchor and rope read n/a while unattached. Surface holds are body.hold's to echo.",
+            handler: TetherHandler
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,

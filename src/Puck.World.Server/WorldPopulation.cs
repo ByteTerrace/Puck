@@ -10,7 +10,7 @@ namespace Puck.World.Server;
 /// <summary>What a <see cref="WorldPopulation"/> entry stands for — the local seats driven by client-submitted intents,
 /// and the peer slice that hosts every other joined body: remote-human peers and the loopback-joined inhabitants alike.
 /// Every entry is an authoritative body advanced from a <see cref="PlayerIntent"/>; a driver (a client seat, a network
-/// peer, AI, an inhabitant's attend producer, a replay tape) may only produce intents, never write a pose. An inhabitant
+/// peer, AI, an inhabitant's sensing steering producer, a replay tape) may only produce intents, never write a pose. An inhabitant
 /// is not a separate kind — it is a <see cref="NetworkPeer"/> whose body is bound to a placement (see
 /// <see cref="WorldPopulation"/>), joined over the loopback link exactly as a peer is. The render path is driven by kind,
 /// so it never learns who is driving an entry.</summary>
@@ -36,13 +36,13 @@ internal enum PopulationKind {
 /// <see cref="Revision"/> bumps whenever the declared set or palette changes — a seat joining, leaving, or recoloring,
 /// or the simulated count moving — never on a per-tick pose write, so the client rebuilds the avatar program exactly
 /// when the declared set moves. The simulated
-/// palette and wander seeds are baked once at construction (index-derived, no RNG), so activating an entry only flips
+/// palette and producer seeds are baked once at construction (index-derived, no RNG), so activating an entry only flips
 /// its <c>Active</c> flag and creates its own <see cref="WorldBody"/> within the frozen render envelope.
 /// </para>
 /// <para>
 /// <b>Simulation authority.</b> Every entry is an authoritative body: an entry owns its own <see cref="WorldBody"/>
 /// (created on activation, dropped on deactivation) and is advanced from an intent.
-/// <see cref="AdvanceSimulated"/> shapes each peer's wander into a submitted intent
+/// <see cref="AdvanceSimulated"/> shapes each peer's producer output into a submitted intent
 /// (<see cref="WorldBody.SubmitIntent"/>) and calls <see cref="WorldBody.Advance"/>;
 /// <see cref="AdvanceSeats"/> advances the seat bodies from the intents the client submitted this tick. Poses flow out
 /// of the sim, never in: the only outside writes into a body are the server-authoritative spawn at activation and the
@@ -180,7 +180,7 @@ public sealed partial class WorldPopulation {
     // is refused past — see RigidVelocityCeiling.
     private FixedQ4816 m_rigidVelocityCeiling;
     // The fixed-point derived tables — recompiled in place by Rebuild when a sim-affecting section mutates (a live kit
-    // tune, motion/wander retune, seat-kit or assignment change), so they are no longer readonly.
+    // tune, motion/producer retune, seat-kit or assignment change), so they are no longer readonly.
     private FixedMotionDefaults m_fixedMotion;
     private byte[]? m_lookAssignmentRows;
     // The compiled population.reconnectGraceSeconds (see WorldDefinition.PopulationReconnectGraceTicks' own
@@ -206,13 +206,6 @@ public sealed partial class WorldPopulation {
     private WorldFieldLattice? m_fields;
     private bool m_fieldsCompiled;
 
-    // The compiled climb/grapple policy every live body reads its attach/detach/reel channel ordinals and grip/rope
-    // tuning from. Recompiled by CompileFixedTables beside every other sim-affecting table and handed to each live
-    // body the same way the contact field/gravity are (see the SetAttachmentPolicy call sites).
-    private FixedWorldAttachment m_fixedAttachment = FixedWorldAttachment.Absent;
-
-    /// <summary>Gets the compiled climb/grapple policy for read-back (<c>world.attach-policy</c>).</summary>
-    public FixedWorldAttachment CompiledAttachment => m_fixedAttachment;
     /// <summary>Gets the field lattice, when the world declares a <c>fields</c> section.</summary>
     public WorldFieldLattice? Fields => m_fields;
     /// <summary>Gets the compiled gravity declaration for read-back.</summary>

@@ -176,9 +176,6 @@
     "captures": {
       "$ref": "./schema/captures.schema.json"
     },
-    "attachment": {
-      "$ref": "./schema/attachment.schema.json"
-    },
     "curves": {
       "$ref": "./schema/curves.schema.json"
     },

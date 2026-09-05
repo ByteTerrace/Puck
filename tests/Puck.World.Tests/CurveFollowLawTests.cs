@@ -74,20 +74,38 @@ public sealed class CurveFollowLawTests {
         Closed: true
     );
 
+    // ProduceSteeringIntent's roam shape never governs this producer (SenseNearestInCone always finds the curve
+    // point), but the op reads the full parameter set regardless of which shape a given tick takes.
     private static BodyProgramParameters FollowerProducerParameters(float orbit) => new(
         Scalars: new Dictionary<string, float> {
             ["standoffRadius"] = 0.1f,
             ["approach"] = 1f,
             ["orbit"] = orbit,
             ["altitudeGain"] = 0f,
+            ["approachAltitudeGain"] = 0f,
             ["inwardGain"] = 3f,
             ["turnScale"] = 3f,
+            ["forward"] = 0f,
+            ["softRadius"] = 1f,
+            ["weaveAmplitude"] = 0f,
+            ["weaveFrequencyBase"] = 0f,
+            ["weaveFrequencyRange"] = 0f,
+            ["activityRateBase"] = 0f,
+            ["activityRateRange"] = 0f,
+            ["strafeWave"] = 0f,
+            ["turnWave"] = 0f,
+            ["upWave"] = 0f,
+            ["pitchWave"] = 0f,
+            ["rollTurn"] = 0f,
+            ["pressThreshold"] = 0f,
+            ["altitudeBase"] = 0f,
+            ["altitudeRange"] = 0f,
         },
         Channels: new Dictionary<string, string>()
     );
     // Splices one curves row and a matching Producer-kind program (SenseNearestInCone + FaceSensorTarget +
-    // ProduceAttendIntent) onto Fixtures.BuildDocument() — the shared shape every test below boots from. The kit's
-    // MoveFrame is World (Fixtures' default), so ProduceAttendIntent drives the body directly at the sensed target's
+    // ProduceSteeringIntent) onto Fixtures.BuildDocument() — the shared shape every test below boots from. The kit's
+    // MoveFrame is World (Fixtures' default), so ProduceSteeringIntent drives the body directly at the sensed target's
     // bearing every tick; FaceSensorTarget's Turn write only ever reaches the drawn attitude under World, never the
     // translation basis (WorldBody.Step's ResolveYawAttitudeAndPlanarFrame). A body only actually runs the program
     // once its own intent source names it (see JoinFollower); the control tests in this file never do.
@@ -98,7 +116,7 @@ public sealed class CurveFollowLawTests {
             Name: programName,
             Version: "puck.body-motion.v1",
             Kind: BodyProgramKind.Producer,
-            Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.FaceSensorTarget, BodyMotionOp.ProduceAttendIntent],
+            Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.FaceSensorTarget, BodyMotionOp.ProduceSteeringIntent],
             Target: new BodyTargetSource.CurveFollow(Curve: curve.Name, Rate: rate)
         );
 
@@ -394,14 +412,14 @@ public sealed class CurveFollowLawTests {
             Name: FollowProgramName,
             Version: "puck.body-motion.v1",
             Kind: BodyProgramKind.Producer,
-            Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.FaceSensorTarget, BodyMotionOp.ProduceAttendIntent],
+            Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.FaceSensorTarget, BodyMotionOp.ProduceSteeringIntent],
             Target: new BodyTargetSource.CurveFollow(Curve: straight.Name, Rate: 2f)
         );
         var followLoop = new BodyMotionProgram(
             Name: LoopFollowProgramName,
             Version: "puck.body-motion.v1",
             Kind: BodyProgramKind.Producer,
-            Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.FaceSensorTarget, BodyMotionOp.ProduceAttendIntent],
+            Operations: [BodyMotionOp.SenseNearestInCone, BodyMotionOp.FaceSensorTarget, BodyMotionOp.ProduceSteeringIntent],
             Target: new BodyTargetSource.CurveFollow(Curve: loop.Name, Rate: 2f)
         );
 

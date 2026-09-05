@@ -21,7 +21,8 @@ selection into its intrinsic host phases), the per-body trigger and action-state
 (`CompiledActionSpec`, `CompiledTrigger`, `CompiledFactTrigger`, `CompiledPredicate`,
 `CompiledBodyInstruction`, `CompiledActionStateSlot`, `CompiledActionStateEnvelope`),
 and the compiled fixed-point tunings the stages read (`FixedMotionTuning`,
-`FixedMotionDefaults`, `FixedMotionScalarEnvelope`, `FixedSpeed`, `FixedTurn`).
+`FixedMotionDefaults`, `FixedMotionScalarEnvelope`, `FixedSpeed`, `FixedTurn`,
+`FixedUpTurnRates`, `FixedObstructionLatch`).
 `ShapeVelocity` reads the one unified velocity-shaping table,
 `FixedMotionTuning.Shaping` (`FixedBodyShaping[]`): the first row whose gate
 opens governs — a row with no `Across` facet shapes the whole vector through
@@ -38,7 +39,7 @@ identically whichever yaw-writing frame operation (`ResolveDriveFrame`,
 `ResolveYawAttitudeAndPlanarFrame`, `IntegrateLocalAttitude`) is selected. A
 held low-traction row (a kart's drift) is an ordinary row gated on a `Held`
 predicate (`CompiledPredicateKind.Held`, a live channel-threshold read),
-authored ahead of the row it overrides. An absent engage/release/brake/grip
+authored ahead of the row it overrides. An absent engage/release/reversalRate/lateral
 rate compiles to an explicit instant-convergence flag; zero is not overloaded
 as either instant or disabled. The vertical channel is a hold row's
 own concern (`FixedBodyHold.Gravity`/`.Thrust`, `ResolveHold`/`ApplyHold` in
@@ -127,7 +128,7 @@ point, outward normal, owning collider identity, and distance within a
 caller-supplied reach across two spans (`FixedSurfaceColliderSource.Static`/
 `.Dynamic`, mirroring `FixedStaticContactSolver.Resolve`'s split), ranked by
 distance then a `(Source, ColliderIndex)` tie-break. `TryNearestDirected` is
-the aim-assist cone variant for grapple targeting: candidates are filtered to
+the aim-assist cone variant for tether targeting: candidates are filtered to
 a caller-supplied max distance and half-angle around an aim direction, then
 ranked by angular deviation before distance. Every reach, max distance, and
 half-angle is caller-supplied; nothing here derives one from a document.

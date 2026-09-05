@@ -588,17 +588,22 @@ public static class BodyActionSpecFactory {
         );
     }
 }
-/// <summary>One producer program and a kit's fixed-point arguments for it.</summary>
+/// <summary>One producer program and a kit's fixed-point arguments for it, resolved to
+/// <see cref="BodyProducerParameter"/> ordinals once at kit-compile time — the tick path indexes
+/// <see cref="Scalar"/>/<see cref="Channel"/> directly, reading no dictionary and no authored string.</summary>
 public sealed class CompiledBodyProducer {
-    private readonly IReadOnlyDictionary<string, int> m_channels;
-    private readonly IReadOnlyDictionary<string, FixedQ4816> m_scalars;
+    private static readonly int ParameterCount = Enum.GetValues<BodyProducerParameter>().Length;
 
-    private CompiledBodyProducer(CompiledBodyMotionProgram program, IReadOnlyDictionary<string, FixedQ4816> scalars, IReadOnlyDictionary<string, int> channels, FixedBodyTargetSource? target, FixedWorldFlockProfile? flock) {
+    private readonly int[] m_channelOrdinals;
+    private readonly FixedQ4816[] m_scalars;
+
+    private CompiledBodyProducer(CompiledBodyMotionProgram program, FixedQ4816[] scalars, int[] channelOrdinals, FixedBodyTargetSource? target, FixedWorldFlockProfile? flock, bool roamActive) {
         Program = program;
         m_scalars = scalars;
-        m_channels = channels;
+        m_channelOrdinals = channelOrdinals;
         Target = target;
         Flock = flock;
+        RoamActive = roamActive;
     }
 
     /// <summary>Gets the compiled producer program.</summary>
@@ -607,16 +612,66 @@ public sealed class CompiledBodyProducer {
     public FixedBodyTargetSource? Target { get; }
     /// <summary>Gets bounded local-perception and steering parameters, when authored.</summary>
     public FixedWorldFlockProfile? Flock { get; }
+    /// <summary>Gets a value indicating whether <see cref="BodyMotionOp.ProduceSteeringIntent"/>'s roam shape runs
+    /// for this producer — always true for a non-sensing steering program, and derived at compile time from a
+    /// roam-exclusive <see cref="BodyProducerParameterVocabulary.SteeringScalars"/> member for a sensing program;
+    /// never authored as a separate flag.</summary>
+    public bool RoamActive { get; }
 
-    /// <summary>Reads one validated channel ordinal by name, or <c>-1</c> when omitted.</summary>
-    public int Channel(string name) => (m_channels.TryGetValue(
-        key: name,
-        value: out var ordinal
-    )
-        ? ordinal
-        : -1
-    );
-    /// <summary>Compiles a kit's producer parameters.</summary>
+    /// <summary>Reads one validated channel ordinal, or <c>-1</c> when the kit binds none.</summary>
+    public int Channel(BodyProducerParameter parameter) => m_channelOrdinals[(int)parameter];
+    /// <summary>Reads one validated fixed-point scalar.</summary>
+    public FixedQ4816 Scalar(BodyProducerParameter parameter) => m_scalars[(int)parameter];
+    // The scalar ordinals CHANNEL args (Press) may legitimately name, alongside the op-declared scalar set — kept
+    // separate from BodyProducerParameterVocabulary.RequiredScalars, which answers only for the SCALAR-valued
+    // argument space.
+    private static bool AdmitsChannelArgument(CompiledBodyMotionProgram program, BodyProducerParameter parameter) => ((parameter == BodyProducerParameter.Press) && program.Contains(operation: BodyMotionOp.ProduceSteeringIntent));
+    /// <summary>Computes one producer program's full required-scalar set from its selected operations and authored
+    /// arguments — the ONE derivation both this type's <see cref="Compile"/> and the schema validator
+    /// (<c>WorldDefinitionValidator.Motion.cs</c>'s <c>ValidateProducerParameters</c>) read, so a required-set rule
+    /// can never drift between compile time and validation time.</summary>
+    /// <param name="program">The compiled producer program.</param>
+    /// <param name="target">The program's authored target source, or <see langword="null"/> when it senses none.</param>
+    /// <param name="parameters">The kit's authored arguments for the program.</param>
+    /// <returns>The set of parameters this program's selected operations and authored arguments require.</returns>
+    public static IReadOnlySet<BodyProducerParameter> ResolveRequiredScalars(CompiledBodyMotionProgram program, BodyTargetSource? target, BodyProgramParameters parameters) {
+        var required = new HashSet<BodyProducerParameter>();
+
+        foreach (var op in Enum.GetValues<BodyMotionOp>()) {
+            if (program.Contains(operation: op)) {
+                required.UnionWith(other: BodyProducerParameterVocabulary.RequiredScalars(op: op));
+            }
+        }
+
+        var senses = program.Contains(operation: BodyMotionOp.SenseNearestInCone);
+        var producesSteering = program.Contains(operation: BodyMotionOp.ProduceSteeringIntent);
+
+        // With sensing, roam is an optional fallback and its exclusive scalar presence activates it. Without
+        // sensing, roam is the op's only reachable shape, so selecting ProduceSteeringIntent requires it outright;
+        // accepting an empty bare producer would compile a permanently inert program.
+        if (producesSteering && (!senses || BodyProducerParameterVocabulary.IsRoamAuthored(scalars: parameters.Scalars))) {
+            required.UnionWith(other: BodyProducerParameterVocabulary.SteeringScalars);
+        }
+        // The approach shape ProduceSteeringIntent runs is reachable only on a tick this program's own sensing
+        // found a target — never on a bare roam producer, which can only ever run the roam shape.
+        if (senses && producesSteering) {
+            required.UnionWith(other: BodyProducerParameterVocabulary.SteeringApproachScalars);
+        }
+        // SenseTarget's own release-radius hysteresis (WorldBody.Step.cs) reads this scalar only for a NON-flock
+        // producer sensing a Sensed source — a flock's own bounded-perception cadence retains observations by a
+        // different mechanism and never reads it.
+        if (
+            senses &&
+            (target is BodyTargetSource.Sensed) &&
+            (parameters.Flock is null)
+        ) {
+            required.Add(item: BodyProducerParameter.ReleaseRadius);
+        }
+
+        return required;
+    }
+    /// <summary>Compiles a kit's producer parameters, refusing an authored <c>scalars</c>/<c>channels</c> key that
+    /// names no parameter this program's selected operations read, or that omits one they require.</summary>
     /// <param name="program">The compiled producer program.</param>
     /// <param name="source">The program's authored target source, or <see langword="null"/> when it senses none.</param>
     /// <param name="parameters">The kit's authored arguments for the program.</param>
@@ -627,33 +682,72 @@ public sealed class CompiledBodyProducer {
     /// <param name="simulationRateHz">The world's own simulation rate — a curve-follow target's per-tick arc step
     /// divisor.</param>
     /// <returns>The compiled producer binding.</returns>
+    /// <exception cref="BodyMotionProgramException">An authored key names no parameter this program's operations
+    /// read, or a required parameter is missing.</exception>
     public static CompiledBodyProducer Compile(CompiledBodyMotionProgram program, BodyTargetSource? source, BodyProgramParameters parameters, WorldChannelTable channels, WorldTargetRegisterTable targets, WorldCurveTable curves, WorldNavigationDomainTable navigation, int simulationRateHz) {
-        var scalars = new Dictionary<string, FixedQ4816>(
-            capacity: parameters.Scalars.Count,
-            comparer: StringComparer.Ordinal
+        var requiredScalars = ResolveRequiredScalars(
+            program: program,
+            target: source,
+            parameters: parameters
         );
+        var producesSteering = program.Contains(operation: BodyMotionOp.ProduceSteeringIntent);
+        var senses = program.Contains(operation: BodyMotionOp.SenseNearestInCone);
+        var roamActive = (producesSteering && (!senses || BodyProducerParameterVocabulary.IsRoamAuthored(scalars: parameters.Scalars)));
+
+        var scalars = new FixedQ4816[ParameterCount];
 
         foreach (var (name, value) in parameters.Scalars) {
-            scalars.Add(
-                key: name,
-                value: FixedQ4816.FromDouble(value: value)
-            );
+            if (
+                !BodyProducerParameterVocabulary.TryParse(name: name, parameter: out var parameter) ||
+                !requiredScalars.Contains(item: parameter)
+            ) {
+                throw new BodyMotionProgramException(
+                    refusal: BodyMotionProgramRefusal.ParameterUnknown,
+                    programName: program.Name,
+                    detail: $"scalar '{name}' names no parameter this program's selected operations read"
+                );
+            }
+
+            scalars[(int)parameter] = FixedQ4816.FromDouble(value: value);
+        }
+        foreach (var required in requiredScalars) {
+            if (!parameters.Scalars.ContainsKey(key: BodyProducerParameterVocabulary.Name(parameter: required))) {
+                throw new BodyMotionProgramException(
+                    refusal: BodyMotionProgramRefusal.ParameterMissing,
+                    programName: program.Name,
+                    detail: $"scalar '{BodyProducerParameterVocabulary.Name(parameter: required)}' is required by this program's selected operations"
+                );
+            }
         }
 
-        var channelOrdinals = new Dictionary<string, int>(
-            capacity: parameters.Channels.Count,
-            comparer: StringComparer.Ordinal
+        var channelOrdinals = new int[ParameterCount];
+
+        Array.Fill(
+            array: channelOrdinals,
+            value: -1
         );
 
         foreach (var (name, channel) in parameters.Channels) {
-            channelOrdinals.Add(
-                key: name,
-                value: (channels.TryGetOrdinal(
-                    name: channel,
-                    ordinal: out var ordinal
-                )
+            if (
+                !BodyProducerParameterVocabulary.TryParse(name: name, parameter: out var parameter) ||
+                !AdmitsChannelArgument(
+                program: program,
+                parameter: parameter
+            )
+            ) {
+                throw new BodyMotionProgramException(
+                    refusal: BodyMotionProgramRefusal.ParameterUnknown,
+                    programName: program.Name,
+                    detail: $"channel argument '{name}' names no parameter this program's selected operations read"
+                );
+            }
+
+            channelOrdinals[(int)parameter] = (channels.TryGetOrdinal(
+                name: channel,
+                ordinal: out var ordinal
+            )
                 ? ordinal
-                : -1)
+                : -1
             );
         }
 
@@ -661,7 +755,8 @@ public sealed class CompiledBodyProducer {
             program: program,
             flock: parameters.Flock is { } flock ? new FixedWorldFlockProfile(flock, navigation) : null,
             scalars: scalars,
-            channels: channelOrdinals,
+            channelOrdinals: channelOrdinals,
+            roamActive: roamActive,
             target: ((source is { } target)
             ? FixedBodyTargetSource.Compile(
                     curves: curves,
@@ -673,6 +768,4 @@ public sealed class CompiledBodyProducer {
             : null)
         );
     }
-    /// <summary>Reads one validated fixed-point scalar by name.</summary>
-    public FixedQ4816 Scalar(string name) => m_scalars[name];
 }

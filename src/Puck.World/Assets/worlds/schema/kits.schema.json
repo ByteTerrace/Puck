@@ -107,6 +107,11 @@
                     "description": "The pitch rate (rad/s) a drive kit\u0027s Pitch channel commands; 0 (the default) locks the drive frame planar (the ground and hover variants). Positive selects the flying variant\u0027s pitched facing, clamped inside the integrator so the frame can never flip past vertical.",
                     "type": "number",
                     "default": 0
+                  },
+                  "maxPitch": {
+                    "description": "The drive pitch clamp (radians): how far the flying variant\u0027s facing may climb or dive before the integrator holds it, so it can never flip past vertical and invert the yaw frame mid-flight. Unread while PitchRate is zero.",
+                    "type": "number",
+                    "default": 1.2
                   }
                 },
                 "required": [
@@ -147,8 +152,8 @@
                           ],
                           "default": null
                         },
-                        "brake": {
-                          "description": "The drive\u0027s sign-reversal (brake) rate (u/s\u00B2) while back-throttle opposes forward travel. null means brake immediately. Refused without a paired Across.",
+                        "reversalRate": {
+                          "description": "The drive\u0027s sign-reversal rate (u/s\u00B2) while back-throttle opposes forward travel. null means reverse sign immediately. Refused without a paired Across.",
                           "type": [
                             "number",
                             "null"
@@ -163,8 +168,8 @@
                           ],
                           "default": null
                         },
-                        "reverse": {
-                          "description": "The reverse speed (u/s) full back-throttle converges on from rest; absence forbids reversing. Refused whenever authored without a paired Across.",
+                        "backwardSpeed": {
+                          "description": "The backward speed (u/s) full back-throttle converges on from rest; absence forbids travelling backward. Refused whenever authored without a paired Across.",
                           "type": [
                             "number",
                             "null"
@@ -182,7 +187,7 @@
                         "null"
                       ],
                       "properties": {
-                        "grip": {
+                        "lateral": {
                           "description": "The lateral convergence rate (u/s\u00B2) toward zero slip while this row governs, or null to remove slip immediately.",
                           "type": [
                             "number",
@@ -255,7 +260,7 @@
                       "enum": [
                         "None",
                         "Gravity",
-                        "Grip",
+                        "Pull",
                         "Lift"
                       ]
                     },
@@ -263,8 +268,8 @@
                       "description": "The inclusive angle band, in degrees, between an admitted surface normal and gravity-up: [0, 60] is floors, [60, 120] walls, [0, 180] everything. Required for Surface, refused for Free.",
                       "default": null
                     },
-                    "grip": {
-                      "description": "The inward pull, world units per second, under Grip. Applied as a positional standoff, so it closes a gap the surface opens without ever pushing the body through it.",
+                    "pull": {
+                      "description": "The inward pull, world units per second, under Pull. Applied as a positional standoff, so it closes a gap the surface opens without ever pushing the body through it.",
                       "type": "number",
                       "default": 0
                     },
@@ -348,39 +353,29 @@
                         "null"
                       ],
                       "properties": {
-                        "buoyancy": {
-                          "description": "The idle vertical drift velocity below the bob band, signed (u/s).",
+                        "idleDrift": {
+                          "description": "The idle vertical drift velocity below the equilibrium band, signed (u/s).",
                           "type": "number"
                         },
-                        "maxRiseSpeed": {
-                          "description": "The terminal ascent speed (u/s).",
+                        "equilibriumOffset": {
+                          "description": "The equilibrium line\u0027s depth below the medium surface, and the band\u0027s half-width (u).",
                           "type": "number"
                         },
-                        "maxSinkSpeed": {
-                          "description": "The terminal descent speed (u/s).",
-                          "type": "number"
-                        },
-                        "surfaceSettleRate": {
-                          "description": "The proportional settle gain toward the float line (1/s).",
-                          "type": "number"
-                        },
-                        "floatDepth": {
-                          "description": "The float line\u0027s depth below the medium surface, and the bob band\u0027s half-width (u).",
+                        "settleRate": {
+                          "description": "The proportional gain (1/s) the equilibrium error scales by to reach a target velocity inside the band or while recovering a breach above the surface.",
                           "type": "number"
                         }
                       },
                       "required": [
-                        "buoyancy",
-                        "maxRiseSpeed",
-                        "maxSinkSpeed",
-                        "surfaceSettleRate",
-                        "floatDepth"
+                        "idleDrift",
+                        "equilibriumOffset",
+                        "settleRate"
                       ],
                       "additionalProperties": false,
                       "default": null
                     },
                     "gravity": {
-                      "description": "The vertical arc this row falls under. Required for Gravity and Lift; refused for Grip, None, and every Medium row.",
+                      "description": "The vertical arc this row falls under. Required for Gravity and Lift; refused for Pull, None, and every Medium row.",
                       "type": [
                         "object",
                         "null"
@@ -393,17 +388,36 @@
                         "fall": {
                           "description": "The downward acceleration while falling (u/s\u00B2) \u2014 the snappy descent (heavier than the rise). The world\u0027s own solved gravity field, where one is authored, overrides the MAGNITUDE but keeps this row\u0027s rise-to-fall ratio as the arc\u0027s asymmetry.",
                           "type": "number"
-                        },
-                        "terminal": {
-                          "description": "The terminal fall speed the descent is clamped to (u/s).",
-                          "type": "number"
                         }
                       },
                       "required": [
                         "rise",
-                        "fall",
-                        "terminal"
+                        "fall"
                       ],
+                      "additionalProperties": false,
+                      "default": null
+                    },
+                    "envelope": {
+                      "description": "The vertical-channel envelope Gravity\u0027s terminal fall speed and Medium\u0027s terminal rise/sink speeds share. Required for a Medium bond and for a Gravity/Lift hold short of full lift; refused otherwise.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "riseSpeed": {
+                          "description": "The terminal upward speed (u/s). Required for a Medium bond; refused (the arc never clamps a rise) for Gravity/Lift.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "sinkSpeed": {
+                          "description": "The terminal downward speed (u/s) \u2014 a Gravity/Lift row\u0027s own terminal fall speed, or a Medium row\u0027s terminal sink speed.",
+                          "type": "number",
+                          "default": 0
+                        }
+                      },
                       "additionalProperties": false,
                       "default": null
                     },
@@ -421,6 +435,58 @@
                   "additionalProperties": false
                 },
                 "default": null
+              },
+              "upTurn": {
+                "description": "How fast a solved gravity field and a measured contact normal may each turn the body\u0027s up axis \u2014 see WorldUpTurnRates. Omitted (null) reproduces the engine\u0027s own steering rates exactly; read the effective rates from UpTurn.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "field": {
+                    "description": "The ceiling on how fast a solved gravity field may turn the up axis. Crossing this rate lets an attractor\u0027s pull replace the world\u0027s own as one continuous roll rather than a single-tick inversion; every ordinary reorientation turns far slower and is untouched.",
+                    "type": "number",
+                    "default": 1.5707964
+                  },
+                  "contact": {
+                    "description": "The ceiling on how fast a measured ground-contact normal may turn the up axis \u2014 a discontinuity filter, not a smoothing rate: it should sit an order of magnitude above the fastest curvature this kit\u0027s own top speed can walk, so ordinary running adopts the surface exactly and only a collider crease is spread across a few ticks. Both rates must remain positive after Q48.16 compilation.",
+                    "type": "number",
+                    "default": 6.2831855
+                  }
+                },
+                "additionalProperties": false,
+                "default": null
+              },
+              "obstruction": {
+                "description": "The non-walkable contact witness\u0027s latch tuning \u2014 see WorldObstructionLatch. Omitted (null) reproduces the engine\u0027s own latch exactly; read the effective latch from Obstruction.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "displacement": {
+                    "description": "World units a body must move from where the witness last (re)latched before it is considered to have genuinely moved on. Its squared comparison threshold must remain positive after Q48.16 compilation.",
+                    "type": "number",
+                    "default": 2
+                  },
+                  "idleThreshold": {
+                    "description": "The raw MoveAdvance/MoveStrafe role-channel magnitude (each reads in [-1, 1]) below which the body counts as not actively driving.",
+                    "type": "number",
+                    "default": 0.05
+                  },
+                  "graceSeconds": {
+                    "description": "How long, in real time, an un-refreshed latch survives a solver pass reporting no push at all \u2014 absorbs ordinary query noise near a surface (a gradient/quantization boundary, or a body settled into a wall/ground corner under blended contact geometry). Must convert to a positive exact whole engine-tick count.",
+                    "type": "number",
+                    "default": 0.5
+                  }
+                },
+                "additionalProperties": false,
+                "default": null
+              },
+              "groundStick": {
+                "description": "The inward speed (world units/second) a grounded body on a curving surface (the up policy is not world-up) is held against while it is not already moving into it at least that fast \u2014 depenetration removes whatever the surface curves away, so a walker\u0027s own speed cannot carry it clean off a convex surface between ticks. Independent of Speed: scaling this bias with a kit\u0027s own resolved move speed over-corrects a shallow slope, where a larger inward bias converts into downhill drift under depenetration faster than it converts into held contact. The default reproduces the engine\u0027s old hardcoded constant. Must remain positive after Q48.16 compilation.",
+                "type": "number",
+                "default": 2
               }
             },
             "required": [
@@ -807,6 +873,75 @@
             "required": [
               "offset",
               "massEquivalent"
+            ],
+            "additionalProperties": false,
+            "default": null
+          },
+          "tether": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "maxAnchorDistance": {
+                "description": "The non-negative, fixed-representable world-unit ceiling an attach aim searches along the body\u0027s facing direction \u2014 also the tether\u0027s rope length at attach (the resolved anchor\u0027s actual distance, always within this ceiling).",
+                "type": "number"
+              },
+              "aimHalfAngleDegrees": {
+                "description": "The fixed-representable aim-assist cone half-angle, degrees, within [0, 180], an attach candidate\u0027s bearing must fall within around the body\u0027s facing. Honoured only by a collider-list contact provider; a field provider\u0027s own directed march has no candidate list to score bearings over and ignores it (see WorldSolidField.TryNearestSurfaceAlongDirection\u0027s remarks).",
+                "type": "number"
+              },
+              "lengthRate": {
+                "description": "The non-negative, fixed-representable world-units-per-second the held ReelChannel reels the rope at \u2014 positive reels out, negative in (the channel\u0027s own sign selects direction; this is a magnitude).",
+                "type": "number"
+              },
+              "minLength": {
+                "description": "The non-negative, fixed-representable rope-length floor a reel-in clamps to.",
+                "type": "number"
+              },
+              "releaseVelocityScale": {
+                "description": "The non-negative, fixed-representable multiplier a detach applies to the body\u0027s velocity at the instant of release \u2014 1 (the default) preserves it exactly, below 1 dampens, above 1 boosts.",
+                "type": "number",
+                "default": 1
+              },
+              "attachChannel": {
+                "description": "The declared channel name (validated) whose rising edge attaches the tether. null leaves attach unreachable from any channel.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "detachChannel": {
+                "description": "The declared channel name (validated) whose rising edge clears an active tether. null leaves detach unreachable from any channel.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "reelChannel": {
+                "description": "The declared channel name (validated) whose held bipolar value drives the rope length every tick. null leaves reel inert.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "modeState": {
+                "description": "The declared state.body/state.identity counter slot name this facet writes 1 while attached and 0 otherwise \u2014 the camera program\u0027s select op keys off it exactly as it keys off any other state.\u003Crow\u003E value. null writes nothing.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "maxAnchorDistance",
+              "aimHalfAngleDegrees",
+              "lengthRate",
+              "minLength"
             ],
             "additionalProperties": false,
             "default": null

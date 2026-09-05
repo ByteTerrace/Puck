@@ -154,7 +154,7 @@ fold — git history only — and rows citing `puck.world.json` describe what is
 `water` field marked `medium` (a 5-unit pool) beside the existing fire/char chemistry, transported by a
 `flow` reaction that spills its edge share into `falls-flux`, which gates a `falls-mist` rule — plus
 `fish`/`critter` placements and `pond-cam`/`south-fall-cam` view layouts. `puck canary medium-submersion`
-proves a medium hold's `Submerged` fact flips both ways off `WorldPopulation.SampleMediumSurfaces`; `puck
+proves a medium hold's `InMedium` fact flips both ways off `WorldPopulation.SampleMediumSurfaces`; `puck
 canary flow-conservation-live` proves a spill row climbs strictly, live, only while a reaction keeps
 feeding its source. `puck parity` (both backends) holds unchanged — the parity world authors neither
 facet.
@@ -204,7 +204,7 @@ leaves `body.where` at the ramp foot (y = −0.48), from x = 1.5/3.5/5.5 it cres
 `body.pose 0 0 3 0 0 0` + `body.fly -1 0 0 0 0 0 1` ends on the net at y = −15.98 inside the pit. The second
 (2026-09-02): climbing and a limbed avatar, built on two primitives that name no game at all. The
 sim publishes a per-body FACT MASK (`BodyFacts`, one bit per `ActionFact` — grounded, airborne,
-rising, falling, submerged, at surface, climbing, flying — derived from the same predicates the action
+rising, falling, inMedium, atMediumBand, holdingUnwalkable, unsupported — derived from the same predicates the action
 gates read; `EntitySnapshot.Facts`, echoed by `body.where`'s `facts=`), never a regime enum, so a
 submarine is a vehicle body that is submerged and a plane one that is airborne. A creation look
 binds DRIVERS to signals (`drivers[]`: planar travel, travel, time, speed, vertical speed, turn rate;
@@ -213,26 +213,33 @@ compose JOINTS from them (`swings[]` about a pivot and axis, `slides[]` along an
 waveforms) — the same parts make a walker's stride, a climber's reach, a wheel, a rotor, or gills.
 Climbing is no longer a mode of its own: a grounded kit authors an ORDERED HOLD LIST
 (`motion.holds`) of what may hold it — a `bond` (a field face inside a `cone` of degrees from
-gravity-up, or nothing at all), a `hold` law (gravity, a positional grip, a fraction of gravity
+gravity-up, or nothing at all), a `hold` law (gravity, a positional pull, a fraction of gravity
 lifted), a tangent `speed`, an `upLean`, an `onDrive` grab, a `release` channel, and a `spend`
 against a body-lane slot — and the `ResolveHold`/`ApplyHold` operations read it. A wall, a ledge, a
 ceiling and a hover are the same primitive under different cones, so a spider and a dragonfly are
-data rather than code. Every surface probe is directed and the grip is a positional constraint, so
-tunnelling through a wall is impossible by construction; `grip: {holdable: true}` on the debug room
+data rather than code. Every surface probe is directed and the pull is a positional constraint, so
+tunnelling through a wall is impossible by construction; `grip: {holdable: true}` (a placement's own
+surface-holdability facet, unrelated to the hold's own `pull` kind) on the debug room
 (and `collision.defaultHold`) decides which surfaces admit a hold at all, and `body.hold` echoes
 which row holds a body. Three follow-ups settled the primitive: `upLean` moves the body's CONTACT
-axis only for a hold gravity keeps (a kart on a loop) — a grip's lean is the frame it travels in and
+axis only for a hold gravity keeps (a kart on a loop) — a pull's lean is the frame it travels in and
 the attitude it is drawn at, because leaning the contact axis onto a ceiling tells the solver the
 floor is a ceiling and a released body falls through it; a producer's inward pull steers against the
 body's own HOME (its activation position, echoed by `body.where`'s `home=`) rather than the world
 origin, so a population spread over placements keeps to its own ground instead of congregating; and
-`bond: "medium"` carries buoyancy and the surface band in the hold vocabulary — the one spelling of that
-law, pinned by `WorldMediumLawTests` to a recorded fixed-point trace. The anisotropic shaping facets fold the other way:
+`bond: "medium"` carries an idle drift, an equilibrium offset and a settle rate in the hold
+vocabulary — the one spelling of that law (the settle rate is the one gain that turns the
+equilibrium error into a target velocity; the governing shaping row's own convergence then
+rate-limits the body's actual velocity toward that target the same way it rate-limits every other
+channel), pinned by `WorldMediumLawTests` to a recorded fixed-point trace, generalized to measure
+displacement along the body's own resolved gravity-up rather than a raw world-Y difference, so a
+medium inside a tilted gravity area settles at the right height. The anisotropic shaping facets fold
+the other way:
 they shape velocity rather than hold a body, so they are an `along` + `across` row in the same motion row, not a hold —
 `DriveLawTests` pins that fold to the row's recorded 240-tick trace. The pip carries two arms and
 two legs on `stride` (contralateral, about X) and `reach` (diagonal pairs, in the wall plane). The
 checks: `body.pose spawn:wall`, `body.fly 0 1 0 0 0 0 2.5` (drive into the wall), then
-`body.fly 1 0 0 0 0 0 2.5` — `body.where` reads `facts=grounded|climbing` at the standoff, rises
+`body.fly 1 0 0 0 0 0 2.5` — `body.where` reads `facts=grounded|holdingunwalkable` at the standoff, rises
 1 m per 0.5 s, and ends `grounded` at y = 2.57 on the wall top; `body.press jump 1 0.2` mid-climb
 ends `grounded` on the floor; `world.screenshot` mid-climb shows the limbs spread in the wall plane
 and mid-walk shows them swung fore and aft, vertical when standing. The avatar since became `wren` — an original
@@ -247,23 +254,23 @@ sampling the world's `curves` table (her stride is an overshooting curve, not a 
 passing: a numeric draw landed in a fixed row as raw Q48.16 bits (7 read as 7/65536) — promoted to
 whole units at both landing sites. A `constant` waveform is the pose blend (`amplitude · w`): Wren's climb is a
 posture — arms overhead with hands at the wall, elbows slightly bent, knees frogged — blended in on
-a `cling` driver gated `Climbing`, with a `reach` driver alternating the limbs up and down the wall
+a `cling` driver gated `HoldingUnwalkable`, with a `reach` driver alternating the limbs up and down the wall
 about the sagittal axis; the sideways flail of swinging about the into-wall axis is gone. The
 checks: `world.state strideCadence` reads an integer in [5, 8] after boot; `body.fly 1 0 0 0 0 0 3`
 mid-walk shows knees and elbows bent through the chain; on the wall (`body.pose spawn:wall`, strafe
 in, forward) `world.screenshot` shows the overhead reach, and on the ledge the posture eases out.
 **The kinematics rework, squash 1**: climbing stopped being a concept. A grounded kit authors an
 ordered `holds` list (`bond` surface/free, a `cone` of surface normals against gravity-up, `hold`
-gravity/grip/lift, reach, speed, `upLean`, `forward`, `onDrive`, `release`, `spend` against a body
+gravity/pull/lift, reach, speed, `upLean`, `forward`, `onDrive`, `release`, `spend` against a body
 state slot), and two program ops — `ResolveHold` picks the hold the world offers each tick and sets
 the frame, `ApplyHold` is its vertical law; the attachment section's climb members are gone
-(grapple stays a tether), `BodyFacts.Flying` joins the mask, and `body.hold` reads the hold back. A
+(grapple stays a tether), `BodyFacts.Unsupported` joins the mask, and `body.hold` reads the hold back. A
 ledge is the next hold, not a mantle state; stamina is the world's own body slot, refilled by its
 `resetFact`. On the rig, `effectors` solve a joint chain to a target (two-bone analytic, CCD beyond)
 from a surface probe, a body, or a state cell, gated on facts, with `plant` windows that latch a foot
 through stance — hands on the wall, feet on the step, from the same primitive that plants a spider's
 eight legs. Three creatures now wander the debug area over those primitives: a spider (whole-sphere
-grip), a dragonfly (full lift, altitude held by its producer), a hound (four-beat trot, planted paws).
+pull), a dragonfly (full lift, altitude held by its producer), a hound (four-beat trot, planted paws).
 Found in passing: the client's query field refused the wallpaper-folded ground texture, so limb
 probes and the chase camera's clearance sweep were inert (it now builds from solid placements only);
 a flat ellipsoid's eccentricity taxes every march in the frame (the dragonfly's first wings made the
@@ -286,6 +293,58 @@ rate drives until `identity.motion` mints an override; `identity.show` reads `mo
 body reads live, and refuses by name for an identity not owned here). An identity document from
 before the reshape still carries its seeded 0.01 rows and reads as an explicit 0.01 claim — cure it
 with `identity.motion`, or delete the state dir.
+
+**The attachment section is gone; the tether it carried is a per-kit facet.** It had zero authored
+callers (no shipped world, no canary, authored it) and one use baked into its own field names
+(`grappleMaxDistance`, `grappleAssistHalfAngleDegrees`, `releaseMomentumScale`) — a document section
+named, and shaped, for a single game's grapple. Kart's tow rope and Jump's own grapple want
+independently tuned reach, cone, and release feel, so the world-global `attachment`/
+`WorldAttachmentSection` is deleted outright and folded into `WorldTether`, a kit facet beside
+`rigid`/`carry` (presence is the switch, same as those two). `WorldBodyAttachmentMode` is gone too —
+a body's attach state was always exactly `m_tether is not null` (`WorldBody.Tether.cs` already said
+so); carrying a separate mode enum alongside it was a second spelling of the same fact. The optional
+`modeState` row a camera program selects on is now resolved to an ordinal at kit compile time, not a
+runtime name scan on every transition. Read back per body with `body.tether`, per kit with
+`world.kits`.
+
+**Wander and attend collapsed into one steering primitive.** They were never two opcodes the world needed —
+`ProduceSteeringIntent` dispatches, every tick, on whether that tick's `SenseNearestInCone` found a target: the
+approach shape (a standoff/approach/orbit steer plus its own `approachAltitudeGain` term) when it did, the roam
+shape (an oscillator weave plus a radial restoring term toward the body's own home register, yaw-rate clamped)
+otherwise, when that producer authors the roam scalar set —
+the garden's own spider `stalk` program already ran both opcodes back to back as this exact fallback chain, which
+was the tell. A sensing, attend-only producer may omit the complete roam set and then holds on an unsensed tick;
+a non-sensing producer has no other reachable shape and still requires the roam set. Shared
+`inwardGain`/`turnScale` fields used by `FaceSensorTarget` do not accidentally opt it into roam. When authored,
+the roam shape's oscillator runs every tick regardless of which shape is governing that tick's
+Intent — the same way the old two-opcode program ran wander every tick and let attend overwrite its output only
+when a target existed — so a body that loses its sensed target resumes roaming from the phase the oscillator would
+already be at, not one frozen for the sensed window's length; `SteeringIntentLawTests` pins this with a synthetic
+hunter/prey pair whose approach-shape Intent is forced to zero, isolating the oscillator's own state from
+everything else the trajectory could reveal. The approach-only scalars
+(`standoffRadius`/`approach`/`orbit`/`approachAltitudeGain`) are
+required exactly when a producer's program also selects `SenseNearestInCone` — never on a bare roam producer,
+which can never reach that shape. The altitude term generalized alongside it, from a literal world-Y read
+to a distance along the body's own resolved up axis (`Dot(position, up)`, which reduces to `.Y` exactly under the
+ordinary `UnitY` up every world still runs under). Producer scalars/channels compile to
+`Puck.Physics.Motion.BodyProducerParameter` ordinals at kit-compile time now, the same resolved-
+outside/consumed-as-ordinal seam `FixedSpeed.HeldOrdinal` uses for a channel name — a missing or
+unknown authored key refuses by name at boot rather than reading a runtime dictionary miss on first
+tick. The published facts `Climbing`/`Flying` are `HoldingUnwalkable`/`Unsupported` — mechanism names
+for what they already measure (a held face outside the walkable cone; a free hold with lift), not the
+creature-AI nouns that named them originally.
+
+**The garden's own `spider`/`hound` state rows named the wrong bodies.** Both keyed the population
+indices of an earlier layout (spiders 54-57, hounds 58-63) — rigid billiard balls under today's
+layout — so the `stalk-visitor` rule's designation and every `hound`-scoped social rule
+(`witness-claim`/`rumor`/`first-witness`/`choose-companion`) silently governed inert bodies instead of
+the real creatures (spiders 86-89, hounds 90-95); no spider ever sensed a quarry in a default boot, and
+the social rules never observed a live hound. Corrected to the real indices in the same change: the
+`stalk-visitor` gate still never opens for the default seat (it spawns outside the pond's proximity
+range), so the garden's population state hash is unchanged by that half of the fix alone, but the hound
+rules now run against live bodies every tick, which moves the 300/600-tick hash
+(`e04606d46ac2631e`/`2fc248117e349d2a` before, `e07cc3b82127cdf1`/`26a3266ce57c98d8` after) — the
+corrected mapping, not a regression.
 
 **The foundation is complete and overshot.** One flat motion row containing its `holds` and `shaping` rows; the portal
 lane end to end — step into a frame and the whole party transfers, all-or-nothing across capacity
@@ -317,7 +376,7 @@ remain possible. Social membership, chosen activity, local steering, shared
 navigation, and physical contact answer different questions. Sharing a compatible
 route is an optimization of chosen behavior, never a reason to force membership;
 followers retain independent progress and may detach without losing their bonds.
-Ground travel uses the body's tangent plane; airborne and submerged travel use
+Ground travel uses the body's tangent plane; airborne and in-medium travel use
 three dimensions, with medium membership remaining an actual traversal constraint.
 
 Relationships are directed, contextual, and author-named numeric dimensions.
@@ -359,8 +418,8 @@ ghost records**.
 geometric scale is a document-declared multiplier (`bodies.scaleRow`, a keyed `state.world` row whose
 own `min`/`max` is the world's declared scale envelope), read and written like any other state cell —
 never a bespoke "shrink" mechanic. Collider volumes, resolved move speed and turn rate, hold
-probe/standoff/reach, a hold's own gravity fall/rise/terminal, a wall hold's travel speed, and a grip's
-pull rate all scale with it on the server — a shrunk body's fall and depenetration stay proportionally
+probe/standoff/reach, a hold's own gravity fall/rise and its vertical-channel envelope (including a medium's idle/settle target), a wall hold's travel speed, and a pull's own
+rate all scale with it on the server — a shrunk body's fall and depenetration stay proportionally
 gentle rather than free-falling one tick of full-scale gravity into a collider whose own contact skin
 margin it can no longer absorb; the client reads the same live cell into the rendered rig and the seat
 chase camera's orbit distance and look-at height, so a shrunk body stays framed rather than shrinking to
@@ -505,6 +564,46 @@ holds. The garden's `billiardsTray`/`bowlingLane`
 placements are the proof fixture; see the
 [server](../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)
 and [schema](../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs) references.
+
+**Locomotion feel is a kit field, not a baked constant (owner decision).**
+`WorldBody`'s per-tick catch-up bias against a curving surface (`StickSpeed`,
+the old flat `2.0`) is genuine feel, not a value derivable from the kit's own
+resolved move speed: a first pass tried deriving it from speed and measurably
+regressed slope climbing on any `GradientDerivedUp` world (a faster kit's
+larger inward bias converts into downhill drift under depenetration faster
+than it converts into held contact) — no shipped world caught it because none
+authors `GradientDerivedUp`. It is now its own `motion` row field
+(`groundStick`), independent of `motion.speed`, defaulting to the engine's old
+`2.0` bit for bit. The up-axis steering ceilings (how fast a solved gravity
+field, and separately a measured ground-contact normal, may turn a body's up
+axis), the drive frame's pitch clamp, and the non-walkable-contact witness's
+latch (displacement, idle threshold, grace) are likewise genuine feel, not
+derivable from anything else a document declares — each is a `motion` row
+field (`upTurn`, `turn.maxPitch`, `obstruction`) whose default reproduces the
+engine's old hardcoded value bit for bit, so no shipped world's behavior
+moved. `world.kits` echoes all five.
+
+**Discrete-topology capacity constants are derived, not restated (owner
+decision).** The hex radius ceiling, the document-wide board-storage budget,
+the zone-sort key ceiling, and the transfer-count ceiling were each a bare
+literal restating a relationship the code already knows (a topology's own
+cell-count formula, `MaxTopologies × MaxCells`, the section's own row
+ceiling, and the domain capacity ceiling respectively) — each now computes
+from the constant it actually follows from, so the two can never drift
+apart, and refusing an authored value past the bound names the derived
+number rather than a hardcoded twin of it.
+
+**A topology's opposite direction is compiled from its own vectors, never
+assumed from ordinal arithmetic (owner decision).** `(direction +
+DirectionCount / 2) % DirectionCount` happens to pair a Grid/Hex/Ring
+topology's directions correctly because each is authored as reciprocal
+pairs in that exact order; a `Box`'s 26 directions are not (they are ordered
+planar, then up-shifted planar, then down-shifted planar), so the same trick
+silently paired `N` with a diagonal-and-a-layer-off direction instead of `S`.
+`CompiledWorldTopology.Opposite` is now a table built once at compile time by
+negating each direction's own step vector and looking up the match, refusing
+compilation if a direction has none; `$board:line:…:exact` reads it instead
+of the ordinal trick.
 
 **Carry, as attachment (owner decision).** Picking up a rigid body is not a
 second attachment primitive beside the surface-hold system — it is a

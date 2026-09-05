@@ -37,10 +37,6 @@ public sealed partial class WorldPopulation {
         }
         m_bodyMotionPrograms = programs;
         m_channels = WorldChannelTable.Compile(channels: definition.Channels);
-        m_fixedAttachment = FixedWorldAttachment.Compile(
-            channels: m_channels,
-            section: definition.Attachment
-        );
         m_bodyUpPolicy = WorldBodyUpPolicyCompiler.Compile(collision: definition.Collision);
         m_walkableThreshold = FixedWorldCollision.Compile(collision: definition.Collision).GroundedThreshold;
         m_bodyContactPolicy = definition.Collision.BodyContacts;
@@ -456,9 +452,9 @@ public sealed partial class WorldPopulation {
         }
     }
     /// <summary>Recompiles the population's derived state after a sim-affecting section mutation (a live kit tune, a
-    /// motion/wander retune, a seat-kit or assignment change, or a whole-document swap): re-quantizes the fixed tables,
-    /// re-resolves every entry's kit index, re-derives the kit/wander-dependent per-entry statics without resetting the
-    /// running wander phase, and swaps every live body's compiled tuning/actions/program in place — bodies keep their
+    /// motion/producer retune, a seat-kit or assignment change, or a whole-document swap): re-quantizes the fixed tables,
+    /// re-resolves every entry's kit index, re-derives the kit/producer-dependent per-entry statics without resetting the
+    /// running producer phase, and swaps every live body's compiled tuning/actions/program in place — bodies keep their
     /// pose/velocity/tape, only the compiled feel swaps. Bumps <see cref="Revision"/> so the client rebuilds the avatar
     /// program. New activations re-seed fully from these fresh tables.</summary>
     /// <param name="definition">The new live definition.</param>
@@ -531,7 +527,7 @@ public sealed partial class WorldPopulation {
         // + the client program rebuild the bumped revision triggers). PRESENTATION-ONLY, so it touches no body state.
         ResolveLookIndices(definition: definition);
 
-        // Re-derive the kit/wander-dependent per-entry statics from the fresh tables, but keep the running wander phase
+        // Re-derive the kit/producer-dependent per-entry statics from the fresh tables, but keep the running producer phase
         // (resetPhase: false) so the live crowd's producer stays continuous — no phase jerk on a retune.
         for (var index = LocalSeatCount; (index < Capacity); index++) {
             SeedSimulated(
@@ -542,7 +538,7 @@ public sealed partial class WorldPopulation {
 
         for (var slot = 0; (slot < LocalSeatCount); slot++) {
             if (m_entries[slot].Active) {
-                SeedSeatWander(
+                SeedSeatSteeringProducer(
                     resetPhase: false,
                     slot: slot
                 );
@@ -572,6 +568,7 @@ public sealed partial class WorldPopulation {
                 collider: kit.Collider,
                 rigid: kit.Rigid,
                 carry: kit.Carry,
+                tether: kit.Tether,
                 maxSmoothError: m_fixedMotion.MaxSmoothError,
                 holds: kit.Holds
             );
@@ -583,7 +580,6 @@ public sealed partial class WorldPopulation {
                 walkableThreshold: m_walkableThreshold
             );
             body.SetGravityField(field: m_gravityField);
-            body.SetAttachmentPolicy(policy: m_fixedAttachment);
         }
 
         m_revision++;
