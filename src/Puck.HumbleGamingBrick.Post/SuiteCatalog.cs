@@ -5,8 +5,8 @@ namespace Puck.HumbleGamingBrick.Post;
 /// one method per suite, each reading that suite's own <c>game-boy-test-roms-howto.md</c> exit condition and
 /// success/failure convention. A suite whose howto makes a case impossible to check mechanically (button input, an
 /// undecoded result convention, no shipped expected image) is still discovered, just recorded
-/// <see cref="CaseDisposition.Unrunnable"/> with the reason — never silently dropped, so the ledger's <c>--record</c>
-/// pass shows exactly what is and is not covered.
+/// <see cref="CaseDisposition.Unrunnable"/> with the reason — never silently dropped, so the ledger shows exactly what is and is not
+/// covered.
 /// </summary>
 internal static class SuiteCatalog {
     // mealybug, the three acid tests, and the mooneye/wilbertpol manual screenshot land after the same "0x40 LD B,B"

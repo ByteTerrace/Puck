@@ -17,8 +17,9 @@ internal static class AudioProbe {
 
     /// <summary>Runs a case to a verdict.</summary>
     /// <param name="ledgerCase">The case to run; <see cref="LedgerCase.ExpectedAudio"/> must be set.</param>
+    /// <param name="budget">The case's wall-clock budget.</param>
     /// <returns>The probe outcome.</returns>
-    public static ProbeOutcome Run(LedgerCase ledgerCase) {
+    public static ProbeOutcome Run(LedgerCase ledgerCase, CaseBudget budget) {
         var expectation = ledgerCase.ExpectedAudio;
 
         if (expectation is null) {
@@ -41,6 +42,7 @@ internal static class AudioProbe {
 
         if (priorFrames > 0) {
             PostMachine.RunFrames(
+                budget: budget,
                 frames: priorFrames,
                 instance: machine
             );
@@ -50,6 +52,7 @@ internal static class AudioProbe {
         sink.Configure(sampleRate: RawSampleRate);
 
         PostMachine.RunFrames(
+            budget: budget,
             frames: 1,
             instance: machine
         );

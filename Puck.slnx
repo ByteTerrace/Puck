@@ -64,6 +64,7 @@
         <Project Path="tests/Puck.Commands.Tests/Puck.Commands.Tests.csproj" />
         <Project Path="tests/Puck.GamingBricks.Tests/Puck.GamingBricks.Tests.csproj" />
         <Project Path="tests/Puck.HumbleGamingBrick.Forge.Tests/Puck.HumbleGamingBrick.Forge.Tests.csproj" />
+        <Project Path="tests/Puck.HumbleGamingBrick.Tests/Puck.HumbleGamingBrick.Tests.csproj" />
         <Project Path="tests/Puck.Hosting.Tests/Puck.Hosting.Tests.csproj" />
         <Project Path="tests/Puck.Input.Tests/Puck.Input.Tests.csproj" />
         <Project Path="tests/Puck.Launcher.Tests/Puck.Launcher.Tests.csproj" />

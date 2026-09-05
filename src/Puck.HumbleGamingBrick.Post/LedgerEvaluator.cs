@@ -1,40 +1,40 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using Puck.Assets;
+
 namespace Puck.HumbleGamingBrick.Post;
 
 /// <summary>
-/// Evaluates one suite's discovered <see cref="LedgerCase"/>s against <c>Expectations.json</c> — the mechanical gate
-/// every ledger stage shares. The gate requires the recorded and actual verdicts to be equal for every case: a
-/// recorded pass that now fails or turns inconclusive, a recorded fail that now passes or turns inconclusive, and a
-/// recorded inconclusive that now resolves either way, are all reported (progress is a deliberate, recorded act, never
-/// a silent gate loosening); a still-recorded-fail whose screenshot differing-pixel count changed fails naming both
-/// counts; a case present on disk with no ledger entry fails as unrecorded; a ROM or expected-image whose bytes no
-/// longer match its recorded hash fails as a hash mismatch; a ledger row for the suite with no matching discovered
-/// case is skipped, or — under <see cref="PostContext.RequireAssets"/> — an infrastructure failure. Under
-/// <see cref="PostContext.RecordMode"/> the stage instead measures every case and appends its outcome to
-/// <see cref="PostContext.RecordedEntries"/> without comparing to the existing ledger.
+/// Measures one suite's discovered <see cref="LedgerCase"/>s and compares each to <c>Expectations.json</c> — the
+/// mechanical gate every ledger stage shares. The gate requires the recorded and actual verdicts to be equal for
+/// every case: a recorded pass that now fails or turns inconclusive, a recorded fail that now passes or turns
+/// inconclusive, and a recorded inconclusive that now resolves either way, are all reported (progress is a deliberate,
+/// accepted act, never a silent gate loosening); a still-recorded-fail whose screenshot differing-pixel count changed
+/// fails naming both counts; a case present on disk with no ledger entry fails as unrecorded; a ROM or expected-image
+/// whose bytes no longer match its recorded hash fails as a hash mismatch; a ledger row for the suite with no matching
+/// discovered case is skipped, or — under <see cref="PostContext.RequireAssets"/> — an infrastructure failure. Every
+/// measured row also lands in <see cref="PostContext.Measurements"/>, from which the run's candidate ledger is built,
+/// so a run never has to be repeated to record what it saw.
 /// </summary>
 internal static class LedgerEvaluator {
+    private sealed record CaseMeasurement(LedgerEntry? Entry, ProbeOutcome? Outcome, string? Error, TimeSpan Duration);
+
     /// <summary>Evaluates a suite's cases.</summary>
-    /// <param name="context">The shared run context (ledger, record mode, require-assets).</param>
+    /// <param name="context">The shared run context.</param>
     /// <param name="cases">The suite's discovered cases.</param>
     /// <param name="suites">Every ledger <see cref="LedgerEntry.Suite"/> key this stage is responsible for — used to
     /// find a recorded row with no matching discovered case, independent of how many cases were actually found.</param>
-    /// <returns>The stage outcome.</returns>
+    /// <returns>The stage outcome, carrying one row per measured case.</returns>
     public static PostStageOutcome Evaluate(PostContext context, IReadOnlyList<LedgerCase> cases, IReadOnlyList<string> suites) {
-        if (context.RecordMode) {
-            if (cases.Count == 0) {
-                return PostStageOutcome.Skip(detail: "no cases discovered under the on-disk corpus root (set PUCK_GB_TESTROMS)");
-            }
-
-            foreach (var ledgerCase in cases) {
-                context.RecordedEntries.Add(item: Measure(ledgerCase: ledgerCase));
-            }
-
-            return PostStageOutcome.Pass(detail: $"recorded {cases.Count} case(s)");
-        }
-
         var discoveredKeys = new HashSet<(string Suite, string Path, string Model)>(
-            collection: cases.Select(selector: static ledgerCase => (ledgerCase.Suite, ledgerCase.RelativePath, ModelKey(model: ledgerCase.Model)))
+            collection: cases.Select(selector: static ledgerCase => ledgerCase.Key)
         );
+
+        context.Measurements.NoteDiscovery(
+            keys: discoveredKeys,
+            suites: suites
+        );
+
         var missingFromDisk = context.Ledger.Values
             .Where(predicate: entry => (suites.Contains(value: entry.Suite) && !discoveredKeys.Contains(item: entry.Key)))
             .OrderBy(
@@ -58,123 +58,205 @@ internal static class LedgerEvaluator {
         }
 
         if (cases.Count == 0) {
-            return PostStageOutcome.Skip(detail: "no cases discovered under the on-disk corpus root (set PUCK_GB_TESTROMS)");
+            return PostStageOutcome.Skip(detail: "no cases discovered under the corpus root (pass --roms)");
         }
 
+        var selected = cases
+            .Where(predicate: ledgerCase => InLane(
+                context: context,
+                ledgerCase: ledgerCase
+            ))
+            .ToArray();
+        var measurements = Measure(
+            cases: selected,
+            parallelism: context.Parallelism
+        );
+
+        context.Measurements.NoteMeasured(entries: measurements
+            .Select(selector: static measurement => measurement.Entry)
+            .Where(predicate: static entry => (entry is not null))!);
+
+        var results = new List<PostCaseResult>(capacity: selected.Length);
         var pass = 0;
-        var recordedFail = 0;
-        var recordedInconclusive = 0;
+        var expectedFail = 0;
         var unrunnable = 0;
         var problems = new List<string>();
+        var stageArtifacts = Path.Combine(
+            path1: context.ArtifactsDirectory,
+            path2: suites[0]
+        );
 
-        foreach (var ledgerCase in cases) {
-            var modelKey = ModelKey(model: ledgerCase.Model);
-            var key = (ledgerCase.Suite, ledgerCase.RelativePath, modelKey);
+        for (var index = 0; (index < selected.Length); ++index) {
+            var ledgerCase = selected[index];
+            var measurement = measurements[index];
+            var name = $"{ledgerCase.RelativePath}[{ledgerCase.ModelKey}]";
+            var (verdict, detail) = Classify(
+                ledgerCase: ledgerCase,
+                measurement: measurement,
+                recorded: (context.Ledger.TryGetValue(
+                    key: ledgerCase.Key,
+                    value: out var recorded
+                )
+                    ? recorded
+                    : null)
+            );
 
-            if (!context.Ledger.TryGetValue(
-                key: key,
-                value: out var entry
-            )) {
-                problems.Add(item: $"{ledgerCase.RelativePath}[{modelKey}] unrecorded (run --record)");
-                continue;
-            }
-
-            var actualHash = ExpectationsLedger.HashRom(romPath: ledgerCase.FullPath);
-
-            if (!string.Equals(
-                a: actualHash,
-                b: entry.RomHash,
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            )) {
-                problems.Add(item: $"{ledgerCase.RelativePath}[{modelKey}] ROM hash mismatch (recorded {entry.RomHash}, actual {actualHash})");
-                continue;
-            }
-
-            switch (ledgerCase.Disposition) {
-                case CaseDisposition.Unrunnable:
-                    if (entry.Outcome == LedgerOutcome.Unrunnable) {
-                        ++unrunnable;
-                    } else {
-                        problems.Add(item: $"{ledgerCase.RelativePath}[{modelKey}] ledger disagrees: recorded '{entry.Outcome}', case is unrunnable");
-                    }
-
-                    continue;
-            }
-
-            if (entry.Outcome is not (LedgerOutcome.Pass or LedgerOutcome.Fail or LedgerOutcome.Inconclusive)) {
-                problems.Add(item: $"{ledgerCase.RelativePath}[{modelKey}] ledger outcome '{entry.Outcome}' is not valid for a runnable case");
-                continue;
-            }
-
-            if (ledgerCase.Probe == ProbeKind.Screenshot) {
-                var imagePath = ScreenshotProbe.ResolveExpectedImage(ledgerCase: ledgerCase);
-                var actualImageHash = ((imagePath is null)
-                    ? null
-                    : ExpectationsLedger.HashFile(path: imagePath));
-
-                if (!string.Equals(
-                    a: actualImageHash,
-                    b: entry.ExpectedImageHash,
-                    comparisonType: StringComparison.OrdinalIgnoreCase
-                )) {
-                    problems.Add(item: $"{ledgerCase.RelativePath}[{modelKey}] expected-image hash mismatch (recorded {(entry.ExpectedImageHash ?? "<none>")}, actual {(actualImageHash ?? "<none>")})");
-                    continue;
-                }
-            }
-
-            var outcome = ProbeRunner.Run(ledgerCase: ledgerCase);
-            var actualOutcome = ToLedgerOutcome(verdict: outcome.Verdict);
-
-            if (entry.Outcome != actualOutcome) {
-                problems.Add(item: $"{ledgerCase.RelativePath}[{modelKey}] {MismatchLabel(
-                    actual: actualOutcome,
-                    recorded: entry.Outcome
-                )}: recorded {entry.Outcome}, now {actualOutcome} ({outcome.Detail})");
-                continue;
-            }
-
-            switch (actualOutcome) {
-                case LedgerOutcome.Pass:
+            switch (verdict) {
+                case PostCaseVerdict.Pass:
                     ++pass;
 
                     break;
-                case LedgerOutcome.Inconclusive:
-                    ++recordedInconclusive;
+                case PostCaseVerdict.ExpectedFail:
+                    ++expectedFail;
+
+                    break;
+                case PostCaseVerdict.Skip:
+                    ++unrunnable;
 
                     break;
                 default:
-                    if (
-                        (ledgerCase.Probe == ProbeKind.Screenshot) &&
-                        (entry.DiffPixels != outcome.DiffPixelCount)
-                    ) {
-                        problems.Add(item: $"{ledgerCase.RelativePath}[{modelKey}] screenshot diff-pixel count changed: recorded {entry.DiffPixels}, actual {outcome.DiffPixelCount}");
-                        continue;
-                    }
+                    problems.Add(item: $"{name} {detail}");
 
-                    ++recordedFail;
+                    if (measurement.Outcome?.ActualImage is not null) {
+                        WriteMismatchImages(
+                            directory: stageArtifacts,
+                            name: name,
+                            outcome: measurement.Outcome
+                        );
+                    }
 
                     break;
             }
+
+            results.Add(item: new PostCaseResult(
+                Detail: detail,
+                Duration: measurement.Duration,
+                Name: name,
+                Verdict: verdict
+            ));
         }
 
-        var summary = $"{pass} pass, {recordedFail} recorded-fail, {recordedInconclusive} recorded-inconclusive, {unrunnable} unrunnable";
+        var laneNote = ((context.Lane == PostLane.All)
+            ? string.Empty
+            : $" [{context.Lane.ToString().ToLowerInvariant()} lane: {selected.Length} of {cases.Count}]");
+        var summary = $"{pass} pass, {expectedFail} recorded-fail, {unrunnable} unrunnable{laneNote}";
 
-        if (
-            (missingFromDisk.Length > 0) &&
-            !context.RequireAssets
-        ) {
+        if (missingFromDisk.Length > 0) {
             summary += $", {missingFromDisk.Length} recorded but absent from disk (skipped)";
         }
 
         return ((problems.Count == 0)
-            ? PostStageOutcome.Pass(detail: summary)
-            : PostStageOutcome.Fail(detail: $"{summary}; {JoinCapped(lines: problems)}"));
+            ? PostStageOutcome.Pass(
+                cases: results,
+                detail: summary
+            )
+            : PostStageOutcome.Fail(
+                cases: results,
+                detail: $"{summary}; {JoinCapped(lines: problems)}"
+            ));
+    }
+    /// <summary>Measures every case and returns its ledger row, in case order.</summary>
+    /// <param name="cases">The cases to measure.</param>
+    /// <param name="parallelism">How many cases to measure at once.</param>
+    /// <returns>One row per case.</returns>
+    /// <exception cref="InvalidOperationException">A case could not be measured.</exception>
+    public static LedgerEntry[] MeasureEntries(IReadOnlyList<LedgerCase> cases, int parallelism) {
+        var measurements = Measure(
+            cases: cases,
+            parallelism: parallelism
+        );
+        var entries = new LedgerEntry[measurements.Length];
+
+        for (var index = 0; (index < measurements.Length); ++index) {
+            entries[index] = (measurements[index].Entry ?? throw new InvalidOperationException(message: $"{cases[index].RelativePath}[{cases[index].ModelKey}] {measurements[index].Error}"));
+        }
+
+        return entries;
     }
 
     // A suite with a large corpus (gambatte, SameSuite) can produce thousands of problem lines; a report is read by a
     // person, so it names a bounded sample rather than dumping every one.
     private const int MaxJoinedLines = 20;
 
+    private static (PostCaseVerdict Verdict, string Detail) Classify(LedgerCase ledgerCase, CaseMeasurement measurement, LedgerEntry? recorded) {
+        if (measurement.Entry is null) {
+            return (PostCaseVerdict.Error, (measurement.Error ?? "not measured"));
+        }
+
+        var actual = measurement.Entry;
+        var actualDetail = (measurement.Outcome?.Detail ?? actual.Reason ?? string.Empty);
+
+        if (recorded is null) {
+            return (PostCaseVerdict.Mismatch, $"unrecorded ({actual.Outcome}: {actualDetail}); accept the candidate ledger to record it");
+        }
+
+        if (!string.Equals(
+            a: actual.RomHash,
+            b: recorded.RomHash,
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )) {
+            return (PostCaseVerdict.Mismatch, $"ROM hash mismatch (recorded {recorded.RomHash}, actual {actual.RomHash})");
+        }
+
+        if (
+            (ledgerCase.Probe == ProbeKind.Screenshot) &&
+            !string.Equals(
+                a: actual.ExpectedImageHash,
+                b: recorded.ExpectedImageHash,
+                comparisonType: StringComparison.OrdinalIgnoreCase
+            )
+        ) {
+            return (PostCaseVerdict.Mismatch, $"expected-image hash mismatch (recorded {(recorded.ExpectedImageHash ?? "<none>")}, actual {(actual.ExpectedImageHash ?? "<none>")})");
+        }
+
+        if (actual.Outcome != recorded.Outcome) {
+            return (PostCaseVerdict.Mismatch, $"{MismatchLabel(
+                actual: actual.Outcome,
+                recorded: recorded.Outcome
+            )}: recorded {recorded.Outcome}, now {actual.Outcome} ({actualDetail})");
+        }
+
+        switch (actual.Outcome) {
+            case LedgerOutcome.Pass:
+                return (PostCaseVerdict.Pass, actualDetail);
+            case LedgerOutcome.Unrunnable:
+                return (PostCaseVerdict.Skip, (actual.Reason ?? "unrunnable"));
+            case LedgerOutcome.Fail when (
+                (ledgerCase.Probe == ProbeKind.Screenshot) &&
+                (recorded.DiffPixels != actual.DiffPixels)
+            ):
+                return (PostCaseVerdict.Mismatch, $"screenshot diff-pixel count changed: recorded {recorded.DiffPixels}, actual {actual.DiffPixels}");
+            default:
+                return (PostCaseVerdict.ExpectedFail, $"recorded {actual.Outcome}: {actualDetail}");
+        }
+    }
+    private static string? ImageHash(LedgerCase ledgerCase) {
+        var imagePath = ScreenshotProbe.ResolveExpectedImage(ledgerCase: ledgerCase);
+
+        return ((imagePath is null)
+            ? null
+            : ExpectationsLedger.HashFile(path: imagePath));
+    }
+    private static bool InLane(PostContext context, LedgerCase ledgerCase) {
+        if (
+            (context.Lane == PostLane.All) ||
+            (ledgerCase.Disposition == CaseDisposition.Unrunnable)
+        ) {
+            return true;
+        }
+
+        if (!context.Ledger.TryGetValue(
+            key: ledgerCase.Key,
+            value: out var recorded
+        )) {
+            return (context.Lane == PostLane.Gate);
+        }
+
+        return (context.Lane switch {
+            PostLane.Gate => (recorded.Outcome is (LedgerOutcome.Pass or LedgerOutcome.Unrunnable)),
+            _ => (recorded.Outcome is (LedgerOutcome.Fail or LedgerOutcome.Inconclusive)),
+        });
+    }
     private static string JoinCapped(IEnumerable<string> lines) {
         var all = lines.ToArray();
         var shown = string.Join(
@@ -186,14 +268,108 @@ internal static class LedgerEvaluator {
             ? $"{shown} (+{(all.Length - MaxJoinedLines)} more)"
             : shown);
     }
+    // Cases are independent (each builds its own machine), so they run on every processor at once; the long ones go
+    // first so the run does not end on a tail of single-threaded work. A case's own ordering in the report is its
+    // discovery order, restored by the index.
+    private static CaseMeasurement[] Measure(IReadOnlyList<LedgerCase> cases, int parallelism) {
+        var measurements = new CaseMeasurement[cases.Count];
+        var order = Enumerable
+            .Range(
+            count: cases.Count,
+            start: 0
+        )
+            .OrderByDescending(keySelector: index => cases[index].FrameCap)
+            .ThenBy(keySelector: static index => index)
+            .ToArray();
 
-    // Names the transition a mismatch represents: a recorded pass regressing is the dangerous direction (silently
-    // blessed by a careless --record), while a recorded fail resolving to a pass is a ratchet that needs a deliberate
-    // re-record either way — both, and every other transition, are surfaced as a gate failure, never accepted quietly.
+        _ = Parallel.ForEach(
+            body: index => measurements[index] = MeasureOne(ledgerCase: cases[index]),
+            parallelOptions: new ParallelOptions {
+                MaxDegreeOfParallelism = parallelism,
+            },
+            source: Partitioner.Create(
+                array: order,
+                loadBalance: true
+            )
+        );
+
+        return measurements;
+    }
+    private static CaseMeasurement MeasureOne(LedgerCase ledgerCase) {
+        var start = Stopwatch.GetTimestamp();
+
+        try {
+            var hash = ExpectationsLedger.HashRom(romPath: ledgerCase.FullPath);
+            var imageHash = ((ledgerCase.Probe == ProbeKind.Screenshot)
+                ? ImageHash(ledgerCase: ledgerCase)
+                : null);
+
+            if (ledgerCase.Disposition == CaseDisposition.Unrunnable) {
+                return new CaseMeasurement(
+                    Duration: Stopwatch.GetElapsedTime(startingTimestamp: start),
+                    Entry: new LedgerEntry(
+                        DiffPixels: null,
+                        ExpectedImageHash: imageHash,
+                        Model: ledgerCase.ModelKey,
+                        Outcome: LedgerOutcome.Unrunnable,
+                        Path: ledgerCase.RelativePath,
+                        Probe: ExpectationsLedger.ProbeName(probe: ledgerCase.Probe),
+                        Reason: ledgerCase.UnrunnableReason,
+                        RomHash: hash,
+                        Suite: ledgerCase.Suite
+                    ),
+                    Error: null,
+                    Outcome: null
+                );
+            }
+
+            var outcome = ProbeRunner.Run(
+                budget: CaseBudget.ForFrames(frames: ledgerCase.FrameCap),
+                ledgerCase: ledgerCase
+            );
+            var recordedOutcome = ToLedgerOutcome(verdict: outcome.Verdict);
+
+            return new CaseMeasurement(
+                Duration: Stopwatch.GetElapsedTime(startingTimestamp: start),
+                Entry: new LedgerEntry(
+                    DiffPixels: outcome.DiffPixelCount,
+                    ExpectedImageHash: imageHash,
+                    Model: ledgerCase.ModelKey,
+                    Outcome: recordedOutcome,
+                    Path: ledgerCase.RelativePath,
+                    Probe: ExpectationsLedger.ProbeName(probe: ledgerCase.Probe),
+                    Reason: ((recordedOutcome == LedgerOutcome.Pass)
+                        ? null
+                        : outcome.Detail),
+                    RomHash: hash,
+                    Suite: ledgerCase.Suite
+                ),
+                Error: null,
+                Outcome: outcome
+            );
+        } catch (CaseBudgetExceededException exception) {
+            return new CaseMeasurement(
+                Duration: Stopwatch.GetElapsedTime(startingTimestamp: start),
+                Entry: null,
+                Error: exception.Message,
+                Outcome: null
+            );
+        } catch (Exception exception) when (exception is not OutOfMemoryException) {
+            return new CaseMeasurement(
+                Duration: Stopwatch.GetElapsedTime(startingTimestamp: start),
+                Entry: null,
+                Error: $"threw {exception.GetType().Name}: {exception.Message}",
+                Outcome: null
+            );
+        }
+    }
+    // Names the transition a mismatch represents: a recorded pass regressing is the dangerous direction, while a
+    // recorded fail resolving to a pass is a ratchet that needs a deliberate accept either way — both, and every other
+    // transition, are surfaced as a gate failure, never accepted quietly.
     private static string MismatchLabel(LedgerOutcome recorded, LedgerOutcome actual) =>
         (recorded switch {
             LedgerOutcome.Pass => "regression",
-            LedgerOutcome.Fail when (actual == LedgerOutcome.Pass) => "ratchet: now passes; re-record",
+            LedgerOutcome.Fail when (actual == LedgerOutcome.Pass) => "ratchet: now passes; accept the candidate ledger",
             _ => "ledger disagrees",
         });
     private static LedgerOutcome ToLedgerOutcome(ProbeVerdict verdict) =>
@@ -203,55 +379,60 @@ internal static class LedgerEvaluator {
             ProbeVerdict.Inconclusive => LedgerOutcome.Inconclusive,
             _ => throw new NotSupportedException(message: $"Unhandled probe verdict '{verdict}'."),
         };
-    private static string ModelKey(ConsoleModel model) =>
-        model.ToString();
-    private static LedgerEntry Measure(LedgerCase ledgerCase) {
-        var modelKey = ModelKey(model: ledgerCase.Model);
-        // Every discovered case's ROM exists on disk by construction (SuiteCatalog/RomCatalog only ever build a case
-        // from a file Directory.EnumerateFiles or File.Exists already found); a hash that cannot be computed here is a
-        // discovery-time race, not a normal outcome, so it throws rather than recording an empty placeholder hash a
-        // future run could accidentally satisfy.
-        var hash = ExpectationsLedger.HashRom(romPath: ledgerCase.FullPath);
-        var imageHash = ((ledgerCase.Probe == ProbeKind.Screenshot)
-            ? ImageHash(ledgerCase: ledgerCase)
-            : null);
+    // A mismatching screenshot leaves the frame it produced and a mask of the differing pixels beside the report, so
+    // a red run is diagnosable from its artifacts.
+    private static void WriteMismatchImages(string directory, string name, ProbeOutcome outcome) {
+        var actual = outcome.ActualImage!;
+        var stem = Path.Combine(
+            path1: directory,
+            path2: name
+                .Replace(
+                oldChar: '/',
+                newChar: '_'
+            )
+                .Replace(
+                oldChar: '\\',
+                newChar: '_'
+            )
+        );
 
-        if (ledgerCase.Disposition == CaseDisposition.Unrunnable) {
-            return new LedgerEntry(
-                DiffPixels: null,
-                ExpectedImageHash: imageHash,
-                Model: modelKey,
-                Outcome: LedgerOutcome.Unrunnable,
-                Path: ledgerCase.RelativePath,
-                Probe: ExpectationsLedger.ProbeName(probe: ledgerCase.Probe),
-                Reason: ledgerCase.UnrunnableReason,
-                RomHash: hash,
-                Suite: ledgerCase.Suite
-            );
+        _ = Directory.CreateDirectory(path: directory);
+        PngEncoder.Write(
+            height: actual.Height,
+            path: (stem + ".actual.png"),
+            rgba: actual.Rgba,
+            width: actual.Width
+        );
+
+        var expected = outcome.ExpectedImage;
+
+        if (
+            (expected is null) ||
+            (expected.Rgba.Length != actual.Rgba.Length)
+        ) {
+            return;
         }
 
-        var outcome = ProbeRunner.Run(ledgerCase: ledgerCase);
-        var recordedOutcome = ToLedgerOutcome(verdict: outcome.Verdict);
+        var mask = new byte[actual.Rgba.Length];
 
-        return new LedgerEntry(
-            DiffPixels: outcome.DiffPixelCount,
-            ExpectedImageHash: imageHash,
-            Model: modelKey,
-            Outcome: recordedOutcome,
-            Path: ledgerCase.RelativePath,
-            Probe: ExpectationsLedger.ProbeName(probe: ledgerCase.Probe),
-            Reason: ((recordedOutcome == LedgerOutcome.Pass)
-                ? null
-                : outcome.Detail),
-            RomHash: hash,
-            Suite: ledgerCase.Suite
+        for (var offset = 0; (offset < mask.Length); offset += 4) {
+            var same = (
+                (actual.Rgba[offset] == expected.Rgba[offset]) &&
+                (actual.Rgba[(offset + 1)] == expected.Rgba[(offset + 1)]) &&
+                (actual.Rgba[(offset + 2)] == expected.Rgba[(offset + 2)])
+            );
+
+            mask[offset] = (same ? actual.Rgba[offset] : ((byte)0xFF));
+            mask[(offset + 1)] = (same ? actual.Rgba[(offset + 1)] : ((byte)0x00));
+            mask[(offset + 2)] = (same ? actual.Rgba[(offset + 2)] : ((byte)0x00));
+            mask[(offset + 3)] = 0xFF;
+        }
+
+        PngEncoder.Write(
+            height: actual.Height,
+            path: (stem + ".diff.png"),
+            rgba: mask,
+            width: actual.Width
         );
-    }
-    private static string? ImageHash(LedgerCase ledgerCase) {
-        var imagePath = ScreenshotProbe.ResolveExpectedImage(ledgerCase: ledgerCase);
-
-        return ((imagePath is null)
-            ? null
-            : ExpectationsLedger.HashFile(path: imagePath));
     }
 }

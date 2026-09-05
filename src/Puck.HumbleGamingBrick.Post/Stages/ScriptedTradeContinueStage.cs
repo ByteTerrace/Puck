@@ -17,7 +17,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// scripted link through the Cable Club is gated by the <see cref="ScriptedTradeLinkLockStage"/> (<c>link-lock</c>). The overworld
 /// factory writes the player and receptionist object structs because CONTINUE restores overworld objects from saved
 /// WRAM rather than regenerating them. The cartridge is a per-machine commercial asset, never committed:
-/// its path comes from <c>PUCK_GB_TRADEROM</c> (with a known dev-box fallback), and the stage skips cleanly when absent.
+/// its path comes from <c>--trade-rom</c>, and the stage skips cleanly when absent.
 /// </para>
 /// <para>
 /// Both machines are pinned to CGB, and this cart's link code never writes rKEY1 or
@@ -28,14 +28,6 @@ namespace Puck.HumbleGamingBrick.Post;
 /// </para>
 /// </summary>
 internal sealed class ScriptedTradeContinueStage : IPostStage<PostContext> {
-    private const string RomEnvironmentVariable = "PUCK_GB_TRADEROM";
-
-    // The known dev-box copies (laptop, desktop), tried in order when the env var is unset.
-    private static readonly string[] RomFallbackPaths = [
-        @"C:\Source\ByteTerrace\Temp\ROMS\Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).gbc",
-        @"D:\Source\ByteTerrace\Silo\ROMS\Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).gbc",
-    ];
-
     // A mid-CONTINUE budget boundary (the intro cinematic is still skipping to the menu here) — well inside the run and,
     // because no serial transfer ever starts before the receptionist walk, always transfer-idle: a genuine severable
     // instant for the churn leg.
@@ -51,10 +43,10 @@ internal sealed class ScriptedTradeContinueStage : IPostStage<PostContext> {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
-        var romPath = ResolveRomPath();
+        var romPath = context.TradeRomPath;
 
         if (romPath is null) {
-            return PostStageOutcome.Skip(detail: $"no trade-cart ROM (set {RomEnvironmentVariable} to the cross-gen trade cartridge)");
+            return PostStageOutcome.Skip(detail: "no trade-cart ROM (pass --trade-rom with the cross-generation trade cartridge)");
         }
 
         var rom = File.ReadAllBytes(path: romPath);
@@ -245,21 +237,6 @@ internal sealed class ScriptedTradeContinueStage : IPostStage<PostContext> {
     }
     private static bool IsTransferIdle(MachineInstance machine) =>
         ((machine.GetRequiredService<ISystemBus>().ReadByte(address: SerialControlAddress) & 0x80) == 0);
-    private static string? ResolveRomPath() {
-        var fromEnvironment = Environment.GetEnvironmentVariable(variable: RomEnvironmentVariable);
-
-        if (
-            !string.IsNullOrEmpty(value: fromEnvironment) &&
-            File.Exists(path: fromEnvironment)
-        ) {
-            return fromEnvironment;
-        }
-
-        return Array.Find(
-            array: RomFallbackPaths,
-            match: File.Exists
-        );
-    }
 
     private readonly record struct ScenarioResult(
         byte LeadA,

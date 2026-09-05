@@ -1,0 +1,129 @@
+name: Verify
+
+# The emulator gates. `gate` runs on every change: the Humble GamingBrick battery's self-contained stages plus every
+# ledger row recorded as passing, against the corpora pinned in src/Puck.HumbleGamingBrick.Post/corpora.json, and
+# fails the build on any regression. `frontier` runs nightly and on request: the rows recorded as failing or
+# inconclusive, re-measured to find ratchets and pixel-count changes, with the candidate ledger uploaded so a
+# ratchet is accepted by `--accept-candidate` on the downloaded file rather than by a second run. Both batteries are
+# pure-CPU console applications; neither needs a GPU or a display.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: Which lane to run
+        type: choice
+        options: [gate, frontier, all]
+        default: gate
+
+permissions:
+  contents: read
+  checks: write
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('verify-pr-{0}', github.ref) || format('verify-run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CI: true
+  DOTNET_NOLOGO: true
+  POST: src/Puck.HumbleGamingBrick.Post
+
+jobs:
+  gate:
+    if: ${{ github.event_name != 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore corpus cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/Puck/corpora
+          key: corpora-${{ hashFiles('src/Puck.HumbleGamingBrick.Post/corpora.json') }}
+
+      - name: Build the battery
+        run: dotnet build "$POST" --configuration Release
+
+      - name: Fetch corpora
+        run: dotnet run --project "$POST" --configuration Release --no-build -- --fetch-corpora
+
+      - name: Run the gate lane
+        run: dotnet run --project "$POST" --configuration Release --no-build -- --lane ${{ github.event.inputs.lane || 'gate' }} --require-assets --artifacts artifacts/gb-post
+
+      - name: Report
+        if: always()
+        run: |
+          {
+            echo '```'
+            cat artifacts/gb-post/post-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gb-post-${{ github.event.inputs.lane || 'gate' }}
+          path: artifacts/gb-post
+          if-no-files-found: error
+
+      - name: Test results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Humble GamingBrick ${{ github.event.inputs.lane || 'gate' }}
+          path: artifacts/gb-post/results.junit.xml
+          reporter: java-junit
+          fail-on-error: false
+
+  frontier:
+    if: ${{ github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore corpus cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/Puck/corpora
+          key: corpora-${{ hashFiles('src/Puck.HumbleGamingBrick.Post/corpora.json') }}
+
+      - name: Build the battery
+        run: dotnet build "$POST" --configuration Release
+
+      - name: Fetch corpora
+        run: dotnet run --project "$POST" --configuration Release --no-build -- --fetch-corpora
+
+      - name: Run the frontier lane
+        run: dotnet run --project "$POST" --configuration Release --no-build -- --lane frontier --require-assets --artifacts artifacts/gb-post
+
+      - name: Report
+        if: always()
+        run: |
+          {
+            echo '```'
+            cat artifacts/gb-post/post-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gb-post-frontier
+          path: artifacts/gb-post
+          if-no-files-found: error

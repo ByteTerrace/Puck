@@ -16,9 +16,10 @@ internal static class AcceptanceRomProbe {
 
     /// <summary>Runs a case to a verdict.</summary>
     /// <param name="romCase">The case to run.</param>
+    /// <param name="budget">The case's wall-clock budget.</param>
     /// <returns><see langword="true"/> for pass, <see langword="false"/> for the failure signature, or
     /// <see langword="null"/> when neither appeared within the frame cap; paired with a one-line detail.</returns>
-    public static (bool? Passed, string Detail) Run(RomCase romCase) {
+    public static (bool? Passed, string Detail) Run(RomCase romCase, CaseBudget budget) {
         var rom = File.ReadAllBytes(path: romCase.FullPath);
 
         using var machine = PostMachine.Build(
@@ -32,6 +33,7 @@ internal static class AcceptanceRomProbe {
 
         for (var frame = 0; (frame < romCase.FrameCap); ++frame) {
             PostMachine.RunFrames(
+                budget: budget,
                 frames: 1,
                 instance: machine
             );

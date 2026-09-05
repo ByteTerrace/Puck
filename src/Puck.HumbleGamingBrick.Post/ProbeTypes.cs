@@ -48,12 +48,19 @@ internal enum ProbeVerdict {
     /// <summary>The ROM produced no result within its frame budget.</summary>
     Inconclusive,
 }
+/// <summary>An RGBA image a probe compared, kept so a mismatch can be written out beside the report.</summary>
+/// <param name="Rgba">The pixels, four bytes each, row-major.</param>
+/// <param name="Width">The width in pixels.</param>
+/// <param name="Height">The height in pixels.</param>
+internal sealed record ProbeImage(byte[] Rgba, int Width, int Height);
 /// <summary>A probe's result: the verdict, a one-line detail, and — for a <see cref="ProbeKind.Screenshot"/> failure —
-/// the differing-pixel count.</summary>
+/// the differing-pixel count and both images.</summary>
 /// <param name="Verdict">The probe's verdict.</param>
 /// <param name="Detail">A one-line success summary or failure reason.</param>
 /// <param name="DiffPixelCount">The differing-pixel count for a failed screenshot comparison; <see langword="null"/> otherwise.</param>
-internal sealed record ProbeOutcome(ProbeVerdict Verdict, string Detail, int? DiffPixelCount = null);
+/// <param name="ActualImage">The framebuffer a failed screenshot comparison produced; <see langword="null"/> otherwise.</param>
+/// <param name="ExpectedImage">The expected image a failed screenshot comparison ran against; <see langword="null"/> otherwise.</param>
+internal sealed record ProbeOutcome(ProbeVerdict Verdict, string Detail, int? DiffPixelCount = null, ProbeImage? ActualImage = null, ProbeImage? ExpectedImage = null);
 /// <summary>Whether a ledger case is meant to run the emulator at all.</summary>
 internal enum CaseDisposition {
     /// <summary>Run the probe and compare its verdict against the ledger.</summary>
@@ -89,4 +96,11 @@ internal sealed record LedgerCase(
     ScreenshotPalette Palette = ScreenshotPalette.Common,
     string? ExpectedHexPattern = null,
     AudioExpectation? ExpectedAudio = null
-);
+) {
+    /// <summary>Gets the ledger key this case is recorded under.</summary>
+    public (string Suite, string Path, string Model) Key =>
+        (Suite, RelativePath, ModelKey);
+    /// <summary>Gets the model as the ledger spells it: the exact <see cref="ConsoleModel"/> member name.</summary>
+    public string ModelKey =>
+        Model.ToString();
+}

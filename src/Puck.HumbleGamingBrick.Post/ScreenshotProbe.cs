@@ -22,8 +22,9 @@ internal static class ScreenshotProbe {
         ledgerCase.ExpectedImageCandidates?.FirstOrDefault(predicate: File.Exists);
     /// <summary>Runs a case to a verdict.</summary>
     /// <param name="ledgerCase">The case to run; <see cref="LedgerCase.ExpectedImageCandidates"/> must be non-empty.</param>
-    /// <returns>The probe outcome, carrying the differing-pixel count on a pixel mismatch.</returns>
-    public static ProbeOutcome Run(LedgerCase ledgerCase) {
+    /// <param name="budget">The case's wall-clock budget.</param>
+    /// <returns>The probe outcome, carrying the differing-pixel count and both images on a pixel mismatch.</returns>
+    public static ProbeOutcome Run(LedgerCase ledgerCase, CaseBudget budget) {
         var candidates = ledgerCase.ExpectedImageCandidates;
 
         if (
@@ -54,6 +55,7 @@ internal static class ScreenshotProbe {
         using var liveness = LivenessGate.Attach(cpu: machine.GetRequiredService<Sm83>());
 
         PostMachine.RunFrames(
+            budget: budget,
             frames: ledgerCase.FrameCap,
             instance: machine
         );
@@ -113,8 +115,18 @@ internal static class ScreenshotProbe {
                 Verdict: ProbeVerdict.Pass
             )
             : new ProbeOutcome(
+                ActualImage: new ProbeImage(
+                    Height: framebuffer.Height,
+                    Rgba: actualRgba,
+                    Width: framebuffer.Width
+                ),
                 DiffPixelCount: diffPixels,
                 Detail: $"{diffPixels} differing pixel(s) against {Path.GetFileName(path: imagePath)} after {ledgerCase.FrameCap} frames",
+                ExpectedImage: new ProbeImage(
+                    Height: expected.Height,
+                    Rgba: expected.RgbaPixels,
+                    Width: expected.Width
+                ),
                 Verdict: ProbeVerdict.Fail
             ));
     }

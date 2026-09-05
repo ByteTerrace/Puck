@@ -1,8 +1,8 @@
 namespace Puck.HumbleGamingBrick.Post;
 
 /// <summary>Discovers SingleStepTests/sm83 opcode-family files under the corpus root (resolved by <c>Program</c> from
-/// the <c>PUCK_GB_SST</c> environment variable, with a known development-machine fallback). The corpus is never
-/// committed to the repository, so an absent root yields no families and the stage skips rather than fails.</summary>
+/// <c>--sst</c> or the manifest's cached archive). The corpus is never committed to the repository, so an absent root
+/// yields no families and the stage skips rather than fails.</summary>
 internal static class Sm83SstCorpus {
     /// <summary>Enumerates the opcode-family JSON files under the corpus's <c>v1</c> directory (500 files: the 256
     /// unprefixed opcodes minus the 11 illegal encodings and the bare <c>0xCB</c> prefix byte, plus the 256

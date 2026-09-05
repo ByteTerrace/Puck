@@ -126,7 +126,7 @@ internal static class PostStages {
         name: "blargg-visual"
     ),
             // Tier B — SingleStepTests/sm83 per-instruction vectors: the shared SM83 core against 500 opcode families
-            // on a flat-RAM harness, off-ROM (skip when PUCK_GB_SST is absent).
+            // on a flat-RAM harness, off-ROM (skip when the vector corpus is absent).
             new Sm83SstStage(),
             // Tier B — acceptance timing suite (serial Fibonacci signature; ledger-gated; skip when the corpus is absent).
             new LedgerRomStage(
@@ -252,6 +252,8 @@ internal static class PostStages {
         discover: context => SuiteCatalog.GbMicrotestRoms(root: context.TestRomRoot),
         name: "gbmicrotest"
     ),
+            // Tier B — the ledger a run measures is independent of how many cases ran at once.
+            new LedgerParallelEquivalenceStage(),
             // Tier B — AGE: register-signature or screenshot depending on what each ROM's own leaf folder ships.
             new LedgerRomStage(
         discover: context => SuiteCatalog.AgeRoms(root: context.TestRomRoot),
@@ -340,16 +342,16 @@ internal static class PostStages {
             // synthetic ROMs; runs anywhere).
             new InfraredExchangeStage(),
             // Tier C — the rule-#3/M5 golden replay of a REAL commercial game across a Cgb↔Agb pair (needs a
-            // link-capable cartridge via PUCK_GB_LINKROM; skips cleanly when absent).
+            // link-capable cartridge via --link-rom; skips cleanly when absent).
             new LinkGameReplayStage(),
             // Tier C — the cross-gen-cart trade-harness foundation: two Cgb machines boot the real trade cartridge with
             // distinct crafted saves, linked through a SerialLinkSession, proving CONTINUE-acceptance onto the Cable Club
-            // floor + churn transparency (needs the trade cartridge via PUCK_GB_TRADEROM; skips cleanly when absent).
+            // floor + churn transparency (needs the trade cartridge via --trade-rom; skips cleanly when absent).
             new ScriptedTradeContinueStage(),
             // Tier C — the full scripted two-machine cross-gen-cart Cable Club trade: ScriptedTradeDriver's peek-gated phase
             // machine walks both Cgb machines through the rendezvous, block exchange, mon offer/confirm, trade + auto-save,
             // and CANCEL exit; the gate asserts the $01/$02 roles, the committed lead-species swap, replay- and
-            // churn-identical traffic/snapshots/SRAMs (needs the trade cartridge via PUCK_GB_TRADEROM; skips cleanly absent).
+            // churn-identical traffic/snapshots/SRAMs (needs the trade cartridge via --trade-rom; skips cleanly absent).
             new ScriptedTradeLinkLockStage(),
         ];
 }

@@ -6,33 +6,73 @@ provides focused diagnostics.
 ## Run the battery
 
 ```powershell
-dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release
+dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --fetch-corpora
+dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --lane gate
 ```
 
-Optional battery arguments:
+The first command fills the local corpus cache from the archives pinned in
+[corpora.json](corpora.json); it is needed once per version bump. The second
+is the developer loop and the pull-request gate. A plain run with no `--lane`
+measures every row.
 
 | Argument | Purpose |
 |---|---|
+| `--lane gate|frontier|all` | Which ledger rows to measure; see [Lanes](#lanes). Default `all`. |
 | `--tier A|B|C` | Run one tier. |
 | `--filter <text>` | Run stages whose names contain the text. |
-| `--roms <directory>` | Override the GB reference-ROM root. |
-| `--sst <directory>` | Override the SingleStepTests/sm83 corpus root. |
+| `--parallelism <n>` | Cases measured at once inside a ledger stage; default one per logical processor. |
+| `--roms <directory>` | A reference-ROM root instead of the cached `game-boy-test-roms` corpus. |
+| `--sst <directory>` | A SingleStepTests/sm83 root instead of the cached `sm83-sst` corpus. |
+| `--link-rom <file>` | A link-capable commercial cartridge for `link-game-replay`; the stage skips without it. |
+| `--trade-rom <file>` | The cross-generation trade cartridge for the scripted trade stages; they skip without it. |
 | `--artifacts <directory>` | Override `artifacts/gb-post`. |
-| `--record` | Regenerate `Expectations.json` from measured outcomes instead of gating against it; see [Recording](#recording). |
 | `--require-assets` | A suite's own ledger rows not matched by a discovered case fail infra (exit 2) instead of skipping — catches a corpus missing entirely, not just one absent ROM. |
-| `--record-accept-regressions` | With `--record`, acknowledge that at least one case regressed from a recorded `pass` — otherwise the write is refused. |
-| `--record-allow-shrink` | With `--record`, acknowledge that at least one recorded case is no longer discovered — otherwise the write is refused. |
+| `--fetch-corpora` | Fill the corpus cache from the manifest and exit. |
+| `--accept` | After the run, promote its candidate ledger to `Expectations.json`; see [Accepting](#accepting). |
+| `--accept-candidate <file>` | Promote a candidate a previous run wrote (a build agent's artifact, say) without running anything. |
+| `--accept-regressions` | With an accept, acknowledge that at least one case regressed from a recorded verdict — otherwise the write is refused. |
+| `--accept-shrink` | With an accept, acknowledge that at least one recorded case is no longer discovered — otherwise the write is refused. |
 
 Exit code 0 means every selected stage passed or skipped. Exit code 1 means a
-check failed. Exit code 2 means infrastructure prevented a stage from running.
+check failed. Exit code 2 means infrastructure prevented a stage from running,
+or an accept was refused.
+
+Every run writes four files under the artifacts directory: `post-report.txt`
+(the table, with a duration column), `summary.json` (per-stage verdict,
+duration, and case counts), `results.junit.xml` (one test case per ledger row
+or vector family, named `path[model]`, which any continuous-integration
+reporter reads), and `Expectations.candidate.json` (what this run measured,
+merged over the rows it did not). A screenshot row that mismatches also leaves
+`<suite>/<path>[model].actual.png` and `.diff.png` beside them.
+
+## Lanes
+
+A ledger row's lane is derived from its recorded outcome, never listed by
+hand:
+
+| Lane | Rows | Cost | Where it runs |
+|---|---|---|---|
+| `gate` | recorded `pass`, unrecorded, and `unrunnable` | a passing case exits at its signature after a few frames | every change, and `dotnet test` (`tests/Puck.HumbleGamingBrick.Tests`) |
+| `frontier` | recorded `fail` and `inconclusive`, and `unrunnable` | every case runs to its frame cap | nightly, and on demand while working on accuracy |
+| `all` | every row | both | a landing that touches accuracy |
+
+The self-contained Tier-A and Tier-C stages run under every lane. The
+commercial-cartridge stages run only when their cartridge is named.
+
+Every case has a wall-clock budget derived from its frame cap — real time for
+the frames plus a fixed allowance — and a case that exceeds it is an `error`
+row, which fails the stage and blocks an accept, rather than a hung run.
+Cases inside a stage run on every processor at once; the
+`ledger-parallel-equivalence` stage proves the measured rows do not depend on
+that.
 
 ## Tiers
 
 | Tier | Coverage | Assets |
 |---|---|---|
 | A | determinism; snapshot and battery-save round trips; victory metadata; fork determinism; AGB costume; authored-boot-ROM handoff; trio lockstep; camera capture; queued-host substrate contract; live cable-linked queued hosts and their coupled rewind; throughput; zero-alloc-per-frame | none |
-| B | SingleStepTests/sm83 per-instruction vectors (498 of 500 families asserted; `10`/`fb` are documented oracle-conflict skips); the ledger-gated corpus — every suite under the resolved `--roms`/`PUCK_GB_TESTROMS` root, see [Corpus ledger](#corpus-ledger) | `--sst`/`PUCK_GB_SST` for the vector corpus; `--roms`/`PUCK_GB_TESTROMS` for the reference-ROM corpus |
-| C | synthetic link exchange for DMG/CGB/AGB costume pairings; snapshot churn; commercial link-game replay; cross-gen trade-cart save acceptance and complete trade | synthetic stages need none; commercial stages use `PUCK_GB_LINKROM` or `PUCK_GB_TRADEROM` |
+| B | SingleStepTests/sm83 per-instruction vectors (498 of 500 families asserted; `10`/`fb` are documented oracle-conflict skips); the ledger-gated corpus — every suite under the reference-ROM root, see [Corpus ledger](#corpus-ledger); the parallel-equivalence proof | the two corpora in `corpora.json` (fetched once), or `--sst`/`--roms` |
+| C | synthetic link exchange for DMG/CGB/AGB costume pairings; snapshot churn; commercial link-game replay; cross-gen trade-cart save acceptance and complete trade | synthetic stages need none; commercial stages need `--link-rom` or `--trade-rom` |
 
 Missing optional assets produce a skip rather than a failure (or, under
 `--require-assets`, an infra failure) rather than a check failure. ROMs and
@@ -52,7 +92,8 @@ cases, `LedgerEvaluator` applies the rules below, `ProbeRunner` dispatches to
 the probe named on the row) compares the ROM's actual behavior against it.
 `Expectations.json` is generated, never hand-edited — the stage is the runner
 that fails when it disagrees with its own source, the same shape as
-`FileLengths.json`/`VerifiedCode.json`.
+`FileLengths.json`/`VerifiedCode.json` — and every run writes the candidate
+that would replace it; see [Accepting](#accepting).
 
 A row records the suite, the ROM's path relative to that suite's on-disk root,
 the model (the exact `ConsoleModel` the case ran on — `DmgC`, `CgbE`, `Agb`,
@@ -129,16 +170,17 @@ expected image) is caught exactly like a regression into `fail`.
 - Actual equals the recorded outcome → counted (`N pass`, `M recorded-fail`,
   `L recorded-inconclusive`, `K unrunnable`).
 - A recorded `fail` that now passes → the stage **fails**
-  (`ratchet: recorded fail, now Pass`) — a fix is a deliberate, recorded act,
-  never a silently-loosened gate.
+  (`ratchet: now passes; accept the candidate ledger`) — a fix is a deliberate,
+  accepted act, never a silently-loosened gate.
 - Any other change of outcome (most importantly a recorded `pass` that now
   fails or turns inconclusive) → **fails** as a regression.
 - A recorded `fail` whose actual outcome is still `fail` but whose
   screenshot `DiffPixels` changed → **fails**, naming both counts.
-- A ROM present on disk with no ledger row → **fails** as `unrecorded`.
+- A ROM present on disk with no ledger row → **fails** as `unrecorded`; the
+  candidate carries the row.
 - A ROM, or a screenshot case's expected image, whose bytes no longer match
-  its recorded hash → **fails** as a hash mismatch (checked before the probe
-  runs, so a swapped fixture is never silently absorbed into a pixel diff).
+  its recorded hash → **fails** as a hash mismatch, whatever the probe then
+  found, so a swapped fixture is never silently absorbed into a pixel diff.
 - A ledger row for a suite this run's own discovery does not produce a
   matching case → skipped, or (`--require-assets`) an infra failure. This is
   computed against the ledger's own rows for the suite, so it also catches a
@@ -146,34 +188,43 @@ expected image) is caught exactly like a regression into `fail`.
   discovery finding zero cases is not by itself proof there was nothing to
   find.
 
-## Recording
+## Accepting
 
-`--record` measures every ledger stage's cases fresh and diffs the result
-against the existing `Expectations.json` before writing anything — a suite
-this run did not measure (an unselected `--tier`/`--filter`, or a suite this
-corpus checkout simply does not carry) is carried over unchanged, so only a
-suite this run actually touched can appear in the diff. Every case whose
-outcome changed is printed (`ratchet: ...` for a recorded `fail` resolving to
-`Pass`, `regression: ...` for anything moving away from a recorded `Pass`,
-`dropped: ...` for a recorded case no longer discovered), and the write is
-refused (exit 2, nothing written) when any of the following holds:
+There is no recording run. Every run writes `Expectations.candidate.json`:
+the existing ledger with every row this run measured replaced, every row of a
+discovered suite whose ROM is no longer on disk removed, and every row of a
+suite this run did not discover (an unselected `--tier`/`--filter`/`--lane`,
+or a corpus this checkout does not carry) carried over unchanged — so the
+diff between the two only ever shows what this run measured. Every changed
+row is printed (`ratchet:` for a recorded `fail` resolving to `pass`,
+`regression:` for any other change of verdict, `dropped:` for a recorded
+case no longer discovered, `added:` for a case with no row), and `--accept`
+promotes the candidate in the same process. `--accept-candidate <file>` does
+the same for a candidate another run wrote — a nightly build's artifact — with
+no battery run at all. Either is refused (exit 2, nothing written) when:
 
-- Any stage in this run ended in infrastructure failure — a ledger built from
-  an incomplete run is worse than no ledger at all.
-- Two measured cases share a (suite, path, model) key — the file is sorted and
-  keyed by exactly that triple, so a collision can only mean two stages are
-  tagging the same case.
-- At least one case regressed from a recorded `Pass`, unless
-  `--record-accept-regressions` is passed.
+- Any stage in the run ended in infrastructure failure, or any case could not
+  be measured — a ledger built from an incomplete run is worse than no ledger.
+- At least one case regressed from a recorded verdict, unless
+  `--accept-regressions` is passed.
 - At least one recorded case is no longer discovered, unless
-  `--record-allow-shrink` is passed.
+  `--accept-shrink` is passed.
 
-Both flags are acknowledgments, not defaults — running `--record` against a
-partial or misconfigured corpus is expected to refuse rather than quietly
-erode the ledger. Run `--record` after a deliberate emulator correction
-changes a recorded outcome, exactly like re-recording a Post baseline; never
-to paper over an unexplained regression, and never routinely against a
-corpus checkout that does not carry everything the ledger already records.
+Both flags are acknowledgments, not defaults. Accept after a deliberate
+emulator correction changes a recorded outcome, in the same change; never to
+paper over an unexplained regression.
+
+## Corpora
+
+[corpora.json](corpora.json) declares every external corpus by name, release
+archive, version, SHA-256, and the directory inside the archive that is its
+root. `--fetch-corpora` downloads each archive, refuses one whose bytes do not
+hash to the declared value, and unpacks it under
+`%LOCALAPPDATA%\Puck\corpora\<name>\<version>` (`~/.local/share/Puck/corpora`
+elsewhere); the stages resolve that directory without configuration. Bumping
+a version in the manifest is what changes which bytes every machine, including
+a build agent, measures against. Commercial cartridges are never in the
+manifest; they are named per run with `--link-rom` and `--trade-rom`.
 
 ## The authored boot ROM
 
@@ -228,9 +279,9 @@ mapping" assumption holds exactly; setting IME/halted and reading them back
 after the step goes through the CPU's existing `SaveState`/`LoadState` seam
 (`Sm83StateCodec`), not a new one. It validates the one-shared-SM83-core
 doctrine instruction-by-instruction, off-ROM — evidence, never a gate: it
-skips cleanly when the corpus is absent. Clone the corpus to
-`D:\Source\ByteTerrace\Temp\sm83-sst` (the established corpus-clone
-location pattern) or point `--sst`/`PUCK_GB_SST` at it.
+skips cleanly when the corpus is absent. The corpus is the `sm83-sst` entry
+in `corpora.json`; `--sst` names another root. Families run on every
+processor at once, each on its own harness.
 
 Two opcode families are documented ORACLE-CONFLICT skips — excluded from
 pass/fail, reported in the stage output with vector counts and a reason naming

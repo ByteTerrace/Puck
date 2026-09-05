@@ -1,8 +1,12 @@
+using System.Diagnostics;
+
 namespace Puck.GamingBricks.Post;
 
 /// <summary>Runs an ordered list of <see cref="IPostStage{TContext}"/> once each, isolating failures so one stage's
-/// infrastructure failure (an exception, recorded as <see cref="PostVerdict.Infra"/>) never aborts the rest, and
-/// gathers the results into a <see cref="PostReport"/>.</summary>
+/// infrastructure failure (an exception, recorded as <see cref="PostVerdict.Infra"/>) never aborts the rest, timing
+/// each, and gathering the results into a <see cref="PostReport"/>. Stages run one after another: a stage that
+/// measures many cases parallelizes inside itself, where the cases are independent by construction, while the stages
+/// themselves may own threads, measure throughput, or hold the console.</summary>
 /// <typeparam name="TContext">The battery's per-run context type.</typeparam>
 public sealed class PostBattery<TContext> {
     private readonly string m_banner;
@@ -29,8 +33,10 @@ public sealed class PostBattery<TContext> {
         ArgumentNullException.ThrowIfNull(argument: context);
 
         var results = new List<PostStageResult>(capacity: m_stages.Count);
+        var batteryStart = Stopwatch.GetTimestamp();
 
         foreach (var stage in m_stages) {
+            var stageStart = Stopwatch.GetTimestamp();
             PostStageOutcome outcome;
 
             try {
@@ -39,16 +45,20 @@ public sealed class PostBattery<TContext> {
                 outcome = PostStageOutcome.Infra(detail: $"threw {exception.GetType().Name}: {exception.Message}");
             }
 
-            Console.Out.WriteLine(value: $"[{stage.Tier}] {stage.Name}: {outcome.Verdict} | {outcome.Detail}");
+            var duration = Stopwatch.GetElapsedTime(startingTimestamp: stageStart);
+
+            Console.Out.WriteLine(value: $"[{stage.Tier}] {stage.Name}: {outcome.Verdict} | {PostReport.FormatDuration(duration: duration)} | {outcome.Detail}");
             results.Add(item: new PostStageResult(
+                Duration: duration,
                 Name: stage.Name,
-                Tier: stage.Tier,
-                Outcome: outcome
+                Outcome: outcome,
+                Tier: stage.Tier
             ));
         }
 
         return new PostReport(
             banner: m_banner,
+            duration: Stopwatch.GetElapsedTime(startingTimestamp: batteryStart),
             results: results
         );
     }

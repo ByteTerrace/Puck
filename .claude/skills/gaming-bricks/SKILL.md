@@ -31,8 +31,11 @@ Post stages are authoritative; update stale skill guidance in the same change.
    clock conversions exact, event ordering explicit, and snapshots complete.
 4. Add or update a self-checking stage when a durable contract changes. A
    diagnostic trace alone is not a gate.
-5. Iterate with `--filter` or `--tier`, then run the unfiltered affected Post
-   battery in Release. Run both batteries when shared hosting, snapshots,
+5. Iterate with `--filter` or `--tier`, then run the affected Post battery in
+   Release: the Humble battery's `--lane gate` for any change, and a plain run
+   (every ledger row) for one that touches accuracy; a recorded outcome that
+   moves is accepted from the run's own candidate ledger with `--accept`,
+   never re-measured. Run both batteries when shared hosting, snapshots,
    clocks, or link behavior crosses the two machines; run Tier C for serial,
    SIO, infrared, or link changes.
 6. Report exact commands, selected stages, asset-gated skips, and whether a

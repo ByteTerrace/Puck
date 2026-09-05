@@ -45,8 +45,9 @@ internal static class HexPatternProbe {
 
     /// <summary>Runs a case to a verdict.</summary>
     /// <param name="ledgerCase">The case to run; <see cref="LedgerCase.ExpectedHexPattern"/> must be non-empty.</param>
+    /// <param name="budget">The case's wall-clock budget.</param>
     /// <returns>The probe outcome.</returns>
-    public static ProbeOutcome Run(LedgerCase ledgerCase) {
+    public static ProbeOutcome Run(LedgerCase ledgerCase, CaseBudget budget) {
         var pattern = ledgerCase.ExpectedHexPattern;
 
         if (string.IsNullOrEmpty(value: pattern)) {
@@ -64,6 +65,7 @@ internal static class HexPatternProbe {
         );
 
         PostMachine.RunFrames(
+            budget: budget,
             frames: ledgerCase.FrameCap,
             instance: machine
         );

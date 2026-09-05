@@ -120,14 +120,22 @@ pending one.
 ### Emulator changes
 
 ```powershell
-dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release
+dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --fetch-corpora
+dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --lane gate
 dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release
 ```
 
-Self-contained tiers run without external ROMs. Reference-ROM stages skip
-when their licensed corpus is unavailable. The Advanced battery also exposes
-lockstep, trace, I/O-dump, render-hash, and divergence diagnostics; see its
-project README.
+The Humble battery's reference corpora are declared in its `corpora.json`
+(pinned archive, version, SHA-256); `--fetch-corpora` fills the local cache
+once and the stages resolve it without configuration. `--lane gate` measures
+every row recorded as passing and must stay green; `--lane frontier` measures
+the recorded fails and inconclusives; a plain run measures both. Every run
+writes `summary.json`, `results.junit.xml`, and a candidate ledger under
+`artifacts/gb-post`; `--accept` promotes the candidate under the refusal rules
+in the project README. Iterate with `--filter`; never chain runs to record.
+The Advanced battery still reads its corpora from the `PUCK_AGB_*` variables
+below and exposes lockstep, trace, I/O-dump, render-hash, and divergence
+diagnostics; see its project README.
 
 ### Performance changes
 
@@ -170,8 +178,9 @@ behavior; the procedure above is the complete add-a-field procedure.
 configuration belongs in the world document; live operations belong in console
 verbs.
 
-The remaining environment variables are engine, launcher, emulator, or
-content-development diagnostics:
+The remaining environment variables are engine, launcher, GBA-emulator, or
+content-development diagnostics (the Humble battery takes its inputs on the
+command line: `--roms`, `--sst`, `--link-rom`, `--trade-rom`):
 
 | Variable | Purpose |
 |---|---|
@@ -182,9 +191,6 @@ content-development diagnostics:
 | `PUCK_D3D12_DEBUG` | Opt in to the Direct3D 12 debug layer. |
 | `PUCK_CAPTURE_FRAME=<number>` | Delay one-shot capture for a world-document run. |
 | `PUCK_FLAGSHIPS_REGENERATE=1` | Regenerate committed flagship creation documents. |
-| `PUCK_GB_TESTROMS` | GB/GBC reference-ROM corpus. |
-| `PUCK_GB_LINKROM`, `PUCK_GB_TRADEROM` | Commercial link-game verification inputs. |
-| `PUCK_GB_SST` | SingleStepTests/sm83 per-instruction vector corpus (`Sm83SstStage`, skip when absent). |
 | `PUCK_AGB_BIOS`, `PUCK_AGB_TESTROMS`, `PUCK_AGB_ACCURACY_SUITE`, `PUCK_AGB_AGS`, `PUCK_AGB_GAMES` | GBA reference inputs. |
 | `PUCK_AGB_SOLARROM` | Commercial Boktai (solar-sensor) cartridge for `SolarReplayStage` (skip when absent). |
 

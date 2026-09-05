@@ -1,0 +1,15 @@
+[
+  {
+    "Name": "game-boy-test-roms",
+    "Version": "v7.0",
+    "Archive": "https://github.com/c-sp/game-boy-test-roms/releases/download/v7.0/game-boy-test-roms-v7.0.zip",
+    "Sha256": "b9a9d7a1075aa35a3d07c07c34974048672d8520dca9e07a50178f5860c3832c"
+  },
+  {
+    "Name": "sm83-sst",
+    "Version": "f9c30210245dd691661db39f5ace022c465ecc2f",
+    "Archive": "https://github.com/SingleStepTests/sm83/archive/f9c30210245dd691661db39f5ace022c465ecc2f.zip",
+    "Sha256": "0a492d69b69cff0d440c9f795a6528c9374a4b771465fbbf42606c98492ab2f2",
+    "Root": "sm83-f9c30210245dd691661db39f5ace022c465ecc2f"
+  }
+]

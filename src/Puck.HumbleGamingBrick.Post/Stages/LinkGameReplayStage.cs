@@ -13,18 +13,16 @@ namespace Puck.HumbleGamingBrick.Post;
 /// byte-identical — the replay-identical proof that a full commercial link workload (menu code, interrupt-driven
 /// handshake, retry loops) adds no nondeterminism across the generation gap.
 /// <para>
-/// The cartridge is a per-machine commercial asset, never committed: its path comes from <c>PUCK_GB_LINKROM</c> (with a
-/// known dev-box fallback), and the stage SKIPS cleanly when it is absent. The scripts were authored once by exploring
+/// The cartridge is a per-machine commercial asset, never committed: its path comes from <c>--link-rom</c>, and the
+/// stage skips cleanly when it is absent. The scripts were authored once by exploring
 /// the game with <c>--link-explore</c>; a per-side traffic-fingerprint floor makes the gate
 /// catch a serial-behavior regression that still happens to be self-consistent across the two runs.
 /// </para>
 /// </summary>
 internal sealed class LinkGameReplayStage : IPostStage<PostContext> {
-    // The frozen scripts drive the captured link-session cart (see RomFallbackPath) — a CGB link-from-menu game — from
-    // power-on to its two-player link handshake. Both consoles walk the identical menu path, so one script drives both
-    // sides. Authored with --link-explore; see the HGB Post README's "link-game-replay" section for the ROM/env-var contract.
-    private const string RomEnvironmentVariable = "PUCK_GB_LINKROM";
-    private const string RomFallbackPath = @"D:\Source\ByteTerrace\Silo\ROMS\Mario Tennis (USA).gbc";
+    // The frozen scripts drive the captured link-session cart (--link-rom) — a CGB link-from-menu game — from power-on
+    // to its two-player link handshake. Both consoles walk the identical menu path, so one script drives both sides.
+    // Authored with --link-explore; see the HGB Post README's "link-game-replay" section for the cartridge contract.
     // The frozen menu walk reaches the handshake by ~frame 700; 1200 frames leaves the pair deep in the live
     // "LINKING… Waiting for other player" exchange with hundreds of transfers each way — ample, robust traffic.
     private const int Frames = 1200;
@@ -46,10 +44,10 @@ internal sealed class LinkGameReplayStage : IPostStage<PostContext> {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
-        var romPath = ResolveRomPath();
+        var romPath = context.LinkRomPath;
 
         if (romPath is null) {
-            return PostStageOutcome.Skip(detail: $"no link-game ROM (set {RomEnvironmentVariable} to a link-capable cartridge)");
+            return PostStageOutcome.Skip(detail: "no link-game ROM (pass --link-rom with a link-capable cartridge)");
         }
 
         var rom = File.ReadAllBytes(path: romPath);
@@ -170,18 +168,4 @@ internal sealed class LinkGameReplayStage : IPostStage<PostContext> {
         (600, JoypadButtons.A),
         (606, JoypadButtons.None)
     );
-    private static string? ResolveRomPath() {
-        var fromEnvironment = Environment.GetEnvironmentVariable(variable: RomEnvironmentVariable);
-
-        if (
-            !string.IsNullOrEmpty(value: fromEnvironment) &&
-            File.Exists(path: fromEnvironment)
-        ) {
-            return fromEnvironment;
-        }
-
-        return (File.Exists(path: RomFallbackPath)
-            ? RomFallbackPath
-            : null);
-    }
 }

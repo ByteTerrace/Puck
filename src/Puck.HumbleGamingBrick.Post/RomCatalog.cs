@@ -1,8 +1,8 @@
 namespace Puck.HumbleGamingBrick.Post;
 
 /// <summary>Discovers reference-ROM test cases under the corpus root (resolved by <c>Program</c> from <c>--roms</c> or
-/// the <c>PUCK_GB_TESTROMS</c> environment variable, with a known development-machine fallback). ROMs are never
-/// committed to the repository, so an absent corpus yields no cases and the Tier-B stages skip rather than fail.</summary>
+/// the manifest's cached archive). ROMs are never committed to the repository, so an absent corpus yields no cases and
+/// the Tier-B stages skip rather than fail.</summary>
 internal static class RomCatalog {
     // Generous ceilings; a passing ROM reports (over serial or at $A000) and exits well before these, so they bound only
     // a ROM that never reports — a genuine failure to detect — not the common path.
