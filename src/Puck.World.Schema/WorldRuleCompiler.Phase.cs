@@ -8,6 +8,6 @@ public static partial class WorldRuleCompiler {
             throw new WorldRuleException(WorldRuleRefusal.StateCellUnaddressable, ruleName,
                 "phase query requires $phase:<row>:<current|active|ready|sequence|round|deadline|direction|skipped>, without key");
         }
-        return new(new CompiledWorldOperand(WorldRuleFactKind.Phase, tokens[1], tokens[2], ValueKind: CellKind.Int), CellKind.Int, name);
+        return new(new CompiledWorldOperand(WorldRuleFactKind.Phase, tokens[1], tokens[2], ValueKind: CellKind.Int, StateHandle: ResolveWorldStateHandle(definition: definition, name: tokens[1])), CellKind.Int, name);
     }
 }
