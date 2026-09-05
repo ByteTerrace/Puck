@@ -226,6 +226,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
                 (m_interrupts.Pending != InterruptKind.None)
             ) {
                 m_key1.CancelSwitch();
+                m_componentClock.Invalidate();
             }
 
             return;
@@ -235,6 +236,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         if (m_key1.IsStopped) {
             if (m_joypad.AnyButtonHeld) {
                 m_key1.LeaveStop();
+                m_componentClock.Invalidate();
             } else {
                 IdleMachineCycle();
 
@@ -247,6 +249,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
                 m_halted = false;
 
                 m_hdma.OnCpuWoke();
+                m_componentClock.Invalidate();
             } else {
                 IdleMachineCycle();
 
@@ -272,6 +275,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
         // unit the CPU has yielded; its start-up chain is measured from here.
         if (m_hdma.IsCpuStalled) {
             m_hdma.AcknowledgeStall();
+            m_componentClock.Invalidate();
             IdleMachineCycle();
 
             return;

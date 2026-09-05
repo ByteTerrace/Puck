@@ -78,6 +78,29 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
     /// <inheritdoc/>
     public ClockDomain Domain =>
         ClockDomain.Cpu;
+
+    /// <summary>Returns how many further T-cycles the rate accumulator can absorb before it next emits a frame;
+    /// unbounded with no sink configured.</summary>
+    public int QuietCycles() {
+        if (m_sampleRate == 0) {
+            return int.MaxValue;
+        }
+
+        var addend = (m_key1.IsDoubleSpeed
+            ? m_sampleRate
+            : (m_sampleRate << 1));
+
+        return (((HalfDotsPerSecond - 1) - m_accumulator) / addend);
+    }
+    /// <summary>Absorbs <paramref name="cycles"/> T-cycles that <see cref="QuietCycles"/> allowed into the accumulator.</summary>
+    /// <param name="cycles">The T-cycles to absorb.</param>
+    public void Skip(int cycles) {
+        if (m_sampleRate != 0) {
+            m_accumulator += (cycles * (m_key1.IsDoubleSpeed
+                ? m_sampleRate
+                : (m_sampleRate << 1)));
+        }
+    }
     /// <inheritdoc/>
     public int SampleRate =>
         m_sampleRate;

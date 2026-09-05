@@ -61,6 +61,10 @@ public sealed partial class Sm83 {
             value: value
         );
 
+        if (address >= MemoryMap.IoRegistersStart) {
+            m_componentClock.Invalidate();
+        }
+
         m_busCycleDebt = CpuTCyclesPerMachineCycle;
     }
     private void WriteDisplayRegisterCycle(ushort address, byte value) {
@@ -84,6 +88,7 @@ public sealed partial class Sm83 {
         // phase, so it is spent even when the held and arriving values happen to coincide.
         if (settles) {
             m_bus.OpenDisplayWriteSettle();
+            m_componentClock.Invalidate();
             AdvanceTCycles(count: 1);
 
             ++lead;
@@ -93,6 +98,7 @@ public sealed partial class Sm83 {
             address: address,
             value: value
         );
+        m_componentClock.Invalidate();
 
         m_busCycleDebt = (CpuTCyclesPerMachineCycle - lead);
     }
@@ -113,11 +119,8 @@ public sealed partial class Sm83 {
 
         AdvanceTCycles(count: debt);
     }
-    private void AdvanceTCycles(int count) {
-        for (var remaining = count; (remaining > 0); --remaining) {
-            m_componentClock.AdvanceCpuTCycle();
-        }
-    }
+    private void AdvanceTCycles(int count) =>
+        m_componentClock.AdvanceCpuTCycles(count: count);
     private void ExecuteStop() {
         // STOP is encoded two bytes (assemblers emit 10 00) and consumes the pad byte ONLY when no interrupt is already
         // pending (SameBoy sm83_cpu.c stop(), ~line 397: `interrupt_pending = gb->interrupt_enable & gb->io_registers
@@ -145,12 +148,15 @@ public sealed partial class Sm83 {
             m_key1.IsSwitchArmed
         ) {
             m_key1.BeginSwitch();
+            m_componentClock.Invalidate();
         } else if (m_supportsColor) {
             m_key1.EnterStop();
+            m_componentClock.Invalidate();
         } else {
             m_halted = true;
 
             m_hdma.OnCpuHalted();
+            m_componentClock.Invalidate();
         }
     }
     private byte ReadNextByte() {
@@ -268,6 +274,7 @@ public sealed partial class Sm83 {
                     m_halted = true;
 
                     m_hdma.OnCpuHalted();
+            m_componentClock.Invalidate();
                 }
 
                 return;

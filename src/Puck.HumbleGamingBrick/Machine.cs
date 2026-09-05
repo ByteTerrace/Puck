@@ -175,6 +175,8 @@ public sealed class Machine : ISnapshotableMachine {
     /// the exact integer T-cycle count its frame elapsed so pacing carries no floating-point drift.</summary>
     /// <param name="tCycles">The number of T-cycles to advance this call.</param>
     public void Run(ulong tCycles) {
+        m_componentClock.Invalidate();
+
         if (m_busMaster is null) {
             for (var remaining = tCycles; (remaining != 0UL); --remaining) {
                 m_componentClock.AdvanceCpuTCycle();
@@ -250,6 +252,7 @@ public sealed class Machine : ISnapshotableMachine {
     /// calling) and does not validate exact consumption (the snapshot restore path does).</summary>
     /// <param name="reader">The source to read state from.</param>
     public void RestoreState(StateReader reader) {
+        m_componentClock.Invalidate();
         m_componentClock.Clock.ResetTo(instant: Tick.FromRawBits(rawBits: reader.ReadUInt64()));
 
         foreach (var snapshotable in m_snapshotables) {

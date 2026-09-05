@@ -78,6 +78,37 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
     /// <inheritdoc/>
     public ClockDomain Domain =>
         ClockDomain.Cpu;
+
+    /// <summary>Gets a value indicating whether ticks can be absorbed as plain step-counter arithmetic: no transfer
+    /// is requested or moving, no wind-down is pending, and the last sampled display mode is the current one, so no
+    /// horizontal-blank edge is waiting to be seen.</summary>
+    public bool IsQuiet =>
+        (((m_state == StateNone) || (m_state == StatePaused)) && !m_windDownPending && !m_active && (m_previousMode == m_ppu.Mode));
+    /// <summary>Gets a value indicating whether ticks can be absorbed whatever the display does: no transfer exists at
+    /// all, so a horizontal-blank edge inside the stretch would change nothing but the sampled mode.</summary>
+    public bool IsIdle =>
+        ((m_state == StateNone) && !m_windDownPending && !m_active);
+    /// <summary>Samples the display mode the way a tick does: the mode before the display's own step on the same
+    /// cycle. The absorbing caller takes it before the last display dot of a stretch.</summary>
+    public void SampleMode() =>
+        m_previousMode = m_ppu.Mode;
+    /// <summary>Absorbs <paramref name="cycles"/> T-cycles while <see cref="IsQuiet"/>, or while <see cref="IsIdle"/>
+    /// and the display has been ticked through them with <see cref="SampleMode"/> taken before its last dot.</summary>
+    /// <param name="cycles">The T-cycles to absorb.</param>
+    public void Skip(int cycles) {
+        if (
+            m_key1.IsStopped ||
+            m_key1.IsHdmaBlocked
+        ) {
+            return;
+        }
+
+        var step = (m_key1.IsDoubleSpeed
+            ? StepTCyclesDouble
+            : StepTCyclesNormal);
+
+        m_stepCounter = ((m_stepCounter + cycles) % step);
+    }
     /// <inheritdoc/>
     public bool IsCpuStalled =>
         (((m_state != StateNone) && (m_state != StatePaused)) || m_active);

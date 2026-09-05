@@ -62,6 +62,28 @@ public sealed class OamDmaController : IOamDma, IClockedComponent, ISnapshotable
     /// <inheritdoc/>
     public ClockDomain Domain =>
         ClockDomain.Cpu;
+
+    /// <summary>Returns how many further T-cycles this unit can absorb without moving a byte: unbounded when idle,
+    /// every cycle short of the start-up delay expiring when one is pending, none while a transfer runs.</summary>
+    public int QuietCycles() {
+        if (m_active) {
+            return 0;
+        }
+
+        return (m_pending
+            ? Math.Max(
+                val1: 0,
+                val2: (m_delay - 1)
+            )
+            : int.MaxValue);
+    }
+    /// <summary>Absorbs <paramref name="cycles"/> T-cycles that <see cref="QuietCycles"/> allowed into the start-up delay.</summary>
+    /// <param name="cycles">The T-cycles to absorb.</param>
+    public void Skip(int cycles) {
+        if (m_pending) {
+            m_delay -= cycles;
+        }
+    }
     /// <inheritdoc/>
     public bool IsActive =>
         m_active;

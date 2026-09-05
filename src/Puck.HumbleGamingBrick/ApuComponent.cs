@@ -264,6 +264,130 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     public ClockDomain Domain =>
         ClockDomain.Cpu;
 
+    /// <summary>Returns how many further T-cycles the frame sequencer and the generators can absorb as plain
+    /// countdowns: none with an envelope step pending, else every cycle before the DIV-APU bit next toggles and
+    /// before any active generator's counter expires.</summary>
+    public int QuietCycles() {
+        if (
+            (m_pendingEnvelopeDelay > 0) ||
+            (m_lastDivApuBit != DivApuBit())
+        ) {
+            return 0;
+        }
+
+        var period = (1 << (m_key1.IsDoubleSpeed
+            ? DoubleSpeedDivApuBit
+            : NormalDivApuBit));
+        var untilToggle = ((period - (m_timer.DivCounter & (period - 1))) - 1);
+        var generatorTicks = GeneratorQuietTicks();
+
+        if (generatorTicks == int.MaxValue) {
+            return untilToggle;
+        }
+
+        // The generators step on every other T-cycle at normal speed, starting from the half-step's current parity.
+        var untilGenerator = ((generatorTicks << 1) + (m_generatorHalfStep
+            ? 0
+            : 1));
+
+        return Math.Min(
+            val1: untilToggle,
+            val2: untilGenerator
+        );
+    }
+    /// <summary>Absorbs <paramref name="cycles"/> T-cycles that <see cref="QuietCycles"/> allowed, after the divider
+    /// has advanced: the DIV-APU sample follows the counter, and every active generator's countdown drops by the
+    /// generator ticks those cycles carried.</summary>
+    /// <param name="cycles">The T-cycles to absorb.</param>
+    public void Skip(int cycles) {
+        m_lastDivApuBit = DivApuBit();
+
+        var ticks = ((cycles + (m_generatorHalfStep
+            ? 1
+            : 0)) >> 1);
+
+        if ((cycles & 1) != 0) {
+            m_generatorHalfStep = !m_generatorHalfStep;
+        }
+
+        if (ticks == 0) {
+            return;
+        }
+
+        m_lfDiv ^= (ticks & 1);
+        m_noiseAlignment = ((m_noiseAlignment + ticks) & 0xFF);
+        m_waveFormJustRead = false;
+
+        for (var channel = 0; (channel < 2); ++channel) {
+            if (m_channelActive[channel]) {
+                m_squareSampleCountdown[channel] -= ticks;
+                m_squareDelay[channel] = Math.Max(
+                    val1: 0,
+                    val2: (m_squareDelay[channel] - ticks)
+                );
+                m_squareJustReloaded[channel] = false;
+            }
+        }
+
+        if (m_channelActive[2]) {
+            m_waveSampleCountdown -= ticks;
+        }
+
+        if (
+            m_noiseCounterActive ||
+            m_noiseBackgroundCounterActive
+        ) {
+            m_noiseCounterCountdown -= ticks;
+            m_noiseCountdownReloaded = false;
+        }
+    }
+
+    // The generator ticks that are pure countdown decrements: the sweep unit idle, and every running counter still
+    // above the value on which its next tick reloads.
+    private int GeneratorQuietTicks() {
+        if (
+            (m_channel1RestartHold != 0) ||
+            (m_sweepCalculateCountdown != 0) ||
+            (m_sweepCalculateReloadTimer != 0) ||
+            m_sweepInstantCalculationDone
+        ) {
+            return 0;
+        }
+
+        var quiet = int.MaxValue;
+
+        for (var channel = 0; (channel < 2); ++channel) {
+            if (m_channelActive[channel]) {
+                quiet = Math.Min(
+                    val1: quiet,
+                    val2: m_squareSampleCountdown[channel]
+                );
+            }
+        }
+
+        if (m_channelActive[2]) {
+            quiet = Math.Min(
+                val1: quiet,
+                val2: m_waveSampleCountdown
+            );
+        }
+
+        if (
+            m_noiseCounterActive ||
+            m_noiseBackgroundCounterActive
+        ) {
+            quiet = Math.Min(
+                val1: quiet,
+                val2: Math.Max(
+                    val1: 0,
+                    val2: (m_noiseCounterCountdown - 1)
+                )
+            );
+        }
+
+        return quiet;
+    }
+
     /// <inheritdoc/>
     public void Tick() {
         // Stop mode freezes the DIV counter, so the frame sequencer has no edge to follow.

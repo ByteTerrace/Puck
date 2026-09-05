@@ -61,6 +61,36 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
     /// <inheritdoc/>
     public ClockDomain Domain =>
         ClockDomain.Cpu;
+
+    /// <summary>Returns how many further T-cycles this unit can absorb as a plain counter advance: none while stop or
+    /// the speed switch holds it, a reload is pending, or the selected bit is about to fall; every cycle up to that
+    /// fall otherwise, and unbounded with the timer disabled.</summary>
+    public int QuietCycles() {
+        if (
+            m_stopLatched ||
+            m_switchBlockLatched ||
+            m_key1.AreTimersBlocked ||
+            (m_overflowCountdown > 0)
+        ) {
+            return 0;
+        }
+
+        if (m_timaInputMask == 0) {
+            return int.MaxValue;
+        }
+
+        var period = (m_timaInputMask << 1);
+
+        return ((period - (m_counter & (period - 1))) - 1);
+    }
+    /// <summary>Advances the counter by <paramref name="cycles"/> T-cycles that <see cref="QuietCycles"/> allowed:
+    /// no falling edge of the selected bit lies inside them, so TIMA holds and only the detector's input follows.</summary>
+    /// <param name="cycles">The T-cycles to absorb.</param>
+    public void Skip(int cycles) {
+        m_reloadedThisCycle = false;
+        m_counter = ((ushort)(m_counter + cycles));
+        m_lastTimaInput = ((m_counter & m_timaInputMask) != 0);
+    }
     /// <inheritdoc/>
     public ushort DivCounter =>
         m_counter;

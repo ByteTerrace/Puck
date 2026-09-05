@@ -78,6 +78,31 @@ public sealed class SerialComponent : ISerial, IClockedComponent, ISnapshotable,
     /// <inheritdoc/>
     public ClockDomain Domain =>
         ClockDomain.Cpu;
+
+    /// <summary>Returns how many further T-cycles this unit can absorb without shifting: unbounded with no
+    /// internal-clock transfer in flight, else every cycle before the next falling edge of its DIV bit.</summary>
+    public int QuietCycles() {
+        if (m_lastDivBit != DivBit()) {
+            return 0;
+        }
+
+        if (
+            ((m_control & (TransferActive | ClockSelect)) != (TransferActive | ClockSelect)) ||
+            (m_bitsRemaining == 0)
+        ) {
+            return int.MaxValue;
+        }
+
+        var period = (1 << ((((m_control & FastClock) != 0)
+            ? FastDivBit
+            : NormalDivBit) + 1));
+
+        return ((period - (m_timer.DivCounter & (period - 1))) - 1);
+    }
+    /// <summary>Absorbs T-cycles that <see cref="QuietCycles"/> allowed, after the divider has advanced: only the
+    /// edge detector's last sample follows.</summary>
+    public void Skip() =>
+        m_lastDivBit = DivBit();
     /// <summary>An optional observer invoked with the byte an internal-clock transfer sends, at the instant the transfer
     /// starts. It is a host-side observation seam — conformance harnesses use it to read a ROM's serial output — and is
     /// not emulated state: it is never serialized, so setting it cannot perturb determinism, and it is <see
