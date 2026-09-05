@@ -971,6 +971,12 @@ public sealed partial class AgbPpu : IAgbPpu {
         var tileY = (y >> 3);
         var inTileY = y & 7;
 
+        if (mosaicX == 1) {
+            RenderTextRow(destination: dest, charBase: charBase, screenBase: screenBase, is8Bpp: is8Bpp,
+                size: size, horizontalOffset: horizontalOffset, widthMask: widthMask, tileY: tileY, inTileY: inTileY);
+            return;
+        }
+
         for (var x = 0; (x < ScreenWidth); ++x) {
             var px = ((x - (x % mosaicX)) + horizontalOffset) & widthMask;
             var entry = Vram16(offset: (screenBase + MapEntryOffset(

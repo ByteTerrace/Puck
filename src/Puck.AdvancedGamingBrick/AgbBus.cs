@@ -40,6 +40,7 @@ public sealed partial class AgbBus : IAgbBus {
     private readonly IAgbApu m_apu;
     private readonly AgbDmaController? m_dmaCore;
     private readonly AgbApu? m_apuCore;
+    private readonly AgbClockState m_clockState = new();
 
     private uint m_openBus;
     private uint m_prevFetchHalf;
@@ -112,6 +113,14 @@ public sealed partial class AgbBus : IAgbBus {
         m_apu = apu;
         m_dmaCore = dma as AgbDmaController;
         m_apuCore = apu as AgbApu;
+
+        // Only built-in controllers publish every readiness transition. Decorators retain the interface path.
+        // An observer already owned by another bus must not be replaced.
+        if ((timers is AgbTimerController { ClockState: null } timerCore)
+            && (interrupts is AgbInterruptController { ClockState: null } interruptCore)) {
+            timerCore.ObserveClockState(state: m_clockState);
+            interruptCore.ObserveClockState(state: m_clockState);
+        }
 
         cartridge.SetCycleProvider(provider: () => m_scheduler.Now);
 
@@ -206,16 +215,11 @@ public sealed partial class AgbBus : IAgbBus {
     // the overflow events (and must run BEFORE the next-event clamp so an overflow due this span is not overstepped).
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void StepClocks(int n) {
-        if ((n > 0) && !m_timers.HasPendingLatch && m_interrupts.PipelineQuiescent) {
-            m_timers.EnsureScheduled(now: m_scheduler.Now);
-
-            // Most accesses finish before any peripheral event. Keep this path small enough to inline;
-            // equality belongs to the slow path so events still fire before the access returns.
-            if (n < (m_scheduler.NextWhen - m_scheduler.Now)) {
-                m_scheduler.Now += n;
-
-                return;
-            }
+        // Readiness is withdrawn by register writes, latch/IRQ transitions and restore. Equality belongs to
+        // the slow path: an event at the charge's final cycle must fire before the access returns.
+        if ((n > 0) && m_clockState.CanAdvance && (n < (m_scheduler.NextWhen - m_scheduler.Now))) {
+            m_scheduler.Now += n;
+            return;
         }
 
         StepClocksSlow(n: n);

@@ -19,6 +19,12 @@ public sealed partial class AgbInterruptController : IAgbInterruptController {
     private bool m_synchronizer;
     // Derived from the pipeline stages; refresh only when those stages change, not at every bus charge.
     private bool m_pipelineQuiescent = true;
+    internal AgbClockState? ClockState { get; private set; }
+
+    internal void ObserveClockState(AgbClockState state) {
+        ClockState = state;
+        state.SetInterrupts(quiescent: m_pipelineQuiescent);
+    }
 
     /// <inheritdoc/>
     public bool Synchronizer => m_synchronizer;
@@ -27,11 +33,14 @@ public sealed partial class AgbInterruptController : IAgbInterruptController {
     /// <inheritdoc/>
     public bool PipelineQuiescent => m_pipelineQuiescent;
 
-    private void RefreshPipelineQuiescent() => m_pipelineQuiescent =
-        ((m_flag0 == m_flag1)
-        && (m_enable0 == m_enable1)
-        && (m_ime0 == m_ime1)
-        && (m_synchronizer == (m_ime0 && ((m_enable0 & m_flag0 & SourceMask) != 0))));
+    private void RefreshPipelineQuiescent() {
+        m_pipelineQuiescent =
+            ((m_flag0 == m_flag1)
+            && (m_enable0 == m_enable1)
+            && (m_ime0 == m_ime1)
+            && (m_synchronizer == (m_ime0 && ((m_enable0 & m_flag0 & SourceMask) != 0))));
+        ClockState?.SetInterrupts(quiescent: m_pipelineQuiescent);
+    }
 
     /// <inheritdoc/>
     public void StepSync(bool stallingCpu) {

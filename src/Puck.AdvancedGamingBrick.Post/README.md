@@ -26,7 +26,7 @@ check failed. Exit code 2 means infrastructure prevented a stage from running.
 
 | Tier | Coverage | Assets |
 |---|---|---|
-| A | CPU and bus smoke vectors; exhaustive BG/OBJ priority and transparency combinations with window/effect cases; determinism; state round trip; fork determinism; save round trip; bounded queued-host backpressure and immutable frame publication; throughput; zero-alloc-per-frame | none |
+| A | CPU and bus smoke vectors; exhaustive BG/OBJ priority and transparency combinations with window/effect cases; text tile-row sampling; cycle-budget execution parity; determinism; state round trip; fork determinism; save round trip; bounded queued-host backpressure and immutable frame publication; throughput; zero-alloc-per-frame | none; execution-parity IRQ variants additionally use a verified retail BIOS when available |
 | B | conformance CPU/save/misc suites; ARM fuzz corpus; render hashes; accuracy suite; AGS aging cartridge | assets listed below; stages skip when absent |
 | C | deterministic multiplayer cable replay and a commercial link-game replay | synthetic replay needs none; commercial replay needs a retail BIOS and `PUCK_AGB_LINK_GAME` |
 
@@ -79,7 +79,32 @@ masking, transparent backgrounds, priority ties and semi-transparent OBJ.
 The `cartridge-fetch` stage checks wide reads against byte reads at sensor
 overlays, empty and odd-sized ROM boundaries, and cartridge page boundaries.
 
+The `ppu-text-row` stage compares 245,760 pixels with an independent scalar
+memory-image model. It covers 4/8 bpp tiles, all four map sizes and character
+bases, scrolling across tile and screen-block boundaries, flips, transparency,
+palette writes between lines, out-of-range tile data, and mosaic.
+
 ## Determinism diagnostics
+
+`--compare-execution <rom> [--frames N]` compares manual instruction stepping
+with `RunCycles` at every frame-sized budget (600 by default). It compares
+instruction counts, full snapshots, and drained 32 kHz stereo PCM, with the
+same varying key inputs on both machines. The reference uses a forwarding
+timer decorator, which keeps its bus on the interface-driven clock path;
+the candidate uses the built-in controllers' published readiness cache.
+Exit 1 means a mismatch; exit 2 means a missing ROM or invalid frame count.
+Reported execution times exclude state/audio comparisons, alternate which
+machine runs first, and include JIT warm-up and the reference decorator's
+overhead. Use frozen-build fleet benchmarks for performance claims.
+
+The Tier-A `cycle-budget-execution` stage uses the same comparison at zero,
+negative, and irregular positive budgets. Its ARM and Thumb loops cover
+instruction overshoot, and its IWRAM case edits running code, restores an
+earlier snapshot, and replaces executing code through DMA3. With a verified
+retail BIOS, four additional micro-ROMs cover timer IRQs, cascaded timers,
+and interrupt-enable delay. These checks establish execution-path equivalence,
+not independent hardware accuracy. Keep frozen-build snapshot comparisons
+and the external conformance suites as separate evidence.
 
 `--hash-divergence [rom] [--frames N] [--fine] [--perturb-at N]` compares two
 machines and identifies the first differing snapshot section and byte. Use

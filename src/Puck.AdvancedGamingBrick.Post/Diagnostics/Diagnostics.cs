@@ -11,7 +11,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// </summary>
 internal static partial class Diagnostics {
     /// <summary>The BIOS image every machine is built with. Defaults to a zeroed stub; the entry point loads the
-    /// open-source replacement BIOS into it when one is available.</summary>
+    /// configured BIOS into it when one is available.</summary>
     public static ReadOnlyMemory<byte> BiosImage { get; set; } = new byte[ReplacementBios.ImageSize];
 
     /// <summary>The number of suites the menu-driven accuracy suite steps through.</summary>
@@ -25,6 +25,10 @@ internal static partial class Diagnostics {
     /// battery); otherwise <see langword="false"/>.</returns>
     public static bool TryRun(string[] args, out int exitCode) {
         exitCode = 0;
+
+        if (TryCompareExecution(args: args, exitCode: out exitCode)) {
+            return true;
+        }
 
         // --oracle: run the self-authored cycle-oracle probe battery — measured vs documented per probe.
         if (Array.IndexOf(

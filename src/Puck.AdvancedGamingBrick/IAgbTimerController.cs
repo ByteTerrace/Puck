@@ -16,7 +16,7 @@ public interface IAgbTimerController {
 
     /// <summary>Enters event-scheduled mode: anchors every running prescaler timer at <paramref name="now"/> and
     /// queues its next overflow on the scheduler, so a span with no pending latch collapses to a single clock
-    /// advance. Idempotent — a no-op once scheduled. The bus calls this before taking the span-collapse fast path.</summary>
+    /// advance. Idempotent — a no-op once scheduled. The bus establishes this mode before collapsing a span.</summary>
     /// <param name="now">The current absolute master-clock value.</param>
     void EnsureScheduled(long now);
     /// <summary>Leaves event-scheduled mode: materializes every running prescaler timer's closed-form counter into
