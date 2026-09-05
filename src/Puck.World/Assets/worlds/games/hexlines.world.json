@@ -1094,6 +1094,18 @@
         "id": "hexTile-7",
         "parent": "hexTable",
         "position": [
+          0.3,
+          1.305,
+          -0.173205
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-8",
+        "parent": "hexTable",
+        "position": [
           0.4,
           1.305,
           0.0
@@ -1103,7 +1115,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-8",
+        "id": "hexTile-9",
         "parent": "hexTable",
         "position": [
           0.3,
@@ -1115,7 +1127,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-9",
+        "id": "hexTile-10",
         "parent": "hexTable",
         "position": [
           0.2,
@@ -1127,7 +1139,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-10",
+        "id": "hexTile-11",
         "parent": "hexTable",
         "position": [
           0.0,
@@ -1139,7 +1151,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-11",
+        "id": "hexTile-12",
         "parent": "hexTable",
         "position": [
           -0.2,
@@ -1151,7 +1163,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-12",
+        "id": "hexTile-13",
         "parent": "hexTable",
         "position": [
           -0.3,
@@ -1163,7 +1175,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-13",
+        "id": "hexTile-14",
         "parent": "hexTable",
         "position": [
           -0.4,
@@ -1175,7 +1187,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-14",
+        "id": "hexTile-15",
         "parent": "hexTable",
         "position": [
           -0.3,
@@ -1187,7 +1199,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-15",
+        "id": "hexTile-16",
         "parent": "hexTable",
         "position": [
           -0.2,
@@ -1199,7 +1211,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-16",
+        "id": "hexTile-17",
         "parent": "hexTable",
         "position": [
           0.0,
@@ -1211,7 +1223,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-17",
+        "id": "hexTile-18",
         "parent": "hexTable",
         "position": [
           0.2,
@@ -1223,19 +1235,31 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-18",
+        "id": "hexTile-19",
         "parent": "hexTable",
         "position": [
-          0.3,
+          0.4,
           1.305,
-          -0.173205
+          -0.34641
         ],
-        "prototypeId": "hexTileA",
+        "prototypeId": "hexTileC",
         "scale": 1,
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-19",
+        "id": "hexTile-20",
+        "parent": "hexTable",
+        "position": [
+          0.5,
+          1.305,
+          -0.173205
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-21",
         "parent": "hexTable",
         "position": [
           0.6,
@@ -1247,7 +1271,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-20",
+        "id": "hexTile-22",
         "parent": "hexTable",
         "position": [
           0.5,
@@ -1259,7 +1283,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-21",
+        "id": "hexTile-23",
         "parent": "hexTable",
         "position": [
           0.4,
@@ -1271,7 +1295,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-22",
+        "id": "hexTile-24",
         "parent": "hexTable",
         "position": [
           0.3,
@@ -1283,7 +1307,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-23",
+        "id": "hexTile-25",
         "parent": "hexTable",
         "position": [
           0.1,
@@ -1295,7 +1319,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-24",
+        "id": "hexTile-26",
         "parent": "hexTable",
         "position": [
           -0.1,
@@ -1307,7 +1331,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-25",
+        "id": "hexTile-27",
         "parent": "hexTable",
         "position": [
           -0.3,
@@ -1319,7 +1343,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-26",
+        "id": "hexTile-28",
         "parent": "hexTable",
         "position": [
           -0.4,
@@ -1331,7 +1355,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-27",
+        "id": "hexTile-29",
         "parent": "hexTable",
         "position": [
           -0.5,
@@ -1343,7 +1367,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-28",
+        "id": "hexTile-30",
         "parent": "hexTable",
         "position": [
           -0.6,
@@ -1355,7 +1379,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-29",
+        "id": "hexTile-31",
         "parent": "hexTable",
         "position": [
           -0.5,
@@ -1367,7 +1391,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-30",
+        "id": "hexTile-32",
         "parent": "hexTable",
         "position": [
           -0.4,
@@ -1379,7 +1403,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-31",
+        "id": "hexTile-33",
         "parent": "hexTable",
         "position": [
           -0.3,
@@ -1391,7 +1415,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-32",
+        "id": "hexTile-34",
         "parent": "hexTable",
         "position": [
           -0.1,
@@ -1403,7 +1427,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-33",
+        "id": "hexTile-35",
         "parent": "hexTable",
         "position": [
           0.1,
@@ -1415,7 +1439,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-34",
+        "id": "hexTile-36",
         "parent": "hexTable",
         "position": [
           0.3,
@@ -1427,31 +1451,43 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-35",
-        "parent": "hexTable",
-        "position": [
-          0.4,
-          1.305,
-          -0.34641
-        ],
-        "prototypeId": "hexTileC",
-        "scale": 1,
-        "yawDegrees": 0
-      },
-      {
-        "id": "hexTile-36",
+        "id": "hexTile-37",
         "parent": "hexTable",
         "position": [
           0.5,
           1.305,
-          -0.173205
+          -0.519615
         ],
         "prototypeId": "hexTileB",
         "scale": 1,
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-37",
+        "id": "hexTile-38",
+        "parent": "hexTable",
+        "position": [
+          0.6,
+          1.305,
+          -0.34641
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-39",
+        "parent": "hexTable",
+        "position": [
+          0.7,
+          1.305,
+          -0.173205
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-40",
         "parent": "hexTable",
         "position": [
           0.8,
@@ -1463,7 +1499,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-38",
+        "id": "hexTile-41",
         "parent": "hexTable",
         "position": [
           0.7,
@@ -1475,7 +1511,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-39",
+        "id": "hexTile-42",
         "parent": "hexTable",
         "position": [
           0.6,
@@ -1487,7 +1523,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-40",
+        "id": "hexTile-43",
         "parent": "hexTable",
         "position": [
           0.5,
@@ -1499,46 +1535,10 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-41",
-        "parent": "hexTable",
-        "position": [
-          0.4,
-          1.305,
-          0.69282
-        ],
-        "prototypeId": "hexTileC",
-        "scale": 1,
-        "yawDegrees": 0
-      },
-      {
-        "id": "hexTile-42",
-        "parent": "hexTable",
-        "position": [
-          0.2,
-          1.305,
-          0.69282
-        ],
-        "prototypeId": "hexTileB",
-        "scale": 1,
-        "yawDegrees": 0
-      },
-      {
-        "id": "hexTile-43",
-        "parent": "hexTable",
-        "position": [
-          0.0,
-          1.305,
-          0.69282
-        ],
-        "prototypeId": "hexTileA",
-        "scale": 1,
-        "yawDegrees": 0
-      },
-      {
         "id": "hexTile-44",
         "parent": "hexTable",
         "position": [
-          -0.2,
+          0.4,
           1.305,
           0.69282
         ],
@@ -1550,7 +1550,7 @@
         "id": "hexTile-45",
         "parent": "hexTable",
         "position": [
-          -0.4,
+          0.2,
           1.305,
           0.69282
         ],
@@ -1562,6 +1562,42 @@
         "id": "hexTile-46",
         "parent": "hexTable",
         "position": [
+          0.0,
+          1.305,
+          0.69282
+        ],
+        "prototypeId": "hexTileA",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-47",
+        "parent": "hexTable",
+        "position": [
+          -0.2,
+          1.305,
+          0.69282
+        ],
+        "prototypeId": "hexTileC",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-48",
+        "parent": "hexTable",
+        "position": [
+          -0.4,
+          1.305,
+          0.69282
+        ],
+        "prototypeId": "hexTileB",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTile-49",
+        "parent": "hexTable",
+        "position": [
           -0.5,
           1.305,
           0.519615
@@ -1571,7 +1607,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-47",
+        "id": "hexTile-50",
         "parent": "hexTable",
         "position": [
           -0.6,
@@ -1583,7 +1619,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-48",
+        "id": "hexTile-51",
         "parent": "hexTable",
         "position": [
           -0.7,
@@ -1595,7 +1631,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-49",
+        "id": "hexTile-52",
         "parent": "hexTable",
         "position": [
           -0.8,
@@ -1607,7 +1643,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-50",
+        "id": "hexTile-53",
         "parent": "hexTable",
         "position": [
           -0.7,
@@ -1619,7 +1655,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-51",
+        "id": "hexTile-54",
         "parent": "hexTable",
         "position": [
           -0.6,
@@ -1631,7 +1667,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-52",
+        "id": "hexTile-55",
         "parent": "hexTable",
         "position": [
           -0.5,
@@ -1643,7 +1679,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-53",
+        "id": "hexTile-56",
         "parent": "hexTable",
         "position": [
           -0.4,
@@ -1655,7 +1691,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-54",
+        "id": "hexTile-57",
         "parent": "hexTable",
         "position": [
           -0.2,
@@ -1667,7 +1703,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-55",
+        "id": "hexTile-58",
         "parent": "hexTable",
         "position": [
           0.0,
@@ -1679,7 +1715,7 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-56",
+        "id": "hexTile-59",
         "parent": "hexTable",
         "position": [
           0.2,
@@ -1691,48 +1727,12 @@
         "yawDegrees": 0
       },
       {
-        "id": "hexTile-57",
+        "id": "hexTile-60",
         "parent": "hexTable",
         "position": [
           0.4,
           1.305,
           -0.69282
-        ],
-        "prototypeId": "hexTileC",
-        "scale": 1,
-        "yawDegrees": 0
-      },
-      {
-        "id": "hexTile-58",
-        "parent": "hexTable",
-        "position": [
-          0.5,
-          1.305,
-          -0.519615
-        ],
-        "prototypeId": "hexTileB",
-        "scale": 1,
-        "yawDegrees": 0
-      },
-      {
-        "id": "hexTile-59",
-        "parent": "hexTable",
-        "position": [
-          0.6,
-          1.305,
-          -0.34641
-        ],
-        "prototypeId": "hexTileA",
-        "scale": 1,
-        "yawDegrees": 0
-      },
-      {
-        "id": "hexTile-60",
-        "parent": "hexTable",
-        "position": [
-          0.7,
-          1.305,
-          -0.173205
         ],
         "prototypeId": "hexTileC",
         "scale": 1,
