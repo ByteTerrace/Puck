@@ -16,25 +16,35 @@ public static partial class WorldStateTransforms {
         if (row.ClampToEnvelope(writeSet.Value) != writeSet.Value || (row.Kind == CellKind.Bool && writeSet.Value is not (0 or 1))) {
             return Refuse("writeSet writes a value the board row does not admit", out reason);
         }
-        var cells = (row.Cells ?? []).ToList();
-        var position = new Dictionary<CellName, int>(cells.Count);
-        for (var cellIndex = 0; cellIndex < cells.Count; cellIndex++) {
-            position[cells[cellIndex].Key] = cellIndex;
-        }
+        // The new row's cell list is the one allocation; the ordinal-indexed position map is pooled scratch.
+        var existing = (row.Cells ?? []);
         var bits = (ulong)setCell.Value;
-        while (bits != 0UL) {
-            var cell = System.Numerics.BitOperations.TrailingZeroCount(bits);
-            bits &= bits - 1UL;
-            if (cell >= topology.CellCount) {
-                continue;
+        var cells = new List<StateCell>(existing.Count + System.Numerics.BitOperations.PopCount(bits));
+        cells.AddRange(existing);
+        var positionPool = System.Buffers.ArrayPool<int>.Shared.Rent(topology.CellCount);
+        try {
+            var position = positionPool.AsSpan(0, topology.CellCount);
+            position.Fill(-1);
+            for (var cellIndex = 0; cellIndex < cells.Count; cellIndex++) {
+                if (topology.TryCell(cells[cellIndex].Key.Value, out var ordinal)) {
+                    position[ordinal] = cellIndex;
+                }
             }
-            var key = topology.NameOf(cell);
-            if (position.TryGetValue(key, out var existing)) {
-                cells[existing] = cells[existing] with { Value = writeSet.Value };
-            } else {
-                position[key] = cells.Count;
-                cells.Add(new(key, writeSet.Value));
+            while (bits != 0UL) {
+                var cell = System.Numerics.BitOperations.TrailingZeroCount(bits);
+                bits &= bits - 1UL;
+                if (cell >= topology.CellCount) {
+                    continue;
+                }
+                if (position[cell] >= 0) {
+                    cells[position[cell]] = cells[position[cell]] with { Value = writeSet.Value };
+                } else {
+                    position[cell] = cells.Count;
+                    cells.Add(new(topology.NameOf(cell), writeSet.Value));
+                }
             }
+        } finally {
+            System.Buffers.ArrayPool<int>.Shared.Return(positionPool);
         }
         rows[index] = row with { Cells = cells };
         return true;
@@ -96,7 +106,11 @@ public static partial class WorldStateTransforms {
                 default: break;
             }
         }
-        var cells = new List<StateCell>();
+        var written = 0;
+        for (var cell = 0; cell < topology.CellCount; cell++) {
+            written += ((operation == BoardCombineOp.Copy) ? ((left[cell] != board.Empty) ? 1 : 0) : (member[cell] ? 1 : 0));
+        }
+        var cells = new List<StateCell>(written);
         for (var cell = 0; cell < topology.CellCount; cell++) {
             if (operation == BoardCombineOp.Copy) {
                 if (left[cell] != board.Empty) { cells.Add(new(topology.NameOf(cell), left[cell])); }

@@ -180,7 +180,10 @@ mutation per operation: `copy`, `fill`, `clear`, `and`, `or`, `xor`, `andNot`,
 one topology; a cell is a member when its value is not its board's `empty`,
 members are written as `value`, and the rest read as empty. A 19×19 board's
 attack map is three `boardCombine`s where an 8×8's is one expression. The same
-operation travels as the `TransformState` document mutation.
+operation travels as the `TransformState` document mutation. A transform
+composes a new row and one journal entry — that is what a mutation is; the read
+path (operands, expressions, board queries, pattern words) is what allocates
+nothing on the tick.
 Transfers preserve keys and accept
 `Key`, `First`, `Last`, `Random`, or `Slice` selectors; random selection names a
 redrawable integer `streamDraw` site, and `count` (1..256) moves that many
@@ -254,7 +257,12 @@ line of sight or render a tactical UI automatically.
 
 A `patterns` row is a regular language over cell values, compiled once at
 validation into a deterministic table the `$match:<pattern>:<row>[:<direction>]`
-operand runs allocation-free, one indexed step per token: `symbols` name value
+operand runs allocation-free, one indexed step per token (a zone or keyed
+word reads whole, or from the token the operand's `key` names to the end of
+the row — a solitaire column from a card to its top; a pattern's `value`
+expression reads the current token as `$token` and the one before it as
+`$previous`, the absent cell on the first, so "one rank lower in the same
+suit" is `(rank[$token] == rank[$previous] - 1) * (suit[$token] == suit[$previous])`): `symbols` name value
 ranges in the pattern's `kind` (overlaps refine into letters; at most 32
 symbols, 64 letters) and `pattern` is the closed node vocabulary `symbol`,
 `any`, `except`, `empty` (the empty word), `none` (the empty language),

@@ -35,9 +35,10 @@ public sealed partial class WorldServer {
     private long[] m_patternWord = [];
     // The token a pattern value expression is evaluating for; set only for the duration of one word read.
     private string? m_patternTokenKey;
+    private string? m_patternPreviousKey;
     // A zone's cells in pile order read through its attribute row, a history ring oldest push first, or a keyed
     // row's own cells in cell order.
-    private static int ReadWord(WorldStateRow row, WorldStateRow source, ulong tick, Span<long> word) {
+    private static int ReadWord(WorldStateRow row, WorldStateRow source, ulong tick, Span<long> word, string? start) {
         var length = 0;
 
         if (row.EffectiveDomain is StateDomain.Ring history) {
@@ -60,16 +61,19 @@ public sealed partial class WorldServer {
 
     // A zone's tokens in pile order, each read through the pattern's value expression with $token bound to it; an
     // expression that fails on a token reads that letter as zero.
-    private int ReadTupleWord(WorldStateRow row, CompiledExpressionToken[] expression, CellKind kind, ulong tick, Span<long> word) {
+    private int ReadTupleWord(WorldStateRow row, CompiledExpressionToken[] expression, CellKind kind, ulong tick, Span<long> word, string? start) {
         var length = 0;
+        var cells = (row.Cells ?? []);
 
         try {
-            foreach (var cell in (row.Cells ?? [])) {
-                m_patternTokenKey = cell.Key.Value;
+            for (var index = PatternOperand.StartIndex(cells: cells, start: start); index < cells.Count; index++) {
+                m_patternTokenKey = cells[index].Key.Value;
+                m_patternPreviousKey = ((index > 0) ? cells[index - 1].Key.Value : null);
                 word[length++] = TryEvaluateExpression(program: expression, kind: kind, tick: tick, value: out var raw) ? raw : 0L;
             }
         } finally {
             m_patternTokenKey = null;
+            m_patternPreviousKey = null;
         }
 
         return length;
@@ -141,7 +145,7 @@ public sealed partial class WorldServer {
                     if (!WorldRuleCompiler.TryCompilePatternValue(definition: m_definition, pattern: pattern.Source, tokenDomain: zone.Row.Value, ruleName: "world.match", tokens: out var expression, reason: out var valueReason)) {
                         return $"[world.match: {valueReason}]";
                     }
-                    length = ReadTupleWord(row, expression!, pattern.Source.Kind, tick, word);
+                    length = ReadTupleWord(row, expression!, pattern.Source.Kind, tick, word, key);
                 } else {
                     if (row.EffectiveDomain is StateDomain.KeysOf { Ordered: true }) {
                         if (attribute is null || WorldDefinitionRows.FindStateRow(rows: m_definition.State, name: attribute) is not { } attributeRow) {
@@ -149,7 +153,7 @@ public sealed partial class WorldServer {
                         }
                         source = attributeRow;
                     }
-                    length = ReadWord(row, source, tick, word);
+                    length = ReadWord(row, source, tick, word, key);
                 }
 
                 lines.Add(Narrate(pattern, word.AsSpan(0, length)));

@@ -107,8 +107,8 @@ public sealed class WorldRuleCompileContext : RuleCompileContext {
         var kind = tokens[start];
 
         if ((RuleBindingTokens.OfReferenceToken(token: kind) is var bound) && (bound != BoundKey.None)) {
-            if (bound == BoundKey.Token) {
-                throw new RuleException(refusal: RuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"'{channel}' names 'token', which binds a cell key inside a pattern value expression and never a body");
+            if (bound is BoundKey.Token or BoundKey.Previous) {
+                throw new RuleException(refusal: RuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"'{channel}' names '{kind}', which binds a cell key inside a pattern value expression and never a body");
             }
 
             RuleCompiler.RequireBindingInScope(context: this, binding: bound, spelled: kind, ruleName: ruleName, where: $"'{channel}'");

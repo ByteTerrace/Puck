@@ -16,6 +16,7 @@ public sealed class ExpressionFunctionLawTests {
         public CompiledPatterns Patterns => CompiledPatterns.Empty;
         public string? BoundEachKey => null;
         public string? BoundTokenKey { get; set; }
+        public string? BoundPreviousKey { get; set; }
         public bool TableKeyMissing { get; set; }
         public Span<long> PatternWord => [];
         public int BoundIndex(BoundKey key) => -1;

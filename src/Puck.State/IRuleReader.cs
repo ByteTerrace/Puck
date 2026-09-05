@@ -21,6 +21,10 @@ public interface IRuleReader {
     /// <summary>Gets or sets the cell key bound to <see cref="BoundKey.Token"/> — set by a pattern's tuple-word read
     /// for the duration of one token's value expression, <see langword="null"/> otherwise.</summary>
     string? BoundTokenKey { get; set; }
+    /// <summary>Gets or sets the cell key bound to <see cref="BoundKey.Previous"/> — the token before
+    /// <see cref="BoundTokenKey"/> in the word being read, <see langword="null"/> on the first token and outside a
+    /// pattern read.</summary>
+    string? BoundPreviousKey { get; set; }
     /// <summary>Gets or sets a value indicating whether a table read since the last clear named a key its table does
     /// not carry; the enclosing gate or expression evaluation clears it and fails, so a missing entry is a reported
     /// refusal rather than a value.</summary>

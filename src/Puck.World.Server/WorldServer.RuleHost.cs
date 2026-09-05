@@ -18,6 +18,10 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
         get => m_patternTokenKey;
         set => m_patternTokenKey = value;
     }
+    string? IRuleReader.BoundPreviousKey {
+        get => m_patternPreviousKey;
+        set => m_patternPreviousKey = value;
+    }
     bool IRuleReader.TableKeyMissing {
         get => m_tableKeyMissing;
         set => m_tableKeyMissing = value;

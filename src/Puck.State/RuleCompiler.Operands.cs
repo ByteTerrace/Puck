@@ -424,11 +424,21 @@ public static partial class RuleCompiler {
             board = new BoardNeighbourQuery(topology, direction);
             kind = CellKind.Int;
         } else {
-            if (tokens.Length > 4 || key is not null) {
-                throw Invalid("a zone or keyed source takes neither a direction nor a key");
+            if (tokens.Length > 4) {
+                throw Invalid("a zone or keyed source takes no direction");
             }
             if (tokens.Length == 4) {
                 facet = (tokens[3] == "prefix") ? MatchFacet.Prefix : throw Invalid($"'{tokens[3]}' is not a facet for a word source; prefix is");
+            }
+            // A zone or keyed word may start at a token: the key names it (a literal token key, or a live indirection),
+            // and the word is that token and every token after it in row order. A history ring reads whole.
+            if (key is not null && row.EffectiveDomain is StateDomain.Ring) {
+                throw Invalid("a history source takes no key");
+            }
+            if (TryResolveDynamicKey(context: context, key: key, ruleName: ruleName, verb: "match", keyFieldLabel: "key", cell: out var startKey)) {
+                keyFrom = startKey;
+            } else if (key is not null && !CellName.TryParse(candidate: key, name: out _, reason: out _)) {
+                throw Invalid("a word source's key must name the token the word starts at, or use a validated dynamic key");
             }
             if (row.EffectiveDomain is StateDomain.KeysOf { Ordered: true } zone) {
                 if (pattern.Value is not null) {
@@ -436,7 +446,7 @@ public static partial class RuleCompiler {
                         throw Invalid(valueReason);
                     }
                     return new ResolvedOperand(
-                        operand: new PatternOperand(row: tokens[2], key: key, keyFrom: null, stateHandle: ResolveHandle(context: context, name: tokens[2]), pattern: tokens[1], board: null, filterRow: null, filterHandle: default, matchFacet: facet, tokenExpression: tokenExpression),
+                        operand: new PatternOperand(row: tokens[2], key: key, keyFrom: keyFrom, stateHandle: ResolveHandle(context: context, name: tokens[2]), pattern: tokens[1], board: null, filterRow: null, filterHandle: default, matchFacet: facet, tokenExpression: tokenExpression),
                         describe: name
                     );
                 }
@@ -486,14 +496,14 @@ public static partial class RuleCompiler {
         ArgumentNullException.ThrowIfNull(argument: context);
         ArgumentNullException.ThrowIfNull(argument: pattern);
         var scope = context.BindingScope;
-        context.BindingScope = [BoundKey.Token];
+        context.BindingScope = [BoundKey.Token, BoundKey.Previous];
         try {
             tokens = CompileExpression(expression: pattern.Value, kind: pattern.Kind, ruleName: ruleName, verb: $"pattern '{pattern.Name}' value", context: context);
             foreach (var token in tokens) {
-                if (token.Operand is IStateAddressedOperand { KeyFrom: { Binding: BoundKey.Token } } operand &&
+                if (token.Operand is IStateAddressedOperand { KeyFrom: { Binding: BoundKey.Token or BoundKey.Previous } } operand &&
                     (context.FindRow(name: operand.Row) is not { } row || row.EffectiveDomain is not StateDomain.KeysOf tokenKeysOf || tokenKeysOf.Row.Value != tokenDomain)) {
                     tokens = null;
-                    reason = $"pattern '{pattern.Name}' value reads '{operand.Row}' by $token, which must be a row keyed over token domain '{tokenDomain}'";
+                    reason = $"pattern '{pattern.Name}' value reads '{operand.Row}' by $token or $previous, which must be a row keyed over token domain '{tokenDomain}'";
                     return false;
                 }
             }

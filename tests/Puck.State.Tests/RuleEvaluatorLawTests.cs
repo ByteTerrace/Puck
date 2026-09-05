@@ -30,9 +30,10 @@ public sealed class RuleEvaluatorLawTests {
 
         public ulong Tick => Evaluator.Tick;
         public StateCatalog Catalog { get; }
-        public CompiledPatterns Patterns => CompiledPatterns.Empty;
+        public CompiledPatterns Patterns { get; set; } = CompiledPatterns.Empty;
         public string? BoundEachKey => Evaluator.BoundEachKey;
         public string? BoundTokenKey { get; set; }
+        public string? BoundPreviousKey { get; set; }
         public bool TableKeyMissing { get; set; }
         public Span<long> PatternWord => m_patternWord;
         public int BoundIndex(BoundKey key) => Evaluator.BoundIndex(key: key);
@@ -111,6 +112,16 @@ public sealed class RuleEvaluatorLawTests {
         var evaluator = new RuleEvaluator(host: host);
         host.Evaluator = evaluator;
         var context = new RuleCompileContext(section: host, catalog: host.Catalog, tables: null, patterns: null, generators: null, simulationRateHz: 240, vocabulary: RuleVocabulary.Core);
+        return (host, evaluator, RuleCompiler.CompileAll(rules: rules, context: context), new RuleLatch());
+    }
+    private static (HeadlessHost Host, RuleEvaluator Evaluator, CompiledRule[] Rules, RuleLatch Latch) ArrangeWithPatterns(IReadOnlyList<Rule> rules, IReadOnlyList<PatternRow> patterns, params StateRow[] rows) {
+        var host = new HeadlessHost(rows);
+        var errors = new List<string>();
+        Assert.True(CompiledPatterns.TryCompileAll(rows: patterns, patterns: out var compiled, errors: errors), string.Join("; ", errors));
+        host.Patterns = compiled;
+        var evaluator = new RuleEvaluator(host: host);
+        host.Evaluator = evaluator;
+        var context = new RuleCompileContext(section: host, catalog: host.Catalog, tables: null, patterns: patterns, generators: null, simulationRateHz: 240, vocabulary: RuleVocabulary.Core);
         return (host, evaluator, RuleCompiler.CompileAll(rules: rules, context: context), new RuleLatch());
     }
     private static Rule R(string name, ActionPredicate? gate, ActionTriggerMode mode = ActionTriggerMode.Level, string? forEach = null, params ActionEffect[] effects) =>
@@ -241,6 +252,43 @@ public sealed class RuleEvaluatorLawTests {
         Assert.Equal(0, host.Installs);
         Assert.Empty(evaluator.Diagnostics());
         Assert.Contains("skipped (could not move the destination)", evaluator.DescribeTrace(verb: "trace")!, StringComparison.Ordinal);
+    }
+
+    // A solitaire column: a run is legal from a card when every later card is one rank lower in the same suit. The
+    // pattern's value expression reads the current token and the one before it; the word starts at the keyed card.
+    [Fact]
+    public void AZoneWordStartsAtTheKeyedTokenAndItsValueExpressionSeesThePreviousToken() {
+        var run = new PatternRow(
+            Name: CellName.Parse(candidate: "run"),
+            Kind: CellKind.Int,
+            Symbols: [new PatternSymbol(Name: CellName.Parse(candidate: "ok"), Min: 1m, Max: 1m)],
+            Pattern: new PatternNode.Sequence([new PatternNode.AnySymbol(), new PatternNode.Star(new PatternNode.Symbol("ok"))]),
+            Value: Expr(text: "(rank[$token] == rank[$previous] - 1) * (suit[$token] == suit[$previous])")
+        );
+        var rules = new Rule[] {
+            R(name: "fromB", gate: new ActionPredicate.CompareState(State: "$match:run:column:prefix", Comparison: ActionStateComparison.Equal, Value: 2m, Key: "b"), effects: new ActionEffect.SetState(State: "flagB", Value: 1m)),
+            R(name: "fromA", gate: new ActionPredicate.CompareState(State: "$match:run:column:prefix", Comparison: ActionStateComparison.Equal, Value: 3m, Key: "a"), effects: new ActionEffect.SetState(State: "flagA", Value: 1m)),
+            R(name: "fromD", gate: new ActionPredicate.CompareState(State: "$match:run:column", Comparison: ActionStateComparison.Equal, Value: 1m, Key: "d"), effects: new ActionEffect.SetState(State: "flagD", Value: 1m)),
+            R(name: "fromZ", gate: new ActionPredicate.CompareState(State: "$match:run:column", Comparison: ActionStateComparison.Equal, Value: 0m, Key: "zz"), effects: new ActionEffect.SetState(State: "flagZ", Value: 1m)),
+        };
+        var (host, evaluator, compiled, latch) = ArrangeWithPatterns(
+            rules: rules,
+            patterns: [run],
+            rows: [
+                Keyed(name: "cards", cells: [("a", 0L), ("b", 0L), ("c", 0L), ("d", 0L), ("e", 0L)]),
+                Keyed(name: "rank", cells: [("a", 9L), ("b", 8L), ("c", 7L), ("d", 6L), ("e", 5L)]) with { Domain = new StateDomain.KeysOf(CellName.Parse(candidate: "cards")) },
+                Keyed(name: "suit", cells: [("a", 0L), ("b", 0L), ("c", 0L), ("d", 1L), ("e", 1L)]) with { Domain = new StateDomain.KeysOf(CellName.Parse(candidate: "cards")) },
+                new StateRow(Name: CellName.Parse(candidate: "column"), Kind: CellKind.Bool, Capacity: 8, Cells: [.. "abcde".Select(static c => new StateCell(Key: CellName.Parse(candidate: c.ToString())))], Domain: new StateDomain.KeysOf(CellName.Parse(candidate: "cards"), Ordered: true)),
+                Slot(name: "flagA", value: 0L), Slot(name: "flagB", value: 0L), Slot(name: "flagD", value: 0L), Slot(name: "flagZ", value: 0L),
+            ]
+        );
+
+        Assert.True(evaluator.Evaluate(rules: compiled, latch: latch, tick: 1UL, stepTicks: 1UL));
+        Assert.Equal(1L, host.Cell(row: "flagB"));
+        Assert.Equal(1L, host.Cell(row: "flagA"));
+        Assert.Equal(1L, host.Cell(row: "flagD"));
+        Assert.Equal(1L, host.Cell(row: "flagZ"));
+        Assert.Empty(evaluator.Diagnostics());
     }
 
     [Fact]

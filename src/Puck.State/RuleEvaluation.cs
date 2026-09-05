@@ -34,6 +34,10 @@ public static class RuleEvaluation {
         if (indirection.Binding == BoundKey.Token) {
             return reader.BoundTokenKey ?? throw new InvalidOperationException("a $token key was read outside a pattern value expression");
         }
+        if (indirection.Binding == BoundKey.Previous) {
+            // A keyed row holds no slot cell, so the first token's "previous" reads as the absent cell.
+            return reader.BoundPreviousKey ?? StateRow.SlotKey.Value;
+        }
         if ((indirection.Binding == BoundKey.Each) && (reader.BoundEachKey is { } eachKey)) {
             return eachKey;
         }

@@ -412,8 +412,8 @@ public sealed class PhaseOperand : OperandFact {
 /// reads the empty word, which the pattern decides like any other.</summary>
 public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
     /// <param name="row">The source row.</param>
-    /// <param name="key">The literal board-origin cell key, or <see langword="null"/> when <paramref name="keyFrom"/>
-    /// applies or the source is a zone/keyed/history word (no origin cell).</param>
+    /// <param name="key">The literal board-origin cell key, or the token a zone or keyed word starts at; <see langword="null"/>
+    /// when <paramref name="keyFrom"/> applies or the word reads whole.</param>
     /// <param name="keyFrom">The live key indirection, or <see langword="null"/> for a literal <paramref name="key"/>.</param>
     /// <param name="stateHandle">The compiled handle for <paramref name="row"/>.</param>
     /// <param name="pattern">The pattern name.</param>
@@ -438,8 +438,8 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
 
     /// <inheritdoc/>
     public string Row { get; }
-    /// <summary>Gets the literal board-origin cell key, or <see langword="null"/> when <see cref="KeyFrom"/> applies
-    /// or the source needs no origin cell.</summary>
+    /// <summary>Gets the literal board-origin cell key, or the token a zone or keyed word starts at; <see langword="null"/>
+    /// when <see cref="KeyFrom"/> applies or the word reads whole.</summary>
     public string? Key { get; }
     /// <inheritdoc/>
     public CompiledCellRef? KeyFrom { get; }
@@ -535,15 +535,16 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
 
         var source = row;
         int wordLength;
+        var start = (((Key is not null) || (KeyFrom is not null)) ? RuleEvaluation.ResolveKey(reader: reader, key: Key, keyFrom: KeyFrom) : null);
 
         if (TokenExpression is { } tokenExpression) {
-            wordLength = ReadTupleWord(reader: reader, row: row, expression: tokenExpression, kind: pattern.Source.Kind, word: word);
+            wordLength = ReadTupleWord(reader: reader, row: row, expression: tokenExpression, kind: pattern.Source.Kind, word: word, start: start);
         } else {
             if ((row.EffectiveDomain is StateDomain.KeysOf { Ordered: true }) && !StateReader.TryReadHandle(rows: reader.Rows, catalog: reader.Catalog, handle: FilterHandle, key: null, tick: reader.Tick, row: out source, rawValue: out _, text: out _)) {
                 throw new InvalidOperationException($"pattern attribute '{FilterRow}' outlived its compiled row handle");
             }
 
-            wordLength = ReadWord(row: row, source: source, tick: reader.Tick, word: word);
+            wordLength = ReadWord(row: row, source: source, tick: reader.Tick, word: word, start: start);
         }
 
         return (MatchFacet == MatchFacet.Prefix)
@@ -558,7 +559,8 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
     /// <param name="tick">The tick the read answers as of.</param>
     /// <param name="word">The word buffer.</param>
     /// <returns>The word's length.</returns>
-    public static int ReadWord(StateRow row, StateRow source, ulong tick, Span<long> word) {
+    /// <param name="start">The token the word starts at, or <see langword="null"/> to read the whole row.</param>
+    public static int ReadWord(StateRow row, StateRow source, ulong tick, Span<long> word, string? start = null) {
         var length = 0;
 
         if (row.EffectiveDomain is StateDomain.Ring history) {
@@ -571,12 +573,31 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
             return length;
         }
 
-        foreach (var cell in (row.Cells ?? [])) {
-            StateReader.ReadCell(row: source, key: cell.Key.Value, tick: tick, rawValue: out var raw, text: out _);
+        var cells = (row.Cells ?? []);
+        for (var index = StartIndex(cells: cells, start: start); index < cells.Count; index++) {
+            StateReader.ReadCell(row: source, key: cells[index].Key.Value, tick: tick, rawValue: out var raw, text: out _);
             word[length++] = raw ?? 0L;
         }
 
         return length;
+    }
+
+    /// <summary>Returns the index the word starts at: 0 for a whole word, the named token's position, or the row's
+    /// count (an empty word) when the named token is not in the row.</summary>
+    /// <param name="cells">The row's cells.</param>
+    /// <param name="start">The start token's key, or <see langword="null"/>.</param>
+    public static int StartIndex(IReadOnlyList<StateCell> cells, string? start) {
+        if (start is null) {
+            return 0;
+        }
+
+        for (var index = 0; index < cells.Count; index++) {
+            if (string.Equals(a: cells[index].Key.Value, b: start, comparisonType: StringComparison.Ordinal)) {
+                return index;
+            }
+        }
+
+        return cells.Count;
     }
 
     /// <summary>Reads a zone's tokens in pile order, each through the pattern's value expression with <c>$token</c>
@@ -587,16 +608,20 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
     /// <param name="kind">The pattern's kind.</param>
     /// <param name="word">The word buffer.</param>
     /// <returns>The word's length.</returns>
-    public static int ReadTupleWord(IRuleReader reader, StateRow row, CompiledExpressionToken[] expression, CellKind kind, Span<long> word) {
+    /// <param name="start">The token the word starts at, or <see langword="null"/> to read the whole row.</param>
+    public static int ReadTupleWord(IRuleReader reader, StateRow row, CompiledExpressionToken[] expression, CellKind kind, Span<long> word, string? start = null) {
         var length = 0;
+        var cells = (row.Cells ?? []);
 
         try {
-            foreach (var cell in (row.Cells ?? [])) {
-                reader.BoundTokenKey = cell.Key.Value;
+            for (var index = StartIndex(cells: cells, start: start); index < cells.Count; index++) {
+                reader.BoundTokenKey = cells[index].Key.Value;
+                reader.BoundPreviousKey = ((index > 0) ? cells[index - 1].Key.Value : null);
                 word[length++] = RuleEvaluation.TryEvaluateExpression(reader: reader, program: expression, kind: kind, value: out var raw) ? raw : 0L;
             }
         } finally {
             reader.BoundTokenKey = null;
+            reader.BoundPreviousKey = null;
         }
 
         return length;
