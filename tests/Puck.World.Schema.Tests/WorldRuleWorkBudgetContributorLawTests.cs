@@ -28,13 +28,13 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
         Assert.Equal(["wide", "p0", "p1", "narrow", "plain"], lines.Select(line => line.Name));
         Assert.Equal(4096L, lines[0].Multiplier);
         Assert.Equal(lines[0].Multiplier * lines[0].UnitCost, lines[0].WorkUnits);
-        Assert.Equal($"phase.{WorldStateRow.SlotKey}", lines[1].ExclusiveCell);
-        Assert.Equal(1L, lines[2].ExclusiveValue);
-        Assert.Null(lines[0].ExclusiveCell);
+        Assert.Equal([$"phase.{WorldStateRow.SlotKey}=0"], lines[1].Discriminators);
+        Assert.Equal([$"phase.{WorldStateRow.SlotKey}=1"], lines[2].Discriminators);
+        Assert.Empty(lines[0].Discriminators);
 
         // p0 and p1 are exclusive on phase, so the total carries one of them, not both.
-        var unconditional = lines.Where(line => line.ExclusiveCell is null).Sum(line => line.WorkUnits);
-        var exclusive = lines.Where(line => line.ExclusiveCell is not null).Max(line => line.WorkUnits);
+        var unconditional = lines.Where(line => line.Discriminators.Count == 0).Sum(line => line.WorkUnits);
+        var exclusive = lines.Where(line => line.Discriminators.Count > 0).Max(line => line.WorkUnits);
         Assert.Equal(unconditional + exclusive, WorldRuleWorkBudget.Measure(document).WorkUnitsPerTick);
     }
 

@@ -52,6 +52,11 @@ public sealed class WorldExpressionSyntaxLawTests {
         Assert.Equal([S("hp", "$each")], Parse("hp[$each]"));
         Assert.Equal([S("seat-1", "0")], Parse("`seat-1`[0]"));
         Assert.Equal([S("$table:armor:$each"), C(2m), new WorldValueToken.Multiply()], Parse("$table:armor:$each * 2"));
+        Assert.Equal([S("$table:armor:$each")], Parse("$table:armor[$each]"));
+        Assert.Equal([S("$table:moves:power:$bind:move")], Parse("$table:moves:power[$bind:move]"));
+        Assert.Equal([S("$table:moves:power:$cell:turn:move")], Parse("$table:moves:power[$cell:turn:move]"));
+        Assert.Equal([S("$table:armor:7")], Parse("$table:armor[7]"));
+        Assert.Equal("$table:moves:power[$bind:move] + $table:armor[7]", WorldExpressionSyntax.Print([S("$table:moves:power:$bind:move"), S("$table:armor:7"), new WorldValueToken.Add()]));
         Assert.Equal([S("damage"), S("hp"), new WorldValueToken.Min()], Parse("min(damage, hp)"));
         Assert.Equal([S("v"), C(0m), C(10m), new WorldValueToken.Clamp()], Parse("clamp(v, 0, 10)"));
         Assert.Equal([S("v"), C(8m), C(4m), new WorldValueToken.BitField()], Parse("bitField(v, 8, 4)"));
@@ -93,6 +98,7 @@ public sealed class WorldExpressionSyntaxLawTests {
     [InlineData("boardShift($board:mask, board, north) & ~boardImage(m, board, rot180)")]
     [InlineData("clamp(v, 0, 10) >> popCount(m) == 3 ? 0.5 : 1.25")]
     [InlineData("bitInsert(v, f, 8, 4) | parallelBitExtract(v, 0xFF)")]
+    [InlineData("$table:moves:power[$bind:move] * $table:armor[$each]")]
     public void PrintingIsTheInverseOfParsingWithOnlyTheParenthesesPrecedenceNeeds(string text) {
         var tokens = Parse(text);
         var printed = WorldExpressionSyntax.Print(tokens);

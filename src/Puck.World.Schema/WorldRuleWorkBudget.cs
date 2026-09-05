@@ -7,11 +7,11 @@ namespace Puck.World;
 /// carrier or pair count, or 1.</param>
 /// <param name="UnitCost">The cost of one evaluation.</param>
 /// <param name="WorkUnits">The line's total, <see cref="Multiplier"/> times <see cref="UnitCost"/>.</param>
-/// <param name="ExclusiveCell">The <c>row.key</c> cell whose literal value the gate pins, or <see langword="null"/>
-/// when the line sums into the total unconditionally.</param>
-/// <param name="ExclusiveValue">The pinned value; lines pinning the same cell to different values price at their
-/// costliest value rather than their sum.</param>
-public readonly record struct WorldRuleWorkContributor(string Name, bool IsInteraction, long Multiplier, long UnitCost, long WorkUnits, string? ExclusiveCell, long ExclusiveValue);
+/// <param name="Discriminators">The literal cells the gate pins to constants, as <c>row.key=value</c> in cell order;
+/// empty when the line sums into the total unconditionally. Lines pinning the same cell to different values price
+/// at their costliest values rather than their sum, one value more per rule that can write the cell in a tick, and
+/// a line pinning a further cell nests under the lines pinning fewer.</param>
+public readonly record struct WorldRuleWorkContributor(string Name, bool IsInteraction, long Multiplier, long UnitCost, long WorkUnits, IReadOnlyList<string> Discriminators);
 
 /// <summary>The statically derived worst-case rule, interaction, and flock-affinity work admitted for one tick.</summary>
 /// <param name="RuleRows">The authored ordinary-rule count.</param>
@@ -41,7 +41,10 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             }
         }
 
-        var (slots, work) = Tally(contributors: Enumerate(definition: definition, rules: rules, interactions: interactions));
+        var (slots, work) = Tally(
+            contributors: Enumerate(definition: definition, rules: rules, interactions: interactions),
+            writers: CountWriters(definition: definition, rules: rules, interactions: interactions)
+        );
 
         var flockCost = FlockAffinityCost(definition);
         var imagePoints = decisionScales.Count == 0 ? 0 : definition.Population.Capacity;
@@ -92,7 +95,6 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 : 1
             );
             var unit = RuleCost(rule: rule, definition: definition);
-            var exclusive = TryExclusiveGate(rule.Gate, out var cell, out var value);
 
             contributors.Add(item: new WorldRuleWorkContributor(
                 Name: rule.Name,
@@ -100,8 +102,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 Multiplier: multiplier,
                 UnitCost: unit,
                 WorkUnits: SaturatingMultiply(left: multiplier, right: unit),
-                ExclusiveCell: (exclusive ? $"{cell.Row}.{cell.Key}" : null),
-                ExclusiveValue: value
+                Discriminators: Discriminators(gate: rule.Gate)
             ));
         }
 
@@ -118,54 +119,75 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 Multiplier: multiplier,
                 UnitCost: unit,
                 WorkUnits: SaturatingMultiply(left: multiplier, right: unit),
-                ExclusiveCell: null,
-                ExclusiveValue: 0L
+                Discriminators: []
             ));
         }
 
         return contributors;
     }
 
-    // Rules whose gates each require one literal cell to EQUAL a distinct constant can never fire on the same tick:
-    // the sheet charges such a group its most expensive value's rules, not their sum. Rules sharing a value, or
-    // gated on anything else, still sum.
-    private static (long Slots, long Work) Tally(List<WorldRuleWorkContributor> contributors) {
+    // Rules whose gates pin the same literal cells to distinct constants cannot all fire on one tick: the sheet
+    // charges a set of such rules its costliest values rather than their sum. Each line sits at the node of the
+    // trie its pinned cells spell (in cell order, so "phase=1, sub=0" and "sub=0, phase=1" share a node); a node's
+    // worst case is its own lines plus, per further cell its children pin, the costliest child values — one value,
+    // plus one more per rule that can write that cell during the tick, since effects apply immediately and a rule
+    // advancing a phase lets the next phase's rules fire in the same tick. Children pinning different cells are
+    // not exclusive of each other and sum.
+    private static (long Slots, long Work) Tally(List<WorldRuleWorkContributor> contributors, Dictionary<string, long> writers) {
         var slots = 0L;
-        var work = 0L;
-        var exclusive = new Dictionary<string, Dictionary<long, long>>(comparer: StringComparer.Ordinal);
+        var root = new ExclusionNode();
 
         foreach (var contributor in contributors) {
             slots = SaturatingAdd(left: slots, right: contributor.Multiplier);
+            var node = root;
 
-            if (contributor.ExclusiveCell is { } cell) {
-                if (!exclusive.TryGetValue(cell, out var byValue)) {
+            foreach (var discriminator in contributor.Discriminators) {
+                var separator = discriminator.LastIndexOf(value: '=');
+                var cell = discriminator[..separator];
+                var value = long.Parse(s: discriminator.AsSpan(start: separator + 1), provider: System.Globalization.CultureInfo.InvariantCulture);
+
+                if (!node.Children.TryGetValue(cell, out var byValue)) {
                     byValue = [];
-                    exclusive[cell] = byValue;
+                    node.Children[cell] = byValue;
                 }
-                byValue[contributor.ExclusiveValue] = SaturatingAdd(left: byValue.GetValueOrDefault(contributor.ExclusiveValue), right: contributor.WorkUnits);
-            } else {
-                work = SaturatingAdd(left: work, right: contributor.WorkUnits);
+                if (!byValue.TryGetValue(value, out var child)) {
+                    child = new ExclusionNode();
+                    byValue[value] = child;
+                }
+                node = child;
             }
+
+            node.Own = SaturatingAdd(left: node.Own, right: contributor.WorkUnits);
         }
 
-        foreach (var group in exclusive.Values) {
-            var worst = 0L;
-
-            foreach (var sum in group.Values) { worst = Math.Max(worst, sum); }
-
-            work = SaturatingAdd(left: work, right: worst);
-        }
-
-        return (slots, work);
+        return (slots, Worst(node: root, writers: writers));
     }
+    private sealed class ExclusionNode {
+        public long Own { get; set; }
+        public Dictionary<string, Dictionary<long, ExclusionNode>> Children { get; } = new(comparer: StringComparer.Ordinal);
+    }
+    private static long Worst(ExclusionNode node, Dictionary<string, long> writers) {
+        var total = node.Own;
 
-    // A gate that is one literal-keyed state cell compared Equal to a constant, or an All of conjuncts one of which
-    // is: the first such conjunct names the exclusivity group (row, key) and its constant the value.
-    private static bool TryExclusiveGate(CompiledWorldPredicate[] gate, out (string Row, string Key) cell, out long value) {
-        cell = default;
-        value = 0L;
+        foreach (var (cell, byValue) in node.Children) {
+            var worsts = new List<long>(capacity: byValue.Count);
+
+            foreach (var child in byValue.Values) { worsts.Add(item: Worst(node: child, writers: writers)); }
+
+            worsts.Sort(comparison: static (left, right) => right.CompareTo(value: left));
+            var admitted = (int)Math.Min(val1: worsts.Count, val2: SaturatingAdd(left: 1L, right: writers.GetValueOrDefault(cell)));
+
+            for (var index = 0; index < admitted; index++) { total = SaturatingAdd(left: total, right: worsts[index]); }
+        }
+
+        return total;
+    }
+    // Every literal cell the gate pins Equal to a constant, as "row.key=value" in cell order: a single Compare, or the
+    // Compare conjuncts of a top-level All (other conjuncts narrow the gate further and cost nothing here). A cell
+    // pinned twice keeps its first value.
+    private static string[] Discriminators(CompiledWorldPredicate[] gate) {
         if (gate.Length == 0) {
-            return false;
+            return [];
         }
         var last = gate[^1];
         var conjuncts = 0;
@@ -174,22 +196,110 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         } else if (last.Kind == CompiledWorldPredicateKind.All && last.Arity == gate.Length - 1) {
             conjuncts = last.Arity;
         } else {
-            return false;
+            return [];
         }
+        var pinned = new SortedDictionary<string, long>(comparer: StringComparer.Ordinal);
         for (var index = 0; index < conjuncts; index++) {
             var predicate = gate[index];
             if (predicate.Kind != CompiledWorldPredicateKind.Compare) {
-                return false;
+                return [];
             }
             if (predicate.Comparison == Puck.Physics.Motion.ActionStateComparison.Equal && predicate.Comparand is null && predicate.LeftExpression is null &&
                 predicate.Left is { Value: StateCellOperand { Key: { } key, KeyFrom: null } state }) {
-                cell = (state.Row, key);
-                value = predicate.Value;
-                return true;
+                pinned.TryAdd(key: $"{state.Row}.{key}", value: predicate.Value);
             }
         }
-        return false;
+        var result = new string[pinned.Count];
+        var position = 0;
+        foreach (var (cell, value) in pinned) {
+            result[position++] = $"{cell}={value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}";
+        }
+        return result;
     }
+    // How many times per tick each "row.key" cell can be written by a rule, counted per evaluation (a forEach rule
+    // writing a slot once per key writes it capacity times). An effect addressing a row without a literal key — a
+    // "$cell:" indirection, a push, a generate, a transform — counts against every cell of that row.
+    private static Dictionary<string, long> CountWriters(WorldDefinition definition, CompiledWorldRule[] rules, CompiledWorldRule[] interactions) {
+        var byCell = new Dictionary<string, long>(comparer: StringComparer.Ordinal);
+        var byRow = new Dictionary<string, long>(comparer: StringComparer.Ordinal);
+
+        foreach (var rule in rules) {
+            var multiplier = ((rule.ForEach is { } rowName) ? RowCapacity(definition, rowName) : 1L);
+            CountRuleWriters(rule: rule, multiplier: multiplier, byCell: byCell, byRow: byRow);
+        }
+        foreach (var interaction in interactions) {
+            var multiplier = ((interaction.Interaction?.CoOccurrence == WorldInteractionCoOccurrence.Distance)
+                ? ((long)definition.Population.Capacity * Math.Max(val1: 0, val2: (definition.Population.Capacity - 1)))
+                : definition.Population.Capacity
+            );
+            CountRuleWriters(rule: interaction, multiplier: multiplier, byCell: byCell, byRow: byRow);
+        }
+
+        var writers = new Dictionary<string, long>(comparer: StringComparer.Ordinal);
+        foreach (var (cell, count) in byCell) {
+            var row = cell[..cell.LastIndexOf(value: '.')];
+            writers[cell] = SaturatingAdd(left: count, right: byRow.GetValueOrDefault(row));
+        }
+        foreach (var (row, count) in byRow) {
+            foreach (var rule in rules) {
+                foreach (var discriminator in Discriminators(gate: rule.Gate)) {
+                    var cell = discriminator[..discriminator.LastIndexOf(value: '=')];
+                    if (!writers.ContainsKey(key: cell) && string.Equals(a: cell[..cell.LastIndexOf(value: '.')], b: row, comparisonType: StringComparison.Ordinal)) {
+                        writers[cell] = count;
+                    }
+                }
+            }
+        }
+        return writers;
+    }
+    private static void CountRuleWriters(CompiledWorldRule rule, long multiplier, Dictionary<string, long> byCell, Dictionary<string, long> byRow) {
+        CountEffectWriters(effects: rule.Effects, multiplier: multiplier, byCell: byCell, byRow: byRow);
+        if (rule.Decision is { } decision) {
+            CountEffectWriters(effects: decision.OnNoChoice, multiplier: multiplier, byCell: byCell, byRow: byRow);
+            foreach (var option in decision.Options) {
+                CountEffectWriters(effects: option.Effects, multiplier: multiplier, byCell: byCell, byRow: byRow);
+            }
+        }
+    }
+    private static void CountEffectWriters(CompiledWorldEffect[] effects, long multiplier, Dictionary<string, long> byCell, Dictionary<string, long> byRow) {
+        foreach (var effect in effects) {
+            switch (effect.Value) {
+                case TransactionEffect transaction:
+                    CountEffectWriters(effects: transaction.Effects, multiplier: multiplier, byCell: byCell, byRow: byRow);
+                    CountEffectWriters(effects: transaction.OnFailure, multiplier: multiplier, byCell: byCell, byRow: byRow);
+                    break;
+                case IStateWriteEffect write:
+                    Count(write.KeyFrom is null ? byCell : byRow, write.KeyFrom is null ? $"{write.Row}.{write.Key}" : write.Row, multiplier);
+                    break;
+                case RemoveStateCellEffect remove:
+                    Count(remove.KeyFrom is null ? byCell : byRow, remove.KeyFrom is null ? $"{remove.Row}.{remove.Key}" : remove.Row, multiplier);
+                    break;
+                case GenerateEffect generate:
+                    Count(byRow, generate.Row, multiplier);
+                    break;
+                case PushStateEffect push:
+                    Count(byRow, push.Row, multiplier);
+                    break;
+                case TransformStateEffect transform:
+                    foreach (var row in TransformRows(transform.Transform)) { Count(byRow, row, multiplier); }
+                    break;
+            }
+        }
+
+        static void Count(Dictionary<string, long> into, string key, long multiplier) =>
+            into[key] = SaturatingAdd(left: into.GetValueOrDefault(key), right: multiplier);
+    }
+    private static IEnumerable<string> TransformRows(WorldStateTransform transform) => transform switch {
+        WorldStateTransform.Transfer transfer => [transfer.From, transfer.To],
+        WorldStateTransform.SetRay ray => [ray.Row],
+        WorldStateTransform.Shuffle shuffle => [shuffle.Row],
+        WorldStateTransform.SortZone zone => [zone.Row],
+        WorldStateTransform.SortKeyed keyed => [keyed.Row],
+        WorldStateTransform.WriteSet set => [set.Row],
+        WorldStateTransform.Push push => [push.Row],
+        WorldStateTransform.Observe observe => [observe.Row],
+        _ => [],
+    };
     private static long RuleCost(CompiledWorldRule rule, WorldDefinition definition) {
         var cost = SaturatingAdd(1, PredicateCost(rule.Gate, definition));
         foreach (var binding in (rule.Bindings ?? [])) {

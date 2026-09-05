@@ -471,7 +471,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.budget.rules",
-            description: "Lists every rule's and interaction's worst-case work per tick, costliest first (Immediate): world.budget.rules [top]. Each line carries the evaluation multiplier (a forEach row's capacity, an interaction's carrier or pair count), the cost of one evaluation, the line's total, and — when the gate pins a literal cell to a constant — the cell and value it prices exclusively under, so the total world.budget reports can be traced to the lines that make it up.",
+            description: "Lists every rule's and interaction's worst-case work per tick, costliest first (Immediate): world.budget.rules [top]. Each line carries the evaluation multiplier (a forEach row's capacity, an interaction's carrier or pair count), the cost of one evaluation, the line's total, and — when the gate pins literal cells to constants — the cells and values it prices exclusively under, so the total world.budget reports can be traced to the lines that make it up.",
             handler: (context, args) => {
                 if (!authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.budget.rules")) {
                     return error;
@@ -485,7 +485,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 var output = new List<string>(capacity: shown + 1) { $"[world.budget.rules: {lines.Count} line(s), showing {shown}]" };
                 for (var index = 0; index < shown; index++) {
                     var line = lines[index];
-                    output.Add(item: $"[world.budget.rules {line.Name}{(line.IsInteraction ? " interaction" : string.Empty)} x{line.Multiplier} unit={line.UnitCost} work={line.WorkUnits}{((line.ExclusiveCell is { } cell) ? $" exclusive {cell}={line.ExclusiveValue}" : string.Empty)}]");
+                    output.Add(item: $"[world.budget.rules {line.Name}{(line.IsInteraction ? " interaction" : string.Empty)} x{line.Multiplier} unit={line.UnitCost} work={line.WorkUnits}{((line.Discriminators.Count > 0) ? $" exclusive {string.Join(separator: ",", values: line.Discriminators)}" : string.Empty)}]");
                 }
                 return new CommandResult(Output: string.Join(separator: Environment.NewLine, values: output));
             },
