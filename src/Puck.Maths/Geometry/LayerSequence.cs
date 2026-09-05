@@ -20,8 +20,9 @@ public readonly record struct LayerProjection(long Layer, long Overflow, long De
 /// <para>
 /// Layer <c>n</c> (for <c>n ≥ 1</c>) holds <c>Start + (n − 1)·Step</c> indices, so the total through layer <c>n</c>
 /// is the quadratic <c>Count(n) = Seed + Start·n + Step·n·(n − 1)/2</c> — the generalized figurate numbers.
-/// <see cref="LayerOf(long)"/> inverts that closed form with an <see cref="Int128"/> discriminant, an exact
-/// integer square root, and a floor division. The square root may use a hardware floating-point seed followed
+/// <see cref="LayerOf(long)"/> reduces square and scaled triangular sequences to unsigned 64-bit arithmetic;
+/// other shapes use an <see cref="Int128"/> discriminant and floor division. Both use an exact
+/// integer square root. The square root may use a hardware floating-point seed followed
 /// by exact integer correction; the final result is deterministic on every platform.
 /// </para>
 /// <para>
@@ -87,6 +88,29 @@ public readonly record struct LayerSequence {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private Int128 CountUnchecked(Int128 layerCount) =>
         ((((Int128)Seed) + (((Int128)Start) * layerCount)) + (((Int128)Step) * ((layerCount * (layerCount - Int128.One)) / 2)));
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private long CountBeforeLayer(long layer) {
+        if (Step == 0L) { return (Seed + ((layer - 1L) * Start)); }
+
+        if ((Start == Step) && (Step > 0L)) {
+            // This is the prefix before an already located index, hence the scaled result fits long.
+            // layer<=2^32, so even the unhalved product fits ulong.
+            var n = ((ulong)layer);
+
+            return (Seed + ((long)(((n * (n - 1UL)) >> 1) * ((ulong)Start))));
+        }
+
+        if ((Start == 1L) && (Step == 2L)) {
+            var n = (layer - 1L);
+
+            return (Seed + (n * n));
+        }
+
+        return CountBeforeGeneralLayer(layer: layer);
+    }
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private long CountBeforeGeneralLayer(long layer) => ((long)CountUnchecked(layerCount: (layer - 1L)));
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private long LocateLayer(long index) {
         if (0L == Step) {
             // Start >= 1 here: a bounded flat sequence never reaches this path. The containing layer itself must
@@ -94,6 +118,34 @@ public readonly record struct LayerSequence {
             return checked((1L + ((index - Seed) / Start)));
         }
 
+        if ((Start == Step) && (Step > 0L)) {
+            // Count(n) = Seed + Start*T(n). Divide out Start before taking a root, so even
+            // the largest coefficients and indices never need a 128-bit discriminant here.
+            var triangularIndex = (((ulong)(index - Seed)) / ((ulong)Start));
+
+            return LocateTriangular(index: triangularIndex);
+        }
+
+        if ((Start == 1L) && (Step == 2L)) {
+            return (((long)((ulong)(index - Seed)).SquareRoot()) + 1L);
+        }
+
+        return LocateGeneralLayer(index: index);
+    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static long LocateTriangular(ulong index) {
+        if (index <= (ulong.MaxValue >> 3)) {
+            return ((long)(((((index << 3) | 1UL).SquareRoot()) + 1UL) >> 1));
+        }
+
+        // Here index <= long.MaxValue. Let s=floor(sqrt(2*index)); the largest n with
+        // T(n)<=index is s or s-1. Also s<=2^32-1, so s*(s+1) fits ulong exactly.
+        var root = (index << 1).SquareRoot();
+
+        return ((long)(root + ((((root * (root + 1UL)) >> 1) <= index) ? 1UL : 0UL)));
+    }
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private long LocateGeneralLayer(long index) {
         var b = ((2 * ((Int128)Start)) - Step);
         var discriminant = ((b * b) + ((((Int128)Step) * (index - Seed)) * 8)); // non-negative for every in-range index
         Int128 layer;
@@ -125,6 +177,7 @@ public readonly record struct LayerSequence {
 
         return (((long)layer) + 1L);
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ThrowIfOutOfRange(long index) {
         if (0L > index) {
             throw new ArgumentOutOfRangeException(
@@ -134,7 +187,7 @@ public readonly record struct LayerSequence {
         }
 
         if (
-            (index >= Seed) &&
+            (Step <= 0L) && (index >= Seed) &&
             (CapacityLimit <= index)
         ) {
             throw new ArgumentOutOfRangeException(
@@ -235,11 +288,13 @@ public readonly record struct LayerSequence {
     /// <exception cref="OverflowException">The containing layer exceeds <see cref="long.MaxValue"/>.</exception>
     /// <remarks>
     /// Inverts the quadratic prefix sum directly: the largest <c>n</c> with <c>Count(n) ≤ x</c> is
-    /// <c>⌊(√((2·Start − Step)² + 8·Step·(x − Seed)) − (2·Start − Step)) / (2·Step)⌋</c>, evaluated entirely in
-    /// integer arithmetic. With the exact floor square root the division floors exactly for a positive
+    /// <c>⌊(√((2·Start − Step)² + 8·Step·(x − Seed)) − (2·Start − Step)) / (2·Step)⌋</c>, evaluated with an
+    /// exact integer square root and division. With the floor square root the division floors exactly for a positive
     /// <see cref="Step"/>; a negative <see cref="Step"/> can land one layer high and settles with a single
-    /// comparison — both verified by exhaustive sweeps against an incremental reference.
+    /// comparison — both verified by exhaustive sweeps against an incremental reference. Square and scaled
+    /// triangular sequences simplify the equation first, avoiding the general discriminant and floor division.
     /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public long LayerOf(long index) {
         ThrowIfOutOfRange(index: index);
 
@@ -285,6 +340,7 @@ public readonly record struct LayerSequence {
     /// <returns>The containing layer and the zero-based offset of <paramref name="index"/> from that layer's first index.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is negative, or lies beyond the capacity of a bounded sequence.</exception>
     /// <exception cref="OverflowException">The containing layer exceeds <see cref="long.MaxValue"/>.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public LayerLocation Locate(long index) {
         ThrowIfOutOfRange(index: index);
 
@@ -299,7 +355,7 @@ public readonly record struct LayerSequence {
 
         return new LayerLocation(
             Layer: layer,
-            Offset: (index - ((long)CountUnchecked(layerCount: (layer - 1L))))
+            Offset: (index - CountBeforeLayer(layer: layer))
         );
     }
     /// <summary>Creates the polygonal (corner-expanding) sequence for a polygon with <paramref name="sides"/> sides: layer sizes <c>1, k − 1, 2·(k − 2) + 1, …</c> growing by <c>k − 2</c>.</summary>

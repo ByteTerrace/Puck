@@ -661,11 +661,17 @@ public sealed class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeSwitchabl
         if (m_supportsColor) {
             // A Color register switches cleanly, so nothing is ever in transition on it; only the instant moves. The
             // monochrome palettes reach the display a machine cycle's worth of pins ahead of the write, and from
-            // revision D one T-cycle earlier still.
-            return ((address is (MemoryMap.BackgroundPalette or MemoryMap.ObjectPalette0 or MemoryMap.ObjectPalette1))
-                ? (m_samplesPaletteEarly
+            // revision D one T-cycle earlier still. Under double speed the horizontal scroll register joins them, on
+            // the same two-T-cycle phase monochrome silicon gives it at either speed (SameBoy's
+            // cgb_double_conflict_map, Core/sm83_cpu.c).
+            if (address is (MemoryMap.BackgroundPalette or MemoryMap.ObjectPalette0 or MemoryMap.ObjectPalette1)) {
+                return (m_samplesPaletteEarly
                     ? -2
-                    : -1)
+                    : -1);
+            }
+
+            return (((address == MemoryMap.ScrollX) && m_key1.IsDoubleSpeed)
+                ? -2
                 : 0);
         }
 

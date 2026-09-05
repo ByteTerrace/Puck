@@ -830,7 +830,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the envelope is DERIVED from the kernel's own arithmetic, never fitted to an observation. The reduction constant is c = round(2^64/2pi), so |c - 2^64/2pi| <= 1/2; the kernel forms u*c exactly and reads the fractional turn off bit sixteen upward, which makes the phase error at most u/2^81 turns, that is 2*pi*u/2^81 radians. Neither sine nor cosine moves faster than one per radian, so the value error that phase implies is at most 2^16 * 2*pi*u/2^81 raw = pi*u/2^64, reaching pi at the top of the unsigned width. TransformKernelClaims.SinCosRawEnvelope evaluates exactly that in integers, with 355/113 standing in for pi as a strict OVERESTIMATE and the quotient taken as a CEILING, plus a flat two raw for the Q60 polynomial's own 0.51 ULP and the Q60-to-Q16 narrowing's half. ENVELOPE: an inequality, not a bit contract - it pins the reduction and the polynomial to within the stated raws and says nothing finer. Measured slack over the swept stream is two raw at every regime, so the bound bites rather than waving through",
+        "Subject": "Coarse integer-ULP envelope derived from Q96 reciprocal error: pi*u/2^96 raw Q16 units, using the strict upper bound 355/113 and a ceiling, plus two raw for kernel narrowing and the angle-addition reference's interval products. ENVELOPE: this companion gate is deliberately coarser than scalar.trigonometry-seams, which checks 0.50000001 raw Q16 ULP directly at unsigned extremes.",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -841,7 +841,7 @@
         "Flavor": "FusedSubstrate",
         "Subject": "FixedQ4816.SinCosRaw at every swept angle BELOW the 2^63 seam",
         "Against": "FixedQ4816.SinCos of the same raw, BIT-FOR-BIT at both lanes",
-        "Shared": "FixedQ4816.SinCosFromTurns - the IDENTICAL private member, not a sibling copy - together with the single Q64 reduction constant SinCosInvTwoPiQ64 and therefore the whole polynomial. What is NOT shared is the product that feeds it: SinCos takes Math.BigMul of two signed longs and reassembles the shifted low and high words, while SinCosRaw forms one UInt128 product of an unsigned angle. Agreement therefore proves the widening is FAITHFUL - that the unsigned overload is the same map extended, not a second approximation that may drift - and proves nothing whatever about the polynomial, which legs 1 and 2 pin",
+        "Shared": "Identical SinCosFromTurns, Q96 reciprocal constant and Q60 table/correction kernel. SinCos reduces a signed magnitude then re-signs; SinCosRaw uses the full unsigned magnitude. Agreement checks the extension across widths, while the independent interval legs check arithmetic.",
         "Citation": "",
         "Absolute": ""
       },

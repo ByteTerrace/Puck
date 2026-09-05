@@ -1,8 +1,10 @@
+using System.Numerics;
+
 namespace Puck.Maths;
 
 /// <summary>
 /// A cached twiddle-factor table for one power-of-two transform length, built once from
-/// <see cref="FixedQ4816.SinCos"/> and reused across every <see cref="FixedFourierTransform.Forward"/>,
+/// <see cref="FixedQ4816.SinCosTurns"/> and reused across every <see cref="FixedFourierTransform.Forward"/>,
 /// <see cref="FixedFourierTransform.Inverse"/> and <see cref="FixedFourierTransform.Convolve"/> call at that length.
 /// Building the plan is the only place the transform allocates.
 /// </summary>
@@ -19,11 +21,9 @@ public sealed class FixedFourierTransformPlan {
     /// <summary>Builds the twiddle table for a transform length.</summary>
     /// <param name="length">The transform length; must be a positive power of two.</param>
     /// <returns>The plan.</returns>
-    /// <remarks>Each forward twiddle is <c>FixedComplex.FromAngle(FromDouble(-2*pi*k/length))</c> — an independent
-    /// <see cref="FixedQ4816.SinCos"/> call per entry rather than an incrementally multiplied ladder, so each
-    /// twiddle's error stays at <see cref="FixedQ4816.SinCos"/>'s own bound instead of compounding over the table.
-    /// The double-precision angle is the deterministic authoring boundary <see cref="FixedQ4816.FromDouble"/>
-    /// documents: IEEE-754 multiply and divide are correctly rounded, so the same table is built on every machine.
+    /// <remarks>Forward twiddles represent <c>exp(-2*pi*i*k/length)</c>. Power-of-two lengths have exact binary turn
+    /// fractions, evaluated directly by <see cref="FixedQ4816.SinCosTurns"/> without quantizing radians. The second
+    /// quarter is reflected from the first, so no error compounds across the table.
     /// Inverse twiddles are the exact conjugates of the forward ones — no second table generator.</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is not a positive power of two.</exception>
     public static FixedFourierTransformPlan Create(int length) {
@@ -35,12 +35,19 @@ public sealed class FixedFourierTransformPlan {
         var half = (length >> 1);
         var forward = new FixedComplex[half];
         var inverse = new FixedComplex[half];
-        var turn = ((-2.0 * Math.PI) / length);
+        var phaseShift = (64 - BitOperations.Log2((uint)length));
 
         for (var k = 0; (k < half); ++k) {
-            var angle = FixedQ4816.FromDouble(value: (turn * k));
-
-            forward[k] = FixedComplex.FromAngle(angle: angle);
+            if (k <= (length >> 2)) {
+                // length == 1 has no twiddles and never executes the otherwise masked shift by 64.
+                var phase = unchecked((0UL - (ulong)k) << phaseShift);
+                var (sin, cos) = FixedQ4816.SinCosTurns(fractionalTurns: phase);
+                forward[k] = new(Real: cos, Imaginary: sin);
+            }
+            else {
+                var reflected = forward[half - k];
+                forward[k] = new(Real: -reflected.Real, Imaginary: reflected.Imaginary);
+            }
             inverse[k] = forward[k].Conjugate();
         }
 

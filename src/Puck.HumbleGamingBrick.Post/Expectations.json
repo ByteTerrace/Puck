@@ -28146,9 +28146,7 @@
     "Model": "CgbE",
     "Probe": "screenshot",
     "RomHash": "0d35a46c0c089dbf",
-    "Outcome": "fail",
-    "Reason": "8 differing pixel(s) against scx_during_m3_ds_1_cgb04c.png after 15 frames",
-    "DiffPixels": 8,
+    "Outcome": "pass",
     "ExpectedImageHash": "8626246d2f7493c2"
   },
   {
@@ -28157,9 +28155,7 @@
     "Model": "CgbE",
     "Probe": "screenshot",
     "RomHash": "2d1655a1db0a716f",
-    "Outcome": "fail",
-    "Reason": "1144 differing pixel(s) against scx_during_m3_ds_2_cgb04c.png after 15 frames",
-    "DiffPixels": 1144,
+    "Outcome": "pass",
     "ExpectedImageHash": "9520821f1bbda1b9"
   },
   {
@@ -28347,8 +28343,8 @@
     "Probe": "screenshot",
     "RomHash": "abf55062a25f1345",
     "Outcome": "fail",
-    "Reason": "8933 differing pixel(s) against scx_during_m3_ds_1_cgb04c.png after 15 frames",
-    "DiffPixels": 8933,
+    "Reason": "8928 differing pixel(s) against scx_during_m3_ds_1_cgb04c.png after 15 frames",
+    "DiffPixels": 8928,
     "ExpectedImageHash": "b4f8d3eb38f58b4c"
   },
   {
@@ -28358,8 +28354,8 @@
     "Probe": "screenshot",
     "RomHash": "2647496155a25a95",
     "Outcome": "fail",
-    "Reason": "9581 differing pixel(s) against scx_during_m3_ds_2_cgb04c.png after 15 frames",
-    "DiffPixels": 9581,
+    "Reason": "8866 differing pixel(s) against scx_during_m3_ds_2_cgb04c.png after 15 frames",
+    "DiffPixels": 8866,
     "ExpectedImageHash": "408be2a136d4197a"
   },
   {
@@ -28551,8 +28547,8 @@
     "Probe": "screenshot",
     "RomHash": "28b0b0e50b90f7db",
     "Outcome": "fail",
-    "Reason": "14403 differing pixel(s) against scx_during_m3_ds_1_cgb04c.png after 15 frames",
-    "DiffPixels": 14403,
+    "Reason": "14400 differing pixel(s) against scx_during_m3_ds_1_cgb04c.png after 15 frames",
+    "DiffPixels": 14400,
     "ExpectedImageHash": "8626246d2f7493c2"
   },
   {
@@ -28562,8 +28558,8 @@
     "Probe": "screenshot",
     "RomHash": "40ff377e133266df",
     "Outcome": "fail",
-    "Reason": "14833 differing pixel(s) against scx_during_m3_ds_2_cgb04c.png after 15 frames",
-    "DiffPixels": 14833,
+    "Reason": "14404 differing pixel(s) against scx_during_m3_ds_2_cgb04c.png after 15 frames",
+    "DiffPixels": 14404,
     "ExpectedImageHash": "c7933266d43d348e"
   },
   {
@@ -28748,9 +28744,7 @@
     "Model": "CgbE",
     "Probe": "screenshot",
     "RomHash": "8a8f45d967296389",
-    "Outcome": "fail",
-    "Reason": "5 differing pixel(s) against scx_during_m3_ds_1_cgb04c.png after 15 frames",
-    "DiffPixels": 5,
+    "Outcome": "pass",
     "ExpectedImageHash": "b4f8d3eb38f58b4c"
   },
   {
@@ -28759,9 +28753,7 @@
     "Model": "CgbE",
     "Probe": "screenshot",
     "RomHash": "ea15caba24f1eb5d",
-    "Outcome": "fail",
-    "Reason": "715 differing pixel(s) against scx_during_m3_ds_2_cgb04c.png after 15 frames",
-    "DiffPixels": 715,
+    "Outcome": "pass",
     "ExpectedImageHash": "57f0f6b71738aa86"
   },
   {
@@ -28953,8 +28945,8 @@
     "Probe": "screenshot",
     "RomHash": "79b003d91fc15759",
     "Outcome": "fail",
-    "Reason": "11810 differing pixel(s) against scx_during_m3_ds_1_cgb04c.png after 15 frames",
-    "DiffPixels": 11810,
+    "Reason": "11808 differing pixel(s) against scx_during_m3_ds_1_cgb04c.png after 15 frames",
+    "DiffPixels": 11808,
     "ExpectedImageHash": "7ac8088a2700bc98"
   },
   {
@@ -28964,8 +28956,8 @@
     "Probe": "screenshot",
     "RomHash": "d29aea44aff638ad",
     "Outcome": "fail",
-    "Reason": "12096 differing pixel(s) against scx_during_m3_ds_2_cgb04c.png after 15 frames",
-    "DiffPixels": 12096,
+    "Reason": "11810 differing pixel(s) against scx_during_m3_ds_2_cgb04c.png after 15 frames",
+    "DiffPixels": 11810,
     "ExpectedImageHash": "24d4904451c43cac"
   },
   {
@@ -29268,8 +29260,8 @@
     "Probe": "screenshot",
     "RomHash": "425da39625417ff8",
     "Outcome": "fail",
-    "Reason": "8 differing pixel(s) against scx_attrib_during_m3_spx2_ds_cgb04c.png after 15 frames",
-    "DiffPixels": 8,
+    "Reason": "16 differing pixel(s) against scx_attrib_during_m3_spx2_ds_cgb04c.png after 15 frames",
+    "DiffPixels": 16,
     "ExpectedImageHash": "a5a8f3465608c19e"
   },
   {
@@ -29337,8 +29329,8 @@
     "Probe": "screenshot",
     "RomHash": "5026e4fade64cede",
     "Outcome": "fail",
-    "Reason": "8 differing pixel(s) against scx_during_m3_spx2_ds_cgb04c.png after 15 frames",
-    "DiffPixels": 8,
+    "Reason": "16 differing pixel(s) against scx_during_m3_spx2_ds_cgb04c.png after 15 frames",
+    "DiffPixels": 16,
     "ExpectedImageHash": "965ec11cc1074b5f"
   },
   {

@@ -5054,7 +5054,8 @@
       "State": "covered",
       "CoveredBy": [
         "dct.constant-and-impulse-exact",
-        "dct.length-refusals"
+        "dct.length-refusals",
+        "scalar.trigonometry-twiddles"
       ]
     },
     {
@@ -5304,7 +5305,8 @@
       "State": "covered",
       "CoveredBy": [
         "fft.impulse-dc-nyquist-exact",
-        "fft.length-refusals"
+        "fft.length-refusals",
+        "scalar.trigonometry-twiddles"
       ]
     },
     {
@@ -6980,7 +6982,9 @@
       "State": "covered",
       "CoveredBy": [
         "deep.fixed-transcendental-envelope",
-        "scalar.sincos-vs-series"
+        "scalar.sincos-vs-series",
+        "scalar.trigonometry-constants",
+        "scalar.trigonometry-seams"
       ]
     },
     {
@@ -7363,7 +7367,9 @@
       "State": "covered",
       "CoveredBy": [
         "deep.fixed-transcendental-envelope",
-        "scalar.sincos-vs-series"
+        "scalar.sincos-vs-series",
+        "scalar.trigonometry-constants",
+        "scalar.trigonometry-seams"
       ]
     },
     {
@@ -7372,7 +7378,19 @@
       "CoveredBy": [
         "deep.fixed-transcendental-envelope",
         "quaternion.sincos-raw-full-unsigned-width",
-        "scalar.sincos-vs-series"
+        "scalar.sincos-vs-series",
+        "scalar.trigonometry-constants",
+        "scalar.trigonometry-seams"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedQ4816.SinCosTurns(System.UInt64)",
+      "State": "covered",
+      "CoveredBy": [
+        "scalar.trigonometry-constants",
+        "scalar.trigonometry-seams",
+        "scalar.trigonometry-turns",
+        "scalar.trigonometry-turns-deep"
       ]
     },
     {
@@ -11431,7 +11449,8 @@
       "Id": "Puck.Maths.LayerSequence.LayerOf(System.Int64)",
       "State": "covered",
       "CoveredBy": [
-        "core.layer-sequence-walker-and-bounded-horizon"
+        "core.layer-sequence-walker-and-bounded-horizon",
+        "integer.layer-sequence-full-range"
       ]
     },
     {
@@ -11453,7 +11472,8 @@
       "Id": "Puck.Maths.LayerSequence.Locate(System.Int64)",
       "State": "covered",
       "CoveredBy": [
-        "core.layer-sequence-walker-and-bounded-horizon"
+        "core.layer-sequence-walker-and-bounded-horizon",
+        "integer.layer-sequence-full-range"
       ]
     },
     {
@@ -11471,7 +11491,8 @@
       "Id": "Puck.Maths.LayerSequence.Project(System.Int64)",
       "State": "covered",
       "CoveredBy": [
-        "core.layer-sequence-walker-and-bounded-horizon"
+        "core.layer-sequence-walker-and-bounded-horizon",
+        "integer.layer-sequence-full-range"
       ]
     },
     {
@@ -20918,6 +20939,334 @@
         "presented.smith-certificate-remultiplies",
         "presented.smith-growth-refuses",
         "presented.smith-remultiplies-at-scale"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareCoordinate..ctor(System.Int32,System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-coordinate",
+        "integer.square-grid-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareCoordinate.AdditiveIdentity",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-coordinate",
+        "integer.square-grid-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareCoordinate.Direction(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-coordinate",
+        "integer.square-grid-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareCoordinate.Distance(Puck.Maths.SquareCoordinate,Puck.Maths.SquareCoordinate)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-coordinate",
+        "integer.square-grid-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareCoordinate.Length",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-coordinate",
+        "integer.square-grid-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareCoordinate.MultiplicativeIdentity",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-coordinate",
+        "integer.square-grid-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareCoordinate.Neighbor(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-coordinate",
+        "integer.square-grid-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareCoordinate.NeighborCount",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-coordinate",
+        "integer.square-grid-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareCoordinate.Norm",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-coordinate",
+        "integer.square-grid-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareCoordinate.Radius",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-coordinate",
+        "integer.square-grid-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareCoordinate.RotatedLeft()",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-coordinate",
+        "integer.square-grid-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareCoordinate.RotatedRight()",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-coordinate",
+        "integer.square-grid-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareCoordinate.Round(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-coordinate",
+        "integer.square-grid-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareCoordinate.X",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-coordinate",
+        "integer.square-grid-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareCoordinate.Y",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-coordinate",
+        "integer.square-grid-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareCoordinate.op_Addition(Puck.Maths.SquareCoordinate,Puck.Maths.SquareCoordinate)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-coordinate",
+        "integer.square-grid-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareCoordinate.op_Multiply(Puck.Maths.SquareCoordinate,Puck.Maths.SquareCoordinate)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-coordinate",
+        "integer.square-grid-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareCoordinate.op_Multiply(Puck.Maths.SquareCoordinate,System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-coordinate",
+        "integer.square-grid-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareCoordinate.op_Subtraction(Puck.Maths.SquareCoordinate,Puck.Maths.SquareCoordinate)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-coordinate",
+        "integer.square-grid-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareCoordinate.op_UnaryNegation(Puck.Maths.SquareCoordinate)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-coordinate",
+        "integer.square-grid-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex..ctor(System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex.AdditiveIdentity",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex.Conjugate()",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex.Distance(Puck.Maths.SquareIndex,Puck.Maths.SquareIndex)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex.FromCoordinate(Puck.Maths.SquareCoordinate)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex.MaxRadius",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex.MaxValue",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex.MultiplicativeIdentity",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex.Neighbor(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex.Norm",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex.Radius",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex.Rotate(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex.Scale(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex.Swap()",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex.ToCoordinate()",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex.Translate(Puck.Maths.SquareCoordinate)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex.Value",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex.op_Addition(Puck.Maths.SquareIndex,Puck.Maths.SquareIndex)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex.op_Multiply(Puck.Maths.SquareIndex,Puck.Maths.SquareIndex)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex.op_Subtraction(Puck.Maths.SquareIndex,Puck.Maths.SquareIndex)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.SquareIndex.op_UnaryNegation(Puck.Maths.SquareIndex)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.square-grid-boundaries",
+        "integer.square-index"
       ]
     },
     {

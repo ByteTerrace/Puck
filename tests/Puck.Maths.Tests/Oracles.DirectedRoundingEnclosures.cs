@@ -608,13 +608,16 @@ internal static partial class Oracles {
     /// <remarks>Route: reduce IN RADIANS against <see cref="Pi"/> — <c>n = round(θ / 2π)</c>, residual
     /// <c>r = θ − n·2π ∈ [−π, π]</c> carried at three hundred and eighty-four working bits so the up-to-forty-five-bit
     /// cancellation of a full-range angle is absorbed — then the alternating Taylor series for sine and cosine, whose
-    /// remainder after thirty terms is bounded by <c>|r|^61/61!</c>. The subject reduces in TURNS against a single Q64
-    /// reciprocal constant and evaluates a seven-term Q60 polynomial after a half-turn fold; neither the reduction
-    /// domain, the constant, nor the polynomial is shared.</remarks>
-    public static (Enclosure Sin, Enclosure Cos) EncloseSinCos(long raw, int guardBitCount) {
+    /// remainder after thirty terms is bounded by <c>|r|^61/61!</c>. The subject uses Q96 turn reduction and a Q60
+    /// quarter-wave table with a local correction; no production constants or evaluation kernel are shared.</remarks>
+    public static (Enclosure Sin, Enclosure Cos) EncloseSinCos(long raw, int guardBitCount) =>
+        EncloseSinCosScaled(raw: raw, fractionBitCount: 16, guardBitCount: guardBitCount);
+
+    /// <summary>Encloses sine and cosine of the exact dyadic radian angle, including unsigned Q16 and signed Q17/Q32.</summary>
+    public static (Enclosure Sin, Enclosure Cos) EncloseSinCosScaled(BigInteger raw, int fractionBitCount, int guardBitCount) {
         var circle = Pi(bitCount: AngleBitCount);
         var turn = new Enclosure(Low: (circle.Low << 1), High: (circle.High << 1));
-        var theta = (new BigInteger(value: raw) << (AngleBitCount - 16));
+        var theta = (raw << (AngleBitCount - fractionBitCount));
         var turns = RoundRationalTiesToEven(numerator: theta, denominator: turn.Low);
         var residual = Residual(theta: theta, turn: turn, turns: turns);
 
@@ -631,6 +634,23 @@ internal static partial class Oracles {
             residual = Residual(theta: theta, turn: turn, turns: turns);
         }
 
+        return EncloseTrigResidual(residual: residual, guardBitCount: guardBitCount);
+    }
+
+    /// <summary>Encloses sine and cosine of a binary turn fraction using the independently derived circle interval.</summary>
+    public static (Enclosure Sin, Enclosure Cos) EncloseSinCosTurns(ulong fractionalTurns, int guardBitCount) {
+        var phase = new BigInteger(unchecked((long)fractionalTurns));
+        var circle = Pi(bitCount: AngleBitCount);
+        var low = (phase * ((phase.Sign < 0) ? circle.High : circle.Low) * 2);
+        var high = (phase * ((phase.Sign < 0) ? circle.Low : circle.High) * 2);
+
+        return EncloseTrigResidual(
+            residual: new(Low: (low >> 64), High: CeilingShiftRight(value: high, shift: 64)),
+            guardBitCount: guardBitCount
+        );
+    }
+
+    private static (Enclosure Sin, Enclosure Cos) EncloseTrigResidual(Enclosure residual, int guardBitCount) {
         var narrowing = (AngleBitCount - TrigBitCount);
         var angle = (residual.Low >> narrowing);
         var slack = (((residual.High - residual.Low) >> narrowing) + new BigInteger(value: 1026));

@@ -10,7 +10,7 @@ namespace Puck.Maths;
 /// their tables and polynomial coefficients (<c>fixed_generated.rs</c>), and <see cref="EmitVectors"/>
 /// produces known-answer vectors computed by calling the real <see cref="FixedQ4816"/> at generation time
 /// (<c>fixed_vectors.rs</c>). Every numeric table/coefficient is read from the live
-/// <see cref="FixedQ4816"/> type by name (<c>FixedQ4816.AtanTableQ61</c>, <c>FixedQ4816.SinPolyC0Q60</c>,
+/// <see cref="FixedQ4816"/> type by name (<c>FixedQ4816.AtanTableQ61</c>, <c>FixedQ4816.SinCosTableQ60</c>,
 /// ...) rather than transcribed as a literal, so this cannot silently drift from the host even if this
 /// file is never touched again.
 /// </summary>
@@ -296,6 +296,8 @@ public static class FixedQ4816RustPort {
                 )));
         }
 
+        // Append regressions after the generated stream so unrelated functions keep their existing vector inputs.
+        angles.AddRange(collection: [-94521L, 94521L, -9223372036854774708L, -9074293991763690791L, -5576408924856405436L]);
         var sinRows = angles.Select(selector: angle => (angle, FixedQ4816.Sin(angle: new FixedQ4816(Value: angle)).Value)).ToList();
         var cosRows = angles.Select(selector: angle => (angle, FixedQ4816.Cos(angle: new FixedQ4816(Value: angle)).Value)).ToList();
 
@@ -471,7 +473,7 @@ const HALF_ULP: u64 = 1u64 << (FRACTION_BITS - 1);
         sb.Append(value: "const ATAN2_PI_Q61: i64 = ").Append(value: FixedQ4816.PiQ61).Append(value: ";\n\n");
 
         sb.Append(value: "// SinCos constants (FixedQ4816.SinCos*).\n");
-        sb.Append(value: "const SIN_COS_INV_TWO_PI_Q64: i64 = ").Append(value: FixedQ4816.SinCosInvTwoPiQ64).Append(value: ";\n");
+        sb.Append(value: "const SIN_COS_INV_TWO_PI_Q96: u128 = ").Append(value: FixedQ4816.SinCosInvTwoPiQ96).Append(value: ";\n");
         sb.Append(value: "const SIN_COS_QUARTER_TURN_Q64: i64 = ").Append(value: FixedQ4816.SinCosQuarterTurnQ64).Append(value: ";\n");
         sb.Append(value: "const SIN_COS_TWO_PI_Q60: i64 = ").Append(value: FixedQ4816.SinCosTwoPiQ60).Append(value: ";\n");
         sb.Append(value: "// FixedQ4816.SinCosFractionBitCount (").Append(value: FixedQ4816.SinCosFractionBitCount)
@@ -479,22 +481,16 @@ const HALF_ULP: u64 = 1u64 << (FRACTION_BITS - 1);
         sb.Append(value: "const SIN_COS_NARROWING_SHIFT: i64 = ").Append(value: (FixedQ4816.SinCosFractionBitCount - 16)).Append(value: ";\n\n");
 
         sb.Append(value: FormatI64Array(
-            comment: "sin Taylor coefficients C0..C6, Q60 (FixedQ4816.SinPolyC*Q60).",
-            name: "SIN_POLY_Q60",
+            comment: "Quarter-wave sine at i/256 turns, Q60; cosine reverses the index (FixedQ4816.SinCosTableQ60).",
+            name: "SIN_COS_TABLE_Q60",
             perLine: 4,
-            values: [
-                FixedQ4816.SinPolyC0Q60, FixedQ4816.SinPolyC1Q60, FixedQ4816.SinPolyC2Q60, FixedQ4816.SinPolyC3Q60,
-                FixedQ4816.SinPolyC4Q60, FixedQ4816.SinPolyC5Q60, FixedQ4816.SinPolyC6Q60,
-            ]
+            values: FixedQ4816.SinCosTableQ60.ToArray()
         ));
         sb.Append(value: FormatI64Array(
-            comment: "cos Taylor coefficients C0..C7, Q60 (FixedQ4816.CosPolyC*Q60).",
-            name: "COS_POLY_Q60",
+            comment: "Small-residual sine/cosine Taylor coefficients, Q60 (degrees five/four).",
+            name: "SIN_COS_RESIDUAL_Q60",
             perLine: 4,
-            values: [
-                FixedQ4816.CosPolyC0Q60, FixedQ4816.CosPolyC1Q60, FixedQ4816.CosPolyC2Q60, FixedQ4816.CosPolyC3Q60,
-                FixedQ4816.CosPolyC4Q60, FixedQ4816.CosPolyC5Q60, FixedQ4816.CosPolyC6Q60, FixedQ4816.CosPolyC7Q60,
-            ]
+            values: [FixedQ4816.SinPolyC1Q60, FixedQ4816.SinPolyC2Q60, FixedQ4816.CosPolyC1Q60, FixedQ4816.CosPolyC2Q60]
         ));
         sb.Append(value: FormatI64Array(
             comment: "log2 residual coefficients C1..C4, Q61 (FixedQ4816.Log2PolyC*Q61).",
@@ -625,88 +621,58 @@ pub fn atan2(y: i64, x: i64) -> i64 {
     }
 }
 
-// Turn-domain reduction shared by sin/cos: `|angle| * round(2^64 / 2*pi)` as an exact 128-bit unsigned
-// product, shifted right by FRACTION_BITS, truncated to the low 64 bits (the two's-complement WRAP that is
-// the exact mod-one-turn reduction) and re-signed — so the turn of -theta is exactly the negation of the
-// turn of theta (FixedQ4816.SinCos).
+// Q96 reciprocal reduction. Wrapping the product loses no bit used by the Q16 input's [48,111] phase slice.
+// The product wrap is exact; the reciprocal approximates the irrational constant. Reduce magnitudes first.
 fn sin_cos_turns(angle: i64) -> i64 {
-    let negative = angle < 0;
-    let product = (angle.unsigned_abs() as u128) * (SIN_COS_INV_TWO_PI_Q64 as u128);
-    let turns = ((product >> FRACTION_BITS) as u64) as i64;
-
-    if negative { turns.wrapping_neg() } else { turns }
+    let product = (angle.unsigned_abs() as u128).wrapping_mul(SIN_COS_INV_TWO_PI_Q96);
+    let turns = (product >> 48) as u64 as i64;
+    if angle < 0 { turns.wrapping_neg() } else { turns }
 }
 
-// Q60 -> Q16 for the circular pair: round to nearest with ties to even on the magnitude, then re-sign, so
-// the narrowing commutes with negation — ported from FixedQ4816.NarrowSinCosQ60.
 fn narrow_sin_cos_q60(value: i64) -> i64 {
-    let negative = value < 0;
     let magnitude = value.unsigned_abs();
-    let mut truncated = magnitude >> SIN_COS_NARROWING_SHIFT;
-    let remainder = magnitude & ((1u64 << SIN_COS_NARROWING_SHIFT) - 1);
-    let half = 1u64 << (SIN_COS_NARROWING_SHIFT - 1);
-
-    if (remainder > half) || ((remainder == half) && ((truncated & 1) != 0)) {
-        truncated += 1;
-    }
-
-    if negative { (truncated as i64).wrapping_neg() } else { truncated as i64 }
+    let bias = (1u64 << (SIN_COS_NARROWING_SHIFT - 1)) - 1;
+    let rounded = ((magnitude + bias + ((magnitude >> SIN_COS_NARROWING_SHIFT) & 1)) >> SIN_COS_NARROWING_SHIFT) as i64;
+    if value < 0 { -rounded } else { rounded }
 }
 
-// Polynomial core on fractional turns (2^64 raw = one turn) — ported from FixedQ4816.SinCosCore. Returns
-// the un-narrowed Q60 (cos, sin) of the folded residual, plus the fold flag (the true cosine is negated
-// when folded).
-fn sin_cos_core(fractional_turns: i64) -> (i64, i64, bool) {
-    let folded = (fractional_turns > SIN_COS_QUARTER_TURN_Q64) || (fractional_turns < -SIN_COS_QUARTER_TURN_Q64);
-    let fractional_turns = if folded {
-        // sin(pi - theta) = sin theta, cos(pi - theta) = -cos theta: half a turn minus the fraction wraps
-        // into [-1/4, 1/4].
-        0x8000000000000000u64.wrapping_sub(fractional_turns as u64) as i64
-    } else {
-        fractional_turns
-    };
-
-    // Radians at Q60 (the fold bounds |theta| <= pi/2), formed on |turns| and re-signed only where the sine
-    // reads it, so the odd sine and the even cosine come out exactly symmetric in the angle.
-    let negative = fractional_turns < 0;
-    let x = (((fractional_turns.unsigned_abs() as u128) * (SIN_COS_TWO_PI_Q60 as u128)) >> 64) as i64;
+// First-quadrant nearest-node residual, |r| <= pi/256. Returns (quadrant, index, sin(r), cos(r)).
+fn sin_cos_residual(fractional_turns: i64) -> (u64, usize, i64, i64) {
+    let phase = fractional_turns as u64;
+    let quadrant = phase >> 62;
+    let quarter = SIN_COS_QUARTER_TURN_Q64 as u64;
+    let offset = phase & (quarter - 1);
+    let position = if quadrant & 1 != 0 { quarter - offset } else { offset };
+    let index = ((position + (1u64 << 55)) >> 56) as usize;
+    let residual = position as i64 - ((index as i64) << 56);
+    let x = (((residual as i128) * (SIN_COS_TWO_PI_Q60 as i128)) >> 64) as i64;
     let u = big_mul_shift60(x, x);
-
-    let mut sin_acc = SIN_POLY_Q60[6];
-
-    for i in (0..6).rev() {
-        sin_acc = SIN_POLY_Q60[i].wrapping_add(big_mul_shift60(u, sin_acc));
-    }
-
-    let mut cos_acc = COS_POLY_Q60[7];
-
-    for i in (0..7).rev() {
-        cos_acc = COS_POLY_Q60[i].wrapping_add(big_mul_shift60(u, cos_acc));
-    }
-
-    let sin_magnitude = big_mul_shift60(x, sin_acc);
-
-    (cos_acc, if negative { sin_magnitude.wrapping_neg() } else { sin_magnitude }, folded)
+    let sin = x + big_mul_shift60(big_mul_shift60(x, u), SIN_COS_RESIDUAL_Q60[0] + big_mul_shift60(u, SIN_COS_RESIDUAL_Q60[1]));
+    let cos = (1i64 << 60) + big_mul_shift60(u, SIN_COS_RESIDUAL_Q60[2] + big_mul_shift60(u, SIN_COS_RESIDUAL_Q60[3]));
+    (quadrant, index, sin, cos)
 }
 
-fn sin_cos(angle: i64) -> (i64, i64) {
-    let (cos_q60, sin_q60, folded) = sin_cos_core(sin_cos_turns(angle));
-    let sin_raw = narrow_sin_cos_q60(sin_q60).clamp(-ONE, ONE);
-    let cos_raw = narrow_sin_cos_q60(cos_q60).clamp(-ONE, ONE);
-
-    (sin_raw, if folded { cos_raw.wrapping_neg() } else { cos_raw })
+fn sin_cos_component(fractional_turns: i64, cosine: bool) -> i64 {
+    let (quadrant, index, sin, cos) = sin_cos_residual(fractional_turns);
+    let value = if cosine {
+        big_mul_shift60(SIN_COS_TABLE_Q60[64 - index], cos) - big_mul_shift60(SIN_COS_TABLE_Q60[index], sin)
+    } else {
+        big_mul_shift60(SIN_COS_TABLE_Q60[index], cos) + big_mul_shift60(SIN_COS_TABLE_Q60[64 - index], sin)
+    };
+    let raw = narrow_sin_cos_q60(value);
+    if (quadrant + if cosine { 1 } else { 0 }) & 2 != 0 { -raw } else { raw }
 }
 
-/// Sine of `angle` (fixed-point radians) — ported from `FixedQ4816.Sin`/`SinCos`.
+/// Sine of `angle` (fixed-point radians), reconstructing only the requested component.
 #[must_use]
 pub fn sin(angle: i64) -> i64 {
-    sin_cos(angle).0
+    sin_cos_component(sin_cos_turns(angle), false)
 }
 
-/// Cosine of `angle` (fixed-point radians) — ported from `FixedQ4816.Cos`/`SinCos`.
+/// Cosine of `angle` (fixed-point radians), reconstructing only the requested component.
 #[must_use]
 pub fn cos(angle: i64) -> i64 {
-    sin_cos(angle).1
+    sin_cos_component(sin_cos_turns(angle), true)
 }
 
 // Fractional base-2 log of a Q62 mantissa in [1, 2), at Q61 — ported from FixedQ4816.Log2FractionQ61.

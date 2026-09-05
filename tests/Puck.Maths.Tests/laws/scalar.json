@@ -39,7 +39,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "CyclicRotation.At(plane: 0, tick: step) for every step in [0, 30) \u2014 the NUMERIC values of the baked rotor table, entry k against the correctly quantized 30th root of unity",
-        "Against": "Oracles.EncloseSinCos at a raw independently rounded from the Machin-derived circle constant (Oracles.Pi(384), the same working scale as the production SinCos reduction and the same constant scalar.sincos-vs-series cross-checks against the published expansion) \u2014 idealRaw = round(2\u03C0\u00B72\u00B9\u2076\u00B7step/30), computed by BigInteger interval arithmetic and directed rounding, never by recomputing BuildRotors\u0027 own TurnRawQ16-and-integer-division formula. Widened by two raw ULP: 3/4 for the kernel\u0027s own committed SinCos envelope at |raw| within one turn, plus a PROVEN strictly-less-than-two-raw-unit bound on the gap between BuildRotors\u0027 internal raw and this independently rounded one (both quantize the same real angle from two different roundings of round(2\u03C0\u00B72\u00B9\u2076); sine and cosine are 1-Lipschitz in raw units, so the gap carries through the trig call with no widening). Neither term is fitted to any observed output",
+        "Against": "Oracles.EncloseSinCos at a raw independently rounded from the Machin-derived circle constant (Oracles.Pi(384), the same working scale as the production SinCos reduction and the same constant scalar.sincos-vs-series cross-checks against the published expansion) \u2014 idealRaw = round(2\u03C0\u00B72\u00B9\u2076\u00B7step/30), computed by BigInteger interval arithmetic and directed rounding, never by recomputing BuildRotors\u0027 own TurnRawQ16-and-integer-division formula. Widened by two raw ULP: 3/4 as a conservative allowance for the kernel\u0027s tighter SinCos envelope at |raw| within one turn, plus a PROVEN strictly-less-than-two-raw-unit bound on the gap between BuildRotors\u0027 internal raw and this independently rounded one (both quantize the same real angle from two different roundings of round(2\u03C0\u00B72\u00B9\u2076); sine and cosine are 1-Lipschitz in raw units, so the gap carries through the trig call with no widening). Neither term is fitted to any observed output",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -1495,8 +1495,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQ4816.SinCos \u2014 turn-domain reduction by the single Q64 reciprocal constant round(2\u2076\u2074/2\u03C0) applied to the angle\u0027s magnitude and re-signed, a half-turn fold, and seven- and eight-term odd/even Taylor polynomials at Q60 on a radian magnitude, narrowed round-half-to-even on the magnitude and clamped",
-        "Against": "Oracles.EncloseSinCos, which reduces IN RADIANS against a \u03C0 derived from Machin\u0027s formula by this module\u0027s own alternating arctangent series, at 384 working bits so a full-range angle\u0027s forty-five bits of cancellation are absorbed, then sums the alternating sine and cosine series with a factorial remainder bound. Neither the reduction domain, the constant, nor the polynomial is shared. The envelope is stated per regime: 0.75 raw ULP for |raw| \u2264 411775 (|\u03B8| \u2264 2\u03C0), 1.0 for |raw| \u003C 2\u2074\u2078, 2.5 over the full range. Those bands are not arbitrary \u2014 the reduction constant carries |C \u2212 2\u2076\u2074/2\u03C0| \u2264 \u00BD, which admits up to 2\u03C0\u00B7|raw|/2\u2076\u2075 \u2248 1.57 raw ULP of argument error at |raw| = 2\u2076\u00B3, on top of the kernel\u0027s own \u2264 0.5",
+        "Subject": "FixedQ4816.SinCos: magnitude-first Q96 reciprocal turn reduction, Q60 quarter-wave table with degree-five/four residual correction and ties-to-even Q16 narrowing",
+        "Against": "Oracles.EncloseSinCos: radian reduction against independently Machin-derived pi at 384 bits, then a 30-term interval series. Full-carrier envelope 0.50000001 raw Q16 ULP; Q96 reduction and the analytic residual remainder account for the margin above one half. This is an error bound, not a correctly-rounded guarantee.",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -1504,10 +1504,10 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "Oracles\u0027 Machin-derived circle constant at 128 working bits",
-        "Against": "the published forty-digit decimal expansion of \u03C0, quoted in Subjects.FixedSinCosWithinEnvelope",
+        "Subject": "Oracles' Machin-derived circle constant at 128 working bits",
+        "Against": "the published forty-digit decimal expansion of \u03c0, quoted in Subjects.FixedSinCosWithinEnvelope",
         "Shared": "",
-        "Citation": "the published expansion, used ONLY to cross-check the derivation \u2014 the oracle\u0027s value comes from its own series, so a transposed Machin formula fails loudly here rather than shifting every angle by a constant",
+        "Citation": "the published expansion, used ONLY to cross-check the derivation \u2014 the oracle's value comes from its own series, so a transposed Machin formula fails loudly here rather than shifting every angle by a constant",
         "Absolute": ""
       },
       {
@@ -1515,14 +1515,14 @@
         "Flavor": "DelegationTwin",
         "Subject": "FixedQ4816.Sin and FixedQ4816.Cos",
         "Against": "the two components of FixedQ4816.SinCos",
-        "Shared": "the entire body \u2014 each is a one-line projection of SinCos (FixedQ4816.cs:1020, 1024), so agreement proves the projection and never the arithmetic",
-        "Citation": "the arithmetic is pinned in this same case by leg 1, against the radian-domain series enclosure. What this leg adds is that the two projections are not swapped, which is the one way a one-line forward can be wrong",
+        "Shared": "Identical ReduceSinCosAngle, SinCosResidual, BigMulShift60 and NarrowSinCosQ60 arithmetic; singles reconstruct one component while the pair reconstructs both",
+        "Citation": "The independent series leg pins the arithmetic; this leg pins exact single/pair agreement despite separate reconstruction paths.",
         "Absolute": ""
       },
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "both outputs are CLAMPED into [\u2212One, One] at every swept angle, both carrier extremes included \u2014 the clamp is what makes SinCos safe to feed straight back into the carrier",
+        "Subject": "Both outputs stay in [-One, One] over the swept carrier, including both extremes; no output clamp is used.",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1531,7 +1531,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the Pythagorean identity holds within the regime\u0027s own error budget: |sin\u00B2 \u002B cos\u00B2 \u2212 2\u00B3\u00B2| stays under 4\u00B72\u00B9\u2076\u00B7u \u002B 4u\u00B2 in BigInteger, where u is the same per-regime ULP bound leg 1 uses \u2014 a cross-component statement neither the enclosure nor the clamp implies",
+        "Subject": "Pythagorean residual |sin^2 + cos^2 - 2^32| stays under 4*2^16*u + 4*u^2 in BigInteger, with u the integer ceiling of the same full-range ULP budget.",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1549,7 +1549,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the pair is exactly odd in the sine and even in the cosine: Sin(\u2212\u03B8) == \u2212Sin(\u03B8) and Cos(\u2212\u03B8) == Cos(\u03B8) bit for bit at every swept raw (MinValue excepted, having no negation) \u2014 the turn reduction, the radian product and the Q60\u2192Q16 narrowing each run on a magnitude and re-sign, so no floor or half-up step can break the symmetry; a rotation chain that composes an angle with its negation therefore closes exactly",
+        "Subject": "Exactly odd sine and even cosine at every swept signed raw except MinValue, which has no signed negation; magnitude-first reduction and quadrant reflection preserve identical magnitudes.",
         "Against": "",
         "Shared": "",
         "Citation": "",

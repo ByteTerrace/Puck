@@ -54,21 +54,22 @@ internal static class FftClaims {
 
         return values;
     }
-    // The direct O(N^2) DFT sum, built from the SAME FixedComplex.FromAngle/operator* kernel FixedFourierTransformPlan uses,
+    // The direct O(N^2) DFT sum, built from the SAME SinCosTurns and FixedComplex.operator* kernels the plan uses,
     // but with no bit-reversal and no butterfly decomposition: bin k accumulates one running FixedComplex sum of
     // x[n] * FromAngle(-2*pi*k*n/N), each term rounding once and the running sum adding exactly. A different
     // summation SCHEDULE over the identical kernel, so agreement pins the radix-2 indexing rather than the kernel.
     private static FixedComplex[] DirectDft(ReadOnlySpan<FixedComplex> values) {
         var n = values.Length;
         var result = new FixedComplex[n];
-        var turn = ((-2.0 * Math.PI) / n);
+        var shift = (64 - BitOperations.Log2((uint)n));
 
         for (var k = 0; (k < n); ++k) {
             var sum = FixedComplex.AdditiveIdentity;
 
             for (var index = 0; (index < n); ++index) {
-                var angle = FixedQ4816.FromDouble(value: ((turn * k) * index));
-                var twiddle = FixedComplex.FromAngle(angle: angle);
+                var phase = unchecked((0UL - ((ulong)k * (ulong)index)) << shift);
+                var (sin, cos) = FixedQ4816.SinCosTurns(fractionalTurns: phase);
+                var twiddle = new FixedComplex(Real: cos, Imaginary: sin);
 
                 sum += (values[index] * twiddle);
             }

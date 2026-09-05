@@ -683,6 +683,11 @@ internal static partial class LawRegistry {
                 width: 1
             )
         ),
+        Case(id: "scalar.trigonometry-twiddles", run: () => Laws.Claim(lawId: "scalar.trigonometry-twiddles", claim: Subjects.TrigonometryTwiddles)),
+        Case(id: "scalar.trigonometry-constants", run: () => Laws.Claim(lawId: "scalar.trigonometry-constants", claim: Subjects.TrigonometryConstants)),
+        Case(id: "scalar.trigonometry-seams", run: () => Laws.Claim(lawId: "scalar.trigonometry-seams", claim: Subjects.TrigonometrySeams)),
+        Case(id: "scalar.trigonometry-turns", run: () => Laws.SweptClaim(lawId: "scalar.trigonometry-turns", claim: Subjects.TrigonometryTurns, domain: ScalarTranscendental, tier: Tier.Default, width: 1)),
+        Case(id: "scalar.trigonometry-turns-deep", run: () => Laws.SweptClaim(lawId: "scalar.trigonometry-turns-deep", claim: Subjects.TrigonometryTurns, domain: ScalarTranscendental, tier: Tier.Deep, width: 1)),
         Case(
             id: "scalar.sincos-vs-series",
             run: () => Laws.SweptClaim(

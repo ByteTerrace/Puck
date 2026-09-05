@@ -162,8 +162,8 @@ public struct Pcg32XshRr {
         NextGaussianPair().First;
     /// <summary>Draws two independent standard-normal values (mean zero, unit deviation).</summary>
     /// <returns>The pair <c>(First, Second)</c> of normally distributed <see cref="FixedQ4816"/> values; magnitudes cap at ≈6.66σ (probability ≈ 10⁻¹¹).</returns>
-    /// <remarks>Box–Muller over the fixed-point primitives (table-driven log2, integer square root, polynomial
-    /// sine/cosine); results are bit-identical across machines. Consumes exactly two advances per pair, so
+    /// <remarks>Box–Muller over the fixed-point primitives (table-driven log2, integer square root, quarter-wave
+    /// sine/cosine with a local correction); results are bit-identical across machines. Consumes exactly two advances per pair, so
     /// <see cref="Advance"/>-based seek arithmetic stays exact.</remarks>
     public (FixedQ4816 First, FixedQ4816 Second) NextGaussianPair() {
         var radiusDraw = NextUInt32();
@@ -184,14 +184,10 @@ public struct Pcg32XshRr {
         var sQ34 = (high << 34) | (low >> 30);
         var rQ27 = ((long)((sQ34 << 20).SquareRoot()));
 
-        // θ = angleDraw in turns at full 2^-32 resolution; the CORDIC core returns Q60 sine/cosine.
+        // θ = angleDraw in turns at full 2^-32 resolution; the quarter-wave core returns signed Q60 sine/cosine.
         var fractionalTurns = unchecked((long)(((ulong)angleDraw) << 32));
 
-        var (cosQ60, sinQ60, folded) = FixedQ4816.SinCosCore(fractionalTurns: fractionalTurns);
-
-        if (folded) {
-            cosQ60 = -cosQ60;
-        }
+        var (sinQ60, cosQ60) = FixedQ4816.SinCosCore(fractionalTurns: fractionalTurns);
 
         // z = r·(cos, sin): Q27 · Q60 = Q87, rounded to Q16.
         var first = ((long)(((((Int128)rQ27) * cosQ60) + (Int128.One << 70)) >> 71));

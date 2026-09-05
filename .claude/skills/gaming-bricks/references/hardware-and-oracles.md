@@ -171,22 +171,47 @@ one lag constant in isolation.
   `lcdon_write_timing-GS`, `hblank_ly_scx_timing-GS` and
   `intr_2_mode0_timing_sprites` is divergence-free for 120 frames against a
   boot-ROM-booted SameBoy, which is the evidence.
-- Do not re-derive the schedule by moving the PPU onto SameBoy's dots. Both
-  decompositions of that idea are measured and refuted. Shortening the first line
-  to 449 and giving the register view a +3 polled-event phase (carrying the
-  polled mode lags with it) leaves the polled STAT and LY dots exactly where they
-  are but moves the interrupt raise and the memory locks three dots early, which
-  fails `hblank_ly_scx_timing`, `intr_2_mode0_timing`,
-  `intr_2_mode0_timing_sprites`, `intr_2_mode3_timing`, `intr_2_oam_ok_timing`,
-  `lcdon_timing` and `lcdon_write_timing`. Moving only the pixel pipeline three
-  dots early (`Mode3EntryLatency` 8→5 with the mode-0 group trailing the
-  160th pop) keeps every acceptance case green but takes the mealybug/AGE error
-  from 65.7k to about 78k differing pixels.
-- The read dot-phase costs the pixel stream nothing. Against a boot-ROM-booted
-  SameBoy the `--cosim` `ppu-pixel` stream on `m3_bgp_change` runs identical into
-  the ROM's own drawing, and the first divergence is a colour on a matching dot,
-  not a dot: at LY 1 x 1 both push the pixel on the same master cycle and SameBoy
-  has already applied a new BGP where we have not.
+- Do not re-derive the schedule by moving the PPU onto SameBoy's dots. All three
+  decompositions of that idea are measured and refuted, the coupled one included.
+  Moving both conventions together — a read taken at the machine cycle's drive
+  instant, the first line after an LCD enable at 448 dots, and every calibrated
+  constant re-derived so the CPU-observed edges land two dots earlier in the line
+  and the pixel pipeline two dots earlier still — is reachable and holds the whole
+  hardware tier: every mooneye acceptance group, blargg including `dmg_sound` and
+  `cgb_sound`, sst-sm83, the boot handoff, and every Tier A and Tier C stage stay
+  green, the `--cosim` `cpu` stream stays divergence-free, and the `ppu-pixel`
+  stream on `lycint_dmgpalette_during_m3_1` becomes content-identical to SameBoy
+  for 120 frames with both cores painting the mid-mode-3 palette from LY 1 x 157.
+  It closes what it is for — `lycint_dmgpalette_during_m3_1`/`_2` go pixel-exact
+  and `_3`/`_4` fall 429 → 143 — and loses far more than it closes: mealybug drops
+  from 3 exact to 2 and its differing-pixel total goes 26,135 → 43,957 with all 33
+  moved rows worse, AGE goes 2,886 → 8,462, and gambatte goes 285,900 → 427,834
+  and 82 cases net. The cost is the pipeline's move and nothing else: restoring
+  only the pipeline's absolute position (a longer mode-3 entry latency) returns
+  mealybug bit-for-bit to its recorded ledger. Nor can the pipeline be held while
+  the LYC interrupt moves in its place — a two-dot-later interrupt view takes
+  `acceptance-ppu` from 34 to 20 — and holding the pipeline while moving only the
+  read view blocks on `intr_2_mode0_timing_sprites` (DmgC and CgbE), first
+  divergence at master cycle 11,218,088, `pc=0BDD`, an IF read returning 0xA3 on
+  SameBoy and 0xA0 here. SameBoy's pixel dots and the screenshot corpus disagree
+  by two dots, and the corpus is the gate. The two older decompositions fail
+  sooner: shortening the first line to 449 and giving the register view a +3
+  polled-event phase (carrying the polled mode lags with it) leaves the polled
+  STAT and LY dots exactly where they are but moves the interrupt raise and the
+  memory locks three dots early, which fails `hblank_ly_scx_timing`,
+  `intr_2_mode0_timing`, `intr_2_mode0_timing_sprites`, `intr_2_mode3_timing`,
+  `intr_2_oam_ok_timing`, `lcdon_timing` and `lcdon_write_timing`; moving only the
+  pixel pipeline three dots early (`Mode3EntryLatency` 8→5 with the mode-0 group
+  trailing the 160th pop) keeps every acceptance case green but takes the
+  mealybug/AGE error from 65.7k to about 78k differing pixels.
+- The pixel pipeline carries the same three-dot offset the register edges do, and
+  the `--cosim` `ppu-pixel` walk cannot show it: that walk compares content only
+  and reports our own cycle. Measure the offset with SameBoy's per-dot trace
+  (`SAMEBOY_PX_TRACE`, whose `abs=` is an exact master T-cycle) against the pixel
+  records' own stamps in `puck.cosim.bin`. On `lycint_dmgpalette_during_m3_1` at
+  LY 1 our column x pops three master cycles after SameBoy's, which is why we
+  paint the mid-mode-3 palette from x 155 where SameBoy paints from x 157 — its
+  logged pixel cycle is up to half a dot early, absorbing one of the three.
 - A `--cosim` run under about 60 frames proves nothing about the ROM: the DMG
   boot ROM's logo scroll occupies them, so every ROM produces the same stream and
   the same record count. Give a CPU-stream comparison at least 120 frames, and
@@ -221,13 +246,15 @@ one lag constant in isolation.
   Color STAT settling window that holds the coincidence source across the
   transition, is refuted: it repairs fourteen gambatte rows and breaks eleven
   recorded passes, all in the `miscmstatirq/lycstatwirq_trigger_*` and
-  `lycEnable/late_ff41|ff45_enable_lcdoffset1_*` families. Color SCX committing
-  two T-cycles early at double speed (SameBoy's
-  `cgb_double_conflict_map[GB_IO_SCX]`) is measured as a net win with a cost:
-  four `scx_during_m3/*_ds_*` rows flip to passing and six fall by thousands of
-  pixels (9581→8866, 14833→14404, 12096→11810), while
+  `lycEnable/late_ff41|ff45_enable_lcdoffset1_*` families.
+- Color SCX commits two T-cycles early at double speed (SameBoy's
+  `cgb_double_conflict_map[GB_IO_SCX]`), which is one whole line dot there. Four
+  `scx_during_m3/*_ds_*` rows are pixel-exact under it and six others fall by
+  hundreds to thousands of pixels (9581→8866, 14833→14404, 12096→11810);
   `scx_during_m3/scx_during_m3_spx2_ds` and its `scx_attrib` sibling rise from 8
-  to 16. It needs the two risers explained before it lands, not another sweep.
+  to 16 because the earlier commit crosses one background fetch's tile-index step,
+  so one more tile column takes the new coarse scroll. That riser is exactly eight
+  pixels wide — x 136-143 of LY 0, the only difference between the two renders.
 - The settling view is per consumer, which is the whole reason the record beats a
   value the CPU writes into the register file. Inside the settling T-cycle each
   of the display's own consumers samples the register at its own depth:
@@ -264,11 +291,9 @@ one lag constant in isolation.
   index-aligned and both cores commit BGP at the same absolute cycle, yet SameBoy
   paints from LY 1 x 157 and we paint from x 155 — the two-column error the
   ledger records as 286 differing pixels (143 lines x 2 columns), with the
-  `lycint_*_3`/`_4` pair three columns out at 429. The only coherent cures are to
-  move both conventions together — read at the drive instant
-  (`LeadingTCyclesBeforeRead` 0) and put the line on SameBoy's dots (first line
-  448, `LineEventPhase` 0) — or to leave it alone. Every decomposition that moved
-  one and not the other is refuted above.
+  `lycint_*_3`/`_4` pair three columns out at 429. Moving both conventions together
+  does close this family, and costs more elsewhere than it closes — see the
+  refuted decompositions above.
 - CPU-visible state trails the internal edge by: polled STAT, VRAM read and
   VRAM write, and OAM write by zero dots; OAM read by zero on monochrome and
   one on Color; the mode-0 interrupt by one, reduced to zero on Color at single
@@ -297,9 +322,10 @@ one lag constant in isolation.
 - Our first line after an LCD enable is four dots longer than SameBoy's, so each
   enable slides our pipeline four dots against its oracle. On some ROMs the two
   happen to land together (`m3_bgp_change`'s pixel stream is dot-identical); on
-  others they sit a dot apart, which is what keeps gambatte's
-  `lycint_dmgpalette_during_m3_*` off pixel-exact (their first pixel divergence
-  is one column, LY 1 x 155) while their non-interrupt siblings improved. No
+  others they sit apart, which is what keeps gambatte's
+  `lycint_dmgpalette_during_m3_*` off pixel-exact (their first pixel divergence is
+  two columns, LY 1 x 155 against SameBoy's x 157) while their non-interrupt
+  siblings improved. No
   write phase closes both: `MonochromePalette` at one T-cycle early instead of
   two moves those four ROMs from 286/429 to 143 and costs fifteen others. Closing
   it means the first line's length, which the register families pin — see the
@@ -310,7 +336,8 @@ one lag constant in isolation.
   `disable_window_pixel_insertion_glitch`). The write-in-flight record reaches
   the PPU state each of them needs, so they are expressible as settling views on
   the same rule rather than as special cases; what still blocks them is the
-  write-versus-read dot-phase asymmetry above, not the write path.
+  two-dot disagreement between SameBoy's pixel dots and the screenshot corpus
+  above, not the write path.
 
 The acceptance cases pinning this schedule by name: `hblank_ly_scx_timing`
 (its 51/50/49 SCX pattern), the `intr_2_*` family, `intr_1_2`,

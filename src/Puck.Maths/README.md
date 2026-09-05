@@ -114,7 +114,7 @@ graph TB
     FP(["🔢 FixedPoint<br/>scalars · vectors · rotations · positions"])
     SA(["🎲 Sampling<br/>seeded randomness · noise · evenly spread point sets"])
     FF(["🧮 FiniteFields<br/>binary fields · prime fields · primality"])
-    GE(["📏 Geometry<br/>hex grids · Hilbert · layers"])
+    GE(["📏 Geometry<br/>square and hex grids · Hilbert · layers"])
     AL(["🏗️ Algebra<br/>configurable number systems"])
     OR(["🔮 Oracle<br/>graphs · paths · patterns"])
     RE(["🔬 Research<br/>exploratory, never the hot path"])
@@ -135,7 +135,7 @@ graph TB
 | [`Sampling/`](Sampling/README.md) | The seeded generator, weighted choice, spatial noise, low-discrepancy sequences and digital nets (point sets that spread evenly by construction), and the two non-simulation paths (`SecureRandom`, `ProbabilityFunctions`). | Anything random, scattered, or noisy. |
 | [`FiniteFields/`](FiniteFields/README.md) | Binary fields over fixed-size bit patterns, prime fields and their extensions, error-correction arithmetic, and exact primality on `ulong`. | Error-correcting codes, checksums, and modular arithmetic. |
 | [`Algebra/`](Algebra/README.md) | Configurable number systems that can add a root, add generators, raise a degree, or double an existing number type. | A relationship chosen at runtime, or a proof that the same operation agrees across number types. |
-| [`Geometry/`](Geometry/README.md) | Hex grids, the locality-preserving Hilbert curve, layered index spaces, and exact integer geometry. | A grid, a space-filling order, or a layered index. |
+| [`Geometry/`](Geometry/README.md) | Square and hex grids, the locality-preserving Hilbert curve, layered index spaces, and exact integer geometry. | A grid, a space-filling order, or a layered index. |
 | [`Oracle/`](Oracle/README.md) | One configurable product operation evaluated with different rules for combining values, then used to build graphs, geometric algebras, planar tangles, divisor arithmetic, and pattern languages. | Reachability, shortest paths, pattern matching, holes in a structure, or group words. |
 | [`Research/`](Research/README.md) | Exploratory exact tools: continued-fraction and radical tails, positional and Ostrowski automatic sequences, Sturmian and quasicrystal words, Fibonacci and metallic-mean arithmetic, odd-cyclic incidence, and real-quadratic orders. Partly in `namespace Puck.Maths.Research`; that folder README says which types. | Research questions and compiled random-access integer patterns, never the simulation hot path. |
 | [`Transforms/`](Transforms/README.md) | The exact number-theoretic transform over `PrimeField64` and the exact Walsh–Hadamard transform over any binary integer; the fixed-point FFT over `FixedComplex` and the fixed-point DCT over `FixedQ4816` — one plan-then-in-place shape, cached twiddle plans, cyclic convolution on both spectral transforms. | A frequency-domain or sequency-domain transform, or a cyclic convolution. |
@@ -185,6 +185,8 @@ operation I need. Pick a row, then follow its link for the detailed contract.
 | The fraction with the smallest denominator inside an interval | `SimplestRational.InOpenInterval` | [below](#root-level-types) |
 | A hex grid whose 60° rotations are exact | `HexagonalCoordinate` | [Geometry](Geometry/README.md#hexagonalcoordinate) |
 | Dense hex-disk storage with a continuous neighbour walk and ring symmetries | `HexagonalIndex` | [Geometry](Geometry/README.md#hexagonalindex) |
+| Signed square-grid cells with exact quarter turns and checked Gaussian arithmetic | `SquareCoordinate` | [Geometry](Geometry/README.md#squarecoordinate) |
+| Dense centered square storage with a continuous cardinal walk and direct symmetries | `SquareIndex` | [Geometry](Geometry/README.md#squareindex) |
 | Dense nonnegative square coordinates with direct swap, common translation, scale and component queries | `ElegantPair` / `ElegantUnpair` and `ElegantSwap`, `ElegantTranslate`, `ElegantScale`, `ElegantMinimum`, `ElegantMaximum`, `ElegantDifference`, `ElegantSum` | `UnsignedNumberFunctions` |
 | Cache-coherent tile/chunk ordering | `HilbertCurve` (locality-preserving) rather than Morton order | [Geometry](Geometry/README.md#hilbertcurve) |
 | A layered index space — rings, shells, shards | `LayerSequence` — constant-time index → layer, exact integer result | [Geometry](Geometry/README.md#layersequence) |

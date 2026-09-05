@@ -136,12 +136,12 @@ leave the carrier during component mixing, and `Convolve`'s output grows as
 `N` times the product of the operands' amplitudes. Callers pre-scale every
 input whose intermediates can leave `FixedQ4816`'s raw range.
 
-**Twiddles.** `Create` builds each forward twiddle independently via
-`FixedComplex.FromAngle(FixedQ4816.FromDouble(angle))` — one
-`FixedQ4816.SinCos` call per table entry rather than an incrementally
-multiplied ladder, so each twiddle's error stays at `SinCos`'s own bound
-instead of compounding across the table. Inverse twiddles are the exact
-conjugates of the forward ones.
+**Twiddles.** Power-of-two lengths have exact binary turn fractions. `Create`
+passes these directly to `FixedQ4816.SinCosTurns`, avoiding rounded radian
+conversion. FFT quarter-wave reflection and DCT complementary angles share
+evaluations without a recurrence, so errors do not accumulate across the
+table. Each component has the kernel's 0.50000001 raw Q16 ULP envelope
+against its ideal phase. Inverse twiddles are exact conjugates.
 
 | Operation | Semantics |
 |---|---|
@@ -183,7 +183,7 @@ two threads sharing one plan never share a buffer.
 
 **Accuracy is measured, not assumed.** For both fixed-point transforms,
 round-trip, linearity and Parseval error scale with operand amplitude — each
-twiddle's own quantization error (from `FixedQ4816.SinCos`) multiplies through
+twiddle's own quantization error (from `FixedQ4816.SinCosTurns`) multiplies through
 the signal at every stage. The `fft.*` and `dct.*` laws pin their bounds at a
 documented amplitude envelope (raw `[-2^20, 2^20]`, about `±16.0`; the
 convolution law at raw `[-2^16, 2^16]`) and freeze them at a measured maximum
@@ -206,7 +206,7 @@ subject rounds, so nothing there is a bound. `fft.*` and `dct.*` statements
 split between exact bins (an impulse, a constant, the Nyquist alternation),
 measured round-trip, linearity, Parseval and convolution bounds (each with a
 Deep-tier mirror at longer lengths), the fast route against a direct O(N^2)
-sum built from the same `SinCos` kernel with a different schedule, the wiring
+sum built from the same `SinCosTurns` kernel with a different schedule, the wiring
 of the real wrappers and the pointwise product, and refusals.
 
 `puck bench --filter '*Ntt*'`, `'*Wht*'`, `'*Fft*'` and `'*Dct*'` measure

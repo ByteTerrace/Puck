@@ -48,7 +48,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "ENVELOPE: the bound is stated AT this amplitude. Round-trip error scales with operand magnitude — each twiddle's own ~0.5 ULP quantization error (from FixedQ4816.SinCos) multiplies through the signal at every stage, so a caller working at a larger amplitude should expect proportionally larger absolute error, not this same ceiling. Forward's own XML doc states the argument.",
+        "Subject": "ENVELOPE: the bound is stated AT this amplitude. Round-trip error scales with operand magnitude — each twiddle's own ~0.5 ULP quantization error (from FixedQ4816.SinCosTurns) multiplies through the signal at every stage, so a caller working at a larger amplitude should expect proportionally larger absolute error, not this same ceiling. Forward's own XML doc states the argument.",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -170,9 +170,9 @@
         "Kind": "SharedSubstrate",
         "Flavor": "FusedSubstrate",
         "Subject": "FixedFourierTransform.Forward's radix-2 decimation-in-time butterfly network, at lengths 1 through 32",
-        "Against": "a direct O(N^2) DFT sum built in this claim body from the SAME FixedComplex.FromAngle and FixedComplex.operator* kernels Forward's twiddle table and butterflies use, but with a completely different summation schedule: no bit-reversal permutation, no stage decomposition, one running FixedComplex accumulator per output bin over all N terms rather than log2(N) pairwise combines. Agreement within 200 raw Q16 ULPs — MEASURED: a calibration run at this envelope observed a worst case of 107 ULPs at length 32; both sides round through the same one-rounding multiply, so exact equality is not expected, and the direct sum's own rounding count (up to N per bin, against the radix-2 network's log2(N) per bin) is why the bound is wider than the round-trip and linearity ones",
-        "Shared": "FixedComplex.FromAngle (built on FixedQ4816.SinCos) and FixedComplex.operator*, the IDENTICAL members, not sibling copies",
-        "Citation": "scalar.* pins FixedQ4816.SinCos's own accuracy; complex.* pins FixedComplex.operator*'s one-rounding contract. What this leg adds beyond those is the radix-2 SCHEDULE — the bit-reversal permutation and the stage-by-stage twiddle-stride indexing — which neither of those families touches: a swapped bit-reversal pair, a wrong twiddle stride, or a stage boundary off by one reddens this case while leaving scalar.* and complex.* green.",
+        "Against": "a direct O(N^2) DFT sum built in this claim body from the SAME FixedQ4816.SinCosTurns and FixedComplex.operator* kernels Forward's twiddle table and butterflies use, but with a completely different summation schedule: no bit-reversal permutation, no stage decomposition, one running FixedComplex accumulator per output bin over all N terms rather than log2(N) pairwise combines. Agreement within 200 raw Q16 ULPs — MEASURED: a calibration run at this envelope observed a worst case of 107 ULPs at length 32; both sides round through the same one-rounding multiply, so exact equality is not expected, and the direct sum's own rounding count (up to N per bin, against the radix-2 network's log2(N) per bin) is why the bound is wider than the round-trip and linearity ones",
+        "Shared": "FixedQ4816.SinCosTurns (built on FixedQ4816.SinCosTurns) and FixedComplex.operator*, the IDENTICAL members, not sibling copies",
+        "Citation": "scalar.* pins FixedQ4816.SinCosTurns's own accuracy; complex.* pins FixedComplex.operator*'s one-rounding contract. What this leg adds beyond those is the radix-2 SCHEDULE — the bit-reversal permutation and the stage-by-stage twiddle-stride indexing — which neither of those families touches: a swapped bit-reversal pair, a wrong twiddle stride, or a stage boundary off by one reddens this case while leaving scalar.* and complex.* green.",
         "Absolute": ""
       }
     ]

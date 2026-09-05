@@ -50,30 +50,6 @@ public readonly partial record struct FixedQ4816(long Value)
     /// atan2 octant fold-back reads.</summary>
     public const long PiQ61 = 7244019458077122842L;             // round(π · 2^61)
 
-    // SinCos constants. Reduction runs in turns (2^64 raw = one turn): the two's-complement wrap of the 128-bit
-    // reduction product is the exact mod-2π. The kernels are odd/even Taylor polynomials at Q60 over |θ| ≤ π/2
-    // (truncation ≤ 2⁻³⁰), Horner-evaluated on θ².
-    internal const int SinCosFractionBitCount = 60;
-    internal const long SinCosInvTwoPiQ64 = 2935890503282001226L;  // round(2^64 / 2π)
-    internal const long SinCosQuarterTurnQ64 = (1L << 62);
-    internal const long SinCosTwoPiQ60 = 7244019458077122842L;     // round(2π · 2^60)
-    // sin θ = θ·Σ (−1)ᵏ θ²ᵏ/(2k+1)!, coefficients at Q60 for k = 0..6.
-    internal const long SinPolyC0Q60 = 1152921504606846976L;
-    internal const long SinPolyC1Q60 = -192153584101141163L;
-    internal const long SinPolyC2Q60 = 9607679205057058L;
-    internal const long SinPolyC3Q60 = -228754266787073L;
-    internal const long SinPolyC4Q60 = 3177142594265L;
-    internal const long SinPolyC5Q60 = -28883114493L;
-    internal const long SinPolyC6Q60 = 185148170L;
-    // cos θ = Σ (−1)ᵏ θ²ᵏ/(2k)!, coefficients at Q60 for k = 0..7.
-    internal const long CosPolyC0Q60 = 1152921504606846976L;
-    internal const long CosPolyC1Q60 = -576460752303423488L;
-    internal const long CosPolyC2Q60 = 48038396025285291L;
-    internal const long CosPolyC3Q60 = -1601279867509510L;
-    internal const long CosPolyC4Q60 = 28594283348384L;
-    internal const long CosPolyC5Q60 = -317714259426L;
-    internal const long CosPolyC6Q60 = 2406926208L;
-    internal const long CosPolyC7Q60 = -13224869L;
     // log2(1 + r) ≈ r·(c1 + r·(c2 + r·(c3 + r·c4))), r ≤ 2⁻⁷: log2(e)/k alternating, at Q61 (truncation ≤ 2⁻³⁶).
     internal const long Log2PolyC1Q61 = 3326628274461080623L;
     internal const long Log2PolyC2Q61 = -1663314137230540311L;
@@ -1221,104 +1197,6 @@ public readonly partial record struct FixedQ4816(long Value)
             ? -raw
             : raw));
     }
-    /// <summary>Computes the cosine of <paramref name="angle"/>, given in fixed-point radians.</summary>
-    /// <param name="angle">The angle in radians.</param>
-    /// <returns>The cosine, in <c>[−1, 1]</c>. Prefer <see cref="SinCos"/> when both the sine and cosine are needed.</returns>
-    public static FixedQ4816 Cos(FixedQ4816 angle) =>
-        SinCos(angle: angle).Cos;
-    /// <summary>Computes the sine of <paramref name="angle"/>, given in fixed-point radians.</summary>
-    /// <param name="angle">The angle in radians.</param>
-    /// <returns>The sine, in <c>[−1, 1]</c>. Prefer <see cref="SinCos"/> when both the sine and cosine are needed.</returns>
-    public static FixedQ4816 Sin(FixedQ4816 angle) =>
-        SinCos(angle: angle).Sin;
-    /// <summary>Computes the sine and cosine of <paramref name="angle"/> (in fixed-point radians) in a single pass.</summary>
-    /// <param name="angle">The angle in radians; any representable value is accepted — reduction is exact in the turn domain.</param>
-    /// <returns>The pair <c>(Sin, Cos)</c>, each in <c>[−1, 1]</c>.</returns>
-    /// <remarks>Pure integer arithmetic (turn-domain reduction, then odd/even polynomials at Q60); bit-identical
-    /// across machines. <c>SinCos(Atan2(y, x))</c> recovers the unit direction. Maximum observed error is 0.51 ULP
-    /// within a few turns of zero and ~2 ULP at extreme magnitudes.</remarks>
-    public static (FixedQ4816 Sin, FixedQ4816 Cos) SinCos(FixedQ4816 angle) =>
-        SinCosScaled(
-            angle: angle.Value,
-            fractionBitCount: FractionBitCount
-        );
-
-    /// <summary>Returns the sine and cosine of half of <paramref name="angle"/> — the half angle taken exactly in the
-    /// turn domain, one bit further down, so an odd raw angle loses nothing to a prior Q16 halving.</summary>
-    internal static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosHalfAngle(FixedQ4816 angle) =>
-        SinCosScaled(
-            angle: angle.Value,
-            fractionBitCount: (FractionBitCount + 1)
-        );
-    /// <summary>Returns the sine and cosine of an angle carried at Q32 (the exact product of two Q16 raws), reduced to
-    /// turns from that width directly rather than through a Q16 rounding.</summary>
-    internal static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosQ32(long angleQ32) =>
-        SinCosScaled(
-            angle: angleQ32,
-            fractionBitCount: (2 * FractionBitCount)
-        );
-
-    // Reduce in turns: raw · round(2^64/2π) = turns · 2^(64 + fractionBitCount); the two's-complement wrap of the
-    // 128-bit product is the exact mod-one-turn reduction. Reduced on the magnitude and re-signed, so the turn of −θ
-    // is exactly the negation of the turn of θ and the pair comes out odd in the sine and even in the cosine.
-    private static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosScaled(long angle, int fractionBitCount) {
-        var negative = (angle < 0L);
-        var magnitude = unchecked((ulong)(negative ? -angle : angle));
-        var turns = unchecked((long)((ulong)(((((UInt128)magnitude) * ((ulong)SinCosInvTwoPiQ64)) >> fractionBitCount))));
-
-        return SinCosFromTurns(fractionalTurns: (negative ? -turns : turns));
-    }
-
-    // Full-range norm overload: phases a non-negative raw Q16 magnitude that may exceed the signed carrier (a
-    // three-component norm always roots within 64 unsigned bits). Same turn-domain wrap as SinCos.
-    internal static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosRaw(ulong rawAngle) {
-        var product = (((UInt128)rawAngle) * ((ulong)SinCosInvTwoPiQ64));
-
-        return SinCosFromTurns(fractionalTurns: unchecked((long)((ulong)(product >> FractionBitCount))));
-    }
-
-    private static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosFromTurns(long fractionalTurns) {
-        var (cosQ60, sinQ60, folded) = SinCosCore(fractionalTurns: fractionalTurns);
-
-        // Q60 → Q16: round to nearest, ties to even on the magnitude (so the narrowing is odd), clamp to ±1.
-        var sinRaw = Math.Clamp(
-            max: RawOne,
-            min: -RawOne,
-            value: NarrowSinCosQ60(value: sinQ60)
-        );
-        var cosRaw = Math.Clamp(
-            max: RawOne,
-            min: -RawOne,
-            value: NarrowSinCosQ60(value: cosQ60)
-        );
-
-        return (new(Value: sinRaw), new(Value: (folded
-            ? -cosRaw
-            : cosRaw)));
-    }
-    // Q60 → Q16 for the circular pair: round to nearest with ties to even on the magnitude, then re-sign, so the
-    // narrowing commutes with negation.
-    private static long NarrowSinCosQ60(long value) {
-        const int NarrowingShift = (SinCosFractionBitCount - FractionBitCount);
-        const ulong NarrowingMask = ((1UL << NarrowingShift) - 1UL);
-        const ulong NarrowingHalf = (1UL << (NarrowingShift - 1));
-        var sign = (value >> 63);
-        var magnitude = unchecked((ulong)((value ^ sign) - sign));
-        var truncated = (magnitude >> NarrowingShift);
-        var remainder = magnitude & NarrowingMask;
-
-        if (
-            (remainder > NarrowingHalf) ||
-            ((remainder == NarrowingHalf) && (0UL != (truncated & 1UL)))
-        ) {
-            ++truncated;
-        }
-
-        var result = unchecked((long)truncated);
-
-        return unchecked(((result ^ sign) - sign));
-    }
-
     // Rounds a wide product (a raw Q16 factor times a 2^fractionBitCount-scaled ratio) to raw Q16, ties to even.
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
     internal static long RoundProduct(Int128 product, int fractionBitCount) {
@@ -1380,18 +1258,6 @@ public readonly partial record struct FixedQ4816(long Value)
 
         return (high << 2) | ((long)(((ulong)low) >> 62));
     }
-    // Signed (x·y) >> 60 via one 64×64→128 multiply; |x·y| must stay below 2^123.
-    [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    private static long BigMulShift60(long x, long y) {
-        var high = Math.BigMul(
-            a: x,
-            b: y,
-            low: out var low
-        );
-
-        return (high << 4) | ((long)(((ulong)low) >> 60));
-    }
-
     // Fractional base-2 log of a Q62 mantissa in [1, 2), at Q61: 128-interval inverse table plus a quartic in the
     // residual r = m/d_i − 1 ≤ 2^-7 (total error ≤ ~2^-36; inverse rounding can leave r, and therefore the result,
     // a few raw units negative). Shared by Log2 and the Gaussian sampler.
@@ -1423,93 +1289,6 @@ public readonly partial record struct FixedQ4816(long Value)
             y: acc
         ));
     }
-    // Polynomial core on fractional turns (2^64 raw = one turn). Returns the un-narrowed Q60 cosine/sine of the
-    // folded residual plus the fold flag; the true cosine is negated when folded. Internal so the Gaussian sampler
-    // can feed full-resolution turns (2^-32 granularity) without the radian round-trip.
-    internal static (long CosQ60, long SinQ60, bool Folded) SinCosCore(long fractionalTurns) {
-        var folded = ((fractionalTurns > SinCosQuarterTurnQ64) || (fractionalTurns < -SinCosQuarterTurnQ64));
-
-        if (folded) {
-            // sin(π − θ) = sin θ and cos(π − θ) = −cos θ: half a turn minus the fraction wraps into [−¼, ¼].
-            fractionalTurns = unchecked((long)(0x8000000000000000UL - ((ulong)fractionalTurns)));
-        }
-
-        // Radians at Q60 (the fold bounds |θ| ≤ π/2), then Horner on u = θ².
-        // The radian magnitude is formed on |turns| and re-signed only where the sine reads it, so the odd sine and the
-        // even cosine come out exactly symmetric in the angle.
-        var negative = (fractionalTurns < 0L);
-        var turnMagnitude = unchecked((ulong)(negative ? -fractionalTurns : fractionalTurns));
-        var x = ((long)((((UInt128)turnMagnitude) * ((ulong)SinCosTwoPiQ60)) >> 64));
-        var u = BigMulShift60(
-            x: x,
-            y: x
-        );
-        var sinAcc = SinPolyC6Q60;
-
-        sinAcc = (SinPolyC5Q60 + BigMulShift60(
-            x: u,
-            y: sinAcc
-        ));
-        sinAcc = (SinPolyC4Q60 + BigMulShift60(
-            x: u,
-            y: sinAcc
-        ));
-        sinAcc = (SinPolyC3Q60 + BigMulShift60(
-            x: u,
-            y: sinAcc
-        ));
-        sinAcc = (SinPolyC2Q60 + BigMulShift60(
-            x: u,
-            y: sinAcc
-        ));
-        sinAcc = (SinPolyC1Q60 + BigMulShift60(
-            x: u,
-            y: sinAcc
-        ));
-        sinAcc = (SinPolyC0Q60 + BigMulShift60(
-            x: u,
-            y: sinAcc
-        ));
-
-        var cosAcc = CosPolyC7Q60;
-
-        cosAcc = (CosPolyC6Q60 + BigMulShift60(
-            x: u,
-            y: cosAcc
-        ));
-        cosAcc = (CosPolyC5Q60 + BigMulShift60(
-            x: u,
-            y: cosAcc
-        ));
-        cosAcc = (CosPolyC4Q60 + BigMulShift60(
-            x: u,
-            y: cosAcc
-        ));
-        cosAcc = (CosPolyC3Q60 + BigMulShift60(
-            x: u,
-            y: cosAcc
-        ));
-        cosAcc = (CosPolyC2Q60 + BigMulShift60(
-            x: u,
-            y: cosAcc
-        ));
-        cosAcc = (CosPolyC1Q60 + BigMulShift60(
-            x: u,
-            y: cosAcc
-        ));
-        cosAcc = (CosPolyC0Q60 + BigMulShift60(
-            x: u,
-            y: cosAcc
-        ));
-
-        var sinMagnitude = BigMulShift60(
-            x: x,
-            y: sinAcc
-        );
-
-        return (cosAcc, (negative ? -sinMagnitude : sinMagnitude), folded);
-    }
-
     /// <summary>Returns the integral part of <paramref name="value"/>, discarding the fraction (rounding toward zero).</summary>
     /// <param name="value">The value to truncate.</param>
     /// <returns><paramref name="value"/> with its fractional part removed toward zero.</returns>

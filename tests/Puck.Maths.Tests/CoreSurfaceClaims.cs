@@ -1160,7 +1160,7 @@ internal static class CoreSurfaceClaims {
     }
 
     // The tolerance a "correctly quantized 30th root of unity" comparison allows, in guard units: the kernel's own
-    // committed SinCos envelope for |raw| within one turn (3/4 raw ULP, the same regime scalar.sincos-vs-series pins)
+    // conservative SinCos allowance within one turn (3/4 raw ULP; scalar.sincos-vs-series pins a tighter bound)
     // plus a PROVEN strictly-less-than-two-raw-unit gap between BuildRotors' own per-step integer-division formula and
     // the independently rounded ideal raw above. Proof of that second term: let R = round(2π·2¹⁶) (the kernel's
     // TurnRawQ16, so |R − 2π·2¹⁶| ≤ ½) and X = 2π·2¹⁶ exactly. |R·step/30 − X·step/30| ≤ (29/30)·½ < ½ for every step

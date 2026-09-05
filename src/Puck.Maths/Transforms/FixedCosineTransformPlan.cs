@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace Puck.Maths;
 
 /// <summary>
@@ -18,9 +20,9 @@ public sealed class FixedCosineTransformPlan {
     /// <summary>Builds the plan for a transform length.</summary>
     /// <param name="length">The transform length; must be a positive power of two.</param>
     /// <returns>The plan.</returns>
-    /// <remarks>Each forward twiddle is <c>FixedComplex.FromAngle(FromDouble(-pi*k/(2*length)))</c> for
-    /// <c>k = 0 .. length - 1</c>, an independent <see cref="FixedQ4816.SinCos"/> call per entry so no error compounds
-    /// across the table; inverse twiddles are the exact conjugates. The Fourier plan beneath is built by
+    /// <remarks>Forward twiddles represent <c>exp(-i*pi*k/(2*length))</c> for <c>k = 0 .. length - 1</c>.
+    /// Exact binary turn fractions enter <see cref="FixedQ4816.SinCosTurns"/> directly. Complementary angles share
+    /// one evaluation, with no accumulated error; inverse twiddles are exact conjugates. The Fourier plan is built by
     /// <see cref="FixedFourierTransformPlan.Create"/> at the same length.</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is not a positive power of two.</exception>
     public static FixedCosineTransformPlan Create(int length) {
@@ -32,12 +34,18 @@ public sealed class FixedCosineTransformPlan {
         var fourierPlan = FixedFourierTransformPlan.Create(length: length);
         var forward = new FixedComplex[length];
         var inverse = new FixedComplex[length];
-        var turn = (-Math.PI / (2.0 * length));
+        var phaseShift = (62 - BitOperations.Log2((uint)length));
 
         for (var k = 0; (k < length); ++k) {
-            var angle = FixedQ4816.FromDouble(value: (turn * k));
-
-            forward[k] = FixedComplex.FromAngle(angle: angle);
+            if (k <= (length >> 1)) {
+                var phase = unchecked((0UL - (ulong)k) << phaseShift);
+                var (sin, cos) = FixedQ4816.SinCosTurns(fractionalTurns: phase);
+                forward[k] = new(Real: cos, Imaginary: sin);
+            }
+            else {
+                var reflected = forward[length - k];
+                forward[k] = new(Real: -reflected.Imaginary, Imaginary: -reflected.Real);
+            }
             inverse[k] = forward[k].Conjugate();
         }
 

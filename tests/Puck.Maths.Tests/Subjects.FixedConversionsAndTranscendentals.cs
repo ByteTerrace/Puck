@@ -923,33 +923,8 @@ internal static partial class Subjects {
             denominator: 2,
             numerator: 1
         ) + (high >> 44));
-    // The three committed circular regimes: 0.75 raw ULP over |θ| ≤ 2π, 1.0 below 2⁴⁸ raw, 2.5 over the full carrier.
-    // The bands follow the reduction constant's own error, which grows linearly in |raw|: |C − 2⁶⁴/2π| ≤ ½ admits up to
-    // 2π·|raw|/2⁶⁵ ≈ 1.57 raw ULP of argument error at |raw| = 2⁶³, on top of the kernel's own ≤ 0.5.
-    private static BigInteger SinCosToleranceUnits(long raw) {
-        var magnitude = ((long.MinValue == raw)
-            ? (BigInteger.One << 63)
-            : BigInteger.Abs(value: new BigInteger(value: raw))
-        );
-
-        if (magnitude <= 411775) {
-            return UlpUnits(
-            denominator: 4,
-            numerator: 3
-        );
-        }
-        if (magnitude < (BigInteger.One << 48)) {
-            return UlpUnits(
-            denominator: 1,
-            numerator: 1
-        );
-        }
-
-        return UlpUnits(
-            denominator: 2,
-            numerator: 5
-        );
-    }
+    // Q96 full-range reduction plus the local Q60 kernel and the final ties-to-even narrowing.
+    private static BigInteger SinCosToleranceUnits() => UlpUnits(numerator: 50000001, denominator: 100000000);
 
     /// <summary>Proves the square root is BIT-EXACTLY the documented floor at every swept raw, against a Newton descent
     /// in arbitrary width settled by the exact predicate; states that predicate directly on the returned raw, so the
@@ -1087,8 +1062,8 @@ internal static partial class Subjects {
         return null;
     }
     /// <summary>Proves both circular outputs lie inside the radian-domain series enclosure widened by the committed
-    /// per-regime envelope, that the two one-line projections are the pair's own components, that both outputs are
-    /// clamped into the unit interval, that the Pythagorean identity holds inside the regime's own budget, that the
+    /// full-range envelope, that the single-output paths equal the pair's own components, that both outputs stay
+    /// inside the unit interval, that the Pythagorean identity holds inside the same budget, that the
     /// origin is exact, and that the module's derived circle constant agrees with the published expansion.</summary>
     /// <param name="left">The first sampled operand lane.</param>
     /// <param name="right">The second sampled operand lane.</param>
@@ -1101,7 +1076,7 @@ internal static partial class Subjects {
             guardBitCount: Oracles.GuardBitCount,
             raw: raw
         );
-        var tolerance = SinCosToleranceUnits(raw: raw);
+        var tolerance = SinCosToleranceUnits();
         var one = (1L << FixedQ4816.FractionBitCount);
 
         if (WithinEnvelope(
@@ -1489,7 +1464,7 @@ internal static partial class Subjects {
             guardBitCount: Oracles.GuardBitCount,
             raw: raw
         );
-        var tolerance = SinCosToleranceUnits(raw: raw);
+        var tolerance = SinCosToleranceUnits();
 
         var (sin, cos) = FixedQ4816.SinCos(angle: Raw(value: raw));
 

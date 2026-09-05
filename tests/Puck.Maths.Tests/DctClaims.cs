@@ -42,7 +42,7 @@ internal static class DctClaims {
 
         return values;
     }
-    // The direct O(N^2) DCT-II sum, built from the SAME FixedQ4816.SinCos kernel the plan's twiddles use and the
+    // The direct O(N^2) DCT-II sum, built from the SAME FixedQ4816.SinCosTurns kernel the plan's twiddles use and the
     // one-rounding FixedQ4816 multiply, but with no even/odd fold, no Fourier network and no post-twiddle: bin k
     // accumulates x[n] * Cos(pi * (2n + 1) * k / (2N)) over all n. A different route over the identical kernel, so
     // agreement pins the fold, the Fourier route and the post-twiddle rather than the kernel.
@@ -54,9 +54,9 @@ internal static class DctClaims {
             var sum = FixedQ4816.Zero;
 
             for (var index = 0; (index < n); ++index) {
-                var angle = FixedQ4816.FromDouble(value: ((Math.PI * ((2 * index) + 1) * k) / (2.0 * n)));
+                var phase = unchecked(((ulong)((2 * index) + 1) * (ulong)k) << (62 - BitOperations.Log2((uint)n)));
 
-                sum += (values[index] * FixedQ4816.Cos(angle: angle));
+                sum += (values[index] * FixedQ4816.SinCosTurns(fractionalTurns: phase).Cos);
             }
 
             result[k] = sum;
@@ -83,7 +83,7 @@ internal static class DctClaims {
     /// <summary>Proves a constant input's spectrum is EXACTLY <c>N * value</c> at bin zero and EXACTLY zero
     /// elsewhere, that <see cref="FixedCosineTransform.Inverse"/> restores the constant EXACTLY at every sample, and
     /// that an impulse at sample zero produces EXACTLY the plan's cosine table — <c>X[k] == Cos(-pi*k/(2N))</c> as
-    /// <see cref="FixedQ4816.SinCos"/> quantizes it.</summary>
+    /// <see cref="FixedQ4816.SinCosTurns"/> quantizes it.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? ConstantAndImpulseExact() {
         foreach (var length in DefaultLengths) {
@@ -122,7 +122,8 @@ internal static class DctClaims {
             FixedCosineTransform.Forward(plan: plan, scratch: scratch, values: impulse);
 
             for (var k = 0; (k < length); ++k) {
-                var expected = FixedQ4816.Cos(angle: FixedQ4816.FromDouble(value: ((-Math.PI * k) / (2.0 * length))));
+                var phase = unchecked((0UL - (ulong)k) << (62 - BitOperations.Log2((uint)length)));
+                var expected = FixedQ4816.SinCosTurns(fractionalTurns: phase).Cos;
 
                 if (impulse[k] != expected) {
                     return $"length {length}: impulse bin {k} is {impulse[k]}, expected exactly the cosine table entry {expected}";
@@ -242,7 +243,7 @@ internal static class DctClaims {
     }
 
     /// <summary>Proves the Fourier route — even/odd fold, one <see cref="FixedFourierTransform"/>, one post-twiddle
-    /// per bin — agrees with the direct O(N^2) DCT-II sum built from the SAME <see cref="FixedQ4816.SinCos"/> kernel
+    /// per bin — agrees with the direct O(N^2) DCT-II sum built from the SAME <see cref="FixedQ4816.SinCosTurns"/> kernel
     /// but a different route, within a measured bound; this pins the fold, the route and the post-twiddle rather
     /// than the kernel.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>

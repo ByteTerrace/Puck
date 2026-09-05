@@ -820,6 +820,8 @@ internal static partial class LawRegistry {
         .. HilbertCurveCases(),
         .. HexagonalCoordinateCases(),
         .. HexagonalIndexCases(),
+        .. SquareGridCases(),
+        Case(id: "integer.layer-sequence-full-range", run: () => Laws.Claim(lawId: "integer.layer-sequence-full-range", claim: Subjects.LayerSequenceFullRange)),
         .. ScalarSpecificationCases(),
         .. BinaryFieldCrcCases(),
         .. MetallicQuasicrystalAccessCases(),
