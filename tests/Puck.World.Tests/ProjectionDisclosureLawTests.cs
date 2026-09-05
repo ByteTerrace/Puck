@@ -20,7 +20,6 @@ public sealed class ProjectionDisclosureLawTests {
         "rules",
         "grants",
         "state",
-        "market",
         "admission",
         "generation",
         "generators",

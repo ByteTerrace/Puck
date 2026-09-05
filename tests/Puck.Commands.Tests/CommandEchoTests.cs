@@ -42,7 +42,7 @@ public sealed class CommandEchoTests {
     }
     [Fact]
     public void NoContentClosesToAnEmptyBody() {
-        Assert.Equal(actual: CommandEcho.Open(verb: "world.market").Close(), expected: "[world.market:]");
+        Assert.Equal(actual: CommandEcho.Open(verb: "world.groups").Close(), expected: "[world.groups:]");
     }
     [Theory]
     [InlineData("plain", "plain")]
@@ -164,15 +164,15 @@ public sealed class CommandEchoTests {
     }
     [Fact]
     public void HeadThenFieldsFormsOneSegmentDistinctFromAPureFieldSegment() {
-        // world.market's own two segment shapes side by side: config is pure Field tokens (no Head), a listing opens
-        // with the declared Head "listing".
-        var line = CommandEcho.Open(verb: "world.market")
-            .Field(key: "feeBasisPoints", value: 1000)
+        // world.groups' own two segment shapes side by side: config is pure Field tokens (no Head), a group opens
+        // with the declared Head "group".
+        var line = CommandEcho.Open(verb: "world.groups")
+            .Field(key: "kindCount", value: 1)
             .Segment()
-            .Head(head: "listing").Field(key: "id", value: 1).Field(key: "status", value: "Active")
+            .Head(head: "group").Field(key: "id", value: 1).Field(key: "status", value: "Active")
             .Close();
 
-        Assert.Equal(actual: line, expected: "[world.market: feeBasisPoints=1000 | listing id=1 status=Active]");
+        Assert.Equal(actual: line, expected: "[world.groups: kindCount=1 | group id=1 status=Active]");
     }
     [Fact]
     public void ASplicedTagSurvivesTheRoundTripBackThroughTheConsole() {

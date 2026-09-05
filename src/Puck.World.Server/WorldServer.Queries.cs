@@ -1,4 +1,3 @@
-using System.Globalization;
 using Puck.Maths;
 using Puck.World.Protocol;
 
@@ -680,33 +679,6 @@ public sealed partial class WorldServer {
         tick: tick
     ),
     });
-    // The item/currency fact vocabulary's cell key for a market participant. A seat's index is its own stable
-    // identity (generation is always 0), so its key is the plain 0-based entity index — the same addressing
-    // WorldRuleFacts.ArgMaxPrefix/ArgMinPrefix already read off an unkeyed row. A peer's index is not stable on its
-    // own: WorldBodiesLimits recycles a vacated population slot for a later, unrelated connection, and
-    // WorldGrants/the ownership escrow substrate both key a peer's real authority on the full (index, generation)
-    // pair (WorldPrincipal's own equality) — so a market cell keys the same pair, or a later occupant of the same
-    // slot would silently inherit the departed peer's balance/items/listing proceeds. The compound key never
-    // collides with a seat's plain-integer key (it always carries a reserved '_' the kernel would otherwise refuse
-    // in an authored key) and reads as a non-candidate to ArgExtremum's int.TryParse scan, exactly like any other
-    // non-numeric key already does. Only a real player (seat or peer) may hold a market fact; console/world/addon/
-    // document/group principals refuse here rather than minting a cell no player could ever read back.
-    private static bool TryPlayerCellKey(WorldPrincipal principal, out string key) {
-        switch (principal.Kind) {
-            case PrincipalKind.Seat:
-                key = principal.Index.ToString(provider: CultureInfo.InvariantCulture);
-
-                return true;
-            case PrincipalKind.Peer:
-                key = $"{principal.Index.ToString(provider: CultureInfo.InvariantCulture)}_{principal.Generation.ToString(provider: CultureInfo.InvariantCulture)}";
-
-                return true;
-            default:
-                key = string.Empty;
-
-                return false;
-        }
-    }
     // The (row, key) PAIR rule at the mutation boundary: a null key means the row's SLOT cell, and a row that is
     // positively keyed (WorldStateRow.IsKeyed) has no single cell for a null key to mean — refused by name rather
     // than silently writing cells[0].

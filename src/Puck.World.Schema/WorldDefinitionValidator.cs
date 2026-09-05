@@ -1373,15 +1373,6 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
-        // The local auction house: null IS today's no-market world — the same null-is-absent posture every
-        // optional section here uses. Needs only stateRows (already built above) to resolve a listing's
-        // item/currency rows.
-        ValidateMarket(
-            market: definition.Market,
-            stateRows: stateRows,
-            errors: errors
-        );
-
         // Groups validates HERE — ahead of its original position ahead of Grants below — because a destination row's
         // scope=group selector resolves against the SAME declared group-id set
         // Grants already needed: both are threaded from this ONE call rather than validating groups twice. Only

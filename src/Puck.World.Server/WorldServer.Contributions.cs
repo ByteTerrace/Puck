@@ -192,8 +192,8 @@ public sealed partial class WorldServer {
 
         return true;
     }
-    // CONTRIBUTION TENURE RECOVERY — the same tick-driven, replay-deterministic shape ReclaimExpiredEscrows and
-    // SettleExpiredMarketListings establish, for a presence-tenure slot whose contributor's link went away instead of
+    // CONTRIBUTION TENURE RECOVERY — the same tick-driven, replay-deterministic shape ReclaimExpiredEscrows
+    // establishes, for a presence-tenure slot whose contributor's link went away instead of
     // an unaccepted ownership offer. `placements` is read once, before any mutation in this pass swaps m_definition,
     // matching those sweeps' own safe-iteration remark; a row an earlier iteration already rewrote is re-read from the
     // live definition where the pass needs its post-write state.

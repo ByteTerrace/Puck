@@ -190,8 +190,8 @@ public sealed record WorldPortalDefaults(
 );
 /// <summary>
 /// The <c>portals</c> section — the world-scope defaults a <see cref="WorldPlacementPortal"/> facet resolves
-/// against when it does not author its own fact. Optional, for the same reason <see cref="WorldMarketSection"/> and
-/// <see cref="WorldReference"/>'s own <c>references</c> section are: a world with no portals authors neither this
+/// against when it does not author its own fact. Optional, for the same reason
+/// <see cref="WorldReference"/>'s own <c>references</c> section is: a world with no portals authors neither this
 /// section nor any portal facet, and a required section would refuse every existing document at boot for declaring
 /// nothing. Slotted immediately after <c>references</c> in <see cref="WorldDefinition"/>'s declaration order — the
 /// two sections are the world-topology cluster a portal composes from (which world, and how travel through it

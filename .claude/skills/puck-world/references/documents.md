@@ -25,7 +25,7 @@ replica. A `frames` row that also mints grants refuses by name.
 `WorldProjection.Compose(definition, tier, authority, revision)` is the one
 egress composer, answering `null` at `replica`/`frames` so the caller sends the
 definition verbatim or nothing. `WorldProjectionDocument`'s MEMBER LIST is the
-disclosure decision: it has no member for `rules`, `grants`, `state`, `market`,
+disclosure decision: it has no member for `rules`, `grants`, `state`,
 `admission`, `generation`, `generators`, `groups`, `properties`, `addons`,
 `storage`, `host`, `authoring`, `identity`, `inputHold`, `targetRegisters`,
 `bodyMotionPrograms`, or `portals`, and its `WorldProjectedKit` row has none for
@@ -100,10 +100,7 @@ below), `Identity`, `Groups`, `Properties`, `Interactions`, `Generation`,
 (`Protocol/WorldAdmission.cs`, the one trust list every ingress crosses —
 key-bearing rows for the QUIC identity door, keyless `federatedAuthority` rows
 for travellers an authenticated authority hands over; deny-by-default, an
-absent/empty section admits neither), `Market` (`WorldMarketSection`,
-`WorldMarket.cs` — the local auction house's config and live listing ledger;
-null IS today's no-market behavior, falling back to
-`WorldMarketSection.Empty`), `Adjacencies` (`WorldAdjacencies.cs` — invisible
+absent/empty section admits neither), `Adjacencies` (`WorldAdjacencies.cs` — invisible
 reciprocal authority boundaries; null names no seamless neighbours), `Text`
 (`TextFontCatalogDefinition` — the named, hash-pinned world-space font
 catalog; null declares no fonts), and `Metadata` (`WorldMetadataSection`,
@@ -197,11 +194,11 @@ mutates them in session and no grant subject names them:
   `$drop`/`$replace` refuses at validation, and a JSON `null` under a key in
   a delta deletes the inherited key rather than storing a literal null.
 
-The `WorldSection` enum (`Protocol/WorldGrant.cs`, 33 members, declared
+The `WorldSection` enum (`Protocol/WorldGrant.cs`, 32 members, declared
 order): `Kits, Screens, Cameras, Spawns, Motion, Population, Render, Addons,
 Bindings, Creations, Placements, Authoring, Speakers, Tunes, Patches, Audio,
 Collision, Host, Views, Looks, Grants, Hud, State, InputHold, Rules,
-Groups, Properties, Interactions, PlayerDefaults, Market, Probes, Dynamics,
+Groups, Properties, Interactions, PlayerDefaults, Probes, Dynamics,
 Curves`.
 It is the grant subject vocabulary
 (`section:<name>`) and the mutation dispatch axis — narrower than
@@ -212,9 +209,7 @@ It is the grant subject vocabulary
 names also differ — `SpawnPoints`/`BindingOverlays`/`LookAssignment`/
 `DefaultSeatKit`/`Assignment` dispatch through `Spawns`/`Bindings`/`Looks`/
 `Kits` respectively; `PlayerDefaults` dispatches through
-`WorldMutation.SetPlayerDefaults`, and `Market` through the
-`CreateMarketListing`/`PlaceMarketBid`/`BuyoutMarketListing`/
-`CancelMarketListing`/`SettleMarketListing` family). `Probes` is boot-authored
+`WorldMutation.SetPlayerDefaults`). `Probes` is boot-authored
 only — no `WorldMutation` kind targets it, so the section-scoped grant hold is
 its whole authority surface.
 

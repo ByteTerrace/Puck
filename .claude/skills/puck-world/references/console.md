@@ -261,7 +261,7 @@ composing writes. That is a defect class, not a shortcut.
 
 - `family.verb` dotted names (`world.*`, `player.*`, `screen.*`,
   `profile.*`, `storage.*`, `capture.*`, `replay.*`,
-  `audio.*`, `market.*`); names case-insensitive on the full parse, ordinal
+  `audio.*`); names case-insensitive on the full parse, ordinal
   on the fast path.
 - Row-valued mutation verbs take ONE inline-JSON argument in the exact wire
   shape of the document section row, reconstructed from the raw text

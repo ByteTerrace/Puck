@@ -510,9 +510,8 @@ transfer is implemented remote-first and short-circuits its transport when both 
 share a process. Building the local path first is what binds transfer authority to a host, which is
 the defect to avoid rather than the shape to extend.
 
-**Reserve then commit, on the primitive that already carries market escrow and exactly-once effect
-settlement** — one mechanism, three customers. The reservation is a **lease the destination is bound
-by**, not a hint the source may withdraw: "on failure the body stays at the source" holds only before
+**Reserve then commit, with exactly-once effect settlement.** The reservation is a **lease the
+destination is bound by**, not a hint the source may withdraw: "on failure the body stays at the source" holds only before
 commit, since a destination that commits with a lost acknowledgement would otherwise duplicate the
 body. The destination may not commit after the lease deadline and the source may not resurrect before
 it, so the deadline partitions every history into exactly-one-authority outcomes. The deadline is

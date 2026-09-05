@@ -142,49 +142,18 @@ public sealed partial class WorldServer {
         WorldMutation.SetRenderDefaults or WorldMutation.SetPopulationDefaults or WorldMutation.SetHostDefaults);
     // An EXPLICIT write to a cell carrying WorldStateAdvance or WorldStateDynamics — a whole-row UpsertStateRow
     // (which re-bases the row's OWN slot trait AND every keyed cell's own trait, since it re-declares the whole
-    // row), an UpsertStateCell (which re-bases ONLY the one cell it names — the row's slot trait when that cell IS
-    // the slot key, or that cell's own trait otherwise), or a market mutation (which re-bases every (row, key) cell
-    // it actually wrote through WriteMarketCell — see MarketCellTouches) — re-bases the trait to `tick`,
+    // row), or an UpsertStateCell (which re-bases ONLY the one cell it names — the row's slot trait when that cell IS
+    // the slot key, or that cell's own trait otherwise) — re-bases the trait to `tick`,
     // unconditionally overwriting whatever epoch the write's own payload carried. An Advance trait's base becomes
     // exactly the value the write installed (see WorldStateAdvance's remarks); a Dynamics trait's Y0/V0 become the
     // eased value/velocity the OLD trait would report at this tick plus a Retarget kick for the target's own jump
-    // (see RebaseDynamics) — never the raw write, so the follower keeps chasing from wherever it actually was. A
-    // market write that skipped the Advance half would let a cell's elapsed accrual apply a second time on its very
-    // next read: WriteMarketCell preserves the pre-write trait verbatim (it is a value move, never a re-mint), so
-    // the base it installs already has that accrual baked in — an un-rebased epoch would let the same elapsed span
-    // compute again from the old epoch against the new base. Runs AFTER TryCompose so it sees the row/cell
-    // TryCompose just installed, and BEFORE validation/journal so a rebased trait is what gets journaled, replayed
-    // by world.undo, and read back. `original` is the document the mutation composed against (before this mutation
-    // applied) — a Dynamics rebase needs it to evaluate the OLD trait/target at `tick`, and market's own touches need
-    // it to resolve a listing's pre-write state (its standing bidder, in particular) since `candidate` already
-    // reflects the write. A no-op for every other mutation kind, and for a cell (row-level or per-cell) that carries
-    // neither trait.
+    // (see RebaseDynamics) — never the raw write, so the follower keeps chasing from wherever it actually was. Runs
+    // AFTER TryCompose so it sees the row/cell TryCompose just installed, and BEFORE validation/journal so a rebased
+    // trait is what gets journaled, replayed by world.undo, and read back. `original` is the document the mutation
+    // composed against (before this mutation applied) — a Dynamics rebase needs it to evaluate the OLD trait/target
+    // at `tick`. A no-op for every other mutation kind, and for a cell (row-level or per-cell) that carries neither
+    // trait.
     private static WorldDefinition RebaseCellTraits(WorldDefinition original, WorldDefinition candidate, WorldMutation mutation, ulong tick) {
-        if (MarketCellTouches(
-            mutation: mutation,
-            original: original
-        ) is { } touches) {
-            var touchedState = candidate.State;
-
-            foreach (var touch in touches) {
-                touchedState = RebaseKeyedCellTraits(
-                    original: original,
-                    rows: touchedState,
-                    rowName: touch.Row,
-                    key: touch.Key,
-                    tick: tick
-                );
-            }
-
-            return (ReferenceEquals(
-                objA: touchedState,
-                objB: candidate.State
-            )
-                ? candidate
-                : candidate.WithWorldState(rows: touchedState)
-            );
-        }
-
         string? rowName;
         string? cellKey; // null on a whole-row write (every trait-bearing cell re-bases); the named key on a per-cell write.
 
@@ -320,56 +289,6 @@ public sealed partial class WorldServer {
         }
 
         return (changed ? (cell with { Advance = advance, Dynamics = dynamics }) : null);
-    }
-    // Rebases one keyed cell's Advance/Dynamics trait to `tick` — the same rebase RebaseCellTraits' own
-    // UpsertStateCell arm performs on a single named cell, factored out so a market write (which may touch several
-    // cells across two rows in one mutation) can apply it per touch without duplicating the clamp-free with-expression
-    // rebuild. A no-op for a cell that carries neither trait, or a row/key MarketCellTouches named that this document
-    // does not (or no longer) declare.
-    private static IReadOnlyList<WorldStateRow> RebaseKeyedCellTraits(WorldDefinition original, IReadOnlyList<WorldStateRow> rows, WorldCellName rowName, string key, ulong tick) {
-        if (WorldDefinitionRows.FindStateRow(
-            name: rowName,
-            rows: rows
-        ) is not { } row) {
-            return rows;
-        }
-
-        var cellKey = WorldCellName.Parse(candidate: key);
-        var cells = (row.Cells ?? []);
-
-        for (var index = 0; (index < cells.Count); index++) {
-            var cell = cells[index];
-
-            if (cell.Key != cellKey) {
-                continue;
-            }
-
-            var originalRow = WorldDefinitionRows.FindStateRow(
-                rows: original.State,
-                name: rowName
-            );
-
-            if (RebaseOneCell(
-                cell: cell,
-                definition: original,
-                row: originalRow,
-                tick: tick
-            ) is not { } rebased) {
-                return rows;
-            }
-
-            var rebasedCells = new List<WorldStateCell>(collection: cells);
-
-            rebasedCells[index] = rebased;
-
-            return Upsert(
-                list: rows,
-                item: (row with { Cells = rebasedCells }),
-                keyOf: static (WorldStateRow r) => r.Name
-            );
-        }
-
-        return rows;
     }
     // The write-side counterpart of WorldStateReader.TryEvaluateDynamics: a cell's WorldStateDynamics trait is
     // rebased, never replaced wholesale, by an explicit write to its own truth value. The trait's Y0/V0 become the
@@ -562,7 +481,6 @@ public sealed partial class WorldServer {
             or WorldMutation.OfferOwnership or WorldMutation.SettleOwnership => WorldSection.Groups,
         WorldMutation.SetProperty => WorldSection.Properties,
         WorldMutation.UpsertInteraction or WorldMutation.RemoveInteraction => WorldSection.Interactions,
-        WorldMutation.CreateMarketListing or WorldMutation.PlaceMarketBid or WorldMutation.BuyoutMarketListing or WorldMutation.CancelMarketListing or WorldMutation.SettleMarketListing or WorldMutation.PruneMarketListings => WorldSection.Market,
         // No silent fallback: a new mutation kind added without its own arm would otherwise inherit Kits authority. A
         // missing arm throws the first time that kind is mapped — surfaced loudly at runtime rather than mis-authorized.
         _ => throw new ArgumentOutOfRangeException(
@@ -2296,54 +2214,6 @@ public sealed partial class WorldServer {
 
                     return true;
                 }
-            case WorldMutation.CreateMarketListing m:
-                return TryComposeCreateMarketListing(
-                    candidate: out candidate,
-                    current: current,
-                    mutation: m,
-                    reason: out reason,
-                    tick: tick
-                );
-            case WorldMutation.PlaceMarketBid m:
-                return TryComposePlaceMarketBid(
-                    candidate: out candidate,
-                    current: current,
-                    mutation: m,
-                    reason: out reason,
-                    tick: tick
-                );
-            case WorldMutation.BuyoutMarketListing m:
-                return TryComposeBuyoutMarketListing(
-                    candidate: out candidate,
-                    current: current,
-                    mutation: m,
-                    reason: out reason,
-                    tick: tick
-                );
-            case WorldMutation.CancelMarketListing m:
-                return TryComposeCancelMarketListing(
-                    candidate: out candidate,
-                    current: current,
-                    mutation: m,
-                    reason: out reason,
-                    tick: tick
-                );
-            case WorldMutation.SettleMarketListing m:
-                return TryComposeSettleMarketListing(
-                    candidate: out candidate,
-                    current: current,
-                    mutation: m,
-                    reason: out reason,
-                    tick: tick
-                );
-            case WorldMutation.PruneMarketListings m:
-                return TryComposePruneMarketListings(
-                    candidate: out candidate,
-                    current: current,
-                    mutation: m,
-                    reason: out reason,
-                    tick: tick
-                );
             default:
                 candidate = current;
                 reason = "unknown mutation kind";

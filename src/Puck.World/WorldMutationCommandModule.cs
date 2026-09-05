@@ -302,7 +302,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return Simulation(
             name: "world.undo",
-            description: "Undoes the last n applied mutations (default 1) by replaying the journal minus its tail through the same apply path: world.undo [n]. The journal IS the edit history; replay IS the undo engine. Refuses before crossing a market listing, bid, buyout, cancellation, or settlement finality barrier; world.status reports the currently undoable tail separately from dirty.",
+            description: "Undoes the last n applied mutations (default 1) by replaying the journal minus its tail through the same apply path: world.undo [n]. The journal IS the edit history; replay IS the undo engine.",
             handler: (context, args) => {
                 var count = 1;
 
@@ -444,7 +444,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.status",
-            description: "Reports the live world definition and journal state (Immediate; the stdin barrier makes it read the settled state after any pending mutation): source path, the source file's basis (its composition template, or none — peeked from the file, the one truth for derivation), schema, row counts, the simulation rate, correction/producer/audio policy (including the mixer's half-radius curve sample), the declared medium field names (or none), a cheap session-drift hint, dirty = journal length, and undoable = the removable tail after the latest economic finality barrier. Session drift is separate from dirty: a saved-bytes-only world.save leaves the in-memory definition unchanged, so session drift honestly persists past a save.",
+            description: "Reports the live world definition and journal state (Immediate; the stdin barrier makes it read the settled state after any pending mutation): source path, the source file's basis (its composition template, or none — peeked from the file, the one truth for derivation), schema, row counts, the simulation rate, correction/producer/audio policy (including the mixer's half-radius curve sample), the declared medium field names (or none), a cheap session-drift hint, and dirty = journal length. Session drift is separate from dirty: a saved-bytes-only world.save leaves the in-memory definition unchanged, so session drift honestly persists past a save.",
             handler: (_, args) => {
                 if (CommandResult.RequireNoArguments(args: args, verb: "world.status") is { } refusal) {
                     return refusal;
@@ -453,7 +453,6 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 var definition = server.Definition;
                 var source = definitionSource.SourcePath;
                 var dirty = server.JournalLength;
-                var undoable = server.UndoableJournalLength;
                 var drift = WorldSessionCapture.DescribeDrift(
                     definition: definition,
                     render: renderSettings,
@@ -492,7 +491,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
 
                 return new CommandResult(Output: string.Create(
                     provider: CultureInfo.InvariantCulture,
-                    handler: $"[world.status: source {source} basis {basis} schema {definition.Schema} rate {definition.SimulationRateHz}Hz kits {definition.Kits.Count} body-programs {definition.BodyMotionPrograms.Count} screens {definition.Screens.Count} cameras {definition.Cameras.Count} creations {definition.Creations.Count} placements {definition.Placements.Count} maxSmoothError {definition.Motion.MaxSmoothError:0.###} medium {medium} audio-curve {definition.Audio.DefaultCurve} half-radius-gain {halfRadiusGain:0.#####} session-drift {drift} dirty {dirty} undoable {undoable}]"
+                    handler: $"[world.status: source {source} basis {basis} schema {definition.Schema} rate {definition.SimulationRateHz}Hz kits {definition.Kits.Count} body-programs {definition.BodyMotionPrograms.Count} screens {definition.Screens.Count} cameras {definition.Cameras.Count} creations {definition.Creations.Count} placements {definition.Placements.Count} maxSmoothError {definition.Motion.MaxSmoothError:0.###} medium {medium} audio-curve {definition.Audio.DefaultCurve} half-radius-gain {halfRadiusGain:0.#####} session-drift {drift} dirty {dirty}]"
                 ));
             }
         );

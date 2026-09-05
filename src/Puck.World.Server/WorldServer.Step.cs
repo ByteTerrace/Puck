@@ -1670,12 +1670,6 @@ public sealed partial class WorldServer {
         // Escrow recovery evaluates on the SAME terms, right beside rules — see ReclaimExpiredEscrows' own remarks.
         ReclaimExpiredEscrows(tick: tick);
         m_transferEscrow.ReclaimExpired(tick: tick);
-        // Market deadline recovery — the SAME tick-driven, replay-deterministic shape ReclaimExpiredEscrows already
-        // establishes, for a listing that reached its deadline instead of an unaccepted ownership offer's.
-        SettleExpiredMarketListings(tick: tick);
-        // Market retention sweep — runs right beside deadline recovery, archiving terminal rows once they have aged
-        // past market.retentionSeconds so the section's lifetime listing count stays bounded.
-        PruneExpiredMarketListings(tick: tick);
         // Contribution tenure recovery — the same shape again, for a presence-tenure slot whose contributor's link
         // went unreachable past its authored grace.
         SweepContributionTenure(tick: tick);

@@ -209,10 +209,7 @@ candidate document, revalidating the WHOLE document through
 the changed section's derived state; a failure rejects loudly and changes
 nothing. The journal is the undo engine: `world.undo` restores the loaded base
 definition and deterministically replays the journal minus its tail through
-the same apply path — no per-mutation inverse exists. Market listings, bids,
-buyouts, cancellations, and settlements are economic finality barriers:
-`world.undo` may remove later authoring edits, but refuses before crossing one
-of those entries. Retention pruning moves no value and remains undoable.
+the same apply path — no per-mutation inverse exists.
 `world.save` writes a canonical session snapshot and compacts the journal (the
 saved definition becomes the new base). `world.reset`/`world.load`/`world.reload` are ONE
 rebuild-and-swap mechanism (`WorldServer.ApplyRebuild`) over three document
@@ -230,12 +227,10 @@ Rule/interaction installation is also guarded by a static aggregate work budget,
 reported beside evaluation slots in `world.budget`; dynamic body-index keys use
 a prebuilt string cache on the evaluation path.
 
-**Lifetime sweeps.** Five per-tick passes run side by side at the end of
+**Lifetime sweeps.** Three per-tick passes run side by side at the end of
 `WorldServer.StepCore`, each firing ORDINARY mutations under
 `WorldPrincipal.World`'s structural exemption so recovery is journalled rather
 than a bespoke erase: `ReclaimExpiredEscrows` (an unaccepted ownership offer),
-`SettleExpiredMarketListings`/`PruneExpiredMarketListings` (a
-listing past its deadline, a terminal row past `market.retentionSeconds`),
 `SweepContributionTenure` (`WorldServer.Contributions.cs` — a presence-tenure
 contribution slot whose watched `adjacencies` row has read dropped past the
 slot's own `graceSeconds`), and `SweepPlacementResponses`
@@ -245,8 +240,7 @@ condition holds at a placement's coupled cell becomes its prototype). The
 contribution sweep reads link liveness through `WorldServer.TryLinkLiveness`,
 which pairs `WorldEventFeed.LinkStalenessTicks` with the row's compiled
 `livenessGraceSeconds`; its retraction defers, rather than proceeding, while
-the slot's inhabitant is drive-possessed. Market settlement is journal-final;
-market retention pruning and the other recovery mutations remain undoable.
+the slot's inhabitant is drive-possessed. Every recovery mutation remains undoable.
 
 **Steady-state performance contract.** The per-tick pipeline — intent fold,
 sim step, snapshot emission, binding resolution — allocates nothing; document
@@ -727,7 +721,7 @@ and `TryDecodeCommittedMutation`: world-authored rule effects must survive a
 checkpoint. Pending external submissions and replayed external inputs retain
 the live mutation codec, which refuses a world actor on both encode and decode.
 The committed codec admits only the canonical world actor and does not relax
-nested grant or market-party validation.
+nested grant validation.
 
 ### Social memory component
 

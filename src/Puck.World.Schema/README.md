@@ -387,7 +387,7 @@ the section list is the `WorldSection` enum in `WorldGrant.cs` (kits,
 screens, cameras, spawns, motion, population, render, addons,
 bindings, creations, placements, authoring, speakers, tunes, patches, audio,
 collision, host, views, looks, grants, hud, state, input hold, rules,
-groups, properties, interactions, player defaults, market, probes,
+groups, properties, interactions, player defaults, probes,
 dynamics, curves). Worlds live as data
 under `../Puck.World/Assets/worlds/`. Four are the four-world charter's whole
 game roster: `nexus` (the overworld hub — a floating island above a field of
@@ -2054,7 +2054,7 @@ refuses by name — a peer with nothing to address them against.
 `presentation` so a replica caller serializes the definition itself.
 `WorldProjectionDocument` is not a `WorldDefinition` with holes: it is its own
 record, and its member list IS the disclosure decision. It has no member for
-`rules`, `grants`, `state`, `market`, `admission`, `generation`, `generators`,
+`rules`, `grants`, `state`, `admission`, `generation`, `generators`,
 `groups`, `properties`, `addons`, `storage`, `host`, `authoring`, `identity`,
 `inputHold`, `targetRegisters`, `bodyMotionPrograms`, or `portals`, and its
 `WorldProjectedKit` has none for a kit's `producers`/`actions`. `metadata`

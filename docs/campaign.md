@@ -349,8 +349,7 @@ corrected mapping, not a regression.
 **The foundation is complete and overshot.** One flat motion row containing its `holds` and `shaping` rows; the portal
 lane end to end — step into a frame and the whole party transfers, all-or-nothing across capacity
 *and* authorization; input vocabulary with ordered chord activators; the radial wheel; roster sync;
-durations authored in seconds with ticks derived at compile; per-world clocks; the market/auction
-  substrate; `studio` and the first border crossing; a walkable four-zone corner whose four hosts
+durations authored in seconds with ticks derived at compile; per-world clocks; `studio` and the first border crossing; a walkable four-zone corner whose four hosts
   exchange geometry and generation-addressed bodies and migrate both human and autonomous entities
   through invisible reciprocal topology rather than portal furniture.
 
@@ -682,6 +681,20 @@ switching on the carrier instead of its `Value`; nothing else moves. Case types 
 never structs, because a union boxes value cases on store. Row and key names leave the hot
 object for compiled handles, kept only in the refusal text. Sequenced after `garden/w3`
 merges, since it rewrites the compiler arms the lanes are producing operands in.
+
+**The local auction house dissolved into an escrowed conditional transfer over ordinary keyed
+rows, authored entirely as rules — no bespoke market mutation kinds, no market-only C# compose
+arms, no market-only checkpoint finality barrier.** `WorldMarket.cs`, `WorldServer.Market.cs`,
+`WorldEconomicSettlement.cs`, `WorldMarketCommandModule`, and the `market` document section are
+gone; ordinals 65-70 are retired, never reassigned. A listing's escrow, an outbid's refund, a
+deadline's settle-or-return, and a house fee are ordinary `AddState`/`SetState` (a literal, a live
+copy via `FromState`, or a computed share via `Expression`) against keyed `state` rows, a
+`ScheduleState` deadline compared against `$tick`, and a `PushState` history ring for the bid
+order — the same closed effect vocabulary every other rule already authors with, proven for both
+an English auction and a buyout by `tests/Puck.World.Tests/EscrowedTransferRuleLawTests.cs`. A
+world that wants a market authors it; the engine no longer ships one. `world.undo`'s old
+market-finality carve-out goes with it — a rule-authored settlement is an ordinary journal entry
+like any other state write, undoable like any other.
 
 **The tabletop primitive (owner decisions, Lane D).** Physics-first extends to
 board games: a chess set is 32 ordinary rigid bodies on a shared `piece` kit —
