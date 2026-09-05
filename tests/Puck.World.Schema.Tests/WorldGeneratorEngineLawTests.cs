@@ -6,7 +6,7 @@ namespace Puck.World.Schema.Tests;
 
 /// <summary>
 /// Laws for authored randomness' source x site x moment split. The source is a stateless declaration, the site
-/// descriptor owns stream identity and cursor/decks, and timing controls when a site fires without becoming another
+/// descriptor owns stream identity and cursor/masks, and timing controls when a site fires without becoming another
 /// seed input.
 /// </summary>
 public sealed class WorldGeneratorEngineLawTests {
@@ -150,74 +150,74 @@ public sealed class WorldGeneratorEngineLawTests {
         Assert.False(condition: otherWorldSeed.SequenceEqual(second: otherInstance), userMessage: "the independently changed seed and instance rungs produced the same 32-sample sequence");
     }
     [Fact]
-    public void PersistedCursorAndDeckReplayTheNextWithoutReplacementDeal() {
-        var generator = DealGenerator(mode: WorldGeneratorMode.WithoutReplacement);
-        var site = "state.card";
+    public void PersistedCursorAndMaskReplayTheNextWithoutReplacementDraw() {
+        var generator = DrawGenerator(mode: WorldGeneratorMode.WithoutReplacement);
+        var site = "state.token";
         var cursor = 0L;
-        IReadOnlyList<ClosedBitset256>? decks = null;
-        var dealt = new List<string>();
-        var snapshots = new List<(long Cursor, IReadOnlyList<ClosedBitset256>? Decks)>();
+        IReadOnlyList<ClosedBitset256>? masks = null;
+        var drawn = new List<string>();
+        var snapshots = new List<(long Cursor, IReadOnlyList<ClosedBitset256>? Masks)>();
 
-        for (var deal = 0; (deal < 3); deal++) {
-            snapshots.Add(item: (cursor, decks?.ToArray()));
-            var fired = Fire(generator: generator, site: site, cursor: cursor, decks: decks);
+        for (var draw = 0; (draw < 3); draw++) {
+            snapshots.Add(item: (cursor, masks?.ToArray()));
+            var fired = Fire(generator: generator, site: site, cursor: cursor, masks: masks);
 
-            dealt.Add(item: fired.Text!);
+            drawn.Add(item: fired.Text!);
             cursor += fired.Samples;
-            decks = fired.Decks;
+            masks = fired.Masks;
         }
 
-        Assert.Equal(expected: 3, actual: dealt.Distinct(comparer: StringComparer.Ordinal).Count());
+        Assert.Equal(expected: 3, actual: drawn.Distinct(comparer: StringComparer.Ordinal).Count());
 
-        for (var deal = 0; (deal < dealt.Count); deal++) {
-            var snapshot = snapshots[deal];
-            var replayed = Fire(generator: generator, site: site, cursor: snapshot.Cursor, decks: snapshot.Decks);
+        for (var draw = 0; (draw < drawn.Count); draw++) {
+            var snapshot = snapshots[draw];
+            var replayed = Fire(generator: generator, site: site, cursor: snapshot.Cursor, masks: snapshot.Masks);
 
-            Assert.Equal(expected: dealt[deal], actual: replayed.Text);
+            Assert.Equal(expected: drawn[draw], actual: replayed.Text);
         }
 
         Assert.False(condition: TryFire(
             generator: generator,
             site: site,
             cursor: cursor,
-            decks: decks,
+            masks: masks,
             result: out _,
             reason: out var reason
         ));
-        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "dealt out");
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "drawn out");
     }
     [Fact]
-    public void ReshuffleOnExhaustionStartsANewDeterministicDeck() {
-        var generator = DealGenerator(mode: WorldGeneratorMode.ReshuffleOnExhaustion);
-        var site = "state.card";
+    public void RestartOnExhaustionStartsANewDeterministicPass() {
+        var generator = DrawGenerator(mode: WorldGeneratorMode.RestartOnExhaustion);
+        var site = "state.token";
         var cursor = 0L;
-        IReadOnlyList<ClosedBitset256>? decks = null;
+        IReadOnlyList<ClosedBitset256>? masks = null;
 
-        for (var deal = 0; (deal < 3); deal++) {
-            var fired = Fire(generator: generator, site: site, cursor: cursor, decks: decks);
+        for (var draw = 0; (draw < 3); draw++) {
+            var fired = Fire(generator: generator, site: site, cursor: cursor, masks: masks);
 
             cursor += fired.Samples;
-            decks = fired.Decks;
+            masks = fired.Masks;
         }
 
-        var reshuffled = Fire(generator: generator, site: site, cursor: cursor, decks: decks);
-        var replayed = Fire(generator: generator, site: site, cursor: cursor, decks: decks?.ToArray());
+        var restarted = Fire(generator: generator, site: site, cursor: cursor, masks: masks);
+        var replayed = Fire(generator: generator, site: site, cursor: cursor, masks: masks?.ToArray());
 
-        Assert.Equal(expected: reshuffled.Text, actual: replayed.Text);
-        Assert.Equal(expected: reshuffled.Numeric, actual: replayed.Numeric);
-        Assert.Equal(expected: reshuffled.Samples, actual: replayed.Samples);
-        Assert.Equal(expected: reshuffled.Decks, actual: replayed.Decks);
-        Assert.NotNull(@object: reshuffled.Decks);
-        Assert.Equal(expected: 1, actual: reshuffled.Decks![0].Count);
+        Assert.Equal(expected: restarted.Text, actual: replayed.Text);
+        Assert.Equal(expected: restarted.Numeric, actual: replayed.Numeric);
+        Assert.Equal(expected: restarted.Samples, actual: replayed.Samples);
+        Assert.Equal(expected: restarted.Masks, actual: replayed.Masks);
+        Assert.NotNull(@object: restarted.Masks);
+        Assert.Equal(expected: 1, actual: restarted.Masks![0].Count);
     }
 
     private static WorldCellName Name(string value) => WorldCellName.Parse(candidate: value);
-    private static WorldGenerator DealGenerator(WorldGeneratorMode mode) => new(
+    private static WorldGenerator DrawGenerator(WorldGeneratorMode mode) => new(
         Source: WorldGeneratorSource.Markov,
-        Start: Name(value: "deck"),
+        Start: Name(value: "pool"),
         Contexts: [
             new WorldGeneratorContext(
-                Key: Name(value: "deck"),
+                Key: Name(value: "pool"),
                 Alternatives: [
                     new WorldGeneratorAlternative(Token: "one", Weight: 1UL, Next: Name(value: "done")),
                     new WorldGeneratorAlternative(Token: "two", Weight: 1UL, Next: Name(value: "done")),
@@ -232,13 +232,13 @@ public sealed class WorldGeneratorEngineLawTests {
         WorldGenerator generator,
         string site,
         long cursor,
-        IReadOnlyList<ClosedBitset256>? decks = null,
+        IReadOnlyList<ClosedBitset256>? masks = null,
         ulong worldSeed = WorldSeed,
         string instance = Instance
     ) {
         Assert.True(condition: TryFire(
             cursor: cursor,
-            decks: decks,
+            masks: masks,
             generator: generator,
             instance: instance,
             reason: out var reason,
@@ -253,7 +253,7 @@ public sealed class WorldGeneratorEngineLawTests {
         WorldGenerator generator,
         string site,
         long cursor,
-        IReadOnlyList<ClosedBitset256>? decks,
+        IReadOnlyList<ClosedBitset256>? masks,
         out WorldGeneratorEngine.FireResult result,
         out string reason,
         ulong worldSeed = WorldSeed,
@@ -264,7 +264,7 @@ public sealed class WorldGeneratorEngineLawTests {
         seedState: WorldGeneratorEngine.ComputeSeedState(instanceIdentity: instance, site: site, worldSeed: worldSeed),
         stream: WorldGeneratorEngine.ComputeStreamId(site: site),
         cursor: cursor,
-        decks: decks,
+        masks: masks,
         result: out result,
         reason: out reason
     );

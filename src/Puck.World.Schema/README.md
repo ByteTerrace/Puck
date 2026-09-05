@@ -98,9 +98,9 @@ restricts an attribute row to those identities; `valuesFrom` additionally
 restricts integer positions to a named topology. A `zone: { "tokens": "cards",
 "ordered": true }` row contains boolean membership cells. For any domain
 with zones, every token belongs to exactly one zone. Cell order is pile order;
-two cards with equal ranks still have different keys. Dealt-generator masks
-are separate from these piles: each `drawDecks` mask is four 64-bit words,
-serialized as exactly 64 hexadecimal digits, and supports 256 dealt entries.
+two cards with equal ranks still have different keys. Drawn-generator masks
+are separate from these piles: each `drawnMasks` mask is four 64-bit words,
+serialized as exactly 64 hexadecimal digits, and supports 256 drawn entries.
 
 The closed `transformState` effect and transaction step carry one of `transfer`,
 `setRay`, `moveToken`, `completePhase`, `turnOrder`, `shuffle`, `sort`,
@@ -225,7 +225,7 @@ by the authority before simulation. This selects cursor-addressed HMAC-SHA256
 samples for integer `streamDraw` sites; ordinary generators keep their PCG
 contract. Use a fresh unpredictable secret per game and keep authority saves,
 replays, and replica access private. The simulation draws no system entropy.
-No hidden keys, generator definitions, cursors, or dealt masks enter observation
+No hidden keys, generator definitions, cursors, or drawn masks enter observation
 payloads. Publicly authored seeds alone are unsuitable for hidden deals.
 
 **The tabletop primitive.** A placement's `board` facet (`WorldPlacementBoard`)
@@ -843,18 +843,18 @@ A `draw` fill (`{ "$type": "draw", "source": … | "generator": … }`, at most 
 per row, numeric sources only) is one whole-field pass of the row's own draw
 stream, seeded through the same ladder as a state-row site under the row's
 `state.<row>` descriptor: cell `k`, in cell-index order, takes the sample a site
-at `drawCursor + k` would draw, with a weighted source's deck threaded cell to
-cell — so a `weightedNumeric` bag in `reshuffleOnExhaustion` mode deals its
-cards across the field and reshuffles as it goes, and outcome `count`s make a
-field carry exactly N cells of a value per pass. The row's `drawCursor`/
-`drawDecks` name the pass currently painted; `world.generate <row>` advances
+at `drawCursor + k` would draw, with a weighted source's mask threaded cell to
+cell — so a `weightedNumeric` bag in `restartOnExhaustion` mode draws its
+units across the field and restarts as it goes, and outcome `multiplicity`s make
+a field carry exactly N cells of a value per pass. The row's `drawCursor`/
+`drawnMasks` name the pass currently painted; `world.generate <row>` advances
 them one whole pass (the cell count) and repaints. The draw occupies its authored
 position in `paint`: it overwrites earlier fills and later fills overwrite it.
 Boot, whole-document rebuild/load/reset, and an undo that rewinds the draw
 position repaint the pass the document names, so restored state lands on the
 field it last drew without resetting unrelated reaction-evolved rows.
 Reactions then evolve the drawn cells like any other paint. `world.state`
-echoes `draw source=… fill=lattice cursor=<n> decks=…` on the row line.
+echoes `draw source=… fill=lattice cursor=<n> masks=…` on the row line.
 
 **Reactions** (`WorldReaction`, `$type`-discriminated, applied in document
 order every `stepEveryTicks`): `diffuse` (each cell moves a fraction toward its
@@ -921,32 +921,32 @@ vocabulary. `source` selects the shape: `markov` walks weighted alternatives per
 context, each naming the context it moves INTO (that authored `next` is what
 makes it a Markov process rather than independent draws — the context key IS the
 process state) and is the only shape that writes TEXT and the only one that
-DEALS per context; `uniformRange` draws one value over `[rangeMin, rangeMax]`;
-`weightedNumeric` draws one value from an authored alias table and DEALS over
-its outcome set under the same `mode` vocabulary (one `drawDecks` mask — the
+EXHAUSTS per context; `uniformRange` draws one value over `[rangeMin, rangeMax]`;
+`weightedNumeric` draws one value from an authored alias table and EXHAUSTS over
+its outcome set under the same `mode` vocabulary (one `drawnMasks` mask — the
 numeric shuffle bag); `streamDraw` yields one raw 32-bit draw; `symmetryOrbit`
 draws one node index uniformly over an orbit of the symmetry lattice — the
 thirty nodes of `ring` (0..7), or the orbit of `node` (0..239) under `word`
 (the same one-to-eight-mirror word a `cycle` trait authors, or omitted for the
-lattice's own cycle, so the node's ring) — and deals that orbit under `mode`
+lattice's own cycle, so the node's ring) — and exhausts that orbit under `mode`
 through the same one mask, so `withoutReplacement` on a ring is "every node of
 the ring once per pass". An alternative or
-outcome may declare `count`: under a deck mode it is that many cards per pass
-(an outcome that should come out twice per pass declares `2`), under
-`withReplacement` it only scales the weight; a set's cards total at most 256,
-one deck-mask bit each. Each shape reads a disjoint field set, and a foreign
-field is refused BY NAME rather than parsed and ignored — including `bound` and
-`mode`, which are non-nullable and so are refused against their declared
-defaults. A markov emission is one walk from `start` to a TERMINAL context (one
-declaring no alternatives), refusing BY NAME at `bound` rather than truncating;
-`mode` is `withReplacement`, `withoutReplacement` (dealt out → refuse by name) or
-`reshuffleOnExhaustion`; `uniformRange` and `streamDraw` refuse a `mode`, having no
-entry set to deal from. Caps live in `WorldGeneratorCapacity`. The alias table
-over a source's full entry set is built once per source instance and held weakly
-beside it (`WorldGeneratorEngine`'s compiled cache), so a site drawn every tick
-pays the build once; a dealt-down pool mid-pass is rebuilt in bounded stack
-storage per emission, with no heap table allocation and the same exact alias
-mapping.
+outcome may declare `multiplicity`: under an exhausting mode it is that many
+units per pass (an outcome that should come out twice per pass declares `2`),
+under `withReplacement` it only scales the weight; a set's units total at most
+256, one drawn-mask bit each. Each shape reads a disjoint field set, and a
+foreign field is refused BY NAME rather than parsed and ignored — including
+`bound` and `mode`, which are non-nullable and so are refused against their
+declared defaults. A markov emission is one walk from `start` to a TERMINAL
+context (one declaring no alternatives), refusing BY NAME at `bound` rather than
+truncating; `mode` is `withReplacement`, `withoutReplacement` (drawn out →
+refuse by name) or `restartOnExhaustion`; `uniformRange` and `streamDraw` refuse
+a `mode`, having no entry set to exhaust. Caps live in `WorldGeneratorCapacity`.
+The alias table over a source's full entry set is built once per source instance
+and held weakly beside it (`WorldGeneratorEngine`'s compiled cache), so a site
+drawn every tick pays the build once; a drawn-down pool mid-pass is rebuilt in
+bounded stack storage per emission, with no heap table allocation and the same
+exact alias mapping.
 
 **A source holds no position.** It may be declared once in the optional
 `generators` section (`WorldGeneratorRow`: `name` + `generator`) and referenced
@@ -961,8 +961,8 @@ draw facet's single home. `bodies.capacityRow`/`host.backendRow` are plain
 strings naming a state row, not sites of their own: they READ that row's
 already-resolved slot, after row first-fills, rather than drawing anything
 directly (see "Two boot-time reads, one site rule" below). The
-CURSOR and the dealt DECKS live on the SITE (`WorldStateRow.DrawCursor`/
-`DrawDecks`), never on the source — which is exactly what lets two sites
+CURSOR and the drawn MASKS live on the SITE (`WorldStateRow.DrawCursor`/
+`DrawnMasks`), never on the source — which is exactly what lets two sites
 reference one table and draw INDEPENDENT sequences. That independence is what
 makes a reference safe: sharing a source shares its SHAPE and never its
 position, so pointing a second site at an existing table cannot perturb the
@@ -1101,7 +1101,7 @@ row. Legitimate only on a NON-reserved cell key: the reserved slot key
 (`WorldStateRow.SlotKey`) may carry only the row's OWN `advance` (above),
 never a cell-level one — the two never both name the same cell, so "which
 advance governs this cell" is never an open question. A DRAW SITE's own
-bookkeeping is not reachable here at all: `drawCursor`/`drawDecks` are typed row
+bookkeeping is not reachable here at all: `drawCursor`/`drawnMasks` are typed row
 FIELDS, never cells, so nothing can name them as an accumulator. `WorldStateReader.TryRead` checks the row's own trait first
 (only relevant for the slot cell) and falls back to the CELL's own trait
 otherwise, so a scalar row's behavior is untouched. Because

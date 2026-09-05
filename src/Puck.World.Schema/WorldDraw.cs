@@ -48,7 +48,7 @@ public enum WorldDrawTiming : byte {
 /// identical <see cref="WorldGenerator"/> family, so nothing is expressible one way and not the other.</para>
 /// <para>A referenced source draws on the site's own stream: two sites naming one source draw independent
 /// sequences, since the seed ladder folds the site descriptor and the position
-/// (<see cref="WorldStateRow.DrawCursor"/>) and dealt decks (<see cref="WorldStateRow.DrawDecks"/>) live on the
+/// (<see cref="WorldStateRow.DrawCursor"/>) and drawn masks (<see cref="WorldStateRow.DrawnMasks"/>) live on the
 /// site. Sharing a source shares its shape and never its position, so pointing a second site at an existing table
 /// can never perturb the first site's sequence.</para>
 /// <para>A reference refuses at validate, before any draw runs, when it names a source that does not exist, names

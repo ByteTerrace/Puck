@@ -683,6 +683,35 @@ never structs, because a union boxes value cases on store. Row and key names lea
 object for compiled handles, kept only in the refusal text. Sequenced after `garden/w3`
 merges, since it rewrites the compiler arms the lanes are producing operands in.
 
+**The generator's card nouns are renamed to its actual primitive: multiset sampling
+(owner decision, Lane 2c).** `WorldGenerator` draws from a weighted entry set with
+optional exhaustion — a mechanism the schema, server, console, and tests spelled with
+card-game words that named no capability a neutral spelling couldn't: `WorldStateRow.DrawDecks`
+is `DrawnMasks`, `WorldGeneratorCapacity.MaxCardsPerSet` is `MaxEntriesPerSet`,
+`WorldGeneratorMode.ReshuffleOnExhaustion` is `RestartOnExhaustion`, and the per-entry repeat
+field on `WorldGeneratorAlternative`/`WorldGeneratorWeightedNumeric` (JSON `count`) is
+`Multiplicity` (JSON `multiplicity`). `WorldGeneratorEngine`'s own internal vocabulary
+renamed with it — `Deals`/`DecksAfter` to `Exhausts`/`MasksAfter`, the private `Deal` method
+to `DrawEntry`, and every `card`/`deck`/`dealt` local variable and doc comment to
+`unit`/`mask`/`drawn` — since a second, unrenamed vocabulary living one layer under the
+public one is the same defect the doctrine names. No shipped world or canary document
+authored the alternatives/weighted vocabulary (the garden's poker table uses the tabletop
+primitive's own token/zone/transfer vocabulary instead, never `WorldGenerator`), so the
+only document fixture touched is `tests/Puck.World.Canaries/lattice-draw-fill/fixture.world.json`
+plus that canary's and `symmetry-orbit-source`'s asserted console text (`decks=` → `masks=`).
+Pure rename, no behavior change: the passive 300-tick garden replay hashes identically
+before and after (`0xCC2D4742992B05CC`). `WorldStatePhase`'s reduction to a guard stamp
+(`WorldPhaseGuard` already exists as an admission side-check, but `Round`/`Skipped`/`Direction`
+and the `turnOrder` transform are not yet folded into ordinary rows and rules) and the
+`setRay`/`moveToken`/`shuffle`/`sort` transform rewrites (`setRay` is still the raw
+bracket-run write, not pattern-driven; `moveToken` still walks its own board-cost search
+rather than composing `$board:pathCost` with a transaction; `shuffle` still refuses any
+row but an ordered zone; `sort` still carries both a keyed and a zone shape behind one
+`$type`) are the rest of Lane 2 and remain exactly as they were — each is its own
+multi-file rewrite touching the checkpoint codec, the runtime hash, the validator, and the
+garden's chess/poker rules, and attempting all three at once risked exactly the
+half-migrated ubercanary the union rewrite's own Lane 0 precursor called out.
+
 **The tabletop primitive (owner decisions, Lane D).** Physics-first extends to
 board games: a chess set is 32 ordinary rigid bodies on a shared `piece` kit —
 no second entity kind, no engine-level "piece" concept. A placement's `board`

@@ -152,8 +152,8 @@ public static partial class WorldStateTransforms {
             }
             cursor = site.DrawCursor;
         }
-        // Each token is selected afresh from what remains, so a random deal samples once per card and a
-        // positional deal walks the pile from its chosen end.
+        // Each token is selected afresh from what remains, so a random transfer samples once per token and a
+        // positional transfer walks the pile from its chosen end.
         for (var moved = 0; moved < transfer.Count; moved++) {
             var selected = transfer.Selector switch {
                 WorldZoneSelector.First => 0,
@@ -162,7 +162,7 @@ public static partial class WorldStateTransforms {
                 _ => 0,
             };
             if (transfer.Selector == WorldZoneSelector.Random) {
-                if (!WorldGeneratorEngine.TryFire(generator, site!.Kind, seed, stream, cursor, site.DrawDecks, out var fired, out reason, draw.Secret)) {
+                if (!WorldGeneratorEngine.TryFire(generator, site!.Kind, seed, stream, cursor, site.DrawnMasks, out var fired, out reason, draw.Secret)) {
                     return false;
                 }
                 cursor = checked(cursor + fired.Samples);
@@ -425,7 +425,7 @@ public static partial class WorldStateTransforms {
         // Fisher-Yates from the top: position i takes a uniform pick from [0, i], the same multiply-high map a random
         // transfer selects with, one sample per position. The site records the final cursor and the last sample once.
         for (var position = cells.Length - 1; position > 0; position--) {
-            if (!WorldGeneratorEngine.TryFire(generator, site.Kind, seed, stream, cursor, site.DrawDecks, out var fired, out reason, draw.Secret)) {
+            if (!WorldGeneratorEngine.TryFire(generator, site.Kind, seed, stream, cursor, site.DrawnMasks, out var fired, out reason, draw.Secret)) {
                 return false;
             }
             cursor = checked(cursor + fired.Samples);

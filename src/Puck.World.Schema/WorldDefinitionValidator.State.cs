@@ -344,7 +344,7 @@ public static partial class WorldDefinitionValidator {
     /// site rule with the row's own envelope as the admissible domain.</summary>
     private static void ValidateDraw(WorldStateRow row, IReadOnlyList<WorldGeneratorRow>? generators, string path, List<string> errors) {
         if (row.Draw is not { } draw) {
-            // A lattice row painted by a draw fill carries the same cursor/decks bookkeeping for its whole-field
+            // A lattice row painted by a draw fill carries the same cursor/masks bookkeeping for its whole-field
             // passes (see WorldLatticeFill.Draw), so only a row with neither facet is refused here.
             var latticeDraws = (WorldLatticeFill.FindDraw(trait: row.Lattice) is not null);
 
@@ -352,8 +352,8 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path} ('{row.Name}') declares drawCursor without draw — drawCursor is engine bookkeeping for a draw site alone.");
             }
 
-            if ((row.DrawDecks is { Count: > 0 }) && !latticeDraws) {
-                errors.Add(item: $"{path} ('{row.Name}') declares drawDecks without draw — drawDecks is engine bookkeeping for a draw site alone.");
+            if ((row.DrawnMasks is { Count: > 0 }) && !latticeDraws) {
+                errors.Add(item: $"{path} ('{row.Name}') declares drawnMasks without draw — drawnMasks is engine bookkeeping for a draw site alone.");
             }
 
             if (latticeDraws && (row.DrawCursor < 0L)) {
@@ -421,43 +421,43 @@ public static partial class WorldDefinitionValidator {
             generator: out var dealtSource,
             reason: out _
         )) {
-            ValidateDrawDecks(
-                decks: row.DrawDecks,
+            ValidateDrawnMasks(
+                masks: row.DrawnMasks,
                 errors: errors,
                 generator: dealtSource,
-                path: $"{path}.drawDecks"
+                path: $"{path}.drawnMasks"
             );
         }
     }
-    /// <summary>Refuses persisted dealt masks that do not fit the site's source — a mask left behind by an earlier
-    /// source shape would otherwise be read as cards already dealt, silently skipping outcomes or declaring a bag
-    /// dealt out early. Stated once, for a draw site and for a lattice row's draw fill alike.</summary>
-    internal static void ValidateDrawDecks(WorldGenerator generator, IReadOnlyList<ClosedBitset256>? decks, string path, List<string> errors) {
-        if (decks is not { Count: > 0 }) {
+    /// <summary>Refuses persisted drawn masks that do not fit the site's source — a mask left behind by an earlier
+    /// source shape would otherwise be read as units already drawn, silently skipping outcomes or declaring a set
+    /// drawn out early. Stated once, for a draw site and for a lattice row's draw fill alike.</summary>
+    internal static void ValidateDrawnMasks(WorldGenerator generator, IReadOnlyList<ClosedBitset256>? masks, string path, List<string> errors) {
+        if (masks is not { Count: > 0 }) {
             return;
         }
 
-        if (!WorldGeneratorEngine.Deals(source: generator.Source) || (generator.Mode == WorldGeneratorMode.WithReplacement)) {
-            errors.Add(item: $"{path} carries {decks.Count} dealt mask(s) but the site's source never deals (source={WorldRefusalSpelling.GeneratorSource(source: generator.Source)}, mode={generator.Mode}) — clear drawDecks when re-authoring a site to a non-dealing source.");
+        if (!WorldGeneratorEngine.Exhausts(source: generator.Source) || (generator.Mode == WorldGeneratorMode.WithReplacement)) {
+            errors.Add(item: $"{path} carries {masks.Count} drawn mask(s) but the site's source never exhausts (source={WorldRefusalSpelling.GeneratorSource(source: generator.Source)}, mode={generator.Mode}) — clear drawnMasks when re-authoring a site to a non-exhausting source.");
 
             return;
         }
 
         if (generator.Source is WorldGeneratorSource.WeightedNumeric or WorldGeneratorSource.SymmetryOrbit) {
-            if (decks.Count != 1) {
-                errors.Add(item: $"{path} carries {decks.Count} dealt masks but a {WorldRefusalSpelling.GeneratorSource(source: generator.Source)} source deals through exactly one — clear drawDecks when re-authoring a site from a Markov source.");
+            if (masks.Count != 1) {
+                errors.Add(item: $"{path} carries {masks.Count} drawn masks but a {WorldRefusalSpelling.GeneratorSource(source: generator.Source)} source exhausts through exactly one — clear drawnMasks when re-authoring a site from a Markov source.");
 
                 return;
             }
 
-            var cards = ((generator.Source == WorldGeneratorSource.WeightedNumeric)
-                ? CountCards(counts: (generator.Weighted ?? []).Select(selector: static outcome => outcome.Count))
-                : (WorldGeneratorEngine.TryResolveOrbit(generator: generator, nodes: out var orbitNodes, reason: out _) ? orbitNodes.Length : WorldGeneratorCapacity.MaxCardsPerSet));
+            var units = ((generator.Source == WorldGeneratorSource.WeightedNumeric)
+                ? CountEntries(counts: (generator.Weighted ?? []).Select(selector: static outcome => outcome.Multiplicity))
+                : (WorldGeneratorEngine.TryResolveOrbit(generator: generator, nodes: out var orbitNodes, reason: out _) ? orbitNodes.Length : WorldGeneratorCapacity.MaxEntriesPerSet));
 
-            RefuseMaskPastCards(
-                cards: cards,
+            RefuseMaskPastEntries(
+                entries: units,
                 errors: errors,
-                mask: decks[0],
+                mask: masks[0],
                 path: $"{path}[0]"
             );
 
@@ -466,35 +466,35 @@ public static partial class WorldDefinitionValidator {
 
         var contexts = (generator.Contexts ?? []);
 
-        if (decks.Count > contexts.Count) {
-            errors.Add(item: $"{path} carries {decks.Count} dealt masks but the Markov source declares {contexts.Count} context(s) — clear drawDecks when re-authoring a site's source.");
+        if (masks.Count > contexts.Count) {
+            errors.Add(item: $"{path} carries {masks.Count} drawn masks but the Markov source declares {contexts.Count} context(s) — clear drawnMasks when re-authoring a site's source.");
 
             return;
         }
 
-        for (var index = 0; (index < decks.Count); index++) {
-            RefuseMaskPastCards(
-                cards: CountCards(counts: (contexts[index]?.Alternatives ?? []).Select(selector: static alternative => alternative.Count)),
+        for (var index = 0; (index < masks.Count); index++) {
+            RefuseMaskPastEntries(
+                entries: CountEntries(counts: (contexts[index]?.Alternatives ?? []).Select(selector: static alternative => alternative.Multiplicity)),
                 errors: errors,
-                mask: decks[index],
+                mask: masks[index],
                 path: $"{path}[{index}]"
             );
         }
     }
-    private static int CountCards(IEnumerable<int?> counts) {
-        var cards = 0;
+    private static int CountEntries(IEnumerable<int?> counts) {
+        var units = 0;
 
         foreach (var count in counts) {
-            cards += Math.Max(val1: 1, val2: (count ?? 1));
+            units += Math.Max(val1: 1, val2: (count ?? 1));
         }
 
-        return cards;
+        return units;
     }
-    private static void RefuseMaskPastCards(ClosedBitset256 mask, int cards, string path, List<string> errors) {
+    private static void RefuseMaskPastEntries(ClosedBitset256 mask, int entries, string path, List<string> errors) {
         var bits = mask;
 
-        if ((cards < WorldGeneratorCapacity.MaxCardsPerSet) && !bits.Fits(cards)) {
-            errors.Add(item: $"{path} marks a card past the {cards} the source holds (mask 0x{bits}) — a stale deck from an earlier source shape; clear drawDecks.");
+        if ((entries < WorldGeneratorCapacity.MaxEntriesPerSet) && !bits.Fits(entries)) {
+            errors.Add(item: $"{path} marks an entry past the {entries} the source holds (mask 0x{bits}) — a stale mask from an earlier source shape; clear drawnMasks.");
         }
     }
     /// <summary>
@@ -558,13 +558,13 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        // A dealing source at a settle-and-clear boot site declares state across draws that this site can never have:
-        // it draws once and its facet is erased, so the deck could not survive to be dealt from again.
+        // An exhausting source at a settle-and-clear boot site declares state across draws that this site can never
+        // have: it draws once and its facet is erased, so the drawn mask could not survive to be drawn from again.
         if (
             bootOnly &&
             (generator.Mode != WorldGeneratorMode.WithReplacement)
         ) {
-            errors.Add(item: $"{path} draws from a source declaring mode={generator.Mode.ToString().ToLowerInvariant()} — a boot-only site draws once and its facet is cleared, so a deck has no second draw to deal into.");
+            errors.Add(item: $"{path} draws from a source declaring mode={generator.Mode.ToString().ToLowerInvariant()} — a boot-only site draws once and its facet is cleared, so a drawn mask has no second draw to accumulate into.");
         }
 
         if (WorldGeneratorEngine.WritesText(source: generator.Source)) {
@@ -670,11 +670,11 @@ public static partial class WorldDefinitionValidator {
             var alternatives = (context.Alternatives ?? []);
 
             if (alternatives.Count > WorldGeneratorCapacity.MaxAlternativesPerContext) {
-                errors.Add(item: $"{contextPath}.alternatives count {alternatives.Count} exceeds the maximum of {WorldGeneratorCapacity.MaxAlternativesPerContext} (one deck-mask bit per alternative).");
+                errors.Add(item: $"{contextPath}.alternatives count {alternatives.Count} exceeds the maximum of {WorldGeneratorCapacity.MaxAlternativesPerContext} (one drawn-mask bit per alternative).");
             }
 
             var anyWeight = false;
-            var cards = 0L;
+            var units = 0L;
 
             for (var alternative = 0; (alternative < alternatives.Count); alternative++) {
                 var entry = alternatives[alternative];
@@ -692,16 +692,16 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{entryPath}.token length {entry.Token.Length} exceeds the maximum of {WorldGeneratorCapacity.MaxTokenLength}.");
                 }
 
-                if (entry.Count is { } count && (count < 1)) {
-                    errors.Add(item: $"{entryPath}.count {count} must be at least 1 — the cards one deck pass holds of this alternative.");
+                if (entry.Multiplicity is { } multiplicity && (multiplicity < 1)) {
+                    errors.Add(item: $"{entryPath}.multiplicity {multiplicity} must be at least 1 — the units one pass holds of this alternative.");
                 }
 
-                cards += Math.Max(val1: 1, val2: (entry.Count ?? 1));
+                units += Math.Max(val1: 1, val2: (entry.Multiplicity ?? 1));
                 anyWeight |= (entry.Weight != 0UL);
             }
 
-            if (cards > WorldGeneratorCapacity.MaxCardsPerSet) {
-                errors.Add(item: $"{contextPath}.alternatives hold {cards} cards counting each alternative's count, exceeding the {WorldGeneratorCapacity.MaxCardsPerSet} a deck mask can deal.");
+            if (units > WorldGeneratorCapacity.MaxEntriesPerSet) {
+                errors.Add(item: $"{contextPath}.alternatives hold {units} units counting each alternative's multiplicity, exceeding the {WorldGeneratorCapacity.MaxEntriesPerSet} a drawn mask can hold.");
             }
 
             if (
@@ -757,15 +757,15 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} declares source={WorldRefusalSpelling.GeneratorSource(source: generator.Source)} beside ring/node/word, which belong to source=symmetryOrbit.");
         }
 
-        // Bound is Markov-only and Mode belongs to the dealing shapes, but both are NON-NULLABLE, so the
+        // Bound is Markov-only and Mode belongs to the exhausting shapes, but both are NON-NULLABLE, so the
         // both-or-neither sweep above cannot see them and a source carrying one it does not read would parse,
         // validate, and then be silently ignored at fire time. Refused against the DECLARED DEFAULT — the most a
         // non-nullable field can distinguish, and exactly the set of values that could mislead.
         if (
-            !WorldGeneratorEngine.Deals(source: generator.Source) &&
+            !WorldGeneratorEngine.Exhausts(source: generator.Source) &&
             (generator.Mode != WorldGeneratorMode.WithReplacement)
         ) {
-            errors.Add(item: $"{path}.source={WorldRefusalSpelling.GeneratorSource(source: generator.Source)} declares mode={generator.Mode.ToString().ToLowerInvariant()} — only markov, weightedNumeric and symmetryOrbit deal; uniformRange and streamDraw have no entry set to deal from.");
+            errors.Add(item: $"{path}.source={WorldRefusalSpelling.GeneratorSource(source: generator.Source)} declares mode={generator.Mode.ToString().ToLowerInvariant()} — only markov, weightedNumeric and symmetryOrbit exhaust; uniformRange and streamDraw have no entry set to draw from.");
         }
 
         if (generator.Source != WorldGeneratorSource.Markov) {
@@ -849,7 +849,7 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 var anyOutcomeWeight = false;
-                var outcomeCards = 0L;
+                var outcomeUnits = 0L;
 
                 for (var index = 0; (index < outcomes.Count); index++) {
                     if (outcomes[index] is null) {
@@ -858,16 +858,16 @@ public static partial class WorldDefinitionValidator {
                         continue;
                     }
 
-                    if (outcomes[index].Count is { } outcomeCount && (outcomeCount < 1)) {
-                        errors.Add(item: $"{path}.weighted[{index}].count {outcomeCount} must be at least 1 — the cards one deck pass holds of this outcome.");
+                    if (outcomes[index].Multiplicity is { } outcomeMultiplicity && (outcomeMultiplicity < 1)) {
+                        errors.Add(item: $"{path}.weighted[{index}].multiplicity {outcomeMultiplicity} must be at least 1 — the units one pass holds of this outcome.");
                     }
 
-                    outcomeCards += Math.Max(val1: 1, val2: (outcomes[index].Count ?? 1));
+                    outcomeUnits += Math.Max(val1: 1, val2: (outcomes[index].Multiplicity ?? 1));
                     anyOutcomeWeight |= (outcomes[index].Weight != 0UL);
                 }
 
-                if (outcomeCards > WorldGeneratorCapacity.MaxCardsPerSet) {
-                    errors.Add(item: $"{path}.weighted holds {outcomeCards} cards counting each outcome's count, exceeding the {WorldGeneratorCapacity.MaxCardsPerSet} a deck mask can deal.");
+                if (outcomeUnits > WorldGeneratorCapacity.MaxEntriesPerSet) {
+                    errors.Add(item: $"{path}.weighted holds {outcomeUnits} units counting each outcome's multiplicity, exceeding the {WorldGeneratorCapacity.MaxEntriesPerSet} a drawn mask can hold.");
                 }
 
                 if (!anyOutcomeWeight) {
@@ -1189,7 +1189,7 @@ public static partial class WorldDefinitionValidator {
                 )) {
                     // Any other reserved-prefix key is refused unless it is exactly the engine-minted key legitimate
                     // for this row's shape, carrying a value the engine could have written (a non-negative cursor; a
-                    // deck mask inside its context's alternative count under a deck mode). The rule lives in
+                    // drawn mask inside its context's alternative count under an exhausting mode). The rule lives in
                     // WorldGeneratorCells so UpsertStateCell's compose arm refuses the identical shape from the
                     // identical code.
                     errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' {reservedReason}.");

@@ -207,8 +207,8 @@ public static partial class WorldRuntimeStateHash {
                 AppendString(hash: ref hash, value: alternative.Token);
                 hash.Add(value: alternative.Weight);
                 AppendString(hash: ref hash, value: alternative.Next.Value);
-                hash.Add(value: ((byte)(alternative.Count is null ? 0 : 1)));
-                hash.Add(value: ((uint)(alternative.Count ?? 0)));
+                hash.Add(value: ((byte)(alternative.Multiplicity is null ? 0 : 1)));
+                hash.Add(value: ((uint)(alternative.Multiplicity ?? 0)));
             }
         }
 
@@ -221,8 +221,8 @@ public static partial class WorldRuntimeStateHash {
 
             hash.Add(value: outcome.Value);
             hash.Add(value: outcome.Weight);
-            hash.Add(value: ((byte)(outcome.Count is null ? 0 : 1)));
-            hash.Add(value: ((uint)(outcome.Count ?? 0)));
+            hash.Add(value: ((byte)(outcome.Multiplicity is null ? 0 : 1)));
+            hash.Add(value: ((uint)(outcome.Multiplicity ?? 0)));
         }
     }
     private static void AppendLattice(ref Fnv1aHash hash, WorldStateLatticeTrait? lattice) {
@@ -373,15 +373,15 @@ public static partial class WorldRuntimeStateHash {
                 hash.Add(value: phase.Direction);
                 hash.Add(value: phase.Skipped);
             }
-            var decks = row.DrawDecks ?? [];
+            var masks = row.DrawnMasks ?? [];
 
-            hash.Add(value: ((uint)decks.Count));
+            hash.Add(value: ((uint)masks.Count));
 
-            for (var deckIndex = 0; (deckIndex < decks.Count); deckIndex++) {
-                hash.Add(value: decks[deckIndex].Word0);
-                hash.Add(value: decks[deckIndex].Word1);
-                hash.Add(value: decks[deckIndex].Word2);
-                hash.Add(value: decks[deckIndex].Word3);
+            for (var maskIndex = 0; (maskIndex < masks.Count); maskIndex++) {
+                hash.Add(value: masks[maskIndex].Word0);
+                hash.Add(value: masks[maskIndex].Word1);
+                hash.Add(value: masks[maskIndex].Word2);
+                hash.Add(value: masks[maskIndex].Word3);
             }
         }
 

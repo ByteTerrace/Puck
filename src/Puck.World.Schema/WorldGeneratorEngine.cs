@@ -52,18 +52,19 @@ public static class WorldGeneratorEngine {
     /// <param name="Numeric">The raw numeric draw, or <see langword="null"/> for a Markov source.</param>
     /// <param name="Samples">How many samples this emission consumed — the amount the site's cursor advances by.
     /// Always <c>1</c> for a numeric source; the walk's own token count for a Markov one.</param>
-    /// <param name="Decks">The site's updated dealt masks, or <see langword="null"/> when nothing dealt (a source under
-    /// <see cref="WorldGeneratorMode.WithReplacement"/>, and every source that cannot deal). A Markov source carries one
+    /// <param name="Masks">The site's updated drawn masks, or <see langword="null"/> when nothing drawn (a source under
+    /// <see cref="WorldGeneratorMode.WithReplacement"/>, and every source that cannot exhaust). A Markov source carries one
     /// mask per context, by declaration ordinal; a weighted numeric source carries exactly one.</param>
-    public readonly record struct FireResult(string? Text, long? Numeric, long Samples, IReadOnlyList<ClosedBitset256>? Decks);
+    public readonly record struct FireResult(string? Text, long? Numeric, long Samples, IReadOnlyList<ClosedBitset256>? Masks);
 
-    // What a source's declaration determines once: each context's entry set dealt as cards, a weighted source's
-    // entry set dealt as cards, and the context key → ordinal map. Built once per WorldGenerator instance and held
-    // weakly beside it, so a site drawn every tick pays the table build once rather than per emission. A card is one
-    // deal of one entry: entry i contributes Count cards, each carrying the entry's weight and ordinal, and a deck
-    // mask holds one bit per card. The full table samples a card ordinal, so a table over the same weights in the
-    // same order picks the same card whatever the entries carry. A dealt-down pool (a deck mode mid-pass) is the
-    // site's membership, not the source's, and is rebuilt allocation-free in stack storage for each emission.
+    // What a source's declaration determines once: each context's entry set expanded into units, a weighted source's
+    // entry set expanded into units, and the context key → ordinal map. Built once per WorldGenerator instance and
+    // held weakly beside it, so a site drawn every tick pays the table build once rather than per emission. A unit is
+    // one draw of one entry: entry i contributes Multiplicity units, each carrying the entry's weight and ordinal,
+    // and a drawn mask holds one bit per unit. The full table samples a unit ordinal, so a table over the same
+    // weights in the same order picks the same unit whatever the entries carry. A drawn-down pool (an exhausting
+    // mode mid-pass) is the site's membership, not the source's, and is rebuilt allocation-free in stack storage for
+    // each emission.
     private sealed class CompiledSource {
         public CompiledSource(WorldGenerator generator) {
             var contexts = (generator.Contexts ?? []);
@@ -80,7 +81,7 @@ public static class WorldGeneratorEngine {
 
                 for (var alternative = 0; (alternative < weights.Length); alternative++) {
                     weights[alternative] = alternatives[alternative].Weight;
-                    counts[alternative] = (alternatives[alternative].Count ?? 1);
+                    counts[alternative] = (alternatives[alternative].Multiplicity ?? 1);
                 }
 
                 Contexts[index] = EntrySet.TryBuild(counts: counts, weights: weights);
@@ -92,7 +93,7 @@ public static class WorldGeneratorEngine {
 
             for (var index = 0; (index < outcomeWeights.Length); index++) {
                 outcomeWeights[index] = outcomes[index].Weight;
-                outcomeCounts[index] = (outcomes[index].Count ?? 1);
+                outcomeCounts[index] = (outcomes[index].Multiplicity ?? 1);
             }
 
             Weighted = EntrySet.TryBuild(counts: outcomeCounts, weights: outcomeWeights);
@@ -119,64 +120,64 @@ public static class WorldGeneratorEngine {
         public EntrySet? Weighted { get; }
     }
     private sealed class EntrySet {
-        private EntrySet(int[] cardEntries, ulong[] cardWeights, AliasTable<int>? full, long cardCount) {
-            CardEntries = cardEntries;
-            CardWeights = cardWeights;
+        private EntrySet(int[] unitEntries, ulong[] unitWeights, AliasTable<int>? full, long unitCount) {
+            UnitEntries = unitEntries;
+            UnitWeights = unitWeights;
             Full = full;
-            CardCount = cardCount;
+            UnitCount = unitCount;
         }
 
-        // The entry ordinal each card deals.
-        public int[] CardEntries { get; }
-        // Each card's weight — its entry's weight.
-        public ulong[] CardWeights { get; }
+        // The entry ordinal each unit resolves to.
+        public int[] UnitEntries { get; }
+        // Each unit's weight — its entry's weight.
+        public ulong[] UnitWeights { get; }
         // Kept separately from the arrays so an invalid, over-capacity declaration can be represented and refused
         // without first attempting an attacker-sized allocation. Validated documents never take this path.
-        public long CardCount { get; }
-        // The alias table over every card, or null when no card weighs anything — the validator refuses that shape,
+        public long UnitCount { get; }
+        // The alias table over every unit, or null when no unit weighs anything — the validator refuses that shape,
         // and the firing arm refuses it by name again rather than trusting it only ever sees validated documents.
         public AliasTable<int>? Full { get; }
 
         public static EntrySet? TryBuild(int[] counts, ulong[] weights) {
             if (weights.Length == 0) { return null; }
 
-            var cards = 0L;
+            var units = 0L;
 
             for (var index = 0; (index < counts.Length); index++) {
-                cards += Math.Max(val1: 1, val2: counts[index]);
+                units += Math.Max(val1: 1, val2: counts[index]);
             }
 
-            if (cards > WorldGeneratorCapacity.MaxCardsPerSet) {
+            if (units > WorldGeneratorCapacity.MaxEntriesPerSet) {
                 return new EntrySet(
-                    cardEntries: [],
-                    cardWeights: [],
+                    unitEntries: [],
+                    unitWeights: [],
                     full: null,
-                    cardCount: cards
+                    unitCount: units
                 );
             }
 
-            var cardEntries = new int[(int)cards];
-            var cardWeights = new ulong[(int)cards];
-            var entries = new (int Element, ulong Weight)[(int)cards];
+            var unitEntries = new int[(int)units];
+            var unitWeights = new ulong[(int)units];
+            var entries = new (int Element, ulong Weight)[(int)units];
             var any = false;
-            var card = 0;
+            var unit = 0;
 
             for (var index = 0; (index < counts.Length); index++) {
                 for (var copy = Math.Max(val1: 1, val2: counts[index]); (copy > 0); copy--) {
-                    cardEntries[card] = index;
-                    cardWeights[card] = weights[index];
-                    entries[card] = (card, weights[index]);
-                    card++;
+                    unitEntries[unit] = index;
+                    unitWeights[unit] = weights[index];
+                    entries[unit] = (unit, weights[index]);
+                    unit++;
                 }
 
                 any |= (weights[index] != 0UL);
             }
 
             return new EntrySet(
-                cardEntries: cardEntries,
-                cardWeights: cardWeights,
+                unitEntries: unitEntries,
+                unitWeights: unitWeights,
                 full: (any ? WeightedSampler.Create<int>(entries: entries) : null),
-                cardCount: cards
+                unitCount: units
             );
         }
     }
@@ -189,16 +190,16 @@ public static class WorldGeneratorEngine {
             createValueCallback: static (WorldGenerator source) => new CompiledSource(generator: source)
         );
 
-    // One deal from a card set under a mode: the full table when nothing is dealt (or the mode never deals), else a
-    // table over the undealt cards. A dealt-out deck refuses under WithoutReplacement and clears under
-    // ReshuffleOnExhaustion, in the same emission. Exactly two generator advances either way, so cursor seeking
-    // stays exact. On success the picked card's bit is set in `deck` (deck modes only) and the card's ENTRY ordinal
-    // is returned; -1 with `reason` set otherwise.
-    private static int Deal(WorldGeneratorMode mode, EntrySet? set, ref ClosedBitset256 deck, ref Pcg32XshRr rng, string what, out string reason) {
+    // One draw from a unit set under a mode: the full table when nothing is drawn (or the mode never exhausts), else
+    // a table over the undrawn units. An exhausted mask refuses under WithoutReplacement and clears under
+    // RestartOnExhaustion, in the same emission. Exactly two generator advances either way, so cursor seeking
+    // stays exact. On success the picked unit's bit is set in `mask` (exhausting modes only) and the unit's ENTRY
+    // ordinal is returned; -1 with `reason` set otherwise.
+    private static int DrawEntry(WorldGeneratorMode mode, EntrySet? set, ref ClosedBitset256 mask, ref Pcg32XshRr rng, string what, out string reason) {
         reason = string.Empty;
 
-        if (set?.CardCount > WorldGeneratorCapacity.MaxCardsPerSet) {
-            reason = $"{what} holds {set.CardCount} cards, more than the {WorldGeneratorCapacity.MaxCardsPerSet} a deck mask can deal";
+        if (set?.UnitCount > WorldGeneratorCapacity.MaxEntriesPerSet) {
+            reason = $"{what} holds {set.UnitCount} units, more than the {WorldGeneratorCapacity.MaxEntriesPerSet} a drawn mask can hold";
 
             return -1;
         }
@@ -210,40 +211,40 @@ public static class WorldGeneratorEngine {
         }
 
         if (mode == WorldGeneratorMode.WithReplacement) {
-            return set.CardEntries[set.Full.Sample(generator: ref rng)];
+            return set.UnitEntries[set.Full.Sample(generator: ref rng)];
         }
 
-        var cards = set.CardEntries.Length;
+        var units = set.UnitEntries.Length;
 
         int picked;
 
-        if (deck.IsEmpty) {
+        if (mask.IsEmpty) {
             picked = set.Full.Sample(generator: ref rng);
         }
         else {
-            Span<(int Element, ulong Weight)> buffer = stackalloc (int, ulong)[WorldGeneratorCapacity.MaxCardsPerSet];
+            Span<(int Element, ulong Weight)> buffer = stackalloc (int, ulong)[WorldGeneratorCapacity.MaxEntriesPerSet];
             var pooled = 0;
             var anyWeight = false;
 
-            for (var card = 0; (card < cards); card++) {
-                if (!deck.Contains(card)) {
-                    buffer[pooled++] = (card, set.CardWeights[card]);
-                    anyWeight |= (set.CardWeights[card] != 0UL);
+            for (var unit = 0; (unit < units); unit++) {
+                if (!mask.Contains(unit)) {
+                    buffer[pooled++] = (unit, set.UnitWeights[unit]);
+                    anyWeight |= (set.UnitWeights[unit] != 0UL);
                 }
             }
 
             if ((pooled == 0) || !anyWeight) {
-                // The deck is dealt out (or only weightless cards remain). What happens next is authored, never
+                // The mask is drawn out (or only weightless units remain). What happens next is authored, never
                 // inferred.
                 if (mode == WorldGeneratorMode.WithoutReplacement) {
                     reason = ((pooled == 0)
-                        ? $"{what} is dealt out ({cards} cards, mode withoutReplacement) — declare mode reshuffleOnExhaustion to deal again from the full set"
-                        : $"{what} has only zero-weight cards left undealt (mode withoutReplacement) — declare mode reshuffleOnExhaustion or give every entry weight");
+                        ? $"{what} is drawn out ({units} units, mode withoutReplacement) — declare mode restartOnExhaustion to draw again from the full set"
+                        : $"{what} has only zero-weight units left undrawn (mode withoutReplacement) — declare mode restartOnExhaustion or give every entry weight");
 
                     return -1;
                 }
 
-                deck = default;
+                mask = default;
                 picked = set.Full.Sample(generator: ref rng);
             }
             else {
@@ -251,11 +252,11 @@ public static class WorldGeneratorEngine {
             }
         }
 
-        deck = deck.Add(picked);
+        mask = mask.Add(picked);
 
-        return set.CardEntries[picked];
+        return set.UnitEntries[picked];
     }
-    // The exact Walker/Vose construction AliasTable<T> uses, specialized to a short-lived card-index table backed
+    // The exact Walker/Vose construction AliasTable<T> uses, specialized to a short-lived unit-index table backed
     // entirely by stack storage. Entry order, LIFO partition order, UQ0.32 rounding, power-of-two padding, and the
     // two random advances are deliberately identical, so every stream is a pure function of the entries and the seed.
     private static int SampleAlias(ReadOnlySpan<(int Element, ulong Weight)> entries, ref Pcg32XshRr generator) {
@@ -335,18 +336,18 @@ public static class WorldGeneratorEngine {
 
         return entries[selected].Element;
     }
-    private static bool TryFireMarkov(WorldGenerator generator, ref Pcg32XshRr rng, IReadOnlyList<ClosedBitset256>? decks, out FireResult result, out string reason) {
+    private static bool TryFireMarkov(WorldGenerator generator, ref Pcg32XshRr rng, IReadOnlyList<ClosedBitset256>? masks, out FireResult result, out string reason) {
         var contexts = generator.Contexts!;
         var compiled = Compiled(generator: generator);
         var tokens = new List<string>(capacity: generator.Bound);
         var context = generator.Start!.Value;
         var samples = 0L;
         var working = new ClosedBitset256[contexts.Count];
-        var dealt = false;
+        var drawn = false;
 
         for (var index = 0; (index < working.Length); index++) {
-            working[index] = (((decks is not null) && (index < decks.Count))
-                ? decks[index]
+            working[index] = (((masks is not null) && (index < masks.Count))
+                ? masks[index]
                 : default
             );
         }
@@ -373,9 +374,9 @@ public static class WorldGeneratorEngine {
                 return false;
             }
 
-            var deck = working[ordinal];
-            var picked = Deal(
-                deck: ref deck,
+            var mask = working[ordinal];
+            var picked = DrawEntry(
+                mask: ref mask,
                 mode: generator.Mode,
                 reason: out reason,
                 rng: ref rng,
@@ -392,8 +393,8 @@ public static class WorldGeneratorEngine {
             samples++;
 
             if (generator.Mode != WorldGeneratorMode.WithReplacement) {
-                working[ordinal] = deck;
-                dealt = true;
+                working[ordinal] = mask;
+                drawn = true;
             }
 
             tokens.Add(item: alternatives[picked].Token);
@@ -407,7 +408,7 @@ public static class WorldGeneratorEngine {
             ),
             Numeric: null,
             Samples: samples,
-            Decks: (dealt
+            Masks: (drawn
             ? working
             : null)
         );
@@ -415,10 +416,10 @@ public static class WorldGeneratorEngine {
 
         return true;
     }
-    // One numeric sample of a non-Markov source at the generator's current position, threading the one deck a
-    // weighted source deals through. The single draw TryFire answers and every cell of a TryFireBatch fill share
+    // One numeric sample of a non-Markov source at the generator's current position, threading the one mask a
+    // weighted source draws through. The single draw TryFire answers and every cell of a TryFireBatch fill share
     // this body, so a fill's cell k is exactly the sample a site at cursor + k would have drawn.
-    private static bool TryDrawNumeric(WorldGenerator generator, CellKind targetKind, ref Pcg32XshRr rng, ref ClosedBitset256 deck, out long value, out string reason) {
+    private static bool TryDrawNumeric(WorldGenerator generator, CellKind targetKind, ref Pcg32XshRr rng, ref ClosedBitset256 mask, out long value, out string reason) {
         switch (generator.Source) {
             case WorldGeneratorSource.UniformRange: {
                     var span = unchecked((uint)(generator.RangeMax!.Value - generator.RangeMin!.Value));
@@ -434,8 +435,8 @@ public static class WorldGeneratorEngine {
                     return true;
                 }
             case WorldGeneratorSource.WeightedNumeric: {
-                    var picked = Deal(
-                        deck: ref deck,
+                    var picked = DrawEntry(
+                        mask: ref mask,
                         mode: generator.Mode,
                         reason: out reason,
                         rng: ref rng,
@@ -454,8 +455,8 @@ public static class WorldGeneratorEngine {
                 return true;
             case WorldGeneratorSource.SymmetryOrbit: {
                     var compiled = Compiled(generator: generator);
-                    var picked = Deal(
-                        deck: ref deck,
+                    var picked = DrawEntry(
+                        mask: ref mask,
                         mode: generator.Mode,
                         reason: out reason,
                         rng: ref rng,
@@ -483,10 +484,10 @@ public static class WorldGeneratorEngine {
     /// <returns>The raw cell value.</returns>
     public static long EncodeNode(int node, CellKind targetKind) =>
         ((targetKind == CellKind.Fixed) ? (((long)node) << FixedQ4816.FractionBitCount) : node);
-    private static bool TryRunBatch(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? decks, Span<long> values, int sampleCount, bool writeValues, out IReadOnlyList<ClosedBitset256>? decksAfter, out string reason) {
+    private static bool TryRunBatch(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, int sampleCount, bool writeValues, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: generator);
 
-        decksAfter = null;
+        masksAfter = null;
 
         if (cursor < 0) {
             reason = $"cursor {cursor} is negative — a draw cursor is a non-negative sample count";
@@ -527,12 +528,12 @@ public static class WorldGeneratorEngine {
 
         rng.Advance(count: unchecked((((ulong)cursor) * AdvancesPerSample(source: generator.Source))));
 
-        var deals = (Deals(source: generator.Source) && (generator.Mode != WorldGeneratorMode.WithReplacement));
-        var deck = ((deals && (decks is { Count: > 0 })) ? decks[0] : default(ClosedBitset256));
+        var exhausts = (Exhausts(source: generator.Source) && (generator.Mode != WorldGeneratorMode.WithReplacement));
+        var mask = ((exhausts && (masks is { Count: > 0 })) ? masks[0] : default(ClosedBitset256));
 
-        // A pass that neither writes values nor deals has no output at all: its only purpose would be the tail decks,
-        // and a non-dealing source has none.
-        if (!deals && !writeValues) {
+        // A pass that neither writes values nor exhausts has no output at all: its only purpose would be the tail masks,
+        // and a non-drawing source has none.
+        if (!exhausts && !writeValues) {
             reason = string.Empty;
 
             return true;
@@ -540,7 +541,7 @@ public static class WorldGeneratorEngine {
 
         for (var sample = 0; (sample < sampleCount); sample++) {
             if (!TryDrawNumeric(
-                deck: ref deck,
+                mask: ref mask,
                 generator: generator,
                 reason: out reason,
                 rng: ref rng,
@@ -555,7 +556,7 @@ public static class WorldGeneratorEngine {
             }
         }
 
-        decksAfter = (deals ? [deck] : null);
+        masksAfter = (exhausts ? [mask] : null);
         reason = string.Empty;
 
         return true;
@@ -563,65 +564,65 @@ public static class WorldGeneratorEngine {
     /// <summary>Fills <paramref name="values"/> with consecutive samples of a numeric <paramref name="generator"/> at
     /// a site already seeked to <paramref name="cursor"/> — the per-cell fill a lattice row's <c>draw</c> paint takes.
     /// Cell <c>k</c> receives exactly the sample a single <see cref="TryFire"/> at <c>cursor + k</c> would draw, with a
-    /// weighted source's deck threaded from cell to cell, so one pass over a field is one run of the site's stream.</summary>
+    /// weighted source's mask threaded from cell to cell, so one pass over a field is one run of the site's stream.</summary>
     /// <param name="generator">The resolved source; a text source is refused.</param>
     /// <param name="targetKind">The cells' declared kind; a mismatch refuses by name before any draw runs.</param>
     /// <param name="seedState">The seed-ladder fold (see <see cref="ComputeSeedState"/>).</param>
     /// <param name="stream">The site's stream id (see <see cref="ComputeStreamId"/>).</param>
     /// <param name="cursor">The site's current sample count.</param>
-    /// <param name="decks">The site's current dealt masks (may be empty).</param>
+    /// <param name="masks">The site's current drawn masks (may be empty).</param>
     /// <param name="values">Receives one raw sample per cell; its length is the sample count the cursor advances by.</param>
-    /// <param name="decksAfter">The site's dealt masks after the fill, or <see langword="null"/> when the source never deals.</param>
+    /// <param name="masksAfter">The site's drawn masks after the fill, or <see langword="null"/> when the source never exhausts.</param>
     /// <param name="reason">Why the fill was refused, on failure.</param>
     /// <returns><see langword="true"/> when every cell was filled.</returns>
-    public static bool TryFireBatch(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? decks, Span<long> values, out IReadOnlyList<ClosedBitset256>? decksAfter, out string reason) => TryRunBatch(
+    public static bool TryFireBatch(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason) => TryRunBatch(
         generator: generator,
         targetKind: targetKind,
         seedState: seedState,
         stream: stream,
         cursor: cursor,
-        decks: decks,
+        masks: masks,
         values: values,
         sampleCount: values.Length,
         writeValues: true,
-        decksAfter: out decksAfter,
+        masksAfter: out masksAfter,
         reason: out reason
     );
     /// <summary>Advances a numeric generator through <paramref name="sampleCount"/> consecutive samples without
     /// materializing their values. This is the compose-side half of a whole-field redraw: it computes the pass's
-    /// final deck while the apply side later emits the same pass directly into the live field.</summary>
+    /// final mask while the apply side later emits the same pass directly into the live field.</summary>
     /// <param name="generator">The resolved source; a text source is refused.</param>
     /// <param name="targetKind">The cells' declared kind.</param>
     /// <param name="seedState">The seed-ladder fold.</param>
     /// <param name="stream">The site's stream id.</param>
     /// <param name="cursor">The site's current sample count.</param>
-    /// <param name="decks">The site's current dealt masks.</param>
+    /// <param name="masks">The site's current drawn masks.</param>
     /// <param name="sampleCount">How many samples to consume.</param>
-    /// <param name="decksAfter">The dealt masks after the pass, or <see langword="null"/> when the source never deals.</param>
+    /// <param name="masksAfter">The drawn masks after the pass, or <see langword="null"/> when the source never exhausts.</param>
     /// <param name="reason">Why the pass was refused, on failure.</param>
     /// <returns><see langword="true"/> when all samples were consumed.</returns>
-    public static bool TryAdvanceBatch(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? decks, int sampleCount, out IReadOnlyList<ClosedBitset256>? decksAfter, out string reason) => TryRunBatch(
+    public static bool TryAdvanceBatch(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, int sampleCount, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason) => TryRunBatch(
         generator: generator,
         targetKind: targetKind,
         seedState: seedState,
         stream: stream,
         cursor: cursor,
-        decks: decks,
+        masks: masks,
         values: Span<long>.Empty,
         sampleCount: sampleCount,
         writeValues: false,
-        decksAfter: out decksAfter,
+        masksAfter: out masksAfter,
         reason: out reason
     );
-    /// <summary>Checks whether a numeric source can complete one batch from its current dealt masks without
+    /// <summary>Checks whether a numeric source can complete one batch from its current drawn masks without
     /// executing it. Only <see cref="WorldGeneratorMode.WithoutReplacement"/> can run out mid-batch; other modes
-    /// either never deal or reshuffle in the same sample.</summary>
+    /// either never exhaust or restart in the same sample.</summary>
     /// <param name="generator">The resolved source.</param>
-    /// <param name="decks">The site's current dealt masks.</param>
+    /// <param name="masks">The site's current drawn masks.</param>
     /// <param name="sampleCount">The required batch length.</param>
     /// <param name="reason">Why the source cannot supply the batch.</param>
     /// <returns><see langword="true"/> when batch execution cannot exhaust the source.</returns>
-    public static bool TryCheckBatchCapacity(WorldGenerator generator, IReadOnlyList<ClosedBitset256>? decks, long sampleCount, out string reason) {
+    public static bool TryCheckBatchCapacity(WorldGenerator generator, IReadOnlyList<ClosedBitset256>? masks, long sampleCount, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: generator);
 
         reason = string.Empty;
@@ -634,36 +635,36 @@ public static class WorldGeneratorEngine {
             return true;
         }
 
-        var deck = ((decks is { Count: > 0 }) ? decks[0] : default(ClosedBitset256));
-        var card = 0;
+        var mask = ((masks is { Count: > 0 }) ? masks[0] : default(ClosedBitset256));
+        var unit = 0;
         var available = 0L;
 
         if (generator.Source == WorldGeneratorSource.SymmetryOrbit) {
-            // Every orbit card weighs one, so the undealt count is the orbit length less the dealt bits; an
+            // Every orbit unit weighs one, so the undrawn count is the orbit length less the drawn bits; an
             // unresolvable orbit is the source-shape validator's refusal, not this one's.
             if (!TryResolveOrbit(generator: generator, nodes: out var orbitNodes, reason: out _)) {
                 return true;
             }
 
-            for (; (card < orbitNodes.Length); card++) {
-                if (!deck.Contains(card)) {
+            for (; (unit < orbitNodes.Length); unit++) {
+                if (!mask.Contains(unit)) {
                     available++;
                 }
             }
         }
         else {
             var outcomes = (generator.Weighted ?? []);
-            var cards = 0L;
+            var units = 0L;
 
             foreach (var outcome in outcomes) {
                 if (outcome is not null) {
-                    cards += Math.Max(val1: 1, val2: (outcome.Count ?? 1));
+                    units += Math.Max(val1: 1, val2: (outcome.Multiplicity ?? 1));
                 }
             }
 
             // The source-shape validator owns this earlier error. Stop here rather than attempting to enumerate an
-            // invalid oversized deck or emitting a misleading second batch-capacity diagnosis.
-            if (cards > WorldGeneratorCapacity.MaxCardsPerSet) {
+            // invalid oversized mask or emitting a misleading second batch-capacity diagnosis.
+            if (units > WorldGeneratorCapacity.MaxEntriesPerSet) {
                 return true;
             }
 
@@ -672,12 +673,12 @@ public static class WorldGeneratorEngine {
                     continue;
                 }
 
-                for (var copy = Math.Max(val1: 1, val2: (outcome.Count ?? 1)); (copy > 0); copy--) {
-                    if ((outcome.Weight != 0UL) && (!deck.Contains(card))) {
+                for (var copy = Math.Max(val1: 1, val2: (outcome.Multiplicity ?? 1)); (copy > 0); copy--) {
+                    if ((outcome.Weight != 0UL) && (!mask.Contains(unit))) {
                         available++;
                     }
 
-                    card++;
+                    unit++;
                 }
             }
         }
@@ -686,7 +687,7 @@ public static class WorldGeneratorEngine {
             return true;
         }
 
-        reason = $"can supply only {available} positive-weight undealt card{((available == 1L) ? string.Empty : "s")} in mode=withoutReplacement, but the lattice pass requires {sampleCount} samples";
+        reason = $"can supply only {available} positive-weight undrawn unit{((available == 1L) ? string.Empty : "s")} in mode=withoutReplacement, but the lattice pass requires {sampleCount} samples";
 
         return false;
     }
@@ -700,14 +701,14 @@ public static class WorldGeneratorEngine {
             hash.Add(value: ((uint)ch));
         }
     }
-    /// <summary>Determines whether a source of <paramref name="source"/> shape may deal — carry a
-    /// <see cref="WorldGeneratorMode"/> other than <see cref="WorldGeneratorMode.WithReplacement"/> and persist dealt masks
+    /// <summary>Determines whether a source of <paramref name="source"/> shape may exhaust — carry a
+    /// <see cref="WorldGeneratorMode"/> other than <see cref="WorldGeneratorMode.WithReplacement"/> and persist drawn masks
     /// on its site.</summary>
     /// <param name="source">The source shape.</param>
     /// <returns><see langword="true"/> for the three alias-table shapes, <see cref="WorldGeneratorSource.Markov"/>,
     /// <see cref="WorldGeneratorSource.WeightedNumeric"/> and <see cref="WorldGeneratorSource.SymmetryOrbit"/>.</returns>
-    public static bool Deals(WorldGeneratorSource source) => (source is WorldGeneratorSource.Markov or WorldGeneratorSource.WeightedNumeric or WorldGeneratorSource.SymmetryOrbit);
-    /// <summary>Resolves the cards of a <see cref="WorldGeneratorSource.SymmetryOrbit"/> source: the nodes of its ring
+    public static bool Exhausts(WorldGeneratorSource source) => (source is WorldGeneratorSource.Markov or WorldGeneratorSource.WeightedNumeric or WorldGeneratorSource.SymmetryOrbit);
+    /// <summary>Resolves the units of a <see cref="WorldGeneratorSource.SymmetryOrbit"/> source: the nodes of its ring
     /// in cycle order, or the orbit of its node under its word in step order.</summary>
     /// <param name="generator">The source.</param>
     /// <param name="nodes">The orbit's nodes, on success; empty otherwise.</param>
@@ -726,7 +727,7 @@ public static class WorldGeneratorEngine {
 
         if ((generator.Ring is null) == (generator.Node is null)) {
             reason = ((generator.Ring is null)
-                ? "declares neither 'ring' nor 'node' — an orbit source names a ring 0..7 or a node 0..239 whose orbit is the cards"
+                ? "declares neither 'ring' nor 'node' — an orbit source names a ring 0..7 or a node 0..239 whose orbit is the units"
                 : "declares both 'ring' and 'node' — an orbit source names one or the other");
 
             return false;
@@ -782,17 +783,17 @@ public static class WorldGeneratorEngine {
 
         return true;
     }
-    /// <summary>Returns the dealt masks a site persists after an emission: the emission's own when it dealt, the
-    /// site's previous masks when a dealing source dealt nothing this time, and none at all for a source that never
-    /// deals — so a site re-authored to a non-dealing source sheds the masks its old source left behind.</summary>
+    /// <summary>Returns the drawn masks a site persists after an emission: the emission's own when it drew, the
+    /// site's previous masks when a drawing source drew nothing this time, and none at all for a source that never
+    /// exhausts — so a site re-authored to a non-drawing source sheds the masks its old source left behind.</summary>
     /// <param name="generator">The site's resolved source.</param>
-    /// <param name="fired">The emission's dealt masks, or <see langword="null"/>.</param>
+    /// <param name="fired">The emission's drawn masks, or <see langword="null"/>.</param>
     /// <param name="previous">The site's persisted masks before the emission.</param>
     /// <returns>The masks to persist.</returns>
-    public static IReadOnlyList<ClosedBitset256>? DecksAfter(WorldGenerator generator, IReadOnlyList<ClosedBitset256>? fired, IReadOnlyList<ClosedBitset256>? previous) {
+    public static IReadOnlyList<ClosedBitset256>? MasksAfter(WorldGenerator generator, IReadOnlyList<ClosedBitset256>? fired, IReadOnlyList<ClosedBitset256>? previous) {
         ArgumentNullException.ThrowIfNull(argument: generator);
 
-        return ((Deals(source: generator.Source) && (generator.Mode != WorldGeneratorMode.WithReplacement))
+        return ((Exhausts(source: generator.Source) && (generator.Mode != WorldGeneratorMode.WithReplacement))
             ? (fired ?? previous)
             : null);
     }
@@ -889,12 +890,12 @@ public static class WorldGeneratorEngine {
     /// <param name="seedState">The seed-ladder fold (see <see cref="ComputeSeedState"/>).</param>
     /// <param name="stream">The site's stream id (see <see cref="ComputeStreamId"/>).</param>
     /// <param name="cursor">The site's current sample count.</param>
-    /// <param name="decks">The site's current per-context dealt masks (may be empty).</param>
+    /// <param name="masks">The site's current per-context drawn masks (may be empty).</param>
     /// <param name="result">The emission, on success.</param>
     /// <param name="reason">Why the emission was refused, on failure.</param>
     /// <returns><see langword="true"/> on a successful emission.</returns>
     /// <param name="secret">Optional authority secret; admitted only for integer streamDraw sources.</param>
-    public static bool TryFire(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? decks, out FireResult result, out string reason, ClosedBitset256? secret = null) {
+    public static bool TryFire(WorldGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, out FireResult result, out string reason, ClosedBitset256? secret = null) {
         ArgumentNullException.ThrowIfNull(argument: generator);
 
         result = default;
@@ -936,18 +937,18 @@ public static class WorldGeneratorEngine {
         switch (generator.Source) {
             case WorldGeneratorSource.Markov:
                 return TryFireMarkov(
-                    decks: decks,
+                    masks: masks,
                     generator: generator,
                     reason: out reason,
                     result: out result,
                     rng: ref rng
                 );
             default: {
-                    var deals = (generator.Mode != WorldGeneratorMode.WithReplacement);
-                    var deck = ((deals && (decks is { Count: > 0 })) ? decks[0] : default(ClosedBitset256));
+                    var exhausts = (generator.Mode != WorldGeneratorMode.WithReplacement);
+                    var mask = ((exhausts && (masks is { Count: > 0 })) ? masks[0] : default(ClosedBitset256));
 
                     if (!TryDrawNumeric(
-                        deck: ref deck,
+                        mask: ref mask,
                         generator: generator,
                         reason: out reason,
                         rng: ref rng,
@@ -961,7 +962,7 @@ public static class WorldGeneratorEngine {
                         Text: null,
                         Numeric: value,
                         Samples: 1L,
-                        Decks: (deals ? [deck] : null)
+                        Masks: (exhausts ? [mask] : null)
                     );
                     reason = string.Empty;
 

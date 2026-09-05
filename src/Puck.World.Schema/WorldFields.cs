@@ -452,8 +452,8 @@ public abstract record WorldLatticeFill {
     /// <summary>Every cell drawn from a numeric authored-randomness source — the per-cell lattice draw. The fill is
     /// one pass of the row's own draw stream (seeded through the same ladder as a state-row site, under the row's
     /// <c>state.&lt;row&gt;</c> descriptor): cell <c>k</c>, in cell-index order, takes the sample a site at
-    /// <c>drawCursor + k</c> would draw, so a weighted source under a deck mode deals its cards across the field and
-    /// reshuffles as it goes. The row's <see cref="WorldStateRow.DrawCursor"/>/<see cref="WorldStateRow.DrawDecks"/>
+    /// <c>drawCursor + k</c> would draw, so a weighted source under an exhausting mode draws its units across the
+    /// field and restarts as it goes. The row's <see cref="WorldStateRow.DrawCursor"/>/<see cref="WorldStateRow.DrawnMasks"/>
     /// name the pass currently painted; <c>generate &lt;row&gt;</c> advances them one whole pass and repaints. Draw
     /// occupies its authored paint position (overwriting earlier fills and preceding later fills); boot, rebuild,
     /// load/reset, and a draw-rewinding undo repaint the pass the document names.</summary>

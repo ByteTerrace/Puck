@@ -11333,7 +11333,7 @@
                 "additionalProperties": false
               },
               {
-                "description": "Every cell drawn from a numeric authored-randomness source \u2014 the per-cell lattice draw. The fill is one pass of the row\u0027s own draw stream (seeded through the same ladder as a state-row site, under the row\u0027s state.\u003Crow\u003E descriptor): cell k, in cell-index order, takes the sample a site at drawCursor \u002B k would draw, so a weighted source under a deck mode deals its cards across the field and reshuffles as it goes. The row\u0027s DrawCursor/DrawDecks name the pass currently painted; generate \u003Crow\u003E advances them one whole pass and repaints. Draw occupies its authored paint position (overwriting earlier fills and preceding later fills); boot, rebuild, load/reset, and a draw-rewinding undo repaint the pass the document names.",
+                "description": "Every cell drawn from a numeric authored-randomness source \u2014 the per-cell lattice draw. The fill is one pass of the row\u0027s own draw stream (seeded through the same ladder as a state-row site, under the row\u0027s state.\u003Crow\u003E descriptor): cell k, in cell-index order, takes the sample a site at drawCursor \u002B k would draw, so a weighted source under an exhausting mode draws its units across the field and restarts as it goes. The row\u0027s DrawCursor/DrawnMasks name the pass currently painted; generate \u003Crow\u003E advances them one whole pass and repaints. Draw occupies its authored paint position (overwriting earlier fills and preceding later fills); boot, rebuild, load/reset, and a draw-rewinding undo repaint the pass the document names.",
                 "properties": {
                   "$type": {
                     "const": "draw"
@@ -11419,8 +11419,8 @@
                                     "description": "The context the walk moves into after this alternative is picked. Must name a declared Key; naming a context that declares NO alternatives ends the emission (a terminal is a context with nothing to say, never a reserved token spelling).",
                                     "type": "string"
                                   },
-                                  "count": {
-                                    "description": "How many cards of this alternative one deck pass holds, at least one; null is one. Under WithReplacement a count only scales the weight; under a deck mode each card is dealt once per pass. A context\u0027s cards total at most MaxCardsPerSet.",
+                                  "multiplicity": {
+                                    "description": "How many units of this alternative one pass holds, at least one; null is one. Under WithReplacement a multiplicity only scales the weight; under an exhausting mode each unit is drawn once per pass. A context\u0027s units total at most MaxEntriesPerSet.",
                                     "type": [
                                       "integer",
                                       "null"
@@ -11450,7 +11450,7 @@
                         "enum": [
                           "WithReplacement",
                           "WithoutReplacement",
-                          "ReshuffleOnExhaustion"
+                          "RestartOnExhaustion"
                         ],
                         "default": "WithReplacement"
                       },
@@ -11471,7 +11471,7 @@
                         "default": null
                       },
                       "weighted": {
-                        "description": "WeightedNumeric only: the weighted numeric outcomes, at least one, at least one carrying a non-zero weight; under a deck Mode each outcome contributes Count cards to the pass.",
+                        "description": "WeightedNumeric only: the weighted numeric outcomes, at least one, at least one carrying a non-zero weight; under an exhausting Mode each outcome contributes Multiplicity units to the pass.",
                         "type": [
                           "array",
                           "null"
@@ -11491,8 +11491,8 @@
                               "description": "The outcome\u0027s relative weight, fed straight to Puck.Maths.WeightedSampler\u0027s exact ulong overload. At least one outcome must carry a non-zero weight.",
                               "type": "integer"
                             },
-                            "count": {
-                              "description": "How many cards of this outcome one deck pass holds, at least one; null is one. Under WithReplacement a count only scales the weight; under a deck mode each card is dealt once per pass, so an outcome that should come out twice per pass declares 2 rather than being authored twice. A source\u0027s cards total at most MaxCardsPerSet.",
+                            "multiplicity": {
+                              "description": "How many units of this outcome one pass holds, at least one; null is one. Under WithReplacement a multiplicity only scales the weight; under an exhausting mode each unit is drawn once per pass, so an outcome that should come out twice per pass declares 2 rather than being authored twice. A source\u0027s units total at most MaxEntriesPerSet.",
                               "type": [
                                 "integer",
                                 "null"
@@ -11509,7 +11509,7 @@
                         "default": null
                       },
                       "ring": {
-                        "description": "SymmetryOrbit only: the ring, 0..7, whose thirty nodes are the cards \u2014 exactly one of Ring and Node.",
+                        "description": "SymmetryOrbit only: the ring, 0..7, whose thirty nodes are the units \u2014 exactly one of Ring and Node.",
                         "type": [
                           "integer",
                           "null"
@@ -11517,7 +11517,7 @@
                         "default": null
                       },
                       "node": {
-                        "description": "SymmetryOrbit only: the node, 0..239, whose orbit under Word is the cards.",
+                        "description": "SymmetryOrbit only: the node, 0..239, whose orbit under Word is the units.",
                         "type": [
                           "integer",
                           "null"
