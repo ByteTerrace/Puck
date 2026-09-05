@@ -28,16 +28,6 @@ public static class WorldBoardQueries {
         if (query.Kind == WorldBoardQueryKind.Line) {
             return HasLine(query, values) ? 1 : 0;
         }
-        if (query.Kind == WorldBoardQueryKind.Image) {
-            return ImageMask(topology, values, query.Direction, query.Value, query.Upper);
-        }
-        if (query.Kind == WorldBoardQueryKind.CanonicalMask) {
-            var least = long.MaxValue;
-            for (var element = 0; element < topology.ElementCount; element++) {
-                least = Math.Min(least, ImageMask(topology, values, element, query.Value, query.Upper));
-            }
-            return least;
-        }
         if (query.Kind == WorldBoardQueryKind.Canonical) {
             return CanonicalFingerprint(topology, values);
         }
@@ -90,20 +80,6 @@ public static class WorldBoardQueries {
             }
         }
         return -1;
-    }
-
-    // The mask of the range's cells carried through one element: bit image(c) for every c in range.
-    private static long ImageMask(CompiledWorldTopology topology, ReadOnlySpan<long> values, int element, long lower, long upper) {
-        var mask = 0L;
-        for (var cell = 0; cell < topology.CellCount && cell < WorldBoardMask.MaxCells; cell++) {
-            if (values[cell] >= lower && values[cell] <= upper) {
-                var image = topology.Image(element, cell);
-                if (image < WorldBoardMask.MaxCells) {
-                    mask |= 1L << image;
-                }
-            }
-        }
-        return mask;
     }
 
     // The least FNV-1a fingerprint of the board's values over every element: the same number for every board in

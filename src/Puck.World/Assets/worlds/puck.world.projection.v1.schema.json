@@ -12222,20 +12222,20 @@
                               "additionalProperties": false
                             },
                             {
-                              "description": "Writes one value into every cell of a board whose bit is set in a mask read from a state cell: the way a mask computed by $board:mask and the bit operators lands back on the board.",
+                              "description": "Writes one value into every cell of a board whose bit is set in a cell-set mask read from a state cell: the way a set built from $board:mask and the and/or/xor/not/shift/image expression ops lands back on the board. The one board-writing form for every topology of at most 64 cells; a wider topology has no transform of its own and composes through per-cell rules instead.",
                               "properties": {
                                 "$type": {
-                                  "const": "setMask"
+                                  "const": "writeSet"
                                 },
                                 "row": {
                                   "description": "The board row, over a topology of at most 64 cells.",
                                   "type": "string"
                                 },
-                                "mask": {
-                                  "description": "The integer row the mask is read from.",
+                                "set": {
+                                  "description": "The integer row the cell-set mask is read from.",
                                   "type": "string"
                                 },
-                                "maskKey": {
+                                "setKey": {
                                   "description": "The cell of that row, or null for its slot cell.",
                                   "type": [
                                     "string",
@@ -12251,47 +12251,7 @@
                               },
                               "required": [
                                 "row",
-                                "mask"
-                              ],
-                              "additionalProperties": false
-                            },
-                            {
-                              "description": "Combines two board rows over one topology cell by cell as sets (a nonzero cell is a member) and writes 1 or 0 into every cell of the target: board algebra for topologies too large for one 64-bit mask.",
-                              "properties": {
-                                "$type": {
-                                  "const": "combine"
-                                },
-                                "target": {
-                                  "description": "The board row written, over the same topology as the operands.",
-                                  "type": "string"
-                                },
-                                "left": {
-                                  "description": "The left operand board.",
-                                  "type": "string"
-                                },
-                                "operation": {
-                                  "description": "The set operation.",
-                                  "enum": [
-                                    "And",
-                                    "Or",
-                                    "Xor",
-                                    "AndNot",
-                                    "Not"
-                                  ]
-                                },
-                                "right": {
-                                  "description": "The right operand board; null for Not only.",
-                                  "type": [
-                                    "string",
-                                    "null"
-                                  ],
-                                  "default": null
-                                }
-                              },
-                              "required": [
-                                "target",
-                                "left",
-                                "operation"
+                                "set"
                               ],
                               "additionalProperties": false
                             },
@@ -12313,32 +12273,6 @@
                               "required": [
                                 "row",
                                 "value"
-                              ],
-                              "additionalProperties": false
-                            },
-                            {
-                              "description": "Writes a board carried through one point-group element of its topology into another board over the same topology: the half turn is how one side\u0027s rules read the other side\u0027s position.",
-                              "properties": {
-                                "$type": {
-                                  "const": "mapBoard"
-                                },
-                                "target": {
-                                  "description": "The board row written.",
-                                  "type": "string"
-                                },
-                                "source": {
-                                  "description": "The board row read.",
-                                  "type": "string"
-                                },
-                                "element": {
-                                  "description": "An element name world.topology lists for the topology.",
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "target",
-                                "source",
-                                "element"
                               ],
                               "additionalProperties": false
                             },
@@ -13062,20 +12996,20 @@
                                         "additionalProperties": false
                                       },
                                       {
-                                        "description": "Writes one value into every cell of a board whose bit is set in a mask read from a state cell: the way a mask computed by $board:mask and the bit operators lands back on the board.",
+                                        "description": "Writes one value into every cell of a board whose bit is set in a cell-set mask read from a state cell: the way a set built from $board:mask and the and/or/xor/not/shift/image expression ops lands back on the board. The one board-writing form for every topology of at most 64 cells; a wider topology has no transform of its own and composes through per-cell rules instead.",
                                         "properties": {
                                           "$type": {
-                                            "const": "setMask"
+                                            "const": "writeSet"
                                           },
                                           "row": {
                                             "description": "The board row, over a topology of at most 64 cells.",
                                             "type": "string"
                                           },
-                                          "mask": {
-                                            "description": "The integer row the mask is read from.",
+                                          "set": {
+                                            "description": "The integer row the cell-set mask is read from.",
                                             "type": "string"
                                           },
-                                          "maskKey": {
+                                          "setKey": {
                                             "description": "The cell of that row, or null for its slot cell.",
                                             "type": [
                                               "string",
@@ -13091,47 +13025,7 @@
                                         },
                                         "required": [
                                           "row",
-                                          "mask"
-                                        ],
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Combines two board rows over one topology cell by cell as sets (a nonzero cell is a member) and writes 1 or 0 into every cell of the target: board algebra for topologies too large for one 64-bit mask.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "combine"
-                                          },
-                                          "target": {
-                                            "description": "The board row written, over the same topology as the operands.",
-                                            "type": "string"
-                                          },
-                                          "left": {
-                                            "description": "The left operand board.",
-                                            "type": "string"
-                                          },
-                                          "operation": {
-                                            "description": "The set operation.",
-                                            "enum": [
-                                              "And",
-                                              "Or",
-                                              "Xor",
-                                              "AndNot",
-                                              "Not"
-                                            ]
-                                          },
-                                          "right": {
-                                            "description": "The right operand board; null for Not only.",
-                                            "type": [
-                                              "string",
-                                              "null"
-                                            ],
-                                            "default": null
-                                          }
-                                        },
-                                        "required": [
-                                          "target",
-                                          "left",
-                                          "operation"
+                                          "set"
                                         ],
                                         "additionalProperties": false
                                       },
@@ -13153,32 +13047,6 @@
                                         "required": [
                                           "row",
                                           "value"
-                                        ],
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Writes a board carried through one point-group element of its topology into another board over the same topology: the half turn is how one side\u0027s rules read the other side\u0027s position.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "mapBoard"
-                                          },
-                                          "target": {
-                                            "description": "The board row written.",
-                                            "type": "string"
-                                          },
-                                          "source": {
-                                            "description": "The board row read.",
-                                            "type": "string"
-                                          },
-                                          "element": {
-                                            "description": "An element name world.topology lists for the topology.",
-                                            "type": "string"
-                                          }
-                                        },
-                                        "required": [
-                                          "target",
-                                          "source",
-                                          "element"
                                         ],
                                         "additionalProperties": false
                                       },

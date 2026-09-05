@@ -683,6 +683,42 @@ never structs, because a union boxes value cases on store. Row and key names lea
 object for compiled handles, kept only in the refusal text. Sequenced after `garden/w3`
 merges, since it rewrites the compiler arms the lanes are producing operands in.
 
+**Cellset-domain unification, the 64-cell half (landed).** The forked
+vocabulary was never a type-system problem: `$board:mask` already reads a
+board's occupancy as a plain `Int` 64-bit cell-set, and `WorldValueToken`'s
+`bitAnd`/`bitOr`/`bitXor`/`bitNot`/`popCount`/`lowestSetBit` were already
+generic ops over that same `Int`, so no new operand/effect value kind was
+needed to unify it — only the genuinely duplicate spellings were. Deleted:
+`WorldBoardQueryKind.Image` (a baked read-and-image query that duplicated
+`$board:mask` piped through the `boardImage` expression op — the op already
+existed and is the one kept spelling), `WorldBoardQueryKind.CanonicalMask`
+(the least image-mask fold; `Canonical`, the FNV fold over a board's actual
+values, is the one canonical form now — a caller wanting canonical-under-
+membership materializes a 0/1 board with `writeSet` and folds that), and the
+`setMask`/`combine`/`mapBoard` state transforms, replaced by one
+`writeSet(row, set, value)` (`set` names the integer cell holding a mask —
+exactly `setMask`'s own shape, renamed; `combine`'s and `mapBoard`'s row-vs-row
+reads compose ahead of time into that mask cell via `$board:mask` and the bit
+ops instead). None of the four deleted arms was authored in any shipped
+world or canary — the tabletop's 106 rules, the poker table, and dominoes ran
+on `$board:mask`/`neighbour`/`rayCell`/`offset`/`attacks` throughout, so the
+passive 300-tick garden hash is unchanged by this change, and the frozen
+world's own hash likewise. `writeSet` keeps `setMask`'s 64-cell ceiling —
+`WorldTopologyCompilation.MaxCells` is 4096, and a topology past 64 cells now
+has no board-writing transform of its own (a rule composes its algebra cell
+by cell instead); `combine`'s prior claim to serve that range was unexercised
+by any document, so the ceiling narrows rather than a multi-word cell-set
+type getting built to fill it — the next world that needs board algebra past
+64 cells is what should motivate that representation, not this pass.
+
+**The row-domain facet collapse remains fully blocked.** `keysOf`, `cellsOf`,
+and `ring` name nothing anywhere in the tree; only handle completion, the
+union rewrite's stated first step above, has landed of that precursor work.
+Deleting the `Tokens`/`Zone`/`KeysFrom`/`Board`/`Lattice`/`History` facets
+today deletes the tabletop primitive, the poker zones, and the island's
+fire/ice/water lattice with no replacement standing in, so it stays
+unstarted until the row-domain union itself ships.
+
 **The tabletop primitive (owner decisions, Lane D).** Physics-first extends to
 board games: a chess set is 32 ordinary rigid bodies on a shared `piece` kit —
 no second entity kind, no engine-level "piece" concept. A placement's `board`

@@ -45,9 +45,7 @@ Rule operands accept these bounded channels:
 | `$board:rayDistance:<row>:<direction>` | Distance to that cell, or -1 |
 | `$board:line:<row>:<length>:<value>:<exact\|atLeast>` | 1 when a matching line exists, otherwise 0 |
 | `$board:pathCost:<row>:<target>:<maxCost>:<maxVisits>` | Minimum terrain entry cost, -1 when unreachable/unaffordable, -2 when the visit budget is exhausted |
-| `$board:mask:<row>:<min>:<max>` | The 64-bit mask of cells whose value lies in min..max (bit c is cell ordinal c); the topology holds at most 64 cells |
-| `$board:image:<row>:<element>:<min>:<max>` | That mask carried through one point-group element of the topology |
-| `$board:canonicalMask:<row>:<min>:<max>` | The least image mask over every element: one number for a position and all its rotations and mirrors |
+| `$board:mask:<row>:<min>:<max>` | The 64-bit cell-set mask of cells whose value lies in min..max (bit c is cell ordinal c); the topology holds at most 64 cells |
 | `$board:canonical:<row>` | The least 64-bit fingerprint of the whole board's values over every element, for boards of any size: pushed into a history ring, repetition up to symmetry is a pattern |
 | `$board:cellOf:<row>:<bodyRef>` | The Grid cell a body's resolved world position falls in, or -1 |
 | `$board:offset:<row>:<dx>:<dz>` | The cell reached by an arbitrary (dx, dz) grid step from the key cell, or -1 |
@@ -67,8 +65,8 @@ directions: the grid's eight compass names in the layer, each prefixed `U`
 or `D` for the layer above or below, and `U`/`D` alone; ordinals run
 `(layer * depth + z) * width + x`, and `layerHeight` resolves a body's Y to
 its layer the way `cellSize` resolves X and Z. Rays, lines, masks under 64
-cells, patterns, path search, `combine`, and `mapBoard` apply to it
-unchanged; a 4x4x4 tic-tac-toe is one 64-bit mask and `line:4`.
+cells, patterns, and path search apply to it unchanged; a 4x4x4 tic-tac-toe
+is one 64-bit mask and `line:4`.
 Every discrete topology carries its point group, derived from its shape and
 never authored: a square grid the eight elements `identity`, `rot90`,
 `rot180`, `rot270`, `mirrorX`, `mirrorZ`, `mirrorMain`, `mirrorAnti`; a
@@ -76,11 +74,9 @@ rectangle the four without quarter turns; a hex board `rot60`..`rot300` and
 `mirror0`..`mirror5`; a box the signed axis permutations its equal extents
 admit (48 for a cube, 16 for a square prism, 8 otherwise), named by where
 `+x+y+z` land; a ring the identity alone. `world.topology <topology>
-[<cell>]` lists them and a cell's image under each. `mapBoard` (`target`,
-`source`, `element`) writes a board carried through an element, which is how
-rules authored from one side's view read the other side's position through
-`rot180`; the `boardImage` (`topology`, `element`) token does the same to a
-mask inside an expression.
+[<cell>]` lists them and a cell's image under each — see the `boardImage`
+expression op above for how a rule authored from one side's view reads the
+other side's position through `rot180`.
 A grid's `band` is the vertical half-extent about its origin's Y a position
 must lie within for `cellOf` to answer a cell; 0 (the default) answers any
 height, so a table's board authors a band and a piece on the floor beneath
@@ -104,14 +100,17 @@ serialized as exactly 64 hexadecimal digits, and supports 256 dealt entries.
 
 The closed `transformState` effect and transaction step carry one of `transfer`,
 `setRay`, `moveToken`, `completePhase`, `turnOrder`, `shuffle`, `sort`,
-`setMask`, `combine`, `push`, `mapBoard`, or `observe`. `setMask` (`row`, `mask`, `maskKey`,
+`writeSet`, `push`, or `observe`. `writeSet` (`row`, `set`, `setKey`,
 `value`) writes one value into every cell of a board (at most 64 cells) whose
-bit is set in a mask read from an integer cell, so a mask built by
-`$board:mask`, `boardShift`, and the bit operators lands back on the board;
-`combine` (`target`, `left`, `operation` and/or/xor/andNot/not, `right`)
-writes the cell-wise set operation of two boards over one topology into a
-third as 1/0, the board algebra for topologies too large for one mask. The same operation travels
-as the `TransformState` document mutation. Transfers preserve keys and accept
+bit is set in a cell-set mask read from an integer cell — the one board-writing
+form for a set built from `$board:mask`, `boardShift`/`boardImage`, and the
+plain bit operators (`bitAnd`/`bitOr`/`bitXor`/`bitNot` compose two boards'
+masks the way a dedicated set-algebra transform once did): populate a scratch
+integer row with the composed expression, then `writeSet` it onto the board.
+A topology past 64 cells has no board-writing transform of its own; a rule
+composes its board algebra cell by cell instead. The same operation travels
+as the `TransformState` document mutation.
+Transfers preserve keys and accept
 `Key`, `First`, `Last`, or `Random` selectors; random selection names a
 redrawable integer `streamDraw` site, and `count` (1..256) moves that many
 tokens in one mutation, each selected afresh from what remains, so a deal is
@@ -1587,11 +1586,16 @@ occupied square), the piece walk `lowestSetBit`/`clearLowestSetBit`, and the
 `parallelBitExtract`/`parallelBitDeposit` (pext/pdep: occupancy along a set
 of squares as a dense index and back); `bitField` (value, offset, width) and
 `bitInsert` (value, field, offset, width) for packed fields, refusing a
-field that leaves the 64-bit carrier; and `boardShift` (`topology`,
-`direction`), which moves every set bit of a cell mask to its neighbour in
-that direction and drops a bit at the edge instead of wrapping, so
-`$board:mask` of one side shifted and masked against `$board:mask` of the
-other is an attack map in one expression.
+field that leaves the 64-bit carrier; and the topology-aware pair `boardShift`
+(`topology`, `direction`), which moves every set bit of a cell mask to its
+neighbour in that direction and drops a bit at the edge instead of wrapping,
+and `boardImage` (`topology`, `element`), which carries a cell mask through
+one point-group element. Together with `$board:mask` and the plain bit
+operators these are the one cell-set vocabulary: `$board:mask` of one side
+shifted and masked against `$board:mask` of the other is an attack map in one
+expression, and `$board:mask` piped through `boardImage` is how a rule
+authored from one side's view reads the other side's position through
+`rot180` — there is no separate read-and-image board query.
 `negate`/`abs` keep their operand's kind and refuse the carrier's minimum;
 `sign` reads either kind and pushes `int` -1/0/1. The compiler proves
 the stack's shape AND each slot's kind, so a comparison's `int` result may feed

@@ -2299,8 +2299,9 @@ most 256) compiled at validation;
 rules read it through `$match:<pattern>:<row>[:<direction>|:any][:prefix|:mask|:count]` over a board
 ray, a zone's attribute word or per-token `value` expression (`$token` keys),
 a `history` ring (`push`/`pushState`, `$history:<row>:<age>`), or a keyed row;
-`$board:mask`, the `boardShift` token, and the `setMask`/`combine` transforms
-carry 64-bit and cell-wise board algebra; `world.match` narrates one word.
+`$board:mask`, the `boardShift`/`boardImage` expression ops, and the
+`writeSet` transform carry the one cell-set vocabulary; `world.match` narrates
+one word.
 The `sort` transform supplies the canonical order. Read back with
 `world.patterns` and `world.match`.
 

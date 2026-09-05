@@ -93,10 +93,8 @@ public enum WorldZoneSelector : byte {
 [JsonDerivedType(typeof(WorldStateTransform.TurnOrder), "turnOrder")]
 [JsonDerivedType(typeof(WorldStateTransform.Shuffle), "shuffle")]
 [JsonDerivedType(typeof(WorldStateTransform.Sort), "sort")]
-[JsonDerivedType(typeof(WorldStateTransform.SetMask), "setMask")]
-[JsonDerivedType(typeof(WorldStateTransform.Combine), "combine")]
+[JsonDerivedType(typeof(WorldStateTransform.WriteSet), "writeSet")]
 [JsonDerivedType(typeof(WorldStateTransform.Push), "push")]
-[JsonDerivedType(typeof(WorldStateTransform.MapBoard), "mapBoard")]
 [JsonDerivedType(typeof(WorldStateTransform.MoveToken), "moveToken")]
 [JsonDerivedType(typeof(WorldStateTransform.Observe), "observe")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -165,49 +163,21 @@ public abstract record WorldStateTransform {
     /// <param name="Descending">Whether a keyed row's greatest value comes first; a zone's direction sits on each key.</param>
     public sealed record Sort(string Row, IReadOnlyList<WorldSortKey>? By = null, bool Descending = false) : WorldStateTransform;
 
-    /// <summary>Writes one value into every cell of a board whose bit is set in a mask read from a state cell: the
-    /// way a mask computed by <c>$board:mask</c> and the bit operators lands back on the board.</summary>
+    /// <summary>Writes one value into every cell of a board whose bit is set in a cell-set mask read from a state
+    /// cell: the way a set built from <c>$board:mask</c> and the and/or/xor/not/shift/image expression ops lands
+    /// back on the board. The one board-writing form for every topology of at most 64 cells; a wider topology has no
+    /// transform of its own and composes through per-cell rules instead.</summary>
     /// <param name="Row">The board row, over a topology of at most 64 cells.</param>
-    /// <param name="Mask">The integer row the mask is read from.</param>
-    /// <param name="MaskKey">The cell of that row, or null for its slot cell.</param>
+    /// <param name="Set">The integer row the cell-set mask is read from.</param>
+    /// <param name="SetKey">The cell of that row, or null for its slot cell.</param>
     /// <param name="Value">The value written to every masked cell.</param>
-    public sealed record SetMask(string Row, string Mask, string? MaskKey = null, long Value = 0) : WorldStateTransform;
-
-    /// <summary>Writes a board carried through one point-group element of its topology into another board over the
-    /// same topology: the half turn is how one side's rules read the other side's position.</summary>
-    /// <param name="Target">The board row written.</param>
-    /// <param name="Source">The board row read.</param>
-    /// <param name="Element">An element name <c>world.topology</c> lists for the topology.</param>
-    public sealed record MapBoard(string Target, string Source, string Element) : WorldStateTransform;
+    public sealed record WriteSet(string Row, string Set, string? SetKey = null, long Value = 0) : WorldStateTransform;
 
     /// <summary>Appends one value to a history row's ring, overwriting the oldest slot once the ring is full, and
     /// advances its cursor by one.</summary>
     /// <param name="Row">The history row.</param>
     /// <param name="Value">The raw value pushed, in the row's kind.</param>
     public sealed record Push(string Row, long Value) : WorldStateTransform;
-
-    /// <summary>Combines two board rows over one topology cell by cell as sets (a nonzero cell is a member) and
-    /// writes 1 or 0 into every cell of the target: board algebra for topologies too large for one 64-bit mask.</summary>
-    /// <param name="Target">The board row written, over the same topology as the operands.</param>
-    /// <param name="Left">The left operand board.</param>
-    /// <param name="Operation">The set operation.</param>
-    /// <param name="Right">The right operand board; null for <see cref="WorldBoardCombine.Not"/> only.</param>
-    public sealed record Combine(string Target, string Left, WorldBoardCombine Operation, string? Right = null) : WorldStateTransform;
-}
-
-/// <summary>The cell-wise set operations of a <see cref="WorldStateTransform.Combine"/>.</summary>
-[JsonConverter(typeof(StrictEnumConverter<WorldBoardCombine>))]
-public enum WorldBoardCombine : byte {
-    /// <summary>Members of both.</summary>
-    And,
-    /// <summary>Members of either.</summary>
-    Or,
-    /// <summary>Members of exactly one.</summary>
-    Xor,
-    /// <summary>Members of the left that are not members of the right.</summary>
-    AndNot,
-    /// <summary>Cells that are not members of the left; the right is absent.</summary>
-    Not,
 }
 
 /// <summary>One key of a zone <c>sort</c>: a keyed numeric attribute row over the zone's token domain.</summary>

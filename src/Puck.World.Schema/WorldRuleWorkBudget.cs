@@ -218,22 +218,14 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 var pile = WorldDefinitionRows.FindStateRow(definition.State, shuffle.Row)!;
                 cost += 2L * (pile.Capacity ?? pile.CellCeiling);
                 break;
-            case WorldStateTransform.SetMask setMask:
-                var masked = WorldDefinitionRows.FindStateRow(definition.State, setMask.Row)!;
-                var maskedCells = WorldTopologyCompilation.Find(definition.StateRaw, masked.Board!.Topology)!.CellCount;
-                cost += (long)maskedCells * (maskedCells + 1);
+            case WorldStateTransform.WriteSet writeSet:
+                var written = WorldDefinitionRows.FindStateRow(definition.State, writeSet.Row)!;
+                var writtenCells = WorldTopologyCompilation.Find(definition.StateRaw, written.Board!.Topology)!.CellCount;
+                cost += (long)writtenCells * (writtenCells + 1);
                 break;
             case WorldStateTransform.Push push:
                 var ring = WorldDefinitionRows.FindStateRow(definition.State, push.Row)!;
                 cost += 2L * (ring.History?.Capacity ?? 1);
-                break;
-            case WorldStateTransform.MapBoard mapped:
-                var mappedTarget = WorldDefinitionRows.FindStateRow(definition.State, mapped.Target)!;
-                cost += 2L * WorldTopologyCompilation.Find(definition.StateRaw, mappedTarget.Board!.Topology)!.CellCount;
-                break;
-            case WorldStateTransform.Combine combine:
-                var combined = WorldDefinitionRows.FindStateRow(definition.State, combine.Target)!;
-                cost += 4L * WorldTopologyCompilation.Find(definition.StateRaw, combined.Board!.Topology)!.CellCount;
                 break;
             case WorldStateTransform.Observe observe:
                 var row = WorldDefinitionRows.FindStateRow(definition.State, observe.Row)!;
@@ -257,7 +249,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             var visits = board.Kind switch {
                 WorldBoardQueryKind.Line => (long)board.Topology.CellCount * board.Topology.DirectionCount * (board.Length + 2),
                 WorldBoardQueryKind.PathCost => (long)(board.MaxVisits + 1) * (board.Topology.CellCount + board.Topology.DirectionCount),
-                WorldBoardQueryKind.Canonical or WorldBoardQueryKind.CanonicalMask => (long)board.Topology.CellCount * board.Topology.ElementCount,
+                WorldBoardQueryKind.Canonical => (long)board.Topology.CellCount * board.Topology.ElementCount,
                 WorldBoardQueryKind.Attacks => (long)board.Topology.CellCount * (board.Directions?.Length ?? 1),
                 _ => board.Topology.CellCount,
             };

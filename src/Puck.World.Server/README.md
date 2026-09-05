@@ -633,9 +633,12 @@ body's own static contact uses), and `WorldPopulation.ResolveCarriedBodyPush`
 then resolves the swept position against every other active solid body on the
 same positional-split terms `ResolveDynamicContacts` already applies to a
 plain pair, pushing the other body away. Whichever correction either sweep
-applied is handed straight back to the carrier (`WorldBody.ApplyDynamicContact`),
-so the carrier itself is stopped by what it is holding, not just the held
-body. It derives rigid velocity from the carrier's own `ApproximateWorldVelocity`.
+applied is handed straight back to the carrier through its own motion seam:
+`WorldBody.ApplyRigidPositionalCorrection` for a rigid carrier (which also
+wakes its exact-rest latch), or `WorldBody.ApplyDynamicContact` for a
+locomotion carrier. The carrier itself is therefore stopped by what it is
+holding, not just the held body. The target derives rigid velocity from the
+carrier's own `ApproximateWorldVelocity`.
 A carried body is excluded from `ResolveDynamicContacts`'
 broadphase and from `$physics:quiescent`'s census (`CarriedBy: null` on both) —
 its own tangibility sweep above is the ONLY contact path it participates in.

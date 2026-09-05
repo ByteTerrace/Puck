@@ -17,6 +17,9 @@ namespace Puck.World.Tests;
 /// outside every one of these cells' declared ranges and gets refused rather than silently written — so an
 /// occupy-only or vacate-only settle must clamp to -1 before writing, exactly as the garden's own
 /// cWhite/cBlackFromCell/ToCell/CapturedCell rows now do.
+/// <para>The shipped-document cases at the end load those classifier rules directly from
+/// <c>src/Puck.World/Assets/worlds/puck.world.json</c>; the synthetic cases above retain small, readable controls,
+/// while the shipped cases prevent either the authored expressions or their declaration order from drifting.</para>
 /// </summary>
 public sealed class WorldTabletopClassifierLawTests {
     private const string Board = "board";
@@ -112,6 +115,66 @@ public sealed class WorldTabletopClassifierLawTests {
 
     private static readonly long[] Start = [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0];
 
+    private static readonly WorldDefinition Garden = LoadGarden();
+    private static readonly string[] ShippedClassifierRuleNames = [
+        "tabletop-king-cell",
+        "tabletop-mover-color",
+        "tabletop-classify-white-masks",
+        "tabletop-classify-white-counts",
+        "tabletop-classify-white-signatures",
+        "tabletop-classify-white-pick",
+        "tabletop-classify-black-masks",
+        "tabletop-classify-black-counts",
+        "tabletop-classify-black-signatures",
+        "tabletop-classify-black-pick",
+        "tabletop-classify-pick",
+        "tabletop-classify-mover",
+        "tabletop-classify-captured",
+    ];
+
+    private static WorldDefinition LoadGarden() {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Puck.slnx"))) {
+            directory = directory.Parent;
+        }
+        Assert.NotNull(directory);
+        var path = Path.Combine(directory!.FullName, "src", "Puck.World", "Assets", "worlds", "puck.world.json");
+        Assert.True(WorldDefinitionFileSource.TryLoad(path, out var definition, out _, out var reason), reason);
+        return definition!;
+    }
+
+    private static WorldDefinition ShippedDocument(long[] previous, long[] current) {
+        WorldStateCell[] Cells(long[] values) => [.. values.Select((value, index) =>
+            new WorldStateCell(Key: WorldCellName.Parse(index.ToString()), Value: value))];
+
+        var rows = Garden.State.Where(row =>
+            row.Name.Value is Board or Prev or "kingCell" or "move" or "moverColor" or "cFromBlack" or "cFromWhite" or "cKindBlack" or "cKindWhite" or "cToBlack" or "cToWhite" ||
+            row.Name.Value.StartsWith("cBlack", StringComparison.Ordinal) ||
+            row.Name.Value.StartsWith("cWhite", StringComparison.Ordinal)
+        ).Select(row => row.Name.Value switch {
+            Board => row with { Cells = Cells(current) },
+            Prev => row with { Cells = Cells(previous) },
+            _ => row,
+        }).ToArray();
+        var source = Fixtures.BuildDocument();
+
+        return source with {
+            StateRaw = new WorldStateSection(
+                World: rows,
+                Lattices: [Garden.StateRaw!.Lattices!.Single(topology => topology.Name == "chessBoard")]
+            ),
+            Rules = [.. Garden.Rules!.Where(rule => ShippedClassifierRuleNames.Contains(rule.Name.Value, StringComparer.Ordinal))],
+        };
+    }
+
+    private static (long Kind, long From, long To, long Mover, long Captured) ShippedMove(long[] previous, long[] current) {
+        using var fixture = Fixtures.FreshServer(definition: ShippedDocument(previous, current));
+        fixture.Step();
+        var move = WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, "move")!;
+        long Read(string key) => WorldDefinitionRows.FindCell(move.Cells, WorldCellName.Parse(key))!.Value;
+        return (Read("kind"), Read("from"), Read("to"), Read("mover"), Read("captured"));
+    }
+
     [Fact]
     public void AQuietMoveIsOneSquareVacatedAndOccupiedByTheSameSide() {
         var moved = (long[])Start.Clone();
@@ -183,5 +246,51 @@ public sealed class WorldTabletopClassifierLawTests {
         var chaos = (long[])Start.Clone();
         chaos[0] = 0; chaos[1] = 0; chaos[2] = 1;
         Assert.Equal(7L, Kind(Start, chaos));
+    }
+
+    [Fact]
+    public void ShippedGardenRulesClassifyQuietCaptureAndCastleInDeclarationOrder() {
+        var quietBefore = new long[64];
+        quietBefore[8] = 1;
+        var quietAfter = (long[])quietBefore.Clone();
+        quietAfter[8] = 0;
+        quietAfter[16] = 1;
+        Assert.Equal(expected: (1L, 8L, 16L, 1L, 0L), actual: ShippedMove(quietBefore, quietAfter));
+
+        var captureBefore = new long[64];
+        captureBefore[8] = 1;
+        captureBefore[17] = -1;
+        var captureAfter = (long[])captureBefore.Clone();
+        captureAfter[8] = 0;
+        captureAfter[17] = 1;
+        Assert.Equal(expected: (2L, 8L, 17L, 1L, -1L), actual: ShippedMove(captureBefore, captureAfter));
+
+        var castleBefore = new long[64];
+        castleBefore[4] = 6;
+        castleBefore[7] = 4;
+        var castleAfter = (long[])castleBefore.Clone();
+        castleAfter[4] = 0;
+        castleAfter[7] = 0;
+        castleAfter[5] = 4;
+        castleAfter[6] = 6;
+        Assert.Equal(expected: (4L, 4L, 6L, 6L, 0L), actual: ShippedMove(castleBefore, castleAfter));
+    }
+
+    [Fact]
+    public void ShippedGardenEnPassantRequiresTheCapturedPawnBehindTheDestination() {
+        var before = new long[64];
+        before[36] = 1;
+        before[35] = -1;
+        var enPassant = (long[])before.Clone();
+        enPassant[36] = 0;
+        enPassant[35] = 0;
+        enPassant[43] = 1;
+        Assert.Equal(expected: (3L, 36L, 43L, 1L, -1L), actual: ShippedMove(before, enPassant));
+
+        var unrelatedVacate = (long[])before.Clone();
+        unrelatedVacate[36] = 0;
+        unrelatedVacate[35] = 0;
+        unrelatedVacate[44] = 1;
+        Assert.Equal(expected: 7L, actual: ShippedMove(before, unrelatedVacate).Kind);
     }
 }

@@ -805,7 +805,7 @@ public static partial class WorldRuleCompiler {
             if (element < 0) { throw Malformed($"token 'BoardImage' names no symmetry element '{image.Element}' of '{image.Topology}'"); }
             Require(WorldExpressionOp.BoardImage, 1);
             RequireKind(WorldExpressionOp.BoardImage, depth - 1, CellKind.Int);
-            return new CompiledWorldExpressionToken(Operation: WorldExpressionOp.BoardImage, Board: new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Image, Direction: element));
+            return new CompiledWorldExpressionToken(Operation: WorldExpressionOp.BoardImage, Board: new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Neighbour, Direction: element));
         }
         CompiledWorldExpressionToken IntArity(WorldExpressionOp operation, int arity) {
             if (kind != CellKind.Int) { throw Malformed($"token '{operation}' is admitted in kind=int expressions only"); }
