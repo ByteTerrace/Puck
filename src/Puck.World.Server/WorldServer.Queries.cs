@@ -422,6 +422,8 @@ public sealed partial class WorldServer {
     // Shared by both sides of a compareState conjunct — the primary operand and, when present, the comparand — so
     // the two reads can never diverge in how a reserved channel or a declared row resolves to a live fact.
     private WorldFact ReadWorldFact(CompiledWorldOperand operand, ulong tick) => operand.Value switch {
+        BindingOperand bound => Finite(value: m_ruleBindingValues[bound.Ordinal], kind: bound.ValueKind),
+        TableOperand table => ReadTableFact(operand: table, tick: tick),
         PhaseOperand phase => Finite(ReadPhaseFact(phase, tick), CellKind.Int),
         BoardOperand board => Finite(ReadBoardFact(board, tick), CellKind.Int),
         PatternOperand pattern => Finite(ReadPatternFact(pattern, tick), CellKind.Int),
@@ -583,6 +585,8 @@ public sealed partial class WorldServer {
     // The bodies bound for the evaluation in progress — set by the rule/interaction evaluator before a gate or
     // effect is read, -1 when a binding is not in play.
     private int m_boundEach = -1;
+    // The enclosing rule's bound values for the evaluation in flight (CompiledRuleBinding.Ordinal indexes it).
+    private readonly long[] m_ruleBindingValues = new long[WorldRuleCapacity.MaxBindingsPerRule];
     private int m_boundLeft = -1;
     private int m_boundRight = -1;
 
@@ -592,6 +596,50 @@ public sealed partial class WorldServer {
         RuleBinding.Right => m_boundRight,
         _ => -1,
     };
+    // The static tables the definition references, in tables-row order; a validated document's rows are proven to
+    // load, so a failure here is an invariant violation, never a reachable case.
+    private static CompiledWorldTable[] CompileTables(WorldDefinition definition) {
+        var rows = (definition.Tables ?? []);
+        var compiled = new CompiledWorldTable[rows.Count];
+        for (var index = 0; index < compiled.Length; index++) {
+            if (!CompiledWorldTable.TryCompile(row: rows[index], table: out var table, error: out var error)) {
+                throw new InvalidOperationException(message: $"tables[{rows[index].Name}]: {error} (a validated document must still resolve at construction)");
+            }
+            compiled[index] = table!;
+        }
+        return compiled;
+    }
+    // A literal key was proven present at compile; a dynamic key reads the indirection cell's integer (or the bound
+    // $each key) and a key the table does not carry reads as a forever fact.
+    // Set by a table read whose dynamic key is absent; the enclosing gate evaluation or expression clears it and
+    // fails, so a missing entry is a reported refusal rather than a value.
+    private bool m_tableKeyMissing;
+    private string m_tableKeyMissingRule = string.Empty;
+    private WorldFact ReadTableFact(TableOperand operand, ulong tick) {
+        var key = operand.Key;
+        if (operand.KeyBinding >= 0) {
+            key = m_ruleBindingValues[operand.KeyBinding];
+        } else if (operand.KeyFrom is { } indirection) {
+            key = ((indirection.Binding == RuleBinding.Each)
+                ? m_boundEach
+                : ((indirection.Binding != RuleBinding.None)
+                    ? BoundBody(binding: indirection.Binding)
+                    : IntegerOf(value: ReadStateCellByHandle(handle: indirection.Handle, key: indirection.Key, tick: tick))));
+        }
+        if (m_tables[operand.TableOrdinal].TryLookup(key: key, column: operand.Column, raw: out var raw)) {
+            return Finite(value: raw, kind: operand.ValueKind);
+        }
+        m_tableKeyMissing = true;
+        ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.TableKeyMissing, ruleName: m_tableKeyMissingRule, effect: $"$table:{operand.Table}", tick: tick, detail: $"key {key} is not an entry of table '{operand.Table}'");
+        return new WorldFact(Value: 0L, Kind: operand.ValueKind, IsForever: true);
+    }
+    /// <summary>Describes every static table the definition references: name, kind, entry count.</summary>
+    public string DescribeTables() {
+        if (m_tables.Length == 0) {
+            return "[world.tables: none]";
+        }
+        return $"[world.tables: {string.Join(separator: " | ", values: m_tables.Select(selector: static table => $"{table.Name} kind={table.Kind.ToString().ToLowerInvariant()} entries={table.Count}{((table.ColumnNames.Count > 0) ? $" columns=[{string.Join(separator: ",", values: table.ColumnNames)}]" : string.Empty)}"))}]";
+    }
     // A '$cell:' key indirection reads the cell's integer value as a key; a binding token reads the bound body; a
     // '$pair:' key resolves both live body references and composes the directed (observer, subject) key.
     private string ResolveOperandKey(string? key, CompiledCellRef? keyFrom, ulong tick) {

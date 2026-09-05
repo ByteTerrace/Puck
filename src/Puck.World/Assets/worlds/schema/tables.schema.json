@@ -1,0 +1,34 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "One static lookup-table asset reference row \u2014 a puck.table.v1 document\u0027s stable name, its file path (relative to BaseDirectory, the convention Source uses), and the SHA-256 hex64 pin of the document\u0027s canonical bytes. A rule reads it through $table:\u003Cname\u003E:\u003Ckey\u003E; nothing writes it, and it is not simulation state.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The row\u0027s stable name.",
+        "type": "string"
+      },
+      "source": {
+        "description": "The referenced document\u0027s file path.",
+        "type": "string"
+      },
+      "hash": {
+        "description": "The SHA-256 hex64 of the referenced document\u0027s canonical bytes.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "source",
+      "hash"
+    ],
+    "additionalProperties": false
+  },
+  "default": null
+}

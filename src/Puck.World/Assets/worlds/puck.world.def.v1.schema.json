@@ -179,6 +179,9 @@
     "patterns": {
       "$ref": "./schema/patterns.schema.json"
     },
+    "tables": {
+      "$ref": "./schema/tables.schema.json"
+    },
     "basis": {
       "$ref": "./schema/basis.schema.json"
     },

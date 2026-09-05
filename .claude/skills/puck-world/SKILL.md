@@ -149,7 +149,7 @@ Client code never mutates local state before the server's verdict
 echoes it, in the same change — a decision nothing can echo can only be
 asserted through downstream inference. `world.why`, `world.grants`,
 `body.channels`, `world.hud`, `world.status`, `world.addons`,
-`world.refusals`, `world.binding-bar` are the pattern.
+`world.refusals`, `world.tables`, `world.binding-bar` are the pattern.
 
 **Keep parsing strict and sweep shipped worlds.** Refuse unmapped JSON members by name on
 every nested row; only the document root's `Extensions` bag round-trips
@@ -392,20 +392,15 @@ choosing fixed-point primitives on sim value paths.
   `world.tabletop`). A `Grid` topology's `cellSize` must quantize to a
   positive Q48.16 value — it is the divisor `$board:cellOf` resolves world
   positions against, so a zero or negative edge is refused at validation, not
-  left to crash the per-tick rule path. A
-  contiguous run of a rule's own `setState`/`addState`/etc. effects
-  preflights and applies as ONE atomic candidate (`WorldServer.Step`'s
-  `PreflightWorldRuleStateEffects`) — deriving N independent pieces' cells
-  needs N separately-authored rules (one write can refuse, alone, only when
-  it owns its own rule), never one rule spanning every piece, or a single
-  piece leaving the frame (captured, knocked clear) rejects every sibling's
-  write in the same settle; a piece resolving to no cell of its own (captured,
-  lifted off) never itself registers as the mover on either side of a settle.
-  The same atomicity is why a per-side classify rule's own scratch cells
-  (a settle's vacated/occupied `trailingZeroCount`) must clamp an empty
-  mask to `-1` rather than writing the mask's own bit width (64): an
-  unclamped write refuses the WHOLE rule, leaving that settle's record
-  stale for every downstream reader. `$upright:<bodyRef>` (a body's own up
+  left to crash the per-tick rule path. Every
+  top-level `setState`/`addState`/etc. effect preflights and applies on its
+  own; only the `transaction` effect groups effects atomically
+  (`WorldServer.Step`'s `FireWorldRuleTransaction`). A piece resolving to no
+  cell of its own (captured, lifted off) never itself registers as the mover
+  on either side of a settle. A classify rule's scratch cells (a settle's
+  vacated/occupied `trailingZeroCount`) clamp an empty mask to `-1` rather
+  than writing the mask's own bit width (64), which the cell's envelope
+  refuses. `$upright:<bodyRef>` (a body's own up
   axis dotted against gravity-up) is the reserved channel a piece's own
   occupancy derive gates on, so a knocked-over piece reads as displaced
   rather than occupying its last resting cell.

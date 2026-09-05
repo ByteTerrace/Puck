@@ -191,6 +191,9 @@ public enum WorldSection : byte {
     /// curve-follow target names by row, targeted by <c>WorldMutation.UpsertCurve</c> /
     /// <c>WorldMutation.RemoveCurve</c>.</summary>
     Curves,
+
+    /// <summary>The static lookup-table asset rows (<see cref="WorldTableRow"/>).</summary>
+    Tables,
 }
 /// <summary>Which flavor of subject a <see cref="GrantSubject"/> addresses.</summary>
 public enum GrantSubjectKind : byte {

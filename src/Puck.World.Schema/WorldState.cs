@@ -232,11 +232,12 @@ public sealed record WorldStateRow(
         ((Phase is not null) || (Capacity is not null) || (Cells is { Count: > 1 }) || ((Cells is { Count: 1 } cells) && (cells[0].Key != SlotKey))
             ? WorldStateDomain.Keys.Instance
             : WorldStateDomain.Slot.Instance);
-    /// <summary>Gets the storage ceiling admitted by the row's shape. Ordinary rows retain the 128-cell ceiling.</summary>
+    /// <summary>Gets the storage ceiling admitted by the row's shape: the declared capacity when there is one, else
+    /// <see cref="WorldStateCapacity.MaxCellsPerRow"/>, the one cell bound every domain shares.</summary>
     public int CellCeiling => EffectiveDomain switch {
         WorldStateDomain.Ring ring => Math.Clamp(ring.Capacity, 1, WorldStateCapacity.MaxCellsPerRow),
-        WorldStateDomain.KeysOf or WorldStateDomain.CellsOf => (Capacity is { } linked ? Math.Clamp(linked, 1, WorldTopologyCompilation.MaxCells) : WorldTopologyCompilation.MaxCells),
-        _ => (Capacity is { } capacity ? Math.Clamp(capacity, 1, WorldStateCapacity.MaxCellsPerRow) : WorldStateCapacity.MaxCellsPerRow),
+        WorldStateDomain.KeysOf or WorldStateDomain.CellsOf => (Capacity is { } linked ? Math.Clamp(linked, 1, WorldStateCapacity.MaxCellsPerRow) : WorldStateCapacity.MaxCellsPerRow),
+        _ => (Capacity is { } capacity ? Math.Clamp(capacity, 1, WorldStateCapacity.MaxCellsPerRow) : WorldStateCapacity.DefaultCellRoom),
     };
     /// <summary>Gets whether the row accumulates continuously.</summary>
     public bool IsAdvancing => (Advance is not null);
@@ -1030,7 +1031,10 @@ public static class WorldStateCapacity {
     /// <see cref="WorldStateRow.Capacity"/>, so a row can never state no bound at all (unbounded growth is refused by
     /// construction, never by author diligence). An authored <see cref="WorldStateRow.Capacity"/> may only narrow
     /// this, never widen it.</summary>
-    public const int MaxCellsPerRow = 128;
+    public const int MaxCellsPerRow = WorldTopologyCompilation.MaxCells;
+    /// <summary>The growth room a slot- or keys-domain row gets when it authors no <see cref="WorldStateRow.Capacity"/>;
+    /// a registry-sized row authors its capacity, up to <see cref="MaxCellsPerRow"/>.</summary>
+    public const int DefaultCellRoom = 128;
     /// <summary>A cell's <see cref="WorldStateCell.Provenance"/> length ceiling, in UTF-16 code units — bounded like
     /// <see cref="MaxTextValueLength"/> since it is likewise a free-form issuer label, never a validated-identifier
     /// type.</summary>

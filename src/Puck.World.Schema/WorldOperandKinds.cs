@@ -30,6 +30,60 @@ public sealed class StateCellOperand : WorldOperandFact, IStateAddressedOperand 
     public WorldStateHandle StateHandle { get; }
 }
 
+/// <summary>A value the enclosing rule bound for this evaluation (<see cref="WorldRuleFacts.BindPrefix"/>).</summary>
+public sealed class BindingOperand : WorldOperandFact {
+    /// <summary>Reads a value the enclosing rule bound for this evaluation.</summary>
+    /// <param name="ordinal">The binding's slot in the evaluation's bound-value scratch.</param>
+    /// <param name="name">The authored binding name.</param>
+    /// <param name="valueKind">The kind the binding was compiled in.</param>
+    public BindingOperand(int ordinal, string name, CellKind valueKind) : base(WorldRuleFactKind.Binding, valueKind) {
+        Ordinal = ordinal;
+        Name = name;
+    }
+    /// <summary>Gets the binding's slot in the evaluation's bound-value scratch.</summary>
+    public int Ordinal { get; }
+    /// <summary>Gets the authored binding name.</summary>
+    public string Name { get; }
+}
+
+/// <summary>A static table entry (<see cref="WorldRuleFacts.TablePrefix"/>). A key the table does not carry reads
+/// as a forever fact: an expression over it refuses and a gate over it never holds.</summary>
+public sealed class TableOperand : WorldOperandFact {
+    /// <summary>Reads one entry of a static table.</summary>
+    /// <param name="tableOrdinal">The table's index in the document's <c>tables</c> rows.</param>
+    /// <param name="table">The table's authored name.</param>
+    /// <param name="key">The literal key, or 0 when <paramref name="keyFrom"/> or <paramref name="keyBinding"/> applies.</param>
+    /// <param name="keyFrom">The live key indirection, or <see langword="null"/> for a literal or bound key.</param>
+    /// <param name="keyBinding">The ordinal of the enclosing rule's binding the key reads, or -1.</param>
+    /// <param name="column">The column index; 0 for a single-value table.</param>
+    /// <param name="entryCount">The table's entry count, for pricing the lookup.</param>
+    /// <param name="valueKind">The table's value kind.</param>
+    public TableOperand(int tableOrdinal, string table, long key, CompiledCellRef? keyFrom, int keyBinding, int column, int entryCount, CellKind valueKind)
+        : base(WorldRuleFactKind.Table, valueKind) {
+        TableOrdinal = tableOrdinal;
+        Table = table;
+        Key = key;
+        KeyFrom = keyFrom;
+        KeyBinding = keyBinding;
+        Column = column;
+        EntryCount = entryCount;
+    }
+    /// <summary>Gets the ordinal of the enclosing rule's binding the key reads, or -1.</summary>
+    public int KeyBinding { get; }
+    /// <summary>Gets the column index.</summary>
+    public int Column { get; }
+    /// <summary>Gets the table's index in the document's <c>tables</c> rows.</summary>
+    public int TableOrdinal { get; }
+    /// <summary>Gets the table's authored name.</summary>
+    public string Table { get; }
+    /// <summary>Gets the literal key.</summary>
+    public long Key { get; }
+    /// <summary>Gets the live key indirection, or <see langword="null"/> for a literal key.</summary>
+    public CompiledCellRef? KeyFrom { get; }
+    /// <summary>Gets the table's entry count.</summary>
+    public int EntryCount { get; }
+}
+
 /// <summary>The server's completed-tick counter (<see cref="WorldRuleFacts.Tick"/>). Stateless: every read shares
 /// <see cref="Instance"/>.</summary>
 public sealed class TickOperand : WorldOperandFact {

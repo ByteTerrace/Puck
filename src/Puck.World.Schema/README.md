@@ -26,7 +26,7 @@ integer/boolean row through `domain: { "$type": "cellsOf", "topology": "map", "e
 a `"field"` lattice creates physical field storage. A world may declare at most 16 topologies, including
 at most one physical field topology. Each discrete topology admits 4096 cells;
 boards together admit 65536 cells, and all declared state storage admits
-262144 cells. Ordinary keyed rows retain their 128-cell limit.
+262144 cells; a row of any domain may author a capacity up to 4096 cells, and a slot or keys row that authors none gets 128.
 
 Grid keys are decimal `y * width + x` ordinals. Directions are `N`, `NE`, `E`,
 `SE`, `S`, `SW`, `W`, `NW`; `wrap` is `None`, `X`, `Y`, or `Both`. Rings use
@@ -305,11 +305,9 @@ illegal by its own color — then a verdict any authored predicate — occupancy
 a `$match:…:cell`/`$board:offset` movement-geometry check — may set to 0
 without touching the mover; a legal verdict alone advances turn and adopts the
 new position into `lastLegal`). Illegal moves are recorded, never undone —
-the world never rejects or repositions a physical piece. A rule's own
-contiguous run of `setState`/`addState`/etc. effects preflights and applies
-as ONE atomic candidate — deriving N independent pieces' occupancy therefore
-needs N separately-authored derive rules, one per piece, never a single rule
-spanning every piece: one piece's body leaving the frame (captured, knocked
+the world never rejects or repositions a physical piece. Every top-level
+`setState`/`addState`/etc. effect preflights and applies on its own — one
+piece's body leaving the frame (captured, knocked
 clear) refuses only its own write when it owns its own rule, but rejects
 every sibling piece's write too when they share one. A `body.pose` reposition
 is a kinematic write: one that leaves the piece resting on its support (its
@@ -1319,6 +1317,21 @@ runs at boot, at every live mutation and on every undo-replay entry — so a
 hand-authored file and a console verb refuse by the same code rather than by one
 door the other walks around.
 
+### `tables` — static lookup data outside simulation state
+
+A `tables` row is a `name`/`source`/`hash` reference to a `puck.table.v1`
+document, loaded and hash-pinned at validation the way `music` rows are. The
+document carries `kind` (`int` or `fixed`) and `entries` of integer `key` and
+`value`; with `columns` declared, each entry carries `values`, one per column.
+A rule reads it through `$table:<name>:<key>` (single-value) or
+`$table:<name>:<column>:<key>`, where the key is an integer literal (proven
+present at compile), a `$cell:<row>:<key>` indirection, the bound `$each` key,
+or an int `$bind:<name>`. Values are never written, never hashed into the tick,
+never checkpointed; a dynamic key the table does not carry is a
+`TableKeyMissing` refusal (`world.rule.failures`) that closes the gate or fails
+the expression, never a value. `world.tables` echoes every table's name, kind,
+entry count and columns. A lookup prices as 2 plus the log of the entry count.
+
 ## The `rules` document — the per-body action primitive, one level up
 
 `WorldRules.cs` holds the optional `rules` section. A `WorldRule` is
@@ -1399,6 +1412,19 @@ a non-integer key (a card or piece token) binds `$each` alone. Removing a
 binding, replacing a body generation, or changing the source policy starts a
 new decision episode; unrelated recompilation retains the episode and refreshes
 its compiled state handles.
+
+A rule's `bindings` list names values computed once per evaluation, after the
+`forEach` key and before the gate, in declared order: `{ "name", "kind"
+(`int`/`fixed`), "expression" }`. A later binding, the gate, and every effect
+read one as `$bind:<name>` wherever a state name is accepted; an earlier binding
+cannot, so the list is feed-forward by construction. The value lives on the
+evaluation alone — an effect that changed the cells it was computed from does
+not change it, which is what lets `min(damage, hp)` be dealt and then recoiled
+from in the same rule. At most 16 per rule; each expression prices into
+`world.budget` like an effect's. A binding that cannot evaluate closes the gate
+for that evaluation and reports an `Arithmetic` refusal. `world.rules` lists
+each rule's bindings by name and kind. The rule count itself has no ceiling of
+its own: the per-tick work budget is the bound.
 
 An option may expand into nearby individuals through `neighbors`. The enclosing
 rule must name a numeric keyed `forEach` row whose keys identify observers.
@@ -1719,11 +1745,11 @@ rather than faulting.
 
 Ordering is declaration order, on both sides: a later rule's copy operand reads
 an earlier rule's same-tick write exactly as a later gate does. Within one rule,
-each contiguous run of state effects is preflighted against one private
-candidate; either the whole run installs in order or none of it does, so a later
-range/capacity refusal cannot leave the earlier writes partially applied.
+each top-level state effect is preflighted and installed on its own, in order; a
+later effect's range/capacity refusal leaves the earlier writes applied.
 
-An explicit `transaction` makes that boundary visible in the document and adds
+An explicit `transaction` is the one atomic group — its whole branch preflights
+against one private candidate and either installs together or not at all — and adds
 an optional `onFailure` branch. Both branches accept at most 64 steps and may
 combine state cells, draw generation, HUD/placement mutations, poses, cues, body
 effects, and field paints. The whole branch is preflighted against each preceding

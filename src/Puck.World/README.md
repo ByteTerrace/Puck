@@ -444,8 +444,8 @@ knocked-over piece reads as displaced) derive each piece's live cell, then
 one PER-PIECE `board`-write rule (never a single rule spanning every piece)
 commits that piece's own code at its own cell — a piece whose body has left
 the frame (captured, knocked clear) refuses only its own write; it never
-costs its neighbours theirs, since a rule's own contiguous run of state
-effects preflights and applies as one atomic candidate. A `body.pose`
+costs its neighbours theirs, since every top-level state effect preflights
+and applies on its own (only a `transaction` groups effects atomically). A `body.pose`
 teleport clears the piece's rest latch (`WorldBody.Pose`), so a bare pose at
 the piece's resting height already un-rests it and re-settles it, crossing
 `$physics:quiescent`'s Edge on the settle with no impulse at all; a pose

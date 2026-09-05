@@ -463,10 +463,6 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        if (rules.Count > WorldRuleCapacity.MaxRules) {
-            errors.Add(item: $"rules count {rules.Count} exceeds the maximum of {WorldRuleCapacity.MaxRules}.");
-        }
-
         for (var index = 0; (index < rules.Count); index++) {
             var rule = rules[index];
             var path = $"rules[{index}]";

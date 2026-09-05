@@ -111,6 +111,7 @@ namespace Puck.World;
 /// <see cref="ActionTriggerMode.Edge"/>: level-firing an <c>addState</c> is what wrote 503 journal entries in 500
 /// ticks.</param>
 /// <param name="Decision">Optional choice policy; requires Level mode. Common effects run only when entering a selected option.</param>
+/// <param name="Bindings">The values bound once per evaluation, in declared order, read as <c>$bind:&lt;name&gt;</c>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldRule(
     WorldCellName Name,
@@ -122,8 +123,18 @@ public sealed record WorldRule(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionPredicate? Gate = null,
     ActionTriggerMode Mode = ActionTriggerMode.Level,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ForEach = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDecision? Decision = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDecision? Decision = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRuleBinding>? Bindings = null
 );
+/// <summary>A value bound once per evaluation of the rule that declares it, after the forEach key and before the
+/// gate, in declared order — a later binding, the gate, and every effect read it as
+/// <c>$bind:&lt;name&gt;</c>; an earlier binding cannot. The value is never stored: it lives on the evaluation and is
+/// recomputed at the next one.</summary>
+/// <param name="Name">The binding's name — the token after <see cref="WorldRuleFacts.BindPrefix"/>.</param>
+/// <param name="Kind">The value's cell kind, <see cref="CellKind.Int"/> or <see cref="CellKind.Fixed"/>.</param>
+/// <param name="Expression">The postfix expression, evaluated in that kind.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldRuleBinding(WorldCellName Name, CellKind Kind, WorldValueExpression Expression);
 /// <summary>The reserved <see cref="ActionPredicate.CompareState"/> channels a world rule may compare against instead
 /// of a declared <see cref="WorldStateRow"/> — time, population, region occupancy, a screen-machine's live memory,
 /// row aggregates/extrema, spatial and navigation facts for named bodies, a body's own reconnect-park state, and a
@@ -191,6 +202,12 @@ public static class WorldRuleFacts {
     /// world-scope effect's <c>key</c>/<c>fromKey</c>, a flock affinity's own key — because both resolve through the
     /// same <see cref="CompiledCellRef"/> indirection carrier.</summary>
     public const string PairKeyPrefix = "$pair:";
+    /// <summary>The prefix of a rule-scoped bound value: <c>$bind:&lt;name&gt;</c> reads the value the enclosing
+    /// rule's same-named <see cref="WorldRuleBinding"/> computed for this evaluation.</summary>
+    public const string BindPrefix = "$bind:";
+    /// <summary>The prefix of a static table read: <c>$table:&lt;name&gt;:&lt;key&gt;</c>, where the key is an
+    /// integer literal, a <c>$cell:&lt;row&gt;:&lt;key&gt;</c> indirection, or the bound <c>$each</c> key.</summary>
+    public const string TablePrefix = "$table:";
 
     /// <summary>The binding vocabulary, one row per <see cref="RuleBinding"/> other than <see cref="RuleBinding.None"/>:
     /// the key token (<c>$each</c>, <c>$left</c>, <c>$right</c>), the body-reference token derived from it by
@@ -529,6 +546,12 @@ public enum WorldRuleFactKind : byte {
     /// <summary>The world's musical clock's signed phase error against the nearest beat
     /// (<see cref="WorldRuleFacts.ClockPrefix"/>).</summary>
     Clock,
+
+    /// <summary>A value the enclosing rule bound for this evaluation (<see cref="WorldRuleFacts.BindPrefix"/>).</summary>
+    Binding,
+
+    /// <summary>A static table entry (<see cref="WorldRuleFacts.TablePrefix"/>).</summary>
+    Table,
 }
 // CompiledWorldOperand is now the closed-union carrier declared in WorldOperandUnion.cs, with its case types in
 // WorldOperandKinds.cs (one sealed class per WorldRuleFactKind below).
@@ -789,7 +812,14 @@ public readonly record struct CompiledWorldPose(FixedVector3 Position, FixedQ481
 /// <param name="ForEach">The keyed row a rule iterates (<see cref="WorldRule.ForEach"/>), or <see langword="null"/>.</param>
 /// <param name="Interaction">The co-occurrence an interaction evaluates, or <see langword="null"/> for a rule.</param>
 /// <param name="Decision">The compiled optional choice policy.</param>
-public sealed record CompiledWorldRule(string Name, ActionTriggerMode Mode, CompiledWorldPredicate[] Gate, CompiledWorldEffect[] Effects, string? ForEach = null, CompiledInteraction? Interaction = null, CompiledWorldDecision? Decision = null);
+/// <param name="Bindings">The compiled per-evaluation bindings, in declared order.</param>
+public sealed record CompiledWorldRule(string Name, ActionTriggerMode Mode, CompiledWorldPredicate[] Gate, CompiledWorldEffect[] Effects, string? ForEach = null, CompiledInteraction? Interaction = null, CompiledWorldDecision? Decision = null, CompiledRuleBinding[]? Bindings = null);
+/// <summary>One compiled <see cref="WorldRuleBinding"/>: its ordinal is its slot in the evaluation's bound-value
+/// scratch, and its expression may read only bindings with a smaller ordinal.</summary>
+/// <param name="Name">The authored name.</param>
+/// <param name="Kind">The value kind the expression was compiled in.</param>
+/// <param name="Expression">The compiled postfix program.</param>
+public sealed record CompiledRuleBinding(string Name, CellKind Kind, CompiledWorldExpressionToken[] Expression);
 
 /// <summary>Hard bounds for rule programs; these are representation and per-tick work limits, not gameplay tuning.</summary>
 public static class WorldRuleCapacity {
@@ -797,10 +827,11 @@ public static class WorldRuleCapacity {
     public const int MaxDecisionOptions = 32;
     /// <summary>The maximum individuals retained by one parameterized decision option.</summary>
     public const int MaxDecisionCandidates = 32;
-    /// <summary>The most ordinary rule rows a document may declare.</summary>
-    public const int MaxRules = 128;
     /// <summary>The most top-level effects one rule or interaction may carry.</summary>
     public const int MaxEffectsPerRule = 64;
+    /// <summary>The most bound values one rule may declare — the width of the per-evaluation scratch every server
+    /// carries for them.</summary>
+    public const int MaxBindingsPerRule = 16;
     /// <summary>The maximum statically derived rule, interaction, and flock-affinity work admitted for one simulation tick.</summary>
     public const long MaxWorkUnitsPerTick = 2_000_000L;
     /// <summary>The most postfix tokens in one Boolean gate.</summary>
@@ -1036,6 +1067,10 @@ public enum WorldRuleEffectRefusal : byte {
     /// before despawning).</summary>
     [Refusal(door: "world.rule.effect", condition: "a rule's 'removePlacement' effect targets a placement whose inhabited body a concrete drive grant currently possesses", kind: RefusalKind.Verdict)]
     CarrierPossessed,
+
+    /// <summary>A <c>$table:</c> read's dynamic key named an entry the table does not carry; the gate did not hold or the
+    /// effect did not fire.</summary>
+    TableKeyMissing,
 }
 /// <summary>Reports a world-rule (or, sharing this exact type, a world-interaction — see the constructor's own
 /// <c>subject</c> parameter) compilation refusal — caught and reported by name at validation, mirroring

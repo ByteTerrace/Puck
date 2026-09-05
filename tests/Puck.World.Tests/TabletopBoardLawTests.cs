@@ -250,9 +250,9 @@ public sealed class TabletopBoardLawTests {
     }
 
     [Theory]
-    [InlineData(true)]  // the fix: isolated per-piece rules — piece 0 derives despite piece 1 being off-frame.
-    [InlineData(false)] // the CONTROL: one combined rule — piece 1's refusal costs piece 0 its own derive too.
-    public void OneOffFrameSiblingIsolatesOrWipesTheOtherPieceByRuleShape(bool splitRules) {
+    [InlineData(true)]  // isolated per-piece rules — piece 0 derives despite piece 1 being off-frame.
+    [InlineData(false)] // one combined rule — every top-level effect is its own boundary, so piece 0 still derives.
+    public void OneOffFrameSiblingNeverCostsTheOtherPieceItsDeriveWhateverTheRuleShape(bool splitRules) {
         using var fixture = Fixtures.FreshServer(definition: TwoPieceTabletopDocument(splitRules: splitRules));
         var left = WorldPrincipal.Seat(slot: 0);
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(left, left.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
@@ -268,11 +268,7 @@ public sealed class TabletopBoardLawTests {
         var board = WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, "board")!;
         var cell0 = board.Cells!.Single(c => c.Key.Value == "0").Value;
 
-        if (splitRules) {
-            Assert.Equal(9, cell0); // piece 1's off-frame write is refused alone — piece 0 still derives.
-        } else {
-            Assert.Equal(0, cell0); // the same refusal rejects the whole four-effect run — piece 0's write with it.
-        }
+        Assert.Equal(9, cell0); // piece 1's off-frame write is refused alone — piece 0 still derives, in either shape.
     }
 
     [Fact]

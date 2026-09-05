@@ -1084,12 +1084,11 @@ The board itself renders as 64 ordinary placements (`boardSquareLight`/
 `boardSquareDark`, one per cell, colors from a `boardColors` text row) rather
 than a bespoke board-rendering feature — the same placement/prototype and
 `state.<row>.<key>` palette-binding vocabulary the pieces already use, so a
-future board (checkers, go) needs no new client code either. Deriving N
-independent pieces' occupancy needs N separately-authored rules, one write
-per piece: a rule's own contiguous run of effects preflights and applies as
-one atomic candidate, so bundling every piece's write into one rule means a
-single piece leaving the frame (a capture, a knock clear off the table)
-rejects every other piece's write in the same settle. A walker's own capsule
+future board (checkers, go) needs no new client code either. Each top-level
+effect of a rule is its own boundary — one piece leaving the frame (a
+capture, a knock clear off the table) refuses only its own write and never
+its neighbours' — so the per-piece derive rules could fold into one rule;
+the explicit `transaction` effect is the only atomic group. A walker's own capsule
 reach already exceeds a 0.2 m cell, so no body can stand on the 1.6 m board
 itself without risking contact; the garden's proof keeps Wren at a safe
 standoff beside the table and moves pieces by console verb, never by having
@@ -1255,6 +1254,26 @@ now parses; and the two lanes' independently-declared `UnionPolyfill.cs` (one `[
 for the operand/effect carriers, one `[AttributeUsage(Class)]` for the row-domain union) collapsed
 into the one file `docs/campaign.md`'s row-domain paragraph already named as the shared destination,
 attributed for both shapes.
+
+**Rule bindings, static tables, independent effects, and two derived limits.**
+A rule may declare `bindings`, values computed once per evaluation before the
+gate and read as `$bind:<name>`; they exist because a value like
+`min(damage, hp)` cannot be recomputed after the first effect writes `hp`, so
+this is expressive power, not shorthand — named, feed-forward, never stored.
+Static lookup data is not simulation state: a `tables` row references a
+hash-pinned `puck.table.v1` document read through `$table:`, the same
+name/source/hash shape music rows use, so a registry of hundreds of entries
+never touches the cell budget, the checkpoint, or the tick hash. Every
+top-level effect is its own boundary and the `transaction` effect is the one
+atomic group; the implicit contiguous-run atomicity was a second, invisible
+mechanism for the same thing, and it was what silently rolled back the chess
+classifier's sibling writes. The rule-count ceiling is deleted — the per-tick
+work budget is the bound — and a row's cell bound is the one cell bound every
+domain shares (4096), with an unauthored capacity getting 128 of room; a
+registry-sized row authors its capacity. Refused on the same review: a fixed
+C# "recipe executor" (game nouns in the engine), a `copyCells` transform
+(derivable from `forEach`), and a per-effect `isolate` flag (a second
+atomicity mechanism where making the boundary explicit was the fix).
 
 ## After this arc
 

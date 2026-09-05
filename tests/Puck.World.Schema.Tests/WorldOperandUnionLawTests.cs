@@ -33,6 +33,8 @@ public sealed class WorldOperandUnionLawTests {
         [WorldRuleFactKind.Pattern] = typeof(PatternOperand),
         [WorldRuleFactKind.History] = typeof(HistoryOperand),
         [WorldRuleFactKind.Clock] = typeof(ClockOperand),
+        [WorldRuleFactKind.Binding] = typeof(BindingOperand),
+        [WorldRuleFactKind.Table] = typeof(TableOperand),
     };
 
     [Fact]
@@ -70,6 +72,8 @@ public sealed class WorldOperandUnionLawTests {
         AssertRoundTrips(new CompiledWorldOperand(PopulationOperand.Instance), WorldRuleFactKind.Population);
         AssertRoundTrips(new CompiledWorldOperand(PhysicsQuiescentOperand.Instance), WorldRuleFactKind.PhysicsQuiescent);
         AssertRoundTrips(new CompiledWorldOperand(new RegionOccupancyOperand(row: "placement")), WorldRuleFactKind.RegionOccupancy);
+        AssertRoundTrips(new CompiledWorldOperand(new BindingOperand(ordinal: 1, name: "dealt", valueKind: CellKind.Int)), WorldRuleFactKind.Binding);
+        AssertRoundTrips(new CompiledWorldOperand(new TableOperand(tableOrdinal: 0, table: "power", key: 7L, keyFrom: null, keyBinding: -1, column: 0, entryCount: 3, valueKind: CellKind.Int)), WorldRuleFactKind.Table);
         AssertRoundTrips(new CompiledWorldOperand(new MachineMemoryOperand(screen: 0, address: 0)), WorldRuleFactKind.MachineMemory);
         AssertRoundTrips(new CompiledWorldOperand(new ReductionOperand(row: "row", stateHandle: default, reduce: WorldStateReduceOp.Sum, filterRow: null, filterHandle: default, valueKind: CellKind.Int)), WorldRuleFactKind.Reduction);
         AssertRoundTrips(new CompiledWorldOperand(new ArgBodyOperand(row: "row", stateHandle: default, reduce: WorldStateReduceOp.Max, filterRow: null, filterHandle: default)), WorldRuleFactKind.ArgBody);

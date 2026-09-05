@@ -37,7 +37,9 @@ public sealed partial class WorldServer {
         )}]";
     }
 
-    private void ReportRuleEffectRefusal(WorldRuleEffectRefusal refusal, string ruleName, CompiledWorldEffect effect, ulong tick, string detail) {
+    private void ReportRuleEffectRefusal(WorldRuleEffectRefusal refusal, string ruleName, CompiledWorldEffect effect, ulong tick, string detail) =>
+        ReportRuleEffectRefusal(refusal: refusal, ruleName: ruleName, effect: effect.Describe, tick: tick, detail: detail);
+    private void ReportRuleEffectRefusal(WorldRuleEffectRefusal refusal, string ruleName, string effect, ulong tick, string detail) {
         var index = (int)refusal;
         var count = m_ruleRefusalCounts[index];
         count = ((count == ulong.MaxValue) ? count : (count + 1UL));
@@ -47,14 +49,14 @@ public sealed partial class WorldServer {
             Count: count,
             LastTick: tick,
             Rule: ruleName,
-            Effect: effect.Describe,
+            Effect: effect,
             Detail: detail
         );
 
         // One line per category per server lifetime. The structured counter remains exact without a Level rule
         // turning an expected live refusal into an unbounded stderr stream.
         if (count == 1UL) {
-            Console.Error.WriteLine(value: $"[world.rule: effect refused ({refusal}) — rule '{ruleName}', '{effect.Describe}': {detail}; world.rule.failures carries the running count]");
+            Console.Error.WriteLine(value: $"[world.rule: effect refused ({refusal}) — rule '{ruleName}', '{effect}': {detail}; world.rule.failures carries the running count]");
         }
     }
 }
