@@ -111,8 +111,8 @@ public sealed class ChessModuleImportLawTests {
         // $physics:quiescent (settle) -> $upright (resting) -> $board:cellOf:board:placement:$each (derive) ->
         // placement:$each (write-board) rides for every piece, addressed by placement id alone.
         Assert.Equal(12, Cell(Row(fixture, "pieceCell"), "piece12"));
-        Assert.Equal(-1, Cell(Row(fixture, "pieceCode"), "piece12")); // white pawn code
-        Assert.Equal(-1, Cell(Row(fixture, "board"), "12"));
+        Assert.Equal(1, Cell(Row(fixture, "pieceCode"), "piece12")); // white pawn code
+        Assert.Equal(1, Cell(Row(fixture, "board"), "12"));
     }
 
     [Fact]
@@ -127,7 +127,7 @@ public sealed class ChessModuleImportLawTests {
 
         Assert.Equal(1, Slot(fixture, "verdict"));
         Assert.Equal(28, Cell(Row(fixture, "pieceCell"), "piece12")); // e4 = rank3*8 + file4
-        Assert.Equal(-1, Cell(Row(fixture, "board"), "28"));
+        Assert.Equal(1, Cell(Row(fixture, "board"), "28"));
         Assert.Equal(0, Cell(Row(fixture, "board"), "12")); // e2 vacated
     }
 
@@ -178,6 +178,138 @@ public sealed class ChessModuleImportLawTests {
 
         Assert.Equal(1, Slot(fixture, "verdict"));
         Assert.Equal(2, Cell(Row(fixture, "move"), "kind"));
-        Assert.Equal(1, Cell(Row(fixture, "move"), "captured"));
+        Assert.Equal(-1, Cell(Row(fixture, "move"), "captured"));
+    }
+
+    [Fact]
+    public void PawnCaptureRecordsLegal() {
+        using var fixture = Fixtures.FreshServer(definition: LoadMinimalHost());
+
+        SettleFromSpawn(fixture: fixture);
+
+        var whitePawn = Piece(fixture, "piece12"); // e2 (cell 12)
+        var blackPawn = Piece(fixture, "piece19"); // d7 (cell 51)
+
+        // Reposition black pawn to d3 (file 3, rank 2 = cell 19) while it's white's turn (an illegal settle, so turn stays 0)
+        MoveTo(fixture, blackPawn, file: 3, rank: 2);
+
+        // In one settle window, black pawn is lifted to the margin and white pawn lands on d3 (diagonal capture from e2)
+        blackPawn.Pose(x: (OriginX + 1.7f), y: SpawnHeight, z: (OriginZ + 0.5f), yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        MoveTo(fixture, whitePawn, file: 3, rank: 2); // d3 (dx=-1, dy=1 from e2: SW step)
+
+        Assert.Equal(1, Slot(fixture, "verdict"));
+        Assert.Equal(2, Cell(Row(fixture, "move"), "kind"));
+        Assert.Equal(-1, Cell(Row(fixture, "move"), "captured")); // captured black pawn
+        Assert.Equal(1, Cell(Row(fixture, "move"), "mover")); // white pawn mover code
+        Assert.Equal(1, Cell(Row(fixture, "board"), "19")); // d3 holds white pawn
+        Assert.Equal(0, Cell(Row(fixture, "board"), "12")); // e2 vacated
+    }
+
+    [Fact]
+    public void QueenDiagonalSlideRecordsLegal() {
+        using var fixture = Fixtures.FreshServer(definition: LoadMinimalHost());
+
+        SettleFromSpawn(fixture: fixture);
+
+        var whiteEPawn = Piece(fixture, "piece12"); // e2
+        var blackEPawn = Piece(fixture, "piece20"); // e7
+        var whiteQueen = Piece(fixture, "piece3"); // d1 (cell 3, code 5)
+
+        // Turn 1 (White): e2 -> e4
+        MoveTo(fixture, whiteEPawn, file: 4, rank: 3);
+        Assert.Equal(1, Slot(fixture, "verdict"));
+        Assert.Equal(1, Slot(fixture, "turn")); // Black's turn
+
+        // Turn 2 (Black): e7 -> e5
+        MoveTo(fixture, blackEPawn, file: 4, rank: 4);
+        Assert.Equal(1, Slot(fixture, "verdict"));
+        Assert.Equal(0, Slot(fixture, "turn")); // White's turn
+
+        // Turn 3 (White): Queen d1 -> h5 (file 7, rank 4 = cell 39) along opened diagonal
+        MoveTo(fixture, whiteQueen, file: 7, rank: 4);
+        Assert.Equal(1, Slot(fixture, "verdict"));
+        Assert.Equal(1, Cell(Row(fixture, "move"), "kind")); // quiet move
+        Assert.Equal(5, Cell(Row(fixture, "move"), "mover")); // queen code is 5
+        Assert.Equal(39, Cell(Row(fixture, "pieceCell"), "piece3"));
+        Assert.Equal(5, Cell(Row(fixture, "board"), "39"));
+        Assert.Equal(0, Cell(Row(fixture, "board"), "3"));
+    }
+
+    [Fact]
+    public void KingStepRecordsLegalAndMultiStepRefused() {
+        using var fixture = Fixtures.FreshServer(definition: LoadMinimalHost());
+
+        SettleFromSpawn(fixture: fixture);
+
+        var whiteEPawn = Piece(fixture, "piece12"); // e2
+        var blackEPawn = Piece(fixture, "piece20"); // e7
+        var whiteKing = Piece(fixture, "piece4"); // e1 (cell 4, code 6)
+
+        // Turn 1 (White): e2 -> e4
+        MoveTo(fixture, whiteEPawn, file: 4, rank: 3);
+        Assert.Equal(1, Slot(fixture, "verdict"));
+
+        // Turn 2 (Black): e7 -> e5
+        MoveTo(fixture, blackEPawn, file: 4, rank: 4);
+        Assert.Equal(1, Slot(fixture, "verdict"));
+
+        // Turn 3 (White): King attempts illegal multi-square slide e1 -> e3 (cell 20)
+        var illegalBefore = Slot(fixture, "illegalCount");
+        MoveTo(fixture, whiteKing, file: 4, rank: 2); // e3
+        Assert.Equal(0, Slot(fixture, "verdict"));
+        Assert.Equal(illegalBefore + 1, Slot(fixture, "illegalCount"));
+
+        // Control: King takes a legal single step to e2 (file 4, rank 1 = cell 12)
+        MoveTo(fixture, whiteKing, file: 4, rank: 1); // e2
+        Assert.Equal(1, Slot(fixture, "verdict"));
+        Assert.Equal(1, Cell(Row(fixture, "move"), "kind"));
+        Assert.Equal(6, Cell(Row(fixture, "move"), "mover")); // king code is 6
+        Assert.Equal(12, Cell(Row(fixture, "pieceCell"), "piece4"));
+        Assert.Equal(6, Cell(Row(fixture, "board"), "12"));
+    }
+
+    [Fact]
+    public void WhiteKingsideCastleRecordsLegal() {
+        using var fixture = Fixtures.FreshServer(definition: LoadMinimalHost());
+
+        SettleFromSpawn(fixture: fixture);
+
+        var whiteBishop = Piece(fixture, "piece5"); // f1
+        var whiteKnight = Piece(fixture, "piece6"); // g1
+        var whiteKing = Piece(fixture, "piece4"); // e1
+        var whiteRook = Piece(fixture, "piece7"); // h1
+
+        // Clear transit squares f1 and g1 by moving bishop and knight off-board onto margin
+        whiteBishop.Pose(x: (OriginX + 1.7f), y: SpawnHeight, z: (OriginZ + 0.1f), yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        MoveTo(fixture, whiteKnight, file: 6, rank: 2); // off transit square
+        // In the next settle window, move knight off-board as well
+        whiteKnight.Pose(x: (OriginX + 1.7f), y: SpawnHeight, z: (OriginZ + 0.3f), yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        for (var tick = 0; tick < 400; tick++) {
+            fixture.Step();
+        }
+
+        // Reposition King back to e1 and Rook back to h1 to ensure starting home cells before castling
+        whiteKing.Pose(x: (OriginX + 4.5f * CellSize), y: SpawnHeight, z: (OriginZ + 0.5f * CellSize), yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        whiteRook.Pose(x: (OriginX + 7.5f * CellSize), y: SpawnHeight, z: (OriginZ + 0.5f * CellSize), yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        for (var tick = 0; tick < 400; tick++) {
+            fixture.Step();
+        }
+
+        // Execute Kingside Castle: King e1 -> g1 (cell 4 -> 6), Rook h1 -> f1 (cell 7 -> 5)
+        whiteKing.Pose(x: (OriginX + 6.5f * CellSize), y: SpawnHeight, z: (OriginZ + 0.5f * CellSize), yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        whiteRook.Pose(x: (OriginX + 5.5f * CellSize), y: SpawnHeight, z: (OriginZ + 0.5f * CellSize), yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        for (var tick = 0; tick < 400; tick++) {
+            fixture.Step();
+        }
+
+        Assert.Equal(1, Slot(fixture, "verdict"));
+        Assert.Equal(4, Cell(Row(fixture, "move"), "kind")); // castle kind is 4
+        Assert.Equal(6, Cell(Row(fixture, "move"), "mover")); // king code
+        Assert.Equal(4, Cell(Row(fixture, "move"), "from")); // king from e1 (4)
+        Assert.Equal(6, Cell(Row(fixture, "move"), "to")); // king to g1 (6)
+        Assert.Equal(6, Cell(Row(fixture, "board"), "6")); // g1 holds king
+        Assert.Equal(4, Cell(Row(fixture, "board"), "5")); // f1 holds rook
+        Assert.Equal(0, Cell(Row(fixture, "board"), "4")); // e1 vacated
+        Assert.Equal(0, Cell(Row(fixture, "board"), "7")); // h1 vacated
     }
 }

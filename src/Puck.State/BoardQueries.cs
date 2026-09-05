@@ -47,6 +47,9 @@ public static class BoardQueries {
         if (query is BoardNeighbourQuery neighbour) {
             return topology.Neighbour(source, neighbour.Direction);
         }
+        if (query is BoardComponentQuery component) {
+            return Component(component, values, source);
+        }
         if (query is BoardPathCostQuery pathCost) {
             return PathCost(pathCost, values, source, (pathCost.TargetFrom is null) ? pathCost.Target : dynamicTarget);
         }
@@ -166,6 +169,54 @@ public static class BoardQueries {
             }
         }
         return (long)shifted;
+    }
+
+    // A flood along the topology's directions from the key cell over in-range cells; every settled member is one
+    // visit against the budget. Liberties are counted once each through a second mark, so a cell touching the group
+    // twice is one liberty.
+    private static long Component(BoardComponentQuery query, ReadOnlySpan<long> values, int source) {
+        var topology = query.Topology;
+        var count = topology.CellCount;
+        if (values[source] < query.Lower || values[source] > query.Upper) {
+            return 0;
+        }
+        var markPool = System.Buffers.ArrayPool<byte>.Shared.Rent(count);
+        var stackPool = System.Buffers.ArrayPool<int>.Shared.Rent(count);
+        try {
+            var mark = markPool.AsSpan(0, count);
+            var stack = stackPool.AsSpan(0, count);
+            mark.Clear();
+            var liberties = query.Kind == BoardQueryKind.Liberties;
+            var size = 0;
+            var members = 0L;
+            var free = 0L;
+            mark[source] = 1;
+            stack[size++] = source;
+            while (size > 0) {
+                var cell = stack[--size];
+                if (members == query.MaxVisits) {
+                    return -2;
+                }
+                members++;
+                for (var direction = 0; direction < topology.DirectionCount; direction++) {
+                    var next = topology.Neighbour(cell, direction);
+                    if (next < 0 || mark[next] != 0) {
+                        continue;
+                    }
+                    if (values[next] >= query.Lower && values[next] <= query.Upper) {
+                        mark[next] = 1;
+                        stack[size++] = next;
+                    } else if (liberties && values[next] >= query.LibertyLower && values[next] <= query.LibertyUpper) {
+                        mark[next] = 2;
+                        free++;
+                    }
+                }
+            }
+            return liberties ? free : members;
+        } finally {
+            System.Buffers.ArrayPool<byte>.Shared.Return(markPool);
+            System.Buffers.ArrayPool<int>.Shared.Return(stackPool);
+        }
     }
 
     // Dijkstra over a binary heap keyed (distance, cell ordinal): the same settle order as a linear scan (least

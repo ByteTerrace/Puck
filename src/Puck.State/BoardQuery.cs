@@ -18,6 +18,11 @@ public enum BoardQueryKind : byte {
     Canonical,
     /// <summary>The cell reached by an arbitrary (dx, dz) grid step from the key cell, or -1.</summary>
     Offset,
+    /// <summary>The size of the connected component of in-range cells containing the key cell, under a visit budget.</summary>
+    Component,
+    /// <summary>The count of distinct cells adjacent to that component whose value lies in a second range — a Go
+    /// group's liberties — under the same budget.</summary>
+    Liberties,
     /// <summary>Whether the key cell is attacked: walking each of a short authored direction list from the key
     /// cell, the first occupied cell in at least one of them carries a value within an inclusive range. A ray that
     /// hits an occupied cell outside the range is blocked (stops there, counts as a miss) — the same single-direction
@@ -93,6 +98,42 @@ public sealed class BoardPathCostQuery : BoardQuery {
     public CompiledCellRef? TargetFrom { get; }
     /// <inheritdoc/>
     public override long Visits => ((long)(MaxVisits + 1) * (Topology.CellCount + Topology.DirectionCount));
+}
+
+/// <summary>The connected component of cells whose value lies in an inclusive range, grown from the key cell along the
+/// topology's directions under a visit budget (<see cref="BoardQueryKind.Component"/>), or the distinct cells adjacent
+/// to that component whose value lies in a second inclusive range (<see cref="BoardQueryKind.Liberties"/>). A key cell
+/// outside the range is a component of size zero with no liberties; a budget that runs out reads -2.</summary>
+public sealed class BoardComponentQuery : BoardQuery {
+    /// <summary>Initializes the query.</summary>
+    /// <param name="topology">The compiled topology.</param>
+    /// <param name="lower">The inclusive lower bound of a member's value.</param>
+    /// <param name="upper">The inclusive upper bound of a member's value.</param>
+    /// <param name="maxVisits">The most component cells the flood may settle, 1..CellCount.</param>
+    /// <param name="libertyLower">The inclusive lower bound of a liberty's value, for <see cref="BoardQueryKind.Liberties"/>.</param>
+    /// <param name="libertyUpper">The inclusive upper bound of a liberty's value.</param>
+    /// <param name="liberties">Whether the query counts liberties rather than members.</param>
+    public BoardComponentQuery(CompiledTopology topology, long lower, long upper, int maxVisits, long libertyLower, long libertyUpper, bool liberties)
+        : base(liberties ? BoardQueryKind.Liberties : BoardQueryKind.Component, topology) {
+        Lower = lower;
+        Upper = upper;
+        MaxVisits = maxVisits;
+        LibertyLower = libertyLower;
+        LibertyUpper = libertyUpper;
+    }
+
+    /// <summary>Gets the inclusive lower bound of a member's value.</summary>
+    public long Lower { get; }
+    /// <summary>Gets the inclusive upper bound of a member's value.</summary>
+    public long Upper { get; }
+    /// <summary>Gets the most component cells the flood may settle.</summary>
+    public int MaxVisits { get; }
+    /// <summary>Gets the inclusive lower bound of a liberty's value.</summary>
+    public long LibertyLower { get; }
+    /// <summary>Gets the inclusive upper bound of a liberty's value.</summary>
+    public long LibertyUpper { get; }
+    /// <inheritdoc/>
+    public override long Visits => (((long)(MaxVisits + 1) * Topology.DirectionCount) + Topology.CellCount);
 }
 
 /// <summary>The 64-bit cell-set mask of cells whose value lies in an inclusive range (<see cref="BoardQueryKind.Mask"/>).</summary>

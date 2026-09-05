@@ -83,6 +83,8 @@ Rule operands accept these bounded channels:
 | `$board:canonical:<row>` | The least 64-bit fingerprint of the whole board's values over every element, for boards of any size: pushed into a history ring, repetition up to symmetry is a pattern |
 | `$board:cellOf:<row>:<bodyRef>` | The Grid cell a body's resolved world position falls in, or -1 |
 | `$board:offset:<row>:<dx>:<dz>` | The cell reached by an arbitrary (dx, dz) grid step from the key cell, or -1 |
+| `$board:component:<row>:<min>:<max>:<maxVisits>` | The size of the connected component (along the topology's directions) of cells whose value lies in min..max that contains the key cell; 0 when the key cell is outside the range, -2 when the budget of settled cells runs out |
+| `$board:liberties:<row>:<min>:<max>:<libertyMin>:<libertyMax>:<maxVisits>` | The count of distinct cells adjacent to that component whose value lies in libertyMin..libertyMax — a Go group's liberties (`1:1:0:0:<n>` for black on an empty-is-0 board), on the same terms |
 | `$board:attacks:<row>:<min>:<max>:<directions>` | 1 when walking any of 1..4 comma-separated directions from the key cell finds, before any other occupied cell, one whose value lies in min..max; 0 otherwise. A single-direction first-blocker rule, unioned over the authored directions and filtered to a range — a slider's reach at one square in one call |
 | `$match:<pattern>:<row>:<direction>:cell` | The first cell one step past the longest accepted prefix of the ray from the key cell in `direction` — the first cell the pattern REJECTS — or -1 when the whole ray is accepted |
 | `$match:<pattern>:<row>:<direction>:distance` | The step count to that cell, or -1 on the same terms |

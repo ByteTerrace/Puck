@@ -4528,7 +4528,7 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": "moverColor == 1 ? pawnLegalWhite : pawnLegalBlack",
+          "expression": "moverColor == 0 ? pawnLegalWhite : pawnLegalBlack",
           "state": "pawnLegal"
         }
       ],
@@ -7212,7 +7212,7 @@
         "max": 1,
         "min": 0,
         "name": "turn",
-        "value": 1
+        "value": 0
       },
       {
         "kind": "int",
@@ -7291,131 +7291,131 @@
         "cells": [
           {
             "key": "piece0",
-            "value": -4
+            "value": 4
           },
           {
             "key": "piece1",
-            "value": -2
+            "value": 2
           },
           {
             "key": "piece2",
-            "value": -3
+            "value": 3
           },
           {
             "key": "piece3",
-            "value": -6
-          },
-          {
-            "key": "piece4",
-            "value": -5
-          },
-          {
-            "key": "piece5",
-            "value": -3
-          },
-          {
-            "key": "piece6",
-            "value": -2
-          },
-          {
-            "key": "piece7",
-            "value": -4
-          },
-          {
-            "key": "piece8",
-            "value": -1
-          },
-          {
-            "key": "piece9",
-            "value": -1
-          },
-          {
-            "key": "piece10",
-            "value": -1
-          },
-          {
-            "key": "piece11",
-            "value": -1
-          },
-          {
-            "key": "piece12",
-            "value": -1
-          },
-          {
-            "key": "piece13",
-            "value": -1
-          },
-          {
-            "key": "piece14",
-            "value": -1
-          },
-          {
-            "key": "piece15",
-            "value": -1
-          },
-          {
-            "key": "piece16",
-            "value": 1
-          },
-          {
-            "key": "piece17",
-            "value": 1
-          },
-          {
-            "key": "piece18",
-            "value": 1
-          },
-          {
-            "key": "piece19",
-            "value": 1
-          },
-          {
-            "key": "piece20",
-            "value": 1
-          },
-          {
-            "key": "piece21",
-            "value": 1
-          },
-          {
-            "key": "piece22",
-            "value": 1
-          },
-          {
-            "key": "piece23",
-            "value": 1
-          },
-          {
-            "key": "piece24",
-            "value": 4
-          },
-          {
-            "key": "piece25",
-            "value": 2
-          },
-          {
-            "key": "piece26",
-            "value": 3
-          },
-          {
-            "key": "piece27",
-            "value": 6
-          },
-          {
-            "key": "piece28",
             "value": 5
           },
           {
-            "key": "piece29",
+            "key": "piece4",
+            "value": 6
+          },
+          {
+            "key": "piece5",
             "value": 3
           },
           {
-            "key": "piece30",
+            "key": "piece6",
             "value": 2
           },
           {
-            "key": "piece31",
+            "key": "piece7",
             "value": 4
+          },
+          {
+            "key": "piece8",
+            "value": 1
+          },
+          {
+            "key": "piece9",
+            "value": 1
+          },
+          {
+            "key": "piece10",
+            "value": 1
+          },
+          {
+            "key": "piece11",
+            "value": 1
+          },
+          {
+            "key": "piece12",
+            "value": 1
+          },
+          {
+            "key": "piece13",
+            "value": 1
+          },
+          {
+            "key": "piece14",
+            "value": 1
+          },
+          {
+            "key": "piece15",
+            "value": 1
+          },
+          {
+            "key": "piece16",
+            "value": -1
+          },
+          {
+            "key": "piece17",
+            "value": -1
+          },
+          {
+            "key": "piece18",
+            "value": -1
+          },
+          {
+            "key": "piece19",
+            "value": -1
+          },
+          {
+            "key": "piece20",
+            "value": -1
+          },
+          {
+            "key": "piece21",
+            "value": -1
+          },
+          {
+            "key": "piece22",
+            "value": -1
+          },
+          {
+            "key": "piece23",
+            "value": -1
+          },
+          {
+            "key": "piece24",
+            "value": -4
+          },
+          {
+            "key": "piece25",
+            "value": -2
+          },
+          {
+            "key": "piece26",
+            "value": -3
+          },
+          {
+            "key": "piece27",
+            "value": -5
+          },
+          {
+            "key": "piece28",
+            "value": -6
+          },
+          {
+            "key": "piece29",
+            "value": -3
+          },
+          {
+            "key": "piece30",
+            "value": -2
+          },
+          {
+            "key": "piece31",
+            "value": -4
           }
         ],
         "kind": "int",

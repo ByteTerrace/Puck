@@ -2402,8 +2402,11 @@ ray, a zone's attribute word or per-token `value` expression (`$token` keys),
 a `history` ring (`push`/`pushState`, `$history:<row>:<age>`), or a keyed row;
 `$board:mask`, the `boardShift`/`boardImage` expression ops, and the
 `writeSet` transform carry the one cell-set vocabulary up to 64 cells, and the
-`boardCombine` transform carries it over boards of any size; `world.match` narrates
-one word.
+`boardCombine` transform carries it over boards of any size; a group and its
+breathing room are `$board:component:<row>:<min>:<max>:<maxVisits>` and
+`$board:liberties:<row>:<min>:<max>:<libertyMin>:<libertyMax>:<maxVisits>`
+from a key cell (a flood under a settled-cell budget, -2 when it runs out);
+`world.match` narrates one word.
 The `sort` transform supplies the canonical order. Read back with
 `world.patterns` and `world.match`.
 
