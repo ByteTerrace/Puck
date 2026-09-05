@@ -41,13 +41,16 @@ public enum WorldTopologyWrap : byte {
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldStateBoard(string Topology, long Empty = 0);
 
-/// <summary>A compiled immutable adjacency table. Absent neighbours are -1. Grid directions are N, NE, E, SE,
-/// S, SW, W, NW; hex directions are E, NE, NW, W, SW, SE; ring directions are forward and backward.</summary>
+/// <summary>A compiled immutable adjacency table. Absent neighbours are -1. Direction names come from the
+/// topology's own <see cref="WorldStateLatticeTopology.Directions"/> when authored; the unauthored default matches
+/// what every kind carried before that field existed — Grid N, NE, E, SE, S, SW, W, NW; Hex E, NE, NW, W, SW, SE;
+/// Box the 26 in <see cref="BoxDirectionNames"/>; Ring forward and backward.</summary>
 public sealed partial class CompiledWorldTopology {
     private readonly int[] m_neighbours;
     private readonly int[] m_opposite;
     private readonly string[] m_keys;
     private readonly WorldCellName[] m_names;
+    private readonly string[] m_directionNames;
     private readonly int m_width;
     private readonly int m_depth;
     private readonly int m_layers;
@@ -59,7 +62,7 @@ public sealed partial class CompiledWorldTopology {
 
     internal CompiledWorldTopology(WorldTopologyKind kind, int count, int directions, int[] neighbours, int[] opposite,
         int width, int depth, WorldTopologyWrap wrap, FixedVector3 origin, FixedQ4816 cellSize, FixedQ4816 band,
-        int[][] images, string[] elementNames, int layers, FixedQ4816 layerHeight) {
+        int[][] images, string[] elementNames, int layers, FixedQ4816 layerHeight, string[] directionNames) {
         m_band = band;
         m_layers = layers;
         m_layerHeight = layerHeight;
@@ -70,6 +73,7 @@ public sealed partial class CompiledWorldTopology {
         DirectionCount = directions;
         m_neighbours = neighbours;
         m_opposite = opposite;
+        m_directionNames = directionNames;
         m_width = width;
         m_depth = depth;
         m_wrap = wrap;
@@ -209,16 +213,15 @@ public sealed partial class CompiledWorldTopology {
     public bool TryCell(string key, out int cell) => int.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out cell)
         && (uint)cell < CellCount && string.Equals(key, m_keys[cell], StringComparison.Ordinal);
 
-    /// <summary>Resolves a direction token for this topology.</summary>
+    /// <summary>Resolves a direction token for this topology — this topology's own authored names when
+    /// <see cref="WorldStateLatticeTopology.Directions"/> was declared, its kind's default names otherwise.</summary>
     /// <param name="token">The case-sensitive direction name.</param>
     /// <returns>The direction ordinal or -1.</returns>
-    public int Direction(string token) => Kind switch {
-        WorldTopologyKind.Grid => token switch { "N" => 0, "NE" => 1, "E" => 2, "SE" => 3, "S" => 4, "SW" => 5, "W" => 6, "NW" => 7, _ => -1 },
-        WorldTopologyKind.Box => Array.IndexOf(BoxDirectionNames, token),
-        WorldTopologyKind.Hex => token switch { "E" => 0, "NE" => 1, "NW" => 2, "W" => 3, "SW" => 4, "SE" => 5, _ => -1 },
-        WorldTopologyKind.Ring => token switch { "forward" => 0, "backward" => 1, _ => -1 },
-        _ => -1,
-    };
+    public int Direction(string token) => Array.IndexOf(m_directionNames, token);
+    /// <summary>Gets a direction's own name.</summary>
+    /// <param name="direction">The direction ordinal.</param>
+    /// <returns>The name, or <see langword="null"/> for an invalid ordinal.</returns>
+    public string? DirectionName(int direction) => ((uint)direction < (uint)m_directionNames.Length) ? m_directionNames[direction] : null;
 }
 
 /// <summary>Validates and compiles discrete addressing independently from physical field simulation.</summary>
@@ -232,6 +235,11 @@ public static class WorldTopologyCompilation {
     /// <summary>The greatest axial hexagon radius whose cell count (<c>1 + 3r(r + 1)</c>) still fits
     /// <see cref="MaxCells"/>, computed rather than authored so the two bounds can never drift apart.</summary>
     public static readonly int MaxHexRadius = ComputeMaxHexRadius();
+    /// <summary>The most directions an authored <see cref="WorldStateLatticeTopology.Directions"/> list may declare —
+    /// the bit width of the <c>long</c> mask <c>$match:</c>'s direction-mask facet packs one bit per direction into
+    /// (<c>1L &lt;&lt; direction</c>), above a Box's unauthored 26 (the largest default set) so a custom vocabulary is
+    /// never narrower than what every kind already carries.</summary>
+    public const int MaxDirections = sizeof(long) * 8;
 
     private static int ComputeMaxHexRadius() {
         var radius = 0;
@@ -308,6 +316,87 @@ public static class WorldTopologyCompilation {
         if (topology.Kind is WorldTopologyKind.Grid or WorldTopologyKind.Box && !TryValidateFrame(topology, out reason)) {
             return false;
         }
+        if (topology.Directions is not null && !TryValidateDirections(topology, out reason)) {
+            return false;
+        }
+        if (topology.ElementAliases is not null && !TryValidateElementAliases(topology, out reason)) {
+            return false;
+        }
+        reason = string.Empty;
+        return true;
+    }
+
+    /// <summary>Checks an authored element-alias list: 1..<see cref="MaxDirections"/> entries, distinct alias names
+    /// that are not themselves a canonical element name, and an <see cref="WorldTopologyElementAlias.Element"/> that
+    /// names a real element of this kind's point group.</summary>
+    private static bool TryValidateElementAliases(WorldStateLatticeTopology topology, out string reason) {
+        var aliases = topology.ElementAliases!;
+        if (aliases.Count is < 1 or > MaxDirections) {
+            reason = $"elementAliases declares {aliases.Count} entries; 1..{MaxDirections} are admitted";
+            return false;
+        }
+        var canonical = CompiledWorldTopology.ElementNames(topology.Kind, topology.Width, topology.Depth, topology.Layers);
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var alias in aliases) {
+            if (alias is null || !WorldCellName.TryParse(alias.Name, out _, out _) || Array.IndexOf(canonical, alias.Name) >= 0 || !names.Add(alias.Name)) {
+                reason = "elementAliases requires a distinct name per entry that is not already a canonical element name";
+                return false;
+            }
+            if (Array.IndexOf(canonical, alias.Element) < 0) {
+                reason = $"elementAliases entry '{alias.Name}' names no element '{alias.Element}' of this topology's point group";
+                return false;
+            }
+        }
+        reason = string.Empty;
+        return true;
+    }
+
+    /// <summary>Checks an authored direction vocabulary: 1..<see cref="MaxDirections"/> entries, distinct names and
+    /// distinct nonzero steps, a Z step only on a <see cref="WorldTopologyKind.Box"/>, no Y step on a
+    /// <see cref="WorldTopologyKind.Ring"/> (which has no second axis), a step magnitude under the wrapped axis'
+    /// own width or depth (a Ring always wraps X) so <see cref="CompiledWorldTopology"/>'s modulo wrap never folds a
+    /// step past the origin or onto itself, and every step's negation present as another entry — the closure
+    /// <see cref="CompiledWorldTopology.Opposite"/> derivation requires so it never throws.</summary>
+    private static bool TryValidateDirections(WorldStateLatticeTopology topology, out string reason) {
+        var directions = topology.Directions!;
+        if (directions.Count is < 1 or > MaxDirections) {
+            reason = $"directions declares {directions.Count} entries; 1..{MaxDirections} are admitted";
+            return false;
+        }
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        var steps = new HashSet<(int, int, int)>();
+        foreach (var direction in directions) {
+            if (direction is null || !WorldCellName.TryParse(direction.Name, out _, out _) || !names.Add(direction.Name)) {
+                reason = "directions requires a distinct, valid name per entry";
+                return false;
+            }
+            if (direction.Z != 0 && topology.Kind != WorldTopologyKind.Box) {
+                reason = $"direction '{direction.Name}' declares a layer step outside a box";
+                return false;
+            }
+            if (topology.Kind == WorldTopologyKind.Ring && direction.Y != 0) {
+                reason = $"direction '{direction.Name}' declares a row step on a ring, which has no second axis";
+                return false;
+            }
+            if ((topology.Kind == WorldTopologyKind.Ring || topology.Wrap is WorldTopologyWrap.X or WorldTopologyWrap.Both) && Math.Abs(direction.X) >= topology.Width) {
+                reason = $"direction '{direction.Name}' steps {direction.X} on a wrapped axis {topology.Width} wide; magnitude must be under the width";
+                return false;
+            }
+            if (topology.Wrap is WorldTopologyWrap.Y or WorldTopologyWrap.Both && Math.Abs(direction.Y) >= topology.Depth) {
+                reason = $"direction '{direction.Name}' steps {direction.Y} on a wrapped axis {topology.Depth} deep; magnitude must be under the depth";
+                return false;
+            }
+            if ((direction.X == 0 && direction.Y == 0 && direction.Z == 0) || !steps.Add((direction.X, direction.Y, direction.Z))) {
+                reason = $"direction '{direction.Name}' repeats another entry's step or is the zero step";
+                return false;
+            }
+        }
+        foreach (var direction in directions) {
+            if (!steps.Contains((-direction.X, -direction.Y, -direction.Z))) {
+                reason = $"direction '{direction.Name}' has no opposite step in the same list";
+                return false;
+            }
+        }
         reason = string.Empty;
         return true;
     }
@@ -358,13 +447,24 @@ public static class WorldTopologyCompilation {
                 }
             }
         }
-        var planar = new (int X, int Y, int Z)[] { (0,-1,0),(1,-1,0),(1,0,0),(1,1,0),(0,1,0),(-1,1,0),(-1,0,0),(-1,-1,0) };
-        var directions = topology.Kind switch {
-            WorldTopologyKind.Grid => planar,
-            WorldTopologyKind.Hex => [(1,0,0),(1,-1,0),(0,-1,0),(-1,0,0),(-1,1,0),(0,1,0)],
-            WorldTopologyKind.Box => [.. planar, (0,0,1), .. planar.Select(p => (p.X, p.Y, 1)), (0,0,-1), .. planar.Select(p => (p.X, p.Y, -1))],
-            _ => [(1,0,0),(-1,0,0)],
-        };
+        (int X, int Y, int Z)[] directions;
+        string[] directionNames;
+        if (topology.Directions is { Count: > 0 } authored) {
+            directions = new (int, int, int)[authored.Count];
+            directionNames = new string[authored.Count];
+            for (var index = 0; index < authored.Count; index++) {
+                directions[index] = (authored[index].X, authored[index].Y, authored[index].Z);
+                directionNames[index] = authored[index].Name;
+            }
+        } else {
+            var planar = new (int X, int Y, int Z)[] { (0,-1,0),(1,-1,0),(1,0,0),(1,1,0),(0,1,0),(-1,1,0),(-1,0,0),(-1,-1,0) };
+            (directions, directionNames) = topology.Kind switch {
+                WorldTopologyKind.Grid => (planar, new[] { "N", "NE", "E", "SE", "S", "SW", "W", "NW" }),
+                WorldTopologyKind.Hex => ([(1,0,0),(1,-1,0),(0,-1,0),(-1,0,0),(-1,1,0),(0,1,0)], new[] { "E", "NE", "NW", "W", "SW", "SE" }),
+                WorldTopologyKind.Box => ([.. planar, (0,0,1), .. planar.Select(p => (p.X, p.Y, 1)), (0,0,-1), .. planar.Select(p => (p.X, p.Y, -1))], CompiledWorldTopology.BoxDirectionNames),
+                _ => ([(1,0,0),(-1,0,0)], new[] { "forward", "backward" }),
+            };
+        }
         var indices = new Dictionary<(int, int, int), int>();
         for (var index = 0; index < coordinates.Count; index++) {
             indices.Add(coordinates[index], index);
@@ -394,7 +494,7 @@ public static class WorldTopologyCompilation {
             opposite[direction] = found;
         }
         var (images, elementNames) = CompiledWorldTopology.BuildSymmetry(topology.Kind, topology.Width, topology.Depth, topology.Layers, coordinates, indices);
-        return new(topology.Kind, coordinates.Count, directions.Length, neighbours, opposite, topology.Width, topology.Depth, topology.Wrap,
+        var compiled = new CompiledWorldTopology(topology.Kind, coordinates.Count, directions.Length, neighbours, opposite, topology.Width, topology.Depth, topology.Wrap,
             new FixedVector3(
                 X: FixedQ4816.FromDouble(topology.Origin.X),
                 Y: FixedQ4816.FromDouble(topology.Origin.Y),
@@ -405,6 +505,9 @@ public static class WorldTopologyCompilation {
             images,
             elementNames,
             topology.Layers,
-            FixedQ4816.FromDouble(topology.LayerHeight));
+            FixedQ4816.FromDouble(topology.LayerHeight),
+            directionNames);
+        compiled.InstallElementAliases(topology.ElementAliases);
+        return compiled;
     }
 }

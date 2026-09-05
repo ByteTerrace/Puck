@@ -344,6 +344,76 @@
             "description": "For a Box, the world-space height of one layer, so a position\u0027s Y above the origin resolves to a layer the way X and Z resolve to a column; positive, and only on a box.",
             "type": "number",
             "default": 0
+          },
+          "directions": {
+            "description": "The topology\u0027s own direction vocabulary \u2014 its neighbour steps and the compass/element names a rule, $board:/$match: token, or leaper reach spells them with. null (the unauthored default) compiles to exactly the fixed set every WorldTopologyKind carried before this field existed \u2014 Grid\u0027s eight compass points, Hex\u0027s six, Box\u0027s 26, Ring\u0027s forward/backward \u2014 so no shipped world\u0027s behavior moves. An authored list replaces that default WHOLESALE: it becomes the topology\u0027s only directions, its only compass names, and the only vocabulary Direction resolves \u2014 the seam a 4-connected grid (orthogonal steps only) or a custom leaper reach declares without inventing a parallel mechanism.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "One authored direction of a discrete WorldStateLatticeTopology: the (X, Y, Z) cell step a neighbour walk, ray, or leaper offset takes, and the case-sensitive token a rule or $board:/$match: channel names it by. X/Y are the topology\u0027s own planar axes (a Grid\u0027s column/row, a Hex\u0027s q/r); Z is a Box\u0027s layer step and must be zero on every other kind.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "name": {
+                  "description": "The direction\u0027s token \u2014 dot-free, distinct within the topology, matched case-sensitively.",
+                  "type": "string"
+                },
+                "x": {
+                  "description": "The signed planar column step.",
+                  "type": "integer"
+                },
+                "y": {
+                  "description": "The signed planar row step.",
+                  "type": "integer"
+                },
+                "z": {
+                  "description": "The signed layer step; zero except on a Box.",
+                  "type": "integer",
+                  "default": 0
+                }
+              },
+              "required": [
+                "name",
+                "x",
+                "y"
+              ],
+              "additionalProperties": false
+            },
+            "default": null
+          },
+          "elementAliases": {
+            "description": "Friendlier names for this topology\u0027s point-group elements (\u0022rot90\u0022 for whatever signed-axis permutation a square grid\u0027s quarter turn spells) \u2014 Element resolves an alias alongside the canonical name; ElementName always answers the canonical spelling.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "A friendlier name for one point-group element, resolved by Element alongside its canonical signed-axis spelling (ElementName always answers the canonical form).",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "name": {
+                  "description": "The alias token a rule or console verb may use instead of Element.",
+                  "type": "string"
+                },
+                "element": {
+                  "description": "The canonical element name (a ElementName value) this alias resolves to.",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "element"
+              ],
+              "additionalProperties": false
+            },
+            "default": null
           }
         },
         "required": [
@@ -355,159 +425,6 @@
         ],
         "additionalProperties": false
       },
-      "default": null
-    },
-    "social": {
-      "description": "Optional bounded social-memory policy; learned runtime impressions are checkpoint state, not public cell rows.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "dimensions": {
-          "description": "Independent, uniquely named impression dimensions. Values are normalized to [-1,1].",
-          "type": "array",
-          "items": {
-            "description": "One contextual belief\u0027s authored bounds and learning behavior. Confidence is a game heuristic, not a calibrated probability. This is not a personality or mood model.",
-            "type": [
-              "object",
-              "null"
-            ],
-            "properties": {
-              "name": {
-                "description": "Non-empty dimension name; contexts, attempts, and outcomes may use distinct dimensions.",
-                "type": "string"
-              },
-              "minimum": {
-                "description": "Lower normalized bound, at least -1.",
-                "type": "number",
-                "default": -1
-              },
-              "maximum": {
-                "description": "Upper normalized bound, at most 1, strictly greater than Minimum.",
-                "type": "number",
-                "default": 1
-              },
-              "baseline": {
-                "description": "Value of an unknown impression, inside the bounds.",
-                "type": "number",
-                "default": 0
-              },
-              "priorWeight": {
-                "description": "Positive inertia toward the current estimate, at most 1024.",
-                "type": "number",
-                "default": 4
-              },
-              "weightCapacity": {
-                "description": "Maximum accumulated evidence weight, positive and at most 65536.",
-                "type": "number",
-                "default": 64
-              },
-              "learningRate": {
-                "description": "[0,1] multiplier on value learning; zero locks the value but not evidence/confidence.",
-                "type": "number",
-                "default": 1
-              },
-              "maximumChange": {
-                "description": "[0,2] maximum absolute value change per accepted event or direct-observation upgrade.",
-                "type": "number",
-                "default": 0.25
-              },
-              "conflictThreshold": {
-                "description": "[0,2] distance from the current estimate above which fresh evidence is conflicting.",
-                "type": "number",
-                "default": 0.5
-              },
-              "conflictGain": {
-                "description": "[0,1] maximum uncertainty increase, scaled by effective evidence strength.",
-                "type": "number",
-                "default": 0.25
-              },
-              "consistencyGain": {
-                "description": "[0,1] maximum uncertainty decrease for consistent, independent evidence.",
-                "type": "number",
-                "default": 0.125
-              },
-              "followUpBoost": {
-                "description": "[0,16] extra direct-evidence weight per unit uncertainty; does not boost repeated events.",
-                "type": "number",
-                "default": 1
-              },
-              "confidenceDecaySeconds": {
-                "description": "Exact engine-tick duration for linear evidence-weight decay; zero disables it.",
-                "type": "number",
-                "default": 0
-              },
-              "recoverySeconds": {
-                "description": "Exact engine-tick duration for linear value recovery to baseline; zero disables it.",
-                "type": "number",
-                "default": 0
-              }
-            },
-            "required": [
-              "name"
-            ],
-            "additionalProperties": false
-          }
-        },
-        "impressionCapacity": {
-          "description": "Total retained (observer, subject, dimension) entries, not body capacity.",
-          "type": "integer",
-          "default": 65536
-        },
-        "impressionsPerObserver": {
-          "description": "Maximum retained entries for one observer, across subjects and dimensions.",
-          "type": "integer",
-          "default": 256
-        },
-        "receiptCapacity": {
-          "description": "Exact duplicate-evidence ledger capacity. Unexpired receipts are never evicted.",
-          "type": "integer",
-          "default": 65536
-        },
-        "evidenceAttemptsPerTick": {
-          "description": "Maximum ingestion attempts, including invalid and duplicate attempts.",
-          "type": "integer",
-          "default": 1024
-        },
-        "expiredReceiptsPerTick": {
-          "description": "Maximum expired ledger entries reclaimed when the engine clock advances.",
-          "type": "integer",
-          "default": 1024
-        },
-        "evidenceLifetimeSeconds": {
-          "description": "Positive exact engine-tick admission age. Older evidence is refused.",
-          "type": "number",
-          "default": 60
-        },
-        "reliabilityDimension": {
-          "description": "Optional [0,1] dimension used to assess a report\u0027s source, independently of affection.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "unfamiliarReliability": {
-          "description": "Fallback source reliability in [0,1], blended with learned reliability by confidence.",
-          "type": "number",
-          "default": 0.5
-        },
-        "directWeight": {
-          "description": "Non-negative weight of a direct observation of quality one, at most 1024.",
-          "type": "number",
-          "default": 1
-        },
-        "reportWeight": {
-          "description": "Non-negative report weight before quality and source reliability, at most 1024.",
-          "type": "number",
-          "default": 0.5
-        }
-      },
-      "required": [
-        "dimensions"
-      ],
-      "additionalProperties": false,
       "default": null
     }
   },

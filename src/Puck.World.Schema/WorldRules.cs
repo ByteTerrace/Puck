@@ -166,6 +166,13 @@ public static class WorldRuleFacts {
     /// <summary>The prefix; <c>$history:&lt;row&gt;:&lt;age&gt;</c> reads the value pushed <c>age</c> pushes ago into a
     /// history row (0 is the latest), or the ring's empty value past what it holds; age is 0..capacity-1.</summary>
     public const string HistoryPrefix = "$history:";
+    /// <summary>The prefix; <c>$clock:&lt;music&gt;:phaseError</c> reads the signed tick distance from the world's
+    /// musical clock's current position to the nearest beat — positive after the beat, negative ahead of the next
+    /// one, magnitude at most half a beat. A hit window is an ordinary <c>compareState</c> range over it (no
+    /// dedicated effect or asset family): the same read at every firing tick a kit action's own edge trigger stamps
+    /// a state cell for. <c>music</c> must name the document's declared music row (the only clock a world may
+    /// author); a world with none has no clock to read and the operand refuses at compile time.</summary>
+    public const string ClockPrefix = "$clock:";
     /// <summary>The prefix a cell KEY may carry in place of a literal: <c>$cell:&lt;row&gt;:&lt;key&gt;</c> resolves, at
     /// every read and every firing, to the integer value of that cell spelled as a key — so an effect or operand
     /// addresses "the cell named by another cell" (the target a body's <c>target</c> cell currently names). Admitted
@@ -390,14 +397,21 @@ public enum CompiledBodyRefKind : byte {
 /// <param name="Row">The keyed row name for <see cref="CompiledBodyRefKind.ArgMax"/>/<see cref="CompiledBodyRefKind.ArgMin"/>
 /// and the indirection row for <see cref="CompiledBodyRefKind.Cell"/>; <see langword="null"/> otherwise.</param>
 /// <param name="Key">The indirection cell's key for <see cref="CompiledBodyRefKind.Cell"/>; <see langword="null"/> otherwise.</param>
-public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Index, string? Row, string? Key = null);
+/// <param name="Handle">The compiled handle for <paramref name="Row"/> under <see cref="CompiledBodyRefKind.Cell"/> —
+/// resolved once at compile time so the per-tick indirection read (<c>WorldServer.ResolveBodyRef</c>) never repeats a
+/// row-name scan; <see langword="default"/> (invalid) otherwise.</param>
+public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Index, string? Row, string? Key = null, WorldStateHandle Handle = default);
 /// <summary>A state cell address whose integer value is read as a cell KEY at evaluation time
 /// (<see cref="WorldRuleFacts.CellKeyPrefix"/>).</summary>
 /// <param name="Row">The row holding the indirection cell.</param>
 /// <param name="Key">The indirection cell's key.</param>
 /// <param name="Binding">The bound body read as the key instead, when not <see cref="RuleBinding.None"/>; then
 /// <paramref name="Row"/>/<paramref name="Key"/> are empty.</param>
-public readonly record struct CompiledCellRef(string Row, string Key, RuleBinding Binding = RuleBinding.None);
+/// <param name="Handle">The compiled handle for <paramref name="Row"/> when <paramref name="Binding"/> is
+/// <see cref="RuleBinding.None"/> — resolved once at compile time (see <see cref="WorldStateReader.TryReadHandle"/>)
+/// so the per-tick indirection read never repeats a row-name scan; <see langword="default"/> (invalid) for a
+/// binding-carried reference, which names no row.</param>
+public readonly record struct CompiledCellRef(string Row, string Key, RuleBinding Binding = RuleBinding.None, WorldStateHandle Handle = default);
 /// <summary>A name bound during one evaluation of a rule or interaction — the body index a key token
 /// <c>$each</c>/<c>$left</c>/<c>$right</c> or a body-reference token <c>each</c>/<c>left</c>/<c>right</c> reads.</summary>
 public enum RuleBinding : byte {
@@ -487,18 +501,15 @@ public enum WorldRuleFactKind : byte {
     Board,
     /// <summary>A phase protocol progression value.</summary>
     Phase,
-    /// <summary>A directed social-memory query.</summary>
-    Social,
-    /// <summary>The social bank's engine clock.</summary>
-    SocialClock,
-    /// <summary>The last social evidence outcome ordinal.</summary>
-    SocialResult,
     /// <summary>A pattern-language match over a row's word (<see cref="WorldRuleFacts.MatchPrefix"/>): acceptance 1
     /// or 0, a longest accepted prefix, or the accepting directions of a board origin.</summary>
     Pattern,
     /// <summary>One value of a history ring by age (<see cref="WorldRuleFacts.HistoryPrefix"/>): 0 is the latest push,
     /// and an age the ring no longer holds reads the trait's empty value.</summary>
     History,
+    /// <summary>The world's musical clock's signed phase error against the nearest beat
+    /// (<see cref="WorldRuleFacts.ClockPrefix"/>).</summary>
+    Clock,
 }
 /// <summary>One resolved operand of a world-rule comparison — the (<see cref="Kind"/>, <see cref="Row"/>,
 /// <see cref="Key"/>) address plus the <see cref="Screen"/>/<see cref="Address"/> machine coordinates, the live
@@ -545,7 +556,6 @@ public enum WorldRuleFactKind : byte {
 /// <param name="FilterRow">The optional keyed row whose nonzero cells admit reduction candidates.</param>
 /// <param name="FilterHandle">The compiled handle for <paramref name="FilterRow"/>.</param>
 /// <param name="Board">The compiled discrete query, when present.</param>
-/// <param name="Social">The compiled directed social query, when present.</param>
 /// <param name="Pattern">The pattern a <see cref="WorldRuleFactKind.Pattern"/> operand runs; the word source is <paramref name="Row"/> and, for a zone, <paramref name="FilterRow"/> is its attribute row.</param>
 /// <param name="MatchFacet">What the pattern operand answers; a board query whose <c>Direction</c> is -1 walks every direction.</param>
 /// <param name="TokenExpression">For a zone source whose pattern carries a value expression, that expression compiled with <c>$token</c> keys bound per token.</param>
@@ -569,7 +579,6 @@ public readonly record struct CompiledWorldOperand(
     string? FilterRow = null,
     WorldStateHandle FilterHandle = default,
     CompiledWorldBoardQuery? Board = null,
-    CompiledWorldSocialQuery? Social = null,
     string? Pattern = null,
     WorldMatchFacet MatchFacet = WorldMatchFacet.Accept,
     CompiledWorldExpressionToken[]? TokenExpression = null
@@ -584,6 +593,11 @@ public enum WorldMatchFacet : byte {
     DirectionMask,
     /// <summary>Over every direction of a board origin: how many rays are accepted.</summary>
     DirectionCount,
+    /// <summary>One board-origin ray: the cell one step past the longest accepted prefix — the first cell the
+    /// pattern rejects — or -1 when the whole ray (to the edge or a wrapped return) is accepted.</summary>
+    Cell,
+    /// <summary>One board-origin ray: the step distance to <see cref="Cell"/>'s cell, or -1 on the same terms.</summary>
+    Distance,
 }
 /// <summary>One operation in a compiled postfix Boolean gate.</summary>
 public enum CompiledWorldPredicateKind : byte {
@@ -802,10 +816,6 @@ public enum WorldRuleEffectKind : byte {
     TransformState,
     /// <summary>Push one evaluated value into a history row's ring.</summary>
     PushState,
-    /// <summary>Deliver evidence into bounded social memory.</summary>
-    ObserveSocial,
-    /// <summary>Forget a directed impression while retaining its duplicate-evidence ledger.</summary>
-    ForgetSocial,
 }
 /// <summary>One compiled world-rule effect. Document and state effects submit ordinary mutations under
 /// <see cref="WorldPrincipal.World"/>, so journal and undo cover them like other writes. Save, pose, cue, body, and
@@ -841,8 +851,6 @@ public enum WorldRuleEffectKind : byte {
 /// <param name="Body">The compiled body operation.</param>
 /// <param name="Paint">The compiled lattice paint.</param>
 /// <param name="Transform">The discrete state transform.</param>
-/// <param name="SocialObservation">The compiled social evidence delivery.</param>
-/// <param name="SocialRelationship">The directed impression to forget.</param>
 public readonly record struct CompiledWorldEffect(
     WorldRuleEffectKind Kind,
     string Row,
@@ -864,9 +872,7 @@ public readonly record struct CompiledWorldEffect(
     string? Payload = null,
     CompiledWorldBodyEffect? Body = null,
     CompiledWorldFieldPaint? Paint = null,
-    WorldStateTransform? Transform = null,
-    CompiledWorldSocialObservation? SocialObservation = null,
-    CompiledWorldSocialRelationship? SocialRelationship = null
+    WorldStateTransform? Transform = null
 );
 /// <summary>A literal body pose compiled to deterministic numerics — angles in radians.</summary>
 /// <param name="Position">The world position.</param>

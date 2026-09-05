@@ -343,8 +343,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             w.WriteUInt64(s.DrawCount); w.WriteUInt64(s.Reconsiderations); w.WriteInt64(s.LastScore);
             w.WriteInt32(s.Candidate); w.WriteInt32(s.CandidateGeneration);
         });
-        WriteOptionalClass(writer, section.Social, WriteSocialMemory);
-        writer.WriteInt32(section.LastSocialResult);
         WriteArray(
             writer: writer,
             items: section.InteractionGateHeld,
@@ -383,16 +381,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             value: section.MusicDirectorLastEmbellishmentTick,
             writeValue: static (w, v) => w.WriteUInt64(value: v)
-        );
-        WriteArray(
-            writer: writer,
-            items: section.JudgeGrades,
-            writeItem: static (w, row) => {
-                w.WriteInt32(value: row.EntityIndex);
-                w.WriteString(value: row.JudgeRef);
-                w.WriteNullableString(value: row.Grade);
-                w.WriteUInt64(value: row.Tick);
-            }
         );
 
         return writer.ToArray();
@@ -470,8 +458,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             r.ReadString("decision rule", MaxStringBytes), r.ReadInt32(), r.ReadInt32(), r.ReadInt32(),
             r.ReadBoolean(), r.ReadBoolean(), r.ReadUInt64(), r.ReadUInt64(), r.ReadUInt64(),
             r.ReadUInt64(), r.ReadUInt64(), r.ReadInt64(), r.ReadInt32(), r.ReadInt32()));
-        var social = ReadOptionalClass(ref reader, ReadSocialMemory);
-        var lastSocialResult = reader.ReadInt32();
         var interactionGateHeld = ReadArray(
             reader: ref reader,
             field: "server interaction gate held",
@@ -523,25 +509,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader,
             readValue: static (ref WireReader r) => r.ReadUInt64()
         );
-        var judgeGrades = ReadArray(
-            reader: ref reader,
-            field: "server judge grades",
-            readItem: static (ref WireReader r) => {
-                var entityIndex = r.ReadInt32();
-                var judgeRef = r.ReadString(
-                    field: "judge grade judgeRef",
-                    maxBytes: MaxStringBytes
-                );
-                var grade = r.ReadNullableString(
-                    field: "judge grade",
-                    maxBytes: MaxStringBytes
-                );
-                var tick = r.ReadUInt64();
-
-                return (entityIndex, judgeRef, grade, tick);
-            }
-        );
-
         if (!reader.TryFinish(failure: out var failure)) {
             section = null!;
             reason = $"server section: {failure}";
@@ -556,7 +523,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             Intents: intents,
             InteractionGateHeld: interactionGateHeld,
             Journal: journal,
-            JudgeGrades: judgeGrades,
             LastCompletedEngineTicks: lastCompletedEngineTicks,
             LastCompletedTick: lastCompletedTick,
             LastDocumentReceipt: lastDocumentReceipt,
@@ -573,8 +539,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             Pending: pending,
             RuleGateHeld: ruleGateHeld,
             Decisions: decisions,
-            Social: social,
-            LastSocialResult: lastSocialResult,
             SolidRevision: solidRevision
         );
         reason = string.Empty;

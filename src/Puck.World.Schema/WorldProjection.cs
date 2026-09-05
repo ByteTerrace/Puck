@@ -48,7 +48,7 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <see cref="WorldDefinition"/> with sections nulled out: a partial definition either refuses at
 /// <see cref="WorldDefinitionValidator"/> or misreports what it carries. This type's member list
 /// is the disclosure decision: a section that must not leave an authority below the replica tier has no member here.
-/// <para>Absent by construction: <c>rules</c>, <c>grants</c>, <c>state</c>, <c>market</c>, <c>admission</c>,
+/// <para>Absent by construction: <c>rules</c>, <c>grants</c>, <c>state</c>, <c>admission</c>,
 /// <c>generation</c>, <c>generators</c>, <c>groups</c>, <c>properties</c>, <c>addons</c>, <c>storage</c>,
 /// <c>host</c>, <c>authoring</c>, <c>identity</c>, <c>inputHold</c>, <c>targetRegisters</c>,
 /// <c>bodyMotionPrograms</c>, <c>portals</c>, and every kit's <c>producers</c>/<c>actions</c> (see

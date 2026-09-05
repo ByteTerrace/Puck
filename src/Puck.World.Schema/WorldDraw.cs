@@ -48,7 +48,7 @@ public enum WorldDrawTiming : byte {
 /// identical <see cref="WorldGenerator"/> family, so nothing is expressible one way and not the other.</para>
 /// <para>A referenced source draws on the site's own stream: two sites naming one source draw independent
 /// sequences, since the seed ladder folds the site descriptor and the position
-/// (<see cref="WorldStateRow.DrawCursor"/>) and dealt decks (<see cref="WorldStateRow.DrawDecks"/>) live on the
+/// (<see cref="WorldStateRow.DrawCursor"/>) and drawn masks (<see cref="WorldStateRow.DrawnMasks"/>) live on the
 /// site. Sharing a source shares its shape and never its position, so pointing a second site at an existing table
 /// can never perturb the first site's sequence.</para>
 /// <para>A reference refuses at validate, before any draw runs, when it names a source that does not exist, names
@@ -77,7 +77,7 @@ public sealed record WorldDraw(
 /// <c>host.backend</c>): the boot resolver draws it, writes the settled value into the ordinary literal field, and
 /// clears the facet — a settled field is indistinguishable from an authored one thereafter, so stderr narration at
 /// settlement time is the only surface that can say the value was random at all. A state site is a
-/// <see cref="WorldStateRow"/>: its facet is never cleared, its cursor and decks persist in the document, and a
+/// <see cref="WorldStateRow"/>: its facet is never cleared, its cursor and drawn masks persist in the document, and a
 /// save/reload resumes the sequence exactly where it stopped.</para>
 /// <para>A descriptor is an identity, never a position: a positional ordinal would renumber under ordinary
 /// operation (a settled facet clearing, a <c>world.row.remove state</c> retiring a row, an <c>UpsertStateRow</c>

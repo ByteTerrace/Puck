@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Client;
@@ -11,7 +10,7 @@ namespace Puck.World;
 /// <summary>
 /// The world's participant/census verb surface — SERVER-SAFE (registered in <c>AddWorldAuthoritativeCore</c>, headless
 /// or windowed alike): <c>world.players</c>, <c>world.devices</c>, <c>world.device-profiles</c>,
-/// <c>world.population</c>, <c>world.navigation</c>, <c>world.flock</c>, <c>world.decisions</c>, <c>world.social</c>, and <c>world.budget</c>. Split out of
+/// <c>world.population</c>, <c>world.navigation</c>, <c>world.flock</c>, <c>world.decisions</c>, and <c>world.budget</c>. Split out of
 /// <see cref="WorldCommandModule"/> (which stays presentation-only — graphics levers, GPU timing, the diegetic-row
 /// listings), because these verbs read pure roster/population/document state and never require a GPU, window, or audio
 /// device. <c>world.budget</c> accepts an optional render probe: windowed composition fills its render figures,
@@ -225,7 +224,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         var ruleBudget = WorldRuleWorkBudget.Measure(definition: server.Definition);
         var rules = $"rules {ruleBudget.RuleRows}/{WorldRuleCapacity.MaxRules}, interactions {ruleBudget.InteractionRows}/{WorldInteractionCapacity.MaxInteractions}, worst {ruleBudget.EvaluationSlots} evaluation(s), {ruleBudget.WorkUnitsPerTick}/{WorldRuleCapacity.MaxWorkUnitsPerTick} work unit(s) / tick (including {ruleBudget.FlockAffinityWorkUnitsPerTick} flock-affinity units); decision perception {ruleBudget.DecisionImagePointsPerTick} pose(s), {ruleBudget.DecisionGridBuildsPerTick} shared grid rebuild(s)/{ruleBudget.DecisionGridPointsPerTick} point(s) sorted per tick ceiling";
 
-        return $"[world.budget: {render} | {far} | {lattice} | {gravity} | {placements} | state {(server.Definition.State?.Count ?? 0)} row(s) | {rules} | {curves} | {navigation} | {population.DescribeFlockWork()} | {population.DescribeRigidWork()} | {server.DescribeSocialBudget()} | {server.DescribePatternBudget()}]";
+        return $"[world.budget: {render} | {far} | {lattice} | {gravity} | {placements} | state {(server.Definition.State?.Count ?? 0)} row(s) | {rules} | {curves} | {navigation} | {population.DescribeFlockWork()} | {population.DescribeRigidWork()} | {server.DescribePatternBudget()}]";
     }
     private static string DescribeSequence(WorldSequence sequence) =>
         $"{sequence.Name}(offset={sequence.Offset},step={sequence.Step:0.########})";
@@ -234,20 +233,6 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.social",
-            description: "Operator inspection of social policy, bounded work, and last evidence outcome, or one belief: world.social [<query-json>]. Requires Observe/all.",
-            handler: (context, args) => {
-                try {
-                    var query = args.Count == 0 ? null : JsonSerializer.Deserialize(
-                        WorldCommandArguments.RawAfter(context, in args, 1), WorldJsonContext.Default.WorldSocialQuery)
-                        ?? throw new JsonException("query must be an object");
-                    return new CommandResult(Output: server.DescribeSocial(context.ActingPrincipal(), query));
-                } catch (JsonException exception) { return new CommandResult(Output: $"[world.social: invalid query: {exception.Message}]"); }
-            },
-            routing: CommandRouting.Immediate
-        );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.decisions",

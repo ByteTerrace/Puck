@@ -165,18 +165,6 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             var diameter = ((2L * paint.Radius) + 1L);
             cost = SaturatingAdd(left: cost, right: SaturatingMultiply(left: diameter, right: SaturatingMultiply(left: diameter, right: diameter)));
         }
-        if (effect.SocialRelationship is { } relationship) {
-            cost = SaturatingAdd(cost, SocialRelationshipCost(relationship, definition));
-        }
-        if (effect.SocialObservation is { } social) {
-            cost = SaturatingAdd(cost, SocialRelationshipCost(social.Relationship, definition));
-            cost = SaturatingAdd(cost, SocialEntityCost(social.Origin, definition));
-            if (social.Source is { } sourceEntity) { cost = SaturatingAdd(cost, SocialEntityCost(sourceEntity, definition)); }
-            cost = SaturatingAdd(cost, ExpressionCost(social.Sequence, definition));
-            cost = SaturatingAdd(cost, ExpressionCost(social.OccurredAt, definition));
-            cost = SaturatingAdd(cost, ExpressionCost(social.Value, definition));
-            cost = SaturatingAdd(cost, ExpressionCost(social.Quality, definition));
-        }
         if (effect.Effects is { } main) {
             var mainCost = EffectsCost(effects: main, definition: definition);
             var failureCost = EffectsCost(effects: (effect.OnFailure ?? []), definition: definition);
@@ -210,30 +198,26 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 var dealt = WorldDefinitionRows.FindStateRow(definition.State, transfer.From)!;
                 cost += (long)transfer.Count * (dealt.Capacity ?? dealt.CellCeiling);
                 break;
-            case WorldStateTransform.Sort sort:
-                var sorted = WorldDefinitionRows.FindStateRow(definition.State, sort.Row)!;
-                cost += 2L * (sorted.Capacity ?? sorted.CellCeiling) * Math.Max(1, sort.By?.Count ?? 1);
+            case WorldStateTransform.SortZone sortZone:
+                var sortedZone = WorldDefinitionRows.FindStateRow(definition.State, sortZone.Row)!;
+                cost += 2L * (sortedZone.Capacity ?? sortedZone.CellCeiling) * Math.Max(1, sortZone.By.Count);
+                break;
+            case WorldStateTransform.SortKeyed sortKeyed:
+                var sortedKeyed = WorldDefinitionRows.FindStateRow(definition.State, sortKeyed.Row)!;
+                cost += 2L * (sortedKeyed.Capacity ?? sortedKeyed.CellCeiling);
                 break;
             case WorldStateTransform.Shuffle shuffle:
                 var pile = WorldDefinitionRows.FindStateRow(definition.State, shuffle.Row)!;
                 cost += 2L * (pile.Capacity ?? pile.CellCeiling);
                 break;
-            case WorldStateTransform.SetMask setMask:
-                var masked = WorldDefinitionRows.FindStateRow(definition.State, setMask.Row)!;
-                var maskedCells = WorldTopologyCompilation.Find(definition.StateRaw, masked.Board!.Topology)!.CellCount;
-                cost += (long)maskedCells * (maskedCells + 1);
+            case WorldStateTransform.WriteSet writeSet:
+                var written = WorldDefinitionRows.FindStateRow(definition.State, writeSet.Row)!;
+                var writtenCells = WorldTopologyCompilation.Find(definition.StateRaw, written.Board!.Topology)!.CellCount;
+                cost += (long)writtenCells * (writtenCells + 1);
                 break;
             case WorldStateTransform.Push push:
                 var ring = WorldDefinitionRows.FindStateRow(definition.State, push.Row)!;
                 cost += 2L * (ring.History?.Capacity ?? 1);
-                break;
-            case WorldStateTransform.MapBoard mapped:
-                var mappedTarget = WorldDefinitionRows.FindStateRow(definition.State, mapped.Target)!;
-                cost += 2L * WorldTopologyCompilation.Find(definition.StateRaw, mappedTarget.Board!.Topology)!.CellCount;
-                break;
-            case WorldStateTransform.Combine combine:
-                var combined = WorldDefinitionRows.FindStateRow(definition.State, combine.Target)!;
-                cost += 4L * WorldTopologyCompilation.Find(definition.StateRaw, combined.Board!.Topology)!.CellCount;
                 break;
             case WorldStateTransform.Observe observe:
                 var row = WorldDefinitionRows.FindStateRow(definition.State, observe.Row)!;
@@ -252,12 +236,10 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     }
 
     private static long OperandCost(CompiledWorldOperand operand, WorldDefinition definition) {
-        if (operand.Social is { } social) { return SocialRelationshipCost(social.Relationship, definition); }
         if (operand.Board is { } board) {
             var visits = board.Kind switch {
-                WorldBoardQueryKind.Line => (long)board.Topology.CellCount * board.Topology.DirectionCount * (board.Length + 2),
                 WorldBoardQueryKind.PathCost => (long)(board.MaxVisits + 1) * (board.Topology.CellCount + board.Topology.DirectionCount),
-                WorldBoardQueryKind.Canonical or WorldBoardQueryKind.CanonicalMask => (long)board.Topology.CellCount * board.Topology.ElementCount,
+                WorldBoardQueryKind.Canonical => (long)board.Topology.CellCount * board.Topology.ElementCount,
                 WorldBoardQueryKind.Attacks => (long)board.Topology.CellCount * (board.Directions?.Length ?? 1),
                 _ => board.Topology.CellCount,
             };
@@ -281,13 +263,6 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
 
         return 1L;
     }
-
-    private static long SocialRelationshipCost(CompiledWorldSocialRelationship relationship, WorldDefinition definition) =>
-        SaturatingAdd(1, SaturatingAdd(SocialEntityCost(relationship.Observer, definition), SocialEntityCost(relationship.Subject, definition)));
-
-    private static long SocialEntityCost(CompiledWorldSocialEntity entity, WorldDefinition definition) =>
-        entity.Body is { Kind: CompiledBodyRefKind.ArgMax or CompiledBodyRefKind.ArgMin, Row: { } row }
-            ? RowCapacity(definition, row) : 1;
 
     private static long SaturatingAdd(long left, long right) => ((left > (long.MaxValue - right)) ? long.MaxValue : (left + right));
     private static long SaturatingMultiply(long left, long right) => ((left == 0L) || (right == 0L))

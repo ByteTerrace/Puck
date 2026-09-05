@@ -78,7 +78,6 @@ public abstract record WorldQuery {
         Properties { BodyIndex: int bodyIndex } => GrantSubject.Body(index: bodyIndex),
         GrantAllows allows => allows.Subject,
         MusicState state => GrantSubject.Body(index: (state.Index - 1)),
-        JudgeState state => GrantSubject.Body(index: (state.Index - 1)),
         InstrumentState state => GrantSubject.Body(index: (state.Index - 1)),
         _ => GrantSubject.All,
     };
@@ -167,11 +166,6 @@ public abstract record WorldQuery {
     /// <see cref="ObservationSubject"/> checks Observe against.</summary>
     /// <param name="Index">The 1-based observing player display index.</param>
     public sealed record MusicState(int Index) : WorldQuery;
-    /// <summary>The declared judge window sets (<c>judge.state</c>) — a structural echo of every
-    /// <c>puck.judge.v1</c> row's name and windows. World-wide, not per-entity; <see cref="Index"/> names only the
-    /// observing seat, the same subject its own <see cref="ObservationSubject"/> checks Observe against.</summary>
-    /// <param name="Index">The 1-based observing player display index.</param>
-    public sealed record JudgeState(int Index) : WorldQuery;
     /// <summary>Which diegetic instrument screen (if any) the observing seat is engaged with, whether the booted
     /// machine there carries the instrument-clock capability, and its authored tempo (<c>instrument.state</c>).
     /// World-wide, not per-entity; <see cref="Index"/> names only the observing seat, the same subject its own

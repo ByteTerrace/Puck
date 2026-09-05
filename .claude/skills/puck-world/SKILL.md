@@ -45,7 +45,7 @@ away. Verify game behavior by RUNNING the game, never by a build gate
 | `src/Puck.World.Protocol` | What a world SAYS — the wire/tape vocabulary | `WorldCommand`, `WorldMutation`, `SubmissionEnvelope`, `SessionRequest`, `WorldSnapshot`, `IServerLink`/`IClientSink`/`IWorldServerHost`, `LoopbackTransport`, `WorldAuthorityEndpoint`/`WorldSessionMirror`, and the `IWorldAdjacencySource` family (`WorldAdjacencyFramePair`/`WorldAdjacencyProjection`/`IWorldAdjacencyNeighbour`) — all four namespaced `Puck.World.Server` still, moved here as files without a rename |
 | `src/Puck.Networking` | The dialect-agnostic wire substrate | `FrameCodec` (the socketless frame grammar), `WireReader`/`WireWriter`, `WireRefusal`/`WireFailure` |
 | `src/Puck.World.Server` | The authoritative sim | `WorldServer` (the tick, the journal), `WorldGrants`, `WorldHandleTable`, `WorldPopulation`/`WorldBody`, World-specific contact orchestration and policy, `WorldEngagement`, `WorldMachineHost`, `IWorldAddonHost`/`WorldAddonReceipt` (the addon seam interface), `WorldOwnedWorlds` (the owned-world identity catalog), `WorldReplayTape`, `WorldOutputHub` |
-| `src/Puck.World.Console` | The server-only console command modules, moved out of `Puck.World` | `IWorldConsoleAuthority` (resolves the addressed `WorldInstance`), `WorldGrantCommandModule`, `WorldGroupCommandModule`, `WorldLookCommandModule`, `WorldMarketCommandModule`, `WorldNetworkCommandModule`, `WorldRowCommandModule`, `WorldStateCommandModule`, `WorldUpdateCommandModule`, `WorldWaitCommandModule` + `WorldConsoleWaitGate`/`IWorldWaitGateResolver` |
+| `src/Puck.World.Console` | The server-only console command modules, moved out of `Puck.World` | `IWorldConsoleAuthority` (resolves the addressed `WorldInstance`), `WorldGrantCommandModule`, `WorldGroupCommandModule`, `WorldLookCommandModule`, `WorldNetworkCommandModule`, `WorldRowCommandModule`, `WorldStateCommandModule`, `WorldUpdateCommandModule`, `WorldWaitCommandModule` + `WorldConsoleWaitGate`/`IWorldWaitGateResolver` |
 | `src/Puck.World.Addons` | The addon guest host | `WorldAddonRuntime`, `WorldAddonMutationDecoder`, `WorldAddonWire`, `AddonMutateRefusal` |
 | `src/Puck.World.Client` | The presentation-facing client seam, physically split out of `Puck.World` | `PlayerRoster`/`WorldClient`/`SeatController`, the camera-program translation (`WorldCameraRigCompiler`, over the document-blind IR in `Puck.SdfVm.Views`), `WorldFramePresenter` (the composed-frame producer)/`WorldSceneEmitter`/`WorldViewComposer`, `WorldSessionSceneEmitter`/`WorldAdjacencySceneEmitter`/`WorldSdfDocumentEmitter`, the stamp/animation pool (`WorldStampPool`/`WorldPlacementStamper`/`WorldScreenStamper`), the SDF document intake (`Sdf/SdfDocumentDecoder`/`SdfDocumentModel`/`SdfRefusal`), `IWorldAudioFrameFeed`/`IWorldAudioCueSink` (the narrow seams the frame/scene producers hold the root's `WorldAudioDirector` through, the `IWorldAudioLever` pattern), and the binding-authoring layer (`WorldSeatBindings`/`WorldAffordances`/`CommandVocabulary`). References `Puck.World.Protocol` and `Puck.Audio`, never `Puck.World.Server`. |
 | `src/Puck.World` | The sole composition root | `Program.cs`, `WorldClientSeats` (implements the Server seam `IWorldEmbodiedSeats`), `WorldAudioDirector` (stays here — imports `Puck.World.Audio` types directly; implements Client's `IWorldAudioFrameFeed`/`IWorldAudioCueSink`/`IWorldAudioLever` for the frame/scene producers and the session-lever sink), presentation and the screen-output binder, `Audio/` (document intake, tune hosting, the render device — the mixer core and voice synth live in `src/Puck.Audio`), the command modules that stayed here (`WorldCommandArguments`, the free-text-tail reconstruction shared with `Puck.World.Console`, lives in `Puck.World.Server` since both need it), and the shipped world/scenario documents under `Assets/` |
@@ -64,19 +64,22 @@ if built, also live in that extension layer.
 `src/Puck.Audio` is a sibling engine-services project: the deterministic fixed-point mixer/voice-synth core
 (`Puck.Audio.Mixing` — `AudioMixer`/`VoiceSynth`/
 `AudioSnapshot`/`MachineAudioRate`) plus sim-state music
-(`Puck.Audio.Simulation` — `MusicClock`/`MusicDirector`/`RhythmJudge`/
+(`Puck.Audio.Simulation` — `MusicClock`/`MusicDirector`/
 `MusicSenseEdge`, stepped from `WorldServer.Step` right after
 `WorldEventFeed.Collect()`), referenced by `Puck.World.Server` (machine audio
-rate; `WorldAssetRowLoader` resolves each `WorldMusicRow`/`WorldJudgeRow`/
+rate; `WorldAssetRowLoader` resolves each `WorldMusicRow`/
 `WorldTune`/`WorldPatch` reference's document off disk (`puck.music.v1`,
-`puck.judge.v1`, `puck.audio.v1`, `puck.synth.v1` — the same name/source/hash
+`puck.audio.v1`, `puck.synth.v1` — the same name/source/hash
 shape every world audio asset row carries), and
-`MusicDirectorFactory` compiles the loaded documents into the sim-side shapes
+`MusicDirectorFactory` compiles the loaded document into the sim-side shapes
 and projects `WorldEventFeed.Edges` into `MusicSenseEdge`) and `Puck.World`
-(presentation glue). It parses no document. `music.state`/`judge.state` are
-`WorldAudioCommandModule` query verbs routed through seat 1's currently
+(presentation glue). It parses no document. `music.state` is a
+`WorldAudioCommandModule` query verb routed through seat 1's currently
 claimed `WorldSeatAuthorityRouter` route — a transferred seat is followed the
-same way `PlayerCommandModule`'s drive-a-player verbs are.
+same way `PlayerCommandModule`'s drive-a-player verbs are. A rhythm hit
+window is an authored `compareState` range over the world-rule operand
+`$clock:<music>:phaseError` (the signed tick distance from `MusicClock`'s
+current position to the nearest beat), never a dedicated effect or section.
 
 Dependency rules are enforced by the architecture gate (`PUCKARCH`
 diagnostics from `build/Architecture.props`): `Puck.World.Schema` references
@@ -297,8 +300,7 @@ buffers through the ordered domain, drains FIFO at the tick boundary,
 composes a candidate → revalidates the WHOLE document → capacity-checks →
 swaps atomically and rebuilds the changed derived state → journals →
 delivers to clients. `world.undo` replays journal-minus-tail
-through the same gates, all-or-nothing, but refuses before crossing a market
-listing, bid, buyout, cancellation, or settlement finality barrier. Rendering derives from the
+through the same gates, all-or-nothing. Rendering derives from the
 delivered definition on revision moves — a mutation's visual effect is a
 side effect, never a draw call. The exact `WorldServer.Step` order, the
 apply pipeline, the 64-kind catalog with declared ordinals, and the

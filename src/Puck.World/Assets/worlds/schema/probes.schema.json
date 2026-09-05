@@ -4,7 +4,7 @@
     "null"
   ],
   "items": {
-    "description": "One probes row: a registered probe kind reading a declared SOCKET set at a bounded rate, and the bindings that route its channels. A socket is a named input slot the kind\u0027s manifest declares (e.g. color, strobe); a row plugs one WorldFrameSource into each socket name it binds. Exactly one of Inputs/Track is present \u2014 the live-hardware leg (named sockets) or the recorded-track leg (one puck.probe-track.v1 document standing in for every socket at once), never both, never neither. A world declares no probes rows when it wants no camera-derived reading at all. Boot-authored only: no WorldSection dispatch axis carries a live mutation kind for it yet (see Probes), the same standing judges carries.",
+    "description": "One probes row: a registered probe kind reading a declared SOCKET set at a bounded rate, and the bindings that route its channels. A socket is a named input slot the kind\u0027s manifest declares (e.g. color, strobe); a row plugs one WorldFrameSource into each socket name it binds. Exactly one of Inputs/Track is present \u2014 the live-hardware leg (named sockets) or the recorded-track leg (one puck.probe-track.v1 document standing in for every socket at once), never both, never neither. A world declares no probes rows when it wants no camera-derived reading at all. Boot-authored only: no WorldSection dispatch axis carries a live mutation kind for it yet (see Probes), the same standing music carries.",
     "type": [
       "object",
       "null"

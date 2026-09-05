@@ -41,74 +41,48 @@ public static partial class WorldRuleCompiler {
             case WorldStateTransform.SetRay ray:
                 var row = Row(ray.Row);
                 if (row.Board is not { } board || WorldTopologyCompilation.Find(definition.StateRaw, board.Topology) is not { } topology ||
-                    !topology.TryCell(ray.From, out _) || topology.Direction(ray.Direction) < 0 || ray.Through == ray.Until ||
+                    !topology.TryCell(ray.From, out _) || topology.Direction(ray.Direction) < 0 ||
+                    definition.Patterns.FirstOrDefault(candidate => candidate.Name.Value == ray.Pattern) is not { } pattern || pattern.Kind != CellKind.Int ||
                     row.ClampToEnvelope(ray.Value) != ray.Value || (row.Kind == CellKind.Bool && ray.Value is not (0 or 1))) {
-                    throw Invalid("setRay requires valid board addressing, distinct through/until values, and an admitted replacement");
+                    throw Invalid("setRay requires valid board addressing, a declared integer-kind pattern, and an admitted replacement");
                 }
                 break;
-            case WorldStateTransform.CompletePhase complete:
-                if (Row(complete.Row).Phase is not { } phase || complete.ExpectedSequence < 0 ||
-                    (complete.Participant is not null && !(phase.Participants ?? []).Contains(complete.Participant, StringComparer.Ordinal)) ||
-                    (complete.Next is not null && !(phase.Phases ?? []).Any(candidate => candidate.Name == complete.Next))) {
-                    throw Invalid("completePhase requires a phase row, valid sequence, declared participant, and a declared next phase");
+            case WorldStateTransform.SortZone sortZone:
+                if (Row(sortZone.Row) is not { Zone: { Ordered: true } zone } ||
+                    sortZone.By is not { Count: >= 1 and <= WorldStateCapacity.MaxSortKeys } ||
+                    sortZone.By.Any(key => key is null || Row(key.Row) is not { IsKeyed: true, Kind: CellKind.Int or CellKind.Fixed } || Row(key.Row).KeysFrom != zone.Tokens) ||
+                    sortZone.By.Select(key => key!.Row).Distinct(StringComparer.Ordinal).Count() != sortZone.By.Count) {
+                    throw Invalid($"sortZone requires an ordered zone with 1..{WorldStateCapacity.MaxSortKeys} distinct numeric attribute keys over the zone's token domain, each carrying its own direction");
                 }
                 break;
-            case WorldStateTransform.Sort sort:
-                if (Row(sort.Row) is not { } sortedRow ||
-                    (sortedRow.Zone is not null
-                        ? (!sortedRow.Zone.Ordered || sort.Descending || sort.By is not { Count: >= 1 and <= WorldStateCapacity.MaxSortKeys } ||
-                            sort.By.Any(key => key is null || Row(key.Row) is not { IsKeyed: true, Kind: CellKind.Int or CellKind.Fixed } || Row(key.Row).KeysFrom != sortedRow.Zone.Tokens) ||
-                            sort.By.Select(key => key!.Row).Distinct(StringComparer.Ordinal).Count() != sort.By.Count)
-                        : (!sortedRow.IsKeyed || sort.By is not null || sortedRow.Kind is not (CellKind.Int or CellKind.Fixed)))) {
-                    throw Invalid($"sort requires an ordered zone with 1..{WorldStateCapacity.MaxSortKeys} distinct numeric attribute keys over the zone's token domain (direction per key), or a keyed numeric row alone");
+            case WorldStateTransform.SortKeyed sortKeyed:
+                if (Row(sortKeyed.Row) is not { IsKeyed: true, Kind: CellKind.Int or CellKind.Fixed }) {
+                    throw Invalid("sortKeyed requires a keyed numeric row");
                 }
                 break;
             case WorldStateTransform.Shuffle shuffle:
-                if (Row(shuffle.Row).Zone is not { Ordered: true } || Row(shuffle.Draw).Draw is not { Timing: not WorldDrawTiming.Boot } shuffleDraw ||
+                if (Row(shuffle.Row) is not { } shuffled || !(shuffled.Zone is { Ordered: true } || (shuffled.Zone is null && shuffled.IsKeyed)) ||
+                    Row(shuffle.Draw).Draw is not { Timing: not WorldDrawTiming.Boot } shuffleDraw ||
                     Row(shuffle.Draw).Kind != CellKind.Int ||
                     !WorldGeneratorEngine.TryResolveSource(generators: definition.Generators, draw: shuffleDraw, generator: out var shuffleSource, reason: out _) ||
                     shuffleSource.Source != WorldGeneratorSource.StreamDraw) {
-                    throw Invalid("shuffle requires an ordered zone and a redrawable integer streamDraw site");
+                    throw Invalid("shuffle requires an ordered zone or a keyed row, and a redrawable integer streamDraw site");
                 }
                 break;
-            case WorldStateTransform.TurnOrder order:
-                if (Row(order.Row).Phase is not { } ordered || order.Direction is not (null or 1 or -1) ||
-                    (order.Skip ?? []).Concat(order.Unskip ?? []).Concat(order.Active is null ? [] : [order.Active])
-                        .Any(token => !(ordered.Participants ?? []).Contains(token, StringComparer.Ordinal))) {
-                    throw Invalid("turnOrder requires a phase row, a direction of 1 or -1, and declared participants");
-                }
-                break;
-            case WorldStateTransform.SetMask setMask:
-                var masked = Row(setMask.Row);
-                var maskSource = Row(setMask.Mask);
-                if (masked.Board is not { } maskedBoard || WorldTopologyCompilation.Find(definition.StateRaw, maskedBoard.Topology) is not { } maskedTopology ||
-                    maskedTopology.CellCount > WorldBoardMask.MaxCells || maskSource.Kind != CellKind.Int ||
-                    (setMask.MaskKey is null ? !maskSource.IsSlot : (!maskSource.IsKeyed || !WorldCellName.TryParse(setMask.MaskKey, out _, out _))) ||
-                    masked.ClampToEnvelope(setMask.Value) != setMask.Value || (masked.Kind == CellKind.Bool && setMask.Value is not (0 or 1))) {
-                    throw Invalid($"setMask requires a board of at most {WorldBoardMask.MaxCells} cells, an integer mask cell, and an admitted value");
-                }
-                break;
-            case WorldStateTransform.MapBoard mapped:
-                var mappedTarget = Row(mapped.Target);
-                var mappedSource = Row(mapped.Source);
-                if (mappedTarget.Board is not { } mappedBoard || WorldTopologyCompilation.Find(definition.StateRaw, mappedBoard.Topology) is not { } mappedTopology ||
-                    mappedSource.Board?.Topology != mappedBoard.Topology || mappedSource.Kind != mappedTarget.Kind || mappedTopology.Element(mapped.Element ?? string.Empty) < 0) {
-                    throw Invalid("mapBoard requires source and target boards of one kind over one topology and a symmetry element of that topology");
+            case WorldStateTransform.WriteSet writeSet:
+                var written = Row(writeSet.Row);
+                var setSource = Row(writeSet.Set);
+                if (written.Board is not { } writtenBoard || WorldTopologyCompilation.Find(definition.StateRaw, writtenBoard.Topology) is not { } writtenTopology ||
+                    writtenTopology.CellCount > WorldBoardMask.MaxCells || setSource.Kind != CellKind.Int ||
+                    (writeSet.SetKey is null ? !setSource.IsSlot : (!setSource.IsKeyed || !WorldCellName.TryParse(writeSet.SetKey, out _, out _))) ||
+                    written.ClampToEnvelope(writeSet.Value) != writeSet.Value || (written.Kind == CellKind.Bool && writeSet.Value is not (0 or 1))) {
+                    throw Invalid($"writeSet requires a board of at most {WorldBoardMask.MaxCells} cells, an integer set cell, and an admitted value");
                 }
                 break;
             case WorldStateTransform.Push push:
                 var ring = Row(push.Row);
                 if (ring.History is null || ring.ClampToEnvelope(push.Value) != push.Value) {
                     throw Invalid("push requires a history row and an admitted value");
-                }
-                break;
-            case WorldStateTransform.Combine combine:
-                var combined = Row(combine.Target);
-                var leftBoard = Row(combine.Left);
-                if (combined.Board is not { } combinedBoard || combined.Kind is not (CellKind.Int or CellKind.Bool) || leftBoard.Board?.Topology != combinedBoard.Topology ||
-                    !Enum.IsDefined(combine.Operation) ||
-                    (combine.Operation == WorldBoardCombine.Not ? combine.Right is not null : (combine.Right is null || Row(combine.Right).Board?.Topology != combinedBoard.Topology))) {
-                    throw Invalid("combine requires boards over one topology, an integer or boolean target, and a right board for every operation but not");
                 }
                 break;
             default:

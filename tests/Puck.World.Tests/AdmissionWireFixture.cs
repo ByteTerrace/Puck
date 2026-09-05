@@ -21,8 +21,7 @@ internal readonly record struct AdmittedPeer(PeerTestClient Client, int PeerInde
 /// The raw-TCP admission harness every wire-door suite drives: generate an identity, author the one-peer admission
 /// document, pump the host's tick-thread queue, complete the Hello/challenge/HelloIdentity/HelloAccepted exchange
 /// against a genuine <see cref="PeerTestClient"/>, and submit a <see cref="WorldQuery"/> over the socket. One home, the
-/// same pattern <see cref="Fixtures"/> and <see cref="MarketFixtures"/> already follow, so no suite re-implements
-/// the door.
+/// same pattern <see cref="Fixtures"/> already follows, so no suite re-implements the door.
 /// </summary>
 internal static class AdmissionWireFixture {
     /// <summary>The 0-based body index every admission law admits its remote peer onto — the ONE peer slot

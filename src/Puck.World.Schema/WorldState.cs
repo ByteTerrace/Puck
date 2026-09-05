@@ -38,13 +38,11 @@ public enum CellKind : byte {
 /// <param name="Identity">Per-body counters and timers synchronized through the durable identity-document seam.</param>
 /// <param name="Lattices">The lattice topologies the section's lattice-shaped rows lie over (see
 /// <see cref="WorldStateLatticeTopology"/>).</param>
-/// <param name="Social">Optional bounded social-memory policy; learned runtime impressions are checkpoint state, not public cell rows.</param>
 public sealed record WorldStateSection(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldStateRow>? World = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ActionStateSlot>? Body = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ActionStateSlot>? Identity = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldStateLatticeTopology>? Lattices = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSocialPolicy? Social = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldStateLatticeTopology>? Lattices = null
 );
 /// <summary>
 /// One cell of the <c>state</c> section's substrate — a typed value addressed by a stable string <see cref="Key"/>
@@ -154,11 +152,11 @@ public sealed record WorldStateCell(WorldCellName Key, long Value = 0, string? T
 /// Stored in the document, so <c>world.undo</c>, <c>world.save</c>, and replay rewind a site's draw position with
 /// the same whole-document restore that rewinds an ordinary counter. Zero when <see cref="Draw"/> is
 /// <see langword="null"/>; refused negative.</param>
-/// <param name="DrawDecks">This site's dealt masks — engine-minted bookkeeping a source under a deck
+/// <param name="DrawnMasks">This site's drawn masks — engine-minted bookkeeping a source under an exhausting
 /// <see cref="WorldGeneratorMode"/> carries: one mask per context, by declaration ordinal, for a Markov source; exactly
-/// one for a weighted numeric source. Bit <c>i</c> is set when entry <c>i</c> has been dealt. Lives at the site rather
-/// than on the source row, which lets two sites reference one declared source and deal independently. Null or empty
-/// for a site whose source never deals.</param>
+/// one for a weighted numeric source. Bit <c>i</c> is set when entry <c>i</c> has been drawn. Lives at the site rather
+/// than on the source row, which lets two sites reference one declared source and draw independently. Null or empty
+/// for a site whose source never exhausts.</param>
 /// <param name="Dynamics">The row's own (slot-cell) second-order easing trait, or <see langword="null"/> for an
 /// ordinary row whose slot value only changes through an explicit write. See <see cref="WorldStateDynamics"/>.
 /// Legitimate only for <see cref="CellKind.Int"/>/<see cref="CellKind.Fixed"/>, only on a scalar (slot-eligible)
@@ -198,7 +196,7 @@ public sealed record WorldStateRow(
     WorldStateAdvance? Advance = null,
     WorldDraw? Draw = null,
     long DrawCursor = 0,
-    IReadOnlyList<ClosedBitset256>? DrawDecks = null,
+    IReadOnlyList<ClosedBitset256>? DrawnMasks = null,
     WorldStateDynamics? Dynamics = null,
     WorldStateLatticeTrait? Lattice = null,
     WorldStateCycle? Cycle = null,
@@ -249,7 +247,7 @@ public sealed record WorldStateRow(
     /// as a <c>cells</c> array, and which read-backs (HUD <c>state.&lt;name&gt;</c> binding, <c>world.state</c>'s
     /// value column) resolve a live value for — a keyed row has no single value to show. A draw site is an ordinary
     /// slot: its one cell holds the drawn value, and its own bookkeeping (<see cref="DrawCursor"/>/
-    /// <see cref="DrawDecks"/>) lives in row fields rather than in cells.</summary>
+    /// <see cref="DrawnMasks"/>) lives in row fields rather than in cells.</summary>
     public bool IsSlot => ((Board is null && Tokens is null && Zone is null && KeysFrom is null && Phase is null && History is null) && (Capacity is null) && (Cells is { Count: 1 } cells) && (cells[0].Key == SlotKey));
 
     /// <summary>Clamps <paramref name="value"/> into this row's declared numeric envelope: the
@@ -753,20 +751,20 @@ public sealed record WorldStateCycle(
     }
 }
 /// <summary>How a <see cref="WorldGenerator"/>'s entries — a Markov context's alternatives, or a weighted numeric
-/// source's outcomes — are consumed: the deck vocabulary. Authored, never inferred: exhaustion behaviour is a
-/// declaration, not a fallback the engine picks.</summary>
+/// source's outcomes — are consumed: the multiset-sampling vocabulary. Authored, never inferred: exhaustion behaviour
+/// is a declaration, not a fallback the engine picks.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldGeneratorMode>))]
 public enum WorldGeneratorMode : byte {
     /// <summary>Every sample leaves the entry set unchanged — the ordinary weighted draw.</summary>
     WithReplacement,
 
-    /// <summary>Each entry may be dealt at most once per pass; a set whose entries are all dealt refuses the whole
-    /// emission by name (never a silent stall, never a re-deal).</summary>
+    /// <summary>Each entry may be drawn at most once per pass; a set whose entries are all drawn refuses the whole
+    /// emission by name (never a silent stall, never a re-draw).</summary>
     WithoutReplacement,
 
-    /// <summary>Each entry may be dealt at most once per pass; a set whose entries are all dealt clears its deck and
-    /// deals again from the full set, deterministically, in the same emission — the shuffle bag.</summary>
-    ReshuffleOnExhaustion,
+    /// <summary>Each entry may be drawn at most once per pass; a set whose entries are all drawn clears its mask and
+    /// draws again from the full set, deterministically, in the same emission — the shuffle bag.</summary>
+    RestartOnExhaustion,
 }
 /// <summary>One weighted alternative of a <see cref="WorldGeneratorContext"/>: the token it emits, its relative
 /// weight, and the context the walk moves into after it is picked. The authored <see cref="Next"/> is what makes this
@@ -780,11 +778,12 @@ public enum WorldGeneratorMode : byte {
 /// <param name="Next">The context the walk moves into after this alternative is picked. Must name a declared
 /// <see cref="WorldGeneratorContext.Key"/>; naming a context that declares NO alternatives ends the emission (a
 /// terminal is a context with nothing to say, never a reserved token spelling).</param>
-/// <param name="Count">How many cards of this alternative one deck pass holds, at least one; <see langword="null"/>
-/// is one. Under <see cref="WorldGeneratorMode.WithReplacement"/> a count only scales the weight; under a deck mode
-/// each card is dealt once per pass. A context's cards total at most <see cref="WorldGeneratorCapacity.MaxCardsPerSet"/>.</param>
+/// <param name="Multiplicity">How many units of this alternative one pass holds, at least one; <see langword="null"/>
+/// is one. Under <see cref="WorldGeneratorMode.WithReplacement"/> a multiplicity only scales the weight; under an
+/// exhausting mode each unit is drawn once per pass. A context's units total at most
+/// <see cref="WorldGeneratorCapacity.MaxEntriesPerSet"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldGeneratorAlternative(string Token, ulong Weight, WorldCellName Next, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Count = null);
+public sealed record WorldGeneratorAlternative(string Token, ulong Weight, WorldCellName Next, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Multiplicity = null);
 /// <summary>One named context of a <see cref="WorldGenerator"/> — the state the walk may be sitting in and the
 /// weighted alternatives it may pick while there. A context declaring NO alternatives is TERMINAL: reaching it ends
 /// the emission.</summary>
@@ -793,9 +792,9 @@ public sealed record WorldGeneratorAlternative(string Token, ulong Weight, World
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldGeneratorContext(WorldCellName Key, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldGeneratorAlternative>? Alternatives = null);
 /// <summary>The closed vocabulary of a <see cref="WorldGenerator"/>'s draw shape — which of its fields are read, and
-/// what one emission produces: a Markov text walk, a deck deal, a uniform range, a weighted numeric table, and a raw
-/// stream draw are sources of one family, never parallel primitives with their own seeding, cursoring, and refusal
-/// stories.</summary>
+/// what one emission produces: a Markov text walk, a multiset draw, a uniform range, a weighted numeric table, and a
+/// raw stream draw are sources of one family, never parallel primitives with their own seeding, cursoring, and
+/// refusal stories.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldGeneratorSource>))]
 public enum WorldGeneratorSource : byte {
     /// <summary>The weighted-transition walk over <see cref="WorldGenerator.Contexts"/> — reads
@@ -815,8 +814,8 @@ public enum WorldGeneratorSource : byte {
 
     /// <summary>One alias-table draw over <see cref="WorldGenerator.Weighted"/>'s numeric outcomes — reads that field
     /// and <see cref="WorldGenerator.Mode"/>, writes an int or fixed value. Exactly two advances per draw, the same
-    /// fixed alias-table cost the Markov walk pays per token; under a deck mode the outcomes are dealt through the
-    /// site's one <see cref="WorldStateRow.DrawDecks"/> mask, which is the numeric shuffle bag.</summary>
+    /// fixed alias-table cost the Markov walk pays per token; under an exhausting mode the outcomes are drawn through
+    /// the site's one <see cref="WorldStateRow.DrawnMasks"/> mask, which is the numeric shuffle bag.</summary>
     WeightedNumeric,
 
     /// <summary>One raw, unshaped 32-bit draw off the site's own stream — no range, no weights — widened into the
@@ -828,8 +827,8 @@ public enum WorldGeneratorSource : byte {
     /// or the nodes <see cref="WorldGenerator.Node"/> visits under <see cref="WorldGenerator.Word"/> (the lattice's
     /// own cycle when none is authored, so the node's ring) — reads those fields and <see cref="WorldGenerator.Mode"/>,
     /// writes the node index in the site's displayed unit (a fixed site stores <c>node.0</c>, the phase a cycle trait
-    /// reads). The cards are the orbit's nodes in walk order, equally weighted, dealt under
-    /// a deck mode through the site's one <see cref="WorldStateRow.DrawDecks"/> mask exactly as a weighted numeric
+    /// reads). The units are the orbit's nodes in walk order, equally weighted, drawn under
+    /// an exhausting mode through the site's one <see cref="WorldStateRow.DrawnMasks"/> mask exactly as a weighted numeric
     /// source is; exactly two advances per draw.</summary>
     SymmetryOrbit,
 }
@@ -841,21 +840,22 @@ public enum WorldGeneratorSource : byte {
 /// <see cref="CellKind.Int"/>, raw <c>FixedQ4816</c> bits for <see cref="CellKind.Fixed"/>).</param>
 /// <param name="Weight">The outcome's relative weight, fed straight to <c>Puck.Maths.WeightedSampler</c>'s exact
 /// <c>ulong</c> overload. At least one outcome must carry a non-zero weight.</param>
-/// <param name="Count">How many cards of this outcome one deck pass holds, at least one; <see langword="null"/> is
-/// one. Under <see cref="WorldGeneratorMode.WithReplacement"/> a count only scales the weight; under a deck mode each
-/// card is dealt once per pass, so an outcome that should come out twice per pass declares <c>2</c> rather than being
-/// authored twice. A source's cards total at most <see cref="WorldGeneratorCapacity.MaxCardsPerSet"/>.</param>
+/// <param name="Multiplicity">How many units of this outcome one pass holds, at least one; <see langword="null"/> is
+/// one. Under <see cref="WorldGeneratorMode.WithReplacement"/> a multiplicity only scales the weight; under an
+/// exhausting mode each unit is drawn once per pass, so an outcome that should come out twice per pass declares
+/// <c>2</c> rather than being authored twice. A source's units total at most
+/// <see cref="WorldGeneratorCapacity.MaxEntriesPerSet"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldGeneratorWeightedNumeric(long Value, ulong Weight, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Count = null);
+public sealed record WorldGeneratorWeightedNumeric(long Value, ulong Weight, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Multiplicity = null);
 /// <summary>
 /// An authored stochastic source — the vocabulary for every randomness declaration in the document: a name
-/// generator, a dialogue line, a loot roll, a flat weighted draw, a card deal, a random census, and a drawn host
-/// backend all reduce to a source of this family, sampled at an authored moment into an authored site (see
+/// generator, a dialogue line, a loot roll, a flat weighted draw, a multiset sample, a random census, and a drawn
+/// host backend all reduce to a source of this family, sampled at an authored moment into an authored site (see
 /// <see cref="WorldDraw"/>).
 /// </summary>
 /// <remarks>
-/// <para>A source is a pure declaration; it holds no position. The cursor and the dealt decks live on the site that
-/// draws (<see cref="WorldStateRow.DrawCursor"/>/<see cref="WorldStateRow.DrawDecks"/>), which is what lets two
+/// <para>A source is a pure declaration; it holds no position. The cursor and the drawn masks live on the site that
+/// draws (<see cref="WorldStateRow.DrawCursor"/>/<see cref="WorldStateRow.DrawnMasks"/>), which is what lets two
 /// sites reference one declared source and draw independent sequences from it. A source may be declared once in the
 /// document's <c>generators</c> section (see <see cref="WorldGeneratorRow"/>) and referenced by name, or inlined at
 /// a single site as sugar — the two spellings compile to the identical record.</para>
@@ -869,9 +869,9 @@ public sealed record WorldGeneratorWeightedNumeric(long Value, ulong Weight, [pr
 /// own: declaring <see cref="Contexts"/> beside <see cref="RangeMin"/> is refused by name rather than silently
 /// ignored.</para>
 /// <para><see cref="Mode"/> belongs to the alias-table shapes — per context for Markov, over the outcome set for
-/// weighted numeric, over the orbit for a symmetry orbit — and persists across emissions in the drawing site's own <see cref="WorldStateRow.DrawDecks"/>
+/// weighted numeric, over the orbit for a symmetry orbit — and persists across emissions in the drawing site's own <see cref="WorldStateRow.DrawnMasks"/>
 /// masks. <see cref="WorldGeneratorSource.UniformRange"/> and <see cref="WorldGeneratorSource.StreamDraw"/> have no
-/// entry set and never deal.</para>
+/// entry set and never exhaust.</para>
 /// </remarks>
 /// <param name="Source">Which draw shape this source fires.</param>
 /// <param name="Start">Markov only: the context every emission begins from. Must name a declared context.</param>
@@ -888,12 +888,12 @@ public sealed record WorldGeneratorWeightedNumeric(long Value, ulong Weight, [pr
 /// <param name="RangeMax"><see cref="WorldGeneratorSource.UniformRange"/> only: the inclusive upper bound, same
 /// encoding as <see cref="RangeMin"/>.</param>
 /// <param name="Weighted"><see cref="WorldGeneratorSource.WeightedNumeric"/> only: the weighted numeric outcomes, at
-/// least one, at least one carrying a non-zero weight; under a deck <see cref="Mode"/> each outcome contributes
-/// <see cref="WorldGeneratorWeightedNumeric.Count"/> cards to the pass.</param>
+/// least one, at least one carrying a non-zero weight; under an exhausting <see cref="Mode"/> each outcome contributes
+/// <see cref="WorldGeneratorWeightedNumeric.Multiplicity"/> units to the pass.</param>
 /// <param name="Ring"><see cref="WorldGeneratorSource.SymmetryOrbit"/> only: the ring, 0..7, whose thirty nodes are
-/// the cards — exactly one of <see cref="Ring"/> and <see cref="Node"/>.</param>
+/// the units — exactly one of <see cref="Ring"/> and <see cref="Node"/>.</param>
 /// <param name="Node"><see cref="WorldGeneratorSource.SymmetryOrbit"/> only: the node, 0..239, whose orbit under
-/// <see cref="Word"/> is the cards.</param>
+/// <see cref="Word"/> is the units.</param>
 /// <param name="Word"><see cref="WorldGeneratorSource.SymmetryOrbit"/> beside <see cref="Node"/> only: the word of
 /// reflections (one to eight mirror nodes, applied first to last) the orbit is taken under, or <see langword="null"/>
 /// for the lattice's own cycle — the same generator vocabulary a <see cref="WorldStateCycle"/> authors.</param>
@@ -929,11 +929,11 @@ public sealed record WorldGenerator(
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldGeneratorRow(WorldCellName Name, WorldGenerator Generator);
 /// <summary>The <see cref="WorldGenerator"/> caps enforced by <see cref="WorldDefinitionValidator"/>.</summary>
-/// <remarks>The context cap and the alternative cap are load-bearing together, not decorative: a deck mode records
-/// one <see cref="WorldStateRow.DrawDecks"/> mask per context, and each such mask is a 256-bit dealt set (so a
-/// context can hold no more alternatives than the membership set has bits).</remarks>
+/// <remarks>The context cap and the alternative cap are load-bearing together, not decorative: an exhausting mode
+/// records one <see cref="WorldStateRow.DrawnMasks"/> mask per context, and each such mask is a 256-bit drawn set (so
+/// a context can hold no more alternatives than the membership set has bits).</remarks>
 public static class WorldGeneratorCapacity {
-    /// <summary>A context's alternative-count ceiling — one bit per alternative in its deck mask.</summary>
+    /// <summary>A context's alternative-count ceiling — one bit per alternative in its drawn mask.</summary>
     public const int MaxAlternativesPerContext = 256;
     /// <summary>A source's context-count ceiling.</summary>
     public const int MaxContexts = 32;
@@ -951,9 +951,9 @@ public static class WorldGeneratorCapacity {
     /// <summary>A <see cref="WorldGeneratorSource.WeightedNumeric"/> source's outcome-count ceiling — matches
     /// <see cref="MaxAlternativesPerContext"/> since both build an alias table over an authored entry list.</summary>
     public const int MaxWeightedOutcomes = 256;
-    /// <summary>The most cards one dealt set may hold — a context's alternatives or a weighted source's outcomes,
-    /// each counted <c>Count</c> times — since a deck mask is one 256-bit set with one bit per card.</summary>
-    public const int MaxCardsPerSet = 256;
+    /// <summary>The most units one drawn set may hold — a context's alternatives or a weighted source's outcomes,
+    /// each counted <c>Multiplicity</c> times — since a drawn mask is one 256-bit set with one bit per unit.</summary>
+    public const int MaxEntriesPerSet = 256;
     /// <summary>The least value a <see cref="WorldGeneratorSource.UniformRange"/> bound may hold — see
     /// <see cref="MaxRangeBound"/>.</summary>
     public const long MinRangeBound = int.MinValue;

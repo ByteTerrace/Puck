@@ -55,8 +55,7 @@
             "AddState",
             "StartTimer",
             "Designate",
-            "Generate",
-            "Judge"
+            "Generate"
           ]
         }
       },

@@ -105,15 +105,6 @@ journal → echo. Precisely:
 A mutation's visual effect is a side effect of the delivered definition —
 rendering derives from it on revision moves, never from a draw call.
 
-`CanInstallSocial` runs before install-side writes on mutation, rebuild, and
-the final undo candidate. A changed or removed social policy refuses while
-source ownership holds or destination import reservations remain unresolved;
-equal policy content and unrelated edits remain admissible. Do not move this
-check into `ReconcileSocial`, after the definition or solids have already been
-swapped. Full authority restore instead reinstates validated checkpoint state.
-The [Server memory contract](../../../../src/Puck.World.Server/README.md#social-memory-component)
-owns the hold and release semantics.
-
 **Timing classes.** Most kinds apply LIVE on delivery. `IsDocumentDefaults`
 (`SetRenderDefaults`, `SetPopulationDefaults`, `SetHostDefaults`) edit what
 the NEXT boot wakes on while live session levers keep their values
@@ -156,10 +147,7 @@ table — a row added there grants nothing until relaunch.
   solid buildability — everything but the per-entry authority check, which the
   every-section hold already re-proves). ALL-OR-NOTHING: any entry failing any
   gate refuses the whole undo, names the failing entry's index and reason on
-  stderr, and installs NOTHING. Market listings, bids, buyouts, cancellations,
-  and settlements are economic finality barriers: the undo refuses before
-  dropping one, while `PruneMarketListings` remains undoable because it only
-  archives terminal rows and moves no value. There is no per-mutation inverse. Proven
+  stderr, and installs NOTHING. There is no per-mutation inverse. Proven
   in-process by `tests/Puck.World.Tests/MutationAllOrNothingLawTests.cs`
   against the shared apply gate; the replay loop's own early-return on a
   genuine mid-replay failure is unproven (see that law's own remarks).
@@ -221,13 +209,15 @@ nested records, which are the authority:
 | Interactions | UpsertInteraction 54, RemoveInteraction 55 |
 | Groups | UpsertGroupKind 56, RemoveGroupKind 57, FormGroup 58, JoinGroup 59, LeaveGroup 60, KickMember 61, OfferOwnership 62, SettleOwnership 63 |
 | PlayerDefaults | SetPlayerDefaults 64 |
-| Market | CreateMarketListing 65, PlaceMarketBid 66, BuyoutMarketListing 67, CancelMarketListing 68, SettleMarketListing 69, PruneMarketListings 70 |
 | Dynamics | UpsertDynamics 71, RemoveDynamics 72 |
 | Curves | UpsertCurve 73, RemoveCurve 74 |
 
 Ordinals 37/38 (the retired screen-link pair) are unassigned and never reused:
 machine cable linking is authored on the `Machine` source itself
-(`WorldMachineCable`), so cable edits ride `UpsertScreen`.
+(`WorldMachineCable`), so cable edits ride `UpsertScreen`. Ordinals 65-70 (the
+retired market kinds) are unassigned and never reused: the local auction house
+dissolved into an escrowed conditional transfer over ordinary keyed rows,
+authored as rules — see [documents.md](documents.md)'s `state` section.
 
 Rules the catalog encodes:
 
@@ -267,7 +257,7 @@ Rules the catalog encodes:
 
 - **A draw site's own bookkeeping.** `Generate` names ONE row — the SITE — and
   writes its drawn slot cell together with the site's own `drawCursor` (plus
-  `drawDecks` under a deck mode) in one candidate. The row is the authority
+  `drawnMasks` under an exhausting mode) in one candidate. The row is the authority
   subject; the cursor advance is engine bookkeeping intrinsic to drawing, while
   re-authoring the site's facet, or the `generators` row it references, is an
   `UpsertStateRow` against that row, gated there. Sampling itself lives in
@@ -276,8 +266,8 @@ Rules the catalog encodes:
 
 ## Adding a mutation kind, end to end
 
-**FIRST — the catalog declares 73 kinds on a 128-bit lane (0–74 with 37/38
-retired).** Ordinals 75–127 are free; a colliding ordinal is still a boot failure, not an
+**FIRST — the catalog declares 68 kinds on a 128-bit lane (0–75 with 37/38 and
+65-70 retired).** Ordinals 76–127 are free; a colliding ordinal is still a boot failure, not an
 option. A genuinely new kind is
 a SUBSTRATE decision, not a lane's, and must SURVIVE CONSOLIDATION REVIEW first:
 is this an existing kind's payload? Most proposals are — a new section reuses

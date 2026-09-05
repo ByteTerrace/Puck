@@ -4,161 +4,93 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Pins the phase machine's authorable order: direction, skipped participants, the active hand-off, and the
-/// world program's transition branch.</summary>
+/// <summary>Pins the phase row down to a guarded submission stamp: a guard whose sequence matches admits the
+/// mutation, a matching guard's success advances the row's own generation by one, and a stale guard is refused
+/// without composing anything.</summary>
 public sealed class WorldPhaseOrderLawTests {
-    private static readonly string[] Three = ["seat1", "seat2", "seat3"];
-
     [Fact]
-    public void SkippedParticipantsArePassedOverAndTheTurnEndsPastTheLastOne() {
-        var definition = Document(Phase(Three, [new("bet", WorldPhaseMode.Sequential, "showdown"), new("showdown", WorldPhaseMode.Resolution, "bet")]));
+    public void AMatchingGuardAdmitsAndItsSuccessAdvancesTheGenerationByOne() {
+        var definition = Document(Phase(), Board());
 
-        var folded = Apply(definition, new WorldStateTransform.TurnOrder("turn", Skip: ["seat2"]), WorldPrincipal.World);
-        Assert.Equal(0b010u, Read(folded).Skipped);
-        Assert.Equal(0, Read(folded).Active);
+        Assert.True(WorldStateTransforms.CanAct(definition, new("turn", 0), WorldPrincipal.Seat(0)));
+        Assert.False(WorldStateTransforms.CanAct(definition, new("turn", 1), WorldPrincipal.Seat(0)));
 
-        var afterFirst = Apply(folded, new WorldStateTransform.CompletePhase("turn", Read(folded).Sequence), WorldPrincipal.Seat(0));
-        Assert.Equal(2, Read(afterFirst).Active);
-        Assert.Equal(0, Read(afterFirst).Current);
+        Assert.True(CompiledWorldPatterns.TryCompileAll(definition, out var patterns, []));
+        Assert.True(WorldStateTransforms.TryApply(definition, Ray(), WorldPrincipal.Seat(0), 1, "test", out var candidate, out var reason, patterns), reason);
+        var advanced = WorldStateTransforms.Advance(candidate, "turn");
 
-        Assert.False(WorldStateTransforms.TryApply(afterFirst, new WorldStateTransform.CompletePhase("turn", Read(afterFirst).Sequence), WorldPrincipal.Seat(1), 1, "test", out _, out _));
-
-        var afterLast = Apply(afterFirst, new WorldStateTransform.CompletePhase("turn", Read(afterFirst).Sequence), WorldPrincipal.Seat(2));
-        Assert.Equal(1, Read(afterLast).Current);
-        Assert.Equal(0b010u, Read(afterLast).Skipped);
+        Assert.Equal(1L, Read(advanced).Sequence);
+        Assert.False(WorldStateTransforms.CanAct(advanced, new("turn", 0), WorldPrincipal.Seat(0)));
+        Assert.True(WorldStateTransforms.CanAct(advanced, new("turn", 1), WorldPrincipal.Seat(0)));
     }
 
     [Fact]
-    public void ReversedDirectionWalksBackwardAndSeatsAFreshPhaseFromTheTrailingEnd() {
-        var definition = Document(Phase(Three, [new("play", WorldPhaseMode.Sequential, "play")]));
+    public void AStaleSequenceRefusesAdmissionRegardlessOfActor() {
+        var definition = Document(Phase(sequence: 3));
 
-        var second = Apply(definition, new WorldStateTransform.CompletePhase("turn", 0), WorldPrincipal.Seat(0));
-        Assert.Equal(1, Read(second).Active);
-
-        var reversed = Apply(second, new WorldStateTransform.TurnOrder("turn", Direction: -1), WorldPrincipal.World);
-        Assert.Equal(-1, Read(reversed).Direction);
-        Assert.Equal(1, Read(reversed).Active);
-
-        var back = Apply(reversed, new WorldStateTransform.CompletePhase("turn", Read(reversed).Sequence), WorldPrincipal.Seat(1));
-        Assert.Equal(0, Read(back).Active);
-
-        var wrapped = Apply(back, new WorldStateTransform.CompletePhase("turn", Read(back).Sequence), WorldPrincipal.Seat(0));
-        Assert.Equal(2, Read(wrapped).Active);
-        Assert.Equal(1L, Read(wrapped).Round);
+        Assert.False(WorldStateTransforms.CanAct(definition, new("turn", 2), WorldPrincipal.Seat(0)));
+        Assert.False(WorldStateTransforms.CanAct(definition, new("turn", 2), WorldPrincipal.World));
+        Assert.True(WorldStateTransforms.CanAct(definition, new("turn", 3), WorldPrincipal.Seat(0)));
     }
 
     [Fact]
-    public void SkippingTheActiveParticipantHandsTheTurnOnwardAroundTheRing() {
-        var definition = Document(Phase(Three, [new("play", WorldPhaseMode.Sequential, "play")]));
+    public void NamingAParticipantIsWorldProgramOnly() {
+        var definition = Document(Phase());
 
-        var advanced = Apply(definition, new WorldStateTransform.CompletePhase("turn", 0), WorldPrincipal.Seat(0));
-        var advancedAgain = Apply(advanced, new WorldStateTransform.CompletePhase("turn", Read(advanced).Sequence), WorldPrincipal.Seat(1));
-        Assert.Equal(2, Read(advancedAgain).Active);
-
-        var eliminated = Apply(advancedAgain, new WorldStateTransform.TurnOrder("turn", Skip: ["seat3"]), WorldPrincipal.World);
-        Assert.Equal(0, Read(eliminated).Active);
-        Assert.Equal(Read(advancedAgain).Sequence + 1, Read(eliminated).Sequence);
-
-        var restored = Apply(eliminated, new WorldStateTransform.TurnOrder("turn", Unskip: ["seat3"], Active: "seat3"), WorldPrincipal.World);
-        Assert.Equal(2, Read(restored).Active);
-        Assert.Equal(0u, Read(restored).Skipped);
-
-        Assert.False(WorldStateTransforms.TryApply(definition, new WorldStateTransform.TurnOrder("turn", Direction: 0), WorldPrincipal.World, 0, "test", out _, out var reason));
-        Assert.Contains("1 or -1", reason);
-        Assert.False(WorldStateTransforms.TryApply(definition, new WorldStateTransform.TurnOrder("turn", Skip: ["seat2"]), WorldPrincipal.Seat(0), 0, "test", out _, out var actorReason));
-        Assert.Contains("world program", actorReason);
+        Assert.False(WorldStateTransforms.CanAct(definition, new("turn", 0, "seat1"), WorldPrincipal.Seat(0)));
+        Assert.True(WorldStateTransforms.CanAct(definition, new("turn", 0, "seat1"), WorldPrincipal.World));
     }
 
     [Fact]
-    public void TogetherPhasesNeverWaitOnSkippedParticipantsAndTheWorldMayBranch() {
-        var definition = Document(Phase(Three, [
-            new("commit", WorldPhaseMode.Together, "reveal"),
-            new("reveal", WorldPhaseMode.Resolution, "commit"),
-            new("sudden-death", WorldPhaseMode.Resolution, "commit"),
-        ]));
-
-        var folded = Apply(definition, new WorldStateTransform.TurnOrder("turn", Skip: ["seat3"]), WorldPrincipal.World);
-        var one = Apply(folded, new WorldStateTransform.CompletePhase("turn", 0), WorldPrincipal.Seat(0));
-        Assert.Equal(0, Read(one).Current);
-        var two = Apply(one, new WorldStateTransform.CompletePhase("turn", 0), WorldPrincipal.Seat(1));
-        Assert.Equal(1, Read(two).Current);
-
-        Assert.False(WorldStateTransforms.TryApply(one, new WorldStateTransform.CompletePhase("turn", 0, Next: "sudden-death"), WorldPrincipal.Seat(1), 0, "test", out _, out var reason));
-        Assert.Contains("branch", reason);
-
-        var branched = Apply(two, new WorldStateTransform.CompletePhase("turn", Next: "sudden-death"), WorldPrincipal.World);
-        Assert.Equal(2, Read(branched).Current);
-        Assert.False(WorldStateTransforms.TryApply(two, new WorldStateTransform.CompletePhase("turn", Next: "overtime"), WorldPrincipal.World, 0, "test", out _, out _));
+    public void EveryPhaseRowRequiresAPlainIntegerRowWithoutCellsOrCapacity() {
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(Document(Phase()), out var reason), reason);
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(
+            Document(new WorldStateRow(WorldCellName.Parse("turn"), CellKind.Int, Phase: new(), Capacity: 4)), out var capacityReason));
+        Assert.Contains("without cells/capacity", capacityReason);
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(
+            Document(new WorldStateRow(WorldCellName.Parse("turn"), CellKind.Bool, Phase: new())), out var kindReason));
+        Assert.Contains("without cells/capacity", kindReason);
     }
 
     [Fact]
-    public void OrderFactsReachRulesAndTheAuthoritativeHashSeesEveryOrderChange() {
-        var definition = Document(Phase(Three, [new("play", WorldPhaseMode.Sequential, "play")])) with {
-            Rules = [new WorldRule(
-                Name: WorldCellName.Parse("mirror"),
-                Effects: [
-                    new ActionEffect.SetState(State: "direction", FromState: "$phase:turn:direction"),
-                    new ActionEffect.SetState(State: "skipped", FromState: "$phase:turn:skipped"),
-                ]
-            )],
-        };
-        definition = definition with { StateRaw = definition.StateRaw! with { World = [.. definition.StateRaw.World!, Slot("direction"), Slot("skipped")] } };
-        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var validation), validation);
-
+    public void ARowTaggedPhaseOfRefusesATransformWithoutItsGuardAndAMatchingGuardAdvancesTheGenerationLive() {
+        var definition = Document(Phase(), Board() with { PhaseOf = "turn" });
         using var fixture = Fixtures.FreshServer(definition: definition);
         fixture.Step();
         var before = WorldRuntimeStateHash.HashAuthoritative(fixture.Server, 0);
-        Assert.Equal(1L, Value(fixture, "direction"));
-        Assert.Equal(0L, Value(fixture, "skipped"));
 
-        var reversed = WorldStateTransforms.TryApply(fixture.Server.Definition, new WorldStateTransform.TurnOrder("turn", Direction: -1, Skip: ["seat2"]), WorldPrincipal.World, 1, "test", out var candidate, out var reason);
-        Assert.True(reversed, reason);
         fixture.Server.Submit(new(SubmissionEnvelope.LocalConnectionId, 0, 1, 1, WorldPrincipal.Console,
-            new WorldSubmissionPayload.Mutation(new WorldMutation.TransformState(WorldPrincipal.Console, new WorldStateTransform.TurnOrder("turn", Direction: -1, Skip: ["seat2"])))), _ => { });
+            new WorldSubmissionPayload.Mutation(new WorldMutation.TransformState(WorldPrincipal.Console, Ray()))), _ => { });
         fixture.Step();
-        Assert.Equal(1L, Value(fixture, "direction"));
+        Assert.Equal(0L, Read(fixture.Server.Definition).Sequence);
 
-        var bad = Document(Phase(Three, [new("play", WorldPhaseMode.Sequential, "play")], skipped: 0b1000u));
-        Assert.False(WorldDefinitionValidator.TryValidateLocally(bad, out var badReason));
-        Assert.Contains("outside its declared domain", badReason);
-
-        var authored = Document(Phase(Three, [new("play", WorldPhaseMode.Sequential, "play")], direction: -1, skipped: 0b010u)) with { Rules = definition.Rules, StateRaw = definition.StateRaw with { World = [Phase(Three, [new("play", WorldPhaseMode.Sequential, "play")], direction: -1, skipped: 0b010u), Slot("direction"), Slot("skipped")] } };
-        using var other = Fixtures.FreshServer(definition: authored);
-        other.Step();
-        Assert.Equal(-1L, Value(other, "direction"));
-        Assert.Equal(2L, Value(other, "skipped"));
-        Assert.NotEqual(before, WorldRuntimeStateHash.HashAuthoritative(other.Server, 0));
+        fixture.Server.Submit(new(SubmissionEnvelope.LocalConnectionId, 0, 2, 2, WorldPrincipal.Console,
+            new WorldSubmissionPayload.Mutation(new WorldMutation.TransformState(WorldPrincipal.Console, Ray(), new("turn", 0)))), _ => { });
+        fixture.Step();
+        Assert.Equal(1L, Read(fixture.Server.Definition).Sequence);
+        Assert.NotEqual(before, WorldRuntimeStateHash.HashAuthoritative(fixture.Server, 0));
     }
 
     [Fact]
-    public void OrderTransformsRoundTripThroughTheStrictWireShape() {
-        var definition = Document(Phase(Three, [new("play", WorldPhaseMode.Sequential, "play")], direction: -1, skipped: 1u)) with {
-            Rules = [new WorldRule(WorldCellName.Parse("order"), [
-                new ActionEffect.TransformState(new WorldStateTransform.TurnOrder("turn", Direction: 1, Skip: ["seat1"], Unskip: ["seat2"], Active: "seat3")),
-                new ActionEffect.TransformState(new WorldStateTransform.CompletePhase("turn", Next: "play")),
-            ])],
-        };
+    public void PhaseRowsRoundTripThroughTheStrictWireShape() {
+        var definition = Document(Phase(sequence: 4));
 
         var parsed = WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: definition));
         var phase = WorldDefinitionRows.FindStateRow(parsed.State, "turn")!.Phase!;
-        Assert.Equal(-1, phase.Direction);
-        Assert.Equal(1u, phase.Skipped);
-        var effects = Assert.Single(parsed.Rules ?? []).Effects;
-        var order = Assert.IsType<WorldStateTransform.TurnOrder>(Assert.IsType<ActionEffect.TransformState>(effects[0]).Transform);
-        Assert.Equal("seat3", order.Active);
-        Assert.Equal("play", Assert.IsType<WorldStateTransform.CompletePhase>(Assert.IsType<ActionEffect.TransformState>(effects[1]).Transform).Next);
+        Assert.Equal(4L, phase.Sequence);
         Assert.True(WorldDefinitionValidator.TryValidateLocally(parsed, out var reason), reason);
     }
 
-    private static WorldStateRow Phase(string[] participants, WorldPhaseDefinition[] phases, int direction = 1, uint skipped = 0) =>
-        new(WorldCellName.Parse("turn"), CellKind.Int, Phase: new(participants, phases, Direction: direction, Skipped: skipped));
-    private static WorldStateRow Slot(string name) => new(WorldCellName.Parse(name), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)]);
-    private static WorldDefinition Document(params WorldStateRow[] rows) => Fixtures.BuildDocument() with { StateRaw = new(World: rows), Rules = [] };
+    private static WorldStateRow Phase(long sequence = 0) => new(WorldCellName.Parse("turn"), CellKind.Int, Phase: new(sequence));
+    private static WorldStateRow Board() => new(WorldCellName.Parse("board"), CellKind.Int,
+        Cells: [new(WorldCellName.Parse("0"), 1), new(WorldCellName.Parse("1"), 2), new(WorldCellName.Parse("2"), 2), new(WorldCellName.Parse("3"), 1)], Board: new("map"));
+    private static WorldStateTransform.SetRay Ray() => new("board", "0", "E", "capture", 1);
+    private static WorldDefinition Document(params WorldStateRow[] rows) => Fixtures.BuildDocument() with {
+        StateRaw = new(World: rows, Lattices: rows.Any(row => row.Board is not null) ? [new("map", new(0, 0, 0), 1, 4, 4, Kind: WorldTopologyKind.Grid)] : []),
+        PatternsRaw = [new(WorldCellName.Parse("capture"), CellKind.Int,
+            [new(WorldCellName.Parse("through"), 2, 2), new(WorldCellName.Parse("until"), 1, 1)],
+            new WorldPatternNode.Sequence([new WorldPatternNode.Plus(new WorldPatternNode.Symbol("through")), new WorldPatternNode.Symbol("until")]))],
+        Rules = [],
+    };
     private static WorldStatePhase Read(WorldDefinition definition) => WorldDefinitionRows.FindStateRow(definition.State, "turn")!.Phase!;
-    private static WorldDefinition Apply(WorldDefinition definition, WorldStateTransform transform, WorldPrincipal actor) {
-        Assert.True(WorldStateTransforms.TryApply(definition, transform, actor, 1, "test", out var candidate, out var reason), reason);
-        return candidate!;
-    }
-    private static long Value(WorldFixture fixture, string row) =>
-        WorldDefinitionRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
 }

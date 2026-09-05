@@ -15,7 +15,7 @@ public sealed partial class WorldServer {
     /// re-derivable from <c>MusicDirector.LastTransitionFromSegmentId</c>/<c>LastTransitionToSegmentId</c>, so no
     /// second value need round-trip through the tap. A <see langword="null"/> tap is a silent no-op, the same
     /// convention every other tap here follows; every live boot shape wires one (<c>WorldPostBuildWiring.Install</c>).
-    /// Never taped — see <c>MusicJudgeReplayReDerivabilityLawTests</c>: the director's own state is purely
+    /// Never taped — see <c>MusicReplayReDerivabilityLawTests</c>: the director's own state is purely
     /// re-derivable from the document plus tick, so a fresh replay boot re-fires the identical sequence of
     /// invocations without a recorded entry.</summary>
     public Action<ulong>? MusicTransitionTap { get; set; }
@@ -533,10 +533,6 @@ public sealed partial class WorldServer {
     // outright rather than submitting). SAVE is the one exception to all of this: it submits no WorldMutation at all (see
     // ActionEffect.Save's remarks) and is handled before the mutation switch below ever runs.
     private bool FireWorldRuleEffect(CompiledWorldEffect effect, string ruleName, ulong tick, ulong stepTicks, bool preflight = false, bool strict = false) {
-        if (effect.Kind is WorldRuleEffectKind.ObserveSocial or WorldRuleEffectKind.ForgetSocial) {
-            if (!preflight) { FireSocialEffect(effect, tick); }
-            return false; // Runtime-only memory never broadcasts a public document update.
-        }
         if (effect.Kind == WorldRuleEffectKind.TransformState) {
             return ApplyWorldRuleMutation(effect: in effect, ruleName: ruleName, mutation: new WorldMutation.TransformState(WorldPrincipal.World, effect.Transform!), tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false, preflight: preflight);
         }
@@ -1165,7 +1161,8 @@ public sealed partial class WorldServer {
             instanceIdentity: InstanceIdentity,
             candidate: out var candidate,
             reason: out var composeReason,
-            evictedKey: out _
+            evictedKey: out _,
+            patterns: m_patterns
         )) {
             m_ruleStatePreflightRejected = true;
             ReportRuleEffectRefusal(refusal: WorldRuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: in effect, tick: tick, detail: composeReason);
@@ -1319,7 +1316,6 @@ public sealed partial class WorldServer {
         m_ruleGateHeld.Prune(compiled: m_rules);
         m_interactionGateHeld.Prune(compiled: m_interactions);
         ReconcileDecisions();
-        ReconcileSocial(definition);
         ReconcilePatterns(definition);
         m_population.BindFlockAffinities(definition, EvaluateFlockAffinity);
     }
@@ -1435,8 +1431,6 @@ public sealed partial class WorldServer {
         }
     }
     private void StepCore(in FixedStepContext context) {
-        m_socialClock = context.ElapsedTicks;
-        m_social?.Advance(m_socialClock);
         // The per-tick mutation-dispatch allowance opens HERE, before either half of the tick that spends it: the
         // addon seam's pre-flight (TickAddons, immediately below) and the drain that applies what it — and every peer
         // submission buffered since the last step — enqueued.
@@ -1544,29 +1538,6 @@ public sealed partial class WorldServer {
 
         m_population.ClearGeneratorInvocationOutputs();
 
-        // Kit-fired `judge` effects, staged during THIS tick's advance — graded and folded into m_judgeGrades right
-        // here, within the SAME Step call, rather than through the mutation pipeline: the acting body's own
-        // last-grade fact is not a document row, so judge.state observes this tick's grade on this tick's read-back
-        // instead of paying Generate's own next-tick round trip. Graded against context.ElapsedTicks, not the
-        // simulation-step ordinal `tick` above — RhythmJudge compares against MusicClock.TicksPerBeat, which is
-        // engine-tick-denominated (the SAME domain ElapsedTicks carries and MusicClock.Advance just advanced by
-        // context.StepTicks), so the step ordinal is the wrong unit to grade against. A judgeRef with no clock to
-        // grade against (a world declaring judges with no music row) still records the firing tick against a null
-        // (miss) grade.
-        foreach (var invocation in m_population.JudgeInvocationOutputs) {
-            var windows = FindJudgeWindows(judgeRef: invocation.JudgeRef);
-            var grade = (((m_musicClock is { } clock) && (windows is not null))
-                ? Puck.Audio.Simulation.RhythmJudge.Evaluate(
-                    tick: context.ElapsedTicks,
-                    clock: clock,
-                    windows: windows
-                )
-                : (Puck.Audio.Simulation.JudgeWindow?)null);
-
-            m_judgeGrades[(invocation.EntityIndex, invocation.JudgeRef)] = (grade?.Grade, context.ElapsedTicks);
-        }
-
-        m_population.ClearJudgeInvocationOutputs();
         if (m_population.DurableStateOutputs.Count > 0) {
             DurableStateOutputTap?.Invoke(obj: m_population.DurableStateOutputs);
             foreach (var output in m_population.DurableStateOutputs) {
@@ -1670,12 +1641,6 @@ public sealed partial class WorldServer {
         // Escrow recovery evaluates on the SAME terms, right beside rules — see ReclaimExpiredEscrows' own remarks.
         ReclaimExpiredEscrows(tick: tick);
         m_transferEscrow.ReclaimExpired(tick: tick);
-        // Market deadline recovery — the SAME tick-driven, replay-deterministic shape ReclaimExpiredEscrows already
-        // establishes, for a listing that reached its deadline instead of an unaccepted ownership offer's.
-        SettleExpiredMarketListings(tick: tick);
-        // Market retention sweep — runs right beside deadline recovery, archiving terminal rows once they have aged
-        // past market.retentionSeconds so the section's lifetime listing count stays bounded.
-        PruneExpiredMarketListings(tick: tick);
         // Contribution tenure recovery — the same shape again, for a presence-tenure slot whose contributor's link
         // went unreachable past its authored grace.
         SweepContributionTenure(tick: tick);

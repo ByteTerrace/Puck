@@ -2,39 +2,33 @@ using System.Globalization;
 
 namespace Puck.World;
 
-/// <summary>The finite discrete-board query vocabulary.</summary>
+/// <summary>The finite discrete-board query vocabulary. A ray's first-blocker cell, its distance, and a run-length
+/// existence check are <c>$match:</c> facets over a board source instead of members here — the same ray walk read
+/// through the pattern engine, which additionally lets the blocking test be any authored value range rather than
+/// only "occupied".</summary>
 public enum WorldBoardQueryKind : byte {
     /// <summary>The adjacent cell, or -1 at an edge.</summary>
     Neighbour,
-    /// <summary>The first occupied ray cell, or -1.</summary>
-    RayCell,
-    /// <summary>The distance to the first occupied ray cell, or -1.</summary>
-    RayDistance,
-    /// <summary>Whether a qualifying line exists.</summary>
-    Line,
     /// <summary>Minimum nonnegative entry cost, -1 if unreachable, -2 if the visit budget was exhausted.</summary>
     PathCost,
-    /// <summary>The 64-bit mask of cells whose value lies in an inclusive range; bit c is cell ordinal c.</summary>
+    /// <summary>The 64-bit cell-set mask of cells whose value lies in an inclusive range; bit c is cell ordinal c. A
+    /// mask carries through the topology's point group with the <c>image</c>/<c>shift</c> expression ops.</summary>
     Mask,
-    /// <summary>The mask of a range's cells carried through one point-group element.</summary>
-    Image,
     /// <summary>The least 64-bit fingerprint of the board's values over every point-group element: equal for two
     /// boards that are the same up to symmetry.</summary>
     Canonical,
-    /// <summary>The least image mask of a range over every point-group element.</summary>
-    CanonicalMask,
     /// <summary>The grid cell a referenced body's world position falls in, or -1.</summary>
     CellOf,
     /// <summary>The cell reached by an arbitrary (dx, dz) grid step from the key cell, or -1.</summary>
     Offset,
     /// <summary>Whether the key cell is attacked: walking each of a short authored direction list from the key
     /// cell, the first occupied cell in at least one of them carries a value within an inclusive range. A ray that
-    /// hits an occupied cell outside the range is blocked (stops there, counts as a miss) exactly like
-    /// <see cref="RayCell"/> — this is <see cref="RayCell"/>'s single-direction blocker test, unioned over the
-    /// authored directions and filtered to a value range, so a slider's reach at one square is one query instead of
-    /// one rule per direction. It does not by itself know a piece's movement shape (the caller supplies the
-    /// direction list and the range), and it says nothing about non-sliding attackers (king/knight/pawn) — those
-    /// stay <see cref="Neighbour"/>/<see cref="Offset"/> composition, cheap enough not to need a primitive.</summary>
+    /// hits an occupied cell outside the range is blocked (stops there, counts as a miss) — the same single-direction
+    /// blocker walk a <c>$match:</c> board-ray facet performs, unioned over the authored directions and filtered to
+    /// a value range, so a slider's reach at one square is one query instead of one rule per direction. It does not
+    /// by itself know a piece's movement shape (the caller supplies the direction list and the range), and it says
+    /// nothing about a non-sliding mover — that stays <see cref="Neighbour"/>/<see cref="Offset"/> composition,
+    /// cheap enough not to need a primitive.</summary>
     Attacks,
 }
 
@@ -42,9 +36,7 @@ public enum WorldBoardQueryKind : byte {
 /// <param name="Topology">The immutable adjacency table.</param>
 /// <param name="Kind">The query operation.</param>
 /// <param name="Direction">The topology-specific direction ordinal.</param>
-/// <param name="Length">The requested line length.</param>
-/// <param name="Value">The raw line-match value.</param>
-/// <param name="Exact">Whether longer runs are excluded.</param>
+/// <param name="Value">The raw range lower bound.</param>
 /// <param name="Target">The path destination ordinal.</param>
 /// <param name="MaxCost">The greatest admitted path cost.</param>
 /// <param name="MaxVisits">The greatest settled nodes in one search.</param>
@@ -55,7 +47,7 @@ public enum WorldBoardQueryKind : byte {
 /// <param name="Directions">The 1..4 direction ordinals an <see cref="WorldBoardQueryKind.Attacks"/> query walks —
 /// a concrete array so the per-evaluation walk indexes it directly rather than boxing an interface enumerator.</param>
 public sealed record CompiledWorldBoardQuery(CompiledWorldTopology Topology, WorldBoardQueryKind Kind,
-    int Direction = 0, int Length = 0, long Value = 0, bool Exact = false, int Target = 0, long MaxCost = 0, int MaxVisits = 0,
+    int Direction = 0, long Value = 0, int Target = 0, long MaxCost = 0, int MaxVisits = 0,
     int Dx = 0, int Dz = 0, long Upper = 0, int[]? Directions = null);
 
 /// <summary>The most cells a board may hold for its occupancy to read as one 64-bit mask.</summary>
@@ -77,27 +69,22 @@ public static partial class WorldRuleCompiler {
         }
         var kind = tokens[1] switch {
             "neighbour" => WorldBoardQueryKind.Neighbour,
-            "rayCell" => WorldBoardQueryKind.RayCell,
-            "rayDistance" => WorldBoardQueryKind.RayDistance,
-            "line" => WorldBoardQueryKind.Line,
             "pathCost" => WorldBoardQueryKind.PathCost,
             "mask" => WorldBoardQueryKind.Mask,
-            "image" => WorldBoardQueryKind.Image,
             "canonical" => WorldBoardQueryKind.Canonical,
-            "canonicalMask" => WorldBoardQueryKind.CanonicalMask,
             "cellOf" => WorldBoardQueryKind.CellOf,
             "offset" => WorldBoardQueryKind.Offset,
             "attacks" => WorldBoardQueryKind.Attacks,
             _ => throw Invalid($"unknown board operation '{tokens[1]}'"),
         };
-        if (kind is WorldBoardQueryKind.Mask or WorldBoardQueryKind.Image or WorldBoardQueryKind.CanonicalMask && topology.CellCount > WorldBoardMask.MaxCells) {
+        if (kind is WorldBoardQueryKind.Mask && topology.CellCount > WorldBoardMask.MaxCells) {
             throw Invalid($"{tokens[1]} reads at most {WorldBoardMask.MaxCells} cells as bits; '{board.Topology}' has {topology.CellCount}");
         }
         if (kind is WorldBoardQueryKind.CellOf or WorldBoardQueryKind.Offset && topology.Kind != WorldTopologyKind.Grid) {
             throw Invalid($"'{tokens[1]}' requires a Grid topology, not {topology.Kind}");
         }
         CompiledCellRef? keyFrom = null;
-        if (kind is not (WorldBoardQueryKind.Line or WorldBoardQueryKind.Mask or WorldBoardQueryKind.Image or WorldBoardQueryKind.Canonical or WorldBoardQueryKind.CanonicalMask or WorldBoardQueryKind.CellOf)) {
+        if (kind is not (WorldBoardQueryKind.Mask or WorldBoardQueryKind.Canonical or WorldBoardQueryKind.CellOf)) {
             if (TryResolveDynamicKey(definition: definition, key: key, ruleName: ruleName, verb: "board", keyFieldLabel: "key", cell: out var dynamicKey)) {
                 keyFrom = dynamicKey;
             } else if (key is null || !topology.TryCell(key, out _)) {
@@ -108,29 +95,10 @@ public static partial class WorldRuleCompiler {
         }
         var query = new CompiledWorldBoardQuery(topology, kind);
         CompiledBodyRef? bodyRef = null;
-        if (kind == WorldBoardQueryKind.Line) {
-            if (tokens.Length != 6 || !int.TryParse(tokens[3], NumberStyles.None, CultureInfo.InvariantCulture, out var length) ||
-                length < 1 || length > topology.CellCount || !long.TryParse(tokens[4], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var value) ||
-                tokens[5] is not ("exact" or "atLeast")) {
-                throw Invalid("line requires <length>:<integerValue>:<exact|atLeast>");
-            }
-            query = query with { Length = length, Value = value, Exact = tokens[5] == "exact" };
-        } else if (kind == WorldBoardQueryKind.Canonical) {
+        if (kind == WorldBoardQueryKind.Canonical) {
             if (tokens.Length != 3) {
                 throw Invalid("canonical takes no arguments beyond the row");
             }
-        } else if (kind is WorldBoardQueryKind.Image or WorldBoardQueryKind.CanonicalMask) {
-            var boundsAt = (kind == WorldBoardQueryKind.Image) ? 4 : 3;
-            if (tokens.Length != boundsAt + 2 || row.Kind is not (CellKind.Int or CellKind.Bool) ||
-                !long.TryParse(tokens[boundsAt], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var low) ||
-                !long.TryParse(tokens[boundsAt + 1], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var high) || low > high) {
-                throw Invalid($"{tokens[1]} requires {((kind == WorldBoardQueryKind.Image) ? "<element>:" : string.Empty)}<min>:<max> integer bounds, min <= max, on an integer or boolean board row");
-            }
-            var element = (kind == WorldBoardQueryKind.Image) ? topology.Element(tokens[3]) : 0;
-            if (element < 0) {
-                throw Invalid($"'{tokens[3]}' is not a symmetry element of '{board.Topology}'");
-            }
-            query = query with { Direction = element, Value = low, Upper = high };
         } else if (kind == WorldBoardQueryKind.Mask) {
             if (tokens.Length != 5 || row.Kind is not (CellKind.Int or CellKind.Bool) ||
                 !long.TryParse(tokens[3], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var lower) ||
@@ -178,12 +146,15 @@ public static partial class WorldRuleCompiler {
             }
             bodyRef = ResolveBodyRefToken(channel: name, definition: definition, ruleName: ruleName, start: 0, tokens: bodyTokens);
         } else {
+            if (tokens.Length != 4) {
+                throw Invalid("neighbour requires exactly one direction token");
+            }
             var direction = topology.Direction(tokens[3]);
-            if (tokens.Length != 4 || direction < 0) {
-                throw Invalid("board ray/neighbour requires one direction valid for its topology");
+            if (direction < 0) {
+                throw Invalid($"'{tokens[3]}' is not a direction of '{board.Topology}'");
             }
             query = query with { Direction = direction };
         }
-        return new(new CompiledWorldOperand(WorldRuleFactKind.Board, row.Name, key, KeyFrom: keyFrom, ValueKind: CellKind.Int, Board: query, BodyA: bodyRef), CellKind.Int, name);
+        return new(new CompiledWorldOperand(WorldRuleFactKind.Board, row.Name, key, KeyFrom: keyFrom, ValueKind: CellKind.Int, Board: query, BodyA: bodyRef, StateHandle: ResolveWorldStateHandle(definition: definition, name: row.Name)), CellKind.Int, name);
     }
 }

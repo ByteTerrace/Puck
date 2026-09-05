@@ -1,4 +1,3 @@
-using System.Globalization;
 using Puck.Maths;
 using Puck.World.Protocol;
 
@@ -350,12 +349,37 @@ public sealed partial class WorldServer {
             : WorldStateReader.LiftSaturating(raw: raw)
         );
     }
+    // The compiled-handle sibling of ReadStateCell — every per-tick reader that already carries a WorldStateHandle
+    // (StateHandle on a CompiledWorldOperand, or Handle on a CompiledCellRef/CompiledBodyRef) reads through here
+    // instead of a row-name scan. Never called with an invalid handle: see WorldStateReader.TryReadHandle's remarks.
+    private FixedQ4816 ReadStateCellByHandle(WorldStateHandle handle, string key, ulong tick) {
+        if (
+            !WorldStateReader.TryReadHandle(
+            definition: m_definition,
+            catalog: m_definition.StateCatalog,
+            handle: handle,
+            key: key,
+            tick: tick,
+            row: out var declared,
+            rawValue: out var rawValue,
+            text: out _
+        ) ||
+            (rawValue is not { } raw)
+        ) {
+            return FixedQ4816.Zero;
+        }
+
+        return ((declared.Kind == CellKind.Fixed)
+            ? FixedQ4816.FromRawBits(value: raw)
+            : WorldStateReader.LiftSaturating(raw: raw)
+        );
+    }
     // $symmetry: — the source cell read through the same resolver as an ordinary cell, its whole part taken as a
     // lattice node, and one of SymmetryLattice's maps applied. A cell holding no node reads the neutral value: -1
     // for the node-valued maps, 0 for orthogonal and the projections.
     private FixedQ4816 ReadSymmetry(CompiledWorldOperand operand, ulong tick) {
-        var node = NodeOf(value: ReadStateCell(
-            row: operand.Row!,
+        var node = NodeOf(value: ReadStateCellByHandle(
+            handle: operand.StateHandle,
             key: ResolveOperandKey(
                 key: operand.Key,
                 keyFrom: operand.KeyFrom,
@@ -364,13 +388,9 @@ public sealed partial class WorldServer {
             tick: tick
         ));
         var other = ((operand.SymmetryOtherCell is { } otherCell)
-            ? NodeOf(value: ReadStateCell(
-                row: otherCell.Row,
-                key: ResolveOperandKey(
-                    key: ((otherCell.Key.Length == 0) ? null : otherCell.Key),
-                    keyFrom: null,
-                    tick: tick
-                ),
+            ? NodeOf(value: ReadStateCellByHandle(
+                handle: otherCell.Handle,
+                key: ((otherCell.Key.Length == 0) ? WorldStateRow.SlotKey.Value : otherCell.Key),
                 tick: tick
             ))
             : (int)Math.Clamp(value: operand.SymmetryArgument, min: -1L, max: (SymmetryLattice.NodeCount - 1L))
@@ -402,13 +422,11 @@ public sealed partial class WorldServer {
     // Shared by both sides of a compareState conjunct — the primary operand and, when present, the comparand — so
     // the two reads can never diverge in how a reserved channel or a declared row resolves to a live fact.
     private WorldFact ReadWorldFact(CompiledWorldOperand operand, ulong tick) => operand.Kind switch {
-        WorldRuleFactKind.Social => Finite(ReadSocialFact(operand.Social!.Value, tick), operand.ValueKind),
-        WorldRuleFactKind.SocialClock => Finite(SocialInteger(m_social?.EngineTick ?? 0), CellKind.Int),
-        WorldRuleFactKind.SocialResult => Finite(m_lastSocialResult, CellKind.Int),
-        WorldRuleFactKind.Phase => Finite(ReadPhaseFact(operand), CellKind.Int),
+        WorldRuleFactKind.Phase => Finite(ReadPhaseFact(operand, tick), CellKind.Int),
         WorldRuleFactKind.Board => Finite(ReadBoardFact(operand, tick), CellKind.Int),
         WorldRuleFactKind.Pattern => Finite(ReadPatternFact(operand, tick), CellKind.Int),
         WorldRuleFactKind.History => Finite(ReadHistoryFact(operand, tick), operand.ValueKind),
+        WorldRuleFactKind.Clock => Finite(value: ReadClockPhaseError(), kind: CellKind.Int),
         WorldRuleFactKind.Tick => Finite(value: unchecked((long)tick), kind: CellKind.Int),
         WorldRuleFactKind.Population => Finite(value: m_population.ActiveCount(), kind: CellKind.Int),
         WorldRuleFactKind.PhysicsQuiescent => Finite(value: (m_population.RigidBodiesQuiescent() ? 1 : 0), kind: CellKind.Bool),
@@ -429,10 +447,11 @@ public sealed partial class WorldServer {
         : (byte)0), kind: CellKind.Int),
         WorldRuleFactKind.Reduction => Finite(value: ReadReduction(operand: operand, tick: tick), kind: operand.ValueKind),
         WorldRuleFactKind.ArgBody => Finite(value: ResolveArgBody(
-        row: operand.Row!,
+        handle: operand.StateHandle,
         op: operand.Reduce,
         tick: tick,
-        filterRow: operand.FilterRow
+        filterHandle: operand.FilterHandle,
+        hasFilter: (operand.FilterRow is not null)
     ), kind: CellKind.Int),
         WorldRuleFactKind.BodyDistance => Finite(value: ReadBodyDistance(
         bodyA: operand.BodyA!.Value,
@@ -476,7 +495,7 @@ public sealed partial class WorldServer {
     )),
         WorldRuleFactKind.Nearest => Finite(value: ResolveNearestBody(
         from: operand.BodyA!.Value,
-        row: operand.Row!,
+        tagRowHandle: operand.StateHandle,
         tick: tick
     ), kind: CellKind.Int),
         WorldRuleFactKind.Symmetry => Finite(value: ConvertFixedToRaw(
@@ -526,18 +545,19 @@ public sealed partial class WorldServer {
     // reader itself; the row can gain a non-numeric-keyed cell after compile via an ordinary world.state.cell.set,
     // and compile-time already proved the row is keyed, not that every future key will parse). Ties resolve to the
     // LOWEST eligible index, deterministically. Returns -1 ("no body") when no cell is eligible.
-    private int ResolveArgBody(string row, WorldStateReduceOp op, ulong tick, string? filterRow = null) {
+    private int ResolveArgBody(WorldStateHandle handle, WorldStateReduceOp op, ulong tick, WorldStateHandle filterHandle = default, bool hasFilter = false) {
         var winner = WorldStateReader.ArgExtremum(
+            catalog: m_definition.StateCatalog,
             definition: m_definition,
-            rowName: row,
+            handle: handle,
             op: op,
             tick: tick,
-            state: (Server: this, Capacity: m_population.Capacity, FilterRow: filterRow, Tick: tick),
+            state: (Server: this, Capacity: m_population.Capacity, HasFilter: hasFilter, FilterHandle: filterHandle, Tick: tick),
             isCandidateIndex: static (index, state) =>
                 (index < state.Capacity) &&
                 (state.Server.Body(index: index) is not null) &&
-                ((state.FilterRow is null) || (state.Server.ReadStateCell(
-                    row: state.FilterRow,
+                (!state.HasFilter || (state.Server.ReadStateCellByHandle(
+                    handle: state.FilterHandle,
                     key: WorldBodyKeyCache.Get(index: index),
                     tick: state.Tick
                 ) != FixedQ4816.Zero))
@@ -586,8 +606,8 @@ public sealed partial class WorldServer {
 
         var index = ((indirection.Binding != RuleBinding.None)
             ? BoundBody(binding: indirection.Binding)
-            : IntegerOf(value: ReadStateCell(
-                row: indirection.Row,
+            : IntegerOf(value: ReadStateCellByHandle(
+                handle: indirection.Handle,
                 key: indirection.Key,
                 tick: tick
             ))
@@ -596,7 +616,7 @@ public sealed partial class WorldServer {
         return WorldBodyKeyCache.Get(index: index);
     }
     // The nearest active body to 'from' (itself excluded) whose cell in the keyed tag row reads nonzero, or -1.
-    private int ResolveNearestBody(CompiledBodyRef from, string row, ulong tick) {
+    private int ResolveNearestBody(CompiledBodyRef from, WorldStateHandle tagRowHandle, ulong tick) {
         var origin = Body(index: ResolveBodyRef(
             bodyRef: from,
             tick: tick
@@ -617,8 +637,8 @@ public sealed partial class WorldServer {
             if (
                 (index == originIndex) ||
                 (Body(index: index) is not { } candidate) ||
-                (ReadStateCell(
-                row: row,
+                (ReadStateCellByHandle(
+                handle: tagRowHandle,
                 key: WorldBodyKeyCache.Get(index: index),
                 tick: tick
             ) == FixedQ4816.Zero)
@@ -642,48 +662,21 @@ public sealed partial class WorldServer {
     private int ResolveBodyRef(CompiledBodyRef bodyRef, ulong tick) => (bodyRef.Kind switch {
         CompiledBodyRefKind.Literal => bodyRef.Index,
         CompiledBodyRefKind.Binding => BoundBody(binding: ((RuleBinding)bodyRef.Index)),
-        CompiledBodyRefKind.Cell => (((IntegerOf(value: ReadStateCell(
-        row: bodyRef.Row!,
+        CompiledBodyRefKind.Cell => (((IntegerOf(value: ReadStateCellByHandle(
+        handle: bodyRef.Handle,
         key: bodyRef.Key!,
         tick: tick
     )) is var cellIndex) && (cellIndex >= 0) && (cellIndex < m_population.Capacity))
         ? ((int)cellIndex)
         : -1),
         _ => ResolveArgBody(
-        row: bodyRef.Row!,
+        handle: bodyRef.Handle,
         op: ((bodyRef.Kind == CompiledBodyRefKind.ArgMax)
         ? WorldStateReduceOp.Max
         : WorldStateReduceOp.Min),
         tick: tick
     ),
     });
-    // The item/currency fact vocabulary's cell key for a market participant. A seat's index is its own stable
-    // identity (generation is always 0), so its key is the plain 0-based entity index — the same addressing
-    // WorldRuleFacts.ArgMaxPrefix/ArgMinPrefix already read off an unkeyed row. A peer's index is not stable on its
-    // own: WorldBodiesLimits recycles a vacated population slot for a later, unrelated connection, and
-    // WorldGrants/the ownership escrow substrate both key a peer's real authority on the full (index, generation)
-    // pair (WorldPrincipal's own equality) — so a market cell keys the same pair, or a later occupant of the same
-    // slot would silently inherit the departed peer's balance/items/listing proceeds. The compound key never
-    // collides with a seat's plain-integer key (it always carries a reserved '_' the kernel would otherwise refuse
-    // in an authored key) and reads as a non-candidate to ArgExtremum's int.TryParse scan, exactly like any other
-    // non-numeric key already does. Only a real player (seat or peer) may hold a market fact; console/world/addon/
-    // document/group principals refuse here rather than minting a cell no player could ever read back.
-    private static bool TryPlayerCellKey(WorldPrincipal principal, out string key) {
-        switch (principal.Kind) {
-            case PrincipalKind.Seat:
-                key = principal.Index.ToString(provider: CultureInfo.InvariantCulture);
-
-                return true;
-            case PrincipalKind.Peer:
-                key = $"{principal.Index.ToString(provider: CultureInfo.InvariantCulture)}_{principal.Generation.ToString(provider: CultureInfo.InvariantCulture)}";
-
-                return true;
-            default:
-                key = string.Empty;
-
-                return false;
-        }
-    }
     // The (row, key) PAIR rule at the mutation boundary: a null key means the row's SLOT cell, and a row that is
     // positively keyed (WorldStateRow.IsKeyed) has no single cell for a null key to mean — refused by name rather
     // than silently writing cells[0].
@@ -782,11 +775,6 @@ public sealed partial class WorldServer {
             Text: $"[music.state: player {state.Index} is not an active population entry — see world.population]",
             Refused: true
         ),
-            WorldQuery.JudgeState state when (Body(index: (state.Index - 1)) is not null) => new QueryAnswer(Text: DescribeJudgeState()),
-            WorldQuery.JudgeState state => new QueryAnswer(
-            Text: $"[judge.state: player {state.Index} is not an active population entry — see world.population]",
-            Refused: true
-        ),
             WorldQuery.InstrumentState state when (Body(index: (state.Index - 1)) is not null) => new QueryAnswer(Text: DescribeInstrumentState(seatSlot: (state.Index - 1))),
             WorldQuery.InstrumentState state => new QueryAnswer(
             Text: $"[instrument.state: player {state.Index} is not an active population entry — see world.population]",
@@ -800,21 +788,19 @@ public sealed partial class WorldServer {
     // whose magnitude can exceed every number — $parked: on a forever-parked body. Infinity participates in
     // comparisons through the ActionStateComparisons overload and is never encoded as a numeric stand-in.
     private readonly record struct WorldFact(long Value, CellKind Kind, bool IsForever);
-    private long ReadPhaseFact(CompiledWorldOperand operand) {
-        var phase = WorldDefinitionRows.FindStateRow(m_definition.State, operand.Row!)?.Phase;
-        if (phase is null) {
+    private long ReadPhaseFact(CompiledWorldOperand operand, ulong tick) {
+        if (!WorldStateReader.TryReadHandle(
+            catalog: m_definition.StateCatalog,
+            definition: m_definition,
+            handle: operand.StateHandle,
+            key: null,
+            rawValue: out _,
+            row: out var declared,
+            text: out _,
+            tick: tick
+        )) {
             return -1;
         }
-        return operand.Key switch {
-            "current" => phase.Current,
-            "active" => phase.Phases[phase.Current].Mode == WorldPhaseMode.Sequential ? phase.Active : -1,
-            "ready" => phase.Ready,
-            "sequence" => phase.Sequence,
-            "round" => phase.Round,
-            "deadline" => WorldStateTransforms.Deadline(phase, m_definition.SimulationRateHz),
-            "direction" => phase.Direction,
-            "skipped" => phase.Skipped,
-            _ => -1,
-        };
+        return declared.Phase?.Sequence ?? -1;
     }
 }

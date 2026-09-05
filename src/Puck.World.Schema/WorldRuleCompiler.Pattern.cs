@@ -4,13 +4,15 @@ public static partial class WorldRuleCompiler {
     // $match:<pattern>:<row>[:<direction>|:any][:<facet>] — a board source walks the ray from the operand key's
     // origin cell (exclusive) in the named direction, or every direction under `any`; an ordered zone reads the
     // pattern's attribute row in pile order; a keyed row reads its own cells in cell order. The word's kind must be
-    // the pattern's kind. The facet is `prefix` (longest accepted prefix length) on one word, or `mask`/`count`
-    // over `any`; absent, the operand answers acceptance.
+    // the pattern's kind. On one direction the facet is `prefix` (longest accepted prefix length), `cell` (the first
+    // rejected cell along the ray, or -1), or `distance` (the step count to it, or -1) — a first-blocker read whose
+    // "blocker" is any authored pattern, not only "occupied", so it subsumes what a fixed ray-to-first-occupant query
+    // would answer. Over `any` the facet is `mask`/`count`. Absent, the operand answers acceptance.
     private static ResolvedOperand ResolvePatternOperand(string name, string? key, string ruleName, WorldDefinition definition) {
         WorldRuleException Invalid(string detail) => new(WorldRuleRefusal.StateCellUnaddressable, ruleName, detail);
         var tokens = name.Split(':');
         if (tokens.Length is < 3 or > 5) {
-            throw Invalid("pattern match requires $match:<pattern>:<row>[:<direction>|:any][:prefix|:mask|:count]");
+            throw Invalid("pattern match requires $match:<pattern>:<row>[:<direction>|:any][:prefix|:cell|:distance|:mask|:count]");
         }
         var facet = WorldMatchFacet.Accept;
         var pattern = definition.Patterns.FirstOrDefault(candidate => candidate.Name.Value == tokens[1]) ?? throw Invalid($"'{tokens[1]}' names no pattern");
@@ -33,9 +35,11 @@ public static partial class WorldRuleCompiler {
             if (tokens.Length == 5) {
                 facet = tokens[4] switch {
                     "prefix" when !every => WorldMatchFacet.Prefix,
+                    "cell" when !every => WorldMatchFacet.Cell,
+                    "distance" when !every => WorldMatchFacet.Distance,
                     "mask" when every => WorldMatchFacet.DirectionMask,
                     "count" when every => WorldMatchFacet.DirectionCount,
-                    _ => throw Invalid($"'{tokens[4]}' is not a facet for this source: prefix on one direction, mask or count over any"),
+                    _ => throw Invalid($"'{tokens[4]}' is not a facet for this source: prefix, cell or distance on one direction, mask or count over any"),
                 };
             }
             if (TryResolveDynamicKey(definition: definition, key: key, ruleName: ruleName, verb: "match", keyFieldLabel: "key", cell: out var dynamicKey)) {
@@ -43,7 +47,9 @@ public static partial class WorldRuleCompiler {
             } else if (key is null || !topology.TryCell(key, out _)) {
                 throw Invalid("a board source's key must name the origin cell or use a validated dynamic key");
             }
-            board = new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.RayCell, Direction: direction);
+            // A pattern's board source is read entirely through ReadRay/the pattern machine below; Neighbour is an
+            // arbitrary placeholder — no reader inspects CompiledWorldBoardQuery.Kind on this path.
+            board = new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Neighbour, Direction: direction);
             kind = CellKind.Int;
         } else {
             if (tokens.Length > 4 || key is not null) {

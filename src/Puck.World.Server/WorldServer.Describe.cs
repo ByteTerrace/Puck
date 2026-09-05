@@ -190,12 +190,6 @@ public sealed partial class WorldServer {
         : $"UpsertProperty '{m.Name}'"),
         WorldMutation.UpsertInteraction m => $"UpsertInteraction '{m.Interaction.Name}'",
         WorldMutation.RemoveInteraction m => $"RemoveInteraction '{m.Name}'",
-        WorldMutation.CreateMarketListing m => $"CreateMarketListing {m.Quantity}x'{m.ItemRow}' seller={m.Seller.Describe()} by {m.Principal.Describe()}",
-        WorldMutation.PlaceMarketBid m => $"PlaceMarketBid #{m.ListingId} {m.Amount} bidder={m.Bidder.Describe()} by {m.Principal.Describe()}",
-        WorldMutation.BuyoutMarketListing m => $"BuyoutMarketListing #{m.ListingId} buyer={m.Buyer.Describe()} by {m.Principal.Describe()}",
-        WorldMutation.CancelMarketListing m => $"CancelMarketListing #{m.ListingId} canceler={m.Canceler.Describe()} by {m.Principal.Describe()}",
-        WorldMutation.SettleMarketListing m => $"SettleMarketListing #{m.ListingId}",
-        WorldMutation.PruneMarketListings => "PruneMarketListings",
         _ => "unknown",
     };
     /// <summary>Composes the <c>body.channels</c> echo — the fold and held-image join's read-back

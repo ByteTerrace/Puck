@@ -46,28 +46,26 @@ public sealed class DiscreteStateLawTests {
     }
 
     [Fact]
-    public void PhaseDeadlineWinsAtTheExactTickAndGuardCannotBeOmitted() {
-        var phase = new WorldStatePhase(["console"], [new("act", WorldPhaseMode.Sequential, "act", 1)]);
+    public void APhaseOfTaggedRowRefusesAnUnguardedTransformAndAMatchingGuardAdvancesTheGenerationOnSuccess() {
         var definition = Document(
-            new(Name("turn"), CellKind.Int, Phase: phase),
+            new(Name("turn"), CellKind.Int, Phase: new()),
             new(Name("cards"), CellKind.Int, Cells: [Cell("a")], Tokens: new()),
             new(Name("deck"), CellKind.Bool, Cells: [Cell("a")], Zone: new("cards"), PhaseOf: "turn"),
             new(Name("hand"), CellKind.Bool, Zone: new("cards"), PhaseOf: "turn"));
-        var deadline = (ulong)definition.SimulationRateHz;
-        Assert.True(WorldStateTransforms.CanAct(definition, new("turn",0), WorldPrincipal.Console, deadline - 1));
-        Assert.False(WorldStateTransforms.CanAct(definition, new("turn",0), WorldPrincipal.Console, deadline));
-        Assert.False(WorldStateTransforms.TryApply(definition, new WorldStateTransform.CompletePhase("turn",0), WorldPrincipal.Console, deadline, "test", out _, out _));
-        Assert.True(WorldStateTransforms.TryApply(definition, new WorldStateTransform.CompletePhase("turn", Timeout: true), WorldPrincipal.World, deadline, "test", out _, out _));
+        Assert.True(WorldStateTransforms.CanAct(definition, new("turn", 0), WorldPrincipal.Console));
+        Assert.False(WorldStateTransforms.CanAct(definition, new("turn", 1), WorldPrincipal.Console));
         using var fixture = Fixtures.FreshServer(definition: definition);
         var operation = new WorldStateTransform.Transfer("deck", "hand", WorldZoneSelector.First);
         fixture.Server.Submit(new(SubmissionEnvelope.LocalConnectionId, 0, 1, 1, WorldPrincipal.Console,
             new WorldSubmissionPayload.Mutation(new WorldMutation.TransformState(WorldPrincipal.Console, operation))), _ => { });
         fixture.Step();
         Assert.Empty(Find(fixture.Server.Definition, "hand").Cells ?? []);
+        Assert.Equal(0L, Find(fixture.Server.Definition, "turn").Phase!.Sequence);
         fixture.Server.Submit(new(SubmissionEnvelope.LocalConnectionId, 0, 2, 2, WorldPrincipal.Console,
             new WorldSubmissionPayload.Mutation(new WorldMutation.TransformState(WorldPrincipal.Console, operation, new("turn",0)))), _ => { });
         fixture.Step();
         Assert.Single(Find(fixture.Server.Definition, "hand").Cells!);
+        Assert.Equal(1L, Find(fixture.Server.Definition, "turn").Phase!.Sequence);
     }
 
     private static WorldCellName Name(string value) => WorldCellName.Parse(value);
@@ -86,22 +84,44 @@ public sealed class DiscreteStateLawTests {
         Assert.Equal(5, topology.Neighbour(0, topology.Direction("SE")));
         var wrapped = WorldTopologyCompilation.Find(new(Lattices: [Grid(wrap: WorldTopologyWrap.Both)]), "map")!;
         Assert.Equal(12, wrapped.Neighbour(0, wrapped.Direction("N")));
-        var query = new CompiledWorldBoardQuery(wrapped, WorldBoardQueryKind.RayCell, Direction: wrapped.Direction("E"));
-        Assert.Equal(-1, WorldBoardQueries.Evaluate(query, new long[16], 0, 0));
-        var line = new CompiledWorldBoardQuery(wrapped, WorldBoardQueryKind.Line, Length: 4, Value: 1, Exact: true);
-        Assert.Equal(1, WorldBoardQueries.Evaluate(line, [1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0], 0, -1));
-        Assert.Equal(0, WorldBoardQueries.Evaluate(line with { Length = 3 }, [1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0], 0, -1));
+
+        // A ray over a fully wrapped board whose every cell matches the pattern reads the pattern-engine's own
+        // ReadRay, which breaks the moment it returns to its own origin: the walk still terminates (rather than
+        // looping forever) with no blocker found, since the pattern accepts the whole (CellCount - 1)-cell word —
+        // the wrap-termination guarantee a $match-over-a-ray read now leans on where a dedicated ray query once did.
+        var runOfOnes = new WorldPatternRow(Name("runOfOnes"), CellKind.Int, Symbols: [new(Name("one"), 1, 1)], Pattern: new WorldPatternNode.Star(new WorldPatternNode.Symbol("one")));
+        var wrappedDefinition = Fixtures.BuildDocument() with {
+            StateRaw = new(World: [new WorldStateRow(Name("board"), CellKind.Int, Board: new("map", Empty: 1)), new WorldStateRow(Name("blocker"), CellKind.Int, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0L)])], Lattices: [Grid(wrap: WorldTopologyWrap.Both)]),
+            PatternsRaw = [runOfOnes],
+            Rules = [new WorldRule(Name("read"), [new ActionEffect.SetState(State: "blocker", FromState: "$match:runOfOnes:board:E:cell", FromKey: "0")])],
+        };
+        using var fixture = Fixtures.FreshServer(definition: wrappedDefinition);
+        fixture.Step();
+        Assert.Equal(-1L, WorldDefinitionRows.FindCell(Find(fixture.Server.Definition, "blocker").Cells, WorldStateRow.SlotKey)!.Value);
     }
 
+    private static WorldPatternRow CapturePattern() => new(Name("capture"), CellKind.Int,
+        [new(Name("through"), 2, 2), new(Name("until"), 1, 1)],
+        new WorldPatternNode.Sequence([new WorldPatternNode.Plus(new WorldPatternNode.Symbol("through")), new WorldPatternNode.Symbol("until")]));
+
     [Fact]
-    public void BracketedRayCommitsAllInterveningCellsOrNone() {
-        var definition = Document(new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0",1),Cell("1",2),Cell("2",2),Cell("3",1)], Board: new("map")));
-        var operation = new WorldStateTransform.SetRay("board", "0", "E", 2, 1, 1);
-        Assert.True(WorldStateTransforms.TryApply(definition, operation, WorldPrincipal.World, 1, "test", out var changed, out var reason), reason);
+    public void BracketedRayCommitsTheAcceptedPrefixOrRefusesOnAnEmptyOne() {
+        var definition = Document(new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0",1),Cell("1",2),Cell("2",2),Cell("3",1)], Board: new("map"))) with {
+            PatternsRaw = [CapturePattern()],
+        };
+        Assert.True(CompiledWorldPatterns.TryCompileAll(definition, out var patterns, []));
+        var operation = new WorldStateTransform.SetRay("board", "0", "E", "capture", 1);
+        Assert.True(WorldStateTransforms.TryApply(definition, operation, WorldPrincipal.World, 1, "test", out var changed, out var reason, patterns), reason);
         Assert.All(Find(changed, "board").Cells!, c => Assert.Equal(1, c.Value));
         Assert.Equal(2, Find(definition, "board").Cells![1].Value);
-        Assert.False(WorldStateTransforms.TryApply(definition, operation with { Until = 3 }, WorldPrincipal.World, 1, "test", out var refused, out _));
-        Assert.Same(definition, refused);
+        // Control: a board holding only "through" values never reaches the required "until" terminator, so the
+        // longest accepted prefix is empty and the whole write is refused.
+        var open = Document(new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0",1),Cell("1",2),Cell("2",2),Cell("3",2)], Board: new("map"))) with {
+            PatternsRaw = [CapturePattern()],
+        };
+        Assert.True(CompiledWorldPatterns.TryCompileAll(open, out var openPatterns, []));
+        Assert.False(WorldStateTransforms.TryApply(open, operation, WorldPrincipal.World, 1, "test", out var refused, out _, openPatterns));
+        Assert.Same(open, refused);
     }
 
     [Fact]
@@ -118,22 +138,6 @@ public sealed class DiscreteStateLawTests {
         Assert.Same(changed, refused);
         Assert.True(WorldStateTransforms.TryApply(definition, new WorldStateTransform.Transfer("deck", "deck", WorldZoneSelector.First), WorldPrincipal.Console, 0, "test", out var reordered, out reason), reason);
         Assert.Equal(new[] { "b", "a" }, Find(reordered, "deck").Cells!.Select(c => c.Key.Value));
-    }
-
-    [Fact]
-    public void SimultaneousReadinessKeepsOtherParticipantsGenerationValid() {
-        var phase = new WorldStatePhase(["seat1", "seat2"], [new("plan", WorldPhaseMode.Together, "resolve"),new("resolve", WorldPhaseMode.Resolution, "plan")]);
-        var definition = Document(new WorldStateRow(Name("turn"), CellKind.Int, Phase: phase));
-        Assert.True(WorldStateTransforms.TryApply(definition, new WorldStateTransform.CompletePhase("turn", 0), WorldPrincipal.Seat(0), 1, "test", out var ready, out var reason), reason);
-        Assert.Equal(0, Find(ready, "turn").Phase!.Sequence);
-        Assert.False(WorldStateTransforms.CanAct(ready, new("turn", 0), WorldPrincipal.Seat(0), 1));
-        Assert.True(WorldStateTransforms.CanAct(ready, new("turn", 0), WorldPrincipal.Seat(1), 1));
-        Assert.True(WorldStateTransforms.TryApply(ready, new WorldStateTransform.CompletePhase("turn", 0), WorldPrincipal.Seat(1), 1, "test", out var resolving, out reason), reason);
-        Assert.Equal(1, Find(resolving, "turn").Phase!.Sequence);
-        Assert.Equal(1, Find(resolving, "turn").Phase!.Current);
-        Assert.False(WorldStateTransforms.CanAct(resolving, new("turn", 0), WorldPrincipal.Seat(0), 1));
-        Assert.True(WorldStateTransforms.TryApply(resolving, new WorldStateTransform.CompletePhase("turn"), WorldPrincipal.World, 1, "test", out var nextRound, out reason), reason);
-        Assert.Equal(1, Find(nextRound, "turn").Phase!.Round);
     }
 
     [Fact]

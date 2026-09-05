@@ -14,8 +14,8 @@ namespace Puck.World;
 /// settlement on stderr. The narration is not decoration: settling erases the only evidence the value was random, so
 /// without it nothing anywhere could say the census or the backend was drawn, or which site decided it. A STATE site
 /// (a <see cref="WorldStateRow"/>'s own <see cref="WorldStateRow.Draw"/>) is different — the facet is NEVER cleared
-/// (it stays redrawable), the fill applies ONLY while the row carries no cell yet, and the site's cursor and decks
-/// persist. That is what makes an authored <c>value</c> a deliberate override, and what keeps a save/reload from
+/// (it stays redrawable), the fill applies ONLY while the row carries no cell yet, and the site's cursor and drawn
+/// masks persist. That is what makes an authored <c>value</c> a deliberate override, and what keeps a save/reload from
 /// re-rolling a value the player has already seen: a reloaded site already holds a cell, so nothing refills it, and
 /// the next redraw resumes from the stored cursor.</para>
 /// <para><b>Why the backend draws a NAME.</b> The host backend's natural spelling is a weighted TEXT source over the
@@ -35,7 +35,7 @@ public static class WorldDrawBootResolver {
     /// <param name="instanceIdentity">The running instance identity.</param>
     /// <param name="row">The keyed draw site.</param>
     /// <param name="keys">The cells to redraw, or <see langword="null"/> for every cell.</param>
-    /// <param name="filled">The row with its drawn values, cursor, and decks.</param>
+    /// <param name="filled">The row with its drawn values, cursor, and drawn masks.</param>
     /// <param name="reason">Why the fill refused, on failure.</param>
     /// <returns><see langword="true"/> when every selected cell drew.</returns>
     public static bool TryFillKeyedSite(WorldDefinition definition, ulong worldSeed, string instanceIdentity, WorldStateRow row, IReadOnlyList<string>? keys, out WorldStateRow filled, out string reason) {
@@ -92,9 +92,9 @@ public static class WorldDrawBootResolver {
             seedState: WorldGeneratorEngine.ComputeSeedState(instanceIdentity: instanceIdentity, site: site, worldSeed: worldSeed),
             stream: WorldGeneratorEngine.ComputeStreamId(site: site),
             cursor: row.DrawCursor,
-            decks: row.DrawDecks,
+            masks: row.DrawnMasks,
             values: values,
-            decksAfter: out var decksAfter,
+            masksAfter: out var masksAfter,
             reason: out var fireReason
         )) {
             reason = $"{site} {fireReason}";
@@ -106,12 +106,12 @@ public static class WorldDrawBootResolver {
             cells[selected[slot]] = cells[selected[slot]] with { Value = values[slot] };
         }
 
-        filled = row with { Cells = cells, DrawCursor = checked(row.DrawCursor + selected.Count), DrawDecks = WorldGeneratorEngine.DecksAfter(generator: generator, fired: decksAfter, previous: row.DrawDecks) };
+        filled = row with { Cells = cells, DrawCursor = checked(row.DrawCursor + selected.Count), DrawnMasks = WorldGeneratorEngine.MasksAfter(generator: generator, fired: masksAfter, previous: row.DrawnMasks) };
         reason = string.Empty;
 
         return true;
     }
-    private static bool TryDrawSite(WorldDefinition definition, ulong worldSeed, string instanceIdentity, string site, WorldDraw draw, CellKind targetKind, out WorldGeneratorEngine.FireResult fired, out string reason, long cursor = 0L, IReadOnlyList<ClosedBitset256>? decks = null) {
+    private static bool TryDrawSite(WorldDefinition definition, ulong worldSeed, string instanceIdentity, string site, WorldDraw draw, CellKind targetKind, out WorldGeneratorEngine.FireResult fired, out string reason, long cursor = 0L, IReadOnlyList<ClosedBitset256>? masks = null) {
         fired = default;
 
         if (!WorldGeneratorEngine.TryResolveSource(
@@ -135,7 +135,7 @@ public static class WorldDrawBootResolver {
             ),
             stream: WorldGeneratorEngine.ComputeStreamId(site: site),
             cursor: cursor,
-            decks: decks,
+            masks: masks,
             result: out fired,
             secret: draw.Secret,
             reason: out var fireReason
@@ -205,7 +205,7 @@ public static class WorldDrawBootResolver {
                 fired: out var fired,
                 reason: out reason,
                 cursor: row.DrawCursor,
-                decks: row.DrawDecks
+                masks: row.DrawnMasks
             )) {
                 return false;
             }
@@ -230,7 +230,7 @@ public static class WorldDrawBootResolver {
                 generator: out var generator,
                 reason: out _
             );
-            state.Add(item: (row with { Cells = [cell], DrawCursor = (row.DrawCursor + fired.Samples), DrawDecks = WorldGeneratorEngine.DecksAfter(generator: generator, fired: fired.Decks, previous: row.DrawDecks) }));
+            state.Add(item: (row with { Cells = [cell], DrawCursor = (row.DrawCursor + fired.Samples), DrawnMasks = WorldGeneratorEngine.MasksAfter(generator: generator, fired: fired.Masks, previous: row.DrawnMasks) }));
             changed = true;
         }
 

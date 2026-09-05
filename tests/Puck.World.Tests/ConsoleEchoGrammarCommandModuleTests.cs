@@ -6,7 +6,7 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Command-level proofs that execute the real <c>world.update</c>/<c>world.groups</c>/<c>world.market</c>/
+/// <summary>Command-level proofs that execute the real <c>world.update</c>/<c>world.groups</c>/
 /// <c>world.wait</c>/<c>world.population.spawn</c> verbs through their registered <see cref="ICommandModule"/>
 /// (<c>Puck.World.Console</c>, referenced directly since <c>Puck.World</c> the composition root is out of scope for
 /// this project) — the coverage <c>CommandEchoTests</c>' builder-only proofs and a hand-built
@@ -103,54 +103,6 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
         var filtered = registry.Submit(line: "world.groups alpha");
 
         Assert.Equal(expected: "[world.groups: group id=alpha kind=party members=\"[seat1]\"]", actual: filtered.Output);
-    }
-    [Fact]
-    public void WorldMarket_NoSectionAuthored_EchoesNoMarketSection() {
-        using var row = HostRow.Build(name: "boot", definition: Fixtures.BuildDocument());
-        var registry = new CommandRegistry(modules: [new WorldMarketCommandModule(authority: new FakeConsoleAuthority(instance: row.Instance), link: row.Instance.Link)]);
-
-        var result = registry.Submit(line: "world.market");
-
-        Assert.Equal(expected: "[world.market: (no market section)]", actual: result.Output);
-    }
-    [Fact]
-    public void WorldMarket_AuthoredWithNoListings_EchoesConfigOnlyWithNoTrailingPipe() {
-        using var row = HostRow.Build(name: "boot", definition: MarketFixtures.BuildDocument());
-        var registry = new CommandRegistry(modules: [new WorldMarketCommandModule(authority: new FakeConsoleAuthority(instance: row.Instance), link: row.Instance.Link)]);
-
-        var result = registry.Submit(line: "world.market");
-
-        // The staged trailing-pipe drop (was "... feeReserve=0 |]") — intentional, pinned here as the empty-listings
-        // case. formats and duration are bracketed values, so CommandEcho quotes them rather than letting their ']'
-        // read as the envelope's own.
-        Assert.Equal(expected: "[world.market: formats=\"[English,Buyout]\" feeBasisPoints=1000 duration=\"[1..3600]\" retentionSeconds=604800 feeReserve=0]", actual: result.Output);
-    }
-    [Fact]
-    public void WorldMarket_WithOneListing_EchoesHeadFieldListingSegment() {
-        var market = (MarketFixtures.BuildDocument().Market! with {
-            Listings = [
-                new WorldMarketListing(
-                    Id: 1,
-                    Seller: WorldPrincipal.Seat(slot: 0),
-                    ItemRow: MarketFixtures.AppleRow,
-                    Quantity: 1,
-                    CurrencyRow: MarketFixtures.GoldRow,
-                    Format: WorldMarketFormat.English,
-                    StartPrice: 10,
-                    DeadlineTick: 1000
-                ),
-            ],
-            NextListingId = 2,
-        });
-        using var row = HostRow.Build(name: "boot", definition: (MarketFixtures.BuildDocument() with { Market = market }));
-        var registry = new CommandRegistry(modules: [new WorldMarketCommandModule(authority: new FakeConsoleAuthority(instance: row.Instance), link: row.Instance.Link)]);
-
-        var result = registry.Submit(line: "world.market");
-
-        Assert.Equal(
-            expected: "[world.market: formats=\"[English,Buyout]\" feeBasisPoints=1000 duration=\"[1..3600]\" retentionSeconds=604800 feeReserve=0 | listing id=1 seller=seat1 item=1xapple currency=gold format=English startPrice=10 deadlineTick=1000 status=Active currentBid=0]",
-            actual: result.Output
-        );
     }
     [Theory]
     [InlineData("1", true, 1UL)]

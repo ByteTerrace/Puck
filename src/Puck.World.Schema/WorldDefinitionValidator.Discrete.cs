@@ -17,8 +17,8 @@ public static partial class WorldDefinitionValidator {
             if (topology.Kind != WorldTopologyKind.Field && !WorldTopologyCompilation.TryValidate(topology, out var reason)) {
                 errors.Add($"state.lattices '{topology.Name}': {reason}.");
             }
-            if (topology.Kind == WorldTopologyKind.Field && (topology.Wrap != WorldTopologyWrap.None || topology.Radius != 0)) {
-                errors.Add($"state.lattices '{topology.Name}': physical fields do not admit discrete wrapping or radius.");
+            if (topology.Kind == WorldTopologyKind.Field && (topology.Wrap != WorldTopologyWrap.None || topology.Radius != 0 || topology.Directions is not null || topology.ElementAliases is not null)) {
+                errors.Add($"state.lattices '{topology.Name}': physical fields do not admit discrete wrapping, radius, a direction vocabulary, or element aliases.");
             }
         }
         var totalCells = 0L;
@@ -91,7 +91,7 @@ public static partial class WorldDefinitionValidator {
                 errors.Add($"state row '{row.Name}': zones contain boolean membership cells whose value is true.");
             }
             if (row.Phase is { } phase) {
-                ValidatePhase(row, phase, definition.SimulationRateHz, errors);
+                ValidatePhase(row, phase, errors);
             }
         }
         foreach (var domain in (definition.State ?? []).Where(r => r?.Tokens is not null)) {
@@ -115,35 +115,9 @@ public static partial class WorldDefinitionValidator {
         }
     }
 
-    private static void ValidatePhase(WorldStateRow row, WorldStatePhase phase, int rate, List<string> errors) {
-        var participants = phase.Participants ?? [];
-        var phases = phase.Phases ?? [];
-        if (row.Kind != CellKind.Int || row.Cells is { Count: > 0 } || row.Capacity is not null || participants.Count is < 1 or > 32 || phases.Count is < 1 or > 32) {
-            errors.Add($"state row '{row.Name}': phase requires an integer row without cells/capacity, 1..32 participants and 1..32 phases.");
-            return;
-        }
-        var actors = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var participant in participants) {
-            if (!Protocol.WorldPrincipal.TryParse(participant, out var principal) || principal.Kind is Protocol.PrincipalKind.Group or Protocol.PrincipalKind.World || !actors.Add(principal.Describe()) || principal.Describe() != participant) {
-                errors.Add($"state row '{row.Name}': phase participants must be distinct canonical acting principals.");
-            }
-        }
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var phaseRow in phases) {
-            if (phaseRow is null || !WorldCellName.TryParse(phaseRow.Name, out _, out _) || !names.Add(phaseRow.Name) || !Enum.IsDefined(phaseRow.Mode) ||
-                phaseRow.TimeoutSeconds < 0 || phaseRow.TimeoutSeconds > (decimal)long.MaxValue / rate) {
-                errors.Add($"state row '{row.Name}': invalid phase name, mode, or timeout.");
-            }
-        }
-        foreach (var phaseRow in phases) {
-            if (phaseRow is not null && !names.Contains(phaseRow.Next)) {
-                errors.Add($"state row '{row.Name}': phase '{phaseRow.Name}' names no next phase '{phaseRow.Next}'.");
-            }
-        }
-        if ((uint)phase.Current >= phases.Count || (uint)phase.Active >= participants.Count || phase.Sequence < 0 ||
-            phase.Round < 0 || phase.DeadlineTick < 0 || phase.Direction is not (1 or -1) ||
-            (participants.Count < 32 && ((phase.Ready | phase.Skipped) >> participants.Count) != 0)) {
-            errors.Add($"state row '{row.Name}': phase progression is outside its declared domain.");
+    private static void ValidatePhase(WorldStateRow row, WorldStatePhase phase, List<string> errors) {
+        if (row.Kind != CellKind.Int || row.Cells is { Count: > 0 } || row.Capacity is not null || phase.Sequence < 0) {
+            errors.Add($"state row '{row.Name}': phase requires an integer row without cells/capacity and a nonnegative sequence.");
         }
     }
 }

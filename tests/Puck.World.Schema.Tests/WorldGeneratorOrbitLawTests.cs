@@ -4,9 +4,10 @@ using Xunit;
 namespace Puck.World.Schema.Tests;
 
 /// <summary>
-/// Laws for the symmetry-orbit source: its cards are the ring's thirty nodes or a node's orbit under a word, a deck
-/// mode deals each card once per pass, the validator refuses every shape that names no single orbit, a site's domain
-/// must admit node indices, a persisted deck must fit the orbit, and a lattice fill needs enough undealt cards.
+/// Laws for the symmetry-orbit source: its units are the ring's thirty nodes or a node's orbit under a word, an
+/// exhausting mode draws each unit once per pass, the validator refuses every shape that names no single orbit, a
+/// site's domain must admit node indices, a persisted mask must fit the orbit, and a lattice fill needs enough
+/// undrawn units.
 /// </summary>
 public sealed class WorldGeneratorOrbitLawTests {
     private const string Instance = "instance-alpha";
@@ -24,18 +25,18 @@ public sealed class WorldGeneratorOrbitLawTests {
         Node: node,
         Word: word
     );
-    private static bool TryFire(WorldGenerator generator, long cursor, IReadOnlyList<ClosedBitset256>? decks, out WorldGeneratorEngine.FireResult result, out string reason) =>
+    private static bool TryFire(WorldGenerator generator, long cursor, IReadOnlyList<ClosedBitset256>? masks, out WorldGeneratorEngine.FireResult result, out string reason) =>
         WorldGeneratorEngine.TryFire(
             generator: generator,
             targetKind: CellKind.Int,
             seedState: WorldGeneratorEngine.ComputeSeedState(instanceIdentity: Instance, site: Site, worldSeed: WorldSeed),
             stream: WorldGeneratorEngine.ComputeStreamId(site: Site),
             cursor: cursor,
-            decks: decks,
+            masks: masks,
             result: out result,
             reason: out reason
         );
-    private static string Validate(WorldGenerator generator, CellKind kind = CellKind.Int, long? max = null, IReadOnlyList<ClosedBitset256>? decks = null) {
+    private static string Validate(WorldGenerator generator, CellKind kind = CellKind.Int, long? max = null, IReadOnlyList<ClosedBitset256>? masks = null) {
         var definition = new WorldDefinition(
             Simulation: new WorldSimulationDefaults(RateHz: 240),
             StateRaw: new WorldStateSection(World: [
@@ -46,7 +47,7 @@ public sealed class WorldGeneratorOrbitLawTests {
                     Min: ((max is null) ? null : 0L),
                     Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)],
                     Draw: new WorldDraw(Generator: generator, Timing: WorldDrawTiming.Event),
-                    DrawDecks: decks
+                    DrawnMasks: masks
                 ),
             ])
         );
@@ -55,44 +56,44 @@ public sealed class WorldGeneratorOrbitLawTests {
     }
 
     [Fact]
-    public void ARingSource_DealsEveryNodeOfTheRingOncePerPass() {
+    public void ARingSource_DrawsEveryNodeOfTheRingOncePerPass() {
         var source = RingSource(ring: 2, mode: WorldGeneratorMode.WithoutReplacement);
         var cursor = 0L;
-        IReadOnlyList<ClosedBitset256>? decks = null;
-        var dealt = new List<long>();
+        IReadOnlyList<ClosedBitset256>? masks = null;
+        var drawn = new List<long>();
 
         Assert.True(condition: WorldGeneratorEngine.TryResolveOrbit(generator: source, nodes: out var nodes, reason: out var orbitReason), userMessage: orbitReason);
         Assert.Equal(expected: SymmetryLattice.RingSize, actual: nodes.Length);
 
-        for (var deal = 0; (deal < SymmetryLattice.RingSize); deal++) {
-            Assert.True(condition: TryFire(generator: source, cursor: cursor, decks: decks, result: out var fired, reason: out var reason), userMessage: reason);
+        for (var draw = 0; (draw < SymmetryLattice.RingSize); draw++) {
+            Assert.True(condition: TryFire(generator: source, cursor: cursor, masks: masks, result: out var fired, reason: out var reason), userMessage: reason);
             Assert.Equal(expected: 1L, actual: fired.Samples);
             Assert.Equal(expected: 2, actual: SymmetryLattice.Ring(node: (int)fired.Numeric!.Value));
-            dealt.Add(item: fired.Numeric!.Value);
+            drawn.Add(item: fired.Numeric!.Value);
             cursor += fired.Samples;
-            decks = fired.Decks;
+            masks = fired.Masks;
         }
 
-        Assert.Equal(expected: nodes.Order().Select(selector: static node => (long)node).ToArray(), actual: dealt.Order().ToArray());
-        Assert.False(condition: TryFire(generator: source, cursor: cursor, decks: decks, result: out _, reason: out var exhausted));
-        Assert.Contains(expectedSubstring: "orbit is dealt out", actualString: exhausted);
+        Assert.Equal(expected: nodes.Order().Select(selector: static node => (long)node).ToArray(), actual: drawn.Order().ToArray());
+        Assert.False(condition: TryFire(generator: source, cursor: cursor, masks: masks, result: out _, reason: out var exhausted));
+        Assert.Contains(expectedSubstring: "orbit is drawn out", actualString: exhausted);
 
         // With replacement the same cursor replays the same node, and every draw stays on the ring.
         var replacing = RingSource(ring: 2);
 
         for (var probe = 0L; (probe < 50L); probe++) {
-            Assert.True(condition: TryFire(generator: replacing, cursor: probe, decks: null, result: out var first, reason: out _));
-            Assert.True(condition: TryFire(generator: replacing, cursor: probe, decks: null, result: out var again, reason: out _));
+            Assert.True(condition: TryFire(generator: replacing, cursor: probe, masks: null, result: out var first, reason: out _));
+            Assert.True(condition: TryFire(generator: replacing, cursor: probe, masks: null, result: out var again, reason: out _));
             Assert.Equal(expected: first.Numeric, actual: again.Numeric);
             Assert.Equal(expected: 2, actual: SymmetryLattice.Ring(node: (int)first.Numeric!.Value));
-            Assert.Null(@object: first.Decks);
+            Assert.Null(@object: first.Masks);
         }
     }
     [Fact]
     public void ANodeSource_DrawsTheOrbitUnderItsWord_OrTheNodesRingWithoutOne() {
         int[] letters = [0, 1, 2, 3, 4, 5];
         var word = SymmetryWord.Create(mirrors: letters);
-        var source = NodeSource(node: 5, word: letters, mode: WorldGeneratorMode.ReshuffleOnExhaustion);
+        var source = NodeSource(node: 5, word: letters, mode: WorldGeneratorMode.RestartOnExhaustion);
 
         Assert.True(condition: WorldGeneratorEngine.TryResolveOrbit(generator: source, nodes: out var nodes, reason: out var reason), userMessage: reason);
         Assert.Equal(expected: word.OrbitLength(node: 5), actual: nodes.Length);
@@ -102,15 +103,15 @@ public sealed class WorldGeneratorOrbitLawTests {
         }
 
         var cursor = 0L;
-        IReadOnlyList<ClosedBitset256>? decks = null;
+        IReadOnlyList<ClosedBitset256>? masks = null;
         var seen = new HashSet<long>();
 
-        for (var deal = 0; (deal < (2 * nodes.Length)); deal++) {
-            Assert.True(condition: TryFire(generator: source, cursor: cursor, decks: decks, result: out var fired, reason: out var fireReason), userMessage: fireReason);
+        for (var draw = 0; (draw < (2 * nodes.Length)); draw++) {
+            Assert.True(condition: TryFire(generator: source, cursor: cursor, masks: masks, result: out var fired, reason: out var fireReason), userMessage: fireReason);
             Assert.Contains(expected: (int)fired.Numeric!.Value, collection: nodes);
             seen.Add(item: fired.Numeric!.Value);
             cursor += fired.Samples;
-            decks = fired.Decks;
+            masks = fired.Masks;
         }
 
         Assert.Equal(expected: nodes.Length, actual: seen.Count);
@@ -136,21 +137,21 @@ public sealed class WorldGeneratorOrbitLawTests {
         Assert.Contains(expectedSubstring: "outside the site's admissible domain", actualString: Validate(generator: RingSource(ring: 0), max: 100L));
         Assert.Equal(expected: string.Empty, actual: Validate(generator: RingSource(ring: 0), max: 239L));
 
-        // A persisted deck must fit the orbit, and a non-dealing mode carries none.
-        Assert.Equal(expected: string.Empty, actual: Validate(generator: RingSource(ring: 0, mode: WorldGeneratorMode.WithoutReplacement), decks: [new(Word0: 0b101UL)]));
-        Assert.Contains(expectedSubstring: "marks a card past the 30", actualString: Validate(generator: RingSource(ring: 0, mode: WorldGeneratorMode.WithoutReplacement), decks: [new(Word0: (1UL << 30))]));
-        Assert.Contains(expectedSubstring: "never deals", actualString: Validate(generator: RingSource(ring: 0), decks: [new(Word0: 1UL)]));
-        Assert.Contains(expectedSubstring: "exactly one", actualString: Validate(generator: RingSource(ring: 0, mode: WorldGeneratorMode.WithoutReplacement), decks: [new(Word0: 1UL), new(Word0: 2UL)]));
+        // A persisted mask must fit the orbit, and a non-exhausting mode carries none.
+        Assert.Equal(expected: string.Empty, actual: Validate(generator: RingSource(ring: 0, mode: WorldGeneratorMode.WithoutReplacement), masks: [new(Word0: 0b101UL)]));
+        Assert.Contains(expectedSubstring: "marks an entry past the 30", actualString: Validate(generator: RingSource(ring: 0, mode: WorldGeneratorMode.WithoutReplacement), masks: [new(Word0: (1UL << 30))]));
+        Assert.Contains(expectedSubstring: "never exhausts", actualString: Validate(generator: RingSource(ring: 0), masks: [new(Word0: 1UL)]));
+        Assert.Contains(expectedSubstring: "exactly one", actualString: Validate(generator: RingSource(ring: 0, mode: WorldGeneratorMode.WithoutReplacement), masks: [new(Word0: 1UL), new(Word0: 2UL)]));
     }
     [Fact]
-    public void ALatticeFill_NeedsEnoughUndealtCards() {
+    public void ALatticeFill_NeedsEnoughUndrawnUnits() {
         var source = RingSource(ring: 3, mode: WorldGeneratorMode.WithoutReplacement);
 
-        Assert.True(condition: WorldGeneratorEngine.TryCheckBatchCapacity(generator: source, decks: null, sampleCount: 30L, reason: out _));
-        Assert.False(condition: WorldGeneratorEngine.TryCheckBatchCapacity(generator: source, decks: null, sampleCount: 31L, reason: out var reason));
+        Assert.True(condition: WorldGeneratorEngine.TryCheckBatchCapacity(generator: source, masks: null, sampleCount: 30L, reason: out _));
+        Assert.False(condition: WorldGeneratorEngine.TryCheckBatchCapacity(generator: source, masks: null, sampleCount: 31L, reason: out var reason));
         Assert.Contains(expectedSubstring: "can supply only 30", actualString: reason);
-        Assert.False(condition: WorldGeneratorEngine.TryCheckBatchCapacity(generator: source, decks: [new(Word0: 0b111UL)], sampleCount: 28L, reason: out _));
-        Assert.True(condition: WorldGeneratorEngine.TryCheckBatchCapacity(generator: source, decks: [new(Word0: 0b111UL)], sampleCount: 27L, reason: out _));
-        Assert.True(condition: WorldGeneratorEngine.TryCheckBatchCapacity(generator: RingSource(ring: 3, mode: WorldGeneratorMode.ReshuffleOnExhaustion), decks: null, sampleCount: 90L, reason: out _));
+        Assert.False(condition: WorldGeneratorEngine.TryCheckBatchCapacity(generator: source, masks: [new(Word0: 0b111UL)], sampleCount: 28L, reason: out _));
+        Assert.True(condition: WorldGeneratorEngine.TryCheckBatchCapacity(generator: source, masks: [new(Word0: 0b111UL)], sampleCount: 27L, reason: out _));
+        Assert.True(condition: WorldGeneratorEngine.TryCheckBatchCapacity(generator: RingSource(ring: 3, mode: WorldGeneratorMode.RestartOnExhaustion), masks: null, sampleCount: 90L, reason: out _));
     }
 }

@@ -36,27 +36,54 @@ All shapes still carry the registry's required `origin` and `cellSize` fields.
 Missing board entries read as the declared `empty` value. Wrapped scans stop
 before revisiting their origin.
 
+The compass/space-direction names above are each kind's DEFAULT — the
+vocabulary it compiles when the topology authors no `directions` — never a
+fixed table. A topology's own `directions` (an array of `{"name", "x", "y",
+"z"}` steps) replaces that default WHOLESALE: `$board:neighbour`/`attacks`/
+`$match:...:<direction>` and every other direction
+token resolve against ONLY the authored list once one is declared. Grid/Hex/
+Ring name planar steps as `x`/`y`; only `Box` may declare a nonzero `z`
+(a layer step); a `Ring` (which has no second axis) refuses a nonzero `y`.
+Every step's own negation must appear as another entry (so
+the opposite-direction table above always closes), names and steps must be
+distinct, the zero step is refused, and on a wrapped axis (a `Ring` always
+wraps X) a step's magnitude must be under that axis' own width or depth — the
+modulo wrap formula folds a step at or past the extent onto the wrong cell or
+onto itself, so validation refuses it rather than leaving it to resolve
+silently wrong; 1..64 entries are admitted (the bit width of the `long` mask
+`$match:`'s direction-mask facet packs one bit per direction into). A
+4-connected grid (orthogonal moves only) or a leaper's own named reach are
+authored this way rather than composed from raw `$board:offset` deltas. A
+physical field topology admits no `directions` at all — there is no discrete
+adjacency to name.
+
 Rule operands accept these bounded channels:
 
 | Channel | Result |
 |---|---|
 | `$board:neighbour:<row>:<direction>` | Neighbour ordinal, or -1 at the edge |
-| `$board:rayCell:<row>:<direction>` | First nonempty cell ordinal, or -1 |
-| `$board:rayDistance:<row>:<direction>` | Distance to that cell, or -1 |
-| `$board:line:<row>:<length>:<value>:<exact\|atLeast>` | 1 when a matching line exists, otherwise 0 |
 | `$board:pathCost:<row>:<target>:<maxCost>:<maxVisits>` | Minimum terrain entry cost, -1 when unreachable/unaffordable, -2 when the visit budget is exhausted |
-| `$board:mask:<row>:<min>:<max>` | The 64-bit mask of cells whose value lies in min..max (bit c is cell ordinal c); the topology holds at most 64 cells |
-| `$board:image:<row>:<element>:<min>:<max>` | That mask carried through one point-group element of the topology |
-| `$board:canonicalMask:<row>:<min>:<max>` | The least image mask over every element: one number for a position and all its rotations and mirrors |
+| `$board:mask:<row>:<min>:<max>` | The 64-bit cell-set mask of cells whose value lies in min..max (bit c is cell ordinal c); the topology holds at most 64 cells |
 | `$board:canonical:<row>` | The least 64-bit fingerprint of the whole board's values over every element, for boards of any size: pushed into a history ring, repetition up to symmetry is a pattern |
 | `$board:cellOf:<row>:<bodyRef>` | The Grid cell a body's resolved world position falls in, or -1 |
 | `$board:offset:<row>:<dx>:<dz>` | The cell reached by an arbitrary (dx, dz) grid step from the key cell, or -1 |
-| `$board:attacks:<row>:<min>:<max>:<directions>` | 1 when walking any of 1..4 comma-separated directions from the key cell finds, before any other occupied cell, one whose value lies in min..max; 0 otherwise. `rayCell`'s single-direction first-blocker rule, unioned over the authored directions and filtered to a range — a slider's reach at one square in one call |
-| `$phase:<row>:<current\|active\|ready\|sequence\|round\|deadline\|direction\|skipped>` | Persisted phase fact; active is -1 outside sequential phases |
+| `$board:attacks:<row>:<min>:<max>:<directions>` | 1 when walking any of 1..4 comma-separated directions from the key cell finds, before any other occupied cell, one whose value lies in min..max; 0 otherwise. A single-direction first-blocker rule, unioned over the authored directions and filtered to a range — a slider's reach at one square in one call |
+| `$match:<pattern>:<row>:<direction>:cell` | The first cell one step past the longest accepted prefix of the ray from the key cell in `direction` — the first cell the pattern REJECTS — or -1 when the whole ray is accepted |
+| `$match:<pattern>:<row>:<direction>:distance` | The step count to that cell, or -1 on the same terms |
+| `$phase:<row>` | The row's own generation — the same value a `WorldPhaseGuard` checks against it |
+| `$clock:<music>:phaseError` | Signed tick distance from the world's musical clock's current position to the nearest beat: `elapsed mod ticksPerBeat`, or that minus `ticksPerBeat` past half a beat (tied toward "past"). `music` must name the document's declared `music` row. |
+
+A ray's first-blocker cell/distance is a `$match:` facet, not a `$board:`
+channel — the identical ray walk read through the pattern engine, generalized
+from "first cell not equal to the board's empty sentinel" to any authored
+pattern (see "Patterns" below); an `n`-in-a-row check composes the same way,
+reading a run-length pattern with the plain accept facet or `prefix`. A
+rhythm hit window is an authored `compareState` range over `$clock:…:phaseError`
+— never a dedicated effect or asset family.
 
 Board operands use the ordinary predicate/source `key` for their origin,
-including the existing `$cell:` dynamic-key form; `line`, `cellOf` accept no
-key — `cellOf` takes a `bodyRef` in its place, the same `body:<n>`/
+including the existing `$cell:` dynamic-key form; `cellOf` accepts no
+key — it takes a `bodyRef` in its place, the same `body:<n>`/
 `argmax:<row>`/`argmin:<row>`/`cell:<row>:<key>` vocabulary `$distance:`/
 `$los:`/`$nearest:` read. Both `cellOf` and `offset` require a `Grid`
 topology — the only kind carrying a rectangular world-space frame
@@ -66,27 +93,37 @@ A `Box` topology is `width` by `layers` by `depth` cells with the 26 space
 directions: the grid's eight compass names in the layer, each prefixed `U`
 or `D` for the layer above or below, and `U`/`D` alone; ordinals run
 `(layer * depth + z) * width + x`, and `layerHeight` resolves a body's Y to
-its layer the way `cellSize` resolves X and Z. Rays, lines, masks under 64
-cells, patterns, path search, `combine`, and `mapBoard` apply to it
-unchanged; a 4x4x4 tic-tac-toe is one 64-bit mask and `line:4`.
+its layer the way `cellSize` resolves X and Z. Rays, masks under 64
+cells, patterns, and path search apply to it unchanged; an `n`-in-a-row
+check over a 4x4x4 cube is one 64-bit mask, or a run-length pattern read
+with `$match:`.
 Every discrete topology carries its point group, derived from its shape and
-never authored: a square grid the eight elements `identity`, `rot90`,
-`rot180`, `rot270`, `mirrorX`, `mirrorZ`, `mirrorMain`, `mirrorAnti`; a
-rectangle the four without quarter turns; a hex board `rot60`..`rot300` and
-`mirror0`..`mirror5`; a box the signed axis permutations its equal extents
-admit (48 for a cube, 16 for a square prism, 8 otherwise), named by where
-`+x+y+z` land; a ring the identity alone. `world.topology <topology>
-[<cell>]` lists them and a cell's image under each. `mapBoard` (`target`,
-`source`, `element`) writes a board carried through an element, which is how
-rules authored from one side's view read the other side's position through
-`rot180`; the `boardImage` (`topology`, `element`) token does the same to a
-mask inside an expression.
+never authored, ALL of it one signed-axis-permutation spelling: an element
+carries axis `A` to output position `k` with sign `S`, spelled `"+x-y+z"`
+(letter per axis, sign first). A square grid's eight elements are
+`identity`, `-x-z`, `-x+z`, `+x-z`, `+z+x`, `+z-x`, `-z+x`, `-z-x` (letters
+`xz`, its two planar axes); a rectangle the four without quarter turns; a
+hex board's twelve are the signed permutations of its cube coordinates
+`(q, r, s)` (letters `qrs`) that keep `q + r + s == 0` — a bare permutation
+or the same permutation negated throughout; a box the signed axis
+permutations its equal extents admit (48 for a cube, 16 for a square prism,
+8 otherwise, letters `xyz`); a ring the identity alone. A topology may
+additionally author `elementAliases` (`[{"name": "rot90", "element":
+"-z+x"}]`) — friendlier names an author may use interchangeably with the
+canonical spelling wherever an element name is read; `world.topology` always
+echoes the canonical form, plus every authored alias
+(`aliases=rot90=-z+x`, or `aliases=none`). `world.topology <topology>
+[<cell>]` lists every element and a cell's image under each — see the
+`boardImage` (`topology`, `element`) expression op for how a rule authored
+from one side's view reads the other side's position through `rot180`
+inside an expression; `writeSet` composes the same carried mask back onto
+a board.
 A grid's `band` is the vertical half-extent about its origin's Y a position
 must lie within for `cellOf` to answer a cell; 0 (the default) answers any
 height, so a table's board authors a band and a piece on the floor beneath
 it reads as off the board.
 `offset` is the arbitrary-`(dx, dz)` sibling of `neighbour`'s fixed eight
-directions — what a leaper (a knight, or any piece whose reach is not a ray)
+directions — what a leaper (a piece whose reach is not a ray)
 authors its geometry against.
 Path search uses all topology neighbours, including grid diagonals, at the
 destination cell's entry cost. Negative terrain is impassable. Equal-cost
@@ -98,56 +135,58 @@ restricts an attribute row to those identities; `valuesFrom` additionally
 restricts integer positions to a named topology. A `zone: { "tokens": "cards",
 "ordered": true }` row contains boolean membership cells. For any domain
 with zones, every token belongs to exactly one zone. Cell order is pile order;
-two cards with equal ranks still have different keys. Dealt-generator masks
-are separate from these piles: each `drawDecks` mask is four 64-bit words,
-serialized as exactly 64 hexadecimal digits, and supports 256 dealt entries.
+two cards with equal ranks still have different keys. Drawn-generator masks
+are separate from these piles: each `drawnMasks` mask is four 64-bit words,
+serialized as exactly 64 hexadecimal digits, and supports 256 drawn entries.
 
 The closed `transformState` effect and transaction step carry one of `transfer`,
-`setRay`, `moveToken`, `completePhase`, `turnOrder`, `shuffle`, `sort`,
-`setMask`, `combine`, `push`, `mapBoard`, or `observe`. `setMask` (`row`, `mask`, `maskKey`,
+`setRay`, `moveToken`, `shuffle`, `sortZone`, `sortKeyed`,
+`writeSet`, `push`, or `observe`. `writeSet` (`row`, `set`, `setKey`,
 `value`) writes one value into every cell of a board (at most 64 cells) whose
-bit is set in a mask read from an integer cell, so a mask built by
-`$board:mask`, `boardShift`, and the bit operators lands back on the board;
-`combine` (`target`, `left`, `operation` and/or/xor/andNot/not, `right`)
-writes the cell-wise set operation of two boards over one topology into a
-third as 1/0, the board algebra for topologies too large for one mask. The same operation travels
-as the `TransformState` document mutation. Transfers preserve keys and accept
+bit is set in a cell-set mask read from an integer cell — the one board-writing
+form for a set built from `$board:mask`, `boardShift`/`boardImage`, and the
+plain bit operators (`bitAnd`/`bitOr`/`bitXor`/`bitNot` compose two boards'
+masks the way a dedicated set-algebra transform once did): populate a scratch
+integer row with the composed expression, then `writeSet` it onto the board.
+A topology past 64 cells has no board-writing transform of its own; a rule
+composes its board algebra cell by cell instead. The same operation travels
+as the `TransformState` document mutation.
+Transfers preserve keys and accept
 `Key`, `First`, `Last`, or `Random` selectors; random selection names a
 redrawable integer `streamDraw` site, and `count` (1..256) moves that many
 tokens in one mutation, each selected afresh from what remains, so a deal is
-one journal entry. A cursor advances only with the committed transfer. `setRay` changes a nonempty run of `through` cells closed by `until`;
-it excludes the origin and terminator and refuses a broken bracket.
+one journal entry. A cursor advances only with the committed transfer. `setRay` (`row`, `from`, `direction`, `pattern`, `value`) walks a ray from
+its origin and writes the longest run its named `patterns` row accepts — the
+same compiled machine and prefix semantics `$match` reads, landed back on the
+board instead of read as a fact; a bracket capture is authored as
+`plus(opponent) . symbol(own)`, and it excludes the origin and refuses an
+empty accepted prefix.
 `moveToken` checks all position rows over the topology for occupancy, searches
 within `maxVisits`, and debits the token's allowance atomically with its move.
-`shuffle` reorders an ordered zone in place by one Fisher-Yates pass over a
-redrawable integer `streamDraw` site, consuming one sample per position after
-the first (a 52-card deck advances the cursor by 51), so one transaction
-shuffles a whole deck and a replay deals the same order.
+`shuffle` reorders an ordered zone, or any other keyed row, in place by one
+Fisher-Yates pass over a redrawable integer `streamDraw` site, consuming one
+sample per position after the first (a 52-card deck advances the cursor by
+51), so one transaction shuffles a whole deck and a replay deals the same
+order.
 Every written row requires edit authority. Transaction preflight leaves no
 partial transfer, ray, cursor, allowance, or phase change after refusal.
 
-A `phase` row declares up to 32 authenticated participants and 32 named phases.
-`Sequential` activates participants in order; `Together` accepts actions until
-a participant becomes ready; `Resolution` admits only world-program completion.
-The order is state, not structure: the row carries `direction` (1 or -1) and a
-`skipped` participant mask, both persisted across phases, and the world-only
-`turnOrder` transform rewrites them (`direction`, `skip`, `unskip`, `active`)
-without completing anything — a reverse card, a fold, an elimination, a
-"play again". A sequential turn walks in `direction` over unskipped
-participants and the phase ends when it passes either end; a `Together` phase
-never waits on a skipped participant; skipping the active participant hands
-the turn onward around the ring. A transition enters the phase's authored
-`next` unless the world program's `completePhase` carries its own `next` — the
-branch (one player left standing goes to `showdown`, otherwise `deal`). Rules
-read `$phase:<row>:direction` and `:skipped` beside the other phase facts.
-Readiness alone preserves `sequence`; changing activation or phase increments
-it. Returning to phase zero increments `round`. A timeout expires at its exact
-deadline tick and takes precedence over a player action at that tick; a world
-rule explicitly performs timeout completion. Timeout completion advances the
-phase, including when some participants remain unready. Rows with `phaseOf`
-require the corresponding guard on external gameplay transforms. Grant those
-players the `TransformState` mutation kind, leaving document authoring to the
-authority. Phase eligibility does not grant access to another player's units.
+A `phase` row is a guarded submission stamp: nothing but its own generation
+(`sequence`, read back by `$phase:<row>`). `WorldPhaseGuard` (`row`,
+`sequence`, `participant`) is checked against a `TransformState` mutation's
+declared phase row before the transform composes, and a guarded mutation's
+success advances that row's generation by one in the same step — the guard
+both admits and completes, so authoring several ungated moves before one ends
+a turn is a matter of leaving those rows' `phaseOf` unset and reserving it for
+the one row that should end it. `participant` names another actor on whose
+behalf the mutation runs; only the world program may set it. Whose turn it
+is, rounds, ready/skipped bitsets, and deadlines carry no engine support any
+more — a world authors them as ordinary rows (a counter, a bitset board, a
+keyed "active" row) written by the same generic effects every other row uses,
+and gates them with ordinary rule conditions. Rows with `phaseOf` require the
+corresponding guard on external gameplay transforms. Grant those players the
+`TransformState` mutation kind, leaving document authoring to the authority.
+A guard does not grant access to another player's units.
 
 `visibility: {}` opts a row into public literal observations. `readers` limits
 that audience to canonical authenticated principals; `readers: []` retains it
@@ -208,12 +247,12 @@ is a ring of the last pushed values, the temporal twin of a ray: `push`
 `empty` past what the ring holds); `$match:<pattern>:<row>` reads the ring
 oldest first, so a combo, a rhythm window, or "three claims then silence" is
 one pattern. `world.state <row>` echoes capacity, cursor, and how much of
-the ring is held. `sort` puts a
-zone in canonical order by `by`, up to `MaxSortKeys` (`WorldStateCapacity`,
-derived from `MaxRows` -- a sort key names a declared row, so a sort can
-never carry more keys than a section can hold) attribute keys (`row`,
-`descending`) in precedence order, or a keyed row by its own values under
-`descending`, stably,
+the ring is held. `sortZone` puts a zone in canonical order by `by`, up to
+`MaxSortKeys` (`WorldStateCapacity`, derived from `MaxRows` -- a sort key
+names a declared row, so a sort can never carry more keys than a section can
+hold) attribute keys (`row`, `descending`) in precedence order; `sortKeyed`
+orders a keyed row by its own values under one `descending` flag. Both sort
+stably,
 which is what turns a multiset question into a regular one: Reversi's
 flank is `them+ me` on a ray, a straight is five consecutive rank symbols over
 a sorted hand, Yahtzee's large straight is a `choice` of two sequences over a
@@ -225,7 +264,7 @@ by the authority before simulation. This selects cursor-addressed HMAC-SHA256
 samples for integer `streamDraw` sites; ordinary generators keep their PCG
 contract. Use a fresh unpredictable secret per game and keep authority saves,
 replays, and replica access private. The simulation draws no system entropy.
-No hidden keys, generator definitions, cursors, or dealt masks enter observation
+No hidden keys, generator definitions, cursors, or drawn masks enter observation
 payloads. Publicly authored seeds alone are unsuitable for hidden deals.
 
 **The tabletop primitive.** A placement's `board` facet (`WorldPlacementBoard`)
@@ -251,7 +290,7 @@ moved between two occupied board cells — a piece whose cell resolves to no
 cell, before or after (captured, lifted off, knocked clear), never itself
 qualifies as the mover, so its own disappearance is never ruled legal or
 illegal by its own color — then a verdict any authored predicate — occupancy, turn order,
-a `$board:rayCell`/`$board:offset` movement-geometry check — may set to 0
+a `$match:…:cell`/`$board:offset` movement-geometry check — may set to 0
 without touching the mover; a legal verdict alone advances turn and adopts the
 new position into `lastLegal`). Illegal moves are recorded, never undone —
 the world never rejects or repositions a physical piece. A rule's own
@@ -295,18 +334,18 @@ is not enough, so a diagonal hop onto the en passant square with the passed
 pawn left standing classifies as a quiet move and stays refused. Movement
 legality and check read outward from the move's
 own squares rather than walking coordinates: a slider's reach is "does
-`$board:rayCell` from the destination back toward the origin land on the
-origin" (the origin is always the ray's own first-occupied answer when the
+`$match:<emptyRun>:…:cell` from the destination back toward the origin land on the
+origin" (the origin is always the ray's own first-blocker answer when the
 path is clear, so no coordinate arithmetic decides direction), a leaper's is
 `$board:offset` from the origin matching the destination over its fixed set
 of jumps, and a king's square is attacked exactly the same way, probed
-outward for an enemy pawn/knight/king/slider. Castling additionally reads a
+outward for an enemy piece. Castling additionally reads a
 one-tick-old snapshot of the check verdict (the king must not already have
 been in check before this settle) and, for the square the king crosses,
 `$board:attacks:<row>:<min>:<max>:<directions>` — walk a short authored
 direction list from a fixed cell and answer whether the first occupied cell
 on any of them falls in an authored value range, the same
-first-blocker-stops-the-walk contract as `rayCell`, unioned over several
+first-blocker-stops-the-walk contract as `$match:…:cell`, unioned over several
 directions and filtered to a range in one call rather than one rule per
 direction. The garden's `puck.world.json`
 chess rules are the worked example for both techniques; its bridge rules
@@ -387,7 +426,7 @@ the section list is the `WorldSection` enum in `WorldGrant.cs` (kits,
 screens, cameras, spawns, motion, population, render, addons,
 bindings, creations, placements, authoring, speakers, tunes, patches, audio,
 collision, host, views, looks, grants, hud, state, input hold, rules,
-groups, properties, interactions, player defaults, market, probes,
+groups, properties, interactions, player defaults, probes,
 dynamics, curves). Worlds live as data
 under `../Puck.World/Assets/worlds/`. Four are the four-world charter's whole
 game roster: `nexus` (the overworld hub — a floating island above a field of
@@ -860,18 +899,18 @@ A `draw` fill (`{ "$type": "draw", "source": … | "generator": … }`, at most 
 per row, numeric sources only) is one whole-field pass of the row's own draw
 stream, seeded through the same ladder as a state-row site under the row's
 `state.<row>` descriptor: cell `k`, in cell-index order, takes the sample a site
-at `drawCursor + k` would draw, with a weighted source's deck threaded cell to
-cell — so a `weightedNumeric` bag in `reshuffleOnExhaustion` mode deals its
-cards across the field and reshuffles as it goes, and outcome `count`s make a
-field carry exactly N cells of a value per pass. The row's `drawCursor`/
-`drawDecks` name the pass currently painted; `world.generate <row>` advances
+at `drawCursor + k` would draw, with a weighted source's mask threaded cell to
+cell — so a `weightedNumeric` bag in `restartOnExhaustion` mode draws its
+units across the field and restarts as it goes, and outcome `multiplicity`s make
+a field carry exactly N cells of a value per pass. The row's `drawCursor`/
+`drawnMasks` name the pass currently painted; `world.generate <row>` advances
 them one whole pass (the cell count) and repaints. The draw occupies its authored
 position in `paint`: it overwrites earlier fills and later fills overwrite it.
 Boot, whole-document rebuild/load/reset, and an undo that rewinds the draw
 position repaint the pass the document names, so restored state lands on the
 field it last drew without resetting unrelated reaction-evolved rows.
 Reactions then evolve the drawn cells like any other paint. `world.state`
-echoes `draw source=… fill=lattice cursor=<n> decks=…` on the row line.
+echoes `draw source=… fill=lattice cursor=<n> masks=…` on the row line.
 
 **Reactions** (`WorldReaction`, `$type`-discriminated, applied in document
 order every `stepEveryTicks`): `diffuse` (each cell moves a fraction toward its
@@ -938,32 +977,32 @@ vocabulary. `source` selects the shape: `markov` walks weighted alternatives per
 context, each naming the context it moves INTO (that authored `next` is what
 makes it a Markov process rather than independent draws — the context key IS the
 process state) and is the only shape that writes TEXT and the only one that
-DEALS per context; `uniformRange` draws one value over `[rangeMin, rangeMax]`;
-`weightedNumeric` draws one value from an authored alias table and DEALS over
-its outcome set under the same `mode` vocabulary (one `drawDecks` mask — the
+EXHAUSTS per context; `uniformRange` draws one value over `[rangeMin, rangeMax]`;
+`weightedNumeric` draws one value from an authored alias table and EXHAUSTS over
+its outcome set under the same `mode` vocabulary (one `drawnMasks` mask — the
 numeric shuffle bag); `streamDraw` yields one raw 32-bit draw; `symmetryOrbit`
 draws one node index uniformly over an orbit of the symmetry lattice — the
 thirty nodes of `ring` (0..7), or the orbit of `node` (0..239) under `word`
 (the same one-to-eight-mirror word a `cycle` trait authors, or omitted for the
-lattice's own cycle, so the node's ring) — and deals that orbit under `mode`
+lattice's own cycle, so the node's ring) — and exhausts that orbit under `mode`
 through the same one mask, so `withoutReplacement` on a ring is "every node of
 the ring once per pass". An alternative or
-outcome may declare `count`: under a deck mode it is that many cards per pass
-(an outcome that should come out twice per pass declares `2`), under
-`withReplacement` it only scales the weight; a set's cards total at most 256,
-one deck-mask bit each. Each shape reads a disjoint field set, and a foreign
-field is refused BY NAME rather than parsed and ignored — including `bound` and
-`mode`, which are non-nullable and so are refused against their declared
-defaults. A markov emission is one walk from `start` to a TERMINAL context (one
-declaring no alternatives), refusing BY NAME at `bound` rather than truncating;
-`mode` is `withReplacement`, `withoutReplacement` (dealt out → refuse by name) or
-`reshuffleOnExhaustion`; `uniformRange` and `streamDraw` refuse a `mode`, having no
-entry set to deal from. Caps live in `WorldGeneratorCapacity`. The alias table
-over a source's full entry set is built once per source instance and held weakly
-beside it (`WorldGeneratorEngine`'s compiled cache), so a site drawn every tick
-pays the build once; a dealt-down pool mid-pass is rebuilt in bounded stack
-storage per emission, with no heap table allocation and the same exact alias
-mapping.
+outcome may declare `multiplicity`: under an exhausting mode it is that many
+units per pass (an outcome that should come out twice per pass declares `2`),
+under `withReplacement` it only scales the weight; a set's units total at most
+256, one drawn-mask bit each. Each shape reads a disjoint field set, and a
+foreign field is refused BY NAME rather than parsed and ignored — including
+`bound` and `mode`, which are non-nullable and so are refused against their
+declared defaults. A markov emission is one walk from `start` to a TERMINAL
+context (one declaring no alternatives), refusing BY NAME at `bound` rather than
+truncating; `mode` is `withReplacement`, `withoutReplacement` (drawn out →
+refuse by name) or `restartOnExhaustion`; `uniformRange` and `streamDraw` refuse
+a `mode`, having no entry set to exhaust. Caps live in `WorldGeneratorCapacity`.
+The alias table over a source's full entry set is built once per source instance
+and held weakly beside it (`WorldGeneratorEngine`'s compiled cache), so a site
+drawn every tick pays the build once; a drawn-down pool mid-pass is rebuilt in
+bounded stack storage per emission, with no heap table allocation and the same
+exact alias mapping.
 
 **A source holds no position.** It may be declared once in the optional
 `generators` section (`WorldGeneratorRow`: `name` + `generator`) and referenced
@@ -978,8 +1017,8 @@ draw facet's single home. `bodies.capacityRow`/`host.backendRow` are plain
 strings naming a state row, not sites of their own: they READ that row's
 already-resolved slot, after row first-fills, rather than drawing anything
 directly (see "Two boot-time reads, one site rule" below). The
-CURSOR and the dealt DECKS live on the SITE (`WorldStateRow.DrawCursor`/
-`DrawDecks`), never on the source — which is exactly what lets two sites
+CURSOR and the drawn MASKS live on the SITE (`WorldStateRow.DrawCursor`/
+`DrawnMasks`), never on the source — which is exactly what lets two sites
 reference one table and draw INDEPENDENT sequences. That independence is what
 makes a reference safe: sharing a source shares its SHAPE and never its
 position, so pointing a second site at an existing table cannot perturb the
@@ -1118,7 +1157,7 @@ row. Legitimate only on a NON-reserved cell key: the reserved slot key
 (`WorldStateRow.SlotKey`) may carry only the row's OWN `advance` (above),
 never a cell-level one — the two never both name the same cell, so "which
 advance governs this cell" is never an open question. A DRAW SITE's own
-bookkeeping is not reachable here at all: `drawCursor`/`drawDecks` are typed row
+bookkeeping is not reachable here at all: `drawCursor`/`drawnMasks` are typed row
 FIELDS, never cells, so nothing can name them as an accumulator. `WorldStateReader.TryRead` checks the row's own trait first
 (only relevant for the slot cell) and falls back to the CELL's own trait
 otherwise, so a scalar row's behavior is untouched. Because
@@ -1369,7 +1408,8 @@ individuals from at most 32 inspected points per reconsideration:
 }
 ```
 
-The option can score a social query from `left` to `right`, then enter with
+The option can score a keyed belief row for `left` (see "Keyed belief rows and
+evidence dedup" below), then enter with
 `{"$type":"designateBody","key":"$each","register":"companion","kind":"Body","targetKey":"$right"}`.
 The register must be declared, and a producer must consume it to cause movement.
 A fixed "alone" option can clear the same register. This selects a movement
@@ -1420,78 +1460,80 @@ render-frame timing never drives it. These are world-authority rules: using
 them for limited creature knowledge requires scoring the creature's observed
 state, not unrestricted world facts.
 
-### Social evidence and belief queries
+### Keyed belief rows and evidence dedup
 
-`state.social` is an optional memory policy. It declares named dimensions such
-as helpfulness or navigation competence, with independent bounds, baselines,
-learning rates, uncertainty, and memory/work limits. It does not make creatures
-omniscient or infer their personality. For example, add this member to `state`:
-
-```json
-"social": {
-  "dimensions": [{ "name": "helpfulness", "maximumChange": 0.25 }],
-  "impressionCapacity": 65536,
-  "impressionsPerObserver": 256,
-  "receiptCapacity": 65536,
-  "evidenceAttemptsPerTick": 1024,
-  "expiredReceiptsPerTick": 1024,
-  "evidenceLifetimeSeconds": 60
-}
-```
-
-Every relationship names an observer, a subject, and a dimension. An individual
-reference contains exactly one of `body` (the ordinary rule grammar, including
-`body:0`, `each`, `left`, `right`, `cell:row:key`, or `argmax:row`) and `identity`
-(`authority`, `index`, `generation`). Live bodies resolve to their original
-mobility incarnation; literal identities remain usable while absent. An
-inactive body is unresolved, not the previous occupant.
-
-An `observeSocial` effect carries `evidence`: a `relationship`, an event
-`origin`, an `aspect` such as `help.attempt`, and numeric expressions for
-`sequence`, `occurredAt`, `value`, and optional `quality`. Sequence and original
-occurrence time are non-negative Int values; time uses engine ticks, with
-`socialClock` supplying the current clock. Value and quality are Fixed;
-quality defaults to one. Optional `source` makes the evidence a report rather
-than direct observation. Relays preserve the original event identity and time.
-Rules must explicitly gate perception; an effect is a delivery, not a sensor.
-`forgetSocial` takes a relationship and removes its impression without erasing
-unexpired duplicate receipts. These effects are world-only and cannot be state
-transaction steps.
-
-The expression token below reads one belief. Its `query.facet` defaults to
-`Value`; `Value`, `Confidence`, `Uncertainty`, and `Weight` produce Fixed values.
-`Known`, `EventCount`, and `Age` produce Int values (Age is engine ticks).
-An unknown valid identity reads the authored baseline with zero confidence;
-an unresolved body reads zero for every facet. Check `Known` when that distinction
-matters. EventCount and Age saturate at Int64.MaxValue.
+An impression (what one individual has learned about another) is an ordinary
+keyed state row, not a bespoke memory bank: one cell per observer, holding a
+Fixed value in an authored range, updated by an ordinary `addState`/`setState`
+expression that reads the row's own current value. There is no dedicated
+policy section, effect, or fact family for this — it is the same keyed-row
+vocabulary every other table in `state` uses, paying no schema cost of its own.
 
 ```json
 {
-  "$type": "social",
-  "query": {
-    "relationship": {
-      "observer": { "body": "each" },
-      "subject": { "body": "body:0" },
-      "dimension": "helpfulness"
-    },
-    "facet": "Confidence"
-  }
+  "name": "boneHolderTrust",
+  "kind": "fixed",
+  "capacity": 64,
+  "min": "0",
+  "max": "1"
 }
 ```
 
-Social queries work in ordinary numeric effects and decision scores.
-`compareValue` compares `left` and `right` expressions using a `comparison`
-and one explicit `kind` (`Int` or `Fixed`, default Fixed). Kind mismatches
-refuse compilation; failed arithmetic closes the predicate. `socialResult`
-returns the last evidence/forgetting outcome as an Int ordinal, or -1 before
-an attempt. Sequential effects can store it in an authored row for branching.
-The outcome enum and memory semantics live in the
-[server contract](../Puck.World.Server/README.md#social-memory-component).
+A rule blends new evidence toward the bound with an authored expression —
+`(1 - trust) * rate` added to the row's own cell:
 
-`world.social [<query-json>]` is an operator read-back under `Observe/all`.
-Its query uses the same shape as the token's `query`, but cannot use rule-local
-bindings. No argument reports policy and work. Memory is runtime state, carried
-by authority checkpoints and hashes rather than public document cells.
+```json
+{
+  "$type": "addState",
+  "state": "boneHolderTrust",
+  "key": "$each",
+  "expression": { "tokens": [
+    { "$type": "constant", "value": 1 },
+    { "$type": "state", "name": "boneHolderTrust", "key": "$each" },
+    { "$type": "subtract" },
+    { "$type": "constant", "value": 0.3 },
+    { "$type": "multiply" }
+  ] }
+}
+```
+
+`compareValue` compares `left` and `right` expressions using a `comparison`
+and one explicit `kind` (`Int` or `Fixed`, default Fixed); kind mismatches
+refuse compilation and failed arithmetic closes the predicate. The one thing
+an ordinary rule cannot express on its own is evidence deduplication: a
+Level-mode rule re-evaluates its gate every tick it holds, so without a
+freshness check a standing claim would re-blend the belief every tick rather
+than once per event. There is no dedicated dedup primitive for this either —
+pack the event's (origin, sequence) pair into one Int64 with `shiftLeft`/
+`bitOr`, remember it in a companion Int cell, and gate on `compareValue`
+against the live pair:
+
+```json
+{
+  "$type": "compareValue",
+  "comparison": "NotEqual",
+  "kind": "Int",
+  "left": { "tokens": [{ "$type": "state", "name": "boneHolderClaimMark", "key": "$each" }] },
+  "right": { "tokens": [
+    { "$type": "state", "name": "boneHolder" },
+    { "$type": "constant", "value": 32 },
+    { "$type": "shiftLeft" },
+    { "$type": "state", "name": "claimSeq" },
+    { "$type": "bitOr" }
+  ] }
+}
+```
+
+A companion `setState` records the packed pair into the marker cell once the
+gate has admitted it, so a repeat of the same (origin, sequence) pair reads
+false on the next tick. An Edge-mode rule or a Distance interaction needs no
+such gate at all: the engine's own edge/per-pair latch already refuses a
+re-fire while the gate stays continuously true, which is exactly why
+witness-claim and hounds-meet-shaped rules never needed one — only a
+Level-mode re-evaluation does. See
+[`KeyedImpressionDedupLawTests`](../../tests/Puck.World.Tests/KeyedImpressionDedupLawTests.cs)
+for the worked proof, including a control row with no freshness gate that
+keeps re-blending every tick.
 
 ### World-rule state effects
 
@@ -1604,11 +1646,16 @@ occupied square), the piece walk `lowestSetBit`/`clearLowestSetBit`, and the
 `parallelBitExtract`/`parallelBitDeposit` (pext/pdep: occupancy along a set
 of squares as a dense index and back); `bitField` (value, offset, width) and
 `bitInsert` (value, field, offset, width) for packed fields, refusing a
-field that leaves the 64-bit carrier; and `boardShift` (`topology`,
-`direction`), which moves every set bit of a cell mask to its neighbour in
-that direction and drops a bit at the edge instead of wrapping, so
-`$board:mask` of one side shifted and masked against `$board:mask` of the
-other is an attack map in one expression.
+field that leaves the 64-bit carrier; and the topology-aware pair `boardShift`
+(`topology`, `direction`), which moves every set bit of a cell mask to its
+neighbour in that direction and drops a bit at the edge instead of wrapping,
+and `boardImage` (`topology`, `element`), which carries a cell mask through
+one point-group element. Together with `$board:mask` and the plain bit
+operators these are the one cell-set vocabulary: `$board:mask` of one side
+shifted and masked against `$board:mask` of the other is an attack map in one
+expression, and `$board:mask` piped through `boardImage` is how a rule
+authored from one side's view reads the other side's position through
+`rot180` — there is no separate read-and-image board query.
 `negate`/`abs` keep their operand's kind and refuse the carrier's minimum;
 `sign` reads either kind and pushes `int` -1/0/1. The compiler proves
 the stack's shape AND each slot's kind, so a comparison's `int` result may feed
@@ -1699,41 +1746,28 @@ rule's own EFFECTS act as `WorldPrincipal.World`, which the server's admission
 predicate exempts STRUCTURALLY — the same standing a per-body `ActionEffect`
 always had.
 
-### Social flock affinities
+### Keyed belief rows and flock affinities
 
 A flock profile can prefer particular neighbors without assigning one universal
 friendship score. `cohesionAffinity` weights neighbors in the attraction centroid;
-`alignmentAffinity` independently weights their headings. For example, add these
-optional fields to a kit producer's `flock` profile to stay near affectionate
-companions while following demonstrated navigation competence:
+`alignmentAffinity` independently weights their headings. For example, add this
+optional field to a kit producer's `flock` profile to follow whichever neighbor
+the observer itself has come to trust (see "Keyed belief rows and evidence
+dedup" above — the belief is keyed by observer alone, not by the specific pair):
 
 ```json
 {
-  "cohesionAffinity": {
-    "tokens": [{ "$type": "social", "query": {
-      "relationship": {
-        "observer": { "body": "left" }, "subject": { "body": "right" },
-        "dimension": "affection"
-      }, "facet": "Value"
-    }}]
-  },
   "alignmentAffinity": {
-    "tokens": [{ "$type": "social", "query": {
-      "relationship": {
-        "observer": { "body": "left" }, "subject": { "body": "right" },
-        "dimension": "navigation-competence"
-      }, "facet": "Value"
-    }}]
+    "tokens": [{ "$type": "state", "name": "boneHolderTrust", "key": "$left" }]
   }
 }
 ```
 
-Declare those dimensions in `state.social`; the names have no engine-defined
-meaning. Expressions may combine Fixed social facets, Fixed state cells and
-state-backed reductions/symmetry with ordinary postfix arithmetic. `left` is
-the observer and `right` the sampled neighbor; state keys use `$left`/`$right`.
-`each` is unavailable. Movement-dependent world facts are refused so every body
-reads the same state/social image during a movement pass.
+Expressions may combine Fixed state cells, reductions, and symmetry with
+ordinary postfix arithmetic. `left` is the observer and `right` the sampled
+neighbor; state keys use `$left`/`$right`. `each` is unavailable.
+Movement-dependent world facts are refused so every body
+reads the same state image during a movement pass.
 
 Absent expressions give uniform weight one. Each result clamps to [0,1], with
 arithmetic failure reading zero. Negative affection therefore means no cohesion
@@ -1969,7 +2003,7 @@ manifest is consulted at boot. An `axis` binding's `source` mints the bindable
 input source `probe.<source>` (`Puck.Input.InputSources.Probe.Axis`); a
 `parameter` binding's `target` must name an entry the document's own
 `render.extensions` composes; a `control` binding's `control` field must name a
-`WorldCameraControls` member. Like `judges`/`music`, the section is
+`WorldCameraControls` member. Like `music`, the section is
 boot-authored only — no `WorldMutation` kind targets it and `world.row.set
 probes` refuses by name enumerating siblings — though it does carry its own
 `WorldSection.Probes` grant subject for a section-scoped hold.
@@ -2071,7 +2105,7 @@ refuses by name — a peer with nothing to address them against.
 `presentation` so a replica caller serializes the definition itself.
 `WorldProjectionDocument` is not a `WorldDefinition` with holes: it is its own
 record, and its member list IS the disclosure decision. It has no member for
-`rules`, `grants`, `state`, `market`, `admission`, `generation`, `generators`,
+`rules`, `grants`, `state`, `admission`, `generation`, `generators`,
 `groups`, `properties`, `addons`, `storage`, `host`, `authoring`, `identity`,
 `inputHold`, `targetRegisters`, `bodyMotionPrograms`, or `portals`, and its
 `WorldProjectedKit` has none for a kit's `producers`/`actions`. `metadata`

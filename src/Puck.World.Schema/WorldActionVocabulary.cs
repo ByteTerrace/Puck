@@ -92,9 +92,6 @@ public sealed record WorldValueExpression(IReadOnlyList<WorldValueToken> Tokens)
 /// <summary>One authored token in a <see cref="WorldValueExpression"/>.</summary>
 [JsonDerivedType(typeof(WorldValueToken.Constant), typeDiscriminator: "constant")]
 [JsonDerivedType(typeof(WorldValueToken.State), typeDiscriminator: "state")]
-[JsonDerivedType(typeof(WorldValueToken.Social), typeDiscriminator: "social")]
-[JsonDerivedType(typeof(WorldValueToken.SocialClock), typeDiscriminator: "socialClock")]
-[JsonDerivedType(typeof(WorldValueToken.SocialResult), typeDiscriminator: "socialResult")]
 [JsonDerivedType(typeof(WorldValueToken.Add), typeDiscriminator: "add")]
 [JsonDerivedType(typeof(WorldValueToken.Subtract), typeDiscriminator: "subtract")]
 [JsonDerivedType(typeof(WorldValueToken.Multiply), typeDiscriminator: "multiply")]
@@ -137,12 +134,6 @@ public sealed record WorldValueExpression(IReadOnlyList<WorldValueToken> Tokens)
 [JsonDerivedType(typeof(WorldValueToken.BoardImage), typeDiscriminator: "boardImage")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldValueToken {
-    /// <summary>A directed impression query, with its facet's declared numeric kind.</summary>
-    public sealed record Social(WorldSocialQuery Query) : WorldValueToken;
-    /// <summary>The social bank's current engine tick, Int saturated at Int64.MaxValue.</summary>
-    public sealed record SocialClock : WorldValueToken;
-    /// <summary>The last social evidence result ordinal, Int; -1 before any attempt. Rule effects execute in document order.</summary>
-    public sealed record SocialResult : WorldValueToken;
     /// <summary>An exact authored decimal, converted to the destination row's numeric kind at compile time.</summary>
     /// <param name="Value">The exact decimal literal.</param>
     public sealed record Constant(decimal Value) : WorldValueToken;
@@ -423,7 +414,6 @@ public abstract record WorldTransactionStep {
 [JsonDerivedType(typeof(ActionEffect.StartTimer), typeDiscriminator: "startTimer")]
 [JsonDerivedType(typeof(ActionEffect.Designate), typeDiscriminator: "designate")]
 [JsonDerivedType(typeof(ActionEffect.Generate), typeDiscriminator: "generate")]
-[JsonDerivedType(typeof(ActionEffect.Judge), typeDiscriminator: "judge")]
 [JsonDerivedType(typeof(ActionEffect.UpsertHudPanel), typeDiscriminator: "upsertHudPanel")]
 [JsonDerivedType(typeof(ActionEffect.RemoveHudPanel), typeDiscriminator: "removeHudPanel")]
 [JsonDerivedType(typeof(ActionEffect.UpsertPlacement), typeDiscriminator: "upsertPlacement")]
@@ -439,14 +429,8 @@ public abstract record WorldTransactionStep {
 [JsonDerivedType(typeof(ActionEffect.ApplyBodyImpulse), typeDiscriminator: "applyBodyImpulse")]
 [JsonDerivedType(typeof(ActionEffect.DesignateBody), typeDiscriminator: "designateBody")]
 [JsonDerivedType(typeof(ActionEffect.PaintField), typeDiscriminator: "paintField")]
-[JsonDerivedType(typeof(ActionEffect.ObserveSocial), typeDiscriminator: "observeSocial")]
-[JsonDerivedType(typeof(ActionEffect.ForgetSocial), typeDiscriminator: "forgetSocial")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record ActionEffect {
-    /// <summary>Delivers explicitly perceived evidence through the world's bounded social-memory policy. World-scope only.</summary>
-    public sealed record ObserveSocial(WorldSocialObservation Evidence) : ActionEffect;
-    /// <summary>Forgets one impression without clearing its unexpired evidence receipts. World-scope only.</summary>
-    public sealed record ForgetSocial(WorldSocialRelationship Relationship) : ActionEffect;
     /// <summary>Applies a bounded state transform through the ordinary mutation pipeline.</summary>
     /// <param name="Transform">The typed operation.</param>
     public sealed record TransformState(WorldStateTransform Transform) : ActionEffect;
@@ -657,14 +641,6 @@ public abstract record ActionEffect {
     /// <param name="Row">The draw site's row name. One name, not a (source, destination) pair: a site's source is its
     /// own facet and a site is a scalar slot, so there is nothing else to address.</param>
     public sealed record Generate(string Row) : ActionEffect;
-    /// <summary>Stages a rhythm-judge grading fact for the body whose trigger fired — the entity index, the judge
-    /// window set, and the firing tick are collected during the body's advance (the same staged-output shape
-    /// <see cref="Generate"/> uses) and drained by <c>WorldServer.Step</c> immediately after the body step, where
-    /// they are graded against the world's musical clock. The grade is never computed here — this effect only names
-    /// which judge row applies.</summary>
-    /// <param name="JudgeRef">The declared <c>judges</c> row name (a <c>puck.judge.v1</c> reference) whose hit
-    /// windows grade the press.</param>
-    public sealed record Judge(string JudgeRef) : ActionEffect;
     /// <summary>Upserts a whole HUD panel row — world scope only (refused at body scope: a per-body action has no HUD
     /// panel of its own to author). Admits <c>WorldMutation.UpsertHudPanel</c> into the world-rule effect set
     /// through the same seam <see cref="Generate"/> uses: the compiled effect submits the mutation stamped

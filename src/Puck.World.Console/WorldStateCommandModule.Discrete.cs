@@ -46,7 +46,11 @@ public sealed partial class WorldStateCommandModule {
                 var lines = new List<string>();
                 foreach (var topology in server.Definition.StateRaw?.Lattices ?? []) {
                     var compiled = WorldTopologyCompilation.Find(server.Definition.StateRaw, topology.Name);
-                    lines.Add($"[world.topology '{topology.Name}' kind={topology.Kind} cells={compiled?.CellCount ?? topology.Width * topology.Depth * topology.Layers} directions={compiled?.DirectionCount ?? 0} wrap={topology.Wrap}]");
+                    var directionCount = compiled?.DirectionCount ?? 0;
+                    var names = (compiled is null)
+                        ? "none"
+                        : string.Join(",", Enumerable.Range(0, directionCount).Select(compiled.DirectionName));
+                    lines.Add($"[world.topology '{topology.Name}' kind={topology.Kind} cells={compiled?.CellCount ?? topology.Width * topology.Depth * topology.Layers} directions={directionCount} names={names} wrap={topology.Wrap}]");
                 }
                 return new CommandResult(Output: string.Join(Environment.NewLine, lines));
             });
@@ -139,8 +143,7 @@ public sealed partial class WorldStateCommandModule {
 
     private static string DescribeDiscrete(WorldServer server, WorldStateRow row) {
         if (row.Phase is { } phase) {
-            var node = phase.Phases[phase.Current];
-            return $" phase={node.Name} mode={node.Mode} active={phase.Active} ready={phase.Ready} sequence={phase.Sequence} round={phase.Round} direction={phase.Direction} skipped={phase.Skipped} deadline={WorldStateTransforms.Deadline(phase, server.Definition.SimulationRateHz)}";
+            return $" phase sequence={phase.Sequence}";
         }
         if (row.Board is { } board) {
             return $" topology={board.Topology} empty={board.Empty}";

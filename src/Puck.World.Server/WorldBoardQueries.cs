@@ -17,27 +17,14 @@ public static class WorldBoardQueries {
         }
     }
 
-    /// <summary>Evaluates one preflighted query. Searches never revisit the origin of a wrapped ray or line.</summary>
+    /// <summary>Evaluates one preflighted query. A ray search never revisits its own wrapped origin.</summary>
     /// <param name="query">The compiled query.</param>
     /// <param name="values">One value per cell.</param>
-    /// <param name="empty">The unoccupied value for rays.</param>
+    /// <param name="empty">The unoccupied value for a ray.</param>
     /// <param name="source">The source cell for neighbour, ray and path queries.</param>
     /// <returns>The result in the query's documented integer domain.</returns>
     public static long Evaluate(CompiledWorldBoardQuery query, ReadOnlySpan<long> values, long empty, int source) {
         var topology = query.Topology;
-        if (query.Kind == WorldBoardQueryKind.Line) {
-            return HasLine(query, values) ? 1 : 0;
-        }
-        if (query.Kind == WorldBoardQueryKind.Image) {
-            return ImageMask(topology, values, query.Direction, query.Value, query.Upper);
-        }
-        if (query.Kind == WorldBoardQueryKind.CanonicalMask) {
-            var least = long.MaxValue;
-            for (var element = 0; element < topology.ElementCount; element++) {
-                least = Math.Min(least, ImageMask(topology, values, element, query.Value, query.Upper));
-            }
-            return least;
-        }
         if (query.Kind == WorldBoardQueryKind.Canonical) {
             return CanonicalFingerprint(topology, values);
         }
@@ -79,31 +66,7 @@ public static class WorldBoardQueries {
             }
             return 0;
         }
-        var cell = source;
-        for (var distance = 1; distance < topology.CellCount; distance++) {
-            cell = topology.Neighbour(cell, query.Direction);
-            if (cell < 0 || cell == source) {
-                break;
-            }
-            if (values[cell] != empty) {
-                return query.Kind == WorldBoardQueryKind.RayCell ? cell : distance;
-            }
-        }
-        return -1;
-    }
-
-    // The mask of the range's cells carried through one element: bit image(c) for every c in range.
-    private static long ImageMask(CompiledWorldTopology topology, ReadOnlySpan<long> values, int element, long lower, long upper) {
-        var mask = 0L;
-        for (var cell = 0; cell < topology.CellCount && cell < WorldBoardMask.MaxCells; cell++) {
-            if (values[cell] >= lower && values[cell] <= upper) {
-                var image = topology.Image(element, cell);
-                if (image < WorldBoardMask.MaxCells) {
-                    mask |= 1L << image;
-                }
-            }
-        }
-        return mask;
+        throw new InvalidOperationException($"unhandled board query kind {query.Kind}");
     }
 
     // The least FNV-1a fingerprint of the board's values over every element: the same number for every board in
@@ -171,40 +134,6 @@ public static class WorldBoardQueries {
         return (long)shifted;
     }
 
-    private static bool HasLine(CompiledWorldBoardQuery query, ReadOnlySpan<long> values) {
-        var topology = query.Topology;
-        for (var start = 0; start < topology.CellCount; start++) {
-            if (values[start] != query.Value) {
-                continue;
-            }
-            for (var direction = 0; direction < topology.DirectionCount; direction++) {
-                var cell = start;
-                var matched = 1;
-                while (matched < query.Length) {
-                    cell = topology.Neighbour(cell, direction);
-                    if (cell < 0 || cell == start || values[cell] != query.Value) {
-                        break;
-                    }
-                    matched++;
-                }
-                if (matched != query.Length) {
-                    continue;
-                }
-                if (!query.Exact) {
-                    return true;
-                }
-                var next = topology.Neighbour(cell, direction);
-                if (next == start) {
-                    return true;
-                }
-                var previous = topology.Neighbour(start, topology.Opposite(direction));
-                if ((next < 0 || values[next] != query.Value) && (previous < 0 || values[previous] != query.Value)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
 
     // Dijkstra over a binary heap keyed (distance, cell ordinal): the same settle order as a linear scan (least
     // distance, lowest ordinal on ties), at O((V + E) log V) instead of O(V²) per query. Stale heap entries are
@@ -323,8 +252,19 @@ public sealed partial class WorldServer {
             var index = ResolveBodyRef(bodyRef: operand.BodyA!.Value, tick: tick);
             return Body(index: index) is { } body && query.Topology.TryCellOf(position: body.FixedPosition, cell: out var cell) ? cell : -1;
         }
-        var row = WorldDefinitionRows.FindStateRow(m_definition.State, operand.Row!);
-        if (row?.Board is null) {
+        if (
+            !WorldStateReader.TryReadHandle(
+            catalog: m_definition.StateCatalog,
+            definition: m_definition,
+            handle: operand.StateHandle,
+            key: null,
+            rawValue: out _,
+            row: out var row,
+            text: out _,
+            tick: tick
+        ) ||
+            (row.Board is null)
+        ) {
             return -1;
         }
         if (query.Kind == WorldBoardQueryKind.Offset) {

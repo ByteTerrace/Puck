@@ -65,6 +65,36 @@ public sealed class WorldPatternLawTests {
     }
 
     [Fact]
+    public void CellAndDistanceFacetsAnswerTheFirstRejectedRayCellExactlyLikeAFixedRayQueryWouldAndGeneralizeIt() {
+        // Eastward from cell 0 the board reads 2, 2, 1: a run of two "them" (2) is the longest accepted prefix of
+        // "them*", so the first rejected cell is cell 3 (2 steps out from cell 0, then blocked at step 3) — the
+        // same value a fixed "first cell not equal to 2" ray query would answer, generalized to any authored run
+        // shape (here "them", not merely "not the board's empty sentinel"). Westward off the edge, the ray is empty
+        // and the whole (empty) word is still accepted, so there is no blocker: both facets read -1.
+        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 2), Cell("2", 2), Cell("3", 1)], Board: new("map"));
+        var runOfThem = new WorldPatternRow(Name("runOfThem"), CellKind.Int, Symbols: [new(Name("them"), 2, 2)], Pattern: new WorldPatternNode.Star(new WorldPatternNode.Symbol("them")));
+        var definition = Document([board, Slot("blockerCell"), Slot("blockerDistance"), Slot("edgeCell"), Slot("edgeDistance")], [runOfThem], [
+            Mirror("blockerCell", "$match:runOfThem:board:E:cell", "0"),
+            Mirror("blockerDistance", "$match:runOfThem:board:E:distance", "0"),
+            Mirror("edgeCell", "$match:runOfThem:board:W:cell", "0"),
+            Mirror("edgeDistance", "$match:runOfThem:board:W:distance", "0"),
+        ]);
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        fixture.Step();
+
+        Assert.Equal(3L, Value(fixture, "blockerCell"));
+        Assert.Equal(3L, Value(fixture, "blockerDistance"));
+        Assert.Equal(-1L, Value(fixture, "edgeCell"));
+        Assert.Equal(-1L, Value(fixture, "edgeDistance"));
+
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([board, Slot("x")], [runOfThem], [Mirror("x", "$match:runOfThem:board:any:cell", "0")]), out var cellAnyReason));
+        Assert.Contains("not a facet", cellAnyReason);
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(Document([board, Slot("x")], [runOfThem], [Mirror("x", "$match:runOfThem:board:any:distance", "0")]), out var distanceAnyReason));
+        Assert.Contains("not a facet", distanceAnyReason);
+    }
+
+    [Fact]
     public void AValueExpressionReadsATupleOfAttributesPerTokenAndTokenBindsOnlyThere() {
         // suit * 16 + rank: hearts are suit 1, so a heart of any rank lies in 16..31 and a heart flush is h{5}.
         WorldValueExpression Tuple() => new(Tokens: [
@@ -86,7 +116,7 @@ public sealed class WorldPatternLawTests {
         Assert.Equal(0L, Value(unsorted, "royal"));
         Assert.Contains("accept=1", unsorted.Server.DescribeMatch("hearts", "hand", null, null, null));
 
-        var sorted = Apply(definition, new WorldStateTransform.Sort("hand", By: [new("rank")]));
+        var sorted = Apply(definition, new WorldStateTransform.SortZone("hand", By: [new("rank")]));
         using var ordered = Fixtures.FreshServer(definition: sorted);
         ordered.Step();
         Assert.Equal(1L, Value(ordered, "royal"));
@@ -129,22 +159,23 @@ public sealed class WorldPatternLawTests {
     [Fact]
     public void ASortedHandReadsItsAttributeWordAndAStraightMatchesOnlyAfterSorting() {
         var unsorted = Hand();
-        var sorted = Apply(unsorted, new WorldStateTransform.Sort("hand", By: [new("rank")]));
+        var sorted = Apply(unsorted, new WorldStateTransform.SortZone("hand", By: [new("rank")]));
         Assert.Equal(new[] { "c2", "c4", "c3", "c5", "c1" }, Find(sorted, "hand").Cells!.Select(c => c.Key.Value));
-        var descending = Apply(unsorted, new WorldStateTransform.Sort("hand", By: [new("rank", Descending: true)]));
+        var descending = Apply(unsorted, new WorldStateTransform.SortZone("hand", By: [new("rank", Descending: true)]));
         Assert.Equal("c1", Find(descending, "hand").Cells![0].Key.Value);
         // Suit first, rank descending inside a suit, stable across cards with equal keys.
-        var suited = Apply(unsorted, new WorldStateTransform.Sort("hand", By: [new("suit"), new("rank", Descending: true)]));
+        var suited = Apply(unsorted, new WorldStateTransform.SortZone("hand", By: [new("suit"), new("rank", Descending: true)]));
         Assert.Equal(new[] { "c1", "c5", "c3", "c4", "c2" }, Find(suited, "hand").Cells!.Select(c => c.Key.Value));
-        Assert.False(WorldStateTransforms.TryApply(unsorted, new WorldStateTransform.Sort("hand", By: [new("rank")], Descending: true), WorldPrincipal.World, 0, "test", out _, out var flagReason));
-        Assert.Contains("its own direction", flagReason);
+        // Control: no attribute keys at all is not "sort by nothing" — it refuses.
+        Assert.False(WorldStateTransforms.TryApply(unsorted, new WorldStateTransform.SortZone("hand", By: []), WorldPrincipal.World, 0, "test", out _, out var flagReason));
+        Assert.Contains("attribute keys", flagReason);
         // An attribute keyed over another token domain never sorts silently as zeroes.
         var foreign = unsorted with { StateRaw = unsorted.StateRaw! with { World = [.. unsorted.State,
             new(Name("seats"), CellKind.Int, Capacity: 2, Cells: [Cell("s1"), Cell("s2")], Tokens: new()),
             new(Name("score"), CellKind.Int, KeysFrom: "seats", Cells: [Cell("s1", 3), Cell("s2", 1)])] } };
-        Assert.False(WorldStateTransforms.TryApply(foreign, new WorldStateTransform.Sort("hand", By: [new("score")]), WorldPrincipal.World, 0, "test", out _, out var domainReason));
+        Assert.False(WorldStateTransforms.TryApply(foreign, new WorldStateTransform.SortZone("hand", By: [new("score")]), WorldPrincipal.World, 0, "test", out _, out var domainReason));
         Assert.Contains("token domain 'cards'", domainReason);
-        Assert.False(WorldDefinitionValidator.TryValidateLocally(foreign with { Rules = [new WorldRule(Name("bad"), [new ActionEffect.TransformState(new WorldStateTransform.Sort("hand", By: [new("score")]))])] }, out var compileReason));
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(foreign with { Rules = [new WorldRule(Name("bad"), [new ActionEffect.TransformState(new WorldStateTransform.SortZone("hand", By: [new("score")]))])] }, out var compileReason));
         Assert.Contains("token domain", compileReason);
         var foreignPattern = new WorldPatternRow(Name("far"), CellKind.Int, Attribute: "score", Symbols: [new(Name("one"), 1, 1)], Pattern: new WorldPatternNode.Symbol("one"));
         Assert.False(WorldDefinitionValidator.TryValidateLocally(foreign with { PatternsRaw = [.. foreign.Patterns, foreignPattern], Rules = [Mirror("straight", "$match:far:hand")] }, out var attributeReason));
@@ -173,14 +204,15 @@ public sealed class WorldPatternLawTests {
         unsorted.Step();
         Assert.Equal(0L, Value(unsorted, "hit"));
 
-        var sorted = Apply(definition, new WorldStateTransform.Sort("dice"));
+        var sorted = Apply(definition, new WorldStateTransform.SortKeyed("dice"));
         Assert.Equal(new[] { 2L, 3L, 4L, 5L, 6L }, Find(sorted, "dice").Cells!.Select(c => c.Value));
         using var fixture = Fixtures.FreshServer(definition: sorted);
         fixture.Step();
         Assert.Equal(1L, Value(fixture, "hit"));
 
-        Assert.False(WorldStateTransforms.TryApply(definition, new WorldStateTransform.Sort("dice", By: [new("dice")]), WorldPrincipal.World, 0, "test", out _, out var reason));
-        Assert.Contains("takes no attribute", reason);
+        // Control: a plain slot row carries no keyed cells to order.
+        Assert.False(WorldStateTransforms.TryApply(definition, new WorldStateTransform.SortKeyed("hit"), WorldPrincipal.World, 0, "test", out _, out var reason));
+        Assert.Contains("keyed numeric row", reason);
     }
 
     [Fact]
@@ -233,13 +265,13 @@ public sealed class WorldPatternLawTests {
                 new WorldPatternNode.Complement(new WorldPatternNode.Both([new WorldPatternNode.Symbol("a"), new WorldPatternNode.AnySymbol()])),
                 new WorldPatternNode.Optional(new WorldPatternNode.None()),
             ]), MaxStates: 12);
-        var definition = Hand() with { PatternsRaw = [.. Hand().Patterns, every], Rules = [.. Hand().Rules!, new WorldRule(Name("order"), [new ActionEffect.TransformState(new WorldStateTransform.Sort("hand", By: [new("suit"), new("rank", Descending: true)]))])] };
+        var definition = Hand() with { PatternsRaw = [.. Hand().Patterns, every], Rules = [.. Hand().Rules!, new WorldRule(Name("order"), [new ActionEffect.TransformState(new WorldStateTransform.SortZone("hand", By: [new("suit"), new("rank", Descending: true)]))])] };
 
         var parsed = WorldDefinitionSerialization.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: definition));
         Assert.Equal(2, parsed.Patterns.Count);
         Assert.Equal(12, parsed.Patterns[1].MaxStates);
         Assert.IsType<WorldPatternNode.Sequence>(parsed.Patterns[1].Pattern);
-        var sort = Assert.IsType<WorldStateTransform.Sort>(Assert.IsType<ActionEffect.TransformState>(parsed.Rules![1].Effects[0]).Transform);
+        var sort = Assert.IsType<WorldStateTransform.SortZone>(Assert.IsType<ActionEffect.TransformState>(parsed.Rules![1].Effects[0]).Transform);
         Assert.Equal(2, sort.By!.Count);
         Assert.True(sort.By[1].Descending);
         Assert.True(WorldDefinitionValidator.TryValidateLocally(parsed, out var reason), reason);

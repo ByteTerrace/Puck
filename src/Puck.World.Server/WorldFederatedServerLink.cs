@@ -84,7 +84,6 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
             WorldQuery.PlayerTargets targets => targets.Index,
             WorldQuery.Contacts contacts => (contacts.Index - 1),
             WorldQuery.MusicState music => (music.Index - 1),
-            WorldQuery.JudgeState judge => (judge.Index - 1),
             WorldQuery.InstrumentState instrument => (instrument.Index - 1),
             _ => -1,
         };

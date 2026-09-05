@@ -64,9 +64,6 @@ public static partial class WorldRuleCompiler {
         detail: "an effect row is null"
     ),
         ActionEffect.TransformState transform => ResolveStateTransform(transform.Transform, ruleName, definition),
-        ActionEffect.ObserveSocial observe => ResolveSocialObservation(observe.Evidence, ruleName, definition),
-        ActionEffect.ForgetSocial forget => new CompiledWorldEffect(WorldRuleEffectKind.ForgetSocial, string.Empty, string.Empty, default, 0, null,
-            "forgetSocial", SocialRelationship: ResolveSocialRelationship(forget.Relationship, ruleName, definition)),
         ActionEffect.SetState set => ResolveWrite(
         rowName: set.State,
         key: set.Key,
@@ -593,7 +590,8 @@ public static partial class WorldRuleCompiler {
                 Index: -1,
                 Kind: CompiledBodyRefKind.Cell,
                 Row: cell.Row,
-                Key: cell.Key
+                Key: cell.Key,
+                Handle: cell.Handle
             );
         }
 
@@ -667,7 +665,8 @@ public static partial class WorldRuleCompiler {
                 Kind: ((kind == "argmax")
                 ? CompiledBodyRefKind.ArgMax
                 : CompiledBodyRefKind.ArgMin),
-                Row: value
+                Row: value,
+                Handle: ResolveWorldStateHandle(definition: definition, name: value)
             );
         }
 
@@ -850,7 +849,8 @@ public static partial class WorldRuleCompiler {
 
         return new CompiledCellRef(
             Key: resolvedKey,
-            Row: row
+            Row: row,
+            Handle: ResolveWorldStateHandle(definition: definition, name: row)
         );
     }
     private static bool TryResolveDynamicKey(string? key, string ruleName, WorldDefinition definition, string verb, string keyFieldLabel, out CompiledCellRef cell) {
@@ -1054,7 +1054,7 @@ public static partial class WorldRuleCompiler {
                     throw Malformed(ruleName: ruleName, name: name, detail: $"argument '{argument}' does not name a declared row's cell by a literal key");
                 }
 
-                other = new CompiledCellRef(Row: resolved.Operand.Row!, Key: (resolved.Operand.Key ?? string.Empty));
+                other = new CompiledCellRef(Row: resolved.Operand.Row!, Key: (resolved.Operand.Key ?? string.Empty), Handle: resolved.Operand.StateHandle);
             }
             else if (!long.TryParse(s: argument, style: System.Globalization.NumberStyles.None, provider: System.Globalization.CultureInfo.InvariantCulture, result: out literal) || (literal >= SymmetryLattice.NodeCount)) {
                 throw Malformed(ruleName: ruleName, name: name, detail: $"argument '{argument}' is neither a node 0..{SymmetryLattice.NodeCount - 1} nor 'cell:<row>[.<key>]'");
@@ -1084,6 +1084,9 @@ public static partial class WorldRuleCompiler {
         }
         if (name.StartsWith(WorldRuleFacts.HistoryPrefix, StringComparison.Ordinal)) {
             return ResolveHistoryOperand(name, key, ruleName, definition);
+        }
+        if (name.StartsWith(WorldRuleFacts.ClockPrefix, StringComparison.Ordinal)) {
+            return ResolveClockOperand(name, key, ruleName, definition);
         }
         var describe = $"{name}{((key is { } spelledKey)
             ? $".{spelledKey}"
@@ -1421,6 +1424,7 @@ public static partial class WorldRuleCompiler {
                     Reduce: (isMax
                 ? WorldStateReduceOp.Max
                 : WorldStateReduceOp.Min),
+                    StateHandle: ResolveWorldStateHandle(definition: definition, name: rowName),
                     FilterRow: filterRowName,
                     FilterHandle: filterHandle
                 ),
@@ -1769,7 +1773,8 @@ public static partial class WorldRuleCompiler {
                     Kind: WorldRuleFactKind.Nearest,
                     Row: tokens[width],
                     Key: null,
-                    BodyA: from
+                    BodyA: from,
+                    StateHandle: ResolveWorldStateHandle(definition: definition, name: tokens[width])
                 ),
                 ValueKind: CellKind.Int,
                 Describe: describe
@@ -2206,7 +2211,6 @@ public static partial class WorldRuleCompiler {
             );
         } finally {
             s_bindingScope = null;
-            s_socialPolicy = null;
         }
     }
     /// <summary>Compiles every rule in the definition's <c>rules</c> section, in document order.</summary>
@@ -2450,7 +2454,6 @@ public static partial class WorldRuleCompiler {
                 );
             } finally {
                 s_bindingScope = null;
-                s_socialPolicy = null;
             }
         }
 

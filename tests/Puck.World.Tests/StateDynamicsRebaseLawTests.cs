@@ -1,6 +1,7 @@
 using Xunit;
 
 using Puck.Maths;
+using Puck.Physics.Motion;
 using Puck.World.Protocol;
 
 namespace Puck.World.Tests;
@@ -8,7 +9,7 @@ namespace Puck.World.Tests;
 /// <summary>Proves an explicit write against a cell carrying a <see cref="WorldStateDynamics"/> easing trait
 /// rebases the trait to the applying tick (<c>Server.WorldServer.RebaseCellTraits</c>) rather than replacing it
 /// wholesale: the follower keeps chasing from wherever it actually was, receives a velocity kick signed by the
-/// referenced <c>dynamics</c> row's own <c>r</c>, and <c>world.undo</c>/a market touch rebase the same way.</summary>
+/// referenced <c>dynamics</c> row's own <c>r</c>, and <c>world.undo</c> rebases the same way.</summary>
 public sealed class StateDynamicsRebaseLawTests {
     private static readonly WorldPrincipal Actor = WorldPrincipal.Seat(slot: 0);
     private static readonly WorldDynamicsRow KickPositive = new(Damping: 1f, Frequency: 1f, Name: "kickPos", Response: 1f);
@@ -115,6 +116,46 @@ public sealed class StateDynamicsRebaseLawTests {
         Assert.True(condition: WorldStateReader.TryReadEased(definition: fixture.Server.Definition, key: "0", rawValue: out var settled, row: out _, rowName: "gauge", text: out _, tick: (rewriteTick + 10_000UL)));
         Assert.Equal(actual: settled, expected: 600L);
     }
+    // A rule's AddState effect compiles to the same WorldMutation.UpsertStateCell RebaseCellTraits switches on
+    // (Server.WorldServer.Step's Write arm), so a rule-authored write rebases exactly like a directly-submitted one.
+    [Fact]
+    public void RuleAddState_FromRest_AlsoRebasesAndKicksTheVelocity() {
+        var gauge = new WorldStateRow(
+            Name: WorldCellName.Parse(candidate: "gauge"),
+            Kind: CellKind.Int,
+            Capacity: 8,
+            Cells: [
+                new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: 0, Dynamics: new WorldStateDynamics(EpochTick: 0, Row: "kickPos", V0: 0, Y0: 0)),
+            ]
+        );
+        var trigger = new WorldStateRow(Name: WorldCellName.Parse(candidate: "trigger"), Kind: CellKind.Int,
+            Cells: [new WorldStateCell(Key: WorldStateRow.SlotKey, Value: 0)]);
+        var document = (Fixtures.BuildDocument().WithWorldState(rows: [gauge, trigger]) with {
+            DynamicsRaw = [.. Fixtures.StandardDynamics, KickPositive, KickZero, KickNegative],
+            Rules = [new WorldRule(
+                Name: WorldCellName.Parse(candidate: "bump"),
+                Gate: new ActionPredicate.CompareState(State: "trigger", Comparison: ActionStateComparison.Equal, Value: 1),
+                Mode: ActionTriggerMode.Edge,
+                Effects: [new ActionEffect.AddState(State: "gauge", Value: 300, Key: "0")]
+            )],
+        });
+
+        using var fixture = Fixtures.FreshServer(definition: document);
+
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
+            Principal: Actor, Row: "trigger", Key: WorldStateRow.SlotKey.Value, Value: 1, Kind: WorldDocumentWriteKind.Set
+        ));
+        fixture.Step();
+
+        var appliedTick = (fixture.Server.NextInputTick - 1UL);
+        var trait = ReadTrait(definition: fixture.Server.Definition);
+
+        Assert.Equal(actual: trait.Y0, expected: 0L);
+        Assert.Equal(actual: trait.EpochTick, expected: unchecked((long)appliedTick));
+        Assert.Equal(actual: System.Math.Sign(value: trait.V0), expected: 1);
+        Assert.True(condition: WorldStateReader.TryRead(definition: fixture.Server.Definition, key: "0", rawValue: out var truth, row: out _, rowName: "gauge", text: out _, tick: appliedTick));
+        Assert.Equal(actual: truth, expected: 300L);
+    }
     [Fact]
     public void Undo_RestoresTheRebasedTraitBitExactly() {
         using var fixture = Fixtures.FreshServer(definition: BuildDocument(dynamicsRow: "kickPos"));
@@ -145,79 +186,5 @@ public sealed class StateDynamicsRebaseLawTests {
         var afterUndo = ReadTrait(definition: fixture.Server.Definition);
 
         Assert.Equal(actual: afterUndo, expected: afterFirstWrite);
-    }
-    [Fact]
-    public void PlaceMarketBid_RebasesTheSpentCellsDynamicsTrait() {
-        var gold = new WorldStateRow(
-            Name: MarketFixtures.GoldRow,
-            Kind: CellKind.Int,
-            Capacity: 128,
-            NonNegative: true,
-            Cells: [
-                new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: MarketFixtures.SellerStartingGold),
-                new WorldStateCell(
-                    Key: WorldCellName.Parse(candidate: "1"),
-                    Value: MarketFixtures.BidderStartingGold,
-                    Dynamics: new WorldStateDynamics(EpochTick: 0, Row: "kickZero", V0: 0, Y0: (MarketFixtures.BidderStartingGold << FixedQ4816.FractionBitCount))
-                ),
-                new WorldStateCell(Key: WorldCellName.Parse(candidate: "2"), Value: MarketFixtures.BidderStartingGold),
-            ]
-        );
-        var apple = new WorldStateRow(
-            Name: MarketFixtures.AppleRow,
-            Kind: CellKind.Int,
-            Capacity: 128,
-            NonNegative: true,
-            Cells: [new WorldStateCell(Key: WorldCellName.Parse(candidate: "0"), Value: MarketFixtures.SellerStartingApples)]
-        );
-        var market = new WorldMarketSection(
-            Formats: [WorldMarketFormat.English, WorldMarketFormat.Buyout],
-            FeeBasisPoints: MarketFixtures.FeeBasisPoints,
-            MinDurationSeconds: MarketFixtures.MinDurationSeconds,
-            MaxDurationSeconds: MarketFixtures.MaxDurationSeconds
-        );
-        var definition = (Fixtures.BuildDocument().WithWorldState(rows: [gold, apple]) with {
-            DynamicsRaw = [.. Fixtures.StandardDynamics, KickZero],
-            Market = market,
-        });
-        using var fixture = Fixtures.FreshServer(definition: definition);
-        var seller = WorldPrincipal.Seat(slot: 0);
-        var bidder = WorldPrincipal.Seat(slot: 1);
-
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            BuyoutPrice: null, CurrencyRow: MarketFixtures.GoldRow, DurationSeconds: MarketFixtures.MinDurationSeconds,
-            Format: WorldMarketFormat.English, ItemRow: MarketFixtures.AppleRow, Principal: seller, Quantity: 1,
-            Seller: seller, StartPrice: 5
-        ));
-        fixture.Step();
-
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.PlaceMarketBid(Amount: 10, Bidder: bidder, ListingId: 1, Principal: bidder));
-        fixture.Step();
-
-        var appliedTick = (fixture.Server.NextInputTick - 2UL);
-        var goldRow = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: MarketFixtures.GoldRow)!;
-        WorldStateDynamics? trait = null;
-
-        foreach (var cell in goldRow.Cells!) {
-            if (string.Equals(a: cell.Key.Value, b: "1", comparisonType: System.StringComparison.Ordinal)) {
-                trait = cell.Dynamics;
-            }
-        }
-
-        Assert.NotNull(@object: trait);
-        Assert.Equal(actual: trait!.EpochTick, expected: unchecked((long)appliedTick));
-        // The trait's own Y0/V0 rebase through the SAME closed form the read side uses — since the cell was already
-        // AT REST at its old truth (500) with a zero-response (r=0) row, the captured sample is unchanged by the
-        // write and the retarget kick is zero, so the follower keeps sitting at 500 for this one instant even
-        // though truth just moved to 490 — it is truth, never the trait, that reflects the spend immediately.
-        Assert.Equal(actual: trait.Y0, expected: (MarketFixtures.BidderStartingGold << FixedQ4816.FractionBitCount));
-        Assert.Equal(actual: trait.V0, expected: 0L);
-        Assert.True(condition: WorldStateReader.TryRead(definition: fixture.Server.Definition, key: "1", rawValue: out var truth, row: out _, rowName: MarketFixtures.GoldRow.Value, text: out _, tick: appliedTick));
-        Assert.Equal(actual: truth, expected: (MarketFixtures.BidderStartingGold - 10));
-
-        // The follower then eases from 500 toward the NEW target 490 — read far in the future (the closed form
-        // needs no further Step() calls) to prove it actually chases the truth rather than sitting at 500 forever.
-        Assert.True(condition: WorldStateReader.TryReadEased(definition: fixture.Server.Definition, key: "1", rawValue: out var settled, row: out _, rowName: MarketFixtures.GoldRow.Value, text: out _, tick: (appliedTick + 10_000UL)));
-        Assert.Equal(actual: settled, expected: (MarketFixtures.BidderStartingGold - 10));
     }
 }

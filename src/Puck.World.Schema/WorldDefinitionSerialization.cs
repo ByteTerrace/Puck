@@ -107,8 +107,8 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldShaping[]))]
 // The audio sections: the speaker row + tune/patch asset REFERENCE rows + the audio defaults (the world.row.set
 // speakers / world.row.set tunes / world.row.set patches / world.row.set audio payload shapes). WorldTune/WorldPatch
-// are plain name/source/hash rows — no embedded document, no bridging converter (see WorldMusicRow/WorldJudgeRow,
-// registered below, for the same shape).
+// are plain name/source/hash rows — no embedded document, no bridging converter (see WorldMusicRow, registered
+// below, for the same shape).
 [JsonSerializable(typeof(WorldSpeaker))]
 // The speaker union's nested kinds collide by simple name with the camera/screen-source unions' (Fixed/Anchored and
 // None/Machine); explicit TypeInfoPropertyName entries resolve the source-gen collision (SYSLIB1031).
@@ -136,9 +136,8 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldSpeakerSource.Machine), TypeInfoPropertyName = "WorldSpeakerSourceMachine")]
 [JsonSerializable(typeof(WorldTune))]
 [JsonSerializable(typeof(WorldPatch))]
-// puck.music.v1 / puck.judge.v1 are referenced, never embedded — plain Name/Source/Hash rows, no bridging converter.
+// puck.music.v1 is referenced, never embedded — a plain Name/Source/Hash row, no bridging converter.
 [JsonSerializable(typeof(WorldMusicRow))]
-[JsonSerializable(typeof(WorldJudgeRow))]
 [JsonSerializable(typeof(WorldAudioDefaults))]
 [JsonSerializable(typeof(WorldAudioCue))]
 // The probes section rows (the document `probes` section) and the frame-source vocabulary a probe socket shares
@@ -189,7 +188,6 @@ namespace Puck.World;
 // name rather than defaulting.
 [JsonSerializable(typeof(WorldStateRow))]
 [JsonSerializable(typeof(WorldStateSection))]
-[JsonSerializable(typeof(WorldSocialPolicy))]
 // The stochastic SOURCE family — reachable both as a document `generators` row and inline inside a site's draw
 // facet. Registered on its own so WorldStateRowJsonConverter can read/write the facet through a typed accessor (the
 // row converter is hand-written; its nested objects are ordinary strict-parsed STJ).
@@ -407,7 +405,7 @@ internal sealed class DocumentWriteMaskJsonConverter : NameListMaskJsonConverter
 /// <c>UnmappedMemberHandling.Disallow</c> policy, so this converter re-implements it by hand.</para>
 /// </summary>
 internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> {
-    private const string Shape = "{\"name\":…,\"kind\":\"int\"|\"fixed\"|\"bool\"|\"text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…},\"lattice\":{\"topology\":…,\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"markov\"|\"uniformRange\"|\"weightedNumeric\"|\"streamDraw\"|\"symmetryOrbit\",…},\"timing\":\"boot\"|\"tickPeriod\"|\"event\"},\"drawCursor\":…,\"drawDecks\":[…]}";
+    private const string Shape = "{\"name\":…,\"kind\":\"int\"|\"fixed\"|\"bool\"|\"text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…},\"lattice\":{\"topology\":…,\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"markov\"|\"uniformRange\"|\"weightedNumeric\"|\"streamDraw\"|\"symmetryOrbit\",…},\"timing\":\"boot\"|\"tickPeriod\"|\"event\"},\"drawCursor\":…,\"drawnMasks\":[…]}";
 
     private static string DescribeCellKind(CellKind cellKind) => cellKind switch {
         CellKind.Int => "int",
@@ -624,18 +622,18 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
 
         return cells;
     }
-    // Engine-minted per-context dealt masks, by the source's context declaration ordinal. Refused off-shape rather
+    // Engine-minted per-context drawn masks, by the source's context declaration ordinal. Refused off-shape rather
     // than coerced: these are the one part of a draw site's position the cursor cannot express.
-    private static List<ClosedBitset256> ReadDrawDecks(string name, JsonElement element) {
+    private static List<ClosedBitset256> ReadDrawnMasks(string name, JsonElement element) {
         if (element.ValueKind != JsonValueKind.Array) {
-            throw new JsonException(message: $"state row '{name}'.drawDecks must be an array of per-context dealt masks.");
+            throw new JsonException(message: $"state row '{name}'.drawnMasks must be an array of per-context drawn masks.");
         }
 
         var masks = new List<ClosedBitset256>(capacity: element.GetArrayLength());
 
         foreach (var entry in element.EnumerateArray()) {
             if (entry.ValueKind != JsonValueKind.String || !ClosedBitset256.TryParse(entry.GetString(), out var mask)) {
-                throw new JsonException($"state row '{name}'.drawDecks[{masks.Count}] must be a 64-digit hexadecimal string.");
+                throw new JsonException($"state row '{name}'.drawnMasks[{masks.Count}] must be a 64-digit hexadecimal string.");
             }
             masks.Add(mask);
         }
@@ -802,7 +800,7 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
         JsonElement? evicts = null;
         JsonElement? draw = null;
         JsonElement? drawCursor = null;
-        JsonElement? drawDecks = null;
+        JsonElement? drawnMasks = null;
         JsonElement? history = null;
         JsonElement? historyCursor = null;
         JsonElement? board = null;
@@ -898,8 +896,8 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
                 case "board":
                     board = JsonElement.ParseValue(reader: ref reader);
                     break;
-                case "drawDecks":
-                    drawDecks = JsonElement.ParseValue(reader: ref reader);
+                case "drawnMasks":
+                    drawnMasks = JsonElement.ParseValue(reader: ref reader);
                     break;
                 case "advance":
                     advance = JsonElement.ParseValue(reader: ref reader);
@@ -960,11 +958,11 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             throw new JsonException(message: $"state row '{name}' declares 'drawCursor' without 'draw' — drawCursor is engine bookkeeping for a draw site alone.");
         }
         if (
-            (drawDecks is not null) &&
+            (drawnMasks is not null) &&
             (draw is null) &&
             (lattice is null)
         ) {
-            throw new JsonException(message: $"state row '{name}' declares 'drawDecks' without 'draw' — drawDecks is engine bookkeeping for a draw site alone.");
+            throw new JsonException(message: $"state row '{name}' declares 'drawnMasks' without 'draw' — drawnMasks is engine bookkeeping for a draw site alone.");
         }
         if (
             (advance is not null) &&
@@ -1123,9 +1121,9 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             KeysFrom: keysFrom,
             ValuesFrom: valuesFrom,
             Board: board is { } boardElement ? (boardElement.Deserialize(WorldJsonContext.Default.WorldStateBoard) ?? throw new JsonException("board must be an object")) : null,
-            DrawDecks: ((drawDecks is { } drawDecksElement)
-            ? ReadDrawDecks(
-                    element: drawDecksElement,
+            DrawnMasks: ((drawnMasks is { } drawnMasksElement)
+            ? ReadDrawnMasks(
+                    element: drawnMasksElement,
                     name: name
                 )
             : null),
@@ -1370,11 +1368,11 @@ internal sealed class WorldStateRowJsonConverter : JsonConverter<WorldStateRow> 
             writer.WritePropertyName("board");
             JsonSerializer.Serialize(writer, board, WorldJsonContext.Default.WorldStateBoard);
         }
-        if (value.DrawDecks is { Count: > 0 } drawDecks) {
-            writer.WritePropertyName(propertyName: "drawDecks");
+        if (value.DrawnMasks is { Count: > 0 } drawnMasks) {
+            writer.WritePropertyName(propertyName: "drawnMasks");
             writer.WriteStartArray();
 
-            foreach (var mask in drawDecks) {
+            foreach (var mask in drawnMasks) {
                 writer.WriteStringValue(value: mask.ToString());
             }
 

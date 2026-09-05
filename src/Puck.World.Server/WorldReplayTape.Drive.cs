@@ -225,7 +225,7 @@ public sealed partial class WorldReplayTape {
             profiles: m_profiles,
             server: shadow
         );
-        // A population-only reset leaves the old clock, latches, social history, decisions, and held input alive.
+        // A population-only reset leaves the old clock, latches, decisions, and held input alive.
         // Reuse the complete authority checkpoint so a live drive starts from the same state as offline replay.
         if (!shadow.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var reason)) {
             return $"the replay boot image could not be captured: {reason}";

@@ -7,7 +7,7 @@ public sealed partial class WorldServer {
         m_boundLeft = observer;
         m_boundRight = neighbor;
         try {
-            // Compiled affinity operands read only state-backed or social facts, which cannot change during
+            // Compiled affinity operands read only state-backed facts, which cannot change during
             // population movement. Body observations stay in the population's frozen spatial image.
             return TryEvaluateExpression(program, CellKind.Fixed, m_lastCompletedTick, out value);
         } finally { m_boundLeft = left; m_boundRight = right; }

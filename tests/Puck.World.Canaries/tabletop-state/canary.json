@@ -1,7 +1,7 @@
 {
   "id": "tabletop-state",
   "title": "Atomic tabletop and tactics state with replay",
-  "binding": "A legal move spends two points, a bracketed ray flips discs, a stable card moves between ordered zones, and a phase advances. The occupied-destination control preserves position and allowance. The positive boot recording must MATCH.",
+  "binding": "A legal move spends two points, a bracketed ray flips discs, a stable card moves between ordered zones, and the guarded move advances the phase generation. The occupied-destination control preserves position and allowance. The positive boot recording must MATCH.",
   "bootShape": "headless",
   "requirements": [], "seconds": 4, "timeoutSeconds": 35, "fixtures": [],
   "positive": {
@@ -16,7 +16,6 @@
       { "verb": "world.state", "occurrence": 3, "outcome": "accepted" },
       { "verb": "world.state.transform", "occurrence": 2, "outcome": "accepted" },
       { "verb": "world.state", "occurrence": 4, "outcome": "accepted" },
-      { "verb": "world.state.transform", "occurrence": 3, "outcome": "accepted" },
       { "verb": "world.state", "occurrence": 5, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
       { "verb": "replay.stop", "occurrence": 1, "outcome": "accepted" },
@@ -28,7 +27,7 @@
       { "type": "line", "name": "spent", "stream": "stdout", "match": "contains", "text": "[world.state.cell 'moves'.'scout' value=1]", "present": true },
       { "type": "line", "name": "flipped", "stream": "stdout", "match": "contains", "text": "[world.state.cell 'discs'.'1' value=1]", "present": true },
       { "type": "line", "name": "identity", "stream": "stdout", "match": "contains", "text": "[world.state.cell 'hand'.'copyA' value=true]", "present": true },
-      { "type": "line", "name": "next-round", "stream": "stdout", "match": "contains", "text": "sequence=1 round=1", "present": true },
+      { "type": "line", "name": "advanced", "stream": "stdout", "match": "contains", "text": "phase sequence=1", "present": true },
       { "type": "line", "name": "replay-match", "stream": "stdout", "match": "contains", "text": "[replay.verify: 'tabletop-state' | MATCH", "present": true },
       { "type": "line", "name": "clean-wire", "stream": "stdout", "match": "contains", "text": "[wire.errors: 0 rejected]", "present": true }
     ]

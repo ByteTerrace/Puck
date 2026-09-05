@@ -486,11 +486,6 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        if (!CanInstallSocial(candidate, out var socialReason)) {
-            RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: socialReason, verb: verb);
-            return false;
-        }
-
         if (ExceedsBootDerivedFaceReservation(
             candidate: candidate,
             reason: out var reservationReason
@@ -1023,7 +1018,8 @@ public sealed partial class WorldServer {
             instanceIdentity: InstanceIdentity,
             candidate: out var candidate,
             reason: out var composeReason,
-            evictedKey: out var evictedKey
+            evictedKey: out var evictedKey,
+            patterns: m_patterns
         )) {
             Reject(
                 connectionId: connectionId,
@@ -1088,11 +1084,6 @@ public sealed partial class WorldServer {
                 reason: validationReason
             );
 
-            return false;
-        }
-
-        if (!CanInstallSocial(candidate, out var socialReason)) {
-            Reject(connectionId: connectionId, correlationId: correlationId, mutation: mutation, reason: socialReason);
             return false;
         }
 
@@ -1271,7 +1262,7 @@ public sealed partial class WorldServer {
             }
 
             // Whatever moved a lattice row's draw pass — a Generate, or a whole-row upsert that re-authored its
-            // cursor, decks or fill — repaints that row; every other row keeps its evolved cells.
+            // cursor, drawn masks or fill — repaints that row; every other row keeps its evolved cells.
             RepaintChangedLatticeDraws(
                 previous: previous,
                 current: candidate

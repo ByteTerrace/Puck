@@ -8,7 +8,7 @@ public sealed partial class WorldPopulation {
     private FlockAffinityReader? m_flockAffinityReader;
     private long m_flockAffinityCeiling;
 
-    // The authority owns state and social memory; the population owns perception. Bind once per installation,
+    // The authority owns state; the population owns perception. Bind once per installation,
     // not per neighbor. Authored names survive checkpoint deserialization, unlike object-reference keys.
     internal void BindFlockAffinities(WorldDefinition definition, FlockAffinityReader reader) {
         m_flockAffinities.Clear();

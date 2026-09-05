@@ -13,8 +13,7 @@ fixed-point constants, and its live reference count), `world.curves`
 authored shape, its compiled segment count and total arc length, and its live
 reference count), `world.group.*`/`world.ownership.*`/
 `world.groups` (`WorldGroupCommandModule`), `world.population.spawn`/
-`world.looks` (`WorldLookCommandModule`), `market.*`/`world.market`
-(`WorldMarketCommandModule`), `world.peers`/`world.projection`
+`world.looks` (`WorldLookCommandModule`), `world.peers`/`world.projection`
 (`WorldNetworkCommandModule`), `world.row.*`/`world.kits`/`world.assign`
 (`WorldRowCommandModule`), `world.state.*`/`world.generate`/`world.state`
 (`WorldStateCommandModule`), `world.tabletop` (`WorldTabletopCommandModule` —

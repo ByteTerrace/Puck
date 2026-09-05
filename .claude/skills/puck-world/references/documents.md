@@ -25,7 +25,7 @@ replica. A `frames` row that also mints grants refuses by name.
 `WorldProjection.Compose(definition, tier, authority, revision)` is the one
 egress composer, answering `null` at `replica`/`frames` so the caller sends the
 definition verbatim or nothing. `WorldProjectionDocument`'s MEMBER LIST is the
-disclosure decision: it has no member for `rules`, `grants`, `state`, `market`,
+disclosure decision: it has no member for `rules`, `grants`, `state`,
 `admission`, `generation`, `generators`, `groups`, `properties`, `addons`,
 `storage`, `host`, `authoring`, `identity`, `inputHold`, `targetRegisters`,
 `bodyMotionPrograms`, or `portals`, and its `WorldProjectedKit` row has none for
@@ -100,10 +100,7 @@ below), `Identity`, `Groups`, `Properties`, `Interactions`, `Generation`,
 (`Protocol/WorldAdmission.cs`, the one trust list every ingress crosses —
 key-bearing rows for the QUIC identity door, keyless `federatedAuthority` rows
 for travellers an authenticated authority hands over; deny-by-default, an
-absent/empty section admits neither), `Market` (`WorldMarketSection`,
-`WorldMarket.cs` — the local auction house's config and live listing ledger;
-null IS today's no-market behavior, falling back to
-`WorldMarketSection.Empty`), `Adjacencies` (`WorldAdjacencies.cs` — invisible
+absent/empty section admits neither), `Adjacencies` (`WorldAdjacencies.cs` — invisible
 reciprocal authority boundaries; null names no seamless neighbours), `Text`
 (`TextFontCatalogDefinition` — the named, hash-pinned world-space font
 catalog; null declares no fonts), and `Metadata` (`WorldMetadataSection`,
@@ -197,11 +194,11 @@ mutates them in session and no grant subject names them:
   `$drop`/`$replace` refuses at validation, and a JSON `null` under a key in
   a delta deletes the inherited key rather than storing a literal null.
 
-The `WorldSection` enum (`Protocol/WorldGrant.cs`, 33 members, declared
+The `WorldSection` enum (`Protocol/WorldGrant.cs`, 32 members, declared
 order): `Kits, Screens, Cameras, Spawns, Motion, Population, Render, Addons,
 Bindings, Creations, Placements, Authoring, Speakers, Tunes, Patches, Audio,
 Collision, Host, Views, Looks, Grants, Hud, State, InputHold, Rules,
-Groups, Properties, Interactions, PlayerDefaults, Market, Probes, Dynamics,
+Groups, Properties, Interactions, PlayerDefaults, Probes, Dynamics,
 Curves`.
 It is the grant subject vocabulary
 (`section:<name>`) and the mutation dispatch axis — narrower than
@@ -212,9 +209,7 @@ It is the grant subject vocabulary
 names also differ — `SpawnPoints`/`BindingOverlays`/`LookAssignment`/
 `DefaultSeatKit`/`Assignment` dispatch through `Spawns`/`Bindings`/`Looks`/
 `Kits` respectively; `PlayerDefaults` dispatches through
-`WorldMutation.SetPlayerDefaults`, and `Market` through the
-`CreateMarketListing`/`PlaceMarketBid`/`BuyoutMarketListing`/
-`CancelMarketListing`/`SettleMarketListing` family). `Probes` is boot-authored
+`WorldMutation.SetPlayerDefaults`). `Probes` is boot-authored
 only — no `WorldMutation` kind targets it, so the section-scoped grant hold is
 its whole authority surface.
 
@@ -313,7 +308,7 @@ individuals, binding left/each to the observer and right to the candidate only
 inside that option. Inspect candidateBudget as well as maxCandidates: rejected
 points and incumbent rechecks consume attention. Incarnation-addressed choices,
 not merely option ordinals, own commitment and entry transitions. Positions freeze
-before ordinary rules; social/state gates still read in normal document order.
+before ordinary rules; state gates still read in normal document order.
 See the Schema README's `decision-policies` section for the complete authoring
 contract. Keep choice state, local random draws, and timers in checkpoint/hash
 coverage; refresh compiled handles while retaining unchanged policy episodes.
@@ -567,19 +562,23 @@ still use the one document door, not a separate flock mutation API.
 
 Optional `cohesionAffinity`/`alignmentAffinity` use the ordinary Fixed postfix
 expression evaluator. Left is the observer, right the retained neighbor; only
-state-backed/social operands are admitted because body/channel/navigation reads
-change during the movement pass. Keep separate dimensions for companion
-attraction and heading expertise. Missing expressions read one, results clamp
+state-backed operands are admitted because body/channel/navigation reads
+change during the movement pass. A belief row keyed by observer (`$left`) is
+the ordinary way to feed one — see "Keyed belief rows and evidence dedup"
+below. Missing expressions read one, results clamp
 to [0,1], arithmetic failure reads zero with a counter. These are relative
 weighted-mean inputs, not separation filters or absolute term strength. They
-refresh with perception cadence, not on every social update. Rebind compiled
-state handles and dimension ordinals on every declaration installation; key
+refresh with perception cadence, not on every belief-row update. Rebind compiled
+state handles on every declaration installation; key
 bindings by authored kit/producer names, not object identity (wire restore
 deserializes fresh objects). Cached neighbor contributions already carry the
 result through checkpoint/hash. Charge both programs and all indirect scans for
 every retained neighbor in the worst-case simultaneous population refresh,
-under the shared rule work ceiling. See the
-[authoring example](../../../../src/Puck.World.Schema/README.md#social-flock-affinities).
+under the shared rule work ceiling — an O(population²) Distance interaction
+firing an ordinary state-write effect on every pair is priced at the engine's
+real per-write cost, not a bespoke cheap one; keep that shape to a linear
+forEach/flock-affinity reach instead. See the
+[authoring example](../../../../src/Puck.World.Schema/README.md#keyed-belief-rows-and-flock-affinities).
 
 ### Crowd scale policies
 
@@ -690,7 +689,10 @@ alone (`Ring`/`Hex` refuse it), and a `Grid`'s `cellSize` must quantize to a
 positive Q48.16 value — it is the divisor `$board:cellOf` resolves world
 positions against (the garden's `chessBoard` alongside its own `pondBasin`
 water field — see `Puck.World.Schema/README.md`'s tabletop-primitive
-section). Lattice-shaped
+section). A discrete topology's own `directions` (optional; each kind's
+compass/space names are the unauthored default) replaces its whole direction
+vocabulary — see the schema README's discrete-boards section for the
+authoring shape and validation. Lattice-shaped
 state rows: `{"name": …, "kind": "fixed", "lattice":
 {"topology": …, "initial"/"min"/"max", optional "heightScale"/"color",
 "paint": […]}}`. `WorldFieldsSection.Compile` assembles the runtime composite
@@ -754,42 +756,43 @@ field refuses BY NAME, including `bound`/`mode`, which are non-nullable and are
 refused against their declared defaults:
 
 - `markov` — `start`, `bound`, `mode`, `contexts` (weighted alternatives, each
-  naming the context it moves INTO). Writes TEXT; deals per context. One
+  naming the context it moves INTO). Writes TEXT; exhausts per context. One
   emission is one walk from `start` to a TERMINAL context (one declaring no
   alternatives), refusing by name at `bound` rather than truncating. `mode` is
-  `withReplacement` (default), `withoutReplacement` (dealt out → refuse by name)
-  or `reshuffleOnExhaustion`.
+  `withReplacement` (default), `withoutReplacement` (drawn out → refuse by name)
+  or `restartOnExhaustion`.
 - `uniformRange` — `rangeMin`/`rangeMax`, both or neither. One numeric draw;
   refuses a `mode`.
-- `weightedNumeric` — `weighted` (`{value, weight, count?}` rows) and `mode`. One
-  numeric draw; under a deck `mode` the outcomes are dealt through the site's
-  single `drawDecks` mask — the numeric shuffle bag. `count` (also on a Markov
-  alternative) is that many cards per pass; a set's cards total at most 256.
+- `weightedNumeric` — `weighted` (`{value, weight, multiplicity?}` rows) and `mode`.
+  One numeric draw; under an exhausting `mode` the outcomes are drawn through the
+  site's single `drawnMasks` mask — the numeric shuffle bag. `multiplicity` (also
+  on a Markov alternative) is that many units per pass; a set's units total at
+  most 256.
 - `streamDraw` — no fields. One raw 32-bit draw; refuses a `mode`.
 
-The alias table over a source's full card set is compiled once per
+The alias table over a source's full entry set is compiled once per
 `WorldGenerator` instance (`WorldGeneratorEngine`, a `ConditionalWeakTable`), so
-per-tick draws do not rebuild it; a dealt-down pool is rebuilt allocation-free
+per-tick draws do not rebuild it; a drawn-down pool is rebuilt allocation-free
 in bounded stack storage per emission, with the identical alias mapping.
 
 A lattice row's paint may carry one `draw` fill (`WorldLatticeFill.Draw`,
 `{ "$type": "draw", "source" | "generator" }`, numeric sources only): the
 per-cell lattice draw. It is one whole-field pass of the row's stream
 (`WorldGeneratorEngine.TryFireBatch`; cell `k` = the sample at
-`drawCursor + k`, deck threaded cell to cell), painted at boot by `WorldServer`
-at the pass the row's `drawCursor`/`drawDecks` name, and advanced one pass plus
+`drawCursor + k`, mask threaded cell to cell), painted at boot by `WorldServer`
+at the pass the row's `drawCursor`/`drawnMasks` name, and advanced one pass plus
 repainted by `world.generate <row>` (`TryComposeGenerate`'s lattice arm, then
 `RepaintLatticeDrawAfterGenerate`). Draw keeps its authored position in the
 paint list: it overwrites earlier fills and later fills overwrite it. Whole-
 document rebuild/load/reset repaint every draw row; undo repaints only a row
-whose cursor/deck position rewound, preserving unrelated reaction-evolved
+whose cursor/mask position rewound, preserving unrelated reaction-evolved
 fields. Read law:
 `tests/Puck.World.Schema.Tests/WorldLatticeDrawLawTests.cs`; live proof:
 `tests/Puck.World.Canaries/lattice-draw-fill`.
 
-`WorldGeneratorCapacity`: 32 contexts, 64 alternatives per context (one deck-mask
-bit each), bound ≤ 64, token ≤ 64 UTF-16 units, 64 weighted outcomes, 64 declared
-sources, uniform bounds inside int32.
+`WorldGeneratorCapacity`: 32 contexts, 64 alternatives per context (one
+drawn-mask bit each), bound ≤ 64, token ≤ 64 UTF-16 units, 64 weighted outcomes,
+64 declared sources, uniform bounds inside int32.
 
 **A source holds NO position.** Declare it once in the optional `generators`
 section (`{"name": …, "generator": {…}}`) and reference it from any number of
@@ -805,7 +808,7 @@ declared row's name) or `generator` (inline), plus `timing`. Three sites:
 "host": { "backendDraw": {"source":"backendTable","timing":"boot"} }
 ```
 
-The CURSOR and dealt DECKS live on the SITE (`drawCursor`/`drawDecks`, engine-
+The CURSOR and drawn MASKS live on the SITE (`drawCursor`/`drawnMasks`, engine-
 minted row fields — never cells), so **two sites referencing one source draw
 INDEPENDENT sequences**. That is what makes a reference safe.
 
@@ -858,8 +861,8 @@ keeps `$tick`/`$population`/`$region:` from being shadowed), and so is a
 `$`-prefixed RULE name. A `$`-prefixed CELL key is refused unless it is exactly
 the key that row's shape mints — `$value` on a slot-addressable row, and nothing
 else. (The rule used to police VALUES too, because a generator's draw position
-and dealt decks were CELLS an author could hand-write; draw bookkeeping now lives
-in typed row FIELDS at the site (`drawCursor`/`drawDecks`), refused by the
+and drawn masks were CELLS an author could hand-write; draw bookkeeping now lives
+in typed row FIELDS at the site (`drawCursor`/`drawnMasks`), refused by the
 field's own range check instead of by a carve-out in the cell namespace.)
 
 There is **no `$type`** and no `rows` member — both are retired spellings of
@@ -1737,7 +1740,7 @@ reserved derived-face band (`WorldPlacementPolicy.DerivedFaceBase` +
   carries exactly the vocabulary its canonicalizer hashes. Tunes/patches are
   never embedded — `WorldTune`/`WorldPatch` are name/source/hash reference
   rows resolved off disk by `WorldAssetRowLoader`, the same shape
-  `WorldMusicRow`/`WorldJudgeRow` already use.
+  `WorldMusicRow` already uses.
 
 **Adding a schema field — the sweep direction.** Adding a top-level SECTION
 refuses at boot until every shipped world carries it (through its own
@@ -2326,22 +2329,19 @@ most 256) compiled at validation;
 rules read it through `$match:<pattern>:<row>[:<direction>|:any][:prefix|:mask|:count]` over a board
 ray, a zone's attribute word or per-token `value` expression (`$token` keys),
 a `history` ring (`push`/`pushState`, `$history:<row>:<age>`), or a keyed row;
-`$board:mask`, the `boardShift` token, and the `setMask`/`combine` transforms
-carry 64-bit and cell-wise board algebra; `world.match` narrates one word.
+`$board:mask`, the `boardShift`/`boardImage` expression ops, and the
+`writeSet` transform carry the one cell-set vocabulary; `world.match` narrates
+one word.
 The `sort` transform supplies the canonical order. Read back with
 `world.patterns` and `world.match`.
 
-`state.social` installs a `WorldSocialPolicy`/`CompiledWorldSocialPolicy` bank;
-`WorldSocialMemory` owns directed impressions and exact evidence receipts.
-World-only `observeSocial`/`forgetSocial` effects and numeric `social` queries
-use ordinary rule bindings; `compareValue` compares numeric expressions and
-closes on arithmetic failure. They are not sensor or transfer implementations.
-Preserve original mobility incarnation and event
-provenance; never replace stable IDs with current body slots or give relays fresh
-event IDs. Forgetting an impression must not clear its unexpired duplicate ledger.
-Keep ingestion attempts and expiry work separately bounded. Read the
-[component contract](../../../../src/Puck.World.Server/README.md#social-memory-component)
-before extending the seam. Authority checkpoints carry the bank and last outcome;
-changed policy content resets memory, unchanged recompilation retains it.
-The `world.social` read-back is operator inspection under Observe/all, not a
-per-creature disclosure API. Keep an actual-world read-back and replay proof.
+An impression is an ordinary keyed `state` row, not a bespoke policy section or
+memory component — see "Keyed belief rows and evidence dedup" in the Schema
+README. `compareValue` compares numeric expressions and closes on arithmetic
+failure; it is the same primitive that gates a rule's freshness check (a packed
+`(origin, sequence)` Int64 against a companion marker cell), the one thing an
+ordinary rule effect cannot express on its own. There is no sensor or transfer
+implementation to preserve: gating who witnesses an event is the author's own
+rule, and an ordinary keyed row is local to its world like any other `state`
+row — it does not travel with a body across a transfer. Keep an actual-world
+read-back and replay proof.

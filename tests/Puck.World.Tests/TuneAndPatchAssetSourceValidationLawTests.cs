@@ -6,10 +6,9 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// CONTRACT UNDER TEST: <c>WorldTune</c>/<c>WorldPatch</c> are name/source/hash reference rows — never embedded
-/// documents (the same shape <c>WorldMusicRow</c>/<c>WorldJudgeRow</c> already use). <c>WorldDefinitionValidator</c>
-/// loads each row's <c>Source</c> off disk before it can validate/canonicalize/hash-pin anything, so a row naming a
-/// path that does not resolve must refuse on that load, the same discipline <c>CheckMusic</c>/<c>CheckJudge</c>
-/// already prove for music/judge rows.
+/// documents (the same shape <c>WorldMusicRow</c> already uses). <c>WorldDefinitionValidator</c> loads each row's
+/// <c>Source</c> off disk before it can validate/canonicalize/hash-pin anything, so a row naming a path that does
+/// not resolve must refuse on that load, the same discipline <c>CheckMusic</c> already proves for music rows.
 /// </summary>
 public sealed class TuneAndPatchAssetSourceValidationLawTests {
     [Fact]
