@@ -60,7 +60,9 @@ public static class WorldBoardQueries {
             return PathCost(query, values, source);
         }
         if (query.Kind == WorldBoardQueryKind.Attacks) {
-            foreach (var direction in query.Directions!) {
+            var directions = query.Directions!;
+            for (var directionIndex = 0; directionIndex < directions.Length; directionIndex++) {
+                var direction = directions[directionIndex];
                 var rayCell = source;
                 for (var distance = 1; distance < topology.CellCount; distance++) {
                     rayCell = topology.Neighbour(rayCell, direction);

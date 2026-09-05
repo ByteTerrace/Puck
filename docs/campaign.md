@@ -686,22 +686,22 @@ second one. `poker-bet-action-seat1`/`-seat2` gate on `bettor` naming their
 own seat and flip it to the other seat on success, a real turn order over the
 two seats.
 
-Live hand-strength is bounded by what the chess table and the rigid facets
-beside it leave in `world.budget`'s 2,000,000-unit per-tick ceiling: every
-`transformState` effect (dealing's `transfer`, a `sort`) is priced against the
-WHOLE document's declared cell storage (`WorldRuleWorkBudget.TransformCost`),
-and `rank`/`suit`'s privacy-required `keysFrom` each add a full topology-sized
-share to that storage on their own — so the deal's three transfers plus one
-sort PER SEAT (needed because the shipped `hasTripAny`/`hasQuadAny`/
-`straightAny` patterns are adjacency-based and read wrong off an unsorted
-deal), combined with chess's and the rigid facets' own rules, already spend
-most of the ceiling. `poker-strength1`/
-`poker-strength2` ARE rule-derived — a genuine landed fix, not a console
-fixture — but fold only the shipped `pairAny` pattern; trip/quad/straight/
-flush reads, a second per-seat suit union, and a full house/two-pair tally
-are each individually affordable on top of the sort but not together, so
-they stay proven correct as authored patterns instead (unsorted or sorted as
-each needs — see `hasTripAny`'s pattern shape) by a law test
+Live hand-strength is priced against `world.budget`'s per-tick ceiling
+(consult the read-back for the current tally, never a hand-quoted fraction
+here): every `transformState` effect (dealing's `transfer`, a `sort`) is
+priced against the WHOLE document's declared cell storage
+(`WorldRuleWorkBudget.TransformCost`), and `rank`/`suit`'s privacy-required
+`keysFrom` each add a full topology-sized share to that storage on their own
+— so the deal's three transfers plus one sort PER SEAT (needed because the
+shipped `hasTripAny`/`hasQuadAny`/`straightAny` patterns are adjacency-based
+and read wrong off an unsorted deal) are a real, non-trivial cost alongside
+chess's and the rigid facets' own rules. `poker-strength1`/`poker-strength2`
+ARE rule-derived — a genuine landed fix, not a console fixture — but fold
+only the shipped `pairAny` pattern; trip/quad/straight/flush reads, a second
+per-seat suit union, and a full house/two-pair tally would each add their
+own full-document-priced transform on top of the sort, so they stay proven
+correct as authored patterns instead (unsorted or sorted as each needs — see
+`hasTripAny`'s pattern shape) by a law test
 (`tests/Puck.World.Tests/PokerHandStrengthLawTests.cs`, which compiles the
 shipped `patterns` rows themselves) and by `world.match`/`world.observe
 <principal>` (composes `WorldStateDisclosure` for an explicitly named

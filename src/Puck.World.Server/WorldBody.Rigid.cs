@@ -540,6 +540,19 @@ public sealed partial class WorldBody {
             return;
         }
 
+        // A body the rest latch has closed stays FROZEN — position, orientation, and both contact latches held
+        // bit-identical — until something wakes it: TryApplyRigidImpulse, CommitRigidHandle (a dynamic-pair
+        // impulse), ApplyRigidPositionalCorrection (a dynamic-pair depenetration), or Pose (a hard teleport — see
+        // WorldBody.Lifecycle.cs), each of which clears m_resting itself. `$physics:quiescent`/`world.rigid`/
+        // `body.where`'s own "resting" fact all read this latch directly, so this IS what those facts mean: a body
+        // actually at rest has nothing left to solve, and re-deriving gravity/contact against it every tick (the
+        // bounded-iteration ground manifold below converges close to, never exactly, zero net impulse) is exactly
+        // what would make them lie.
+        if (m_resting) {
+            RigidStaticSubstepsThisTick = 0;
+            return;
+        }
+
         // Every subsequent read of `rigid` in this call — including the reference ResolveRigidContact receives below
         // — is this body's live-Scale-consistent copy (see ScaleRigid's own remarks), never the kit-shared authored
         // facet: a shrunk body's mass, inertia, substep bound, and contact-point lever arm all shrink with it.

@@ -160,6 +160,22 @@ public static class FixedDynamicBodyContacts {
             return true;
         }
 
+        if (
+            (left.Kind == FixedBodyColliderKind.Box) &&
+            (right.Kind == FixedBodyColliderKind.Box)
+        ) {
+            return TryBoxBoxCorrection(
+                leftPosition: leftPosition,
+                leftOrientation: leftOrientation,
+                left: in left,
+                rightPosition: rightPosition,
+                rightOrientation: rightOrientation,
+                right: in right,
+                tieBreaker: tieBreaker,
+                correction: out correction
+            );
+        }
+
         var (leftCenter, leftExtent) = FixedColliderBounds.WorldBounds(
             orientation: leftOrientation,
             position: leftPosition,
@@ -229,6 +245,95 @@ public static class FixedDynamicBodyContacts {
                 Z: (overlapZ * sign)
             );
         }
+        return true;
+    }
+    /// <summary>Depenetrates two oriented boxes by separating-axis test over the 9 candidate axes that matter for a
+    /// pair of boxes — the world X/Y/Z axes (so an axis-aligned pair costs nothing extra over the world-bounds
+    /// approximation) plus each box's own three face axes, which the world-bounds path never tests and a tilted or
+    /// tumbling box needs: its true footprint is narrower along its own axes than along world axes, so world-axis-only
+    /// overlap systematically OVERSTATES the penetration of anything but an axis-aligned box, and the resulting
+    /// correction can be pointed nowhere near the box's actual touching face. Face-normal SAT alone (no edge-edge
+    /// cross-product axes) is not the complete 15-axis OBB test, so a pure edge-edge contact can still read a larger
+    /// depth than its true minimum — a bound on the remaining error, not an exact witness.</summary>
+    /// <param name="leftPosition">The left box's world position.</param>
+    /// <param name="leftOrientation">The left box's world orientation.</param>
+    /// <param name="left">The left body-local box volume.</param>
+    /// <param name="rightPosition">The right box's world position.</param>
+    /// <param name="rightOrientation">The right box's world orientation.</param>
+    /// <param name="right">The right body-local box volume.</param>
+    /// <param name="tieBreaker">Selects a correction sign only when the winning axis reads exactly coincident
+    /// centers along it.</param>
+    /// <param name="correction">The chosen axis scaled by its overlap depth, directed from <paramref name="right"/>
+    /// toward <paramref name="left"/> — the same convention every other branch here returns.</param>
+    /// <returns><see langword="true"/> when every one of the 9 axes reads a positive overlap (so the boxes truly
+    /// overlap on the axes tested); <see langword="false"/> the moment any axis proves separation.</returns>
+    private static bool TryBoxBoxCorrection(
+        FixedVector3 leftPosition,
+        FixedQuaternion leftOrientation,
+        in FixedBodyColliderVolume left,
+        FixedVector3 rightPosition,
+        FixedQuaternion rightOrientation,
+        in FixedBodyColliderVolume right,
+        int tieBreaker,
+        out FixedVector3 correction
+    ) {
+        var (leftCenter, leftAxisX, leftAxisY, leftAxisZ, leftHalf) = FixedColliderBounds.BoxAxes(
+            position: leftPosition,
+            orientation: leftOrientation,
+            volume: in left
+        );
+        var (rightCenter, rightAxisX, rightAxisY, rightAxisZ, rightHalf) = FixedColliderBounds.BoxAxes(
+            position: rightPosition,
+            orientation: rightOrientation,
+            volume: in right
+        );
+        var delta = (leftCenter - rightCenter);
+
+        Span<FixedVector3> axes = [
+            FixedAxisMath.UnitX, FixedAxisMath.UnitY, FixedAxisMath.UnitZ,
+            leftAxisX, leftAxisY, leftAxisZ,
+            rightAxisX, rightAxisY, rightAxisZ,
+        ];
+        var bestOverlap = FixedQ4816.MaxValue;
+        var bestAxis = FixedVector3.Zero;
+        var bestCenterDistance = FixedQ4816.Zero;
+
+        foreach (var axis in axes) {
+            var leftProjection = (
+                (FixedQ4816.Abs(value: FixedVector3.Dot(left: leftAxisX, right: axis)) * leftHalf.X) +
+                (FixedQ4816.Abs(value: FixedVector3.Dot(left: leftAxisY, right: axis)) * leftHalf.Y) +
+                (FixedQ4816.Abs(value: FixedVector3.Dot(left: leftAxisZ, right: axis)) * leftHalf.Z)
+            );
+            var rightProjection = (
+                (FixedQ4816.Abs(value: FixedVector3.Dot(left: rightAxisX, right: axis)) * rightHalf.X) +
+                (FixedQ4816.Abs(value: FixedVector3.Dot(left: rightAxisY, right: axis)) * rightHalf.Y) +
+                (FixedQ4816.Abs(value: FixedVector3.Dot(left: rightAxisZ, right: axis)) * rightHalf.Z)
+            );
+            var centerDistance = FixedVector3.Dot(left: delta, right: axis);
+            var overlap = ((leftProjection + rightProjection) - FixedQ4816.Abs(value: centerDistance));
+
+            if (overlap <= FixedQ4816.Zero) {
+                correction = default;
+                return false;
+            }
+
+            if (overlap < bestOverlap) {
+                bestOverlap = overlap;
+                bestAxis = axis;
+                bestCenterDistance = centerDistance;
+            }
+        }
+
+        var sign = ((bestCenterDistance == FixedQ4816.Zero)
+            ? (((tieBreaker & 1) == 0)
+                ? FixedQ4816.One
+                : -FixedQ4816.One)
+            : ((bestCenterDistance > FixedQ4816.Zero)
+                ? FixedQ4816.One
+                : -FixedQ4816.One
+        ));
+
+        correction = (bestAxis * (bestOverlap * sign));
         return true;
     }
 

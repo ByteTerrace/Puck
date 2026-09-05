@@ -558,11 +558,12 @@ correct against a sorted or order-independent word respectively, reachable via
 effect — a `sort`, a `transfer`, a `completePhase` alike — against the WHOLE
 document's declared cell storage (`suit` and `rank`'s privacy-required
 `keysFrom` each add a full topology-sized share to that storage on their own),
-so the deal's three transfers plus the two sorts, alongside chess's and the
-rigid facets' own rules, together spend most of `world.budget`'s 2,000,000-unit
-per-tick ceiling; trip/quad/straight/flush reads, a second
-per-seat suit union, and a full house/two-pair tally are each individually
-affordable but not together. `poker-bet-action-seat1`/`-seat2` fold a
+so the deal's three transfers plus the two sorts are a real, non-trivial cost
+alongside chess's and the rigid facets' own rules — consult `world.budget`
+for the live per-tick tally rather than a fraction quoted here. Trip/quad/
+straight/flush reads, a second per-seat suit union, and a full house/two-pair
+tally would each add their own full-document-priced transform on top of the
+sort, so they stay proven correct as authored patterns instead. `poker-bet-action-seat1`/`-seat2` fold a
 console-set `betAction1`/
 `betAction2` (0 = check, 1 = raise) into `bets`/`pot`, each gated on
 `pokerTurn == 1` and on `bettor` naming its own seat, flipping `bettor` to the

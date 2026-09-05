@@ -279,6 +279,22 @@ public sealed partial class WorldBody {
         m_obstructionWitnessGraceTicks = 0;
         m_upNeedsReseat = true;
 
+        if (m_rigid is not null) {
+            // A rigid kit's own contact state is the resting latch, not m_grounded above (AdvanceRigid never reads
+            // it): a body a moment ago resting on the floor it just left is not resting on wherever it landed,
+            // whatever this tick's stale hold-tick count and latched contacts still say — carrying them forward
+            // would leave AdvanceRigid's own rest-latch fast path (see WorldBody.Rigid.cs) skipping this body
+            // forever, never re-deriving a genuine grounded transition at the new pose.
+            m_rigidVelocity = FixedVector3.Zero;
+            m_angularVelocity = FixedVector3.Zero;
+            m_resting = false;
+            m_restingHoldTicks = 0UL;
+            m_rigidGroundContacting = false;
+            m_rigidObstructionContacting = false;
+            m_rigidGroundMissStreak = 0;
+            m_rigidObstructionMissStreak = 0;
+        }
+
         CommitTeleport();
         m_continuity = EntityContinuity.Teleport;
     }

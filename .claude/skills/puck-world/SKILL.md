@@ -349,7 +349,14 @@ choosing fixed-point primitives on sim value paths.
   positions — over the SAME tick (`collision.bodyContacts.rigidPairIterationCeiling`/
   `rigidPairIterationBudget`), so an impulse chain (a rack break, a falling
   domino line) crosses more than one pair-hop within one tick instead of one
-  body per tick. `body.impulse`, `world.rigid`, `world.budget`, and the
+  body per tick; a box-vs-box pair depenetrates by separating-axis test over
+  world X/Y/Z plus each box's own three face axes
+  (`Puck.Physics.FixedColliderBounds.BoxAxes`), not the coarser world-bounds
+  approximation every other volume pair still uses. Once the resting latch
+  closes, `AdvanceRigid` stops integrating that body entirely until something
+  wakes it (an impulse, a dynamic-pair impulse or depenetration, or a hard
+  teleport) — this is what makes `Resting`/`$physics:quiescent` mean the body
+  is not moving. `body.impulse`, `world.rigid`, `world.budget`, and the
   `$physics:quiescent` rule operand are the console/rule surface; see
   [references/documents.md](references/documents.md#crowd-scale-policies)
   for the authored `collision.bodyContacts` rigid fields, and the

@@ -6,10 +6,10 @@ namespace Puck.World.Tests;
 /// <summary>Pins the garden's hidden-hand poker table (puck.world.json) by compiling and matching the shipped
 /// `patterns` rows themselves (never a reimplementation), over authored 7-card hands with a near-miss control per
 /// rank, and the showdown reveal's readersFrom audience widening. The live `strength1`/`strength2` rows fold only
-/// `pairAny` — the garden's chess/tabletop rules already spend nearly the whole document work-budget ceiling
-/// (`world.budget`), leaving no headroom for trip/quad/straight/flush once the deal, the two rank sorts, and the
-/// `rank`/`suit` attribute rows' privacy-required `keysFrom` cost are paid — see puck.world.json's poker-strength1/2
-/// remarks and docs/campaign.md. `hasTripAny`, `hasQuadAny`, `straightAny`, `pairAtRank2..14`, and
+/// `pairAny` — the deal, the two rank sorts, and the `rank`/`suit` attribute rows' privacy-required `keysFrom` each
+/// price a full topology-sized share against the document work-budget ceiling (`world.budget`), so folding
+/// trip/quad/straight/flush in too would add their own such share rather than costing nothing — see
+/// puck.world.json's poker-strength1/2 remarks and docs/campaign.md. `hasTripAny`, `hasQuadAny`, `straightAny`, `pairAtRank2..14`, and
 /// `suitAtLeast5_0..3` remain shipped, correct, and reachable via `world.match` regardless.</summary>
 public sealed class PokerHandStrengthLawTests {
     private static readonly WorldDefinition Garden = LoadGarden();

@@ -501,7 +501,8 @@ values.
 Dynamic-vs-dynamic rigid contact rides the SAME broadphase/narrowphase
 `ResolveDynamicContacts` already runs for two `solid` kits
 (`FixedDynamicBodyContacts.TryCorrection`, whose correction direction points
-from the second body toward the first): when at least one side is rigid,
+from the second body toward the first, and whose box-vs-box separating-axis
+test is `Puck.Physics`'s own — see that project's README). When at least one side is rigid,
 `WorldPopulation.ResolveRigidPairContact` replaces the plain positional split
 with an impulse computed through `Puck.Physics.FixedTwoBodyKernel` — the
 kernel's own contract names its "A" side the body the contact normal points
@@ -549,7 +550,14 @@ A body settles to `Puck.Physics.Motion.ActionFact.Resting` (`BodyFacts.Resting`,
 published by `WorldBody.FactHolds`) after its linear and angular speed stay
 below threshold for a short hold window while grounded — the LINEAR threshold
 scales with the body's own live `Scale` (a spatial rate, like a hold's own
-travel speed), the ANGULAR one does not (no length dimension); `body.impulse`
+travel speed), the ANGULAR one does not (no length dimension). Once the latch
+closes, `WorldBody.AdvanceRigid` stops integrating that body entirely — position,
+orientation, and both contact latches hold bit-identical every tick — until
+something wakes it (`TryApplyRigidImpulse`, `CommitRigidHandle`, or
+`ApplyRigidPositionalCorrection`, each of which clears the latch itself): this
+is what makes `$physics:quiescent`/the `resting` fact mean a body is not
+moving, rather than merely reporting zero velocity at the instant the latch
+last closed. `body.impulse`
 (`WorldCommand.RigidImpulse`, checked for `IsRigid` server-side and refused
 by name otherwise, then `WorldBody.TryApplyRigidImpulse` — refused by name a
 second way when the impulse's scaled velocity delta overflows the fixed-point

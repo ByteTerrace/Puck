@@ -52,10 +52,11 @@ public enum WorldBoardQueryKind : byte {
 /// <param name="Dz">The signed +Z grid step for <see cref="WorldBoardQueryKind.Offset"/>.</param>
 /// <param name="Upper">The inclusive upper bound of a <see cref="WorldBoardQueryKind.Mask"/> or
 /// <see cref="WorldBoardQueryKind.Attacks"/> range; <paramref name="Value"/> is its lower bound.</param>
-/// <param name="Directions">The 1..4 direction ordinals an <see cref="WorldBoardQueryKind.Attacks"/> query walks.</param>
+/// <param name="Directions">The 1..4 direction ordinals an <see cref="WorldBoardQueryKind.Attacks"/> query walks —
+/// a concrete array so the per-evaluation walk indexes it directly rather than boxing an interface enumerator.</param>
 public sealed record CompiledWorldBoardQuery(CompiledWorldTopology Topology, WorldBoardQueryKind Kind,
     int Direction = 0, int Length = 0, long Value = 0, bool Exact = false, int Target = 0, long MaxCost = 0, int MaxVisits = 0,
-    int Dx = 0, int Dz = 0, long Upper = 0, IReadOnlyList<int>? Directions = null);
+    int Dx = 0, int Dz = 0, long Upper = 0, int[]? Directions = null);
 
 /// <summary>The most cells a board may hold for its occupancy to read as one 64-bit mask.</summary>
 public static class WorldBoardMask {
