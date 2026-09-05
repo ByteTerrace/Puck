@@ -390,14 +390,21 @@ public enum CompiledBodyRefKind : byte {
 /// <param name="Row">The keyed row name for <see cref="CompiledBodyRefKind.ArgMax"/>/<see cref="CompiledBodyRefKind.ArgMin"/>
 /// and the indirection row for <see cref="CompiledBodyRefKind.Cell"/>; <see langword="null"/> otherwise.</param>
 /// <param name="Key">The indirection cell's key for <see cref="CompiledBodyRefKind.Cell"/>; <see langword="null"/> otherwise.</param>
-public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Index, string? Row, string? Key = null);
+/// <param name="Handle">The compiled handle for <paramref name="Row"/> under <see cref="CompiledBodyRefKind.Cell"/> —
+/// resolved once at compile time so the per-tick indirection read (<c>WorldServer.ResolveBodyRef</c>) never repeats a
+/// row-name scan; <see langword="default"/> (invalid) otherwise.</param>
+public readonly record struct CompiledBodyRef(CompiledBodyRefKind Kind, int Index, string? Row, string? Key = null, WorldStateHandle Handle = default);
 /// <summary>A state cell address whose integer value is read as a cell KEY at evaluation time
 /// (<see cref="WorldRuleFacts.CellKeyPrefix"/>).</summary>
 /// <param name="Row">The row holding the indirection cell.</param>
 /// <param name="Key">The indirection cell's key.</param>
 /// <param name="Binding">The bound body read as the key instead, when not <see cref="RuleBinding.None"/>; then
 /// <paramref name="Row"/>/<paramref name="Key"/> are empty.</param>
-public readonly record struct CompiledCellRef(string Row, string Key, RuleBinding Binding = RuleBinding.None);
+/// <param name="Handle">The compiled handle for <paramref name="Row"/> when <paramref name="Binding"/> is
+/// <see cref="RuleBinding.None"/> — resolved once at compile time (see <see cref="WorldStateReader.TryReadHandle"/>)
+/// so the per-tick indirection read never repeats a row-name scan; <see langword="default"/> (invalid) for a
+/// binding-carried reference, which names no row.</param>
+public readonly record struct CompiledCellRef(string Row, string Key, RuleBinding Binding = RuleBinding.None, WorldStateHandle Handle = default);
 /// <summary>A name bound during one evaluation of a rule or interaction — the body index a key token
 /// <c>$each</c>/<c>$left</c>/<c>$right</c> or a body-reference token <c>each</c>/<c>left</c>/<c>right</c> reads.</summary>
 public enum RuleBinding : byte {

@@ -652,6 +652,22 @@ free constant. `body.carry`/`body.release` are the console/wire surface (the
 same shape `body.impulse` already established for a rigid-solver-facing
 verb); a rule effect and an authored chord are follow-on work, not yet built.
 
+**Handle completion is the union rewrite's settled precursor (owner decision).** Every
+per-tick reader that used to resolve a state row by name — a symmetry operand's source and
+`cell:` argument, a `$cell:` key indirection, `$argmax:`/`$argmin:` (both the row itself and
+its `:where:` filter), `$nearest:`'s tag row, a body reference's `cell:<row>:<key>`
+indirection, and the `$board:`/`$phase:` readers — now carries a `WorldStateHandle` compiled
+once at `ResolveOperand`/`ResolveCellRef`/`ResolveBodyRefToken` time and reads through
+`WorldStateReader.TryReadHandle` instead of a name scan, matching the handle-based path
+`ReadReduction` already used. The vanished-row question is settled the same way for all of
+them: a compiled handle is only ever minted against a row `WorldRuleCompiler.CompileAll`
+already proved present, and every document install revalidates by recompiling every rule
+against the SAME candidate document — so an installed document can never carry a rule whose
+handle addresses a row that has vanished, and `TryReadHandle` throws rather than reading a
+neutral value it should never need to. This is a pure representation change: the passive
+300-tick garden replay and the frozen world's 720-tick replay both hash identically before and
+after. The case-type/union rewrite below is unstarted; this only clears its stated first step.
+
 **Compiled rule operands are a closed union, built to the union pattern before the compiler
 has it (owner decision).** `CompiledWorldOperand` and `CompiledWorldEffect` are flattened
 structs carrying every fact kind's parameters at once, copied by value into every predicate,

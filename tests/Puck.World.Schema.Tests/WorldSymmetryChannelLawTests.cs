@@ -70,7 +70,9 @@ public sealed class WorldSymmetryChannelLawTests {
 
         var keyedOther = Compile(channel: "$symmetry:orthogonal:cell:nodes.0:node");
 
-        Assert.Equal(expected: new CompiledCellRef(Row: "nodes", Key: "0"), actual: keyedOther.SymmetryOtherCell);
+        Assert.Equal(expected: "nodes", actual: keyedOther.SymmetryOtherCell!.Value.Row);
+        Assert.Equal(expected: "0", actual: keyedOther.SymmetryOtherCell.Value.Key);
+        Assert.True(condition: keyedOther.SymmetryOtherCell.Value.Handle.IsValid);
 
         var keyedSource = Compile(channel: "$symmetry:ring:nodes", key: "0");
 
