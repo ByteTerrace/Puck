@@ -136,10 +136,10 @@ public sealed class ExpressionFunctionLawTests {
         Assert.Equal(q, Eval($"hexQ({index})"));
         Assert.Equal(r, Eval($"hexR({index})"));
         Assert.Equal(expected.Radius, Eval($"hexRadius({index})"));
-        Assert.Equal(expected.Norm, Eval($"hexNorm({index})"));
+        Assert.Equal(expected.Norm, Eval($"hexEuclideanSquared({index})"));
         Assert.Equal(expected.Radius, Eval($"hexDistance({index}, 0)"));
         Assert.Equal(index, Eval($"hexRotate({index}, 6)"));
-        Assert.Equal(index, Eval($"hexConjugate(hexConjugate({index}))"));
+        Assert.Equal(index, Eval($"hexMirror(hexMirror({index}))"));
         Assert.Equal(index, Eval($"hexSwap(hexSwap({index}))"));
         Assert.Equal(Eval($"hexAdd({index}, hex(2, -1))"), Eval($"hexTranslate({index}, 2, -1)"));
         Assert.Equal(index, Eval($"hexAdd(hex(2, -1), hexSubtract({index}, hex(2, -1)))"));

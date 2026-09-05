@@ -4,7 +4,7 @@ using Puck.Maths;
 namespace Puck.State.Tests;
 
 /// <summary>The square family is <see cref="SquareIndex"/> exactly as the hex family is <see cref="HexagonalIndex"/>;
-/// <c>gcd</c>/<c>lcm</c>, the floored <c>mod</c> with its two cycle spellings, and <c>mex</c> are the number-theory
+/// <c>gcd</c>/<c>lcm</c>, the floored <c>mod</c> with its two cycle spellings, and <c>smallestMissing</c> are the number-theory
 /// calls a board author reaches for — each pinned against the Maths operation it names.</summary>
 public sealed class LatticeFunctionLawTests {
     private static long Eval(string text) => ExpressionFunctionLawTests.EvalPublic(text: text);
@@ -25,12 +25,12 @@ public sealed class LatticeFunctionLawTests {
         Assert.Equal(y, Eval($"squareY({index})"));
         Assert.Equal(Math.Max(Math.Abs(x), Math.Abs(y)), Eval($"squareRadius({index})"));
         Assert.Equal(Math.Abs(x) + Math.Abs(y), Eval($"squareLength({index})"));
-        Assert.Equal((x * x) + (y * y), Eval($"squareNorm({index})"));
+        Assert.Equal((x * x) + (y * y), Eval($"squareEuclideanSquared({index})"));
         Assert.Equal(Math.Abs(x) + Math.Abs(y), Eval($"squareDistance({index}, 0)"));
         Assert.Equal(Math.Max(Math.Abs(x), Math.Abs(y)), Eval($"squareChebyshev({index}, 0)"));
         Assert.Equal(index, Eval($"squareRotate({index}, 4)"));
         Assert.Equal(Eval($"square({-y}, {x})"), Eval($"squareRotate({index}, 1)"));
-        Assert.Equal(index, Eval($"squareConjugate(squareConjugate({index}))"));
+        Assert.Equal(index, Eval($"squareMirror(squareMirror({index}))"));
         Assert.Equal(Eval($"square({y}, {x})"), Eval($"squareSwap({index})"));
         Assert.Equal(Eval($"squareAdd({index}, square(2, -1))"), Eval($"squareTranslate({index}, 2, -1)"));
         Assert.Equal(index, Eval($"squareAdd(square(2, -1), squareSubtract({index}, square(2, -1)))"));
@@ -103,55 +103,55 @@ public sealed class LatticeFunctionLawTests {
     [InlineData(0b0111L, 3L)]
     [InlineData(-1L, 64L)]
     public void MexIsTheSmallestClearBit(long mask, long expected) {
-        Assert.Equal(expected, Eval($"mex({mask})"));
-        Assert.Equal(Eval($"trailingZeroCount(~{mask})"), Eval($"mex({mask})"));
+        Assert.Equal(expected, Eval($"smallestMissing({mask})"));
+        Assert.Equal(Eval($"trailingZeroCount(~{mask})"), Eval($"smallestMissing({mask})"));
     }
 
     [Fact]
     public void SubsetsRankColexicographicallyAsBitmasks() {
-        Assert.Equal(2598960L, Eval("binomial(52, 5)"));
-        Assert.Equal(1L, Eval("binomial(7, 0)"));
-        Assert.Equal(0L, Eval("binomial(3, 5)"));
+        Assert.Equal(2598960L, Eval("choose(52, 5)"));
+        Assert.Equal(1L, Eval("choose(7, 0)"));
+        Assert.Equal(0L, Eval("choose(3, 5)"));
         Assert.Equal(2432902008176640000L, Eval("factorial(20)"));
         Assert.False(TryEval("factorial(21)"));
-        Assert.False(TryEval("binomial(-1, 0)"));
-        Assert.False(TryEval("binomial(70, 35)"));                       // exceeds 2^63
+        Assert.False(TryEval("choose(-1, 0)"));
+        Assert.False(TryEval("choose(70, 35)"));                       // exceeds 2^63
 
-        // Every 3-subset of 0..7 round-trips through its rank; combElement reads the subset the mask spells.
+        // Every 3-subset of 0..7 round-trips through its rank; subsetMember reads the subset the mask spells.
         for (var rank = 0L; rank < 56L; rank++) {
-            var mask = Eval($"combUnrank(8, 3, {rank})");
+            var mask = Eval($"subsetAt(8, 3, {rank})");
             Assert.Equal(3L, Eval($"popCount({mask})"));
-            Assert.Equal(rank, Eval($"combRank(8, {mask})"));
+            Assert.Equal(rank, Eval($"subsetRank(8, {mask})"));
             for (var index = 0; index < 3; index++) {
-                var element = Eval($"combElement(8, 3, {rank}, {index})");
+                var element = Eval($"subsetMember(8, 3, {rank}, {index})");
                 Assert.NotEqual(0L, mask & (1L << ((int)element)));
                 Assert.Equal(index, System.Numerics.BitOperations.PopCount(((ulong)mask) & ((1UL << ((int)element)) - 1UL)));
             }
         }
-        Assert.Equal(0L, Eval("combRank(8, 7)"));                       // {0,1,2} is the first 3-subset
-        Assert.Equal(55L, Eval("combRank(8, 224)"));                    // {5,6,7} is the last
-        Assert.False(TryEval("combRank(8, 256)"));                      // bit 8 is outside 0..7
-        Assert.False(TryEval("combUnrank(8, 3, 56)"));
-        Assert.True(TryEval("combRank(64, -1)"));                       // the full word is a 64-subset of 0..63
-        // A poker hand's identity: a 5-card mask over 52 ranks below binomial(52, 5).
-        Assert.True(Eval("combRank(52, (1 << 0) | (1 << 13) | (1 << 26) | (1 << 39) | (1 << 51))") < 2598960L);
+        Assert.Equal(0L, Eval("subsetRank(8, 7)"));                       // {0,1,2} is the first 3-subset
+        Assert.Equal(55L, Eval("subsetRank(8, 224)"));                    // {5,6,7} is the last
+        Assert.False(TryEval("subsetRank(8, 256)"));                      // bit 8 is outside 0..7
+        Assert.False(TryEval("subsetAt(8, 3, 56)"));
+        Assert.True(TryEval("subsetRank(64, -1)"));                       // the full word is a 64-subset of 0..63
+        // A poker hand's identity: a 5-card mask over 52 ranks below choose(52, 5).
+        Assert.True(Eval("subsetRank(52, (1 << 0) | (1 << 13) | (1 << 26) | (1 << 39) | (1 << 51))") < 2598960L);
     }
 
     [Fact]
     public void PermutationsRankLexicographicallyAsNibbles() {
-        Assert.Equal(0L, Eval("permRank(3, 0x210)"));                  // (0, 1, 2)
-        Assert.Equal(5L, Eval("permRank(3, 0x012)"));                  // (2, 1, 0)
-        Assert.Equal(0x012L, Eval("permUnrank(3, 5)"));
-        Assert.Equal(2L, Eval("permElement(3, 5, 0)"));
-        Assert.False(TryEval("permRank(3, 0x211)"));                   // a repeated element
-        Assert.False(TryEval("permUnrank(3, 6)"));
-        Assert.False(TryEval("permUnrank(17, 0)"));
-        Assert.Equal(unchecked((long)0xFEDCBA9876543210UL), Eval("permUnrank(16, 0)"));
+        Assert.Equal(0L, Eval("arrangementRank(3, 0x210)"));                  // (0, 1, 2)
+        Assert.Equal(5L, Eval("arrangementRank(3, 0x012)"));                  // (2, 1, 0)
+        Assert.Equal(0x012L, Eval("arrangementAt(3, 5)"));
+        Assert.Equal(2L, Eval("arrangementMember(3, 5, 0)"));
+        Assert.False(TryEval("arrangementRank(3, 0x211)"));                   // a repeated element
+        Assert.False(TryEval("arrangementAt(3, 6)"));
+        Assert.False(TryEval("arrangementAt(17, 0)"));
+        Assert.Equal(unchecked((long)0xFEDCBA9876543210UL), Eval("arrangementAt(16, 0)"));
         for (var rank = 0L; rank < 120L; rank++) {
-            var packed = Eval($"permUnrank(5, {rank})");
-            Assert.Equal(rank, Eval($"permRank(5, {packed})"));
+            var packed = Eval($"arrangementAt(5, {rank})");
+            Assert.Equal(rank, Eval($"arrangementRank(5, {packed})"));
             for (var position = 0; position < 5; position++) {
-                Assert.Equal((packed >> (4 * position)) & 0xF, Eval($"permElement(5, {rank}, {position})"));
+                Assert.Equal((packed >> (4 * position)) & 0xF, Eval($"arrangementMember(5, {rank}, {position})"));
             }
         }
     }
@@ -181,11 +181,11 @@ public sealed class LatticeFunctionLawTests {
 
     [Fact]
     public void NimHeapsReduceThroughMexAndNimSum() {
-        // A subtraction game {1, 2}: Grundy(n) = mex{Grundy(n-1), Grundy(n-2)} cycles 0,1,2 — spelled as an author would.
-        Assert.Equal(0L, Eval("mex(0)"));
-        Assert.Equal(1L, Eval("mex(1 << 0)"));
-        Assert.Equal(2L, Eval("mex((1 << 0) | (1 << 1))"));
-        Assert.Equal(0L, Eval("mex((1 << 1) | (1 << 2))"));
+        // A subtraction game {1, 2}: Grundy(n) = smallestMissing{Grundy(n-1), Grundy(n-2)} cycles 0,1,2 — spelled as an author would.
+        Assert.Equal(0L, Eval("smallestMissing(0)"));
+        Assert.Equal(1L, Eval("smallestMissing(1 << 0)"));
+        Assert.Equal(2L, Eval("smallestMissing((1 << 0) | (1 << 1))"));
+        Assert.Equal(0L, Eval("smallestMissing((1 << 1) | (1 << 2))"));
         Assert.Equal(0L, Eval("(3 ^ 5) ^ 6")); // three Nim heaps 3, 5, 6 — a losing position
     }
 }

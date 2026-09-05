@@ -87,11 +87,11 @@ public sealed record ValueExpression(IReadOnlyList<ValueToken> Tokens) {
 [JsonDerivedType(typeof(ValueToken.HexQ), typeDiscriminator: "hexQ")]
 [JsonDerivedType(typeof(ValueToken.HexR), typeDiscriminator: "hexR")]
 [JsonDerivedType(typeof(ValueToken.HexRadius), typeDiscriminator: "hexRadius")]
-[JsonDerivedType(typeof(ValueToken.HexNorm), typeDiscriminator: "hexNorm")]
+[JsonDerivedType(typeof(ValueToken.HexEuclideanSquared), typeDiscriminator: "hexEuclideanSquared")]
 [JsonDerivedType(typeof(ValueToken.HexDistance), typeDiscriminator: "hexDistance")]
 [JsonDerivedType(typeof(ValueToken.HexNeighbor), typeDiscriminator: "hexNeighbor")]
 [JsonDerivedType(typeof(ValueToken.HexRotate), typeDiscriminator: "hexRotate")]
-[JsonDerivedType(typeof(ValueToken.HexConjugate), typeDiscriminator: "hexConjugate")]
+[JsonDerivedType(typeof(ValueToken.HexMirror), typeDiscriminator: "hexMirror")]
 [JsonDerivedType(typeof(ValueToken.HexSwap), typeDiscriminator: "hexSwap")]
 [JsonDerivedType(typeof(ValueToken.HexAdd), typeDiscriminator: "hexAdd")]
 [JsonDerivedType(typeof(ValueToken.HexSubtract), typeDiscriminator: "hexSubtract")]
@@ -110,12 +110,12 @@ public sealed record ValueExpression(IReadOnlyList<ValueToken> Tokens) {
 [JsonDerivedType(typeof(ValueToken.SquareY), typeDiscriminator: "squareY")]
 [JsonDerivedType(typeof(ValueToken.SquareRadius), typeDiscriminator: "squareRadius")]
 [JsonDerivedType(typeof(ValueToken.SquareLength), typeDiscriminator: "squareLength")]
-[JsonDerivedType(typeof(ValueToken.SquareNorm), typeDiscriminator: "squareNorm")]
+[JsonDerivedType(typeof(ValueToken.SquareEuclideanSquared), typeDiscriminator: "squareEuclideanSquared")]
 [JsonDerivedType(typeof(ValueToken.SquareDistance), typeDiscriminator: "squareDistance")]
 [JsonDerivedType(typeof(ValueToken.SquareChebyshev), typeDiscriminator: "squareChebyshev")]
 [JsonDerivedType(typeof(ValueToken.SquareNeighbor), typeDiscriminator: "squareNeighbor")]
 [JsonDerivedType(typeof(ValueToken.SquareRotate), typeDiscriminator: "squareRotate")]
-[JsonDerivedType(typeof(ValueToken.SquareConjugate), typeDiscriminator: "squareConjugate")]
+[JsonDerivedType(typeof(ValueToken.SquareMirror), typeDiscriminator: "squareMirror")]
 [JsonDerivedType(typeof(ValueToken.SquareSwap), typeDiscriminator: "squareSwap")]
 [JsonDerivedType(typeof(ValueToken.SquareAdd), typeDiscriminator: "squareAdd")]
 [JsonDerivedType(typeof(ValueToken.SquareSubtract), typeDiscriminator: "squareSubtract")]
@@ -127,17 +127,17 @@ public sealed record ValueExpression(IReadOnlyList<ValueToken> Tokens) {
 [JsonDerivedType(typeof(ValueToken.FloorModulo), typeDiscriminator: "mod")]
 [JsonDerivedType(typeof(ValueToken.CycleForward), typeDiscriminator: "cycleForward")]
 [JsonDerivedType(typeof(ValueToken.CycleDistance), typeDiscriminator: "cycleDistance")]
-[JsonDerivedType(typeof(ValueToken.MinimumExcluded), typeDiscriminator: "mex")]
+[JsonDerivedType(typeof(ValueToken.SmallestMissing), typeDiscriminator: "smallestMissing")]
 [JsonDerivedType(typeof(ValueToken.IsPrime), typeDiscriminator: "isPrime")]
 [JsonDerivedType(typeof(ValueToken.Prime), typeDiscriminator: "prime")]
-[JsonDerivedType(typeof(ValueToken.Binomial), typeDiscriminator: "binomial")]
+[JsonDerivedType(typeof(ValueToken.Choose), typeDiscriminator: "choose")]
 [JsonDerivedType(typeof(ValueToken.Factorial), typeDiscriminator: "factorial")]
-[JsonDerivedType(typeof(ValueToken.CombinationRank), typeDiscriminator: "combRank")]
-[JsonDerivedType(typeof(ValueToken.CombinationUnrank), typeDiscriminator: "combUnrank")]
-[JsonDerivedType(typeof(ValueToken.CombinationElement), typeDiscriminator: "combElement")]
-[JsonDerivedType(typeof(ValueToken.PermutationRank), typeDiscriminator: "permRank")]
-[JsonDerivedType(typeof(ValueToken.PermutationUnrank), typeDiscriminator: "permUnrank")]
-[JsonDerivedType(typeof(ValueToken.PermutationElement), typeDiscriminator: "permElement")]
+[JsonDerivedType(typeof(ValueToken.SubsetRank), typeDiscriminator: "subsetRank")]
+[JsonDerivedType(typeof(ValueToken.SubsetAt), typeDiscriminator: "subsetAt")]
+[JsonDerivedType(typeof(ValueToken.SubsetMember), typeDiscriminator: "subsetMember")]
+[JsonDerivedType(typeof(ValueToken.ArrangementRank), typeDiscriminator: "arrangementRank")]
+[JsonDerivedType(typeof(ValueToken.ArrangementAt), typeDiscriminator: "arrangementAt")]
+[JsonDerivedType(typeof(ValueToken.ArrangementMember), typeDiscriminator: "arrangementMember")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record ValueToken {
     /// <summary>An exact authored decimal, converted to the destination row's numeric kind at compile time.</summary>
@@ -298,8 +298,8 @@ public abstract record ValueToken {
     public sealed record HexR : ValueToken;
     /// <summary>The ring a hex index lies on.</summary>
     public sealed record HexRadius : ValueToken;
-    /// <summary>The Eisenstein norm q² − q·r + r² of a hex index.</summary>
-    public sealed record HexNorm : ValueToken;
+    /// <summary>The Eisenstein squared straight-line distance from the origin q² − q·r + r² of a hex index.</summary>
+    public sealed record HexEuclideanSquared : ValueToken;
     /// <summary>The step distance between two hex indices.</summary>
     public sealed record HexDistance : ValueToken;
     /// <summary>The hex index one step away in direction 0..5 (counterclockwise from +q; any integer, taken modulo 6).</summary>
@@ -307,7 +307,7 @@ public abstract record ValueToken {
     /// <summary>The hex index rotated about the origin by sixth turns (any integer, taken modulo 6).</summary>
     public sealed record HexRotate : ValueToken;
     /// <summary>The hex index reflected across the q axis.</summary>
-    public sealed record HexConjugate : ValueToken;
+    public sealed record HexMirror : ValueToken;
     /// <summary>The hex index with q and r exchanged.</summary>
     public sealed record HexSwap : ValueToken;
     /// <summary>The hex index of the coordinate sum.</summary>
@@ -344,8 +344,8 @@ public abstract record ValueToken {
     public sealed record SquareRadius : ValueToken;
     /// <summary>The Manhattan distance of a square index from the origin.</summary>
     public sealed record SquareLength : ValueToken;
-    /// <summary>The Gaussian norm x² + y² of a square index.</summary>
-    public sealed record SquareNorm : ValueToken;
+    /// <summary>The Gaussian squared straight-line distance from the origin x² + y² of a square index.</summary>
+    public sealed record SquareEuclideanSquared : ValueToken;
     /// <summary>The Manhattan (rook-step) distance between two square indices.</summary>
     public sealed record SquareDistance : ValueToken;
     /// <summary>The Chebyshev (king-step) distance between two square indices.</summary>
@@ -355,7 +355,7 @@ public abstract record ValueToken {
     /// <summary>The square index rotated about the origin by quarter turns (any integer, taken modulo 4).</summary>
     public sealed record SquareRotate : ValueToken;
     /// <summary>The square index reflected across the x axis.</summary>
-    public sealed record SquareConjugate : ValueToken;
+    public sealed record SquareMirror : ValueToken;
     /// <summary>The square index with x and y exchanged.</summary>
     public sealed record SquareSwap : ValueToken;
     /// <summary>The square index of the coordinate sum.</summary>
@@ -378,28 +378,28 @@ public abstract record ValueToken {
     public sealed record CycleForward : ValueToken;
     /// <summary>The shortest distance between a and b around an m-cycle, in either direction.</summary>
     public sealed record CycleDistance : ValueToken;
-    /// <summary>The minimum excluded value of a 64-bit set: the smallest non-negative integer whose bit is clear (the Sprague–Grundy value of a position whose options' values are the set).</summary>
-    public sealed record MinimumExcluded : ValueToken;
+    /// <summary>The smallest non-negative integer missing from a 64-bit set — the lowest clear bit (the Sprague–Grundy value of a position whose options' values are the set).</summary>
+    public sealed record SmallestMissing : ValueToken;
     /// <summary>Whether a non-negative integer is prime, decided exactly over the whole 64-bit range in bounded work.</summary>
     public sealed record IsPrime : ValueToken;
     /// <summary>The i-th prime for i in 0..255 (2, 3, 5, … 1619): the bounded table a Gödel multiset or a coprime stride reaches for.</summary>
     public sealed record Prime : ValueToken;
     /// <summary>n choose k, exact; zero when k exceeds n.</summary>
-    public sealed record Binomial : ValueToken;
+    public sealed record Choose : ValueToken;
     /// <summary>n! for n in 0..20.</summary>
     public sealed record Factorial : ValueToken;
-    /// <summary>The colexicographic rank of a k-subset of 0..n−1 given as a bitmask (bit e set = element e chosen), in [0, binomial(n, k)); n at most 64.</summary>
-    public sealed record CombinationRank : ValueToken;
-    /// <summary>The k-subset of 0..n−1 at a colexicographic rank, as a bitmask; the inverse of combRank.</summary>
-    public sealed record CombinationUnrank : ValueToken;
+    /// <summary>The colexicographic rank of a k-subset of 0..n−1 given as a bitmask (bit e set = element e chosen), in [0, choose(n, k)); n at most 64.</summary>
+    public sealed record SubsetRank : ValueToken;
+    /// <summary>The k-subset of 0..n−1 at a colexicographic rank, as a bitmask; the inverse of subsetRank.</summary>
+    public sealed record SubsetAt : ValueToken;
     /// <summary>The i-th smallest element (i from 0) of the k-subset of 0..n−1 at a colexicographic rank, without building the subset.</summary>
-    public sealed record CombinationElement : ValueToken;
+    public sealed record SubsetMember : ValueToken;
     /// <summary>The lexicographic (Lehmer) rank of a permutation of 0..n−1 packed as nibbles — position i in bits 4i..4i+3 — in [0, n!); n at most 16.</summary>
-    public sealed record PermutationRank : ValueToken;
-    /// <summary>The permutation of 0..n−1 at a lexicographic rank, packed as nibbles; the inverse of permRank.</summary>
-    public sealed record PermutationUnrank : ValueToken;
+    public sealed record ArrangementRank : ValueToken;
+    /// <summary>The permutation of 0..n−1 at a lexicographic rank, packed as nibbles; the inverse of arrangementRank.</summary>
+    public sealed record ArrangementAt : ValueToken;
     /// <summary>The element at position i of the permutation of 0..n−1 at a lexicographic rank.</summary>
-    public sealed record PermutationElement : ValueToken;
+    public sealed record ArrangementMember : ValueToken;
 }
 
 /// <summary>Converts an exact authored decimal literal into the Q48.16 fixed-point carrier a state cell holds — the one

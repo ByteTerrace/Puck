@@ -3262,11 +3262,11 @@
       },
       "additionalProperties": false
     },
-    "ValueTokenHexNorm": {
-      "description": "The Eisenstein norm q\u00B2 \u2212 q\u00B7r \u002B r\u00B2 of a hex index.",
+    "ValueTokenHexEuclideanSquared": {
+      "description": "The Eisenstein squared straight-line distance from the origin q\u00B2 \u2212 q\u00B7r \u002B r\u00B2 of a hex index.",
       "properties": {
         "$type": {
-          "const": "hexNorm"
+          "const": "hexEuclideanSquared"
         }
       },
       "additionalProperties": false
@@ -3298,11 +3298,11 @@
       },
       "additionalProperties": false
     },
-    "ValueTokenHexConjugate": {
+    "ValueTokenHexMirror": {
       "description": "The hex index reflected across the q axis.",
       "properties": {
         "$type": {
-          "const": "hexConjugate"
+          "const": "hexMirror"
         }
       },
       "additionalProperties": false
@@ -3469,11 +3469,11 @@
       },
       "additionalProperties": false
     },
-    "ValueTokenSquareNorm": {
-      "description": "The Gaussian norm x\u00B2 \u002B y\u00B2 of a square index.",
+    "ValueTokenSquareEuclideanSquared": {
+      "description": "The Gaussian squared straight-line distance from the origin x\u00B2 \u002B y\u00B2 of a square index.",
       "properties": {
         "$type": {
-          "const": "squareNorm"
+          "const": "squareEuclideanSquared"
         }
       },
       "additionalProperties": false
@@ -3514,11 +3514,11 @@
       },
       "additionalProperties": false
     },
-    "ValueTokenSquareConjugate": {
+    "ValueTokenSquareMirror": {
       "description": "The square index reflected across the x axis.",
       "properties": {
         "$type": {
-          "const": "squareConjugate"
+          "const": "squareMirror"
         }
       },
       "additionalProperties": false
@@ -3622,11 +3622,11 @@
       },
       "additionalProperties": false
     },
-    "ValueTokenMinimumExcluded": {
-      "description": "The minimum excluded value of a 64-bit set: the smallest non-negative integer whose bit is clear (the Sprague\u2013Grundy value of a position whose options\u0027 values are the set).",
+    "ValueTokenSmallestMissing": {
+      "description": "The smallest non-negative integer missing from a 64-bit set \u2014 the lowest clear bit (the Sprague\u2013Grundy value of a position whose options\u0027 values are the set).",
       "properties": {
         "$type": {
-          "const": "mex"
+          "const": "smallestMissing"
         }
       },
       "additionalProperties": false
@@ -3649,11 +3649,11 @@
       },
       "additionalProperties": false
     },
-    "ValueTokenBinomial": {
+    "ValueTokenChoose": {
       "description": "n choose k, exact; zero when k exceeds n.",
       "properties": {
         "$type": {
-          "const": "binomial"
+          "const": "choose"
         }
       },
       "additionalProperties": false
@@ -3667,56 +3667,56 @@
       },
       "additionalProperties": false
     },
-    "ValueTokenCombinationRank": {
-      "description": "The colexicographic rank of a k-subset of 0..n\u22121 given as a bitmask (bit e set = element e chosen), in [0, binomial(n, k)); n at most 64.",
+    "ValueTokenSubsetRank": {
+      "description": "The colexicographic rank of a k-subset of 0..n\u22121 given as a bitmask (bit e set = element e chosen), in [0, choose(n, k)); n at most 64.",
       "properties": {
         "$type": {
-          "const": "combRank"
+          "const": "subsetRank"
         }
       },
       "additionalProperties": false
     },
-    "ValueTokenCombinationUnrank": {
-      "description": "The k-subset of 0..n\u22121 at a colexicographic rank, as a bitmask; the inverse of combRank.",
+    "ValueTokenSubsetAt": {
+      "description": "The k-subset of 0..n\u22121 at a colexicographic rank, as a bitmask; the inverse of subsetRank.",
       "properties": {
         "$type": {
-          "const": "combUnrank"
+          "const": "subsetAt"
         }
       },
       "additionalProperties": false
     },
-    "ValueTokenCombinationElement": {
+    "ValueTokenSubsetMember": {
       "description": "The i-th smallest element (i from 0) of the k-subset of 0..n\u22121 at a colexicographic rank, without building the subset.",
       "properties": {
         "$type": {
-          "const": "combElement"
+          "const": "subsetMember"
         }
       },
       "additionalProperties": false
     },
-    "ValueTokenPermutationRank": {
+    "ValueTokenArrangementRank": {
       "description": "The lexicographic (Lehmer) rank of a permutation of 0..n\u22121 packed as nibbles \u2014 position i in bits 4i..4i\u002B3 \u2014 in [0, n!); n at most 16.",
       "properties": {
         "$type": {
-          "const": "permRank"
+          "const": "arrangementRank"
         }
       },
       "additionalProperties": false
     },
-    "ValueTokenPermutationUnrank": {
-      "description": "The permutation of 0..n\u22121 at a lexicographic rank, packed as nibbles; the inverse of permRank.",
+    "ValueTokenArrangementAt": {
+      "description": "The permutation of 0..n\u22121 at a lexicographic rank, packed as nibbles; the inverse of arrangementRank.",
       "properties": {
         "$type": {
-          "const": "permUnrank"
+          "const": "arrangementAt"
         }
       },
       "additionalProperties": false
     },
-    "ValueTokenPermutationElement": {
+    "ValueTokenArrangementMember": {
       "description": "The element at position i of the permutation of 0..n\u22121 at a lexicographic rank.",
       "properties": {
         "$type": {
-          "const": "permElement"
+          "const": "arrangementMember"
         }
       },
       "additionalProperties": false
@@ -3915,7 +3915,7 @@
           "$ref": "#/$defs/ValueTokenHexRadius"
         },
         {
-          "$ref": "#/$defs/ValueTokenHexNorm"
+          "$ref": "#/$defs/ValueTokenHexEuclideanSquared"
         },
         {
           "$ref": "#/$defs/ValueTokenHexDistance"
@@ -3927,7 +3927,7 @@
           "$ref": "#/$defs/ValueTokenHexRotate"
         },
         {
-          "$ref": "#/$defs/ValueTokenHexConjugate"
+          "$ref": "#/$defs/ValueTokenHexMirror"
         },
         {
           "$ref": "#/$defs/ValueTokenHexSwap"
@@ -3984,7 +3984,7 @@
           "$ref": "#/$defs/ValueTokenSquareLength"
         },
         {
-          "$ref": "#/$defs/ValueTokenSquareNorm"
+          "$ref": "#/$defs/ValueTokenSquareEuclideanSquared"
         },
         {
           "$ref": "#/$defs/ValueTokenSquareDistance"
@@ -3999,7 +3999,7 @@
           "$ref": "#/$defs/ValueTokenSquareRotate"
         },
         {
-          "$ref": "#/$defs/ValueTokenSquareConjugate"
+          "$ref": "#/$defs/ValueTokenSquareMirror"
         },
         {
           "$ref": "#/$defs/ValueTokenSquareSwap"
@@ -4035,7 +4035,7 @@
           "$ref": "#/$defs/ValueTokenCycleDistance"
         },
         {
-          "$ref": "#/$defs/ValueTokenMinimumExcluded"
+          "$ref": "#/$defs/ValueTokenSmallestMissing"
         },
         {
           "$ref": "#/$defs/ValueTokenIsPrime"
@@ -4044,28 +4044,28 @@
           "$ref": "#/$defs/ValueTokenPrime"
         },
         {
-          "$ref": "#/$defs/ValueTokenBinomial"
+          "$ref": "#/$defs/ValueTokenChoose"
         },
         {
           "$ref": "#/$defs/ValueTokenFactorial"
         },
         {
-          "$ref": "#/$defs/ValueTokenCombinationRank"
+          "$ref": "#/$defs/ValueTokenSubsetRank"
         },
         {
-          "$ref": "#/$defs/ValueTokenCombinationUnrank"
+          "$ref": "#/$defs/ValueTokenSubsetAt"
         },
         {
-          "$ref": "#/$defs/ValueTokenCombinationElement"
+          "$ref": "#/$defs/ValueTokenSubsetMember"
         },
         {
-          "$ref": "#/$defs/ValueTokenPermutationRank"
+          "$ref": "#/$defs/ValueTokenArrangementRank"
         },
         {
-          "$ref": "#/$defs/ValueTokenPermutationUnrank"
+          "$ref": "#/$defs/ValueTokenArrangementAt"
         },
         {
-          "$ref": "#/$defs/ValueTokenPermutationElement"
+          "$ref": "#/$defs/ValueTokenArrangementMember"
         }
       ]
     },

@@ -5255,10 +5255,10 @@
                                             "additionalProperties": false
                                           },
                                           {
-                                            "description": "The Eisenstein norm q\u00B2 \u2212 q\u00B7r \u002B r\u00B2 of a hex index.",
+                                            "description": "The Eisenstein squared straight-line distance from the origin q\u00B2 \u2212 q\u00B7r \u002B r\u00B2 of a hex index.",
                                             "properties": {
                                               "$type": {
-                                                "const": "hexNorm"
+                                                "const": "hexEuclideanSquared"
                                               }
                                             },
                                             "additionalProperties": false
@@ -5294,7 +5294,7 @@
                                             "description": "The hex index reflected across the q axis.",
                                             "properties": {
                                               "$type": {
-                                                "const": "hexConjugate"
+                                                "const": "hexMirror"
                                               }
                                             },
                                             "additionalProperties": false
@@ -5462,10 +5462,10 @@
                                             "additionalProperties": false
                                           },
                                           {
-                                            "description": "The Gaussian norm x\u00B2 \u002B y\u00B2 of a square index.",
+                                            "description": "The Gaussian squared straight-line distance from the origin x\u00B2 \u002B y\u00B2 of a square index.",
                                             "properties": {
                                               "$type": {
-                                                "const": "squareNorm"
+                                                "const": "squareEuclideanSquared"
                                               }
                                             },
                                             "additionalProperties": false
@@ -5510,7 +5510,7 @@
                                             "description": "The square index reflected across the x axis.",
                                             "properties": {
                                               "$type": {
-                                                "const": "squareConjugate"
+                                                "const": "squareMirror"
                                               }
                                             },
                                             "additionalProperties": false
@@ -5615,10 +5615,10 @@
                                             "additionalProperties": false
                                           },
                                           {
-                                            "description": "The minimum excluded value of a 64-bit set: the smallest non-negative integer whose bit is clear (the Sprague\u2013Grundy value of a position whose options\u0027 values are the set).",
+                                            "description": "The smallest non-negative integer missing from a 64-bit set \u2014 the lowest clear bit (the Sprague\u2013Grundy value of a position whose options\u0027 values are the set).",
                                             "properties": {
                                               "$type": {
-                                                "const": "mex"
+                                                "const": "smallestMissing"
                                               }
                                             },
                                             "additionalProperties": false
@@ -5645,7 +5645,7 @@
                                             "description": "n choose k, exact; zero when k exceeds n.",
                                             "properties": {
                                               "$type": {
-                                                "const": "binomial"
+                                                "const": "choose"
                                               }
                                             },
                                             "additionalProperties": false
@@ -5660,19 +5660,19 @@
                                             "additionalProperties": false
                                           },
                                           {
-                                            "description": "The colexicographic rank of a k-subset of 0..n\u22121 given as a bitmask (bit e set = element e chosen), in [0, binomial(n, k)); n at most 64.",
+                                            "description": "The colexicographic rank of a k-subset of 0..n\u22121 given as a bitmask (bit e set = element e chosen), in [0, choose(n, k)); n at most 64.",
                                             "properties": {
                                               "$type": {
-                                                "const": "combRank"
+                                                "const": "subsetRank"
                                               }
                                             },
                                             "additionalProperties": false
                                           },
                                           {
-                                            "description": "The k-subset of 0..n\u22121 at a colexicographic rank, as a bitmask; the inverse of combRank.",
+                                            "description": "The k-subset of 0..n\u22121 at a colexicographic rank, as a bitmask; the inverse of subsetRank.",
                                             "properties": {
                                               "$type": {
-                                                "const": "combUnrank"
+                                                "const": "subsetAt"
                                               }
                                             },
                                             "additionalProperties": false
@@ -5681,7 +5681,7 @@
                                             "description": "The i-th smallest element (i from 0) of the k-subset of 0..n\u22121 at a colexicographic rank, without building the subset.",
                                             "properties": {
                                               "$type": {
-                                                "const": "combElement"
+                                                "const": "subsetMember"
                                               }
                                             },
                                             "additionalProperties": false
@@ -5690,16 +5690,16 @@
                                             "description": "The lexicographic (Lehmer) rank of a permutation of 0..n\u22121 packed as nibbles \u2014 position i in bits 4i..4i\u002B3 \u2014 in [0, n!); n at most 16.",
                                             "properties": {
                                               "$type": {
-                                                "const": "permRank"
+                                                "const": "arrangementRank"
                                               }
                                             },
                                             "additionalProperties": false
                                           },
                                           {
-                                            "description": "The permutation of 0..n\u22121 at a lexicographic rank, packed as nibbles; the inverse of permRank.",
+                                            "description": "The permutation of 0..n\u22121 at a lexicographic rank, packed as nibbles; the inverse of arrangementRank.",
                                             "properties": {
                                               "$type": {
-                                                "const": "permUnrank"
+                                                "const": "arrangementAt"
                                               }
                                             },
                                             "additionalProperties": false
@@ -5708,7 +5708,7 @@
                                             "description": "The element at position i of the permutation of 0..n\u22121 at a lexicographic rank.",
                                             "properties": {
                                               "$type": {
-                                                "const": "permElement"
+                                                "const": "arrangementMember"
                                               }
                                             },
                                             "additionalProperties": false

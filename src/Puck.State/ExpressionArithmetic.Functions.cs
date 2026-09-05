@@ -25,22 +25,22 @@ public static partial class ExpressionArithmetic {
     public static int FunctionArity(ExpressionOp operation) => operation switch {
         ExpressionOp.PairX or ExpressionOp.PairY or ExpressionOp.PairSwap or ExpressionOp.PairMax or ExpressionOp.PairMin or ExpressionOp.PairSum or ExpressionOp.PairDifference
             or ExpressionOp.MortonX or ExpressionOp.MortonY
-            or ExpressionOp.HexQ or ExpressionOp.HexR or ExpressionOp.HexRadius or ExpressionOp.HexNorm or ExpressionOp.HexConjugate or ExpressionOp.HexSwap
+            or ExpressionOp.HexQ or ExpressionOp.HexR or ExpressionOp.HexRadius or ExpressionOp.HexEuclideanSquared or ExpressionOp.HexMirror or ExpressionOp.HexSwap
             or ExpressionOp.SquareRoot or ExpressionOp.Sine or ExpressionOp.Cosine => 1,
         ExpressionOp.Pair or ExpressionOp.PairTranslate or ExpressionOp.PairScale or ExpressionOp.Morton or ExpressionOp.HilbertX or ExpressionOp.HilbertY
             or ExpressionOp.HexIndex or ExpressionOp.HexDistance or ExpressionOp.HexNeighbor or ExpressionOp.HexRotate or ExpressionOp.HexAdd or ExpressionOp.HexSubtract or ExpressionOp.HexMultiply or ExpressionOp.HexScale => 2,
         ExpressionOp.Hilbert or ExpressionOp.HexTranslate => 3,
         ExpressionOp.Layer or ExpressionOp.LayerOffset or ExpressionOp.LayerStart or ExpressionOp.LayerSize => 4,
-        ExpressionOp.SquareX or ExpressionOp.SquareY or ExpressionOp.SquareRadius or ExpressionOp.SquareLength or ExpressionOp.SquareNorm or ExpressionOp.SquareConjugate or ExpressionOp.SquareSwap
-            or ExpressionOp.MinimumExcluded or ExpressionOp.IsPrime or ExpressionOp.Prime => 1,
+        ExpressionOp.SquareX or ExpressionOp.SquareY or ExpressionOp.SquareRadius or ExpressionOp.SquareLength or ExpressionOp.SquareEuclideanSquared or ExpressionOp.SquareMirror or ExpressionOp.SquareSwap
+            or ExpressionOp.SmallestMissing or ExpressionOp.IsPrime or ExpressionOp.Prime => 1,
         ExpressionOp.SquareIndex or ExpressionOp.SquareDistance or ExpressionOp.SquareChebyshev or ExpressionOp.SquareNeighbor or ExpressionOp.SquareRotate or ExpressionOp.SquareAdd
             or ExpressionOp.SquareSubtract or ExpressionOp.SquareMultiply or ExpressionOp.SquareScale
             or ExpressionOp.GreatestCommonDivisor or ExpressionOp.LeastCommonMultiple or ExpressionOp.FloorModulo => 2,
         ExpressionOp.SquareTranslate or ExpressionOp.CycleForward or ExpressionOp.CycleDistance => 3,
         ExpressionOp.Factorial => 1,
-        ExpressionOp.Binomial or ExpressionOp.CombinationRank or ExpressionOp.PermutationRank or ExpressionOp.PermutationUnrank => 2,
-        ExpressionOp.CombinationUnrank or ExpressionOp.PermutationElement => 3,
-        ExpressionOp.CombinationElement => 4,
+        ExpressionOp.Choose or ExpressionOp.SubsetRank or ExpressionOp.ArrangementRank or ExpressionOp.ArrangementAt => 2,
+        ExpressionOp.SubsetAt or ExpressionOp.ArrangementMember => 3,
+        ExpressionOp.SubsetMember => 4,
         _ => 0,
     };
 
@@ -180,12 +180,12 @@ public static partial class ExpressionArithmetic {
                     value = cell.Radius;
                     return true;
                 }
-                case ExpressionOp.HexNorm: {
+                case ExpressionOp.HexEuclideanSquared: {
                     if (!TryHex(arguments[0], out var cell)) { return false; }
                     value = cell.Norm;
                     return true;
                 }
-                case ExpressionOp.HexConjugate: {
+                case ExpressionOp.HexMirror: {
                     if (!TryHex(arguments[0], out var cell)) { return false; }
                     value = cell.Conjugate().Value;
                     return true;
@@ -271,7 +271,7 @@ public static partial class ExpressionArithmetic {
                     value = cell.ToCoordinate().Length;
                     return true;
                 }
-                case ExpressionOp.SquareNorm: {
+                case ExpressionOp.SquareEuclideanSquared: {
                     if (!TrySquare(arguments[0], out var cell)) { return false; }
                     value = cell.Norm;
                     return true;
@@ -298,7 +298,7 @@ public static partial class ExpressionArithmetic {
                     value = cell.Rotate(turns: ((int)arguments[1].FloorModulo(modulus: SquareCoordinate.NeighborCount))).Value;
                     return true;
                 }
-                case ExpressionOp.SquareConjugate: {
+                case ExpressionOp.SquareMirror: {
                     if (!TrySquare(arguments[0], out var cell)) { return false; }
                     value = cell.Conjugate().Value;
                     return true;
@@ -359,7 +359,7 @@ public static partial class ExpressionArithmetic {
                     value = ((operation == ExpressionOp.CycleForward) ? forward : Math.Min(val1: forward, val2: (modulus - forward)));
                     return true;
                 }
-                case ExpressionOp.MinimumExcluded:
+                case ExpressionOp.SmallestMissing:
                     value = System.Numerics.BitOperations.TrailingZeroCount(~((ulong)arguments[0]));
                     return true;
                 case ExpressionOp.IsPrime:
@@ -369,13 +369,13 @@ public static partial class ExpressionArithmetic {
                     if ((arguments[0] < 0L) || (arguments[0] >= s_primes.Length)) { return false; }
                     value = s_primes[arguments[0]];
                     return true;
-                case ExpressionOp.Binomial:
+                case ExpressionOp.Choose:
                     if (!IsInt(arguments[0]) || !IsInt(arguments[1])) { return false; }
                     return TryLong(Combinatorics.Binomial(n: ((int)arguments[0]), k: ((int)arguments[1])), out value);
                 case ExpressionOp.Factorial:
                     if (!IsInt(arguments[0])) { return false; }
                     return TryLong(Combinatorics.Factorial(n: ((int)arguments[0])), out value);
-                case ExpressionOp.CombinationRank: {
+                case ExpressionOp.SubsetRank: {
                     var n = arguments[0];
                     var mask = arguments[1];
                     if ((n < 0L) || (n > MaskBits) || ((n < MaskBits) && ((((ulong)mask) >> ((int)n)) != 0UL))) { return false; }
@@ -386,7 +386,7 @@ public static partial class ExpressionArithmetic {
                     }
                     return TryLong(Combinatorics.CombinationRank(n: ((int)n), combination: elements[..count]), out value);
                 }
-                case ExpressionOp.CombinationUnrank: {
+                case ExpressionOp.SubsetAt: {
                     var n = arguments[0];
                     var k = arguments[1];
                     if ((n < 0L) || (n > MaskBits) || (k < 0L) || (k > n) || (arguments[2] < 0L)) { return false; }
@@ -397,24 +397,24 @@ public static partial class ExpressionArithmetic {
                     value = unchecked((long)mask);
                     return true;
                 }
-                case ExpressionOp.CombinationElement:
+                case ExpressionOp.SubsetMember:
                     if (!IsInt(arguments[0]) || !IsInt(arguments[1]) || (arguments[2] < 0L) || !IsInt(arguments[3])) { return false; }
                     value = Combinatorics.CombinationElement(n: ((int)arguments[0]), k: ((int)arguments[1]), rank: ((ulong)arguments[2]), index: ((int)arguments[3]));
                     return true;
-                case ExpressionOp.PermutationRank: {
+                case ExpressionOp.ArrangementRank: {
                     var n = arguments[0];
                     if ((n < 0L) || (n > NibbleSlots)) { return false; }
                     Span<int> elements = stackalloc int[NibbleSlots];
                     for (var index = 0; index < n; index++) { elements[index] = ((int)((((ulong)arguments[1]) >> (4 * index)) & 0xFUL)); }
                     return TryLong(Combinatorics.PermutationRank(permutation: elements[..((int)n)]), out value);
                 }
-                case ExpressionOp.PermutationUnrank:
-                case ExpressionOp.PermutationElement: {
+                case ExpressionOp.ArrangementAt:
+                case ExpressionOp.ArrangementMember: {
                     var n = arguments[0];
                     if ((n < 0L) || (n > NibbleSlots) || (arguments[1] < 0L)) { return false; }
                     Span<int> elements = stackalloc int[NibbleSlots];
                     Combinatorics.PermutationUnrank(rank: ((ulong)arguments[1]), destination: elements[..((int)n)]);
-                    if (operation == ExpressionOp.PermutationElement) {
+                    if (operation == ExpressionOp.ArrangementMember) {
                         var position = arguments[2];
                         if ((position < 0L) || (position >= n)) { return false; }
                         value = elements[(int)position];

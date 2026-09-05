@@ -127,8 +127,8 @@ public enum ExpressionOp : byte {
     HexR,
     /// <summary>The ring a hex index lies on.</summary>
     HexRadius,
-    /// <summary>The Eisenstein norm q² − q·r + r² of a hex index.</summary>
-    HexNorm,
+    /// <summary>The Eisenstein squared straight-line distance from the origin q² − q·r + r² of a hex index.</summary>
+    HexEuclideanSquared,
     /// <summary>The step distance between two hex indices.</summary>
     HexDistance,
     /// <summary>The hex index one step away in direction 0..5 (counterclockwise from +q; any integer, taken modulo 6).</summary>
@@ -136,7 +136,7 @@ public enum ExpressionOp : byte {
     /// <summary>The hex index rotated about the origin by sixth turns (any integer, taken modulo 6).</summary>
     HexRotate,
     /// <summary>The hex index reflected across the q axis.</summary>
-    HexConjugate,
+    HexMirror,
     /// <summary>The hex index with q and r exchanged.</summary>
     HexSwap,
     /// <summary>The hex index of the coordinate sum.</summary>
@@ -173,8 +173,8 @@ public enum ExpressionOp : byte {
     SquareRadius,
     /// <summary>The Manhattan distance of a square index from the origin.</summary>
     SquareLength,
-    /// <summary>The Gaussian norm x² + y² of a square index.</summary>
-    SquareNorm,
+    /// <summary>The Gaussian squared straight-line distance from the origin x² + y² of a square index.</summary>
+    SquareEuclideanSquared,
     /// <summary>The Manhattan (rook-step) distance between two square indices.</summary>
     SquareDistance,
     /// <summary>The Chebyshev (king-step) distance between two square indices.</summary>
@@ -184,7 +184,7 @@ public enum ExpressionOp : byte {
     /// <summary>The square index rotated about the origin by quarter turns (any integer, taken modulo 4).</summary>
     SquareRotate,
     /// <summary>The square index reflected across the x axis.</summary>
-    SquareConjugate,
+    SquareMirror,
     /// <summary>The square index with x and y exchanged.</summary>
     SquareSwap,
     /// <summary>The square index of the coordinate sum.</summary>
@@ -207,26 +207,26 @@ public enum ExpressionOp : byte {
     CycleForward,
     /// <summary>The shortest distance between a and b around an m-cycle, in either direction.</summary>
     CycleDistance,
-    /// <summary>The minimum excluded value of a 64-bit set: the smallest non-negative integer whose bit is clear (the Sprague–Grundy value of a position whose options' values are the set).</summary>
-    MinimumExcluded,
+    /// <summary>The smallest non-negative integer missing from a 64-bit set — the lowest clear bit (the Sprague–Grundy value of a position whose options' values are the set).</summary>
+    SmallestMissing,
     /// <summary>Whether a non-negative integer is prime, decided exactly over the whole 64-bit range in bounded work.</summary>
     IsPrime,
     /// <summary>The i-th prime for i in 0..255 (2, 3, 5, … 1619): the bounded table a Gödel multiset or a coprime stride reaches for.</summary>
     Prime,
     /// <summary>n choose k, exact; zero when k exceeds n.</summary>
-    Binomial,
+    Choose,
     /// <summary>n! for n in 0..20.</summary>
     Factorial,
-    /// <summary>The colexicographic rank of a k-subset of 0..n−1 given as a bitmask (bit e set = element e chosen), in [0, binomial(n, k)); n at most 64.</summary>
-    CombinationRank,
-    /// <summary>The k-subset of 0..n−1 at a colexicographic rank, as a bitmask; the inverse of combRank.</summary>
-    CombinationUnrank,
+    /// <summary>The colexicographic rank of a k-subset of 0..n−1 given as a bitmask (bit e set = element e chosen), in [0, choose(n, k)); n at most 64.</summary>
+    SubsetRank,
+    /// <summary>The k-subset of 0..n−1 at a colexicographic rank, as a bitmask; the inverse of subsetRank.</summary>
+    SubsetAt,
     /// <summary>The i-th smallest element (i from 0) of the k-subset of 0..n−1 at a colexicographic rank, without building the subset.</summary>
-    CombinationElement,
+    SubsetMember,
     /// <summary>The lexicographic (Lehmer) rank of a permutation of 0..n−1 packed as nibbles — position i in bits 4i..4i+3 — in [0, n!); n at most 16.</summary>
-    PermutationRank,
-    /// <summary>The permutation of 0..n−1 at a lexicographic rank, packed as nibbles; the inverse of permRank.</summary>
-    PermutationUnrank,
+    ArrangementRank,
+    /// <summary>The permutation of 0..n−1 at a lexicographic rank, packed as nibbles; the inverse of arrangementRank.</summary>
+    ArrangementAt,
     /// <summary>The element at position i of the permutation of 0..n−1 at a lexicographic rank.</summary>
-    PermutationElement,
+    ArrangementMember,
 }
