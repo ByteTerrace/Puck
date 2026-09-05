@@ -23,6 +23,12 @@ public enum BoardQueryKind : byte {
     /// <summary>The count of distinct cells adjacent to that component whose value lies in a second range — a Go
     /// group's liberties — under the same budget.</summary>
     Liberties,
+    /// <summary>The liberties a stone placed on the empty key cell would have: the distinct in-range cells adjacent to
+    /// the group it would join, the key cell itself excluded — 0 with no capture is suicide.</summary>
+    LibertiesAt,
+    /// <summary>The count of adjacent groups a stone placed on the empty key cell would capture: those whose every
+    /// liberty is the key cell.</summary>
+    CapturesAt,
     /// <summary>Whether the key cell is attacked: walking each of a short authored direction list from the key
     /// cell, the first occupied cell in at least one of them carries a value within an inclusive range. A ray that
     /// hits an occupied cell outside the range is blocked (stops there, counts as a miss) — the same single-direction
@@ -114,7 +120,20 @@ public sealed class BoardComponentQuery : BoardQuery {
     /// <param name="libertyUpper">The inclusive upper bound of a liberty's value.</param>
     /// <param name="liberties">Whether the query counts liberties rather than members.</param>
     public BoardComponentQuery(CompiledTopology topology, long lower, long upper, int maxVisits, long libertyLower, long libertyUpper, bool liberties)
-        : base(liberties ? BoardQueryKind.Liberties : BoardQueryKind.Component, topology) {
+        : this(topology, lower, upper, maxVisits, libertyLower, libertyUpper, liberties ? BoardQueryKind.Liberties : BoardQueryKind.Component) {
+    }
+
+    /// <summary>Initializes the query for any of its four kinds; the placement kinds (<see cref="BoardQueryKind.LibertiesAt"/>,
+    /// <see cref="BoardQueryKind.CapturesAt"/>) read the key cell as the empty cell a stone would land on.</summary>
+    /// <param name="topology">The compiled topology.</param>
+    /// <param name="lower">The inclusive lower bound of a member's value.</param>
+    /// <param name="upper">The inclusive upper bound of a member's value.</param>
+    /// <param name="maxVisits">The most component cells the flood may settle, 1..CellCount.</param>
+    /// <param name="libertyLower">The inclusive lower bound of a liberty's value.</param>
+    /// <param name="libertyUpper">The inclusive upper bound of a liberty's value.</param>
+    /// <param name="kind">The query kind.</param>
+    public BoardComponentQuery(CompiledTopology topology, long lower, long upper, int maxVisits, long libertyLower, long libertyUpper, BoardQueryKind kind)
+        : base(kind, topology) {
         Lower = lower;
         Upper = upper;
         MaxVisits = maxVisits;

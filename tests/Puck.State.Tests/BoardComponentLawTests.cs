@@ -42,6 +42,44 @@ public sealed class BoardComponentLawTests {
         Assert.Equal(7L, BoardQueries.Evaluate(white, s_position, 0, source: 12));
     }
 
+    // Row-major 5×5: black 1 at cell 0 with white 2 at cell 1; cell 5 is black's last liberty.
+    private static readonly long[] s_atari = [
+        1, 2, 0, 0, 0,
+        0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0,
+    ];
+
+    [Fact]
+    public void APlacementKnowsItsOwnLibertiesAndWhatItCaptures() {
+        var topology = Board();
+        var whiteLibertiesAt = new BoardComponentQuery(topology, lower: 2, upper: 2, maxVisits: 25, libertyLower: 0, libertyUpper: 0, BoardQueryKind.LibertiesAt);
+        var whiteCapturesAt = new BoardComponentQuery(topology, lower: 1, upper: 1, maxVisits: 25, libertyLower: 0, libertyUpper: 0, BoardQueryKind.CapturesAt);
+        // White at 5 takes black's last liberty: one capture, and the stone itself breathes at 6 and 10.
+        Assert.Equal(1L, BoardQueries.Evaluate(whiteCapturesAt, s_atari, 0, source: 5));
+        Assert.Equal(2L, BoardQueries.Evaluate(whiteLibertiesAt, s_atari, 0, source: 5));
+        // White at 2 joins the stone at 1: liberties 3, 6, 7 (never the key cell); black keeps its liberty at 5.
+        Assert.Equal(3L, BoardQueries.Evaluate(whiteLibertiesAt, s_atari, 0, source: 2));
+        Assert.Equal(0L, BoardQueries.Evaluate(whiteCapturesAt, s_atari, 0, source: 2));
+        // An occupied key cell is no placement.
+        Assert.Equal(-1L, BoardQueries.Evaluate(whiteLibertiesAt, s_atari, 0, source: 0));
+
+        // Black at 0 with white at 1 and 5: no empty neighbour, no friendly group, and neither white stone loses its
+        // last liberty — suicide, and both facets say so.
+        long[] surrounded = [
+            0, 2, 0, 0, 0,
+            2, 0, 0, 0, 0,
+            0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0,
+        ];
+        var blackLibertiesAt = new BoardComponentQuery(topology, lower: 1, upper: 1, maxVisits: 25, libertyLower: 0, libertyUpper: 0, BoardQueryKind.LibertiesAt);
+        var blackCapturesAt = new BoardComponentQuery(topology, lower: 2, upper: 2, maxVisits: 25, libertyLower: 0, libertyUpper: 0, BoardQueryKind.CapturesAt);
+        Assert.Equal(0L, BoardQueries.Evaluate(blackLibertiesAt, surrounded, 0, source: 0));
+        Assert.Equal(0L, BoardQueries.Evaluate(blackCapturesAt, surrounded, 0, source: 0));
+    }
+
     [Fact]
     public void TheBudgetBoundsTheFloodAndReadsMinusTwoWhenItRunsOut() {
         var topology = Board();

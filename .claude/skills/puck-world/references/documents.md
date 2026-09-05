@@ -2413,7 +2413,9 @@ a `history` ring (`push`/`pushState`, `$history:<row>:<age>`), or a keyed row;
 `boardCombine` transform carries it over boards of any size; a group and its
 breathing room are `$board:component:<row>:<min>:<max>:<maxVisits>` and
 `$board:liberties:<row>:<min>:<max>:<libertyMin>:<libertyMax>:<maxVisits>`
-from a key cell (a flood under a settled-cell budget, -2 when it runs out);
+from a key cell (a flood under a settled-cell budget, -2 when it runs out); a placement's legality is
+`$board:libertiesAt` (the stone's own liberties, the key cell excluded) and `$board:capturesAt` (adjacent enemy
+groups whose only liberty is the key cell) keyed on the empty cell — legal iff `libertiesAt > 0 || capturesAt > 0`;
 `world.match` narrates one word.
 The `sort` transform supplies the canonical order. Read back with
 `world.patterns` and `world.match`.

@@ -177,6 +177,9 @@ public static class BoardQueries {
     private static long Component(BoardComponentQuery query, ReadOnlySpan<long> values, int source) {
         var topology = query.Topology;
         var count = topology.CellCount;
+        if (query.Kind is BoardQueryKind.LibertiesAt or BoardQueryKind.CapturesAt) {
+            return Placement(query, values, source);
+        }
         if (values[source] < query.Lower || values[source] > query.Upper) {
             return 0;
         }
@@ -213,6 +216,95 @@ public static class BoardQueries {
                 }
             }
             return liberties ? free : members;
+        } finally {
+            System.Buffers.ArrayPool<byte>.Shared.Return(markPool);
+            System.Buffers.ArrayPool<int>.Shared.Return(stackPool);
+        }
+    }
+
+    // A stone on the empty key cell: LibertiesAt floods the friendly group it would join (the key cell a member) and
+    // counts the distinct empty cells beside it other than the key cell; CapturesAt floods each enemy group beside
+    // the key cell and counts those left with no liberty once the key cell is filled. -1 when the key cell is not
+    // empty, -2 when the settled-cell budget runs out across the floods.
+    private static long Placement(BoardComponentQuery query, ReadOnlySpan<long> values, int source) {
+        var topology = query.Topology;
+        var count = topology.CellCount;
+        if (values[source] < query.LibertyLower || values[source] > query.LibertyUpper) {
+            return -1;
+        }
+        var markPool = System.Buffers.ArrayPool<byte>.Shared.Rent(count);
+        var stackPool = System.Buffers.ArrayPool<int>.Shared.Rent(count);
+        try {
+            var mark = markPool.AsSpan(0, count);
+            var stack = stackPool.AsSpan(0, count);
+            mark.Clear();
+            mark[source] = 1;
+            var settled = 0L;
+            if (query.Kind == BoardQueryKind.LibertiesAt) {
+                var size = 0;
+                var free = 0L;
+                stack[size++] = source;
+                while (size > 0) {
+                    var cell = stack[--size];
+                    if (settled == query.MaxVisits) {
+                        return -2;
+                    }
+                    settled++;
+                    for (var direction = 0; direction < topology.DirectionCount; direction++) {
+                        var next = topology.Neighbour(cell, direction);
+                        if (next < 0 || mark[next] != 0) {
+                            continue;
+                        }
+                        if (values[next] >= query.Lower && values[next] <= query.Upper) {
+                            mark[next] = 1;
+                            stack[size++] = next;
+                        } else if (values[next] >= query.LibertyLower && values[next] <= query.LibertyUpper) {
+                            mark[next] = 2;
+                            free++;
+                        }
+                    }
+                }
+                return free;
+            }
+            var captures = 0L;
+            for (var seed = 0; seed < topology.DirectionCount; seed++) {
+                var start = topology.Neighbour(source, seed);
+                if (start < 0 || mark[start] != 0 || values[start] < query.Lower || values[start] > query.Upper) {
+                    continue;
+                }
+                // Liberties seen for earlier groups are cleared back to unmarked so each group counts its own.
+                for (var cell = 0; cell < count; cell++) {
+                    if (mark[cell] == 2) { mark[cell] = 0; }
+                }
+                var size = 0;
+                var free = 0L;
+                mark[start] = 1;
+                stack[size++] = start;
+                while (size > 0) {
+                    var cell = stack[--size];
+                    if (settled == query.MaxVisits) {
+                        return -2;
+                    }
+                    settled++;
+                    for (var direction = 0; direction < topology.DirectionCount; direction++) {
+                        var next = topology.Neighbour(cell, direction);
+                        if (next < 0 || mark[next] != 0) {
+                            continue;
+                        }
+                        if (values[next] >= query.Lower && values[next] <= query.Upper) {
+                            mark[next] = 1;
+                            stack[size++] = next;
+                        } else if (values[next] >= query.LibertyLower && values[next] <= query.LibertyUpper) {
+                            mark[next] = 2;
+                            free++;
+                        }
+                    }
+                }
+                if (free == 0) {
+                    captures++;
+                }
+            }
+            return captures;
         } finally {
             System.Buffers.ArrayPool<byte>.Shared.Return(markPool);
             System.Buffers.ArrayPool<int>.Shared.Return(stackPool);
