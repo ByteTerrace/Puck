@@ -1,7 +1,7 @@
 namespace Puck.World;
 
 /// <summary>State-layout-specific flock expressions. Recompile on document installation, even when the
-/// physical population does not rebuild, so state handles and social dimension ordinals remain current.</summary>
+/// physical population does not rebuild, so state handles remain current.</summary>
 public sealed class CompiledWorldFlockAffinities {
     /// <summary>Compiles the two independent neighbor weights against the current world.</summary>
     /// <param name="profile">The authored flock profile.</param>

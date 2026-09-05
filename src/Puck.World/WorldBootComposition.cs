@@ -358,8 +358,6 @@ internal static class WorldBootComposition {
         // The addon cost-surface read-back — world.addons. Mounting/unmounting/reloading/enabling/disabling
         // an addon rides world.row.set addons/.remove instead (WorldRowCommandModule), never a verb here.
         services.AddSingleton<ICommandModule, WorldAddonCommandModule>();
-        // The local auction house verb surface — market.list/.bid/.buyout/.cancel + world.market.
-        services.AddSingleton<ICommandModule, WorldMarketCommandModule>();
         // The contribution-slot read-back verb — world.contributions. Slots themselves are authored and filled
         // through world.row.set placements.
         services.AddSingleton<ICommandModule, WorldContributionCommandModule>();

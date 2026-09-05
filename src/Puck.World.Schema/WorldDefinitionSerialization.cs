@@ -189,7 +189,6 @@ namespace Puck.World;
 // name rather than defaulting.
 [JsonSerializable(typeof(WorldStateRow))]
 [JsonSerializable(typeof(WorldStateSection))]
-[JsonSerializable(typeof(WorldSocialPolicy))]
 // The stochastic SOURCE family — reachable both as a document `generators` row and inline inside a site's draw
 // facet. Registered on its own so WorldStateRowJsonConverter can read/write the facet through a typed accessor (the
 // row converter is hand-written; its nested objects are ordinary strict-parsed STJ).

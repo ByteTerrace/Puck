@@ -10,8 +10,6 @@ public sealed partial class WorldServer {
     // needed). The replay is ALL-OR-NOTHING: any entry failing any gate refuses the undo outright, names the failing
     // entry's index and reason on stderr, and installs NOTHING — a validated prefix is not a validated document, and no
     // general admissibility invariant lets a partially-replayed journal stand in for one that fully replayed.
-    // Economic market entries are finality barriers checked before replay begins: undo may drop later editor work,
-    // but never silently rewinds a listing, bid, cancellation, or transfer commitment.
     private bool ApplyUndo(int count, WorldPrincipal principal, int connectionId, long correlationId) {
         // Journal control is Mutate territory over every section (a replay can rebuild any).
         if (!m_grants.AllowsAllSections(
@@ -45,26 +43,6 @@ public sealed partial class WorldServer {
             max: m_journal.Count
         );
         var keep = (m_journal.Count - drop);
-
-        // Market submissions are economic commitments, not authoring edits. Replaying the journal without one would
-        // let an administrator silently reopen listings, displace a different standing bidder, or reverse a settled
-        // transfer while every later mutation continued to look valid. The recorded mutation is the durable finality
-        // marker, so checkpoint restore and hosted journal-tail recovery preserve this boundary without a parallel
-        // bookkeeping lane. Pruning is deliberately absent: it archives terminal rows but moves no value and may be
-        // undone to inspect the retained receipt row again.
-        for (var index = keep; (index < m_journal.Count); index++) {
-            if (!IsMarketFinalityBarrier(mutation: m_journal[index].Mutation)) {
-                continue;
-            }
-
-            var refusal = $"undo refused: journal entry {index} ({Describe(mutation: m_journal[index].Mutation)}) is a finalized market transaction";
-
-            return RefuseUndo(
-                connectionId: connectionId,
-                correlationId: correlationId,
-                refusal: refusal
-            );
-        }
 
         var candidate = m_base;
         var kept = new List<JournalEntry>(capacity: keep);
@@ -140,9 +118,6 @@ public sealed partial class WorldServer {
             kept.Add(item: entry);
         }
 
-        if (!CanInstallSocial(candidate, out var undoSocialReason)) {
-            return RefuseUndo(connectionId: connectionId, correlationId: correlationId, refusal: $"undo refused: {undoSocialReason}");
-        }
         // Field storage is boot allocated. Prove the final replay result can retain the live lattice before building
         // or swapping any other derived runtime product; InstallFields is then an infallible compatible plan swap.
         if (!m_population.CanInstallFields(
@@ -255,14 +230,6 @@ public sealed partial class WorldServer {
 
         return true;
     }
-    // Every market mutation that creates or changes an economic commitment is final against journal undo. The
-    // section's automatic PruneMarketListings mutation is archival only and therefore intentionally reversible.
-    private static bool IsMarketFinalityBarrier(WorldMutation mutation) => (mutation is
-        WorldMutation.CreateMarketListing or
-        WorldMutation.PlaceMarketBid or
-        WorldMutation.BuyoutMarketListing or
-        WorldMutation.CancelMarketListing or
-        WorldMutation.SettleMarketListing);
     // Undo's own throwaway addon-prepare probe for an INTERMEDIATE journal-replay candidate: proves the row set
     // this candidate carries could still mount, without ever registering, disclosing, or journaling anything — the
     // plan is disposed immediately regardless of outcome. Only the FINAL candidate's prepare (after the loop above)
@@ -309,8 +276,7 @@ public sealed partial class WorldServer {
     /// <summary>Buffers a journal undo of the last <paramref name="count"/> mutations for the next <see cref="Step"/>.
     /// Retains the submitting envelope's connection/correlation identity — see <see cref="EnqueueMutation"/>'s own
     /// remarks.</summary>
-    /// <param name="count">How many trailing mutations to undo (clamped to at least 1 and at most the journal length).
-    /// The request refuses when that tail crosses a finalized market transaction.</param>
+    /// <param name="count">How many trailing mutations to undo (clamped to at least 1 and at most the journal length).</param>
     /// <param name="principal">The acting identity the undo is checked against.</param>
     /// <param name="connectionId">The submitting envelope's connection id.</param>
     /// <param name="correlationId">The submitting envelope's correlation id.</param>
@@ -324,8 +290,8 @@ public sealed partial class WorldServer {
     }
 
     /// <summary>This server's own checkpointed fields — journal, base/definition documents, buffered pending ops,
-    /// step clock, rule-edge latches, per-binding decisions, and social memory/work state. Every other subsystem's own section lives beside this one on
-    /// <see cref="WorldAuthorityCheckpoint"/>.</summary>
+    /// step clock, rule-edge latches, and per-binding decisions. Every other subsystem's own section lives beside
+    /// this one on <see cref="WorldAuthorityCheckpoint"/>.</summary>
     public sealed record WorldServerCheckpoint(
         byte[] DefinitionJson,
         byte[] BaseDefinitionJson,
@@ -350,9 +316,7 @@ public sealed partial class WorldServer {
         string? MusicDirectorLastEmbellishmentPatchId,
         ulong? MusicDirectorLastEmbellishmentTick,
         IReadOnlyList<(int EntityIndex, string JudgeRef, string? Grade, ulong Tick)> JudgeGrades,
-        IReadOnlyList<WorldDecisionCheckpoint> Decisions,
-        WorldSocialMemoryCheckpoint? Social,
-        int LastSocialResult
+        IReadOnlyList<WorldDecisionCheckpoint> Decisions
     );
 
     /// <summary>The engine-tick threshold beyond which a checkpoint capture is refused rather than silently taken
@@ -456,8 +420,6 @@ public sealed partial class WorldServer {
                 Intents: [.. m_intents],
                 Pending: [],
                 Decisions: CaptureDecisions(),
-                Social: m_social?.Capture(),
-                LastSocialResult: m_lastSocialResult,
                 RuleGateHeld: ruleGateHeld,
                 InteractionGateHeld: interactionGateHeld,
                 LastDocumentReceipt: m_lastDocumentReceipt,
@@ -511,8 +473,6 @@ public sealed partial class WorldServer {
         var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: server.DefinitionJson);
         m_events.ValidateCheckpoint(checkpoint: checkpoint.EventFeed);
         ValidateDecisionCheckpoint(server, restoredDefinition);
-        var restoredSocial = RestoreSocialCheckpoint(server, restoredDefinition);
-        WorldTransferEscrow.ValidateSocialCheckpoint(checkpoint.Escrow, restoredSocial);
 
         m_definition = restoredDefinition;
         m_base = WorldDefinitionSerialization.Deserialize(utf8Json: server.BaseDefinitionJson);
@@ -611,10 +571,6 @@ public sealed partial class WorldServer {
             }
         }
 
-        m_social = restoredSocial;
-        m_socialSource = restoredDefinition.StateRaw?.Social;
-        m_socialClock = server.LastCompletedEngineTicks;
-        m_lastSocialResult = server.LastSocialResult;
         m_transferEscrow.Restore(checkpoint: checkpoint.Escrow);
         m_inputHold.Restore(checkpoint: checkpoint.InputHold);
         m_events.Restore(checkpoint: checkpoint.EventFeed);

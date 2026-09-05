@@ -38,13 +38,11 @@ public enum CellKind : byte {
 /// <param name="Identity">Per-body counters and timers synchronized through the durable identity-document seam.</param>
 /// <param name="Lattices">The lattice topologies the section's lattice-shaped rows lie over (see
 /// <see cref="WorldStateLatticeTopology"/>).</param>
-/// <param name="Social">Optional bounded social-memory policy; learned runtime impressions are checkpoint state, not public cell rows.</param>
 public sealed record WorldStateSection(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldStateRow>? World = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ActionStateSlot>? Body = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ActionStateSlot>? Identity = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldStateLatticeTopology>? Lattices = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSocialPolicy? Social = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldStateLatticeTopology>? Lattices = null
 );
 /// <summary>
 /// One cell of the <c>state</c> section's substrate — a typed value addressed by a stable string <see cref="Key"/>

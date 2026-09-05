@@ -494,12 +494,6 @@ public enum WorldRuleFactKind : byte {
     Board,
     /// <summary>A phase protocol progression value.</summary>
     Phase,
-    /// <summary>A directed social-memory query.</summary>
-    Social,
-    /// <summary>The social bank's engine clock.</summary>
-    SocialClock,
-    /// <summary>The last social evidence outcome ordinal.</summary>
-    SocialResult,
     /// <summary>A pattern-language match over a row's word (<see cref="WorldRuleFacts.MatchPrefix"/>): acceptance 1
     /// or 0, a longest accepted prefix, or the accepting directions of a board origin.</summary>
     Pattern,
@@ -552,7 +546,6 @@ public enum WorldRuleFactKind : byte {
 /// <param name="FilterRow">The optional keyed row whose nonzero cells admit reduction candidates.</param>
 /// <param name="FilterHandle">The compiled handle for <paramref name="FilterRow"/>.</param>
 /// <param name="Board">The compiled discrete query, when present.</param>
-/// <param name="Social">The compiled directed social query, when present.</param>
 /// <param name="Pattern">The pattern a <see cref="WorldRuleFactKind.Pattern"/> operand runs; the word source is <paramref name="Row"/> and, for a zone, <paramref name="FilterRow"/> is its attribute row.</param>
 /// <param name="MatchFacet">What the pattern operand answers; a board query whose <c>Direction</c> is -1 walks every direction.</param>
 /// <param name="TokenExpression">For a zone source whose pattern carries a value expression, that expression compiled with <c>$token</c> keys bound per token.</param>
@@ -576,7 +569,6 @@ public readonly record struct CompiledWorldOperand(
     string? FilterRow = null,
     WorldStateHandle FilterHandle = default,
     CompiledWorldBoardQuery? Board = null,
-    CompiledWorldSocialQuery? Social = null,
     string? Pattern = null,
     WorldMatchFacet MatchFacet = WorldMatchFacet.Accept,
     CompiledWorldExpressionToken[]? TokenExpression = null
@@ -809,10 +801,6 @@ public enum WorldRuleEffectKind : byte {
     TransformState,
     /// <summary>Push one evaluated value into a history row's ring.</summary>
     PushState,
-    /// <summary>Deliver evidence into bounded social memory.</summary>
-    ObserveSocial,
-    /// <summary>Forget a directed impression while retaining its duplicate-evidence ledger.</summary>
-    ForgetSocial,
 }
 /// <summary>One compiled world-rule effect. Document and state effects submit ordinary mutations under
 /// <see cref="WorldPrincipal.World"/>, so journal and undo cover them like other writes. Save, pose, cue, body, and
@@ -848,8 +836,6 @@ public enum WorldRuleEffectKind : byte {
 /// <param name="Body">The compiled body operation.</param>
 /// <param name="Paint">The compiled lattice paint.</param>
 /// <param name="Transform">The discrete state transform.</param>
-/// <param name="SocialObservation">The compiled social evidence delivery.</param>
-/// <param name="SocialRelationship">The directed impression to forget.</param>
 public readonly record struct CompiledWorldEffect(
     WorldRuleEffectKind Kind,
     string Row,
@@ -871,9 +857,7 @@ public readonly record struct CompiledWorldEffect(
     string? Payload = null,
     CompiledWorldBodyEffect? Body = null,
     CompiledWorldFieldPaint? Paint = null,
-    WorldStateTransform? Transform = null,
-    CompiledWorldSocialObservation? SocialObservation = null,
-    CompiledWorldSocialRelationship? SocialRelationship = null
+    WorldStateTransform? Transform = null
 );
 /// <summary>A literal body pose compiled to deterministic numerics — angles in radians.</summary>
 /// <param name="Position">The world position.</param>

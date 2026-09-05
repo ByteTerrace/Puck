@@ -486,11 +486,6 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        if (!CanInstallSocial(candidate, out var socialReason)) {
-            RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: socialReason, verb: verb);
-            return false;
-        }
-
         if (ExceedsBootDerivedFaceReservation(
             candidate: candidate,
             reason: out var reservationReason
@@ -1089,11 +1084,6 @@ public sealed partial class WorldServer {
                 reason: validationReason
             );
 
-            return false;
-        }
-
-        if (!CanInstallSocial(candidate, out var socialReason)) {
-            Reject(connectionId: connectionId, correlationId: correlationId, mutation: mutation, reason: socialReason);
             return false;
         }
 

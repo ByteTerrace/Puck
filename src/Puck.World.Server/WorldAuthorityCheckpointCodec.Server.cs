@@ -343,8 +343,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             w.WriteUInt64(s.DrawCount); w.WriteUInt64(s.Reconsiderations); w.WriteInt64(s.LastScore);
             w.WriteInt32(s.Candidate); w.WriteInt32(s.CandidateGeneration);
         });
-        WriteOptionalClass(writer, section.Social, WriteSocialMemory);
-        writer.WriteInt32(section.LastSocialResult);
         WriteArray(
             writer: writer,
             items: section.InteractionGateHeld,
@@ -470,8 +468,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             r.ReadString("decision rule", MaxStringBytes), r.ReadInt32(), r.ReadInt32(), r.ReadInt32(),
             r.ReadBoolean(), r.ReadBoolean(), r.ReadUInt64(), r.ReadUInt64(), r.ReadUInt64(),
             r.ReadUInt64(), r.ReadUInt64(), r.ReadInt64(), r.ReadInt32(), r.ReadInt32()));
-        var social = ReadOptionalClass(ref reader, ReadSocialMemory);
-        var lastSocialResult = reader.ReadInt32();
         var interactionGateHeld = ReadArray(
             reader: ref reader,
             field: "server interaction gate held",
@@ -573,8 +569,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             Pending: pending,
             RuleGateHeld: ruleGateHeld,
             Decisions: decisions,
-            Social: social,
-            LastSocialResult: lastSocialResult,
             SolidRevision: solidRevision
         );
         reason = string.Empty;

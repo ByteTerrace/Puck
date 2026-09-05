@@ -107,7 +107,7 @@ public sealed partial class WorldInstanceHost {
                     // Once any member can return, never retry the cohort commit—even after a checkpoint.
                     pending = pending with { RollbackOnly = true };
                     m_inDoubtTransfers[index] = pending;
-                    if (!RestoreDetachedMembers(source, new(pending.SourceAuthority, transfer.TransferId), pending.Landed, pending.CommitMembers)) {
+                    if (!RestoreDetachedMembers(source, pending.Landed, pending.CommitMembers)) {
                         index++;
                         continue;
                     }

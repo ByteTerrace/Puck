@@ -261,7 +261,7 @@ composing writes. That is a defect class, not a shortcut.
 
 - `family.verb` dotted names (`world.*`, `player.*`, `screen.*`,
   `profile.*`, `storage.*`, `capture.*`, `replay.*`,
-  `audio.*`, `market.*`); names case-insensitive on the full parse, ordinal
+  `audio.*`); names case-insensitive on the full parse, ordinal
   on the fast path.
 - Row-valued mutation verbs take ONE inline-JSON argument in the exact wire
   shape of the document section row, reconstructed from the raw text
@@ -307,14 +307,6 @@ the greatest effect branch, plus shared pose-image and grid copy/group visits.
 It separately echoes the per-tick pose, distinct range-scale rebuild, and sorted
 grid-point ceilings without cadence discounts. These structural units do not
 claim a CPU-time or sorting-comparison bound.
-
-`world.social [<query-json>]` is Immediate, headless-safe operator inspection
-under the stamped caller's Observe/all grant. No argument reports policy,
-clock, storage/work limits, and last evidence outcome; a query reads one directed
-impression. Use `WorldCommandArguments.RawAfter` for its JSON tail and the
-source-generated query type. It is not a network creature-observation channel.
-`world.budget` includes social storage and ingestion/expiry budgets, while
-rule costs account for expression tokens and body-reference row scans.
 
 Discrete state commands: `world.state.transform <transform-json>` and
 `world.state.act <phase-row> <sequence> <transform-json>` are Simulation-routed,

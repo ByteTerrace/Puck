@@ -1200,7 +1200,6 @@ public static partial class WorldDefinitionValidator {
         // resolves against (a kit naming an undeclared generator or destination row refuses HERE, at load, rather
         // than at first fire) and what a state.<row>/state.<row>.<key> HUD binding resolves against —
         // refuse-unknown-by-name, the same discipline every other HudBindingVocabulary token gets.
-        ValidateSocial(definition, errors);
         var stateRows = ValidateState(
             rows: definition.State,
             generators: definition.Generators,
@@ -1370,15 +1369,6 @@ public static partial class WorldDefinitionValidator {
 
         ValidateFields(
             definition: definition,
-            errors: errors
-        );
-
-        // The local auction house: null IS today's no-market world — the same null-is-absent posture every
-        // optional section here uses. Needs only stateRows (already built above) to resolve a listing's
-        // item/currency rows.
-        ValidateMarket(
-            market: definition.Market,
-            stateRows: stateRows,
             errors: errors
         );
 

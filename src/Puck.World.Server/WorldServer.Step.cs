@@ -533,10 +533,6 @@ public sealed partial class WorldServer {
     // outright rather than submitting). SAVE is the one exception to all of this: it submits no WorldMutation at all (see
     // ActionEffect.Save's remarks) and is handled before the mutation switch below ever runs.
     private bool FireWorldRuleEffect(CompiledWorldEffect effect, string ruleName, ulong tick, ulong stepTicks, bool preflight = false, bool strict = false) {
-        if (effect.Kind is WorldRuleEffectKind.ObserveSocial or WorldRuleEffectKind.ForgetSocial) {
-            if (!preflight) { FireSocialEffect(effect, tick); }
-            return false; // Runtime-only memory never broadcasts a public document update.
-        }
         if (effect.Kind == WorldRuleEffectKind.TransformState) {
             return ApplyWorldRuleMutation(effect: in effect, ruleName: ruleName, mutation: new WorldMutation.TransformState(WorldPrincipal.World, effect.Transform!), tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false, preflight: preflight);
         }
@@ -1320,7 +1316,6 @@ public sealed partial class WorldServer {
         m_ruleGateHeld.Prune(compiled: m_rules);
         m_interactionGateHeld.Prune(compiled: m_interactions);
         ReconcileDecisions();
-        ReconcileSocial(definition);
         ReconcilePatterns(definition);
         m_population.BindFlockAffinities(definition, EvaluateFlockAffinity);
     }
@@ -1436,8 +1431,6 @@ public sealed partial class WorldServer {
         }
     }
     private void StepCore(in FixedStepContext context) {
-        m_socialClock = context.ElapsedTicks;
-        m_social?.Advance(m_socialClock);
         // The per-tick mutation-dispatch allowance opens HERE, before either half of the tick that spends it: the
         // addon seam's pre-flight (TickAddons, immediately below) and the drain that applies what it — and every peer
         // submission buffered since the last step — enqueued.
@@ -1671,12 +1664,6 @@ public sealed partial class WorldServer {
         // Escrow recovery evaluates on the SAME terms, right beside rules — see ReclaimExpiredEscrows' own remarks.
         ReclaimExpiredEscrows(tick: tick);
         m_transferEscrow.ReclaimExpired(tick: tick);
-        // Market deadline recovery — the SAME tick-driven, replay-deterministic shape ReclaimExpiredEscrows already
-        // establishes, for a listing that reached its deadline instead of an unaccepted ownership offer's.
-        SettleExpiredMarketListings(tick: tick);
-        // Market retention sweep — runs right beside deadline recovery, archiving terminal rows once they have aged
-        // past market.retentionSeconds so the section's lifetime listing count stays bounded.
-        PruneExpiredMarketListings(tick: tick);
         // Contribution tenure recovery — the same shape again, for a presence-tenure slot whose contributor's link
         // went unreachable past its authored grace.
         SweepContributionTenure(tick: tick);

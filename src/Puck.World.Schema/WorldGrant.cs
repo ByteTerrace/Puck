@@ -178,14 +178,6 @@ public enum WorldSection : byte {
     /// grant here retunes how a seat feels without touching what the simulation does.</summary>
     PlayerDefaults,
 
-    /// <summary>The <c>market</c> section — the local auction house's config and live listing ledger, targeted by
-    /// <c>WorldMutation.CreateMarketListing</c>/<c>WorldMutation.PlaceMarketBid</c>/
-    /// <c>WorldMutation.BuyoutMarketListing</c>/<c>WorldMutation.CancelMarketListing</c>/
-    /// <c>WorldMutation.SettleMarketListing</c>. The engine's own deadline sweep fires the last of these as
-    /// <see cref="WorldPrincipal.World"/>, the same structural exemption <see cref="Groups"/>' escrow reclaim uses —
-    /// never gated by a grant.</summary>
-    Market,
-
     /// <summary>The <c>probes</c> section — the probe and binding rows, targeted by the section-scoped grant
     /// hold alone; no <c>WorldMutation</c> kind targets it yet (the section is boot-authored only).</summary>
     Probes,

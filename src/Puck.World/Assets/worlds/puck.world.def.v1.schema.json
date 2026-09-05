@@ -146,9 +146,6 @@
     "admission": {
       "$ref": "./schema/admission.schema.json"
     },
-    "market": {
-      "$ref": "./schema/market.schema.json"
-    },
     "adjacencies": {
       "$ref": "./schema/adjacencies.schema.json"
     },

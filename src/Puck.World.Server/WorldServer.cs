@@ -90,9 +90,7 @@ public readonly record struct WorldEditEcho(string Message, bool Rejected, World
 /// can settle without racing that fold or waiting for another authority's next tick. The
 /// journal is the undo engine: the loaded base definition plus an append-only list of applied <see cref="WorldMutation"/>s;
 /// undo restores the base and deterministically replays the journal minus its tail through the same apply path — no
-/// per-mutation inverse logic is ever written. Market listings, bids, buyouts, cancellations, and settlements are
-/// economic finality barriers that journal undo refuses to cross; retention pruning is archival and remains
-/// undoable.</remarks>
+/// per-mutation inverse logic is ever written.</remarks>
 public sealed partial class WorldServer : IWorldServerHost {
     // Federation reserve/commit requests arrive on socket workers. They must be able to settle while this host's
     // simulation thread waits on a different authority, otherwise simultaneous cyclic crossings deadlock.
@@ -428,25 +426,8 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// used, so a site's first fill and its later redraws share one deterministic stream per instance.</summary>
     public string InstanceIdentity { get; }
     /// <summary>Gets the journal length — the number of applied mutations over the base (the <c>world.status</c> dirty
-    /// count). See <see cref="UndoableJournalLength"/> for the removable tail.</summary>
+    /// count).</summary>
     public int JournalLength => m_journal.Count;
-    /// <summary>Gets the number of trailing journal entries <c>world.undo</c> may remove without crossing an economic
-    /// market-finality barrier. Zero means the latest entry is finalized or the journal is empty.</summary>
-    public int UndoableJournalLength {
-        get {
-            var count = 0;
-
-            for (var index = (m_journal.Count - 1); (index >= 0); index--) {
-                if (IsMarketFinalityBarrier(mutation: m_journal[index].Mutation)) {
-                    break;
-                }
-
-                count++;
-            }
-
-            return count;
-        }
-    }
     /// <summary>Gets the width of the latest authoritative step, or zero before the first step.</summary>
     public ulong LastStepTicks => m_lastStepTicks;
     /// <summary>Gets the authoritative screen-machine host — owns every booted <c>IScreenMachine</c>, its memory-peek

@@ -815,15 +815,11 @@ public static class WorldSubmissionCodec {
     // is acted upon). The NESTED row of an UpsertGrant/RemoveGrant is the opposite case: that row is DOCUMENT DATA
     // this mutation writes into the Grants section, and a document principal is exactly the shape the cross-document
     // write-back channel reads back out of it — so the row admits one where the actor never does. Same shape rule,
-    // two different admissible kind sets, spelled by the caller rather than guessed at inside the rule. A market
-    // mutation's trade party (Seller/Bidder/Buyer/Canceler) is a third case, shaped like the acting principal
-    // (documentAllowed stays false — a document can no more trade than it can act) but never itself the acting
-    // principal: Server.WorldServer's own TryAuthorizeMarketParty is what checks a party against the actor
-    // submitting it, a live-runtime question this wire-shape check cannot answer and does not attempt to.
+    // spelled by the caller rather than guessed at inside the rule.
     private static bool TryValidateMutationPrincipals(WorldMutation mutation, out WorldCodecFailure failure, bool committed = false) {
         failure = default;
-        // Only the committed-journal codec admits the canonical structural actor. Nested grant/market parties
-        // still pass the normal validation below; no live submission decoder calls this with committed=true.
+        // Only the committed-journal codec admits the canonical structural actor. A nested grant row still passes
+        // the normal validation below; no live submission decoder calls this with committed=true.
         if (!(committed && mutation.Principal == WorldPrincipal.World) && !TryValidatePrincipal(
             mutation.Principal,
             out failure
@@ -836,29 +832,12 @@ public static class WorldSubmissionCodec {
             _ => ((WorldPrincipal?)null),
         };
 
-        if (
-            (nested is { } principal) &&
-            !TryValidatePrincipal(
+        return (
+            (nested is not { } principal) ||
+            TryValidatePrincipal(
             principal,
             out failure,
             documentAllowed: true
-        )
-        ) {
-            return false;
-        }
-        var party = mutation switch {
-            WorldMutation.CreateMarketListing value => value.Seller,
-            WorldMutation.PlaceMarketBid value => value.Bidder,
-            WorldMutation.BuyoutMarketListing value => value.Buyer,
-            WorldMutation.CancelMarketListing value => value.Canceler,
-            _ => ((WorldPrincipal?)null),
-        };
-
-        return (
-            (party is not { } tradeParty) ||
-            TryValidatePrincipal(
-            tradeParty,
-            out failure
         )
         );
     }

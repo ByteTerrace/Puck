@@ -2745,130 +2745,6 @@
       ],
       "additionalProperties": false
     },
-    "WorldEntityAddress": {
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "authority": {
-          "type": "string"
-        },
-        "index": {
-          "type": "integer"
-        },
-        "generation": {
-          "type": "integer"
-        }
-      },
-      "additionalProperties": false
-    },
-    "WorldSocialEntityReference": {
-      "description": "Exactly one way to name an individual: a live body reference resolved to its mobility incarnation, or a literal stable identity that remains addressable while absent.",
-      "type": "object",
-      "properties": {
-        "body": {
-          "description": "The ordinary world-rule body-reference grammar, such as body:0, each, or cell:row:key.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "identity": {
-          "$ref": "#/$defs/WorldEntityAddress",
-          "description": "An original authority/index/generation address, not a current transfer destination.",
-          "default": null
-        }
-      },
-      "additionalProperties": false
-    },
-    "WorldSocialRelationship": {
-      "description": "One directed contextual relationship, shared by queries, evidence, and forgetting.",
-      "type": "object",
-      "properties": {
-        "observer": {
-          "$ref": "#/$defs/WorldSocialEntityReference",
-          "description": "The individual whose belief is addressed."
-        },
-        "subject": {
-          "$ref": "#/$defs/WorldSocialEntityReference",
-          "description": "The individual the belief concerns."
-        },
-        "dimension": {
-          "description": "The exact dimension name declared in state.social.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "observer",
-        "subject",
-        "dimension"
-      ],
-      "additionalProperties": false
-    },
-    "WorldSocialFacet": {
-      "description": "One numeric view of a remembered impression.",
-      "enum": [
-        "Value",
-        "Confidence",
-        "Uncertainty",
-        "Weight",
-        "Known",
-        "EventCount",
-        "Age"
-      ]
-    },
-    "WorldSocialQuery": {
-      "description": "A read-only belief query. Unknown valid identities return the authored baseline and zero confidence; an inactive body reference is unresolved and cannot inherit a former occupant\u0027s belief.",
-      "type": "object",
-      "properties": {
-        "relationship": {
-          "$ref": "#/$defs/WorldSocialRelationship"
-        },
-        "facet": {
-          "$ref": "#/$defs/WorldSocialFacet",
-          "default": "Value"
-        }
-      },
-      "required": [
-        "relationship"
-      ],
-      "additionalProperties": false
-    },
-    "WorldValueTokenSocial": {
-      "description": "A directed impression query, with its facet\u0027s declared numeric kind.",
-      "properties": {
-        "$type": {
-          "const": "social"
-        },
-        "query": {
-          "$ref": "#/$defs/WorldSocialQuery"
-        }
-      },
-      "required": [
-        "query"
-      ],
-      "additionalProperties": false
-    },
-    "WorldValueTokenSocialClock": {
-      "description": "The social bank\u0027s current engine tick, Int saturated at Int64.MaxValue.",
-      "properties": {
-        "$type": {
-          "const": "socialClock"
-        }
-      },
-      "additionalProperties": false
-    },
-    "WorldValueTokenSocialResult": {
-      "description": "The last social evidence result ordinal, Int; -1 before any attempt. Rule effects execute in document order.",
-      "properties": {
-        "$type": {
-          "const": "socialResult"
-        }
-      },
-      "additionalProperties": false
-    },
     "WorldValueTokenAdd": {
       "description": "Consumes two values and pushes their sum.",
       "properties": {
@@ -3268,15 +3144,6 @@
         },
         {
           "$ref": "#/$defs/WorldValueTokenState"
-        },
-        {
-          "$ref": "#/$defs/WorldValueTokenSocial"
-        },
-        {
-          "$ref": "#/$defs/WorldValueTokenSocialClock"
-        },
-        {
-          "$ref": "#/$defs/WorldValueTokenSocialResult"
         },
         {
           "$ref": "#/$defs/WorldValueTokenAdd"
@@ -6111,108 +5978,6 @@
       ],
       "additionalProperties": false
     },
-    "WorldSocialEntityReferenceNullable": {
-      "description": "Exactly one way to name an individual: a live body reference resolved to its mobility incarnation, or a literal stable identity that remains addressable while absent.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "body": {
-          "description": "The ordinary world-rule body-reference grammar, such as body:0, each, or cell:row:key.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "identity": {
-          "$ref": "#/$defs/WorldEntityAddress",
-          "description": "An original authority/index/generation address, not a current transfer destination.",
-          "default": null
-        }
-      },
-      "additionalProperties": false
-    },
-    "WorldSocialObservation": {
-      "description": "One world-authorized evidence delivery, not a sensor or a claim of objective truth. A world rule must explicitly gate who can perceive it. Relays retain the original event identity and occurrence tick.",
-      "type": "object",
-      "properties": {
-        "relationship": {
-          "$ref": "#/$defs/WorldSocialRelationship",
-          "description": "The directed belief to update."
-        },
-        "origin": {
-          "$ref": "#/$defs/WorldSocialEntityReference",
-          "description": "The stable identity that minted the underlying event, unchanged across relays."
-        },
-        "aspect": {
-          "description": "An authored event-aspect token of 1..64 characters, such as help.attempt or help.outcome.",
-          "type": "string"
-        },
-        "sequence": {
-          "$ref": "#/$defs/WorldValueExpression",
-          "description": "Non-negative Int event sequence; the minting rule must not reuse IDs for different events."
-        },
-        "occurredAt": {
-          "$ref": "#/$defs/WorldValueExpression",
-          "description": "Non-negative Int original engine tick, not delivery time. socialClock supplies the current clock."
-        },
-        "value": {
-          "$ref": "#/$defs/WorldValueExpression",
-          "description": "Fixed evidence value within the relationship dimension\u0027s bounds."
-        },
-        "quality": {
-          "$ref": "#/$defs/WorldValueExpressionNullable",
-          "description": "Fixed [0,1] evidence quality; absent means one.",
-          "default": null
-        },
-        "source": {
-          "$ref": "#/$defs/WorldSocialEntityReferenceNullable",
-          "description": "Report source, or null for direct observation. Private intent is never inferred or exposed by this effect.",
-          "default": null
-        }
-      },
-      "required": [
-        "relationship",
-        "origin",
-        "aspect",
-        "sequence",
-        "occurredAt",
-        "value"
-      ],
-      "additionalProperties": false
-    },
-    "ActionEffectObserveSocial": {
-      "description": "Delivers explicitly perceived evidence through the world\u0027s bounded social-memory policy. World-scope only.",
-      "properties": {
-        "$type": {
-          "const": "observeSocial"
-        },
-        "evidence": {
-          "$ref": "#/$defs/WorldSocialObservation"
-        }
-      },
-      "required": [
-        "evidence"
-      ],
-      "additionalProperties": false
-    },
-    "ActionEffectForgetSocial": {
-      "description": "Forgets one impression without clearing its unexpired evidence receipts. World-scope only.",
-      "properties": {
-        "$type": {
-          "const": "forgetSocial"
-        },
-        "relationship": {
-          "$ref": "#/$defs/WorldSocialRelationship"
-        }
-      },
-      "required": [
-        "relationship"
-      ],
-      "additionalProperties": false
-    },
     "ActionEffect": {
       "description": "An authored operand row lowered to a BodyMotionOp and executed by the body instruction interpreter when its trigger fires.",
       "type": [
@@ -6303,12 +6068,6 @@
         },
         {
           "$ref": "#/$defs/ActionEffectPaintField"
-        },
-        {
-          "$ref": "#/$defs/ActionEffectObserveSocial"
-        },
-        {
-          "$ref": "#/$defs/ActionEffectForgetSocial"
         }
       ]
     },

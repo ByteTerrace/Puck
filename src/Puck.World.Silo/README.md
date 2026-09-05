@@ -106,7 +106,6 @@ Storage Table clustering. Console verbs whose module takes a
 process-wide `IServerLink`/similar singleton rather than resolving it
 through the row `IWorldConsoleAuthority` returns (`WorldGrantCommandModule`,
 `WorldGroupCommandModule`, `WorldLookCommandModule`,
-`WorldMarketCommandModule`, `WorldRowCommandModule`,
-`WorldStateCommandModule`) are not registered here — registering them
+`WorldRowCommandModule`, `WorldStateCommandModule`) are not registered here — registering them
 unmodified would misattribute every row's mutation to whichever one
 happened to be resolved into the shared singleton.
