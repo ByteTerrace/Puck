@@ -1181,57 +1181,28 @@ tabletop anchors) moved with chess, `pondBasin` stayed. `billiardsColors`
 bowling and stays substrate rather than forcing an arbitrary owner. `world.imports`
 reads the resolved stack back.
 
-The import fold concatenates each source's contribution as one contiguous run
-(the basis chain, then each import fully resolved in list order, then the
-importing file's own new keys, appended last) — so a keyed list drawn from a
-monolithic file whose own authoring order interleaved substrate and game
-content as each was built over time (the original document's placements ran
-dominoes, most of the substrate, billiards, bowling, a substrate/chess/substrate
-interleave, then the rest of chess) cannot reproduce that exact array order; no
-composition built from one contiguous run per source can. This is proven, not
-assumed, by a permanent law
-(`tests/Puck.World.Tests/GardenSplitLawTests.cs`, over a frozen
-`pre-split-garden.world.json` fixture): canonicalizing every keyed list by
-sorting it on its identity key — the same vocabulary the merge itself keys
-by — makes the pre-split and post-split composed trees `JsonNode.DeepEquals`,
-with a corrupted-row control proving the canonicalization does not also hide
-a real value change.
+The import fold keeps each game's new rows together and preserves their authored
+order; the importing file's new rows follow the imports. `GardenSplitLawTests`
+checks each current fragment's rules, state, patterns, and topology against the
+composed garden. Behavioral laws check the games independently of their authored
+representation; a frozen copy of the original monolith would prevent those
+programs from adopting newer state primitives.
 
-Placement reordering has a sharp edge beyond row order: `WorldPopulation`
-seats each inhabited placement at the highest still-free body index, walking
-placements in composed document order, so moving a game's placements to a
-different point in the fold moves every one of its bodies to a different
-index range. Chess's 32 `piece` placements sat last among inhabited placements
-pre-split (bodies 12..43); with chess first among `imports`, they are first
-instead (bodies 74..105). `games/chess.world.json`'s `pieceCell`/`pieceCode`
-row keys and its 32 `tabletop-write-board-NN` rules are per-body-indexed
-authoring — re-derived against the new range in the same change, not left
-pointing at bodies that no longer hold the pieces they used to; the check
-that keeps them right is `GardenSplitLawTests.ChessPieceBodies_MatchAuthoredPieceCellAndPieceCodeKeys`,
-which cross-checks the authored keys against where `WorldPopulation` actually
-seats the placements rather than trusting the literals. No other fragment
-authors a per-body-indexed row or rule (billiards/bowling/dominoes carry no
-rules at all; poker's keyed rows are card codes, not body indices), so chess
-is the only place this re-derivation was needed.
+Chess addresses pieces by placement ID (`piece0` through `piece31`) through
+`pieceCell`, `pieceCode`, and `placement:$each`. Every piece and board square
+inherits the `tabletop` frame. Import order may change body indices without
+changing those identities or the board's local coordinates. The placement and
+physical-move laws verify both contracts against the live server.
 
-Reordering a hashed row changes what the hash folds even though no value
-moves; re-deriving chess's per-body literals against their new index range is
-the same relabeling, not a behavior change — the piece at each body still
-starts on the same board square with the same legal moves. Both together are
-why the passive garden replay's own hash moves with the split: the doctrine
-that already covers a deliberate correction ("determinism pins the mapping,
-not the values") covers a deliberate reorganization the same way — the replay
-stays self-consistent (rule-failure-free, MATCH) before and after, which is
-the guarantee, not a frozen number. The eight substrate rules (`claim-tick`
-through `physics-settled`) also move, from first in rule order to last —
-every import's rules compose before the importing file's own new rules, the
-same basis-first/overlay-appended rule that reorders placements. Checked and
-currently inert: no substrate rule's effect names a state any game rule reads
-or writes, and no game rule names a state a substrate rule writes: the two
-rule sets share no data flow through anything but the engine's own
-`$physics:quiescent` source. A future rule that reaches across that boundary
-must account for the new order rather than assume the substrate still runs
-first.
+Board programs should share scans within an event and use topology operations
+for geometry. Chess uses `boardShift` for pawn, king, and knight attack masks,
+and `$board:attacks` for sliders that stop at the first occupied square. Qubic
+uses three successive intersections and shifts to find four marks along each
+of its 13 undirected line directions. Both keep their expensive expressions in
+gated effects: rule-local bindings evaluate before the gate, including idle
+ticks. Changes to scratch rows and rule order change replay hashes; replay
+verification must prove consistency under the new document rather than preserve
+a historical hash.
 
 **The operand/effect unions, the row-domain union, and the garden split land together
 (`tower/unions`, integrator ruling).** Three lanes built independently against the same

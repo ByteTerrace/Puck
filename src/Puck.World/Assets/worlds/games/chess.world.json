@@ -4125,22 +4125,22 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": "$board:mask:previousBoard:-6:-1 & ~$board:mask:board:-6:-1",
+          "expression": "cWhiteOtherVacMask",
           "state": "cBlackVacMask"
         },
         {
           "$type": "setState",
-          "expression": "$board:mask:board:-6:-1 & ~$board:mask:previousBoard:-6:-1",
+          "expression": "cWhiteOtherOccMask",
           "state": "cBlackOccMask"
         },
         {
           "$type": "setState",
-          "expression": "$board:mask:previousBoard:1:6 & ~$board:mask:board:1:6",
+          "expression": "cWhiteVacMask",
           "state": "cBlackOtherVacMask"
         },
         {
           "$type": "setState",
-          "expression": "$board:mask:board:1:6 & ~$board:mask:previousBoard:1:6",
+          "expression": "cWhiteOccMask",
           "state": "cBlackOtherOccMask"
         }
       ],
@@ -4736,177 +4736,27 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": "max(max(max(($board:neighbour:board:SE[kingCell[0]] >= 0) * (($board:mask:board:-1:-1 & 1 << max($board:neighbour:board:SE[kingCell[0]], 0)) != 0), ($board:neighbour:board:SW[kingCell[0]] >= 0) * (($board:mask:board:-1:-1 & 1 << max($board:neighbour:board:SW[kingCell[0]], 0)) != 0)), ($board:neighbour:board:N[kingCell[0]] >= 0) * (($board:mask:board:-6:-6 & 1 << max($board:neighbour:board:N[kingCell[0]], 0)) != 0)), ($board:neighbour:board:NE[kingCell[0]] >= 0) * (($board:mask:board:-6:-6 & 1 << max($board:neighbour:board:NE[kingCell[0]], 0)) != 0))",
-          "state": "closeCheckWhitePart0"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-check-closecheckwhitepart0"
-    },
-    {
-      "effects": [
+          "expression": "(kingCell[0] >= 0) * (1 << max(kingCell[0], 0))",
+          "state": "kingMaskWhite"
+        },
         {
           "$type": "setState",
-          "expression": "max(max(max(($board:neighbour:board:E[kingCell[0]] >= 0) * (($board:mask:board:-6:-6 & 1 << max($board:neighbour:board:E[kingCell[0]], 0)) != 0), ($board:neighbour:board:SE[kingCell[0]] >= 0) * (($board:mask:board:-6:-6 & 1 << max($board:neighbour:board:SE[kingCell[0]], 0)) != 0)), ($board:neighbour:board:S[kingCell[0]] >= 0) * (($board:mask:board:-6:-6 & 1 << max($board:neighbour:board:S[kingCell[0]], 0)) != 0)), ($board:neighbour:board:SW[kingCell[0]] >= 0) * (($board:mask:board:-6:-6 & 1 << max($board:neighbour:board:SW[kingCell[0]], 0)) != 0))",
-          "state": "closeCheckWhitePart1"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-check-closecheckwhitepart1"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "expression": "max(($board:neighbour:board:W[kingCell[0]] >= 0) * (($board:mask:board:-6:-6 & 1 << max($board:neighbour:board:W[kingCell[0]], 0)) != 0), ($board:neighbour:board:NW[kingCell[0]] >= 0) * (($board:mask:board:-6:-6 & 1 << max($board:neighbour:board:NW[kingCell[0]], 0)) != 0))",
-          "state": "closeCheckWhitePart2"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-check-closecheckwhitepart2"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "expression": "max(max(closeCheckWhitePart0, closeCheckWhitePart1), closeCheckWhitePart2)",
+          "expression": "(((boardShift(kingMaskWhite, chessBoard, SE) | boardShift(kingMaskWhite, chessBoard, SW)) & $board:mask:board:-1:-1) | ((boardShift(kingMaskWhite, chessBoard, N) | boardShift(kingMaskWhite, chessBoard, NE) | boardShift(kingMaskWhite, chessBoard, E) | boardShift(kingMaskWhite, chessBoard, SE) | boardShift(kingMaskWhite, chessBoard, S) | boardShift(kingMaskWhite, chessBoard, SW) | boardShift(kingMaskWhite, chessBoard, W) | boardShift(kingMaskWhite, chessBoard, NW)) & $board:mask:board:-6:-6)) != 0",
           "state": "closeCheckWhite"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-check-closecheckwhite-combine"
-    },
-    {
-      "effects": [
+        },
         {
           "$type": "setState",
-          "expression": "max(max(max(($board:offset:board:1:2[kingCell[0]] >= 0) * (($board:mask:board:-2:-2 & 1 << max($board:offset:board:1:2[kingCell[0]], 0)) != 0), ($board:offset:board:2:1[kingCell[0]] >= 0) * (($board:mask:board:-2:-2 & 1 << max($board:offset:board:2:1[kingCell[0]], 0)) != 0)), ($board:offset:board:2:-1[kingCell[0]] >= 0) * (($board:mask:board:-2:-2 & 1 << max($board:offset:board:2:-1[kingCell[0]], 0)) != 0)), ($board:offset:board:1:-2[kingCell[0]] >= 0) * (($board:mask:board:-2:-2 & 1 << max($board:offset:board:1:-2[kingCell[0]], 0)) != 0))",
-          "state": "knightHitWhitePart0"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-check-knighthitwhitepart0"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "expression": "max(max(max(($board:offset:board:-1:-2[kingCell[0]] >= 0) * (($board:mask:board:-2:-2 & 1 << max($board:offset:board:-1:-2[kingCell[0]], 0)) != 0), ($board:offset:board:-2:-1[kingCell[0]] >= 0) * (($board:mask:board:-2:-2 & 1 << max($board:offset:board:-2:-1[kingCell[0]], 0)) != 0)), ($board:offset:board:-2:1[kingCell[0]] >= 0) * (($board:mask:board:-2:-2 & 1 << max($board:offset:board:-2:1[kingCell[0]], 0)) != 0)), ($board:offset:board:-1:2[kingCell[0]] >= 0) * (($board:mask:board:-2:-2 & 1 << max($board:offset:board:-1:2[kingCell[0]], 0)) != 0))",
-          "state": "knightHitWhitePart1"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-check-knighthitwhitepart1"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "expression": "max(knightHitWhitePart0, knightHitWhitePart1)",
+          "expression": "((boardShift(kingMaskWhite, chessBoard, K0) | boardShift(kingMaskWhite, chessBoard, K1) | boardShift(kingMaskWhite, chessBoard, K2) | boardShift(kingMaskWhite, chessBoard, K3) | boardShift(kingMaskWhite, chessBoard, K4) | boardShift(kingMaskWhite, chessBoard, K5) | boardShift(kingMaskWhite, chessBoard, K6) | boardShift(kingMaskWhite, chessBoard, K7)) & $board:mask:board:-2:-2) != 0",
           "state": "knightHitWhite"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-check-knighthitwhite-combine"
-    },
-    {
-      "effects": [
+        },
         {
           "$type": "setState",
-          "expression": "max(max(max(($match:chessRayEmpty:board:N:cell[kingCell[0]] >= 0) * ((($board:mask:board:-4:-4 | $board:mask:board:-5:-5) & 1 << max($match:chessRayEmpty:board:N:cell[kingCell[0]], 0)) != 0), ($match:chessRayEmpty:board:S:cell[kingCell[0]] >= 0) * ((($board:mask:board:-4:-4 | $board:mask:board:-5:-5) & 1 << max($match:chessRayEmpty:board:S:cell[kingCell[0]], 0)) != 0)), ($match:chessRayEmpty:board:E:cell[kingCell[0]] >= 0) * ((($board:mask:board:-4:-4 | $board:mask:board:-5:-5) & 1 << max($match:chessRayEmpty:board:E:cell[kingCell[0]], 0)) != 0)), ($match:chessRayEmpty:board:W:cell[kingCell[0]] >= 0) * ((($board:mask:board:-4:-4 | $board:mask:board:-5:-5) & 1 << max($match:chessRayEmpty:board:W:cell[kingCell[0]], 0)) != 0))",
-          "state": "slideHitWhitePart0"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-check-slidehitwhitepart0"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "expression": "max(max(max(($match:chessRayEmpty:board:NE:cell[kingCell[0]] >= 0) * ((($board:mask:board:-3:-3 | $board:mask:board:-5:-5) & 1 << max($match:chessRayEmpty:board:NE:cell[kingCell[0]], 0)) != 0), ($match:chessRayEmpty:board:SE:cell[kingCell[0]] >= 0) * ((($board:mask:board:-3:-3 | $board:mask:board:-5:-5) & 1 << max($match:chessRayEmpty:board:SE:cell[kingCell[0]], 0)) != 0)), ($match:chessRayEmpty:board:SW:cell[kingCell[0]] >= 0) * ((($board:mask:board:-3:-3 | $board:mask:board:-5:-5) & 1 << max($match:chessRayEmpty:board:SW:cell[kingCell[0]], 0)) != 0)), ($match:chessRayEmpty:board:NW:cell[kingCell[0]] >= 0) * ((($board:mask:board:-3:-3 | $board:mask:board:-5:-5) & 1 << max($match:chessRayEmpty:board:NW:cell[kingCell[0]], 0)) != 0))",
-          "state": "slideHitWhitePart1"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-check-slidehitwhitepart1"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "expression": "max(slideHitWhitePart0, slideHitWhitePart1)",
+          "expression": "(kingCell[0] >= 0) * max(`$board:attacks:board:-5:-4:N,S,E,W`[kingCell[0]], max(`$board:attacks:board:-3:-3:NE,SE,SW,NW`[kingCell[0]], `$board:attacks:board:-5:-5:NE,SE,SW,NW`[kingCell[0]]))",
           "state": "slideHitWhite"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-check-slidehitwhite-combine"
-    },
-    {
-      "effects": [
+        },
         {
           "$type": "setState",
-          "expression": "max(max(closeCheckWhite, knightHitWhite), slideHitWhite)",
+          "expression": "max(closeCheckWhite, max(knightHitWhite, slideHitWhite))",
           "state": "inCheckCombineWhite"
         }
       ],
@@ -4917,183 +4767,33 @@
         "value": 60
       },
       "mode": "Edge",
-      "name": "tabletop-check-total-white"
+      "name": "tabletop-check-white"
     },
     {
       "effects": [
         {
           "$type": "setState",
-          "expression": "max(max(max(($board:neighbour:board:NE[kingCell[1]] >= 0) * (($board:mask:board:1:1 & 1 << max($board:neighbour:board:NE[kingCell[1]], 0)) != 0), ($board:neighbour:board:NW[kingCell[1]] >= 0) * (($board:mask:board:1:1 & 1 << max($board:neighbour:board:NW[kingCell[1]], 0)) != 0)), ($board:neighbour:board:N[kingCell[1]] >= 0) * (($board:mask:board:6:6 & 1 << max($board:neighbour:board:N[kingCell[1]], 0)) != 0)), ($board:neighbour:board:NE[kingCell[1]] >= 0) * (($board:mask:board:6:6 & 1 << max($board:neighbour:board:NE[kingCell[1]], 0)) != 0))",
-          "state": "closeCheckBlackPart0"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-check-closecheckblackpart0"
-    },
-    {
-      "effects": [
+          "expression": "(kingCell[1] >= 0) * (1 << max(kingCell[1], 0))",
+          "state": "kingMaskBlack"
+        },
         {
           "$type": "setState",
-          "expression": "max(max(max(($board:neighbour:board:E[kingCell[1]] >= 0) * (($board:mask:board:6:6 & 1 << max($board:neighbour:board:E[kingCell[1]], 0)) != 0), ($board:neighbour:board:SE[kingCell[1]] >= 0) * (($board:mask:board:6:6 & 1 << max($board:neighbour:board:SE[kingCell[1]], 0)) != 0)), ($board:neighbour:board:S[kingCell[1]] >= 0) * (($board:mask:board:6:6 & 1 << max($board:neighbour:board:S[kingCell[1]], 0)) != 0)), ($board:neighbour:board:SW[kingCell[1]] >= 0) * (($board:mask:board:6:6 & 1 << max($board:neighbour:board:SW[kingCell[1]], 0)) != 0))",
-          "state": "closeCheckBlackPart1"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-check-closecheckblackpart1"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "expression": "max(($board:neighbour:board:W[kingCell[1]] >= 0) * (($board:mask:board:6:6 & 1 << max($board:neighbour:board:W[kingCell[1]], 0)) != 0), ($board:neighbour:board:NW[kingCell[1]] >= 0) * (($board:mask:board:6:6 & 1 << max($board:neighbour:board:NW[kingCell[1]], 0)) != 0))",
-          "state": "closeCheckBlackPart2"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-check-closecheckblackpart2"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "expression": "max(max(closeCheckBlackPart0, closeCheckBlackPart1), closeCheckBlackPart2)",
+          "expression": "(((boardShift(kingMaskBlack, chessBoard, NE) | boardShift(kingMaskBlack, chessBoard, NW)) & $board:mask:board:1:1) | ((boardShift(kingMaskBlack, chessBoard, N) | boardShift(kingMaskBlack, chessBoard, NE) | boardShift(kingMaskBlack, chessBoard, E) | boardShift(kingMaskBlack, chessBoard, SE) | boardShift(kingMaskBlack, chessBoard, S) | boardShift(kingMaskBlack, chessBoard, SW) | boardShift(kingMaskBlack, chessBoard, W) | boardShift(kingMaskBlack, chessBoard, NW)) & $board:mask:board:6:6)) != 0",
           "state": "closeCheckBlack"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-check-closecheckblack-combine"
-    },
-    {
-      "effects": [
+        },
         {
           "$type": "setState",
-          "expression": "max(max(max(($board:offset:board:1:2[kingCell[1]] >= 0) * (($board:mask:board:2:2 & 1 << max($board:offset:board:1:2[kingCell[1]], 0)) != 0), ($board:offset:board:2:1[kingCell[1]] >= 0) * (($board:mask:board:2:2 & 1 << max($board:offset:board:2:1[kingCell[1]], 0)) != 0)), ($board:offset:board:2:-1[kingCell[1]] >= 0) * (($board:mask:board:2:2 & 1 << max($board:offset:board:2:-1[kingCell[1]], 0)) != 0)), ($board:offset:board:1:-2[kingCell[1]] >= 0) * (($board:mask:board:2:2 & 1 << max($board:offset:board:1:-2[kingCell[1]], 0)) != 0))",
-          "state": "knightHitBlackPart0"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-check-knighthitblackpart0"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "expression": "max(max(max(($board:offset:board:-1:-2[kingCell[1]] >= 0) * (($board:mask:board:2:2 & 1 << max($board:offset:board:-1:-2[kingCell[1]], 0)) != 0), ($board:offset:board:-2:-1[kingCell[1]] >= 0) * (($board:mask:board:2:2 & 1 << max($board:offset:board:-2:-1[kingCell[1]], 0)) != 0)), ($board:offset:board:-2:1[kingCell[1]] >= 0) * (($board:mask:board:2:2 & 1 << max($board:offset:board:-2:1[kingCell[1]], 0)) != 0)), ($board:offset:board:-1:2[kingCell[1]] >= 0) * (($board:mask:board:2:2 & 1 << max($board:offset:board:-1:2[kingCell[1]], 0)) != 0))",
-          "state": "knightHitBlackPart1"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-check-knighthitblackpart1"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "expression": "max(knightHitBlackPart0, knightHitBlackPart1)",
+          "expression": "((boardShift(kingMaskBlack, chessBoard, K0) | boardShift(kingMaskBlack, chessBoard, K1) | boardShift(kingMaskBlack, chessBoard, K2) | boardShift(kingMaskBlack, chessBoard, K3) | boardShift(kingMaskBlack, chessBoard, K4) | boardShift(kingMaskBlack, chessBoard, K5) | boardShift(kingMaskBlack, chessBoard, K6) | boardShift(kingMaskBlack, chessBoard, K7)) & $board:mask:board:2:2) != 0",
           "state": "knightHitBlack"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-check-knighthitblack-combine"
-    },
-    {
-      "effects": [
+        },
         {
           "$type": "setState",
-          "expression": "max(max(max(($match:chessRayEmpty:board:N:cell[kingCell[1]] >= 0) * ((($board:mask:board:4:4 | $board:mask:board:5:5) & 1 << max($match:chessRayEmpty:board:N:cell[kingCell[1]], 0)) != 0), ($match:chessRayEmpty:board:S:cell[kingCell[1]] >= 0) * ((($board:mask:board:4:4 | $board:mask:board:5:5) & 1 << max($match:chessRayEmpty:board:S:cell[kingCell[1]], 0)) != 0)), ($match:chessRayEmpty:board:E:cell[kingCell[1]] >= 0) * ((($board:mask:board:4:4 | $board:mask:board:5:5) & 1 << max($match:chessRayEmpty:board:E:cell[kingCell[1]], 0)) != 0)), ($match:chessRayEmpty:board:W:cell[kingCell[1]] >= 0) * ((($board:mask:board:4:4 | $board:mask:board:5:5) & 1 << max($match:chessRayEmpty:board:W:cell[kingCell[1]], 0)) != 0))",
-          "state": "slideHitBlackPart0"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-check-slidehitblackpart0"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "expression": "max(max(max(($match:chessRayEmpty:board:NE:cell[kingCell[1]] >= 0) * ((($board:mask:board:3:3 | $board:mask:board:5:5) & 1 << max($match:chessRayEmpty:board:NE:cell[kingCell[1]], 0)) != 0), ($match:chessRayEmpty:board:SE:cell[kingCell[1]] >= 0) * ((($board:mask:board:3:3 | $board:mask:board:5:5) & 1 << max($match:chessRayEmpty:board:SE:cell[kingCell[1]], 0)) != 0)), ($match:chessRayEmpty:board:SW:cell[kingCell[1]] >= 0) * ((($board:mask:board:3:3 | $board:mask:board:5:5) & 1 << max($match:chessRayEmpty:board:SW:cell[kingCell[1]], 0)) != 0)), ($match:chessRayEmpty:board:NW:cell[kingCell[1]] >= 0) * ((($board:mask:board:3:3 | $board:mask:board:5:5) & 1 << max($match:chessRayEmpty:board:NW:cell[kingCell[1]], 0)) != 0))",
-          "state": "slideHitBlackPart1"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-check-slidehitblackpart1"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "expression": "max(slideHitBlackPart0, slideHitBlackPart1)",
+          "expression": "(kingCell[1] >= 0) * max(`$board:attacks:board:4:5:N,S,E,W`[kingCell[1]], max(`$board:attacks:board:3:3:NE,SE,SW,NW`[kingCell[1]], `$board:attacks:board:5:5:NE,SE,SW,NW`[kingCell[1]]))",
           "state": "slideHitBlack"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-check-slidehitblack-combine"
-    },
-    {
-      "effects": [
+        },
         {
           "$type": "setState",
-          "expression": "max(max(closeCheckBlack, knightHitBlack), slideHitBlack)",
+          "expression": "max(closeCheckBlack, max(knightHitBlack, slideHitBlack))",
           "state": "inCheckCombineBlack"
         }
       ],
@@ -5104,7 +4804,7 @@
         "value": 60
       },
       "mode": "Edge",
-      "name": "tabletop-check-total-black"
+      "name": "tabletop-check-black"
     },
     {
       "effects": [
@@ -6248,6 +5948,54 @@
             "name": "NW",
             "x": -1,
             "y": -1,
+            "z": 0
+          },
+          {
+            "name": "K0",
+            "x": 1,
+            "y": 2,
+            "z": 0
+          },
+          {
+            "name": "K1",
+            "x": 2,
+            "y": 1,
+            "z": 0
+          },
+          {
+            "name": "K2",
+            "x": 2,
+            "y": -1,
+            "z": 0
+          },
+          {
+            "name": "K3",
+            "x": 1,
+            "y": -2,
+            "z": 0
+          },
+          {
+            "name": "K4",
+            "x": -1,
+            "y": -2,
+            "z": 0
+          },
+          {
+            "name": "K5",
+            "x": -2,
+            "y": -1,
+            "z": 0
+          },
+          {
+            "name": "K6",
+            "x": -2,
+            "y": 1,
+            "z": 0
+          },
+          {
+            "name": "K7",
+            "x": -1,
+            "y": 2,
             "z": 0
           }
         ],
@@ -8466,78 +8214,6 @@
         "kind": "int",
         "max": 1,
         "min": 0,
-        "name": "pawnKingCheckWhite"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "knightCheckWhite"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "slideCheckWhite"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "pawnKingCheckBlack"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "knightCheckBlack"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "slideCheckBlack"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
         "name": "castleWK"
       },
       {
@@ -8575,270 +8251,6 @@
         "max": 1,
         "min": 0,
         "name": "castleBQ"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "closeCheckWhitePart0"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "closeCheckWhitePart1"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "closeCheckWhitePart2"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "closeCheckWhite"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "knightHitWhitePart0"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "knightHitWhitePart1"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "knightHitWhite"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "slideHitWhitePart0"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "slideHitWhitePart1"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "slideHitWhite"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "inCheckCombineWhite"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "closeCheckBlackPart0"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "closeCheckBlackPart1"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "closeCheckBlackPart2"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "closeCheckBlack"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "knightHitBlackPart0"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "knightHitBlackPart1"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "knightHitBlack"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "slideHitBlackPart0"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "slideHitBlackPart1"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "slideHitBlack"
-      },
-      {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "inCheckCombineBlack"
       },
       {
         "cells": [
@@ -8902,6 +8314,76 @@
         "max": 1,
         "min": 0,
         "name": "castleTransitAttacked"
+      },
+      {
+        "kind": "int",
+        "max": 9223372036854775807,
+        "min": -9223372036854775808,
+        "name": "kingMaskWhite",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "closeCheckWhite",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "knightHitWhite",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "slideHitWhite",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "inCheckCombineWhite",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 9223372036854775807,
+        "min": -9223372036854775808,
+        "name": "kingMaskBlack",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "closeCheckBlack",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "knightHitBlack",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "slideHitBlack",
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "max": 1,
+        "min": 0,
+        "name": "inCheckCombineBlack",
+        "value": 0
       }
     ]
   }
