@@ -334,6 +334,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
             // every other read of component state that is not itself a bus access. A direct read's own trigger backs
             // up from its latch instant to the same phase (Ppu.NoteBlockedOamRead).
             FlushBusCycles();
+            m_componentClock.Settle();
             m_bus.NoteRegisterAddressBus(address: preValue);
         }
     }

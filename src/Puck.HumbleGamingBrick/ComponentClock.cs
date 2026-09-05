@@ -46,6 +46,9 @@ public sealed class ComponentClock {
     // state changes by a path other than absorbing: a register write into any component, a restore, or a ticked
     // cycle, each of which clears it.
     private int m_quietRemaining;
+    // Cycles of an agreed stretch the clock has already advanced through but the components have not: applied to
+    // them by Settle before anything reads or ticks them.
+    private int m_pendingAbsorb;
 
     /// <summary>Builds the driver over a clock and the machine's timed components, wiring each into its hard-coded
     /// domain slot and verifying the slot against the component's declared <see cref="IClockedComponent.Domain"/>.</summary>
@@ -166,6 +169,8 @@ public sealed class ComponentClock {
     /// speed, half a dot under double-speed), ticks every CPU-domain component once, and ticks every LCD-domain
     /// component once for each whole dot the advance crossed.</summary>
     public void AdvanceCpuTCycle() {
+        Settle();
+
         // Double-speed advances only half a dot per CPU T-cycle, so the whole-dot boundary that makes the LCD-domain
         // components due is crossed on every other call; that bookkeeping lives in the cold path. At normal speed — the
         // overwhelmingly common case — one CPU T-cycle is exactly one whole dot, so the CPU- and LCD-domain components
@@ -205,13 +210,15 @@ public sealed class ComponentClock {
 
         if (m_quietRemaining >= count) {
             m_quietRemaining -= count;
-            Absorb(cycles: count);
+            m_pendingAbsorb += count;
+            m_clock.AdvanceCycles(cycles: ((ulong)count));
 
             return;
         }
 
         // Whatever remained of an earlier agreement is shorter than this advance; it is re-derived below.
         m_quietRemaining = 0;
+        Settle();
 
         while (count > 0) {
             var others = OthersQuietCycles();
@@ -273,10 +280,28 @@ public sealed class ComponentClock {
             count -= quiet;
         }
     }
-    /// <summary>Forgets the agreed quiet stretch. Every path that changes a component's state other than absorbing
-    /// cycles — a register write into any component, a snapshot restore — calls this before the next advance.</summary>
-    public void Invalidate() =>
+    /// <summary>Forgets the agreed quiet stretch, settling the components first. Every path that changes a component's
+    /// state other than absorbing cycles — a register write into any component, a snapshot restore — calls this
+    /// before the next advance.</summary>
+    public void Invalidate() {
+        Settle();
         m_quietRemaining = 0;
+    }
+    /// <summary>Applies the cycles the clock has advanced through to the components, so their state is current.
+    /// Every read of a component's state from outside a tick — a bus access to a register or to display memory, a
+    /// snapshot, a host peek — settles first.</summary>
+    public void Settle() {
+        var pending = m_pendingAbsorb;
+
+        if (pending == 0) {
+            return;
+        }
+
+        m_pendingAbsorb = 0;
+        m_hdma.SampleMode();
+        m_ppu.Skip(dots: pending);
+        AbsorbOthers(cycles: pending);
+    }
 
     // Advances the clock and every component through cycles they all agreed to absorb.
     private void Absorb(int cycles) {

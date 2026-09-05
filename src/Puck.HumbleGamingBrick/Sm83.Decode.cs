@@ -34,6 +34,10 @@ public sealed partial class Sm83 {
         FlushBusCycles();
         AdvanceTCycles(count: LeadingTCyclesBeforeRead);
 
+        if (TouchesTimedState(address: address)) {
+            m_componentClock.Settle();
+        }
+
         var value = m_bus.ReadByte(address: address);
 
         m_busCycleDebt = (CpuTCyclesPerMachineCycle - LeadingTCyclesBeforeRead);
@@ -56,6 +60,11 @@ public sealed partial class Sm83 {
         }
 
         FlushBusCycles();
+
+        if (TouchesTimedState(address: address)) {
+            m_componentClock.Settle();
+        }
+
         m_bus.WriteByte(
             address: address,
             value: value
@@ -68,6 +77,8 @@ public sealed partial class Sm83 {
         m_busCycleDebt = CpuTCyclesPerMachineCycle;
     }
     private void WriteDisplayRegisterCycle(ushort address, byte value) {
+        m_componentClock.Settle();
+
         var lead = m_bus.RecordDisplayWrite(
             address: address,
             settles: out var settles,
@@ -81,6 +92,7 @@ public sealed partial class Sm83 {
         }
 
         AdvanceTCycles(count: (m_busCycleDebt + lead));
+        m_componentClock.Settle();
 
         m_busCycleDebt = 0;
 
@@ -121,6 +133,10 @@ public sealed partial class Sm83 {
     }
     private void AdvanceTCycles(int count) =>
         m_componentClock.AdvanceCpuTCycles(count: count);
+    // Whether an access at the address reads or writes state a component keeps on its own clock — display memory
+    // behind the picture processor's locks, the object table, the I/O page — as opposed to plain memory or ROM.
+    private static bool TouchesTimedState(ushort address) =>
+        ((address >= MemoryMap.ObjectAttributeMemoryStart) || ((address >= MemoryMap.VideoRamStart) && (address <= MemoryMap.VideoRamEnd)));
     private void ExecuteStop() {
         // STOP is encoded two bytes (assemblers emit 10 00) and consumes the pad byte ONLY when no interrupt is already
         // pending (SameBoy sm83_cpu.c stop(), ~line 397: `interrupt_pending = gb->interrupt_enable & gb->io_registers
