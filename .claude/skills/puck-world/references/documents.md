@@ -257,7 +257,15 @@ and the board ops, the call vocabulary carries one Maths family per prefix: `pai
 the Szudzik algebra (`pairSwap`, `pairMax`, `pairMin`, `pairSum`, `pairDifference`, `pairTranslate`,
 `pairScale`); `morton`/`mortonX`/`mortonY`; `hilbert(order, x, y)`/`hilbertX`/`hilbertY`; the hex family
 over `HexagonalIndex` (`hex(q, r)`, `hexQ`, `hexR`, `hexRadius`, `hexNorm`, `hexDistance`, `hexNeighbor`,
-`hexRotate`, `hexConjugate`, `hexSwap`, `hexAdd`, `hexSubtract`, `hexMultiply`, `hexScale`, `hexTranslate`);
+`hexRotate`, `hexConjugate`, `hexSwap`, `hexAdd`, `hexSubtract`, `hexMultiply`, `hexScale`, `hexTranslate`); the
+square family over `SquareIndex` on the same spellings (`square(x, y)`, `squareX`/`squareY`, `squareRadius`
+(Chebyshev), `squareLength`/`squareDistance` (Manhattan), `squareChebyshev`, `squareNeighbor` E/N/W/S,
+`squareRotate` quarter turns, …) — a shell-ordered index over Z², not a grid topology's row-major ordinal, so a
+grid cell still bridges through `%`/`/` or `$board:offset`; `gcd`/`lcm` (`gcd(dx, dy) == 1` is a lattice line
+with no interior point); the floored `mod(a, m)` with `cycleForward(a, b, m)`/`cycleDistance(a, b, m)` for
+track and pit races (`%` stays C truncation); `mex(mask)`, the Sprague–Grundy value of a set of options; `isPrime(n)` (exact, bounded) and `prime(i)` for
+i in 0..255 (a Gödel multiset in one cell: add is `* prime(k)`, presence is `% prime(k) == 0`) — no next-prime or
+n-th-prime search, which is unbounded and belongs to a generator draw source;
 the layer family over `LayerSequence` (`layer`, `layerOffset`, `layerStart`, `layerSize`, each
 `(index-or-layer, start, step, seed)` — `layer(i, 6, 6, 1)` is `hexRadius(i)`); and `sqrt` (both kinds),
 `sin`, `cos` (fixed radians). Every other function is int-only, and a domain fault fails the expression the way

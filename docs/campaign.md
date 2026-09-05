@@ -1339,7 +1339,13 @@ An author reaches `Puck.Maths` from an expression by the name of the thing —
 `mortonY`, `hilbert(order, x, y)`/`hilbertX`/`hilbertY`, the hex family over
 `HexagonalIndex` (`hex(q, r)`, `hexQ`, `hexR`, `hexRadius`, `hexNorm`,
 `hexDistance`, `hexNeighbor`, `hexRotate`, `hexConjugate`, `hexSwap`,
-`hexAdd`, `hexSubtract`, `hexMultiply`, `hexScale`, `hexTranslate`), the layer
+`hexAdd`, `hexSubtract`, `hexMultiply`, `hexScale`, `hexTranslate`), the square
+family over `SquareIndex` on the same spellings (Chebyshev as `squareRadius`/
+`squareChebyshev`, Manhattan as `squareLength`/`squareDistance`), `gcd`/`lcm`,
+the floored `mod` with `cycleForward`/`cycleDistance` over an m-cycle, `mex`
+over a 64-bit option set, `isPrime` and the bounded `prime(i)` table (a
+next-prime or n-th-prime search is unbounded on the tick path and stays a
+generator draw source's concern), the layer
 family over `LayerSequence` (`layer`, `layerOffset`, `layerStart`, `layerSize`
 over `(index-or-layer, start, step, seed)`), and `sqrt`, `sin`, `cos` — never
 by a matrix or an ISA spelling. The inverse of every encoding is a sibling
@@ -1347,7 +1353,10 @@ call (`pairX(pair(x, y))` is `x`), a domain fault fails the expression the way
 an overflow does, and the compile-time kind proof admits each family only in
 the kind it means (`sin`/`cos` fixed, `sqrt` both, the rest int).
 `ModularTransform` stays a C# concern: a quasicrystal inflation would arrive as
-a generator draw source, not as an author-facing matrix.
+a generator draw source, not as an author-facing matrix. Two families wait on
+`Puck.Maths` members that do not exist yet: the combinatorial number system
+(binomials and colex rank, poker's hand identity) and factoradic permutation
+codes — the latter over a row, so its home is a reduction operand, not a call.
 
 **Hex boards have grid parity, on one convention.** A hex topology is
 `HexagonalIndex` made spatial: cell `i` is index `i` (rings outward from the

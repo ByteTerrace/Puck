@@ -163,4 +163,54 @@ public enum ExpressionOp : byte {
     Sine,
     /// <summary>The cosine of a fixed-point angle in radians; fixed expressions only.</summary>
     Cosine,
+    /// <summary>The shell-ordered index of the square cell at Gaussian coordinates (x, y); <c>squareX</c>/<c>squareY</c> invert it.</summary>
+    SquareIndex,
+    /// <summary>The x coordinate of a square index.</summary>
+    SquareX,
+    /// <summary>The y coordinate of a square index.</summary>
+    SquareY,
+    /// <summary>The shell a square index lies on: its Chebyshev distance from the origin.</summary>
+    SquareRadius,
+    /// <summary>The Manhattan distance of a square index from the origin.</summary>
+    SquareLength,
+    /// <summary>The Gaussian norm x² + y² of a square index.</summary>
+    SquareNorm,
+    /// <summary>The Manhattan (rook-step) distance between two square indices.</summary>
+    SquareDistance,
+    /// <summary>The Chebyshev (king-step) distance between two square indices.</summary>
+    SquareChebyshev,
+    /// <summary>The square index one step away in direction 0..3 (east, north, west, south; any integer, taken modulo 4).</summary>
+    SquareNeighbor,
+    /// <summary>The square index rotated about the origin by quarter turns (any integer, taken modulo 4).</summary>
+    SquareRotate,
+    /// <summary>The square index reflected across the x axis.</summary>
+    SquareConjugate,
+    /// <summary>The square index with x and y exchanged.</summary>
+    SquareSwap,
+    /// <summary>The square index of the coordinate sum.</summary>
+    SquareAdd,
+    /// <summary>The square index of the coordinate difference.</summary>
+    SquareSubtract,
+    /// <summary>The square index of the Gaussian product.</summary>
+    SquareMultiply,
+    /// <summary>The square index scaled by an integer.</summary>
+    SquareScale,
+    /// <summary>The square index moved by (x, y).</summary>
+    SquareTranslate,
+    /// <summary>The greatest common divisor of two integers' magnitudes; gcd(dx, dy) == 1 is a lattice line with no interior point.</summary>
+    GreatestCommonDivisor,
+    /// <summary>The least common multiple of two integers' magnitudes.</summary>
+    LeastCommonMultiple,
+    /// <summary>The floored remainder of a by m: for a positive m the value in [0, m) congruent to a, whatever a's sign.</summary>
+    FloorModulo,
+    /// <summary>The forward (clockwise) distance from a to b around an m-cycle: mod(b − a, m).</summary>
+    CycleForward,
+    /// <summary>The shortest distance between a and b around an m-cycle, in either direction.</summary>
+    CycleDistance,
+    /// <summary>The minimum excluded value of a 64-bit set: the smallest non-negative integer whose bit is clear (the Sprague–Grundy value of a position whose options' values are the set).</summary>
+    MinimumExcluded,
+    /// <summary>Whether a non-negative integer is prime, decided exactly over the whole 64-bit range in bounded work.</summary>
+    IsPrime,
+    /// <summary>The i-th prime for i in 0..255 (2, 3, 5, … 1619): the bounded table a Gödel multiset or a coprime stride reaches for.</summary>
+    Prime,
 }
