@@ -1180,8 +1180,13 @@ likewise-frozen `puck.basis.frozen.json`. The loader is
 `WorldDefinition.Basis` is the document-composition member: a file naming a `basis` (a file path resolved against
 its own directory) is a DELTA over that document — templates/prefabs for similar worlds. `WorldDefinition.Imports`
 is the fan-in half beside it: an ORDERED list of fragment paths (each resolved against the importing file's own
-directory, exactly like `basis`), letting several documents each own one disjoint slice of a world — one per game
-in the garden — rather than forcing every slice through the single-parent basis chain. The mechanism is
+directory, exactly like `basis`), letting several documents each own one disjoint slice of a world — the garden's
+own `src/Puck.World/Assets/worlds/games/{chess,poker,dominoes,billiards,bowling,tictactoe}.world.json`, each
+imported by `puck.world.json` — rather than forcing every slice through the single-parent basis chain. A keyed
+list assembled this way (every import's rows concatenated in import order, then the importing file's own new
+rows appended last) never reproduces a monolithic predecessor's own interleaved authoring order — order is not
+preserved across a split, only content is; compare two composed trees by canonicalizing each keyed list (sort by
+its identity key) before a `JsonNode.DeepEquals`, never by raw array order. The mechanism is
 `WorldDocumentBasis` (`Puck.World.Schema/WorldDocumentBasis.cs`), invoked from `WorldDefinitionFileSource` on EVERY
 file load (boot, `world.load`/`world.reload`, the replay re-drive's apply-boundary re-read, and both neighbour
 resolvers), composing on the raw JSON trees BEFORE the strict parse — a partial template or import fragment cannot

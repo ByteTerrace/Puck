@@ -318,6 +318,6 @@ authority-side composition of `WorldStateDisclosure.Compose` for an EXPLICITLY
 named principal (`WorldPrincipal.TryParse`'s token grammar, the same
 `world.grant`/`world.why` take), so a single console session can inspect what
 seat1 sees and what seat2 sees without submitting as either — the read-back
-side of a hidden-hand table (see the garden's `puck.world.json` poker table).
+side of a hidden-hand table (see the garden's `games/poker.world.json` poker table).
 Operators and limits live in the Schema README's discrete-state section rather
 than a second command vocabulary here.
