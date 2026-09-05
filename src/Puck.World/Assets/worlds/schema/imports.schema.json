@@ -1,0 +1,13 @@
+{
+  "description": "Gets the ordered fragment documents this file imports, each a file path resolved against this document\u0027s own directory \u2014 the fan-in half of composition beside Basis\u0027s single-parent chain (see WorldDocumentBasis). Composition order is the basis chain, then each import in list order, then this file\u0027s own body.",
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "type": [
+      "string",
+      "null"
+    ]
+  }
+}

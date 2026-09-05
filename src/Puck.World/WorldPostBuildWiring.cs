@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Numerics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -334,14 +335,15 @@ internal static class WorldPostBuildWiring {
                 var bytes = WorldDefinitionSerialization.SavePreservingBasis(
                     basisPath: out var basisPath,
                     definition: snapshot,
+                    imports: out var preservedImports,
                     note: out var note,
                     path: target
                 );
 
                 worldServer.Compact();
 
-                var derivation = ((basisPath is { })
-                    ? $", basis: {basisPath}"
+                var derivation = (((basisPath is { }) || (preservedImports.Count > 0))
+                    ? $", basis: {(basisPath is { } ? basisPath : "none")}, imports: {preservedImports.Count.ToString(provider: CultureInfo.InvariantCulture)}"
                     : ((note.Length > 0)
                         ? $", {note}"
                         : ""

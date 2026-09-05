@@ -471,6 +471,7 @@ public sealed class DocumentBasisLawTests {
         WorldDefinitionSerialization.SavePreservingBasis(
             basisPath: out var preserved,
             definition: loaded!,
+            imports: out _,
             note: out var note,
             path: deltaPath
         );
@@ -520,6 +521,7 @@ public sealed class DocumentBasisLawTests {
         WorldDefinitionSerialization.SavePreservingBasis(
             basisPath: out var basisPath,
             definition: retuned,
+            imports: out _,
             note: out var note,
             path: deltaPath
         );
@@ -648,6 +650,400 @@ public sealed class DocumentBasisLawTests {
         Assert.NotEqual(
             actual: after,
             expected: before
+        );
+    }
+    [Fact]
+    public void Diff_RoundTrips_OverABasisPlusImportsStack_AtTheJsonLevel() {
+        var basis = ((JsonObject)JsonNode.Parse(json: /*lang=json*/ """
+            { "a": 1, "rows": [ { "id": "x", "v": 1 } ] }
+            """)!);
+        var importOne = ((JsonObject)JsonNode.Parse(json: /*lang=json*/ """{ "b": 2 }""")!);
+        var importTwo = ((JsonObject)JsonNode.Parse(json: /*lang=json*/ """{ "c": 3 }""")!);
+
+        Assert.True(
+            condition: WorldDocumentBasis.TryMergeImports(
+                composed: out var importsLayer,
+                imports: [("importOne", importOne), ("importTwo", importTwo)],
+                reason: out var mergeImportsReason,
+                restated: new JsonObject()
+            ),
+            userMessage: mergeImportsReason
+        );
+        Assert.True(
+            condition: WorldDocumentBasis.TryMerge(
+                basis: basis,
+                composed: out var stack,
+                overlay: importsLayer!,
+                reason: out var stackReason
+            ),
+            userMessage: stackReason
+        );
+
+        // The target changes `a`, adds a row, and includes both imports' own contributions unchanged — the stack,
+        // not the basis alone, is what a save must diff against.
+        var target = ((JsonObject)JsonNode.Parse(json: /*lang=json*/ """
+            { "a": 9, "b": 2, "c": 3, "rows": [ { "id": "x", "v": 1 }, { "id": "y", "v": 4 } ] }
+            """)!);
+        var delta = WorldDocumentBasis.Diff(
+            basis: stack!,
+            target: target
+        );
+
+        Assert.True(
+            condition: WorldDocumentBasis.TryMerge(
+                basis: stack!,
+                composed: out var reproduced,
+                overlay: delta,
+                reason: out var reproduceReason
+            ),
+            userMessage: reproduceReason
+        );
+        Assert.True(condition: JsonNode.DeepEquals(
+            node1: reproduced,
+            node2: target
+        ));
+    }
+    [Fact]
+    public void Imports_CycleRefusedByName() {
+        using var files = new TempWorldDirectory();
+
+        var firstPath = files.WriteText(
+            name: "first.world.json",
+            text: /*lang=json*/ """{ "imports": ["second.world.json"] }"""
+        );
+
+        files.WriteText(
+            name: "second.world.json",
+            text: /*lang=json*/ """{ "imports": ["first.world.json"] }"""
+        );
+
+        Assert.False(condition: WorldDefinitionFileSource.TryLoad(
+            path: firstPath,
+            definition: out _,
+            contentHash: out _,
+            reason: out var reason
+        ));
+        Assert.Contains(
+            actualString: reason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "cycle"
+        );
+    }
+    [Fact]
+    public void Imports_HeadlessBoot_BothFragmentsOwnRulesFire() {
+        using var files = new TempWorldDirectory();
+
+        // The shared basis carries every ordinary section (kits, population, screens, ...); the two fragments each
+        // own one disjoint slice — one state row and one rule that sets it — proving a world composed entirely from
+        // imported fragments actually boots and both fragments' rules fire.
+        var baseNode = ((JsonObject)JsonNode.Parse(json: System.Text.Encoding.UTF8.GetString(bytes: Fixtures.DefaultWorldBytes()))!);
+
+        baseNode.Remove(propertyName: "state");
+        files.WriteText(
+            name: "basis.world.json",
+            text: baseNode.ToJsonString()
+        );
+        files.WriteText(
+            name: "fragmentA.world.json",
+            text: /*lang=json*/ """
+            {
+              "state": { "world": [ { "name": "flagA", "kind": "int", "value": 0 } ] },
+              "rules": [ { "name": "setFlagA", "effects": [ { "$type": "setState", "state": "flagA", "value": 1 } ] } ]
+            }
+            """
+        );
+        files.WriteText(
+            name: "fragmentB.world.json",
+            text: /*lang=json*/ """
+            {
+              "state": { "world": [ { "name": "flagB", "kind": "int", "value": 0 } ] },
+              "rules": [ { "name": "setFlagB", "effects": [ { "$type": "setState", "state": "flagB", "value": 1 } ] } ]
+            }
+            """
+        );
+
+        var rootPath = files.WriteText(
+            name: "root.world.json",
+            text: /*lang=json*/ """
+            { "basis": "basis.world.json", "imports": ["fragmentA.world.json", "fragmentB.world.json"] }
+            """
+        );
+
+        Assert.True(
+            condition: WorldDefinitionFileSource.TryLoad(
+                path: rootPath,
+                definition: out var loaded,
+                contentHash: out _,
+                reason: out var loadReason
+            ),
+            userMessage: loadReason
+        );
+        Assert.Equal(
+            expected: 2,
+            actual: (loaded!.Rules?.Count ?? 0)
+        );
+
+        using var fixture = Fixtures.FreshServer(definition: loaded);
+
+        fixture.Step();
+
+        Assert.Equal(
+            expected: 1L,
+            actual: WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "flagA")!.Cells![0].Value
+        );
+        Assert.Equal(
+            expected: 1L,
+            actual: WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "flagB")!.Cells![0].Value
+        );
+    }
+    [Fact]
+    public void Imports_OrderedFanIn_MergesEachImportInListOrder() {
+        using var files = new TempWorldDirectory();
+
+        files.WriteFlatDocument(name: "basis.world.json");
+        files.WriteText(
+            name: "importA.world.json",
+            text: /*lang=json*/ """{ "spawnPoints": [ { "id": "from-a", "position": [1, 0, 0] } ] }"""
+        );
+        files.WriteText(
+            name: "importB.world.json",
+            text: /*lang=json*/ """{ "spawnPoints": [ { "id": "from-b", "position": [2, 0, 0] } ] }"""
+        );
+
+        var rootPath = files.WriteText(
+            name: "root.world.json",
+            text: /*lang=json*/ """
+            { "basis": "basis.world.json", "imports": ["importA.world.json", "importB.world.json"] }
+            """
+        );
+
+        Assert.True(
+            condition: WorldDefinitionFileSource.TryLoad(
+                path: rootPath,
+                definition: out var composed,
+                contentHash: out _,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+
+        Assert.Null(@object: composed!.Basis);
+        Assert.Null(@object: composed.Imports);
+        Assert.Equal(
+            expected: ["seat-1", "seat-2", "seat-3", "seat-4", "from-a", "from-b"],
+            actual: composed.SpawnPoints.Select(selector: static row => row.Id)
+        );
+    }
+    [Fact]
+    public void Imports_SiblingCollision_RefusedByName_UnlessTheImportingFileRestates() {
+        using var files = new TempWorldDirectory();
+
+        files.WriteFlatDocument(name: "basis.world.json");
+        files.WriteText(
+            name: "importA.world.json",
+            text: /*lang=json*/ """{ "metadata": { "title": "from-a" } }"""
+        );
+        files.WriteText(
+            name: "importB.world.json",
+            text: /*lang=json*/ """{ "metadata": { "title": "from-b" } }"""
+        );
+
+        var collidingPath = files.WriteText(
+            name: "colliding.world.json",
+            text: /*lang=json*/ """
+            { "basis": "basis.world.json", "imports": ["importA.world.json", "importB.world.json"] }
+            """
+        );
+
+        Assert.False(condition: WorldDefinitionFileSource.TryLoad(
+            path: collidingPath,
+            definition: out _,
+            contentHash: out _,
+            reason: out var reason
+        ));
+        Assert.Contains(
+            actualString: reason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "importA.world.json"
+        );
+        Assert.Contains(
+            actualString: reason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "importB.world.json"
+        );
+
+        // Control: the importing file restating the same member is the explicit resolution — the collision the
+        // two imports leave behind never has to be inspected, since the restated body always wins downstream.
+        var restatedPath = files.WriteText(
+            name: "restated.world.json",
+            text: /*lang=json*/ """
+            {
+              "basis": "basis.world.json",
+              "imports": ["importA.world.json", "importB.world.json"],
+              "metadata": { "title": "root" }
+            }
+            """
+        );
+
+        Assert.True(
+            condition: WorldDefinitionFileSource.TryLoad(
+                path: restatedPath,
+                definition: out var resolved,
+                contentHash: out _,
+                reason: out var restatedReason
+            ),
+            userMessage: restatedReason
+        );
+        Assert.Equal(
+            expected: "root",
+            actual: resolved!.Metadata!.Title
+        );
+    }
+    [Fact]
+    public void Imports_StackDiff_RoundTrips_ThroughSavePreservingBasis() {
+        using var files = new TempWorldDirectory();
+
+        var basisPath = files.WriteFlatDocument(name: "basis.world.json");
+
+        Assert.True(
+            condition: WorldDefinitionFileSource.TryLoad(
+                path: basisPath,
+                definition: out var flat,
+                contentHash: out _,
+                reason: out var flatReason
+            ),
+            userMessage: flatReason
+        );
+
+        files.WriteText(
+            name: "importA.world.json",
+            text: /*lang=json*/ """{ "spawnPoints": [ { "id": "from-a", "position": [1, 0, 0] } ] }"""
+        );
+
+        var rootPath = files.WriteText(
+            name: "root.world.json",
+            text: /*lang=json*/ """{ "basis": "basis.world.json", "imports": ["importA.world.json"] }"""
+        );
+
+        Assert.True(
+            condition: WorldDefinitionFileSource.TryLoad(
+                path: rootPath,
+                definition: out var loaded,
+                contentHash: out _,
+                reason: out var loadReason
+            ),
+            userMessage: loadReason
+        );
+
+        var retuned = (loaded! with { MotionRaw = (loaded.Motion with { MoveSpeed = 11.5f }) });
+
+        WorldDefinitionSerialization.SavePreservingBasis(
+            basisPath: out var preservedBasis,
+            definition: retuned,
+            imports: out var preservedImports,
+            note: out var note,
+            path: rootPath
+        );
+
+        Assert.NotNull(@object: preservedBasis);
+        Assert.Single(collection: preservedImports);
+        Assert.Equal(
+            expected: string.Empty,
+            actual: note
+        );
+
+        var written = ((JsonObject)JsonNode.Parse(json: File.ReadAllText(path: rootPath))!);
+
+        Assert.True(condition: written.ContainsKey(propertyName: WorldDocumentBasis.BasisMemberName));
+        Assert.True(condition: written.ContainsKey(propertyName: WorldDocumentBasis.ImportsMemberName));
+        Assert.False(condition: written.ContainsKey(propertyName: "kits"));
+
+        Assert.True(
+            condition: WorldDefinitionFileSource.TryLoad(
+                path: rootPath,
+                definition: out var reloaded,
+                contentHash: out _,
+                reason: out var reloadReason
+            ),
+            userMessage: reloadReason
+        );
+        Assert.Equal(
+            expected: 11.5f,
+            actual: reloaded!.Motion.MoveSpeed
+        );
+        Assert.Equal(
+            expected: (flat!.SpawnPoints.Count + 1),
+            actual: reloaded.SpawnPoints.Count
+        );
+    }
+    [Fact]
+    public void KeyedCellMerge_RefinesByKey_AndAControlStillReplacesWholesale() {
+        using var files = new TempWorldDirectory();
+
+        var baseNode = ((JsonObject)JsonNode.Parse(json: System.Text.Encoding.UTF8.GetString(bytes: Fixtures.DefaultWorldBytes()))!);
+
+        baseNode["state"] = JsonNode.Parse(json: /*lang=json*/ """
+            { "world": [ { "name": "keyed-refine", "kind": "int", "cells": [ { "key": "a", "value": 1 }, { "key": "b", "value": 2 } ] } ] }
+            """);
+        var basisPath = files.WriteText(
+            name: "basis.world.json",
+            text: baseNode.ToJsonString()
+        );
+
+        // A derived row restates only ONE cell — under the new `key` row-identity vocabulary this refines that cell
+        // in place rather than wholesale-replacing the row's whole cell list, so the untouched cell inherits.
+        var refinedPath = files.WriteText(
+            name: "refined.world.json",
+            text: /*lang=json*/ """
+            { "basis": "basis.world.json", "state": { "world": [ { "name": "keyed-refine", "kind": "int", "cells": [ { "key": "a", "value": 9 } ] } ] } }
+            """
+        );
+
+        Assert.True(
+            condition: WorldDefinitionFileSource.TryLoad(
+                path: refinedPath,
+                definition: out var refined,
+                contentHash: out _,
+                reason: out var refinedReason
+            ),
+            userMessage: refinedReason
+        );
+
+        var refinedRow = WorldDefinitionRows.FindStateRow(rows: refined!.State, name: "keyed-refine")!;
+
+        Assert.Equal(
+            expected: 9L,
+            actual: WorldDefinitionRows.FindCell(cells: refinedRow.Cells, key: WorldCellName.Parse(candidate: "a"))!.Value
+        );
+        Assert.Equal(
+            expected: 2L,
+            actual: WorldDefinitionRows.FindCell(cells: refinedRow.Cells, key: WorldCellName.Parse(candidate: "b"))!.Value
+        );
+
+        // Control: a leading `$replace` marker still opts into the old wholesale-replace behavior.
+        var replacedPath = files.WriteText(
+            name: "replaced.world.json",
+            text: /*lang=json*/ """
+            { "basis": "basis.world.json", "state": { "world": [ { "name": "keyed-refine", "kind": "int", "cells": [ { "$replace": true }, { "key": "a", "value": 9 } ] } ] } }
+            """
+        );
+
+        Assert.True(
+            condition: WorldDefinitionFileSource.TryLoad(
+                path: replacedPath,
+                definition: out var replaced,
+                contentHash: out _,
+                reason: out var replacedReason
+            ),
+            userMessage: replacedReason
+        );
+
+        var replacedRow = WorldDefinitionRows.FindStateRow(rows: replaced!.State, name: "keyed-refine")!;
+
+        Assert.Single(collection: replacedRow.Cells!);
+        Assert.Equal(
+            expected: 9L,
+            actual: WorldDefinitionRows.FindCell(cells: replacedRow.Cells, key: WorldCellName.Parse(candidate: "a"))!.Value
         );
     }
 }

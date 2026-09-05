@@ -868,6 +868,7 @@ public sealed class WorldOwnedWorlds {
         _ = WorldDefinitionSerialization.SavePreservingBasis(
             basisPath: out _,
             definition: document,
+            imports: out _,
             note: out var note,
             path: path
         );

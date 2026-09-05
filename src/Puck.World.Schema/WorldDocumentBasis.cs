@@ -41,6 +41,21 @@ namespace Puck.World;
 /// <see cref="TryMerge"/> over the basis reproduces the target — the derivation-preserving <c>world.save</c> path.
 /// Callers must verify the round trip (<see cref="TryMerge"/> + <see cref="JsonNode.DeepEquals"/>) before trusting a
 /// computed delta, and fall back to a flat save when it fails.</para>
+/// <para><c>imports</c> is the fan-in half of composition beside <c>basis</c>'s single-parent chain: an ordered list
+/// of fragment paths (each resolved against the importing file's own directory, exactly like <c>basis</c>), letting
+/// several documents each own one disjoint slice of a world (one per game in the garden) rather than forcing every
+/// slice through one basis chain. Composition order is the basis chain first, then each import fully resolved (its
+/// own <c>basis</c>/<c>imports</c> included) and folded left to right in authored list order via
+/// <see cref="TryMergeImports"/>, then the file's own body last — each step an ordinary <see cref="TryMerge"/>
+/// (basis, then the folded import layer, then the file's own body, each refining the one before). Both consumed
+/// members are stripped before the strict parse, exactly like <c>basis</c>. Collision policy: within the basis
+/// chain a derived row REFINES its same-key basis row (unchanged, the rule above) — imports are the opposite,
+/// SIBLINGS with no priority order between them, so a same-key row, a same-name object member, or a same list both
+/// authored by two imports is a refusal by name (naming the two importing fragments) UNLESS the importing file's own
+/// body also declares that same path — the explicit resolution <see cref="TryMergeImports"/>'s remarks describe. Two
+/// imports agreeing on a value (typically because they share a common ancestor somewhere in their own basis/import
+/// graphs) never collide, so a shared basis diamond composes fine. Cycles across basis and import edges together
+/// refuse by name, and both share the one <see cref="MaxChainDepth"/> ceiling.</para>
 /// </remarks>
 public static class WorldDocumentBasis {
     /// <summary>The document root member naming the basis document this file layers over.</summary>
@@ -48,16 +63,21 @@ public static class WorldDocumentBasis {
     /// <summary>The tombstone member: a row carrying <c>"$drop": true</c> beside its identity key removes the
     /// same-key basis row during a keyed-list merge.</summary>
     public const string DropMemberName = "$drop";
+    /// <summary>The document root member naming, in order, the fragment documents this file imports — the fan-in
+    /// half of composition beside the single-parent <see cref="BasisMemberName"/> chain (see the type remarks).</summary>
+    public const string ImportsMemberName = "imports";
     /// <summary>The basis-chain depth ceiling, refusals included — a recursion bound, not an authoring target; a
-    /// chain this deep is unreadable long before it is unloadable.</summary>
+    /// chain this deep is unreadable long before it is unloadable. Shared by the import graph: any path through
+    /// basis and import edges together is capped at this many documents.</summary>
     public const int MaxChainDepth = 8;
     /// <summary>The wholesale-replacement marker: a keyed list whose FIRST element is exactly
     /// <c>{"$replace": true}</c> replaces the basis list outright instead of merging by key.</summary>
     public const string ReplaceMemberName = "$replace";
 
     // The settled row-identity vocabulary, in precedence order (see the type remarks and documents.md's "Identity
-    // conventions"): stable string ids, then names, then the screen family's position index.
-    private static readonly string[] RowKeyPrecedence = ["id", "name", "index"];
+    // conventions"): stable string ids, then names, then a state cell's own key, then the screen family's position
+    // index.
+    private static readonly string[] RowKeyPrecedence = ["id", "name", "key", "index"];
 
     private static string DescribeKey(JsonNode? value) {
         return (value?.ToJsonString() ?? "(absent)");
@@ -628,5 +648,251 @@ public static class WorldDocumentBasis {
 
             return false;
         }
+    }
+    /// <summary>Folds <paramref name="imports"/> — each already the FULL recursively composed tree of one imported
+    /// fragment, in authored list order — into one layer, refusing a genuine authorship collision between two
+    /// imports unless <paramref name="restated"/> (the importing file's own body, basis/imports members already
+    /// stripped) also declares the same path, row, or list: the explicit resolution the type remarks describe.
+    /// Two imports agreeing on a value at the same path (most commonly because they share a common ancestor
+    /// somewhere in their own basis/import graphs) never collide — only a genuine disagreement, which can only arise
+    /// from each side's own authored content actually diverging, does. An object member merges member-wise
+    /// (recursing when both sides carry an object, so disjoint nested members from two imports combine rather than
+    /// colliding on their shared parent); a row list keyed by the settled identity vocabulary unions by row (a key
+    /// only one side carries appends; the same key on both sides collides exactly like a leaf, checked against
+    /// <paramref name="restated"/>'s own row); any other shared list or scalar collides wholesale.</summary>
+    /// <param name="imports">Each import's display name (for the refusal message) paired with its fully composed
+    /// tree, in authored order.</param>
+    /// <param name="restated">The importing file's own body — the sole exemption from a sibling collision.</param>
+    /// <param name="composed">The folded layer on success; <see langword="null"/> on refusal.</param>
+    /// <param name="reason">The one-line refusal reason, or empty on success.</param>
+    /// <returns><see langword="true"/> when every import folded without an unresolved collision.</returns>
+    public static bool TryMergeImports(IReadOnlyList<(string Name, JsonObject Tree)> imports, JsonObject restated, out JsonObject? composed, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: imports);
+        ArgumentNullException.ThrowIfNull(argument: restated);
+
+        var target = new JsonObject();
+        var owners = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+
+        try {
+            foreach (var (name, tree) in imports) {
+                MergeSiblingObject(
+                    overlay: tree,
+                    overlayName: name,
+                    owners: owners,
+                    path: "$",
+                    restated: restated,
+                    target: target
+                );
+            }
+
+            composed = target;
+            reason = string.Empty;
+
+            return true;
+        } catch (JsonException exception) {
+            composed = null;
+            reason = exception.Message;
+
+            return false;
+        }
+    }
+    private static JsonArray MergeSiblingArray(JsonArray existing, JsonArray overlay, JsonNode? restated, string overlayName, Dictionary<string, string> owners, string path) {
+        if (!TryFindRowKey(
+            ambiguity: out var ambiguity,
+            basis: existing,
+            key: out var key,
+            overlay: overlay
+        )) {
+            if (ambiguity.Length > 0) {
+                throw new JsonException(message: $"{path} {ambiguity}");
+            }
+
+            if (JsonNode.DeepEquals(
+                node1: existing,
+                node2: overlay
+            )) {
+                return existing;
+            }
+
+            if (restated is not JsonArray) {
+                var earlier = owners.GetValueOrDefault(
+                    defaultValue: "an earlier import",
+                    key: path
+                );
+
+                throw new JsonException(message: $"{path}: '{earlier}' and '{overlayName}' both author this list, and it cannot merge by row identity — restate the whole list in the importing file to resolve the collision.");
+            }
+
+            return existing;
+        }
+
+        var merged = ((JsonArray)existing.DeepClone());
+        var restatedArray = (restated as JsonArray);
+
+        foreach (var row in overlay) {
+            var rowObject = ((JsonObject)row!);
+            var rowKey = rowObject[propertyName: key];
+            var existingIndex = IndexOfRowKey(
+                key: key,
+                list: merged,
+                value: rowKey
+            );
+
+            if (existingIndex < 0) {
+                merged.Add(value: rowObject.DeepClone());
+                owners[$"{path}[{DescribeKey(value: rowKey)}]"] = overlayName;
+
+                continue;
+            }
+
+            if (JsonNode.DeepEquals(
+                node1: merged[index: existingIndex],
+                node2: rowObject
+            )) {
+                continue;
+            }
+
+            var restatesRow = (
+                (restatedArray is not null) &&
+                (IndexOfRowKey(
+                key: key,
+                list: restatedArray,
+                value: rowKey
+            ) >= 0)
+            );
+
+            if (!restatesRow) {
+                var earlier = owners.GetValueOrDefault(
+                    defaultValue: "an earlier import",
+                    key: $"{path}[{DescribeKey(value: rowKey)}]"
+                );
+
+                throw new JsonException(message: $"{path}[{key}={DescribeKey(value: rowKey)}]: '{earlier}' and '{overlayName}' both author this row — restate it in the importing file to resolve the collision.");
+            }
+        }
+
+        return merged;
+    }
+    private static void MergeSiblingObject(JsonObject target, JsonObject overlay, JsonNode? restated, string overlayName, Dictionary<string, string> owners, string path) {
+        foreach (var (name, value) in overlay) {
+            var memberPath = $"{path}.{name}";
+            var childRestated = ((restated as JsonObject)?[name]);
+
+            if (!target.TryGetPropertyValue(
+                jsonNode: out var existing,
+                propertyName: name
+            )) {
+                target[propertyName: name] = value?.DeepClone();
+                RecordFreshOwnership(
+                    node: target[propertyName: name],
+                    owners: owners,
+                    overlayName: overlayName,
+                    path: memberPath
+                );
+
+                continue;
+            }
+
+            if (
+                (existing is JsonObject existingObject) &&
+                (value is JsonObject overlayObject) &&
+                !TypeDiscriminatorsDiffer(
+                basis: existingObject,
+                overlay: overlayObject
+            )
+            ) {
+                MergeSiblingObject(
+                    overlay: overlayObject,
+                    overlayName: overlayName,
+                    owners: owners,
+                    path: memberPath,
+                    restated: childRestated,
+                    target: existingObject
+                );
+
+                continue;
+            }
+
+            if (
+                (existing is JsonArray existingArray) &&
+                (value is JsonArray overlayArray)
+            ) {
+                target[propertyName: name] = MergeSiblingArray(
+                    existing: existingArray,
+                    overlay: overlayArray,
+                    overlayName: overlayName,
+                    owners: owners,
+                    path: memberPath,
+                    restated: childRestated
+                );
+
+                continue;
+            }
+
+            if (JsonNode.DeepEquals(
+                node1: existing,
+                node2: value
+            )) {
+                continue;
+            }
+
+            if (childRestated is null) {
+                var earlier = owners.GetValueOrDefault(
+                    defaultValue: "an earlier import",
+                    key: memberPath
+                );
+
+                throw new JsonException(message: $"{memberPath}: '{earlier}' and '{overlayName}' both author this member — restate it in the importing file to resolve the collision.");
+            }
+        }
+    }
+    // Registers ownership at EVERY path reachable inside a freshly-added subtree, not just its own top-level path —
+    // a later import's collision may land on a nested leaf ("$.metadata.title") this one never touched directly,
+    // and the refusal must still name the ORIGINAL contributor rather than falling back to a generic description.
+    private static void RecordFreshOwnership(JsonNode? node, string path, string overlayName, Dictionary<string, string> owners) {
+        owners[path] = overlayName;
+
+        if (node is JsonObject nested) {
+            foreach (var (name, value) in nested) {
+                RecordFreshOwnership(
+                    node: value,
+                    overlayName: overlayName,
+                    owners: owners,
+                    path: $"{path}.{name}"
+                );
+            }
+
+            return;
+        }
+
+        if (
+            (node is JsonArray array) &&
+            TryFindSingleListRowKey(
+            key: out var key,
+            list: array
+        )
+        ) {
+            foreach (var row in array) {
+                if (row is JsonObject rowObject) {
+                    owners[$"{path}[{DescribeKey(value: rowObject[propertyName: key])}]"] = overlayName;
+                }
+            }
+        }
+    }
+    private static bool TryFindSingleListRowKey(JsonArray list, out string key) {
+        foreach (var candidate in RowKeyPrecedence) {
+            if (ListCarriesKey(
+                key: candidate,
+                list: list
+            )) {
+                key = candidate;
+
+                return true;
+            }
+        }
+
+        key = string.Empty;
+
+        return false;
     }
 }
