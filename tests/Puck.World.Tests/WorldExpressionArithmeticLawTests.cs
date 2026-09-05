@@ -1,5 +1,4 @@
 using Puck.Maths;
-using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -13,7 +12,8 @@ public sealed class WorldExpressionArithmeticLawTests {
         WorldExpressionOp.Multiply, WorldExpressionOp.Divide, WorldExpressionOp.Minimum, WorldExpressionOp.Maximum];
 
     [Theory]
-    [InlineData(CellKind.Int)] [InlineData(CellKind.Fixed)]
+    [InlineData(CellKind.Int)]
+    [InlineData(CellKind.Fixed)]
     public void NonthrowingEvaluationPreservesCheckedSemanticsAtSignedAndRoundingBoundaries(CellKind kind) {
         foreach (var operation in s_operations) {
             foreach (var left in s_values) {

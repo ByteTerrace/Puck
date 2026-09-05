@@ -1260,8 +1260,9 @@ Enumerating the edge's view instead (a container named for the namespace) asks
 for something no account layout has, and an emulator that has been laid out to
 match the edge's view will pass while production 404s.
 
-`WorldOwnedWorldFileName` (in `Puck.World.Schema`, because the earliest door that
-has to enforce it is document validation) is the id↔file/blob-name mapping. It
+`WorldOwnedWorldFileName` (in `Puck.State`, beside `WorldSafeName`, because the
+earliest door that has to enforce it is document validation) is the id↔file/blob-name
+mapping. It
 escapes nothing: it takes a `WorldSafeName`, whose fixed reserved-character set
 (rather than `Path.GetInvalidFileNameChars()`) is what makes two machines on
 different operating systems agree on the name an id maps to. That makes the

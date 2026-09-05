@@ -1,6 +1,6 @@
 using System.Buffers;
 
-namespace Puck.World;
+namespace Puck.State;
 
 /// <summary>The reserved-character kernel shared by every member of this repository's validated-identifier family
 /// (<see cref="WorldSafeName"/>, <see cref="WorldCellName"/>): control characters and the fixed reserved set (quote,
@@ -147,7 +147,7 @@ public readonly record struct WorldSafeName {
 /// A validated <c>state</c>-section row name or cell key — the base <see cref="WorldSafeName"/> rule plus no dot
 /// anywhere, which is what makes the <c>state.&lt;row&gt;.&lt;key&gt;</c> HUD binding grammar unambiguous by
 /// construction: splitting a bound token on <c>'.'</c> can never mistake part of a row or cell name for a grammar
-/// separator, because neither can hold one. The reserved slot key <see cref="WorldStateRow.SlotKey"/>
+/// separator, because neither can hold one. The reserved slot key <c>WorldStateRow.SlotKey</c>
 /// (<c>"$value"</c>) is unaffected — <c>'$'</c> is neither a reserved character nor a dot, so it is already a legal
 /// <see cref="WorldCellName"/> like any other author-chosen key, exactly the one reserved exception the substrate
 /// mints rather than authors.
@@ -206,7 +206,7 @@ public readonly record struct WorldCellName {
 
 /// <summary>Reads/writes <see cref="WorldSafeName"/> as its plain string — refusing on read, by name, exactly like
 /// <see cref="WorldSafeName.TryParse"/>, so a document holding one can never carry an unsafe id.</summary>
-internal sealed class WorldSafeNameJsonConverter : TryParseStringJsonConverter<WorldSafeName> {
+public sealed class WorldSafeNameJsonConverter : TryParseStringJsonConverter<WorldSafeName> {
     /// <inheritdoc/>
     protected override bool TryParse(string? candidate, out WorldSafeName value, out string reason) => WorldSafeName.TryParse(
         candidate: candidate,
@@ -219,7 +219,7 @@ internal sealed class WorldSafeNameJsonConverter : TryParseStringJsonConverter<W
 /// <summary>Reads/writes <see cref="WorldCellName"/> as its plain string — refusing on read, by name, exactly like
 /// <see cref="WorldCellName.TryParse"/>, so a document holding one can never carry a dotted or unsafe row/cell
 /// name.</summary>
-internal sealed class WorldCellNameJsonConverter : TryParseStringJsonConverter<WorldCellName> {
+public sealed class WorldCellNameJsonConverter : TryParseStringJsonConverter<WorldCellName> {
     /// <inheritdoc/>
     protected override bool TryParse(string? candidate, out WorldCellName value, out string reason) => WorldCellName.TryParse(
         candidate: candidate,

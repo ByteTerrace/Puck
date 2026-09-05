@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace Puck.World;
+namespace Puck.State;
 
 /// <summary>
 /// The infix spelling of a <see cref="WorldValueExpression"/> — <c>"min(damage, hp) * 2 - armor[$each]"</c> — and

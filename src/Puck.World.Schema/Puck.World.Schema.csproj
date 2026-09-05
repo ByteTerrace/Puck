@@ -11,8 +11,12 @@
         <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
         <ProjectReference Include="..\Puck.Physics\Puck.Physics.csproj" />
+        <ProjectReference Include="..\Puck.State\Puck.State.csproj" />
         <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.World.Authoring\Puck.World.Authoring.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
     </ItemGroup>
 </Project>

@@ -1,11 +1,10 @@
-using System.Text.Json;
 using Xunit;
 
-namespace Puck.World.Schema.Tests;
+namespace Puck.State.Tests;
 
 /// <summary>The infix spelling is syntax over the postfix tokens: C precedence parses to the tokens an author would
-/// write by hand, every token kind prints to a spelling that parses back to itself with only the parentheses
-/// precedence needs, and the JSON converter reads both spellings and writes each back in its own.</summary>
+/// write by hand, and every token kind prints to a spelling that parses back to itself with only the parentheses
+/// precedence needs. The world document's converter and schema facts live in <c>tests/Puck.World.Schema.Tests</c>.</summary>
 public sealed class WorldExpressionSyntaxLawTests {
     private static WorldValueToken S(string name, string? key = null) => new WorldValueToken.State(name, key);
     private static WorldValueToken C(decimal value) => new WorldValueToken.Constant(value);
@@ -115,40 +114,6 @@ public sealed class WorldExpressionSyntaxLawTests {
     public void AMalformedPostfixListDoesNotPrint() {
         Assert.False(WorldExpressionSyntax.TryPrint([new WorldValueToken.Add()], out _));
         Assert.False(WorldExpressionSyntax.TryPrint([C(1m), C(2m)], out _));
-    }
-
-    [Fact]
-    public void TheConverterReadsBothSpellingsAndWritesEachBackInItsOwn() {
-        var info = WorldJsonContext.Default.WorldValueExpression;
-        var fromText = JsonSerializer.Deserialize("\"hp - min(damage, hp)\"", info)!;
-        var fromTokens = JsonSerializer.Deserialize(
-            "{\"tokens\":[{\"$type\":\"state\",\"name\":\"hp\"},{\"$type\":\"state\",\"name\":\"damage\"},{\"$type\":\"state\",\"name\":\"hp\"},{\"$type\":\"min\"},{\"$type\":\"subtract\"}]}",
-            info
-        )!;
-        Assert.Equal(fromTokens.Tokens, fromText.Tokens);
-        Assert.Equal("hp - min(damage, hp)", fromText.Text);
-        Assert.Null(fromTokens.Text);
-        Assert.Equal("\"hp - min(damage, hp)\"", JsonSerializer.Serialize(fromText, info));
-        Assert.Contains("\"tokens\": [", JsonSerializer.Serialize(fromTokens, info), StringComparison.Ordinal);
-        Assert.Equal(fromTokens.Tokens, JsonSerializer.Deserialize(JsonSerializer.Serialize(fromTokens, info), info)!.Tokens);
-
-        var refusal = Assert.Throws<JsonException>(() => JsonSerializer.Deserialize("\"a +\"", info));
-        Assert.Contains("reached the end", refusal.Message, StringComparison.Ordinal);
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize("{\"text\":\"a\"}", info));
-        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize("12", info));
-    }
-
-    [Fact]
-    public void TheSchemaAdmitsBothSpellings() {
-        var schema = WorldSchema.Export(postRenderExtensions: []);
-        var defs = schema.Common["$defs"]!.AsObject();
-        var expression = defs["WorldValueExpression"]!.AsObject();
-        var arms = expression["anyOf"]!.AsArray();
-        Assert.Equal(2, arms.Count);
-        Assert.Equal("string", arms[0]!["type"]!.GetValue<string>());
-        Assert.Contains("WorldValueExpressionTokens", arms[1]!.ToJsonString(), StringComparison.Ordinal);
-        Assert.True(defs.ContainsKey("WorldValueExpressionTokens"));
-        Assert.True(defs.ContainsKey("WorldValueToken"));
     }
 
     private static string Spell(WorldValueToken token) => token switch {

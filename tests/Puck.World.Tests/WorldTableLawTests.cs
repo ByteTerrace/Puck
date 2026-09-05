@@ -2,7 +2,6 @@ using Puck.Physics.Motion;
 using System.Text.Json;
 
 using Puck.Assets.Documents;
-using Puck.World.Authoring;
 using Xunit;
 
 namespace Puck.World.Tests;

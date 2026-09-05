@@ -122,7 +122,7 @@ public static partial class WorldRuleCompiler {
     }
 
     private static RuleBinding BindingOfKeyToken(string? key) {
-        foreach (var (binding, keyToken, _) in WorldRuleFacts.Bindings) {
+        foreach (var (binding, keyToken, _) in WorldRuleBindingTokens.Bindings) {
             if (string.Equals(
                 a: key,
                 b: keyToken,
@@ -135,10 +135,10 @@ public static partial class WorldRuleCompiler {
         return RuleBinding.None;
     }
     private static RuleBinding BindingOfBodyToken(string token) {
-        foreach (var (binding, keyToken, _) in WorldRuleFacts.Bindings) {
+        foreach (var (binding, keyToken, _) in WorldRuleBindingTokens.Bindings) {
             if (string.Equals(
                 a: token,
-                b: WorldRuleFacts.BodyTokenOf(keyToken: keyToken),
+                b: WorldRuleBindingTokens.BodyTokenOf(keyToken: keyToken),
                 comparisonType: StringComparison.Ordinal
             )) {
                 return binding;
@@ -153,12 +153,12 @@ public static partial class WorldRuleCompiler {
         (("a 'body:<n>', 'argmax:<row>'/'argmin:<row>', 'cell:<row>:<key>', or a bound " +
         string.Join(
             separator: '/',
-            values: WorldRuleFacts.Bindings.Select(selector: static entry => $"'{WorldRuleFacts.BodyTokenOf(keyToken: entry.KeyToken)}'")
+            values: WorldRuleBindingTokens.Bindings.Select(selector: static entry => $"'{WorldRuleBindingTokens.BodyTokenOf(keyToken: entry.KeyToken)}'")
         )) +
         " reference");
     private static readonly string s_bindingScopes = string.Join(
         separator: ", ",
-        values: WorldRuleFacts.Bindings.Select(selector: static (entry, index) => $"'{entry.KeyToken}' {((index == 0)
+        values: WorldRuleBindingTokens.Bindings.Select(selector: static (entry, index) => $"'{entry.KeyToken}' {((index == 0)
             ? "binds inside "
             : "inside ")}{entry.Scope}")
     );

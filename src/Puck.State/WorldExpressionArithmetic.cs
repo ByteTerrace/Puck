@@ -3,7 +3,7 @@ using System.Buffers.Binary;
 using System.Runtime.Intrinsics.X86;
 using Puck.Maths;
 
-namespace Puck.World.Server;
+namespace Puck.State;
 
 /// <summary>Allocation-free arithmetic refusal for the shared rule, decision, and flock expression evaluator.</summary>
 public static class WorldExpressionArithmetic {

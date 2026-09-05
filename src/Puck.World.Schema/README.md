@@ -820,7 +820,7 @@ for a slot-shaped row so a load→save round-trip is byte-identical. There is
 no `$type` and no `rows` member; the retired spellings refuse as unmapped
 members like any other stale field, and the addon mutation decoder speaks
 this identical grammar rather than forking one of its own. `name` and every
-cell `key` are `WorldCellName` (`WorldSafeName.cs`) — a validated type that
+cell `key` are `WorldCellName` (`Puck.State`'s `WorldSafeName.cs`) — a validated type that
 CANNOT hold an empty, unsafe, or dotted value, refusing at JSON parse (naming
 the offending character) rather than at whole-document validation; the
 dot-free rule is what makes the `state.<row>.<key>` HUD binding grammar
@@ -1320,7 +1320,8 @@ door the other walks around.
 ### `tables` — static lookup data outside simulation state
 
 A `tables` row is a `name`/`source`/`hash` reference to a `puck.table.v1`
-document, loaded and hash-pinned at validation the way `music` rows are. The
+document (`Puck.State`'s `TableDocument`, canonicalized by `TableCanonicalizer`),
+loaded and hash-pinned at validation the way `music` rows are. The
 document carries `kind` (`int` or `fixed`) and `entries` of integer `key` and
 `value`; with `columns` declared, each entry carries `values`, one per column.
 A rule reads it through `$table:<name>:<key>` (single-value) or
@@ -1707,7 +1708,9 @@ is `$table:moves:power:$bind:move`), a key read from another cell as nested
 brackets (`buffs[minion[$each]]` is the `$cell:minion:$each` indirection — a
 two-hop join in one read), decimal or `0x` literals — or as the postfix `{ "tokens": [...] }`
 object. The string is syntax only: it parses to exactly the tokens an author
-could have written by hand (`WorldExpressionSyntax`), the compiler proves and
+could have written by hand (`WorldExpressionSyntax`, which lives with the
+token vocabulary, the opcode enum, the arithmetic, and the state transforms in
+`Puck.State`), the compiler proves and
 prices the tokens the same way, and the document writes back whichever
 spelling it read. Expressions are
 postfix token lists with a 64-token ceiling; they provide constants, state or

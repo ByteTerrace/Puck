@@ -144,6 +144,16 @@
              production dependency Puck.SdfVm carries — exact equality enforces that a future member never quietly
              grows one. Puck.Abstractions arrives through Puck.Assets' shared document-identifier contract. -->
         <PuckArchitectureProfile Include="Puck.SignedDistance" Closure="Puck.Abstractions;Puck.Assets;Puck.Maths;Puck.Text" />
+        <!-- The state and rule engine as a standalone deterministic library (docs/project-map.md's Puck.State row;
+             the campaign's Puck.State charter, phase one): expression syntax and tokens, the opcode enum and its
+             arithmetic, tables and their document, state transforms, the validated-identifier family, and the
+             reserved fact channels — no world, body, rendering, or presentation concept. Puck.Abstractions for the
+             converter contracts, Puck.Assets for the canonical-document boundary, Puck.Maths for the Q48.16 carrier,
+             Puck.Physics for the motion-program fact a reserved channel names. What exact equality enforces is the
+             ABSENCE of Puck.World.Schema and everything above it: the document project consumes and extends this
+             row, never the reverse, so a card game or a turn-based resolver can run rules over Puck.Maths and this
+             package alone. -->
+        <PuckArchitectureProfile Include="Puck.State" Closure="Puck.Abstractions;Puck.Assets;Puck.Maths;Puck.Physics" />
         <!-- The headless P1 split's document row (docs/project-map.md's Puck.World.Schema row; formerly
              Puck.World.Data). Puck.World.Authoring is the authored-content document row (formerly the Authoring/
              half of Puck.World.Forge; the SM83 forge half moved to Puck.HumbleGamingBrick.Forge, taking the
@@ -155,7 +165,9 @@
              connecting peer's signed-attestation claim through it — Leaf contracts and data, same row as
              Puck.Maths/Puck.Storage, so no layer boundary moves. Puck.Physics is the production owner of
              deterministic collider vocabulary, contact geometry, and the body motion-program core; this project
-             keeps the authoring vocabulary and its translation into that core. What this profile
+             keeps the authoring vocabulary and its translation into that core. Puck.State is the state and rule
+             engine this document row consumes and extends (expressions, tables, transforms, identifiers, reserved
+             channels) — the edge points down into it, never back. What this profile
              actually enforces is the ABSENCE that matters: no Backends row, no Presentation row, no Puck.SdfVm
              (the GPU renderer — this row reaches only Puck.SignedDistance, its field-as-data half), no
              Puck.Overlays, no Puck.Input, no Puck.World.Protocol, no Puck.World.Server. A member that would need
@@ -165,7 +177,7 @@
              reference. Puck.Scripting is absent: WorldAddonRow carries no AddonLane, so nothing in this project
              names a Puck.Scripting type — Puck.World.Server (below) is the one row that still needs it, for the
              addon host itself. -->
-        <PuckArchitectureProfile Include="Puck.World.Schema" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Physics;Puck.SignedDistance;Puck.Text;Puck.World.Authoring" />
+        <PuckArchitectureProfile Include="Puck.World.Schema" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.Text;Puck.World.Authoring" />
         <!-- The world-agnostic wire substrate (docs/project-map.md's Puck.Networking row) — the socketless frame
              grammar and the bounded reader/writer pair every World socket frames its bytes through, plus the
              symmetric peer substrate (Puck.Networking.Peers: QUIC transport, identity-bound handshake, attested
@@ -187,12 +199,12 @@
              Puck.World.Schema's profile carries (Protocol references Schema) plus Schema itself and Puck.Networking
              (the frame/wire grammar its codecs frame payloads through). Same absence this profile enforces: no
              Backends row, no Presentation row, no Puck.Overlays, no Puck.Input, no Puck.World.Server. -->
-        <PuckArchitectureProfile Include="Puck.World.Protocol" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.Text;Puck.World.Authoring;Puck.World.Schema" />
+        <PuckArchitectureProfile Include="Puck.World.Protocol" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.Text;Puck.World.Authoring;Puck.World.Schema" />
         <!-- Optional autonomous-participant projects consume only the public command/protocol/schema closure. Their
              top-row classification prevents the base Puck.World composition root from referencing them; these exact
              profiles prevent the reverse shortcut through Puck.World, Server, Client, Console, or Addons. -->
-        <PuckArchitectureProfile Include="Puck.World.AgentBridge" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema" />
-        <PuckArchitectureProfile Include="Puck.World.AgentHarness" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.Text;Puck.World.AgentBridge;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema" />
+        <PuckArchitectureProfile Include="Puck.World.AgentBridge" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema" />
+        <PuckArchitectureProfile Include="Puck.World.AgentHarness" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.Text;Puck.World.AgentBridge;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema" />
         <!-- The headless P1 split's server row (docs/project-map.md's Puck.World.Server row) — everything
              Puck.World.Protocol's profile carries (Server references both Schema and Protocol), plus Puck.Storage
              (the owned-world cloud sync substrate WorldOwnedWorldSync reads through). Puck.Attestation also arrives
@@ -206,7 +218,7 @@
              Puck.Scripting/Puck.Input: the addon guest host that needed them physically moved to Puck.World.Addons
              (below), which references this project rather than the reverse. Same absence this profile actually
              enforces: no Backends row, no Presentation row, no Puck.Overlays. -->
-        <PuckArchitectureProfile Include="Puck.World.Server" Closure="Puck.Abstractions;Puck.AdvancedGamingBrick;Puck.Assets;Puck.Attestation;Puck.Audio;Puck.Commands;Puck.GamingBricks;Puck.Hosting;Puck.HumbleGamingBrick;Puck.HumbleGamingBrick.Forge;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SdfVm;Puck.Shaders;Puck.SignedDistance;Puck.Storage;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema" />
+        <PuckArchitectureProfile Include="Puck.World.Server" Closure="Puck.Abstractions;Puck.AdvancedGamingBrick;Puck.Assets;Puck.Attestation;Puck.Audio;Puck.Commands;Puck.GamingBricks;Puck.Hosting;Puck.HumbleGamingBrick;Puck.HumbleGamingBrick.Forge;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SdfVm;Puck.Shaders;Puck.SignedDistance;Puck.State;Puck.Storage;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema" />
         <!-- The presentation-facing client seam, split out of Puck.World (docs/project-map.md's Puck.World.Client
              row): the seat/roster surface, the editor, scene/session emitters, camera/view resolution, the stamp
              pool, and the SDF document intake. Everything Puck.World.Protocol's profile carries (Client references
@@ -217,14 +229,14 @@
              (WorldAffordances' command vocabulary), Puck.SdfVm (Views), and Puck.SignedDistance directly (Queries).
              No Puck.World.Server, no Backends row, no Presentation row: this project reads the document and the
              wire, never the authoritative fold. -->
-        <PuckArchitectureProfile Include="Puck.World.Client" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Audio;Puck.Commands;Puck.Hosting;Puck.Input;Puck.Launcher;Puck.Maths;Puck.Networking;Puck.Overlays;Puck.Physics;Puck.Scripting;Puck.SdfVm;Puck.SignedDistance;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema" />
+        <PuckArchitectureProfile Include="Puck.World.Client" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Audio;Puck.Commands;Puck.Hosting;Puck.Input;Puck.Launcher;Puck.Maths;Puck.Networking;Puck.Overlays;Puck.Physics;Puck.Scripting;Puck.SdfVm;Puck.SignedDistance;Puck.State;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema" />
         <!-- The addon guest host, split out of Puck.World.Server so the authoritative server carries no
              WASM/Wasmtime surface of its own — everything Puck.World.Server's profile carries (Addons references
              Server directly), plus Puck.Scripting itself (the guest ABI AddonSimulationPump, hosted directly in
              this project, validates against) and Puck.Assets (the module bytes a mount reads). No Puck.Input: the
              source-id vocabulary AddonSimulationPump's predecessor once read moved to Puck.World, not here. Same
              absence enforced: no Backends row, no Presentation row, no Puck.Overlays. -->
-        <PuckArchitectureProfile Include="Puck.World.Addons" Closure="Puck.Abstractions;Puck.AdvancedGamingBrick;Puck.Assets;Puck.Attestation;Puck.Audio;Puck.Commands;Puck.GamingBricks;Puck.Hosting;Puck.HumbleGamingBrick;Puck.HumbleGamingBrick.Forge;Puck.Maths;Puck.Networking;Puck.Physics;Puck.Scripting;Puck.SdfVm;Puck.Shaders;Puck.SignedDistance;Puck.Storage;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema;Puck.World.Server" />
+        <PuckArchitectureProfile Include="Puck.World.Addons" Closure="Puck.Abstractions;Puck.AdvancedGamingBrick;Puck.Assets;Puck.Attestation;Puck.Audio;Puck.Commands;Puck.GamingBricks;Puck.Hosting;Puck.HumbleGamingBrick;Puck.HumbleGamingBrick.Forge;Puck.Maths;Puck.Networking;Puck.Physics;Puck.Scripting;Puck.SdfVm;Puck.Shaders;Puck.SignedDistance;Puck.State;Puck.Storage;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema;Puck.World.Server" />
         <!-- The control plane that follows the authority (docs/project-map.md's Puck.World.Console row):
              IWorldConsoleAuthority and the server-only console modules moved out of Puck.World (world.grant/
              .revoke/.grants/.why, world.groups/.ownership, world.looks/.population.spawn, world.market, world.peers,
@@ -234,7 +246,7 @@
              not otherwise in Server's closure). Same absence this profile enforces: no Backends row, no Presentation
              row, no Puck.Overlays, no Puck.World.Addons — a module touching WorldClient/PlayerRoster/the seat
              surface/views/HUD/editor/screens/audio/recording stays in Puck.World instead of moving here. -->
-        <PuckArchitectureProfile Include="Puck.World.Console" Closure="Puck.Abstractions;Puck.AdvancedGamingBrick;Puck.Assets;Puck.Attestation;Puck.Audio;Puck.Commands;Puck.GamingBricks;Puck.Hosting;Puck.HumbleGamingBrick;Puck.HumbleGamingBrick.Forge;Puck.Input;Puck.Launcher;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SdfVm;Puck.Shaders;Puck.SignedDistance;Puck.Storage;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema;Puck.World.Server" />
+        <PuckArchitectureProfile Include="Puck.World.Console" Closure="Puck.Abstractions;Puck.AdvancedGamingBrick;Puck.Assets;Puck.Attestation;Puck.Audio;Puck.Commands;Puck.GamingBricks;Puck.Hosting;Puck.HumbleGamingBrick;Puck.HumbleGamingBrick.Forge;Puck.Input;Puck.Launcher;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SdfVm;Puck.Shaders;Puck.SignedDistance;Puck.State;Puck.Storage;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema;Puck.World.Server" />
         <!-- The Linux platform split (docs/project-map.md's Puck.Platform.Linux row). PUCKARCH002 clause (a)
              already lets any Presentation-or-Composition-roots project hold a Backends assembly, so nothing stops
              a stray Puck.DirectX* reference from compiling here by rank alone — this exact-equality closure is

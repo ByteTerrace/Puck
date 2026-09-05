@@ -38,4 +38,7 @@
             SourceFiles="$(PublishDir)$(AssemblyName).exe"
         />
     </Target>
+    <ItemGroup>
+        <Using Include="Puck.State" />
+    </ItemGroup>
 </Project>

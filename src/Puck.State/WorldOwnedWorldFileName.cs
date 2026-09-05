@@ -1,4 +1,4 @@
-namespace Puck.World;
+namespace Puck.State;
 
 /// <summary>
 /// The one id↔file-name mapping every owned world is stored under — locally as <c>&lt;name&gt;.world.json</c> beside its
@@ -12,9 +12,9 @@ namespace Puck.World;
 /// pair addresses two blobs there). One id therefore addresses one location only under a case-insensitive uniqueness
 /// rule, which is held by the two doors that admit an id: the world document's seed list
 /// (<c>WorldDefinitionValidator.ValidatePlayerDefaults</c>) and the catalog directory itself
-/// (<c>Server.WorldOwnedWorlds</c>). This type lives in the DOCUMENT project, not beside that catalog, because the
-/// character rule has to hold at the earliest door: a world document authoring seed identities is validated long
-/// before any catalog exists to refuse them.</remarks>
+/// (<c>Server.WorldOwnedWorlds</c>). This type lives beside <see cref="WorldSafeName"/> in the state library, beneath
+/// the document project and not beside that catalog, because the character rule has to hold at the earliest door: a
+/// world document authoring seed identities is validated long before any catalog exists to refuse them.</remarks>
 public static class WorldOwnedWorldFileName {
     /// <summary>The file-name suffix every owned world is stored under.</summary>
     public const string Suffix = ".world.json";
