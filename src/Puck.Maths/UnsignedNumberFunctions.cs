@@ -13,7 +13,7 @@ namespace Puck.Maths;
 /// constrained to <see cref="IUnsignedNumber{TSelf}"/>) so that a single implementation serves every unsigned width,
 /// and they favor branchless, width-agnostic formulations.
 /// </remarks>
-public static class UnsignedNumberFunctions {
+public static partial class UnsignedNumberFunctions {
     /// <summary>Returns <c>1</c> when <paramref name="value"/> is greater than <paramref name="other"/> and <c>0</c> otherwise, without branching.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
     /// <param name="value">The first operand.</param>
@@ -31,7 +31,7 @@ public static class UnsignedNumberFunctions {
     private static T Maximum<T>(this T value, T other) where T : IBinaryInteger<T> =>
         value ^ ((value ^ other) & (-other.IsGreaterThan(other: value)));
 
-    /// <summary>Combines two non-negative integers into a single non-negative integer using Szudzik's elegant pairing function.</summary>
+    /// <summary>Combines two non-negative integers in a continuous walk through alternating square shells.</summary>
     /// <typeparam name="TInput">The unsigned binary integer type of the operands.</typeparam>
     /// <typeparam name="TResult">The unsigned binary integer type of the packed result; it must be wide enough to hold the paired value.</typeparam>
     /// <param name="value">The first component of the pair.</param>
@@ -39,8 +39,9 @@ public static class UnsignedNumberFunctions {
     /// <returns>The unique <typeparamref name="TResult"/> that encodes the ordered pair (<paramref name="value"/>, <paramref name="other"/>).</returns>
     /// <remarks>
     /// The mapping is a bijection between pairs and single values; <see cref="ElegantUnpair{TInput, TResult}(TInput)"/>
-    /// recovers the operands. It packs more densely than the Cantor pairing function, consuming all values up to the
-    /// square of the larger operand.
+    /// recovers the operands. Shell <c>m = max(x, y)</c> occupies <c>m²</c> through <c>(m + 1)² − 1</c>.
+    /// Its index is <c>m(m + 1) + (m odd ? x − y : y − x)</c>. Every consecutive index is a grid neighbour.
+    /// The result type must hold the entire encoded value; conversions and arithmetic otherwise truncate or wrap.
     /// </remarks>
     public static TResult ElegantPair<TInput, TResult>(this TInput value, TInput other) where TInput : IBinaryInteger<TInput>, IUnsignedNumber<TInput> where TResult : IBinaryInteger<TResult>, IUnsignedNumber<TResult> {
         var x = value.Maximum(other: other);
@@ -49,7 +50,7 @@ public static class UnsignedNumberFunctions {
 
         return ((z * (z + TResult.One)) + (TResult.CreateTruncating(value: y ^ other) - TResult.CreateTruncating(value: y ^ value)));
     }
-    /// <summary>Recovers the two non-negative integers that Szudzik's elegant pairing function combined into <paramref name="value"/>.</summary>
+    /// <summary>Recovers the two non-negative integers in an alternating square-shell encoding.</summary>
     /// <typeparam name="TInput">The unsigned binary integer type of the packed input.</typeparam>
     /// <typeparam name="TResult">The unsigned binary integer type of each recovered component.</typeparam>
     /// <param name="value">The paired value to decode.</param>

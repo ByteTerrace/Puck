@@ -184,9 +184,10 @@ operation I need. Pick a row, then follow its link for the detailed contract.
 | Proof that a quantized slope reproduces exact Beatty floors — and the exact index where it first stops | `BeattyQuantization.CertifySlope`; `ContinuedFraction.Convergents` supplies the worst-case indices | [Research](Research/README.md) |
 | The fraction with the smallest denominator inside an interval | `SimplestRational.InOpenInterval` | [below](#root-level-types) |
 | A hex grid whose 60° rotations are exact | `HexagonalCoordinate` | [Geometry](Geometry/README.md#hexagonalcoordinate) |
-| One integer per hex cell, with radius and ring symmetries | `HexagonalIndex` | [Geometry](Geometry/README.md#hexagonalindex) |
+| Dense hex-disk storage with a continuous neighbour walk and ring symmetries | `HexagonalIndex` | [Geometry](Geometry/README.md#hexagonalindex) |
+| Dense nonnegative square coordinates with direct swap, common translation, scale and component queries | `ElegantPair` / `ElegantUnpair` and `ElegantSwap`, `ElegantTranslate`, `ElegantScale`, `ElegantMinimum`, `ElegantMaximum`, `ElegantDifference`, `ElegantSum` | `UnsignedNumberFunctions` |
 | Cache-coherent tile/chunk ordering | `HilbertCurve` (locality-preserving) rather than Morton order | [Geometry](Geometry/README.md#hilbertcurve) |
-| A layered index space — rings, shells, shards | `LayerSequence` — constant-time index → layer, pure integer | [Geometry](Geometry/README.md#layersequence) |
+| A layered index space — rings, shells, shards | `LayerSequence` — constant-time index → layer, exact integer result | [Geometry](Geometry/README.md#layersequence) |
 | One algebraic relationship over several number types, or a proof that two number systems agree | `QuadraticAlgebra<TScalar>` and the rest of the configurable algebra types | [Algebra](Algebra/README.md) |
 | To fold a per-tick state hash for a determinism or replay check | `Fnv1aHash` — allocation-free, endianness-independent | [below](#root-level-types) |
 | A restriction that can only narrow — a capability mask under AND, a quantity under minimum, or both paired as one value | `MeetMask64`, `MeetQuantity64`, `MeetProduct<TFirst, TSecond>` | [below](#root-level-types) |
@@ -340,6 +341,22 @@ surface, including parameters, return values, and exceptions.
 
 The chooser above is the quickest way into these types. The API reference is
 the place to check a particular overload or failure condition.
+
+`ElegantPair` follows alternating square shells: for `m = max(x, y)`, the
+index is `m(m + 1) + (m odd ? x - y : y - x)`. Shell `m` occupies exactly
+`m²` through `(m + 1)² - 1`, and successive indices are grid neighbours.
+`ElegantSwap` exchanges the coordinates; `ElegantTranslate(k)` adds the same
+nonnegative `k` to both; `ElegantScale(k)` multiplies both by `k`. These direct
+transforms retain the unsigned carrier and throw `OverflowException` if the
+encoded result cannot fit. `ElegantMinimum`, `ElegantMaximum`,
+`ElegantDifference` (absolute difference), and `ElegantSum` query the components
+from the shell and its displacement from the diagonal. The original
+`ElegantPair<TInput, TResult>` requires the caller to choose a result width
+large enough; `ElegantUnpair` similarly requires sufficient component width.
+
+For example, `2u.ElegantPair<uint, ulong>(1u)` is `5UL`; its swap is `7UL`,
+translation by one is `13UL`, and scale by two is `18UL`. These operations
+act on coordinates; adding two raw indices does not add their coordinates.
 
 For repeating bit patterns, `BinaryIntegerFunctions.ReplicationMask<T>` places
 one bit at the bottom of each block: `8.ReplicationMask<uint>()` gives

@@ -10318,6 +10318,8 @@
       "Id": "Puck.Maths.HexagonalIndex.Norm",
       "State": "covered",
       "CoveredBy": [
+        "integer.encoded-operations",
+        "integer.encoded-operations-boundaries",
         "integer.hexagonal-index-geometry"
       ]
     },
@@ -10338,10 +10340,27 @@
       ]
     },
     {
+      "Id": "Puck.Maths.HexagonalIndex.Scale(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.encoded-operations",
+        "integer.encoded-operations-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.HexagonalIndex.Swap()",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.encoded-operations",
+        "integer.encoded-operations-boundaries"
+      ]
+    },
+    {
       "Id": "Puck.Maths.HexagonalIndex.ToCoordinate()",
       "State": "covered",
       "CoveredBy": [
         "integer.hexagonal-index-boundaries",
+        "integer.hexagonal-index-continuity",
         "integer.hexagonal-index-geometry",
         "integer.hexagonal-index-perimeter"
       ]
@@ -10350,6 +10369,8 @@
       "Id": "Puck.Maths.HexagonalIndex.Translate(Puck.Maths.HexagonalCoordinate)",
       "State": "covered",
       "CoveredBy": [
+        "integer.encoded-operations",
+        "integer.encoded-operations-boundaries",
         "integer.hexagonal-index-arithmetic"
       ]
     },
@@ -23292,17 +23313,77 @@
       ]
     },
     {
+      "Id": "Puck.Maths.UnsignedNumberFunctions.ElegantDifference(T)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.encoded-operations",
+        "integer.encoded-operations-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.UnsignedNumberFunctions.ElegantMaximum(T)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.encoded-operations",
+        "integer.encoded-operations-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.UnsignedNumberFunctions.ElegantMinimum(T)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.encoded-operations",
+        "integer.encoded-operations-boundaries"
+      ]
+    },
+    {
       "Id": "Puck.Maths.UnsignedNumberFunctions.ElegantPair(TInput,TInput)",
       "State": "covered",
       "CoveredBy": [
-        "core.unsigned-integer-contracts"
+        "core.unsigned-integer-contracts",
+        "integer.encoded-operations",
+        "integer.encoded-operations-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.UnsignedNumberFunctions.ElegantScale(T,T)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.encoded-operations",
+        "integer.encoded-operations-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.UnsignedNumberFunctions.ElegantSum(T)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.encoded-operations",
+        "integer.encoded-operations-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.UnsignedNumberFunctions.ElegantSwap(T)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.encoded-operations",
+        "integer.encoded-operations-boundaries"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.UnsignedNumberFunctions.ElegantTranslate(T,T)",
+      "State": "covered",
+      "CoveredBy": [
+        "integer.encoded-operations",
+        "integer.encoded-operations-boundaries"
       ]
     },
     {
       "Id": "Puck.Maths.UnsignedNumberFunctions.ElegantUnpair(TInput)",
       "State": "covered",
       "CoveredBy": [
-        "core.unsigned-integer-contracts"
+        "core.unsigned-integer-contracts",
+        "integer.encoded-operations",
+        "integer.encoded-operations-boundaries"
       ]
     },
     {

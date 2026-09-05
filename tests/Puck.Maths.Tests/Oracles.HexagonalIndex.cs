@@ -26,6 +26,7 @@ internal static partial class Oracles {
         }
 
         var offset = index - (1 + (3 * low * (low - 1)));
+        offset = (offset + (5 * low) + 1) % (6 * low);
         var side = (int)(offset / low);
         var position = offset % low;
         var a = HexIndexUnits[side];
@@ -44,7 +45,8 @@ internal static partial class Oracles {
             var position = !dq.IsZero ? (q - (radius * a.Q)) / dq : (r - (radius * a.R)) / dr;
             if (position >= 0 && position < radius &&
                 q == (radius * a.Q) + (position * dq) && r == (radius * a.R) + (position * dr)) {
-                return 1 + (3 * radius * (radius - 1)) + (side * radius) + position;
+                var offset = ((side * radius) + position + radius - 1) % (6 * radius);
+                return 1 + (3 * radius * (radius - 1)) + offset;
             }
         }
 
@@ -62,11 +64,13 @@ internal static partial class Oracles {
         BigInteger index = 0;
         yield return (index++, 0, 0, 0);
         for (var radius = 1; radius <= maximumRadius; ++radius) {
-            BigInteger q = radius;
-            BigInteger r = 0;
-            for (var side = 0; side < 6; ++side) {
-                var direction = HexIndexUnits[(side + 2) % 6];
-                for (var step = 0; step < radius; ++step) {
+            BigInteger q = 1;
+            BigInteger r = 1 - radius;
+            // Split the last geometric edge around the seam: r-1 steps, five full sides, then one final step.
+            for (var segment = 0; segment < 7; ++segment) {
+                var direction = HexIndexUnits[(segment + 1) % 6];
+                var length = segment == 0 ? radius - 1 : (segment == 6 ? 1 : radius);
+                for (var step = 0; step < length; ++step) {
                     yield return (index++, q, r, radius);
                     q += direction.Q;
                     r += direction.R;

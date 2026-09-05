@@ -13,7 +13,7 @@ adversarial review's job, not this file's.
 
 | leg kind | flavor | legs | statements |
 | --- | --- | --- | --- |
-| classical | — | 783 | 504 |
+| classical | — | 786 | 507 |
 | presented-twin | — | 9 | 8 |
 | in-tree-independent | — | 31 | 25 |
 | shared-substrate | fused-substrate | 36 | 34 |
@@ -23,15 +23,15 @@ adversarial review's job, not this file's.
 | shared-substrate | intra-presented | 82 | 47 |
 | shared-substrate | shared-upstream | 22 | 15 |
 | relative-canary | — | 18 | 17 |
-| structural | — | 1161 | 576 |
-| **total** | | **2232** | **716** |
+| structural | — | 1162 | 577 |
+| **total** | | **2236** | **720** |
 
 ## Counts by surface
 
 | surface | statements | agreement legs | structural legs | statements with no independent leg |
 | --- | --- | --- | --- | --- |
-| law: Deep | 107 | 143 | 123 | 21 |
-| law: Default | 580 | 857 | 1037 | 175 |
+| law: Deep | 108 | 144 | 123 | 21 |
+| law: Default | 583 | 859 | 1038 | 176 |
 | law: Exhaustive | 7 | 23 | 11 | 1 |
 | law: Smoke | 22 | 30 | 8 | 2 |
 
@@ -358,6 +358,7 @@ adversarial review's job, not this file's.
 | deep.complex-mul-vs-oracle | law: Deep | classical | — | FixedComplex.op_Multiply over the exhaustive four-operand edge cross product | Oracles.QuadraticMultiply at (0, −1) — the Q48 expression in BigInteger, one Oracles.RoundDyadic at shift 32. MIRROR of complex.mul-vs-oracle at strictly stronger operands | — | — |
 | deep.complex-rotate-vs-oracle | law: Deep | classical | — | FixedComplex.Rotate over the exhaustive four-operand edge cross product, which is the only way to reach the corners of its ASYMMETRIC 2¹⁷/2⁴⁵ gate — a mixed-magnitude quad | Oracles.QuadraticMultiply at (0, −1), one Oracles.RoundDyadic per component at shift 32. MIRROR of complex.rotate-vs-oracle at strictly stronger operands | — | — |
 | deep.dual-quaternion-mul-vs-oracle | law: Deep | classical | — | FixedDual<FixedQuaternion>.op_Multiply — eight lanes and eight leaf products per lane, the widest fused accumulator in the tree | Oracles.DoublingDualProduct at two floors — the exact charged sums a·d + b·c in BigInteger, one Oracles.RoundDyadic at shift 16 per lane. MIRROR of dual.quaternion-mul-vs-oracle at strictly stronger operands | — | — |
+| deep.encoded-operations | law: Deep | classical | — | MIRROR of integer.encoded-operations with Deep sampling. | The same independent BigInteger coordinate arithmetic and encoders. ENVELOPE: sampled carrier widths and signed hex cases; no whole-domain proof. | — | — |
 | deep.extension-field-product-vs-oracle | law: Deep | classical | — | QuadraticExtensionField64.Multiply at 2⁶¹ − 1 over the EXHAUSTIVE four-operand edge cross product — 24⁴ quads, every element component at every committed edge raw against every other — plus the 4096-draw random batch | Oracles.PrimeFieldPolynomialProduct at tail [p − d, 0]. MIRROR of extension-field.product-vs-oracle at strictly stronger operands: Domains.Quads switches from the budget-bounded rotation to the full product only at Tier.Deep, so this is exhaustion and not merely volume | — | — |
 | deep.extension-field-ring-and-norm | law: Deep | classical | — | the whole ring statement of extension-field.ring-vs-oracle over the FULL thirteen-prime ladder — including F_3 and F_5, where the residue set is small enough that the sweep visits most of it, and both published NTT moduli, whose p − 1 carries 2²³ and 2²⁷ | the same Oracles.PrimeFieldPolynomialProduct and the same unbounded BigInteger coordinate arithmetic. MIRROR of extension-field.ring-vs-oracle at strictly stronger operands — stronger in TWO directions at once: the Deep lane stream's 4096-draw batch and enlarged frontier block, and a ladder four times longer | — | — |
 | deep.extension-field-ring-and-norm | law: Deep | classical | — | the whole norm, trace and conjugation statement of extension-field.norm-trace-frobenius-vs-oracle over the same full ladder | the same Oracles.QuadraticExtensionConjugateProduct and the same BigInteger references. MIRROR of extension-field.norm-trace-frobenius-vs-oracle at strictly stronger operands | — | — |
@@ -572,6 +573,8 @@ adversarial review's job, not this file's.
 | fft.round-trip-bound-deep | law: Deep | structural | — | MIRROR of fft.round-trip-bound at strictly stronger operands — lengths 512 through 4096 rather than 1 through 256, with a wider measured bound (96 ULPs; the calibration run's worst case at this length range was 62 ULPs at length 4096) because more butterfly stages accumulate more per-stage rounding. | — | — | — |
 | fft.self-referential-bit-identity | law: Default | structural | — | two Forward runs and two Inverse runs on identical input, in this process, return bit-identical results, at lengths 1 through 256. Rule 4's determinism contract: same input, same code version, bit-identical output on every run — this is the same-process purity half of that promise; it observes hidden mutable state or an operand-independent result and nothing else, and is never a pinned historical value (a correction to the kernel is expected to move the ACTUAL bits, never the fact that two runs agree with each other). | — | — | — |
 | integer.ceiling-divide-vs-oracle | law: Default | classical | — | BinaryIntegerFunctions.CeilingDivide<long> — T.DivRem plus the XOR-sign carry, deliberately not routed through FloorDivide | Subjects.CeilingDivideOracle — Oracles.FloorQuotient raised by one iff quotient·divisor != a; a different derivation route, both sides exact | — | — |
+| integer.encoded-operations | law: Default | classical | — | Direct encoded transformations and component queries, checked overflow, and pair numbering across byte, ushort, uint, ulong, nuint and UInt128; hex swap, signed scale and diagonal translation across the admitted disk. | BigInteger bracketed square-shell lookup followed by coordinate arithmetic and two-segment perimeter counting; hex uses independent BigInteger coordinate lookup and six-edge solving. ENVELOPE: shared integer-hexagonal-index domain, full-width sampled carriers, plus hex indices below 3169 and factors from -8 through 8. | — | — |
+| integer.encoded-operations-boundaries | law: Default | classical | — | Complete byte-index basis with scales and increments 0, 1, 2, 3, 15, 16 and 255; hex ring-sector boundaries through MaxRadius, signed extreme factors and origin; component-only formatting at signed int extremes. | Independent BigInteger coordinate arithmetic and encoders used by integer.encoded-operations, and exact component-format expectations. ENVELOPE: explicit byte basis, representative hex radii and sector seams, and 25 formatting combinations. | — | — |
 | integer.fermat-mask-bit-oracle | law: Default | classical | — | The internal NthFermatMask<T> kernel, invoked directly by a reflection-created delegate for every legal exponent in all twelve built-in fixed-width integer carriers, including both 128-bit signs and the final half-word mask. | Oracles.RepeatPatternBits assembles individual destination bits from a block of ones in BigInteger. It shares no Fermat quotient, replication multiplication, machine-word decomposition or subject helper. ENVELOPE: the internal kernel requires valid exponents; invalid indices and custom carriers are outside this statement. | — | — |
 | integer.floor-divide-vs-oracle | law: Default | classical | — | BinaryIntegerFunctions.FloorDivide<long> — T.DivRem plus the branchless XOR-sign borrow | Oracles.FloorQuotient — BigInteger.Divide plus a Sign-comparison correction; both sides exact integers, no rounding substrate on either. Subjects.Divisor substitutes 1 for b == 0 and for (long.MinValue, −1), so the value statement runs over every OTHER operand pair; leg 2 closes the envelope at those two | — | — |
 | integer.floor-divide-vs-oracle | law: Default | structural | — | the two substituted pairs are REFUSED rather than answered, at all three floored members: DivideByZeroException at divisor zero and OverflowException at the signed minimum over minus one, which are the documented throws (worklist O1) | — | — | — |
@@ -581,9 +584,10 @@ adversarial review's job, not this file's.
 | integer.hexagonal-index-arithmetic | law: Default | structural | — | Additive and multiplicative identities, inverse addition, commutativity, distributivity and rotation equivariance on a bounded band where intermediate results fit. | — | — | — |
 | integer.hexagonal-index-boundaries | law: Default | classical | — | The maximum complete ring, ring starts and ends, every outer corner and adjacent edge cell, and distances exceeding int.MaxValue. | BigInteger cardinalities, independent bracketed ring lookup, barycentric coordinates and cube-distance arithmetic. Proves that the next complete ring exceeds long.MaxValue. | — | — |
 | integer.hexagonal-index-boundaries | law: Default | structural | — | Default is zero; out-of-domain indices refuse with ArgumentOutOfRangeException naming value; out-of-domain coordinates and outward moves refuse with OverflowException. Signed minimum and maximum turn/direction counts normalize modulo six. | — | — | — |
+| integer.hexagonal-index-continuity | law: Default | structural | — | Successive indices decode to cells separated by exactly one hex step, including both sides of each sampled ring seam. Shares the integer-hexagonal-index operand domain with the geometry laws. ENVELOPE: sampled full-domain indices and their containing ring boundaries; MaxValue has no admitted successor. | — | — | — |
 | integer.hexagonal-index-geometry | law: Default | classical | — | Decoding, encoding, radius, norm, distance, signed rotation, reflection and all six neighbour moves across sampled complete-domain indices. | BigInteger ring bracketing and barycentric interpolation of independent unit coordinates; cube-distance and coordinate transformations, with six-edge parameter solving to encode expected results. No Puck.Maths calls. The separate perimeter walk pins the enumeration. ENVELOPE: nonnegative long raws folded modulo MaxValue + 1; no exhaustive full-width claim. | — | — |
 | integer.hexagonal-index-geometry | law: Default | structural | — | Rotation has order six, conjugation has order two, and conjugation reverses a rotation. | — | — | — |
-| integer.hexagonal-index-perimeter | law: Default | classical | — | The origin and every index through ring 32 encode and decode in the declared order, with the declared radius. | An independent BigInteger perimeter walk accumulating the six unit directions, without square roots, side classification, or Puck.Maths calls. ENVELOPE: the complete disk of radius 32. | — | — |
+| integer.hexagonal-index-perimeter | law: Default | classical | — | The origin and every index through ring 32 encode and decode in the declared continuous order, with the declared radius and no repeated cells. | An independent BigInteger perimeter walk starting at (1, 1-r), walking the split edge and five complete edges by accumulated unit steps, without square roots, offset rephasing, side classification, or Puck.Maths calls. ENVELOPE: the complete disk of radius 32, including every successive-cell adjacency. | — | — |
 | integer.hilbert-curve-bijection-and-locality | law: Deep | structural | — | Decode is a bijection onto the grid at every order one through nine: each cell is visited exactly once, tested at the DECODED point | — | — | — |
 | integer.hilbert-curve-bijection-and-locality | law: Deep | shared-substrate | delegation-twin | HilbertCurve.Encode | HilbertCurve.Decode, as its exact inverse over the full curve at orders one through nine | the round trip calls BOTH members and nothing else, and both route through the private rotation helper, so a compensating error in Encode and Decode together — or a wrong-but-shared rotation — would survive it alone | the locality leg below is what actually discriminates a wrong rotation: consecutive curve distances must land on grid neighbours, which a shared-but-wrong reflection breaks even though the round trip stays green |
 | integer.hilbert-curve-bijection-and-locality | law: Deep | structural | — | consecutive curve distances map to grid neighbours at Manhattan distance exactly one at every step of the full curve, orders one through nine — the defining locality property, and the leg that discriminates the rotation helper | — | — | — |
@@ -2511,6 +2515,7 @@ EXCLUDED and live in the canary register above.
 | fft.round-trip-bound | law: Default | 2 |
 | fft.round-trip-bound-deep | law: Deep | 1 |
 | fft.self-referential-bit-identity | law: Default | 1 |
+| integer.hexagonal-index-continuity | law: Default | 1 |
 | integer.hilbert-curve-refuses-outside-its-domain | law: Default | 2 |
 | integer.ray-cycle-factors-are-not-writable-by-consumers | law: Default | 1 |
 | mass-properties.capsule-degenerates-to-sphere | law: Default | 1 |

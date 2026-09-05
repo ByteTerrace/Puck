@@ -28,8 +28,26 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "The origin and every index through ring 32 encode and decode in the declared order, with the declared radius.",
-        "Against": "An independent BigInteger perimeter walk accumulating the six unit directions, without square roots, side classification, or Puck.Maths calls. ENVELOPE: the complete disk of radius 32.",
+        "Subject": "The origin and every index through ring 32 encode and decode in the declared continuous order, with the declared radius and no repeated cells.",
+        "Against": "An independent BigInteger perimeter walk starting at (1, 1-r), walking the split edge and five complete edges by accumulated unit steps, without square roots, offset rephasing, side classification, or Puck.Maths calls. ENVELOPE: the complete disk of radius 32, including every successive-cell adjacency.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.hexagonal-index-continuity",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.HexagonalIndex", "Name": "ToCoordinate" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Successive indices decode to cells separated by exactly one hex step, including both sides of each sampled ring seam. Shares the integer-hexagonal-index operand domain with the geometry laws. ENVELOPE: sampled full-domain indices and their containing ring boundaries; MaxValue has no admitted successor.",
+        "Against": "",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

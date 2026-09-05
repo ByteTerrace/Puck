@@ -1,0 +1,156 @@
+[
+  {
+    "Id": "integer.encoded-operations",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ElegantPair"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ElegantUnpair"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ElegantSwap"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ElegantTranslate"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ElegantScale"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ElegantMaximum"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ElegantMinimum"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ElegantDifference"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ElegantSum"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Swap"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Scale"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Norm"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Translate"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Direct encoded transformations and component queries, checked overflow, and pair numbering across byte, ushort, uint, ulong, nuint and UInt128; hex swap, signed scale and diagonal translation across the admitted disk.",
+        "Against": "BigInteger bracketed square-shell lookup followed by coordinate arithmetic and two-segment perimeter counting; hex uses independent BigInteger coordinate lookup and six-edge solving. ENVELOPE: shared integer-hexagonal-index domain, full-width sampled carriers, plus hex indices below 3169 and factors from -8 through 8.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.encoded-operations-boundaries",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ElegantPair"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ElegantUnpair"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ElegantSwap"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ElegantTranslate"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ElegantScale"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ElegantMaximum"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ElegantMinimum"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ElegantDifference"
+      },
+      {
+        "Type": "Puck.Maths.UnsignedNumberFunctions",
+        "Name": "ElegantSum"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Swap"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Scale"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Norm"
+      },
+      {
+        "Type": "Puck.Maths.HexagonalIndex",
+        "Name": "Translate"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Complete byte-index basis with scales and increments 0, 1, 2, 3, 15, 16 and 255; hex ring-sector boundaries through MaxRadius, signed extreme factors and origin; component-only formatting at signed int extremes.",
+        "Against": "Independent BigInteger coordinate arithmetic and encoders used by integer.encoded-operations, and exact component-format expectations. ENVELOPE: explicit byte basis, representative hex radii and sector seams, and 25 formatting combinations.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.encoded-operations",
+    "Tier": "Deep",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of integer.encoded-operations with Deep sampling.",
+        "Against": "The same independent BigInteger coordinate arithmetic and encoders. ENVELOPE: sampled carrier widths and signed hex cases; no whole-domain proof.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]
