@@ -12060,47 +12060,6 @@
                               "additionalProperties": false
                             },
                             {
-                              "description": "Moves a token along an affordable route, debiting movement points in the same candidate.",
-                              "properties": {
-                                "$type": {
-                                  "const": "moveToken"
-                                },
-                                "positions": {
-                                  "description": "The token-keyed position row; valuesFrom names the terrain topology.",
-                                  "type": "string"
-                                },
-                                "token": {
-                                  "description": "The stable token key.",
-                                  "type": "string"
-                                },
-                                "destination": {
-                                  "description": "The destination cell ordinal.",
-                                  "type": "integer"
-                                },
-                                "terrain": {
-                                  "description": "The board row containing nonnegative entry costs; negative values are impassable.",
-                                  "type": "string"
-                                },
-                                "allowance": {
-                                  "description": "The token-keyed movement-points row.",
-                                  "type": "string"
-                                },
-                                "maxVisits": {
-                                  "description": "The route search\u0027s settled-node bound.",
-                                  "type": "integer"
-                                }
-                              },
-                              "required": [
-                                "positions",
-                                "token",
-                                "destination",
-                                "terrain",
-                                "allowance",
-                                "maxVisits"
-                              ],
-                              "additionalProperties": false
-                            },
-                            {
                               "description": "Refreshes a knowledge board from its declared source and visibility mask; authority only.",
                               "properties": {
                                 "$type": {
@@ -12740,47 +12699,6 @@
                                         "required": [
                                           "row",
                                           "value"
-                                        ],
-                                        "additionalProperties": false
-                                      },
-                                      {
-                                        "description": "Moves a token along an affordable route, debiting movement points in the same candidate.",
-                                        "properties": {
-                                          "$type": {
-                                            "const": "moveToken"
-                                          },
-                                          "positions": {
-                                            "description": "The token-keyed position row; valuesFrom names the terrain topology.",
-                                            "type": "string"
-                                          },
-                                          "token": {
-                                            "description": "The stable token key.",
-                                            "type": "string"
-                                          },
-                                          "destination": {
-                                            "description": "The destination cell ordinal.",
-                                            "type": "integer"
-                                          },
-                                          "terrain": {
-                                            "description": "The board row containing nonnegative entry costs; negative values are impassable.",
-                                            "type": "string"
-                                          },
-                                          "allowance": {
-                                            "description": "The token-keyed movement-points row.",
-                                            "type": "string"
-                                          },
-                                          "maxVisits": {
-                                            "description": "The route search\u0027s settled-node bound.",
-                                            "type": "integer"
-                                          }
-                                        },
-                                        "required": [
-                                          "positions",
-                                          "token",
-                                          "destination",
-                                          "terrain",
-                                          "allowance",
-                                          "maxVisits"
                                         ],
                                         "additionalProperties": false
                                       },

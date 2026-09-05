@@ -22,8 +22,12 @@ public static class WorldBoardQueries {
     /// <param name="values">One value per cell.</param>
     /// <param name="empty">The unoccupied value for a ray.</param>
     /// <param name="source">The source cell for neighbour, ray and path queries.</param>
+    /// <param name="dynamicTarget">The live-resolved destination ordinal for a <see cref="BoardPathCostQuery"/>
+    /// whose <see cref="BoardPathCostQuery.TargetFrom"/> is set; ignored otherwise, and irrelevant for every other
+    /// query kind. The caller resolves it (a tick-dependent state read) before this otherwise tick-agnostic
+    /// evaluation runs.</param>
     /// <returns>The result in the query's documented integer domain.</returns>
-    public static long Evaluate(CompiledWorldBoardQuery query, ReadOnlySpan<long> values, long empty, int source) {
+    public static long Evaluate(CompiledWorldBoardQuery query, ReadOnlySpan<long> values, long empty, int source, int dynamicTarget = 0) {
         var topology = query.Topology;
         if (query is BoardCanonicalQuery) {
             return CanonicalFingerprint(topology, values);
@@ -44,7 +48,7 @@ public static class WorldBoardQueries {
             return topology.Neighbour(source, neighbour.Direction);
         }
         if (query is BoardPathCostQuery pathCost) {
-            return PathCost(pathCost, values, source);
+            return PathCost(pathCost, values, source, (pathCost.TargetFrom is null) ? pathCost.Target : dynamicTarget);
         }
         if (query is BoardAttacksQuery attacks) {
             var directions = attacks.Directions;
@@ -138,7 +142,7 @@ public static class WorldBoardQueries {
     // Dijkstra over a binary heap keyed (distance, cell ordinal): the same settle order as a linear scan (least
     // distance, lowest ordinal on ties), at O((V + E) log V) instead of O(V²) per query. Stale heap entries are
     // skipped on pop; the visit budget counts settled cells exactly as before.
-    private static long PathCost(BoardPathCostQuery query, ReadOnlySpan<long> costs, int source) {
+    private static long PathCost(BoardPathCostQuery query, ReadOnlySpan<long> costs, int source, int target) {
         var topology = query.Topology;
         var count = topology.CellCount;
         var capacity = count * (topology.DirectionCount + 1);
@@ -173,7 +177,7 @@ public static class WorldBoardQueries {
                 if (visited == query.MaxVisits) {
                     return -2;
                 }
-                if (best == query.Target) {
+                if (best == target) {
                     return distance;
                 }
                 settled[best] = 1;
@@ -276,6 +280,12 @@ public sealed partial class WorldServer {
         WorldBoardQueries.Read(row, query.Topology, values);
         var key = ResolveOperandKey(operand.Key, operand.KeyFrom, tick);
         var source = key is not null && query.Topology.TryCell(key, out var sourceCell) ? sourceCell : -1;
-        return WorldBoardQueries.Evaluate(query, values, row.Board.Empty, source);
+        // A pathCost query's live target, resolved on the same terms as a '$cell:' key indirection — the same
+        // (row, key) cell read, just answered as the destination ordinal rather than formatted as a key string.
+        var dynamicTarget = ((query is BoardPathCostQuery { TargetFrom: { } targetFrom })
+            ? ((int)IntegerOf(value: ReadStateCellByHandle(handle: targetFrom.Handle, key: targetFrom.Key, tick: tick)))
+            : 0
+        );
+        return WorldBoardQueries.Evaluate(query, values, row.Board.Empty, source, dynamicTarget);
     }
 }

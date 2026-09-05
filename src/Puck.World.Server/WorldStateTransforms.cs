@@ -13,7 +13,6 @@ public static partial class WorldStateTransforms {
         WorldStateTransform.Transfer transfer => transfer.Draw is null ? [transfer.From, transfer.To] : [transfer.From, transfer.To, transfer.Draw],
         WorldStateTransform.SetRay ray => [ray.Row],
         WorldStateTransform.Observe observe => [observe.Row],
-        WorldStateTransform.MoveToken move => [move.Positions, move.Allowance],
         WorldStateTransform.Shuffle shuffle => [shuffle.Row, shuffle.Draw],
         WorldStateTransform.SortZone sortZone => [sortZone.Row, .. sortZone.By.Select(key => key.Row)],
         WorldStateTransform.SortKeyed sortKeyed => [sortKeyed.Row],
@@ -43,7 +42,6 @@ public static partial class WorldStateTransforms {
             composed = transform switch {
                 WorldStateTransform.Observe observe => TryObserve(definition, rows, observe, actor, tick, out reason),
                 WorldStateTransform.Transfer transfer => TryTransfer(definition, rows, transfer, instance, out reason),
-                WorldStateTransform.MoveToken move => TryMove(definition, rows, move, out reason),
                 WorldStateTransform.SetRay ray => TrySetRay(definition, rows, ray, patterns ?? CompiledWorldPatterns.Empty, out reason),
                 WorldStateTransform.Shuffle shuffle => TryShuffle(definition, rows, shuffle, instance, out reason),
                 WorldStateTransform.SortZone sortZone => TrySortZone(rows, sortZone, out reason),
@@ -63,6 +61,17 @@ public static partial class WorldStateTransforms {
         }
 
         return composed;
+    }
+
+    /// <summary>Checks a submitted guard's generation against its phase row.</summary>
+    /// <param name="definition">The current definition.</param>
+    /// <param name="guard">The submitted guard.</param>
+    /// <param name="actor">The authenticated actor.</param>
+    /// <returns>Whether the guard matches: the sole condition a mutation's guard checks.</returns>
+    public static bool CanAct(WorldDefinition definition, WorldPhaseGuard guard, WorldPrincipal actor) {
+        var phase = WorldDefinitionRows.FindStateRow(definition.State, guard.Row)?.Phase;
+
+        return phase is not null && phase.Sequence == guard.Sequence && (guard.Participant is null || actor == WorldPrincipal.World);
     }
 
     /// <summary>Advances a phase row's generation by one: the completion half of a guarded submission. Called by the

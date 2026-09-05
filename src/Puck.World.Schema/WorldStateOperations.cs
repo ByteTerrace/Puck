@@ -72,20 +72,11 @@ public enum WorldZoneSelector : byte {
 [JsonDerivedType(typeof(WorldStateTransform.SortKeyed), "sortKeyed")]
 [JsonDerivedType(typeof(WorldStateTransform.WriteSet), "writeSet")]
 [JsonDerivedType(typeof(WorldStateTransform.Push), "push")]
-[JsonDerivedType(typeof(WorldStateTransform.MoveToken), "moveToken")]
 [JsonDerivedType(typeof(WorldStateTransform.Observe), "observe")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public abstract record WorldStateTransform {
     /// <summary>Refreshes a knowledge board from its declared source and visibility mask; authority only.</summary>
     public sealed record Observe(string Row) : WorldStateTransform;
-    /// <summary>Moves a token along an affordable route, debiting movement points in the same candidate.</summary>
-    /// <param name="Positions">The token-keyed position row; valuesFrom names the terrain topology.</param>
-    /// <param name="Token">The stable token key.</param>
-    /// <param name="Destination">The destination cell ordinal.</param>
-    /// <param name="Terrain">The board row containing nonnegative entry costs; negative values are impassable.</param>
-    /// <param name="Allowance">The token-keyed movement-points row.</param>
-    /// <param name="MaxVisits">The route search's settled-node bound.</param>
-    public sealed record MoveToken(string Positions, string Token, int Destination, string Terrain, string Allowance, int MaxVisits) : WorldStateTransform;
     /// <summary>Moves one token, preserving identity. A random draw advances only when the whole transfer commits.</summary>
     /// <param name="From">The source zone.</param>
     /// <param name="To">The destination zone.</param>

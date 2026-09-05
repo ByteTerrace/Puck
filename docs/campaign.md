@@ -889,10 +889,24 @@ carrying two authoring surfaces that refused each other's fields only at validat
 two `$type`s let the shape refuse at the type level instead. The garden's two `sort`
 rules move to `sortKeyed` (pure rename: the passive 300-tick replay hash is unchanged);
 no shipped world or canary declared `completePhase`, `turnOrder`, `setRay`, `moveToken`,
-or `shuffle`, so no other document migrates. `moveToken` is left as its own transform:
-composing it from `$board:pathCost` plus a transaction needs that fact's target cell to
-read a just-written value rather than the compile-time literal it takes today, which is
-new expressive power the fact does not carry yet, not a rewrite of what it already has.
+or `shuffle`, so no other document migrates.
+
+**`moveToken` is retired; `$board:pathCost` gains a dynamic target (owner decision, closed
+union follow-on).** The opaque transform (pathfind, allowance debit, and occupancy baked
+into one C# compose arm) is deleted; `$board:pathCost:<terrain>:cell:<row>:<key>:<maxCost>:<maxVisits>`
+reads its destination ordinal live from another declared row's cell — the same `cell:<row>:<key>`
+indirection `$distance:`/`$los:` already spend their own body-reference grammar on — instead of
+only the compile-time literal ordinal it took before. A world now authors "move a token" as
+ordinary rules: an affordability gate comparing the live path cost against a live allowance row,
+and a `transaction` that debits the allowance by that same live expression, clears the token's old
+occupancy and terrain cells, writes the new position, and sets the new occupancy and terrain
+cells — nothing atomic left for the engine to own on the token's behalf.
+`tests/Puck.World.Tests/DiscreteStateLawTests.cs`'s
+`APathCostTransactionMovesATokenUnderAnAllowanceAndRefusesWhenCostExceedsIt` proves the gate reads
+the cost live rather than baking a stale one at compile time (the control: raising the allowance
+alone flips an unaffordable request to affordable). `tests/Puck.World.Canaries/tabletop-state`
+re-authors its guarded move the same way; the passive 300-tick garden replay hash and the frozen
+720-tick replay hash are both unaffected (`moveToken` was never shipped in either world).
 
 **The local auction house dissolved into an escrowed conditional transfer over ordinary keyed
 rows, authored entirely as rules — no bespoke market mutation kinds, no market-only C# compose

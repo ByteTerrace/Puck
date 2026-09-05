@@ -1,4 +1,5 @@
 using Puck.Assets.Documents;
+using Puck.Physics.Motion;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
@@ -140,21 +141,58 @@ public sealed class DiscreteStateLawTests {
         Assert.Equal(new[] { "b", "a" }, Find(reordered, "deck").Cells!.Select(c => c.Key.Value));
     }
 
+    // moveToken (pathfind + allowance debit + baked occupancy, one opaque WorldStateTransform) is retired: the same
+    // shape is now ordinary authoring over three already-general primitives — $board:pathCost's own live target (a
+    // '$cell:<row>:<key>' indirection, not a compile-time literal), an authored occupancy board a rule maintains
+    // itself, and a Transaction bundling the affordability gate's own cost expression, the position write, and the
+    // occupancy/terrain updates atomically. THE LAW: the transaction fires (position advances, allowance debits by
+    // the exact path cost, occupancy and terrain both move with the token) only while the live pathCost stays within
+    // the live allowance; an unaffordable request leaves every row exactly as it was — the control that raising the
+    // allowance is the only thing that flips the outcome is what proves the gate reads the cost live rather than
+    // baking a stale one at compile time.
     [Fact]
-    public void MovementSpendsPointsAtomicallyAndOccupancyBlocksEntry() {
-        var definition = Document(
-            new(Name("units"), CellKind.Int, Cells: [Cell("a"),Cell("b")], Tokens: new()),
+    public void APathCostTransactionMovesATokenUnderAnAllowanceAndRefusesWhenCostExceedsIt() {
+        WorldDefinition Scenario(long allowance) => Document(
+            new(Name("position"), CellKind.Int, Capacity: 1, Cells: [Cell("0", 0)]),
+            new(Name("destination"), CellKind.Int, Capacity: 1, Cells: [Cell("0", 2)]),
+            new(Name("allowance"), CellKind.Int, Capacity: 1, Cells: [Cell("0", allowance)]),
             new(Name("terrain"), CellKind.Int, Board: new("map", Empty: 1)),
-            new(Name("positions"), CellKind.Int, Cells: [Cell("a",0),Cell("b",1)], KeysFrom: "units", ValuesFrom: "map"),
-            new(Name("points"), CellKind.Int, Cells: [Cell("a",2),Cell("b",2)], KeysFrom: "units"));
-        var move = new WorldStateTransform.MoveToken("positions", "a", 4, "terrain", "points", 16);
-        Assert.True(WorldStateTransforms.TryApply(definition, move, WorldPrincipal.Console, 1, "test", out var changed, out var reason), reason);
-        Assert.Equal(4, Find(changed, "positions").Cells![0].Value);
-        Assert.Equal(1, Find(changed, "points").Cells![0].Value);
-        Assert.False(WorldStateTransforms.TryApply(definition, move with { Destination = 1 }, WorldPrincipal.Console, 1, "test", out var refused, out _));
-        Assert.Same(definition, refused);
-        Assert.False(WorldStateTransforms.TryApply(definition, move with { MaxVisits = 1 }, WorldPrincipal.Console, 1, "test", out _, out reason));
-        Assert.Contains("budget exhausted", reason);
+            new(Name("occupancy"), CellKind.Int, Board: new("map", Empty: 0), Cells: [Cell("0", 1)])
+        ) with {
+            Rules = [new(Name("move"), Effects: [new ActionEffect.Transaction([
+                new WorldTransactionStep.AddCell("allowance", Key: "0", Expression: new([
+                    new WorldValueToken.State("$board:pathCost:terrain:cell:destination:0:100:16", Key: "$cell:position:0"),
+                    new WorldValueToken.Negate(),
+                ])),
+                new WorldTransactionStep.SetCell("occupancy", Key: "$cell:position:0", Value: 0),
+                new WorldTransactionStep.SetCell("terrain", Key: "$cell:position:0", Value: 1),
+                new WorldTransactionStep.SetCell("position", Key: "0", FromState: "destination", FromKey: "0"),
+                new WorldTransactionStep.SetCell("occupancy", Key: "$cell:position:0", Value: 1),
+                new WorldTransactionStep.SetCell("terrain", Key: "$cell:position:0", Value: -1),
+            ])], Mode: ActionTriggerMode.Edge, Gate: new ActionPredicate.All([
+                new ActionPredicate.CompareState("position", ActionStateComparison.NotEqual, Key: "0", ComparandState: "destination", ComparandKey: "0"),
+                new ActionPredicate.CompareState("$board:pathCost:terrain:cell:destination:0:100:16", ActionStateComparison.LessOrEqual, Key: "$cell:position:0", ComparandState: "allowance", ComparandKey: "0"),
+            ]))],
+        };
+
+        // Cell 0 to cell 2 on the 4-wide grid is two due-east steps at the uniform cost-1 terrain: affordable at
+        // exactly 2, not at 1.
+        using (var fixture = Fixtures.FreshServer(definition: Scenario(allowance: 1))) {
+            fixture.Step();
+            Assert.Equal(0, Find(fixture.Server.Definition, "position").Cells![0].Value);
+            Assert.Equal(1, Find(fixture.Server.Definition, "allowance").Cells![0].Value);
+            Assert.Equal(1, Find(fixture.Server.Definition, "occupancy").Cells!.Single(c => c.Key.Value == "0").Value);
+        }
+
+        // Control: the identical request succeeds once the allowance covers the live cost — the gate tracks the
+        // cost, not a value frozen at compile time.
+        using (var fixture = Fixtures.FreshServer(definition: Scenario(allowance: 2))) {
+            fixture.Step();
+            Assert.Equal(2, Find(fixture.Server.Definition, "position").Cells![0].Value);
+            Assert.Equal(0, Find(fixture.Server.Definition, "allowance").Cells![0].Value);
+            Assert.Equal(0, Find(fixture.Server.Definition, "occupancy").Cells!.Single(c => c.Key.Value == "0").Value);
+            Assert.Equal(1, Find(fixture.Server.Definition, "occupancy").Cells!.Single(c => c.Key.Value == "2").Value);
+        }
     }
 
     [Fact]

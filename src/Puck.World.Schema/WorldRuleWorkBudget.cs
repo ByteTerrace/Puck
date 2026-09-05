@@ -184,11 +184,6 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         var storage = definition.State.Sum(static row => (long)row.CellCeiling);
         var cost = 4096L + storage;
         switch (transform) {
-            case WorldStateTransform.MoveToken move:
-                var terrain = WorldDefinitionRows.FindStateRow(definition.State, move.Terrain)!;
-                var map = WorldTopologyCompilation.Find(definition.StateRaw, terrain.Board!.Topology)!;
-                cost += (long)(move.MaxVisits + 1) * (map.CellCount + map.DirectionCount) + storage;
-                break;
             case WorldStateTransform.SetRay ray:
                 var board = WorldDefinitionRows.FindStateRow(definition.State, ray.Row)!;
                 var count = WorldTopologyCompilation.Find(definition.StateRaw, board.Board!.Topology)!.CellCount;

@@ -67,21 +67,29 @@ public sealed class BoardNeighbourQuery : CompiledWorldBoardQuery {
 /// <summary>Minimum nonnegative entry cost to a target cell (<see cref="WorldBoardQueryKind.PathCost"/>).</summary>
 public sealed class BoardPathCostQuery : CompiledWorldBoardQuery {
     /// <param name="topology">The immutable adjacency table.</param>
-    /// <param name="target">The path destination ordinal.</param>
+    /// <param name="target">The path destination ordinal, read only when <paramref name="targetFrom"/> is
+    /// <see langword="null"/>.</param>
     /// <param name="maxCost">The greatest admitted path cost.</param>
     /// <param name="maxVisits">The greatest settled nodes in one search.</param>
-    public BoardPathCostQuery(CompiledWorldTopology topology, int target, long maxCost, int maxVisits) : base(WorldBoardQueryKind.PathCost, topology) {
+    /// <param name="targetFrom">A live indirection naming another declared row's cell whose integer value is the
+    /// destination ordinal at evaluation time, or <see langword="null"/> for the compile-time literal
+    /// <paramref name="target"/> — the same (row, key) cell-indirection every other dynamic key resolves through.</param>
+    public BoardPathCostQuery(CompiledWorldTopology topology, int target, long maxCost, int maxVisits, CompiledCellRef? targetFrom = null) : base(WorldBoardQueryKind.PathCost, topology) {
         Target = target;
         MaxCost = maxCost;
         MaxVisits = maxVisits;
+        TargetFrom = targetFrom;
     }
 
-    /// <summary>The path destination ordinal.</summary>
+    /// <summary>The path destination ordinal, when <see cref="TargetFrom"/> is <see langword="null"/>.</summary>
     public int Target { get; }
     /// <summary>The greatest admitted path cost.</summary>
     public long MaxCost { get; }
     /// <summary>The greatest settled nodes in one search.</summary>
     public int MaxVisits { get; }
+    /// <summary>A live indirection naming another declared row's cell whose integer value is the destination
+    /// ordinal at evaluation time, or <see langword="null"/> for the compile-time literal <see cref="Target"/>.</summary>
+    public CompiledCellRef? TargetFrom { get; }
 }
 
 /// <summary>The 64-bit cell-set mask of cells whose value lies in an inclusive range (<see cref="WorldBoardQueryKind.Mask"/>).</summary>
@@ -207,12 +215,30 @@ public static partial class WorldRuleCompiler {
             }
             query = new BoardMaskQuery(topology, lower, upper);
         } else if (kind == WorldBoardQueryKind.PathCost) {
-            if (tokens.Length != 6 || row.Kind != CellKind.Int || !topology.TryCell(tokens[3], out var target) ||
-                !long.TryParse(tokens[4], NumberStyles.None, CultureInfo.InvariantCulture, out var cost) || cost < 0 ||
-                !int.TryParse(tokens[5], NumberStyles.None, CultureInfo.InvariantCulture, out var visits) || visits < 1 || visits > topology.CellCount) {
-                throw Invalid("pathCost requires <targetCell>:<maxCost>:<maxVisits> on an integer terrain row");
+            if (row.Kind != CellKind.Int) {
+                throw Invalid("pathCost requires <targetCell>:<maxCost>:<maxVisits> or cell:<row>:<key>:<maxCost>:<maxVisits> on an integer terrain row");
             }
-            query = new BoardPathCostQuery(topology, target, cost, visits);
+
+            // A dynamic target — 'cell:<row>:<key>', the same (row, key) cell-indirection $distance:/$los:'s own
+            // body-reference grammar spends on 'cell:<row>:<key>' — reads its live integer value as the destination
+            // ordinal every evaluation, instead of the literal ordinal $board:pathCost: took at compile time alone.
+            var dynamicTarget = ((tokens.Length == 8) && string.Equals(tokens[3], "cell", StringComparison.Ordinal));
+            var target = 0;
+            CompiledCellRef? targetFrom = null;
+            var argumentsStart = 4;
+
+            if (dynamicTarget) {
+                targetFrom = ResolveCellRef(channel: name, definition: definition, key: tokens[5], row: tokens[4], ruleName: ruleName);
+                argumentsStart = 6;
+            } else if (tokens.Length != 6 || !topology.TryCell(tokens[3], out target)) {
+                throw Invalid("pathCost requires <targetCell>:<maxCost>:<maxVisits> or cell:<row>:<key>:<maxCost>:<maxVisits> on an integer terrain row");
+            }
+
+            if (!long.TryParse(tokens[argumentsStart], NumberStyles.None, CultureInfo.InvariantCulture, out var cost) || cost < 0 ||
+                !int.TryParse(tokens[argumentsStart + 1], NumberStyles.None, CultureInfo.InvariantCulture, out var visits) || visits < 1 || visits > topology.CellCount) {
+                throw Invalid("pathCost requires <targetCell>:<maxCost>:<maxVisits> or cell:<row>:<key>:<maxCost>:<maxVisits> on an integer terrain row");
+            }
+            query = new BoardPathCostQuery(topology, target, cost, visits, targetFrom);
         } else if (kind == WorldBoardQueryKind.Attacks) {
             if (tokens.Length != 6 || row.Kind is not (CellKind.Int or CellKind.Bool) ||
                 !long.TryParse(tokens[3], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var attackLower) ||

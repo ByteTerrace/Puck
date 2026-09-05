@@ -11,17 +11,6 @@ public static partial class WorldRuleCompiler {
                 }
 
                 break;
-            case WorldStateTransform.MoveToken move:
-                var positions = Row(move.Positions);
-                var allowance = Row(move.Allowance);
-                var terrain = Row(move.Terrain);
-                if (positions.KeysFrom is null || allowance.KeysFrom != positions.KeysFrom || terrain.Board is not { } terrainBoard ||
-                    positions.ValuesFrom != terrainBoard.Topology || positions.Kind != CellKind.Int || allowance.Kind != CellKind.Int || terrain.Kind != CellKind.Int ||
-                    WorldTopologyCompilation.Find(definition.StateRaw, terrainBoard.Topology) is not { } map ||
-                    (uint)move.Destination >= map.CellCount || move.MaxVisits < 1 || move.MaxVisits > map.CellCount) {
-                    throw Invalid("moveToken requires bounded addressing and compatible position, allowance, and terrain rows");
-                }
-                break;
             case WorldStateTransform.Transfer transfer:
                 if (Row(transfer.From).Zone is not { } source || Row(transfer.To).Zone is not { } destination || source.Tokens != destination.Tokens ||
                     !Enum.IsDefined(transfer.Selector) || (transfer.Selector == WorldZoneSelector.Key) != (transfer.Key is not null) ||

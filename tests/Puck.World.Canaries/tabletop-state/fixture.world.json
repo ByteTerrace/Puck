@@ -171,13 +171,55 @@
         ]
       },
       {
+        "name": "destination",
+        "kind": "int",
+        "keysFrom": "units",
+        "cells": [
+          {
+            "key": "scout",
+            "value": 0
+          },
+          {
+            "key": "guard",
+            "value": 15
+          }
+        ]
+      },
+      {
         "name": "terrain",
         "kind": "int",
         "board": {
           "topology": "map",
           "empty": 1
         },
-        "cells": []
+        "cells": [
+          {
+            "key": "0",
+            "value": -1
+          },
+          {
+            "key": "15",
+            "value": -1
+          }
+        ]
+      },
+      {
+        "name": "occupancy",
+        "kind": "int",
+        "board": {
+          "topology": "map",
+          "empty": 0
+        },
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          },
+          {
+            "key": "15",
+            "value": 1
+          }
+        ]
       },
       {
         "name": "discs",
@@ -254,6 +296,95 @@
       }
     ]
   },
+  "rules": [
+    {
+      "name": "move-scout",
+      "mode": "Edge",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "positions",
+            "key": "scout",
+            "comparison": "NotEqual",
+            "comparandState": "destination",
+            "comparandKey": "scout"
+          },
+          {
+            "$type": "compareState",
+            "state": "$board:pathCost:terrain:cell:destination:scout:100:16",
+            "key": "$cell:positions:scout",
+            "comparison": "GreaterOrEqual",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "state": "$board:pathCost:terrain:cell:destination:scout:100:16",
+            "key": "$cell:positions:scout",
+            "comparison": "LessOrEqual",
+            "comparandState": "moves",
+            "comparandKey": "scout"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "addState",
+              "state": "moves",
+              "key": "scout",
+              "expression": {
+                "tokens": [
+                  {
+                    "$type": "state",
+                    "name": "$board:pathCost:terrain:cell:destination:scout:100:16",
+                    "key": "$cell:positions:scout"
+                  },
+                  {
+                    "$type": "negate"
+                  }
+                ]
+              }
+            },
+            {
+              "$type": "setState",
+              "state": "occupancy",
+              "key": "$cell:positions:scout",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "state": "terrain",
+              "key": "$cell:positions:scout",
+              "value": 1
+            },
+            {
+              "$type": "setState",
+              "state": "positions",
+              "key": "scout",
+              "fromState": "destination",
+              "fromKey": "scout"
+            },
+            {
+              "$type": "setState",
+              "state": "occupancy",
+              "key": "$cell:positions:scout",
+              "value": 1
+            },
+            {
+              "$type": "setState",
+              "state": "terrain",
+              "key": "$cell:positions:scout",
+              "value": -1
+            }
+          ]
+        }
+      ]
+    }
+  ],
   "patterns": [
     {
       "name": "capture",
