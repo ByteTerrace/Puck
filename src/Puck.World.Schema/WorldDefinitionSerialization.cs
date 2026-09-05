@@ -207,6 +207,9 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldStateHistory))]
 [JsonSerializable(typeof(WorldStateTokens))]
 [JsonSerializable(typeof(WorldStateLatticeTopology))]
+// Disambiguates the generated type-info property name from WorldCollider.Box, an unrelated type sharing the simple
+// name "Box" (see SYSLIB1031).
+[JsonSerializable(typeof(WorldStateLatticeTopology.Box), TypeInfoPropertyName = "WorldStateLatticeTopologyBox")]
 // The continuous-accumulation trait a state row's SLOT cell, or (independently) any of a keyed row's OWN cells, may
 // declare — read/written by WorldStateRowJsonConverter through this typed accessor, the same "hand-written row,
 // ordinary strict-parsed nested object" split the generator table above already uses, at either grain.

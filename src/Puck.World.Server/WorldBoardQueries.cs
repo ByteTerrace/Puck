@@ -25,29 +25,29 @@ public static class WorldBoardQueries {
     /// <returns>The result in the query's documented integer domain.</returns>
     public static long Evaluate(CompiledWorldBoardQuery query, ReadOnlySpan<long> values, long empty, int source) {
         var topology = query.Topology;
-        if (query.Kind == WorldBoardQueryKind.Canonical) {
+        if (query is BoardCanonicalQuery) {
             return CanonicalFingerprint(topology, values);
         }
-        if (query.Kind == WorldBoardQueryKind.Mask) {
-            var mask = 0L;
+        if (query is BoardMaskQuery mask) {
+            var result = 0L;
             for (var ordinal = 0; ordinal < topology.CellCount && ordinal < WorldBoardMask.MaxCells; ordinal++) {
-                if (values[ordinal] >= query.Value && values[ordinal] <= query.Upper) {
-                    mask |= 1L << ordinal;
+                if (values[ordinal] >= mask.Lower && values[ordinal] <= mask.Upper) {
+                    result |= 1L << ordinal;
                 }
             }
-            return mask;
+            return result;
         }
         if ((uint)source >= topology.CellCount) {
             return -1;
         }
-        if (query.Kind == WorldBoardQueryKind.Neighbour) {
-            return topology.Neighbour(source, query.Direction);
+        if (query is BoardNeighbourQuery neighbour) {
+            return topology.Neighbour(source, neighbour.Direction);
         }
-        if (query.Kind == WorldBoardQueryKind.PathCost) {
-            return PathCost(query, values, source);
+        if (query is BoardPathCostQuery pathCost) {
+            return PathCost(pathCost, values, source);
         }
-        if (query.Kind == WorldBoardQueryKind.Attacks) {
-            var directions = query.Directions!;
+        if (query is BoardAttacksQuery attacks) {
+            var directions = attacks.Directions;
             for (var directionIndex = 0; directionIndex < directions.Length; directionIndex++) {
                 var direction = directions[directionIndex];
                 var rayCell = source;
@@ -57,7 +57,7 @@ public static class WorldBoardQueries {
                         break;
                     }
                     if (values[rayCell] != empty) {
-                        if (values[rayCell] >= query.Value && values[rayCell] <= query.Upper) {
+                        if (values[rayCell] >= attacks.Lower && values[rayCell] <= attacks.Upper) {
                             return 1;
                         }
                         break;
@@ -116,7 +116,7 @@ public static class WorldBoardQueries {
     /// <param name="query">The compiled topology and direction.</param>
     /// <param name="mask">Bit c set for cell ordinal c.</param>
     /// <returns>The shifted mask.</returns>
-    public static long ShiftMask(CompiledWorldBoardQuery query, long mask) {
+    public static long ShiftMask(BoardNeighbourQuery query, long mask) {
         var topology = query.Topology;
         var bits = (ulong)mask;
         var shifted = 0UL;
@@ -138,7 +138,7 @@ public static class WorldBoardQueries {
     // Dijkstra over a binary heap keyed (distance, cell ordinal): the same settle order as a linear scan (least
     // distance, lowest ordinal on ties), at O((V + E) log V) instead of O(V²) per query. Stale heap entries are
     // skipped on pop; the visit budget counts settled cells exactly as before.
-    private static long PathCost(CompiledWorldBoardQuery query, ReadOnlySpan<long> costs, int source) {
+    private static long PathCost(BoardPathCostQuery query, ReadOnlySpan<long> costs, int source) {
         var topology = query.Topology;
         var count = topology.CellCount;
         var capacity = count * (topology.DirectionCount + 1);
@@ -248,7 +248,7 @@ public static class WorldBoardQueries {
 public sealed partial class WorldServer {
     private long ReadBoardFact(BoardOperand operand, ulong tick) {
         var query = operand.Board;
-        if (query.Kind == WorldBoardQueryKind.CellOf) {
+        if (query is BoardCellOfQuery) {
             var index = ResolveBodyRef(bodyRef: operand.BodyA!.Value, tick: tick);
             return Body(index: index) is { } body && query.Topology.TryCellOf(position: body.FixedPosition, cell: out var cell) ? cell : -1;
         }
@@ -267,10 +267,10 @@ public sealed partial class WorldServer {
         ) {
             return -1;
         }
-        if (query.Kind == WorldBoardQueryKind.Offset) {
+        if (query is BoardOffsetQuery offsetQuery) {
             var originKey = ResolveOperandKey(operand.Key, operand.KeyFrom, tick);
             var origin = originKey is not null && query.Topology.TryCell(originKey, out var originCell) ? originCell : -1;
-            return origin >= 0 && query.Topology.TryOffset(origin, query.Dx, query.Dz, out var offset) ? offset : -1;
+            return origin >= 0 && query.Topology.TryOffset(origin, offsetQuery.Dx, offsetQuery.Dz, out var offset) ? offset : -1;
         }
         var values = BoardScratch(query.Topology.CellCount);
         WorldBoardQueries.Read(row, query.Topology, values);

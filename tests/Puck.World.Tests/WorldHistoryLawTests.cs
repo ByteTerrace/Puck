@@ -110,7 +110,7 @@ public sealed class WorldHistoryLawTests {
     }
 
     private static WorldDefinition Document(WorldStateRow[] rows, WorldRule[] rules, WorldPatternRow[]? patterns = null) => Fixtures.BuildDocument() with {
-        StateRaw = new(World: rows, Lattices: [new WorldStateLatticeTopology("map", new Puck.Assets.Documents.DocumentVector3(0, 0, 0), 1, 4, 4, Kind: WorldTopologyKind.Grid)]),
+        StateRaw = new(World: rows, Lattices: [new WorldStateLatticeTopology.Grid("map", new Puck.Assets.Documents.DocumentVector3(0, 0, 0), 1, 4, 4)]),
         PatternsRaw = patterns ?? [],
         Rules = rules,
     };

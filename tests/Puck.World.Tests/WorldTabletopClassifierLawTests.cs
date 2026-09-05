@@ -89,7 +89,7 @@ public sealed class WorldTabletopClassifierLawTests {
 
     private static WorldDefinition Document(long[] previous, long[] current) {
         var document = Fixtures.BuildDocument();
-        var topology = new WorldStateLatticeTopology("board", new DocumentVector3(0, 0, 0), 1, 4, 4, Kind: WorldTopologyKind.Grid);
+        var topology = new WorldStateLatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, 4, 4);
         WorldStateCell[] Cells(long[] values) => [.. Enumerable.Range(0, 16).Select(i => new WorldStateCell(WorldCellName.Parse(i.ToString()), values[i]))];
         WorldStateRow Slot(string name, long min, long max) => new(WorldCellName.Parse(name), CellKind.Int, Min: min, Max: max, Cells: [new WorldStateCell(WorldStateRow.SlotKey, 0)]);
 

@@ -207,7 +207,7 @@ public sealed class TransferAbortKitWideningLawTests {
                 ],
                 Identity: [new ActionStateSlot(Name: "surgeCounter", Kind: ActionStateKind.Counter, Initial: 0f)],
                 Lattices: [
-                    new WorldStateLatticeTopology(
+                    new WorldStateLatticeTopology.Field(
                         Name: "world",
                         Origin: new DocumentVector3(x: -10f, y: 0f, z: -10f),
                         CellSize: 1f,

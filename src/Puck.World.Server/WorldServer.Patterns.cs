@@ -59,7 +59,9 @@ public sealed partial class WorldServer {
 
         Span<long> word = m_patternWord;
 
-        if (operand.Board is { } query) {
+        // A pattern's board source is compiled only as BoardNeighbourQuery (see WorldRuleCompiler.Pattern.cs) — the
+        // Kind it carries is an arbitrary placeholder; only Direction (-1 meaning "every direction") is ever read.
+        if (operand.Board is BoardNeighbourQuery query) {
             if (row.Board is null) {
                 return 0L;
             }

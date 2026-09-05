@@ -19,6 +19,7 @@
     ],
     "lattices": [
       {
+        "$type": "field",
         "name": "channel",
         "origin": [0, 0, 0],
         "cellSize": 1,

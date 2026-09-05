@@ -926,11 +926,12 @@ public sealed partial class WorldServer {
                     continue;
                 }
                 if (token.Operation == WorldExpressionOp.BoardShift) {
-                    stack[top - 1] = WorldBoardQueries.ShiftMask(token.Board!, stack[top - 1]);
+                    stack[top - 1] = WorldBoardQueries.ShiftMask((BoardNeighbourQuery)token.Board!, stack[top - 1]);
                     continue;
                 }
                 if (token.Operation == WorldExpressionOp.BoardImage) {
-                    stack[top - 1] = WorldBoardQueries.ImageOfMask(token.Board!.Topology, token.Board.Direction, stack[top - 1]);
+                    var image = (BoardNeighbourQuery)token.Board!;
+                    stack[top - 1] = WorldBoardQueries.ImageOfMask(image.Topology, image.Direction, stack[top - 1]);
                     continue;
                 }
                 if (token.Operation == WorldExpressionOp.BitInsert) {

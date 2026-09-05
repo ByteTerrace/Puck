@@ -26060,6 +26060,7 @@
     ],
     "lattices": [
       {
+        "$type": "field",
         "cellSize": 0.5,
         "depth": 16,
         "layers": 1,
@@ -26073,6 +26074,7 @@
         "width": 16
       },
       {
+        "$type": "grid",
         "band": 0.3,
         "cellSize": 0.2,
         "depth": 8,
@@ -26126,15 +26128,12 @@
             "z": 0
           }
         ],
-        "kind": "Grid",
-        "layers": 1,
         "name": "chessBoard",
         "origin": [
           -8.8,
           0.75,
           11.2
         ],
-        "stepEveryTicks": 8,
         "width": 8,
         "wrap": "None"
       }

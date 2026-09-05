@@ -49,7 +49,7 @@ public static partial class WorldRuleCompiler {
             }
             // A pattern's board source is read entirely through ReadRay/the pattern machine below; Neighbour is an
             // arbitrary placeholder — no reader inspects CompiledWorldBoardQuery.Kind on this path.
-            board = new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Neighbour, Direction: direction);
+            board = new BoardNeighbourQuery(topology, direction);
             kind = CellKind.Int;
         } else {
             if (tokens.Length > 4 || key is not null) {

@@ -144,7 +144,7 @@ public sealed class ReviewFixLawTests {
             Simulation: new WorldSimulationDefaults(RateHz: 240),
             StateRaw: new WorldStateSection(
                 World: [lattice],
-                Lattices: [new WorldStateLatticeTopology(Name: "grid", Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f), CellSize: 1f, Width: 4, Depth: 1, Layers: 1, StepEveryTicks: 1)]
+                Lattices: [new WorldStateLatticeTopology.Field(Name: "grid", Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f), CellSize: 1f, Width: 4, Depth: 1, Layers: 1, StepEveryTicks: 1)]
             )
         );
 

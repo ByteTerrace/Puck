@@ -84,7 +84,7 @@ public sealed class PlacementResponseValidationLawTests {
             ),
         ],
         Lattices: [
-            new WorldStateLatticeTopology(
+            new WorldStateLatticeTopology.Field(
                 Name: "world",
                 Origin: new DocumentVector3(value: Vector3.Zero),
                 CellSize: 1f,

@@ -244,10 +244,10 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             _ => null,
         };
         if (board is { } query) {
-            var visits = query.Kind switch {
-                WorldBoardQueryKind.PathCost => (long)(query.MaxVisits + 1) * (query.Topology.CellCount + query.Topology.DirectionCount),
-                WorldBoardQueryKind.Canonical => (long)query.Topology.CellCount * query.Topology.ElementCount,
-                WorldBoardQueryKind.Attacks => (long)query.Topology.CellCount * (query.Directions?.Length ?? 1),
+            var visits = query switch {
+                BoardPathCostQuery pathCost => (long)(pathCost.MaxVisits + 1) * (query.Topology.CellCount + query.Topology.DirectionCount),
+                BoardCanonicalQuery => (long)query.Topology.CellCount * query.Topology.ElementCount,
+                BoardAttacksQuery attacks => (long)query.Topology.CellCount * attacks.Directions.Length,
                 _ => query.Topology.CellCount,
             };
             return query.Topology.CellCount + visits;

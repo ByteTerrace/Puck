@@ -111,8 +111,8 @@ public sealed class WorldBoardMaskLawTests {
     }
     private static string[] Members(WorldDefinition document, string row) =>
         (Find(document, row).Cells ?? []).Where(c => c.Value != 0L).Select(c => c.Key.Value).ToArray();
-    private static WorldStateLatticeTopology Grid(string name, int side) =>
-        new(name, new DocumentVector3(0, 0, 0), 1, side, side, Kind: WorldTopologyKind.Grid);
+    private static WorldStateLatticeTopology.Grid Grid(string name, int side) =>
+        new(name, new DocumentVector3(0, 0, 0), 1, side, side);
     private static WorldDefinition Document(WorldStateRow[] rows, WorldRule[] rules, WorldPatternRow[]? patterns = null, WorldStateLatticeTopology[]? lattices = null) => Fixtures.BuildDocument() with {
         StateRaw = new(World: rows, Lattices: lattices ?? [Grid("map", 4)]),
         PatternsRaw = patterns ?? [],

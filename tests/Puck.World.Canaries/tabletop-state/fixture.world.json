@@ -106,8 +106,8 @@
   "state": {
     "lattices": [
       {
+        "$type": "grid",
         "name": "map",
-        "kind": "Grid",
         "origin": [
           0,
           0,

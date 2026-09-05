@@ -62,6 +62,7 @@
     ],
     "lattices": [
       {
+        "$type": "field",
         "name": "grid",
         "origin": [
           0,

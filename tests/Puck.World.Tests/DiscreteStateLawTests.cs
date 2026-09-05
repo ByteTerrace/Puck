@@ -8,8 +8,8 @@ namespace Puck.World.Tests;
 public sealed class DiscreteStateLawTests {
     [Fact]
     public void HexAndRingAddressingAreBoundedAndReciprocal() {
-        var hex = new WorldStateLatticeTopology("hex", new DocumentVector3(0,0,0), 1, 1, 1, Kind: WorldTopologyKind.Hex, Radius: 2);
-        var ring = new WorldStateLatticeTopology("ring", new DocumentVector3(0,0,0), 1, 5, 1, Kind: WorldTopologyKind.Ring);
+        var hex = new WorldStateLatticeTopology.Hex("hex", new DocumentVector3(0,0,0), 1, Radius: 2);
+        var ring = new WorldStateLatticeTopology.Ring("ring", new DocumentVector3(0,0,0), 1, Width: 5);
         var state = new WorldStateSection(Lattices: [hex, ring]);
         var topology = WorldTopologyCompilation.Find(state, "hex")!;
         Assert.Equal(19, topology.CellCount);
@@ -32,7 +32,7 @@ public sealed class DiscreteStateLawTests {
         var state = new WorldStateSection(Lattices: [Grid()]);
         var topology = WorldTopologyCompilation.Find(state, "map")!;
         var row = new WorldStateRow(Name("terrain"), CellKind.Int, Cells: [Cell("1",2)], Board: new("map",1));
-        var query = new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.PathCost, Target: 15, MaxCost: 100, MaxVisits: 16);
+        var query = new BoardPathCostQuery(topology, target: 15, maxCost: 100, maxVisits: 16);
         Span<long> values = stackalloc long[16];
         WorldBoardQueries.Read(row, topology, values);
         _ = WorldBoardQueries.Evaluate(query, values, 1, 0);
@@ -71,7 +71,7 @@ public sealed class DiscreteStateLawTests {
     private static WorldCellName Name(string value) => WorldCellName.Parse(value);
     private static WorldStateCell Cell(string key, long value = 1) => new(Name(key), value);
     private static WorldStateRow Row(string name, params WorldStateCell[] cells) => new(Name(name), CellKind.Int, Cells: cells);
-    private static WorldStateLatticeTopology Grid(int width = 4, int depth = 4, WorldTopologyWrap wrap = WorldTopologyWrap.None) => new("map", new DocumentVector3(0, 0, 0), 1, width, depth, Kind: WorldTopologyKind.Grid, Wrap: wrap);
+    private static WorldStateLatticeTopology.Grid Grid(int width = 4, int depth = 4, WorldTopologyWrap wrap = WorldTopologyWrap.None) => new("map", new DocumentVector3(0, 0, 0), 1, width, depth, Wrap: wrap);
     private static WorldDefinition Document(params WorldStateRow[] rows) => Fixtures.BuildDocument() with { StateRaw = new(World: rows, Lattices: [Grid()]), Rules = [] };
     private static WorldStateRow Find(WorldDefinition document, string row) => WorldDefinitionRows.FindStateRow(document.State, row)!;
 
@@ -186,18 +186,18 @@ public sealed class DiscreteStateLawTests {
         const int rookCell = 6; // two steps east of the origin
         var values = new long[topology.CellCount];
         values[rookCell] = 4;
-        var attacksEast = new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Attacks, Value: 4, Upper: 4, Directions: [east]);
+        var attacksEast = new BoardAttacksQuery(topology, lower: 4, upper: 4, directions: [east]);
         Assert.Equal(1, WorldBoardQueries.Evaluate(attacksEast, values, 0, origin));
         // Control: the same ray with no qualifying piece at all must read a miss, not a stale hit.
         Assert.Equal(0, WorldBoardQueries.Evaluate(attacksEast, new long[topology.CellCount], 0, origin));
         // Control: the rook's cell holds a code outside the authored range -- geometry alone must not be enough.
-        var attacksWrongValue = attacksEast with { Value = 5, Upper = 5 };
+        var attacksWrongValue = new BoardAttacksQuery(topology, lower: 5, upper: 5, directions: [east]);
         Assert.Equal(0, WorldBoardQueries.Evaluate(attacksWrongValue, values, 0, origin));
         // Control: the piece sits east, not south -- an authored direction that never reaches it must read a miss.
-        var attacksSouthOnly = new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Attacks, Value: 4, Upper: 4, Directions: [south]);
+        var attacksSouthOnly = new BoardAttacksQuery(topology, lower: 4, upper: 4, directions: [south]);
         Assert.Equal(0, WorldBoardQueries.Evaluate(attacksSouthOnly, values, 0, origin));
         // Several authored directions OR together: south alone misses, but south-or-east finds the rook via east.
-        var attacksEitherWay = new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Attacks, Value: 4, Upper: 4, Directions: [south, east]);
+        var attacksEitherWay = new BoardAttacksQuery(topology, lower: 4, upper: 4, directions: [south, east]);
         Assert.Equal(1, WorldBoardQueries.Evaluate(attacksEitherWay, values, 0, origin));
         // Control: a non-qualifying piece one step closer blocks the ray -- if the walk did not stop at the first
         // occupied cell, this would wrongly still see the rook past it.

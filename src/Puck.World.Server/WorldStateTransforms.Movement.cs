@@ -49,8 +49,7 @@ public static partial class WorldStateTransforms {
                 }
             }
         }
-        var query = new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.PathCost,
-            Target: move.Destination, MaxCost: allowanceCell.Value, MaxVisits: move.MaxVisits);
+        var query = new BoardPathCostQuery(topology, move.Destination, allowanceCell.Value, move.MaxVisits);
         var cost = WorldBoardQueries.Evaluate(query, costs, board.Empty, (int)positionCell.Value);
         if (cost < 0) {
             return Refuse(cost == -2 ? "moveToken search budget exhausted" : "moveToken destination is blocked, unreachable, or unaffordable", out reason);

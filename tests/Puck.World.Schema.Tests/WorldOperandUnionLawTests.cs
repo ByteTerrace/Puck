@@ -86,7 +86,7 @@ public sealed class WorldOperandUnionLawTests {
         AssertRoundTrips(new CompiledWorldOperand(new SymmetryOperand(row: "row", key: null, keyFrom: null, stateHandle: default, symmetry: WorldSymmetryFunction.Ring, symmetryArgument: 0L, symmetryOtherCell: null, valueKind: CellKind.Int)), WorldRuleFactKind.Symmetry);
         AssertRoundTrips(new CompiledWorldOperand(new NavigationOperand(literalBody, row: "hasPath")), WorldRuleFactKind.Navigation);
 
-        var boardQuery = new CompiledWorldBoardQuery(Topology: null!, Kind: WorldBoardQueryKind.Neighbour);
+        var boardQuery = new BoardNeighbourQuery(topology: null!, direction: 0);
 
         AssertRoundTrips(new CompiledWorldOperand(new BoardOperand(row: "row", key: null, keyFrom: null, stateHandle: default, board: boardQuery, bodyA: null)), WorldRuleFactKind.Board);
         AssertRoundTrips(new CompiledWorldOperand(new PhaseOperand(row: "row", stateHandle: default)), WorldRuleFactKind.Phase);

@@ -741,7 +741,7 @@ public static partial class WorldRuleCompiler {
             if (direction < 0) { throw Malformed($"token 'BoardShift' names no direction '{shift.Direction}' of '{shift.Topology}'"); }
             Require(WorldExpressionOp.BoardShift, 1);
             RequireKind(WorldExpressionOp.BoardShift, depth - 1, CellKind.Int);
-            return new CompiledWorldExpressionToken(Operation: WorldExpressionOp.BoardShift, Board: new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Neighbour, Direction: direction));
+            return new CompiledWorldExpressionToken(Operation: WorldExpressionOp.BoardShift, Board: new BoardNeighbourQuery(topology, direction));
         }
         CompiledWorldExpressionToken ResolveBoardImage(WorldValueToken.BoardImage image) {
             if (kind != CellKind.Int) { throw Malformed("token 'BoardImage' is admitted in kind=int expressions only"); }
@@ -755,7 +755,7 @@ public static partial class WorldRuleCompiler {
             if (element < 0) { throw Malformed($"token 'BoardImage' names no symmetry element '{image.Element}' of '{image.Topology}'"); }
             Require(WorldExpressionOp.BoardImage, 1);
             RequireKind(WorldExpressionOp.BoardImage, depth - 1, CellKind.Int);
-            return new CompiledWorldExpressionToken(Operation: WorldExpressionOp.BoardImage, Board: new CompiledWorldBoardQuery(topology, WorldBoardQueryKind.Neighbour, Direction: element));
+            return new CompiledWorldExpressionToken(Operation: WorldExpressionOp.BoardImage, Board: new BoardNeighbourQuery(topology, element));
         }
         CompiledWorldExpressionToken IntArity(WorldExpressionOp operation, int arity) {
             if (kind != CellKind.Int) { throw Malformed($"token '{operation}' is admitted in kind=int expressions only"); }
