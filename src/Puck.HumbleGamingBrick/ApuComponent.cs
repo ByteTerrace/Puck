@@ -267,7 +267,8 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     /// <summary>Returns how many further T-cycles the frame sequencer and the generators can absorb as plain
     /// countdowns: none with an envelope step pending, else every cycle before the DIV-APU bit next toggles and
     /// before any active generator's counter expires.</summary>
-    public int QuietCycles() {
+    /// <param name="subCyclePhase">One when the clock stands half a dot past a dot boundary, else zero.</param>
+    public int QuietCycles(int subCyclePhase) {
         if (
             (m_pendingEnvelopeDelay > 0) ||
             (m_lastDivApuBit != DivApuBit())
@@ -285,10 +286,17 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
             return untilToggle;
         }
 
-        // The generators step on every other T-cycle at normal speed, starting from the half-step's current parity.
+        // The generators step on every other generator call, starting from the half-step's current parity; at normal
+        // speed every T-cycle is a call, under double speed only the cycle that lands mid-dot is.
         var untilGenerator = ((generatorTicks << 1) + (m_generatorHalfStep
             ? 0
             : 1));
+
+        if (m_key1.IsDoubleSpeed) {
+            untilGenerator = ((untilGenerator >= (int.MaxValue >> 1))
+                ? int.MaxValue
+                : ((untilGenerator << 1) + subCyclePhase));
+        }
 
         return Math.Min(
             val1: untilToggle,
@@ -297,16 +305,17 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
     }
     /// <summary>Absorbs <paramref name="cycles"/> T-cycles that <see cref="QuietCycles"/> allowed, after the divider
     /// has advanced: the DIV-APU sample follows the counter, and every active generator's countdown drops by the
-    /// generator ticks those cycles carried.</summary>
+    /// generator ticks the generator calls carried.</summary>
     /// <param name="cycles">The T-cycles to absorb.</param>
-    public void Skip(int cycles) {
+    /// <param name="generatorCalls">How many of those cycles the generator clock would have called on.</param>
+    public void Skip(int cycles, int generatorCalls) {
         m_lastDivApuBit = DivApuBit();
 
-        var ticks = ((cycles + (m_generatorHalfStep
+        var ticks = ((generatorCalls + (m_generatorHalfStep
             ? 1
             : 0)) >> 1);
 
-        if ((cycles & 1) != 0) {
+        if ((generatorCalls & 1) != 0) {
             m_generatorHalfStep = !m_generatorHalfStep;
         }
 

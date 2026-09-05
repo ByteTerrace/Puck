@@ -261,6 +261,7 @@ public sealed class Machine : ISnapshotableMachine {
     public void RestoreState(StateReader reader) {
         m_componentClock.Invalidate();
         m_componentClock.Clock.ResetTo(instant: Tick.FromRawBits(rawBits: reader.ReadUInt64()));
+        m_componentClock.Invalidate();
 
         foreach (var snapshotable in m_snapshotables) {
             snapshotable.LoadState(reader: reader);
