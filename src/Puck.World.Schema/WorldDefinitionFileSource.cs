@@ -246,6 +246,64 @@ public static class WorldDefinitionFileSource {
         return true;
     }
 
+    // The one reader of an `imports` entry: an object naming its `document`, optionally an `as` alias, and nothing
+    // else — shared by the composer, the describer, and the save-side peek so the three refuse one shape identically.
+    private static bool TryReadImportEntry(JsonNode? entry, string referrerPath, out string document, out string? alias, out string reason) {
+        document = string.Empty;
+        alias = null;
+
+        if (entry is not JsonObject entryObject) {
+            reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {referrerPath} must hold only entries of the form {{\"{WorldImport.DocumentMemberName}\": \"<path>\"}} with an optional \"{WorldImport.AsMemberName}\".";
+
+            return false;
+        }
+
+        foreach (var (name, _) in entryObject) {
+            if (
+                !string.Equals(a: name, b: WorldImport.DocumentMemberName, comparisonType: StringComparison.Ordinal) &&
+                !string.Equals(a: name, b: WorldImport.AsMemberName, comparisonType: StringComparison.Ordinal)
+            ) {
+                reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry in {referrerPath} carries '{name}'; an entry carries only '{WorldImport.DocumentMemberName}' and '{WorldImport.AsMemberName}'.";
+
+                return false;
+            }
+        }
+
+        if (
+            !entryObject.TryGetPropertyValue(propertyName: WorldImport.DocumentMemberName, jsonNode: out var documentNode) ||
+            (documentNode is not JsonValue documentValue) ||
+            !documentValue.TryGetValue<string>(value: out var documentText) ||
+            (documentText.Length == 0)
+        ) {
+            reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry in {referrerPath} must name a non-empty '{WorldImport.DocumentMemberName}' file path.";
+
+            return false;
+        }
+
+        document = documentText;
+
+        if (entryObject.TryGetPropertyValue(propertyName: WorldImport.AsMemberName, jsonNode: out var aliasNode) && (aliasNode is not null)) {
+            if ((aliasNode is not JsonValue aliasValue) || !aliasValue.TryGetValue<string>(value: out var aliasText)) {
+                reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry {document} in {referrerPath}: '{WorldImport.AsMemberName}' must be a string.";
+
+                return false;
+            }
+
+            if (!WorldImport.TryValidateAlias(alias: aliasText, reason: out var aliasReason)) {
+                reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry {document} in {referrerPath}: {aliasReason}.";
+
+                return false;
+            }
+
+            alias = aliasText;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
+    private static string DescribeImport(string resolvedName, string? alias) =>
+        ((alias is null) ? resolvedName : $"{resolvedName} as {alias}");
     private static bool TryResolveBasisPath(JsonNode? basisNode, string referrerPath, out string? basisPath, out string reason) {
         basisPath = null;
 
@@ -613,7 +671,7 @@ public static class WorldDefinitionFileSource {
             propertyName: WorldDocumentBasis.ImportsMemberName
         )) {
             if (importsNode is not JsonArray importsArray) {
-                reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {resolvedPath} must be an array of file path strings.";
+                reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {resolvedPath} must be an array of import entries.";
 
                 return false;
             }
@@ -621,13 +679,13 @@ public static class WorldDefinitionFileSource {
             var importTrees = new List<(string Name, JsonObject Tree)>();
 
             foreach (var entry in importsArray) {
-                if (
-                    (entry is not JsonValue entryValue) ||
-                    !entryValue.TryGetValue<string>(value: out var importName) ||
-                    (importName.Length == 0)
-                ) {
-                    reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {resolvedPath} must hold only non-empty file path strings.";
-
+                if (!TryReadImportEntry(
+                    alias: out var importAlias,
+                    document: out var importName,
+                    entry: entry,
+                    reason: out reason,
+                    referrerPath: resolvedPath
+                )) {
                     return false;
                 }
 
@@ -654,7 +712,17 @@ public static class WorldDefinitionFileSource {
                     return false;
                 }
 
-                importTrees.Add(item: (importResolvedName, importResult!));
+                if ((importAlias is not null) && !WorldModuleNamespace.TryApply(
+                    alias: importAlias,
+                    module: importResult!,
+                    reason: out var aliasReason
+                )) {
+                    reason = $"{resolvedPath} imports {importResolvedName} as '{importAlias}': {aliasReason}";
+
+                    return false;
+                }
+
+                importTrees.Add(item: (DescribeImport(alias: importAlias, resolvedName: importResolvedName), importResult!));
                 touched.AddRange(collection: importTouched);
             }
 
@@ -841,7 +909,7 @@ public static class WorldDefinitionFileSource {
     // a (path, own top-level keys) entry per file instead of merging JSON — the read-back `world.imports` prints.
     // Each entry's keys are exactly what that file's own JSON declares at the root (basis/imports members excluded),
     // in MERGE order: a later entry's same key overrides an earlier one's.
-    private static bool TryDescribeLayers(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, List<(string Path, IReadOnlyList<string> Keys)> layers, out string reason) {
+    private static bool TryDescribeLayers(IWorldDocumentSource source, string resolvedPath, string? alias, byte[] bytes, IReadOnlyList<string> ancestors, List<(string Path, string? Alias, IReadOnlyList<string> Keys)> layers, out string reason) {
         if (ancestors.Contains(
             value: resolvedPath,
             comparer: StringComparer.OrdinalIgnoreCase
@@ -893,6 +961,7 @@ public static class WorldDefinitionFileSource {
             }
 
             if (!TryDescribeLayers(
+                alias: null,
                 ancestors: nextAncestors,
                 bytes: basisContent!,
                 layers: layers,
@@ -909,19 +978,19 @@ public static class WorldDefinitionFileSource {
             propertyName: WorldDocumentBasis.ImportsMemberName
         )) {
             if (importsNode is not JsonArray importsArray) {
-                reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {resolvedPath} must be an array of file path strings.";
+                reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {resolvedPath} must be an array of import entries.";
 
                 return false;
             }
 
             foreach (var entry in importsArray) {
-                if (
-                    (entry is not JsonValue entryValue) ||
-                    !entryValue.TryGetValue<string>(value: out var importName) ||
-                    (importName.Length == 0)
-                ) {
-                    reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {resolvedPath} must hold only non-empty file path strings.";
-
+                if (!TryReadImportEntry(
+                    alias: out var importAlias,
+                    document: out var importName,
+                    entry: entry,
+                    reason: out reason,
+                    referrerPath: resolvedPath
+                )) {
                     return false;
                 }
 
@@ -936,6 +1005,7 @@ public static class WorldDefinitionFileSource {
                 }
 
                 if (!TryDescribeLayers(
+                    alias: importAlias,
                     ancestors: nextAncestors,
                     bytes: importContent!,
                     layers: layers,
@@ -955,7 +1025,7 @@ public static class WorldDefinitionFileSource {
             ))
             .ToArray();
 
-        layers.Add(item: (resolvedPath, ownKeys));
+        layers.Add(item: (resolvedPath, alias, ownKeys));
         reason = string.Empty;
 
         return true;
@@ -966,16 +1036,19 @@ public static class WorldDefinitionFileSource {
     /// body last. A later entry's same key overrides an earlier one's (see <see cref="WorldDocumentBasis"/>'s
     /// remarks).</summary>
     /// <param name="path">The document file to describe.</param>
-    /// <param name="layers">Each layer in merge order on success; empty on failure.</param>
+    /// <param name="layers">Each layer in merge order on success — its resolved path, the alias it composed under
+    /// (<see langword="null"/> for a basis link or an unaliased import), and its own top-level keys; empty on
+    /// failure.</param>
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
     /// <returns><see langword="true"/> when the file was readable and its graph resolved.</returns>
-    public static bool TryDescribeComposition(string path, out IReadOnlyList<(string Path, IReadOnlyList<string> Keys)> layers, out string reason) {
-        var collected = new List<(string Path, IReadOnlyList<string> Keys)>();
+    public static bool TryDescribeComposition(string path, out IReadOnlyList<(string Path, string? Alias, IReadOnlyList<string> Keys)> layers, out string reason) {
+        var collected = new List<(string Path, string? Alias, IReadOnlyList<string> Keys)>();
 
         try {
             var bytes = File.ReadAllBytes(path: path);
 
             if (!TryDescribeLayers(
+                alias: null,
                 ancestors: [],
                 bytes: bytes,
                 layers: collected,
@@ -1106,12 +1179,12 @@ public static class WorldDefinitionFileSource {
     /// save uses beside <see cref="TryPeekBasis"/>. The file is the one source of truth for its own derivation;
     /// nothing caches this between load and save.</summary>
     /// <param name="path">The document file to peek.</param>
-    /// <param name="imports">The resolved absolute import paths in authored order, or an empty list when the
-    /// document declares none.</param>
+    /// <param name="imports">Each import's resolved absolute path and alias in authored order, or an empty list
+    /// when the document declares none.</param>
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
     /// <returns><see langword="true"/> when the file was readable and its root answered; a missing <c>imports</c>
     /// member is a success with an empty <paramref name="imports"/>.</returns>
-    public static bool TryPeekImports(string path, out IReadOnlyList<string> imports, out string reason) {
+    public static bool TryPeekImports(string path, out IReadOnlyList<(string Path, string? Alias)> imports, out string reason) {
         imports = [];
 
         try {
@@ -1133,16 +1206,26 @@ public static class WorldDefinitionFileSource {
             }
 
             if (importsNode is not JsonArray importsArray) {
-                reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {path} must be an array of file path strings.";
+                reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {path} must be an array of import entries.";
 
                 return false;
             }
 
-            var resolved = new List<string>(capacity: importsArray.Count);
+            var resolved = new List<(string Path, string? Alias)>(capacity: importsArray.Count);
 
             foreach (var entry in importsArray) {
+                if (!TryReadImportEntry(
+                    alias: out var alias,
+                    document: out var document,
+                    entry: entry,
+                    reason: out reason,
+                    referrerPath: path
+                )) {
+                    return false;
+                }
+
                 if (!TryResolveBasisPath(
-                    basisNode: entry,
+                    basisNode: JsonValue.Create(value: document),
                     basisPath: out var resolvedEntry,
                     reason: out reason,
                     referrerPath: path
@@ -1150,7 +1233,7 @@ public static class WorldDefinitionFileSource {
                     return false;
                 }
 
-                resolved.Add(item: resolvedEntry!);
+                resolved.Add(item: (resolvedEntry!, alias));
             }
 
             imports = resolved;

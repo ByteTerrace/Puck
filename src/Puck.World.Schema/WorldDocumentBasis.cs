@@ -42,9 +42,10 @@ namespace Puck.World;
 /// Callers must verify the round trip (<see cref="TryMerge"/> + <see cref="JsonNode.DeepEquals"/>) before trusting a
 /// computed delta, and fall back to a flat save when it fails.</para>
 /// <para><c>imports</c> is the fan-in half of composition beside <c>basis</c>'s single-parent chain: an ordered list
-/// of fragment paths (each resolved against the importing file's own directory, exactly like <c>basis</c>), letting
-/// several documents each own one disjoint slice of a world (one per game in the garden) rather than forcing every
-/// slice through one basis chain. Composition order is the basis chain first, then each import fully resolved (its
+/// of <see cref="WorldImport"/> entries (each document resolved against the importing file's own directory, exactly
+/// like <c>basis</c>; an entry carrying <c>as</c> composes its fragment's names under that alias through
+/// <see cref="WorldModuleNamespace"/>), letting several documents each own one disjoint slice of a world (one per
+/// game in the garden) rather than forcing every slice through one basis chain. Composition order is the basis chain first, then each import fully resolved (its
 /// own <c>basis</c>/<c>imports</c> included) and folded left to right in authored list order via
 /// <see cref="TryMergeImports"/>, then the file's own body last — each step an ordinary <see cref="TryMerge"/>
 /// (basis, then the folded import layer, then the file's own body, each refining the one before). Both consumed

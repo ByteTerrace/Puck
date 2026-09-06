@@ -1106,14 +1106,22 @@ public static class WorldDefinitionSerialization {
         if (peekedImports.Count > 0) {
             var importsArray = new JsonArray();
 
-            foreach (var import in peekedImports) {
-                importsArray.Add(value: Path.GetRelativePath(
-                    path: import,
-                    relativeTo: targetDirectory
-                ).Replace(
-                    newChar: '/',
-                    oldChar: '\\'
-                ));
+            foreach (var (importPath, alias) in peekedImports) {
+                var entry = new JsonObject {
+                    [propertyName: WorldImport.DocumentMemberName] = Path.GetRelativePath(
+                        path: importPath,
+                        relativeTo: targetDirectory
+                    ).Replace(
+                        newChar: '/',
+                        oldChar: '\\'
+                    ),
+                };
+
+                if (alias is not null) {
+                    entry[propertyName: WorldImport.AsMemberName] = alias;
+                }
+
+                importsArray.Add(value: entry);
             }
 
             output[propertyName: WorldDocumentBasis.ImportsMemberName] = importsArray;
@@ -1130,7 +1138,7 @@ public static class WorldDefinitionSerialization {
             path: path
         );
         basisPath = peekedBasis;
-        imports = peekedImports;
+        imports = [.. peekedImports.Select(selector: static import => import.Path)];
 
         return bytes.LongLength;
     }

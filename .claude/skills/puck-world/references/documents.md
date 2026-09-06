@@ -1354,8 +1354,9 @@ likewise-frozen `puck.basis.frozen.json`. The loader is
 
 `WorldDefinition.Basis` is the document-composition member: a file naming a `basis` (a file path resolved against
 its own directory) is a DELTA over that document — templates/prefabs for similar worlds. `WorldDefinition.Imports`
-is the fan-in half beside it: an ORDERED list of fragment paths (each resolved against the importing file's own
-directory, exactly like `basis`), letting several documents each own one disjoint slice of a world — the garden's
+is the fan-in half beside it: an ORDERED list of `{"document": "<path>", "as": "<alias>"}` entries (`WorldImport`;
+each document resolved against the importing file's own directory, exactly like `basis`; `as` is optional), letting
+several documents each own one disjoint slice of a world — the garden's
 own `src/Puck.World/Assets/worlds/games/{chess,poker,dominoes,billiards,bowling,tictactoe,hexlines}.world.json`, each
 imported by `puck.world.json` — rather than forcing every slice through the single-parent basis chain. A keyed
 list assembled this way (every import's rows concatenated in import order, then the importing file's own new
@@ -1404,7 +1405,7 @@ full basis-plus-imports stack (`WorldDefinitionFileSource.TryComposeStackTree`),
 against that stack (`WorldDocumentBasis.Diff`), PROVES it by re-merging before writing, and degrades to a flat save
 with a named note when it cannot (basis/import unreadable, deleted, or the delta cannot reproduce the document).
 Read-backs: `world.status` echoes `basis <path|none>`; `world.imports` prints the whole resolved composition stack
-in merge order, each file's path paired with the top-level keys its own JSON declares; `world.save`'s echo names
+in merge order, each file's path paired with its alias and the top-level keys its own JSON declares; `world.save`'s echo names
 the preserved basis/import count or the flat-save note. Storage composes a synced delta too, over `basis` only —
 `imports` is a local-directory-load feature today, not yet extended to the cloud sync path:
 `IWorldDocumentSource`/`WorldDefinitionFileSource.TryComposeChain` generalize the chain walk onto any byte source,
@@ -1412,7 +1413,15 @@ and `Puck.World.Server`'s `WorldStorageDocumentSource` resolves basis members ag
 `puck/worlds/basis/{name}` namespace (`WorldOwnedWorldSync.BasisAddressFor`) — the storage neighbour resolver and
 `storage.pull` both compose before parsing, exactly like a directory load. `storage.push` pushes the whole chain
 (each link its own blob) via `WorldDefinitionFileSource.TryResolveChainFiles`, deduplicated per push call when two
-owned worlds share a basis. Law suite: `tests/Puck.World.Tests/DocumentBasisLawTests.cs`,
+owned worlds share a basis. An entry's `as` composes the fragment under a namespace: every name the fragment declares at a `Declares` site of
+`WorldNameRegistry` (`src/Puck.World.Schema/WorldNameRegistry.cs`; the generated table is
+`docs/world-name-registry.md`, `puck registry --check`) becomes `<alias>_<name>` and every other registered site in
+the fragment — bare name positions, `$` channel segments, `$cell:`/`cell:`/`$expr:` keys, infix and postfix
+expressions, `state.<row>` bindings — is rewritten to match (`WorldModuleNamespace`); names the fragment does not
+declare stay as written. An alias is a bare identifier (letter or underscore, then letters, digits, underscores).
+One fragment composes twice under two aliases; an entry with no `as` composes its names unchanged. Law suites:
+`tests/Puck.World.Tests/ModuleAliasImportLawTests.cs`, `tests/Puck.World.Schema.Tests/WorldNameRegistryLawTests.cs`.
+Law suite: `tests/Puck.World.Tests/DocumentBasisLawTests.cs`,
 `StorageCompositionLawTests.cs`.
 
 **`standard.world.json` — the standard library, not a world.** The engine ships

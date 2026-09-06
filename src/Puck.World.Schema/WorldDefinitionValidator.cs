@@ -884,7 +884,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (definition.Imports is { } imports) {
-            errors.Add(item: $"imports [{string.Join(separator: ", ", values: imports)}] survived to validation — imports resolve only at the file-load boundary; this document arrived somewhere no import can be resolved, so it must be composed (flattened) before it can run.");
+            errors.Add(item: $"imports [{string.Join(separator: ", ", values: imports.Select(selector: static import => import.Document))}] survived to validation — imports resolve only at the file-load boundary; this document arrived somewhere no import can be resolved, so it must be composed (flattened) before it can run.");
         }
 
         ValidateExtensions(

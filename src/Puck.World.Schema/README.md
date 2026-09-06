@@ -631,10 +631,11 @@ addon-scoped declaration.
 
 **Document composition.** A world file may name a `basis` — another document it
 layers over, resolved against its own directory — and/or `imports` — an ORDERED
-list of fragment documents it fans in, each resolved against its own directory
-the same way, letting several files each own one disjoint slice of a world (one
-per game in the garden) instead of forcing every slice through the single-parent
-basis chain. Composition order is the basis chain first, then each import fully
+list of fragment entries it fans in, each `{"document": "<path>"}` resolved
+against its own directory the same way, optionally `"as": "<alias>"`
+(`WorldImport`), letting several files each own one disjoint slice of a world
+(one per game in the garden) instead of forcing every slice through the
+single-parent basis chain. Composition order is the basis chain first, then each import fully
 resolved and folded left to right in list order, then the file's own body last.
 Within either step, authored members override, omitted members inherit, an
 authored `null` clears, `$type`-changed union objects replace wholesale, and
@@ -661,7 +662,8 @@ pin. `world.save` preserves the derivation of the file it overwrites
 basis-plus-imports stack before anything lands, degrading to a flat save with a
 named note when it cannot. `world.status` echoes the source file's basis;
 `world.imports` prints the whole resolved composition stack in merge order, each
-file paired with the top-level keys its own JSON declares. A partial template or
+file paired with the alias it composed under and the top-level keys its own JSON
+declares. A partial template or
 import fragment cannot boot on its own (the validator names its missing
 sections). `IWorldDocumentSource` generalizes the basis-chain walk (not yet the
 import fan-in) onto any byte-level document source, so storage sync
@@ -671,6 +673,29 @@ a directory load does — it no longer refuses one by name. The wire still never
 carries a basis- or import-bearing document: a live document's `Basis`/`Imports`
 are always `null` (stripped at load), so nothing reaches the wire un-flattened
 regardless.
+
+**Name registry and aliased imports.** `WorldNameRegistry.cs` lists every
+document member that carries a state, zone, rule, table, pattern, topology,
+generator, field, or dynamics name — keyed by C# member, with the role it
+carries the name in (`Declares`, `Names`, `Key`, `Expression`, `Binding`,
+`Template`) — and derives the JSON paths those members reach by walking
+`WorldJsonContext`, so [`docs/world-name-registry.md`](../../docs/world-name-registry.md)
+is generated (`puck registry`) and checked (`puck registry --check`), never
+hand-maintained. A member typed `CellName`, `ValueExpression`, `BindableScalar`,
+`BindableColor`, or `WorldLatticeScalar`, or a string member whose name reads
+like a name position, must be registered or excluded with a reason, so a field
+added without a registration fails the check. `WorldModuleNamespace.cs` reads
+the same registry at compose time: an import entry carrying `as` prefixes every
+name its fragment declares with `<alias>_` (the one character a `CellName`
+admits that also lexes inside a bare expression name) and rewrites every other
+registered site to match — bare name positions, a reserved `$` channel's colon
+segments, `$cell:`/`cell:`/`$expr:` key spellings, infix and postfix
+expressions, and `state.<row>` bindings — while a name the fragment does not
+declare stays as written, so a fragment still addresses its host's rows. An
+alias is a bare identifier (letter or underscore, then letters, digits, and
+underscores), refused by name otherwise. The same fragment composes twice under
+two aliases (`tests/Puck.World.Tests/Fixtures/twin-tictactoe-host.world.json`),
+and an entry with no `as` composes its names unchanged.
 
 **The validator is the one thick gate.** `WorldDefinitionValidator.cs` runs
 over the entire composed candidate document — at boot, on every live mutation,

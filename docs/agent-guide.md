@@ -350,6 +350,11 @@ all verification work here. Each keeps one compressed instance as evidence.
   unless `FileLengths.json` already records the file, and a recorded file may
   only shrink (LEN002/LEN003). Split, then `puck lengths --write` — the ledger
   never grows.
+- A document field that carries a state, zone, rule, table, pattern, topology,
+  generator, field, or dynamics name is registered in `WorldNameRegistry`
+  (`src/Puck.World.Schema`); `puck registry --check` fails on an unregistered
+  name-shaped member or a stale `docs/world-name-registry.md`, and
+  `puck registry` rewrites the table.
 - Derive descriptor counts, pool sizes, strides, and capacities from the data
   that defines them.
 - .NET 10 is the only target. Consult `dotnet10-performance` before preserving

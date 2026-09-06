@@ -1,8 +1,14 @@
 {
   "imports": [
-    "klondike.world.json",
-    "spider.world.json",
-    "freecell.world.json"
+    {
+      "document": "klondike.world.json"
+    },
+    {
+      "document": "spider.world.json"
+    },
+    {
+      "document": "freecell.world.json"
+    }
   ],
   "state": {
     "world": [

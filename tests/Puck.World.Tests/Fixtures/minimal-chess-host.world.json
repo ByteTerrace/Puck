@@ -62,7 +62,9 @@
     ]
   },
   "imports": [
-    "../../../src/Puck.World/Assets/worlds/games/chess.world.json"
+    {
+      "document": "../../../src/Puck.World/Assets/worlds/games/chess.world.json"
+    }
   ],
   "looks": {
     "rows": [

@@ -709,12 +709,12 @@ public sealed class DocumentBasisLawTests {
 
         var firstPath = files.WriteText(
             name: "first.world.json",
-            text: /*lang=json*/ """{ "imports": ["second.world.json"] }"""
+            text: /*lang=json*/ """{ "imports": [{ "document": "second.world.json" }] }"""
         );
 
         files.WriteText(
             name: "second.world.json",
-            text: /*lang=json*/ """{ "imports": ["first.world.json"] }"""
+            text: /*lang=json*/ """{ "imports": [{ "document": "first.world.json" }] }"""
         );
 
         Assert.False(condition: WorldDefinitionFileSource.TryLoad(
@@ -765,7 +765,7 @@ public sealed class DocumentBasisLawTests {
         var rootPath = files.WriteText(
             name: "root.world.json",
             text: /*lang=json*/ """
-            { "basis": "basis.world.json", "imports": ["fragmentA.world.json", "fragmentB.world.json"] }
+            { "basis": "basis.world.json", "imports": [{ "document": "fragmentA.world.json" }, { "document": "fragmentB.world.json" }] }
             """
         );
 
@@ -813,7 +813,7 @@ public sealed class DocumentBasisLawTests {
         var rootPath = files.WriteText(
             name: "root.world.json",
             text: /*lang=json*/ """
-            { "basis": "basis.world.json", "imports": ["importA.world.json", "importB.world.json"] }
+            { "basis": "basis.world.json", "imports": [{ "document": "importA.world.json" }, { "document": "importB.world.json" }] }
             """
         );
 
@@ -851,7 +851,7 @@ public sealed class DocumentBasisLawTests {
         var collidingPath = files.WriteText(
             name: "colliding.world.json",
             text: /*lang=json*/ """
-            { "basis": "basis.world.json", "imports": ["importA.world.json", "importB.world.json"] }
+            { "basis": "basis.world.json", "imports": [{ "document": "importA.world.json" }, { "document": "importB.world.json" }] }
             """
         );
 
@@ -879,7 +879,7 @@ public sealed class DocumentBasisLawTests {
             text: /*lang=json*/ """
             {
               "basis": "basis.world.json",
-              "imports": ["importA.world.json", "importB.world.json"],
+              "imports": [{ "document": "importA.world.json" }, { "document": "importB.world.json" }],
               "metadata": { "title": "root" }
             }
             """
@@ -922,7 +922,7 @@ public sealed class DocumentBasisLawTests {
 
         var rootPath = files.WriteText(
             name: "root.world.json",
-            text: /*lang=json*/ """{ "basis": "basis.world.json", "imports": ["importA.world.json"] }"""
+            text: /*lang=json*/ """{ "basis": "basis.world.json", "imports": [{ "document": "importA.world.json" }] }"""
         );
 
         Assert.True(

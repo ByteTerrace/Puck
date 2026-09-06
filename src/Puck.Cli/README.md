@@ -11,6 +11,7 @@ with hand-rolled first-positional verb dispatch:
 | [`puck bench`](#puck-bench--the-puckmaths-microscope) | the on-demand `Puck.Maths` micro-benchmark microscope, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet); `puck bench world` is the `Puck.World.Server` tick-path stopwatch lane. |
 | [`puck scan`](#puck-scan--source-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
 | [`puck schema`](#puck-schema--worlddef-json-schema) | the generated JSON Schema for `puck.world.def.v1`, checked and regenerated. |
+| [`puck registry`](#puck-registry--world-name-registry) | the world name registry `docs/world-name-registry.md`, generated from `WorldNameRegistry` over the document model and checked against it. |
 | [`puck format`](#puck-format--source-rewriters) | source rewriters for the conventions `.editorconfig` cannot express. |
 | [`puck font-atlas`](#puck-font-atlas--managed-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
 | [`puck references`](#puck-references--semantic-symbol-queries) | semantic symbol queries: references, implementers, overrides, derived types. |
@@ -452,6 +453,30 @@ Regenerate the fixture document only when
 it — it is a checked-in snapshot, not derived at run time.
 
 ---
+
+## `puck registry` — world name registry
+
+Writes `docs/world-name-registry.md` from `Puck.World.WorldNameRegistry`
+(`src/Puck.World.Schema/WorldNameRegistry.cs`): every document field that
+carries a state, zone, rule, table, pattern, topology, generator, field, or
+dynamics name, with the role it carries the name in, the JSON paths derived by
+walking the same source-generated `WorldJsonContext` the loader reads through.
+`WorldModuleNamespace` reads the same registry to prefix an aliased import's
+names at compose time, so the table and the compose path cannot disagree.
+
+```
+puck registry               write docs/world-name-registry.md
+puck registry --check       regenerate in memory and compare against the file on disk;
+                            write nothing, exit 1 naming the first differing line
+puck registry -h / --help   this text
+```
+
+Both modes first refuse, exit 1, on a name-shaped document member the registry
+neither registers nor excludes with a reason — a `CellName`, `ValueExpression`,
+`BindableScalar`, `BindableColor`, or `WorldLatticeScalar` member, or a string
+member whose C# name reads like a name position — so a field added to the model
+without a registration cannot pass. Exit codes: **0** wrote or matched, **1**
+drift or an uncovered member, **2** usage error or missing repository root.
 
 ## `puck scan` — source sweep
 

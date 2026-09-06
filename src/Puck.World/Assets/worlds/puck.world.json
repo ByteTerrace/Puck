@@ -461,16 +461,36 @@
     "width": 1280
   },
   "imports": [
-    "games/chess.world.json",
-    "games/poker.world.json",
-    "games/dominoes.world.json",
-    "games/billiards.world.json",
-    "games/bowling.world.json",
-    "games/tictactoe.world.json",
-    "games/hexlines.world.json",
-    "games/mancala.world.json",
-    "games/solitaire.world.json",
-    "modules/granaries.world.json"
+    {
+      "document": "games/chess.world.json"
+    },
+    {
+      "document": "games/poker.world.json"
+    },
+    {
+      "document": "games/dominoes.world.json"
+    },
+    {
+      "document": "games/billiards.world.json"
+    },
+    {
+      "document": "games/bowling.world.json"
+    },
+    {
+      "document": "games/tictactoe.world.json"
+    },
+    {
+      "document": "games/hexlines.world.json"
+    },
+    {
+      "document": "games/mancala.world.json"
+    },
+    {
+      "document": "games/solitaire.world.json"
+    },
+    {
+      "document": "modules/granaries.world.json"
+    }
   ],
   "interactions": {
     "interactions": [

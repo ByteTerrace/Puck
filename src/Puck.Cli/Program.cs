@@ -13,6 +13,7 @@ using Puck.Cli.Lengths;
 using Puck.Cli.Packaging;
 using Puck.Cli.Parity;
 using Puck.Cli.PublishRelease;
+using Puck.Cli.Registry;
 using Puck.Cli.Scan;
 using Puck.Cli.Schema;
 using Puck.Cli.Search;
@@ -42,6 +43,7 @@ return args switch {
     ["parity", .. var parityArgs] => ParityCommand.Run(args: parityArgs),
     ["publish", .. var publishArgs] => PublishCommand.Run(args: publishArgs),
     ["references", .. var referencesArgs] => ReferencesCommand.Run(args: referencesArgs),
+    ["registry", .. var registryArgs] => RegistryCommand.Run(args: registryArgs),
     ["scan", .. var scanArgs] => ScanCommand.Run(args: scanArgs),
     ["schema", .. var schemaArgs] => SchemaCommand.Run(args: schemaArgs),
     ["search", .. var searchArgs] => SearchCommand.Run(args: searchArgs),
@@ -72,6 +74,7 @@ static int Usage() {
               parity        cross-backend composed-frame comparison against the real Puck.World
               publish       write an unsigned puck.release.v1 release-source tree from a built RID's output
               references    references, implementers and overrides of a symbol, solution-wide
+              registry      the world name registry docs/world-name-registry.md: --check or write
               scan          source sweep: comments, comment smells, locks, clones
               schema        generated JSON Schema for puck.world.def.v1, checked and regenerated
               search        content search over a linear-time symbolic-derivatives regex engine

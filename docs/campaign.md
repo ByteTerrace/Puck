@@ -1172,9 +1172,10 @@ cube (`Box`-topology Qubic, the schema's own discrete-boards worked example) —
 lives in its own file under `src/Puck.World/Assets/worlds/games/`, imported by
 `puck.world.json` in that order, rather than all six sharing one ever-growing
 document. `WorldDefinition.Imports` is the fan-in half of composition beside
-`basis`'s single-parent chain: an ordered list of fragment paths, each fully
-resolved (its own `basis`/`imports` included) and folded left to right, then
-layered under the importing file's own body. The reasoning this decision rests
+`basis`'s single-parent chain: an ordered list of `{"document": …, "as": …}`
+entries, each fully resolved (its own `basis`/`imports` included), composed
+under its alias when it carries one, and folded left to right, then layered
+under the importing file's own body. The reasoning this decision rests
 on: a single-parent basis chain cannot express "six independent slices of one
 document" without artificial ordering between unrelated games; imports can,
 because siblings are checked for collision rather than silently overridden —

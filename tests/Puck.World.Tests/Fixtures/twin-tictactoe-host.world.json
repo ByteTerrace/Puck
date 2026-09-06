@@ -1,7 +1,7 @@
 {
   "basis": "../../../src/Puck.World/Assets/worlds/standard.basis.json",
   "bodies": {
-    "capacity": 40,
+    "capacity": 2,
     "localSeats": 1
   },
   "bodyMotionPrograms": [
@@ -63,25 +63,52 @@
   },
   "imports": [
     {
-      "document": "../../../src/Puck.World/Assets/worlds/games/hexlines.world.json"
+      "document": "../../../src/Puck.World/Assets/worlds/games/tictactoe.world.json",
+      "as": "a"
+    },
+    {
+      "document": "../../../src/Puck.World/Assets/worlds/games/tictactoe.world.json",
+      "as": "b"
     }
   ],
-  "placements": {
+  "kits": {
     "rows": [
       {
-        "id": "hexTable",
-        "position": [
-          20,
-          -0.5,
-          -12
-        ],
-        "board": {
-          "topology": "hexLinesBoard",
-          "occupancy": "hexBoard",
-          "turn": "hexTurn",
-          "verdict": "hexVerdict",
-          "move": "hexMove"
-        }
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "walk",
+        "collider": {
+          "$type": "sphere",
+          "radius": 0.3
+        },
+        "motion": {
+          "facingSnap": true,
+          "holds": [
+            {
+              "bond": "Free",
+              "envelope": {
+                "sinkSpeed": 40
+              },
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "hold": "Gravity",
+              "name": "air"
+            }
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 1
+          },
+          "turn": {
+            "rate": 1
+          }
+        },
+        "name": "seat"
       }
     ]
   },
@@ -89,7 +116,6 @@
   "simulation": {
     "rateHz": 30
   },
-  "state": {},
   "views": {
     "layouts": [
       {

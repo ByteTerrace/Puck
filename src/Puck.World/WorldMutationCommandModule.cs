@@ -521,7 +521,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
 
                 var formatted = string.Join(
                     separator: " | ",
-                    values: layers.Select(selector: layer => $"{layer.Path} [{string.Join(separator: ",", values: layer.Keys)}]")
+                    values: layers.Select(selector: layer => $"{layer.Path}{((layer.Alias is null) ? "" : $" as {layer.Alias}")} [{string.Join(separator: ",", values: layer.Keys)}]")
                 );
 
                 return new CommandResult(Output: $"[world.imports: {formatted}]");
