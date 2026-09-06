@@ -244,6 +244,8 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldEffect.RemovePlacement))]
 [JsonSerializable(typeof(WorldEffect.Save))]
 [JsonSerializable(typeof(WorldEffect.Pose))]
+[JsonSerializable(typeof(WorldEffect.SetIdentityFact))]
+[JsonSerializable(typeof(WorldIdentityFacts))]
 [JsonSerializable(typeof(WorldPredicate.Now))]
 [JsonSerializable(typeof(WorldPredicate.Recently))]
 [JsonSerializable(typeof(WorldPredicate.TimerElapsed))]

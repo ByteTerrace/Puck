@@ -874,6 +874,48 @@ public static partial class WorldDefinitionValidator {
     // optionally narrowed by an authored Capacity). CellName already refuses an empty/unsafe/dotted row name at
     // JSON parse, so this pass checks only uniqueness. Returns the declared rows by name so ValidateHud can refuse
     // an unknown state.<row>/state.<row>.<key> binding.
+    // An owned identity's facts row is read raw at every seat bind, so its shape is held here rather than at the
+    // write door alone: a keyed int row whose capacity is the one number identity.facts.capacity states.
+    private static void ValidateIdentityFacts(WorldIdentityDefinition? identity, IReadOnlyDictionary<string, WorldStateRow> stateRows, List<string> errors) {
+        if (identity is null) {
+            return;
+        }
+
+        var facts = identity.FactsOrDefault;
+
+        if (
+            (facts.Capacity < 1) ||
+            (facts.Capacity > StateCapacity.MaxCellsPerRow)
+        ) {
+            errors.Add(item: $"identity.facts.capacity {facts.Capacity} must be 1..{StateCapacity.MaxCellsPerRow}.");
+        }
+        if (!stateRows.TryGetValue(key: facts.State, value: out var row)) {
+            return;
+        }
+        if (row is not { Kind: CellKind.Int, IsKeyed: true }) {
+            errors.Add(item: $"identity.facts.state '{facts.State}' must name a keyed int state row.");
+        } else if (row.Capacity != facts.Capacity) {
+            errors.Add(item: $"identity.facts.state '{facts.State}' declares capacity {(row.Capacity?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")}; identity.facts.capacity is {facts.Capacity} — the two are one number.");
+        }
+    }
+    // The reserved lane a world declares to carry facts: a bounded keyed int row whose every authored cell key is a
+    // (body, fact) pair, since the server keys the cells it loads that way.
+    private static void ValidateIdentityFactLane(IReadOnlyDictionary<string, WorldStateRow> stateRows, List<string> errors) {
+        if (!stateRows.TryGetValue(key: WorldIdentityFactLane.RowName, value: out var lane)) {
+            return;
+        }
+        if (lane is not { Kind: CellKind.Int, IsKeyed: true, Capacity: > 0 }) {
+            errors.Add(item: $"state.world row '{WorldIdentityFactLane.RowName}' is the reserved identity fact lane: it must be a keyed int row declaring a capacity.");
+
+            return;
+        }
+
+        foreach (var cell in (lane.Cells ?? [])) {
+            if (!WorldIdentityFactLane.TryParse(key: cell.Key.Value, bodyIndex: out _, fact: out _)) {
+                errors.Add(item: $"state.world row '{WorldIdentityFactLane.RowName}' cell '{cell.Key}' is not a '<bodyIndex>{WorldIdentityFactLane.Separator}<fact>' lane key.");
+            }
+        }
+    }
     private static Dictionary<string, WorldStateRow> ValidateState(IReadOnlyList<WorldStateRow> rows, IReadOnlyList<GeneratorRow>? generators, ISet<string> dynamicsNames, List<string> errors) {
         var byName = new Dictionary<string, WorldStateRow>(comparer: StringComparer.Ordinal);
 

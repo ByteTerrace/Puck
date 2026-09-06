@@ -184,6 +184,10 @@ public static class WorldRuleCapacity {
 public enum WorldRuleRefusal : byte {
     [Refusal(door: "world.rule.compile", condition: "a 'body:<n>' reference names an index outside the document's declared entity-table capacity", kind: RefusalKind.Verdict)]
     BodyIndexUnknown,
+    [Refusal(door: "world.rule.compile", condition: "a 'setIdentityFact' effect or a '$identity:' channel names a fact that is not a cell name, or the channel does not spell '$identity:<bodyRef>:<fact>'", kind: RefusalKind.Verdict)]
+    IdentityFactMalformed,
+    [Refusal(door: "world.rule.compile", condition: "a 'setIdentityFact' effect or a '$identity:' channel is authored in a document declaring no 'identity' lane row in state.world", kind: RefusalKind.Verdict)]
+    IdentityLaneUndeclared,
     [Refusal(door: "world.rule.compile", condition: "a '$channel:' channel does not spell '$channel:<seat>:<channelName>' with seat in 1..population.localSeats and channelName naming a declared 'channels[]' row", kind: RefusalKind.Verdict)]
     ChannelMalformed,
     [Refusal(door: "world.rule.compile", condition: "an 'upsertHudPanel'/'removeHudPanel' effect carries no panel id", kind: RefusalKind.Verdict)]
@@ -229,4 +233,10 @@ public enum WorldRuleEffectRefusal : byte {
 
     [Refusal(door: "world.rule.effect", condition: "a rule's 'removePlacement' effect targets a placement whose inhabited body a concrete drive grant currently possesses", kind: RefusalKind.Verdict)]
     CarrierPossessed,
+
+    [Refusal(door: "world.rule.effect", condition: "a 'setIdentityFact' effect addresses a body driving under no owned identity, so there is no document to carry the fact", kind: RefusalKind.Verdict)]
+    IdentityUnbound,
+
+    [Refusal(door: "world.rule.effect", condition: "a 'setIdentityFact' effect finds no 'identity' lane row in the installed document, or the lane or the identity's own facts row refuses the write", kind: RefusalKind.Verdict)]
+    IdentityFactUnwritable,
 }

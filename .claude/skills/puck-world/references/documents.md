@@ -2147,7 +2147,7 @@ unique ignoring case, hex color — `ValidatePlayerDefaults` in
 **`WorldIdentity`** (`Puck.World.Schema/WorldIdentity.cs`) is the runtime
 handle over one owned document's `identity` section
 (`WorldIdentityDefinition(Id, Name, Color, MoveSpeedState, TurnSpeedState,
-Controllers, Voice)`): `MoveSpeed`/`TurnSpeed` read
+Controllers, Voice, Facts)`): `MoveSpeed`/`TurnSpeed` read
 and write the owned document's OWN `state` rows named by those state-row
 references; `Bindings` is the owned document's own first `bindingOverlays`
 row's document (the seat's profile binding layer — see "Binding composition"
@@ -2163,6 +2163,23 @@ its read-back/debug-trigger verbs). Two things stay open: no producer yet
 estimates an utterance's syllable count from dialogue/caption text, and a
 babbling identity has no live-body correlation, so every syllable voices
 listener-placed rather than at a resolved world position.
+
+**Facts.** `Facts` (`WorldIdentityFacts {state, capacity}`, defaulting to
+`identity-facts` holding 64) names the keyed `int` row of facts the identity
+carries on its own document — minted on the first write, capacity-bounded,
+validated as that one number. A world receives them only through a reserved
+keyed `int` row named `identity` it declares in `state.world`
+(`WorldIdentityFactLane`; cells keyed `<bodyIndex>-<fact>`), loaded into a
+body's cells when a seat binds the identity and zeroed when it unbinds. A rule
+writes one with the `setIdentityFact` effect (`{key: <body>, fact, value |
+expression}` — lane and identity row together, the identity persisted through
+`WorldOwnedWorlds.TrySetFact`) and reads one through `$identity:<bodyRef>:<fact>`
+(0 when never written or no identity drives the body); a world declaring no
+lane refuses both by name at compile (`IdentityLaneUndeclared`), and a body
+driving under no owned identity refuses the write at fire time
+(`IdentityUnbound`). `identity.facts [player]` echoes the identity's row;
+`identity.fact.set <key> <value> [player]` writes one from the console (a seat
+principal only its own seat's); `world.state identity` echoes the lane.
 
 **Seating.** `SessionRequest.SetIdentity` (gated on `WorldCapability.Drive`
 over the targeted slot's body — the same grant `Join`/`Leave` use) sets a

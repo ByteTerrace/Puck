@@ -1355,6 +1355,37 @@ persists it. The concrete host — `WorldAddonRuntime`, the mount sequence,
 the WASM guest ABI decode, the addon.mutate refusal catalog — is
 [`Puck.World.Addons`](../Puck.World.Addons/README.md).
 
+## Identity facts (`WorldServer.IdentityFacts.cs`)
+
+A world declaring the reserved `identity` lane row (`WorldIdentityFactLane`, a
+keyed `int` row in `state.world`) carries each seated identity's facts in that
+body's cells, keyed `<bodyIndex>-<fact>`. The mirror runs once per tick inside
+`LoadRuleFrame`, before any rule reads: a body whose `Profile` reference or
+whose identity's `FactsRevision` moved since the last sync reloads its lane —
+its cells the identity does not carry are written 0, every fact the identity
+carries lands as a lane write — through the same `IRuleHost.TryApply` door a
+rule's own cell write takes, so the writes queue on the frame, fold once at
+the end of the tick, journal, undo, and replay like any rule-written cell. A
+lane write that would leave a cell as it is queues nothing, so a quiet tick
+moves no row version. Cells are never removed: a HUD binding a lane cell must
+find it declared, and the row's authored `capacity` bounds bodies times facts.
+
+`setIdentityFact` (`IdentityFactEffect`) resolves its body like `pose` does,
+refuses by name a body driving under no owned identity (`IdentityUnbound` —
+an anonymous seat's fact is refused, never minted), a document declaring no
+lane, or a faulted expression (`IdentityFactUnwritable`), writes the lane cell
+when the value differs (`Applied`; an unchanged value is `Skipped` and costs a
+quiet tick what an unchanged ordinary write costs), and persists the fact on
+the identity's own row through `WorldOwnedWorlds.TrySetFact` — the one door
+the console's `identity.fact.set` shares — which saves the identity only when
+its row changed. Inside a transaction the persist waits on the commit: a
+preflight scope stacks its pending facts beside the frame's own journal marks
+and a discarded scope drops them. The identity's `FactsRevision` moves on
+every row change, so a console write reaches the lane on the next tick without
+a second mirror path; the replay tape pins an identity's projection and not its
+facts, so a re-drive of a tape recorded with a non-empty lane diverges at the
+lane the way it does at a durable identity slot.
+
 ## Owned worlds and storage
 
 `WorldOwnedWorlds` loads one `puck.world.def.v1` file per identity from

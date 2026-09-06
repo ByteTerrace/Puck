@@ -358,6 +358,47 @@ public static partial class WorldRuleCompiler {
         return new RemovePlacementEffect(id: effect.Id, describe: $"removePlacement {effect.Id}");
     }
 
+    /// <summary>Resolves the handle of the document's <see cref="WorldIdentityFactLane"/> row, refusing by name when
+    /// the document declares none.</summary>
+    /// <param name="ruleName">The rule being compiled.</param>
+    /// <param name="context">The compile context.</param>
+    /// <param name="where">The site spelled in the refusal.</param>
+    internal static StateHandle ResolveIdentityLane(string ruleName, WorldRuleCompileContext context, string where) {
+        if (context.FindRow(name: WorldIdentityFactLane.RowName) is not { Kind: CellKind.Int, IsKeyed: true }) {
+            throw new RuleException(refusal: WorldRuleRefusal.IdentityLaneUndeclared, ruleName: ruleName, detail: $"{where} reads or writes an identity fact, but the document declares no keyed int row named '{WorldIdentityFactLane.RowName}' in state.world — a world carries facts only when it declares that lane");
+        }
+
+        return RuleCompiler.ResolveHandle(context: context, name: WorldIdentityFactLane.RowName);
+    }
+    internal static EffectFact ResolveIdentityFact(WorldEffect.SetIdentityFact effect, string ruleName, WorldRuleCompileContext context) {
+        const string Verb = "setIdentityFact";
+
+        var (key, keyFrom) = context.ResolveBodyAddress(key: effect.Key, verb: Verb, ruleName: ruleName);
+
+        if (!CellName.TryParse(candidate: effect.Fact, name: out var fact, reason: out var factReason)) {
+            throw new RuleException(refusal: WorldRuleRefusal.IdentityFactMalformed, ruleName: ruleName, detail: $"'{Verb}' fact '{effect.Fact}' {factReason}");
+        }
+
+        _ = ResolveIdentityLane(ruleName: ruleName, context: context, where: $"'{Verb}'");
+
+        if ((effect.Value is not null) == (effect.Expression is not null)) {
+            throw new RuleException(refusal: RuleRefusal.EffectSourceAmbiguous, ruleName: ruleName, detail: $"'{Verb}' must name EXACTLY ONE of 'value' or 'expression'");
+        }
+        if (effect.Value is { } literal) {
+            return new IdentityFactEffect(
+                key: key,
+                keyFrom: keyFrom,
+                fact: fact,
+                rawValue: RuleCompiler.LiteralToRaw(kind: CellKind.Int, literal: literal, ruleName: ruleName, verb: Verb),
+                expression: null,
+                describe: $"{Verb} body:{key}.{fact} = {literal.ToString(provider: CultureInfo.InvariantCulture)}"
+            );
+        }
+
+        var program = RuleCompiler.CompileExpression(expression: effect.Expression, kind: CellKind.Int, ruleName: ruleName, verb: Verb, context: context);
+
+        return new IdentityFactEffect(key: key, keyFrom: keyFrom, fact: fact, rawValue: 0L, expression: program, describe: $"{Verb} body:{key}.{fact} := expression[{program.Length}]");
+    }
     internal static EffectFact ResolvePose(WorldEffect.Pose effect, string ruleName, WorldRuleCompileContext context) {
         CompiledCellRef? keyFrom = null;
         var index = -1;

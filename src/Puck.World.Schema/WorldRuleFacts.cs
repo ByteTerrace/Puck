@@ -92,6 +92,9 @@ public static class WorldRuleFacts {
     /// resolved cell. A body reference resolving to no live body reads <c>1</c> (perfectly upright) — the neutral
     /// value for an absent body, since nothing about "no body" should ever read as knocked over.</summary>
     public const string UprightPrefix = "$upright:";
+    /// <summary>The reserved channel reading one fact on the identity a body drives under:
+    /// <c>$identity:&lt;bodyRef&gt;:&lt;fact&gt;</c>, answered from the world's <see cref="WorldIdentityFactLane"/>.</summary>
+    public const string IdentityPrefix = "$identity:";
     /// <summary>The prefix; <c>$nav:&lt;bodyRef&gt;:&lt;facet&gt;</c> reads one body's live route state. Facets are
     /// <c>hasPath</c>, <c>active</c>, <c>arrived</c>, <c>unreachable</c>, <c>pending</c>, <c>capacity</c>, and <c>remaining</c> waypoints.</summary>
     public const string NavigationPrefix = "$nav:";

@@ -35,25 +35,29 @@ public sealed partial class WorldServer {
         return m_ruleFrame!;
     }
     // Loads the frame fresh from the installed document — once per tick, before any rule evaluates — remembers this
-    // tick's own starting document as the fold's replay baseline, and holds the frame active for IRuleReader.Store
-    // until EvaluateWorldRules releases it, so a read outside the tick's own rule evaluation never reaches it.
-    private void LoadRuleFrame() {
+    // tick's own starting document as the fold's replay baseline, holds the frame active for IRuleReader.Store
+    // until EvaluateWorldRules releases it, so a read outside the tick's own rule evaluation never reaches it, and
+    // mirrors every moved identity binding into the fact lane so this tick's rules read it.
+    private void LoadRuleFrame(ulong tick) {
         EnsureRuleFrame();
         m_ruleFrameStore ??= new RowStore(rows: () => m_definition.State);
         m_ruleFrame!.Load(source: m_ruleFrameStore);
         m_ruleFrameTickBaseline = m_definition;
         m_ruleFrameActive = true;
+        SyncIdentityFactLanes(tick: tick);
     }
     private void BeginRuleFrameScope() {
         m_ruleFrameJournalMarks.Push(item: EnsureRuleFrame().BeginJournalScope());
         m_ruleFrameMutationMarks.Push(item: m_ruleFrameMutations.Count);
         m_ruleFrameReloadMarks.Push(item: m_ruleFrameReloadStamp);
+        BeginIdentityFactScope();
     }
     private void EndRuleFrameScope() {
         var journalMark = m_ruleFrameJournalMarks.Pop();
         var mutationMark = m_ruleFrameMutationMarks.Pop();
         var reloadMark = m_ruleFrameReloadMarks.Pop();
 
+        EndIdentityFactScope();
         m_ruleFrameMutations.RemoveRange(index: mutationMark, count: (m_ruleFrameMutations.Count - mutationMark));
 
         // A cross-row mutation (TryApplyCrossRowStateMutation) reloaded the frame from a candidate this scope is
@@ -77,6 +81,7 @@ public sealed partial class WorldServer {
         _ = m_ruleFrameReloadMarks.Pop();
         m_ruleFrame!.CommitJournalScope();
         _ = m_ruleFrameJournalMarks.Pop();
+        CommitIdentityFactScope();
 
         return (m_ruleFrameMutations.Count > mutationMark);
     }

@@ -96,6 +96,57 @@ public sealed class EmitCueEffect : EffectFact {
     public override void CollectReads(List<RuleAccess> into) => RuleAccess.CollectReference(reference: KeyFrom, into: into);
 }
 
+/// <summary>Writes one fact on the identity a world-addressed body drives under — the body's lane cell and the
+/// identity's persisted row together (<see cref="WorldEffect.SetIdentityFact"/>).</summary>
+public sealed class IdentityFactEffect : EffectFact, IValueSourcedEffect {
+    private CellName[]? m_laneKeys;
+
+    public IdentityFactEffect(string key, CompiledCellRef? keyFrom, CellName fact, long rawValue, CompiledExpressionToken[]? expression, string describe) : base(describe: describe) {
+        Key = key;
+        KeyFrom = keyFrom;
+        Fact = fact;
+        RawValue = rawValue;
+        Expression = expression;
+    }
+
+    /// <summary>Gets the body address — a literal index, or the spelling <see cref="KeyFrom"/> resolves live.</summary>
+    public string Key { get; }
+    /// <summary>Gets the live body indirection, or <see langword="null"/> for a literal <see cref="Key"/>.</summary>
+    public CompiledCellRef? KeyFrom { get; }
+    /// <summary>Gets the fact key on the identity's row.</summary>
+    public CellName Fact { get; }
+    /// <inheritdoc/>
+    public long RawValue { get; }
+    /// <inheritdoc/>
+    public OperandFact? From => null;
+    /// <inheritdoc/>
+    public CompiledExpressionToken[]? Expression { get; }
+
+    /// <summary>Returns the lane key of <paramref name="bodyIndex"/>'s cell for this fact, minted once per body.</summary>
+    /// <param name="bodyIndex">The 0-based body index.</param>
+    /// <param name="capacity">The population capacity the cache is sized to.</param>
+    public CellName LaneKey(int bodyIndex, int capacity) {
+        m_laneKeys ??= new CellName[capacity];
+
+        if (((uint)bodyIndex) >= ((uint)m_laneKeys.Length)) {
+            return CellName.Parse(candidate: WorldIdentityFactLane.Key(bodyIndex: bodyIndex, fact: Fact.Value));
+        }
+        if (m_laneKeys[bodyIndex].Value is null) {
+            m_laneKeys[bodyIndex] = CellName.Parse(candidate: WorldIdentityFactLane.Key(bodyIndex: bodyIndex, fact: Fact.Value));
+        }
+
+        return m_laneKeys[bodyIndex];
+    }
+
+    public override long Cost(RuleCompileContext context) => EffectCosts.Sourced(baseCost: 512L, effect: this, context: context);
+    public override void CollectReads(List<RuleAccess> into) {
+        EffectCosts.CollectSourceReads(effect: this, into: into);
+        RuleAccess.CollectReference(reference: KeyFrom, into: into);
+    }
+    public override void CollectWrites(List<RuleAccess> into) => into.Add(item: new RuleAccess(Row: WorldIdentityFactLane.RowName, Key: null, IsSet: true));
+    public override bool ReadsHost => true;
+}
+
 /// <summary>Applies a body motion operation to a world-addressed body.</summary>
 public sealed class BodyEffect : EffectFact {
     public BodyEffect(string key, CompiledCellRef? keyFrom, CompiledWorldBodyEffect body, string describe) : base(describe: describe) {

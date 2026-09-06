@@ -791,6 +791,26 @@ worlds; there is no player-document family or aggregate catalog. The runtime
 stores them independently beneath the selected state root's `owned-worlds`
 directory.
 
+**Facts.** An identity carries one keyed `int` row of facts on its own
+document — `identity.facts` (`WorldIdentityFacts`: `{state, capacity}`,
+`identity-facts` holding 64 when the section authors none) names the row and
+bounds it; the row is minted on the first write and validated as a keyed `int`
+row whose `capacity` is that one number. A fact is a key and an integer, and
+what a key means is the reading world's own rule to author. A world receives
+facts through one reserved body-scope row it declares in `state.world` when it
+wants them at all: a keyed `int` row named `identity` (`WorldIdentityFactLane`)
+whose cells are keyed `<bodyIndex>-<fact>`; a world declaring none refuses
+every fact effect and channel by name at compile. The `setIdentityFact` effect
+(`{key: <body>, fact, value | expression}`, the body spelled as every other
+body-addressed effect spells it) writes the body's lane cell and the identity's
+own row together; the `$identity:<bodyRef>:<fact>` channel reads the lane, 0
+for a fact never written or a body driving under no identity; the HUD binds a
+lane cell as `state.identity.<bodyIndex>-<fact>` like any other keyed cell. The
+server mirrors the identity into the lane when a seat binds one and zeroes the
+lane when the seat unbinds (`Puck.World.Server`'s `WorldServer.IdentityFacts.cs`);
+`identity.facts` echoes the identity's row and `identity.fact.set` writes one
+from the console.
+
 **Bindings compose in layers.** A seat's effective binding document is the
 world's `bindingOverlays` rows in order (a `basis` chain supplies earlier rows
 — the shipped `Assets/worlds/standard.world.json` template carries the standard

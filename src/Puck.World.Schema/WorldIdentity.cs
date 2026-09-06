@@ -25,6 +25,7 @@ public sealed class WorldIdentity {
     private readonly string m_neutralColor;
     private readonly float m_noseFactor;
 
+    private int m_factsRevision;
     private FixedQ4816? m_moveSpeed;
     private FixedQ4816? m_turnSpeed;
 
@@ -88,6 +89,18 @@ public sealed class WorldIdentity {
     public string ColorHex { get; private set; }
     /// <summary>Gets the owned world, or <see langword="null"/> for a replay-pinned identity.</summary>
     public WorldDefinition? Document { get; private set; }
+    /// <summary>Gets the facts row this identity carries, or <see langword="null"/> when no fact was ever written or
+    /// there is no owned document to carry one.</summary>
+    public WorldStateRow? Facts => ((Document is { } document)
+        ? WorldDefinitionRows.FindStateRow(rows: document.State, name: FactsDefinition.State)
+        : null
+    );
+    /// <summary>Gets the facts row name and capacity this identity's document declares, or the default for one
+    /// declaring none.</summary>
+    public WorldIdentityFacts FactsDefinition => (Document?.Identity?.FactsOrDefault ?? WorldIdentityFacts.Default);
+    /// <summary>Gets a counter that moves on every change to <see cref="Facts"/> — the one reference a server holds
+    /// to know whether a body's lane still mirrors this identity's row.</summary>
+    public int FactsRevision => m_factsRevision;
     /// <summary>Gets the claimed deterministic locomotion speed, or <see langword="null"/> when this identity
     /// claims none — the seat then moves at the kit's own authored rate.</summary>
     public FixedQ4816? FixedMoveSpeed => m_moveSpeed;
@@ -278,7 +291,84 @@ public sealed class WorldIdentity {
         );
     /// <summary>Replaces the backing owned world after a composed edit.</summary>
     /// <param name="document">The replacement owned world.</param>
-    public void ReplaceDocument(WorldDefinition document) => Document = document;
+    public void ReplaceDocument(WorldDefinition document) {
+        Document = document;
+        m_factsRevision++;
+    }
+    /// <summary>Writes one fact on this identity's own facts row — minting the row on the first write — and reports
+    /// whether the row changed. A write of the value the row already holds changes nothing and touches no
+    /// document.</summary>
+    /// <param name="key">The fact key.</param>
+    /// <param name="value">The fact's integer value.</param>
+    /// <param name="changed">Whether the row changed.</param>
+    /// <param name="reason">Why the write was refused, or empty on success.</param>
+    /// <returns><see langword="true"/> when the write applied or was already in place.</returns>
+    public bool TrySetFact(CellName key, long value, out bool changed, out string reason) {
+        changed = false;
+
+        if (Document is null) {
+            reason = "this identity carries no owned document to persist a fact into";
+
+            return false;
+        }
+
+        var definition = FactsDefinition;
+        var row = Facts;
+
+        if (row is { } declared) {
+            if (declared is not { Kind: CellKind.Int, IsKeyed: true }) {
+                reason = $"state row '{definition.State}' is not a keyed int row";
+
+                return false;
+            }
+
+            var cells = (declared.Cells ?? []);
+
+            for (var index = 0; (index < cells.Count); index++) {
+                if (cells[index].Key != key) {
+                    continue;
+                }
+                if (cells[index].Value == value) {
+                    reason = string.Empty;
+
+                    return true;
+                }
+
+                var replaced = new StateCell[cells.Count];
+
+                for (var copy = 0; (copy < cells.Count); copy++) {
+                    replaced[copy] = cells[copy];
+                }
+
+                replaced[index] = new StateCell(Key: key, Value: value);
+                WriteState(row: declared with { Cells = replaced });
+                changed = true;
+                reason = string.Empty;
+
+                return true;
+            }
+
+            if (cells.Count >= definition.Capacity) {
+                reason = $"facts row '{definition.State}' holds {cells.Count} of {definition.Capacity} facts; '{key}' does not fit";
+
+                return false;
+            }
+
+            WriteState(row: declared with { Cells = [.. cells, new StateCell(Key: key, Value: value)] });
+        } else {
+            WriteState(row: new WorldStateRow(
+                Name: definition.State,
+                Kind: CellKind.Int,
+                Capacity: definition.Capacity,
+                Cells: [new StateCell(Key: key, Value: value)]
+            ));
+        }
+
+        changed = true;
+        reason = string.Empty;
+
+        return true;
+    }
     /// <summary>Changes display identity in the owned world.</summary>
     /// <param name="name">The new display name.</param>
     /// <param name="colorHex">The new authored color, as <c>#RRGGBB</c>.</param>
@@ -376,5 +466,6 @@ public sealed class WorldIdentity {
         )).Append(element: row).ToArray();
 
         Document = Document.WithWorldState(rows: state);
+        m_factsRevision++;
     }
 }

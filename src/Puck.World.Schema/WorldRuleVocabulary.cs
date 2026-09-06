@@ -291,6 +291,11 @@ public static class WorldRuleVocabulary {
                 allowsTransaction: true,
                 compile: static (effect, ruleName, context) => WorldRuleCompiler.ResolvePose(effect: (WorldEffect.Pose)effect, ruleName: ruleName, context: context)
             ),
+            new WorldEffectArm(
+                effectType: typeof(WorldEffect.SetIdentityFact), discriminator: "setIdentityFact",
+                allowsTransaction: true,
+                compile: static (effect, ruleName, context) => WorldRuleCompiler.ResolveIdentityFact(effect: (WorldEffect.SetIdentityFact)effect, ruleName: ruleName, context: context)
+            ),
         ],
         predicates: [
             new WorldPredicateArm(predicateType: typeof(WorldPredicate.Now), discriminator: "now"),
@@ -385,6 +390,7 @@ public static class WorldRuleVocabulary {
             $"{WorldRuleFacts.DistancePrefix}<a>:<b>",
             $"{WorldRuleFacts.LineOfSightPrefix}<a>:<b>",
             $"{WorldRuleFacts.UprightPrefix}<bodyRef>",
+            $"{WorldRuleFacts.IdentityPrefix}<bodyRef>:<fact>",
             $"{WorldRuleFacts.NavigationPrefix}<bodyRef>:<facet>",
             $"{WorldRuleFacts.ParkedPrefix}<bodyRef>",
             $"{WorldRuleFacts.LinkPrefix}<adjacencyName>",
@@ -449,6 +455,19 @@ public static class WorldRuleVocabulary {
                     throw new RuleException(refusal: WorldRuleRefusal.SpatialChannelMalformed, ruleName: ruleName, detail: $"'{name}' does not spell '{WorldRuleFacts.UprightPrefix}<bodyRef>' ({WorldRuleCompileContext.BodyRefVocabulary})");
                 }
                 fact = new UprightOperand(bodyA: world.ResolveBodyRef(tokens: tokens, start: 0, ruleName: ruleName, channel: name));
+            } else if (name.StartsWith(value: WorldRuleFacts.IdentityPrefix, comparisonType: StringComparison.Ordinal)) {
+                RuleCompiler.RefuseKeyOnReservedChannel(key: key, ruleName: ruleName, name: name, keyFieldLabel: site.KeyFieldLabel);
+                var tokens = name[WorldRuleFacts.IdentityPrefix.Length..].Split(separator: ':');
+                var width = WorldRuleCompileContext.BodyRefTokenWidth(tokens: tokens, start: 0);
+                if ((tokens.Length != (width + 1)) || !CellName.TryParse(candidate: tokens[width], name: out _, reason: out _)) {
+                    throw new RuleException(refusal: WorldRuleRefusal.IdentityFactMalformed, ruleName: ruleName, detail: $"'{name}' does not spell '{WorldRuleFacts.IdentityPrefix}<bodyRef>:<fact>' ({WorldRuleCompileContext.BodyRefVocabulary}, then a fact key)");
+                }
+                fact = new IdentityFactOperand(
+                    body: world.ResolveBodyRef(tokens: tokens, start: 0, ruleName: ruleName, channel: name),
+                    fact: tokens[width],
+                    lane: WorldRuleCompiler.ResolveIdentityLane(ruleName: ruleName, context: world, where: $"'{name}'"),
+                    capacity: world.Definition.Population.Capacity
+                );
             } else if (name.StartsWith(value: WorldRuleFacts.ParkedPrefix, comparisonType: StringComparison.Ordinal)) {
                 RuleCompiler.RefuseKeyOnReservedChannel(key: key, ruleName: ruleName, name: name, keyFieldLabel: site.KeyFieldLabel);
                 var tokens = name[WorldRuleFacts.ParkedPrefix.Length..].Split(separator: ':');

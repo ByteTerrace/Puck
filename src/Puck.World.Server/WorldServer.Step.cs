@@ -394,7 +394,7 @@ public sealed partial class WorldServer {
     private void EvaluateWorldRules(ulong tick, ulong stepTicks) {
         m_decisionWork = default;
         FreezeDecisionPerception(m_rules);
-        LoadRuleFrame();
+        LoadRuleFrame(tick: tick);
         var applied = m_evaluator.Evaluate(rules: m_rules, latch: m_ruleGateHeld, tick: tick, stepTicks: stepTicks);
 
         applied |= m_evaluator.Evaluate(rules: m_interactions, latch: m_interactionGateHeld, tick: tick, stepTicks: stepTicks);
@@ -438,6 +438,8 @@ public sealed partial class WorldServer {
                 return EffectOutcome.Skipped;
             case PoseEffect pose:
                 return (FirePoseEffect(effect: pose, ruleName: ruleName, tick: tick, preflight: preflight) ? EffectOutcome.Refused : EffectOutcome.Skipped);
+            case IdentityFactEffect fact:
+                return FireIdentityFactEffect(effect: fact, ruleName: ruleName, tick: tick, preflight: preflight);
         }
 
         // DESPAWN-OF-OWNED-CARRIER GUARD (WorldRuleEffectRefusal.CarrierPossessed): a removePlacement targeting a

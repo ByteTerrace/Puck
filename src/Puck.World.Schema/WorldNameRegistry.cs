@@ -144,6 +144,8 @@ public static partial class WorldNameRegistry {
         new(typeof(WorldEffect.DesignateBody), nameof(WorldEffect.DesignateBody.Key), WorldNameKind.State, WorldNameRole.Key),
         new(typeof(WorldEffect.DesignateBody), nameof(WorldEffect.DesignateBody.TargetKey), WorldNameKind.State, WorldNameRole.Key),
         new(typeof(WorldEffect.Pose), nameof(WorldEffect.Pose.Key), WorldNameKind.State, WorldNameRole.Key),
+        new(typeof(WorldEffect.SetIdentityFact), nameof(WorldEffect.SetIdentityFact.Key), WorldNameKind.State, WorldNameRole.Key),
+        new(typeof(WorldEffect.SetIdentityFact), nameof(WorldEffect.SetIdentityFact.Expression), WorldNameKind.State, WorldNameRole.Expression),
         new(typeof(WorldEffect.PaintField), nameof(WorldEffect.PaintField.Field), WorldNameKind.Field, WorldNameRole.Names, WorldExportFacet.Action),
         new(typeof(WorldDecisionOption), nameof(WorldDecisionOption.Score), WorldNameKind.State, WorldNameRole.Expression),
         // State transforms.
@@ -326,6 +328,8 @@ public static partial class WorldNameRegistry {
         new(typeof(WorldIdentityDefinition), nameof(WorldIdentityDefinition.Name), "an identity display name"),
         new(typeof(WorldIdentityDefinition), nameof(WorldIdentityDefinition.MoveSpeedState), "an identity-lane slot name"),
         new(typeof(WorldIdentityDefinition), nameof(WorldIdentityDefinition.TurnSpeedState), "an identity-lane slot name"),
+        new(typeof(WorldIdentityFacts), nameof(WorldIdentityFacts.State), "an identity-lane row name"),
+        new(typeof(WorldEffect.SetIdentityFact), nameof(WorldEffect.SetIdentityFact.Fact), "a fact key on the identity's own row, outside every world namespace"),
         new(typeof(WorldControllerStateSlots), nameof(WorldControllerStateSlots.MachineState), "an identity-lane slot name"),
         new(typeof(WorldControllerStateSlots), nameof(WorldControllerStateSlots.DeviceState), "an identity-lane slot name"),
         new(typeof(OwnershipSubject), nameof(OwnershipSubject.Id), "an ownership subject id"),

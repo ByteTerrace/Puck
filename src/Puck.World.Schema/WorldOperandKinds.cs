@@ -142,6 +142,53 @@ public sealed class UprightOperand : WorldOperandFact {
     public override long Cost(RuleCompileContext context) => 1L;
 }
 
+/// <summary>One fact on the identity a body drives under, read from the body's lane cell in the world's reserved
+/// <see cref="WorldIdentityFactLane"/> row (<see cref="WorldRuleFacts.IdentityPrefix"/>); a body driving under no
+/// identity, or a fact the identity never wrote, reads 0.</summary>
+public sealed class IdentityFactOperand : WorldOperandFact {
+    private readonly CellName[] m_laneKeys;
+
+    public IdentityFactOperand(CompiledBodyRef body, string fact, StateHandle lane, int capacity) : base(CellKind.Int) {
+        Body = body;
+        Fact = fact;
+        Lane = lane;
+        m_laneKeys = new CellName[capacity];
+    }
+
+    public CompiledBodyRef Body { get; }
+    public string Fact { get; }
+    public StateHandle Lane { get; }
+
+    public override RuleFact Read(IRuleReader reader) {
+        var body = Body;
+        var index = ((IWorldRuleReader)reader).ResolveBody(bodyRef: in body);
+        var store = reader.Store;
+
+        if (
+            (index < 0) ||
+            !reader.Catalog.TryGetDescriptor(handle: Lane, descriptor: out var descriptor) ||
+            (((uint)descriptor.LaneOrdinal) >= ((uint)store.Rows.Count))
+        ) {
+            return RuleFact.Finite(value: 0L, kind: CellKind.Int);
+        }
+
+        return RuleFact.Finite(value: (store.TryStored(row: store.Rows[descriptor.LaneOrdinal], key: LaneKey(bodyIndex: index), value: out var value, text: out _) ? value : 0L), kind: CellKind.Int);
+    }
+    public override long Cost(RuleCompileContext context) => 1L;
+    public override void CollectReads(List<RuleAccess> into) => into.Add(item: new RuleAccess(Row: WorldIdentityFactLane.RowName, Key: null));
+
+    private CellName LaneKey(int bodyIndex) {
+        if (((uint)bodyIndex) >= ((uint)m_laneKeys.Length)) {
+            return CellName.Parse(candidate: WorldIdentityFactLane.Key(bodyIndex: bodyIndex, fact: Fact));
+        }
+        if (m_laneKeys[bodyIndex].Value is null) {
+            m_laneKeys[bodyIndex] = CellName.Parse(candidate: WorldIdentityFactLane.Key(bodyIndex: bodyIndex, fact: Fact));
+        }
+
+        return m_laneKeys[bodyIndex];
+    }
+}
+
 /// <summary>The staleness of an adjacency link, in ticks (<see cref="WorldRuleFacts.LinkPrefix"/>).</summary>
 public sealed class LinkStalenessOperand : WorldOperandFact {
     public LinkStalenessOperand(string adjacencyName) : base(CellKind.Int) => AdjacencyName = adjacencyName;

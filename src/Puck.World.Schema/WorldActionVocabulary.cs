@@ -88,6 +88,20 @@ public static class WorldEffect {
     public sealed record RemovePlacement(string Id) : ActionEffect;
     /// <summary>Saves the world through the host's save tap.</summary>
     public sealed record Save : ActionEffect;
+    /// <summary>Writes one fact on the identity a world-addressed body drives under: the body's cell in the world's
+    /// reserved <see cref="WorldIdentityFactLane"/> row and the identity's own persisted facts row, together. Exactly
+    /// one of <paramref name="Value"/> and <paramref name="Expression"/> is authored; a body driving under no owned
+    /// identity refuses the write rather than minting one.</summary>
+    /// <param name="Key">The body — an index, a <c>$cell:</c> indirection, or a bound key.</param>
+    /// <param name="Fact">The fact key on the identity's row.</param>
+    /// <param name="Value">The integer literal.</param>
+    /// <param name="Expression">A bounded integer expression evaluated at fire time.</param>
+    public sealed record SetIdentityFact(
+        string Key,
+        string Fact,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Value = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? Expression = null
+    ) : ActionEffect;
     /// <summary>Teleports a world-addressed body to a spawn point, or to a literal position with angles; exactly one
     /// of <paramref name="SpawnPoint"/> and <paramref name="Position"/> is authored.</summary>
     public sealed record Pose(

@@ -62,8 +62,24 @@ public sealed record WorldIdentitySeed(SafeName Id, string Name, string Color);
 /// <param name="Controllers">Machine/device state-slot references used for controller pre-selection.</param>
 /// <param name="Voice">The identity's authored voice-babble selectors, or <see langword="null"/> for none (see
 /// <see cref="WorldVoiceProfile"/>).</param>
+/// <param name="Facts">The facts row this identity carries and its capacity, or <see langword="null"/> for
+/// <see cref="WorldIdentityFacts.Default"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldIdentityDefinition(SafeName Id, string Name, string Color, CellName MoveSpeedState, CellName TurnSpeedState, IReadOnlyList<WorldControllerStateSlots>? Controllers = null, WorldVoiceProfile? Voice = null);
+public sealed record WorldIdentityDefinition(
+    SafeName Id,
+    string Name,
+    string Color,
+    CellName MoveSpeedState,
+    CellName TurnSpeedState,
+    IReadOnlyList<WorldControllerStateSlots>? Controllers = null,
+    WorldVoiceProfile? Voice = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldIdentityFacts? Facts = null
+) {
+    /// <summary>Gets the facts row and capacity — <see cref="Facts"/>, or <see cref="WorldIdentityFacts.Default"/>
+    /// when the section authors none.</summary>
+    [JsonIgnore]
+    public WorldIdentityFacts FactsOrDefault => (Facts ?? WorldIdentityFacts.Default);
+}
 /// <summary>Two text state rows that identify one reconnect-stable controller.</summary>
 /// <param name="MachineState">The row containing the machine id.</param>
 /// <param name="DeviceState">The row containing the device id.</param>

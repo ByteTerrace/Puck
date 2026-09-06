@@ -1307,6 +1307,15 @@ public static partial class WorldDefinitionValidator {
             stateRows: stateRows,
             errors: errors
         );
+        ValidateIdentityFacts(
+            identity: definition.Identity,
+            stateRows: stateRows,
+            errors: errors
+        );
+        ValidateIdentityFactLane(
+            stateRows: stateRows,
+            errors: errors
+        );
         ValidateIdentityVoiceProfile(
             identity: definition.Identity,
             patchIds: patchIds,

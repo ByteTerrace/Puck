@@ -921,6 +921,27 @@ public sealed class WorldOwnedWorlds {
             m_revision++;
         }
     }
+    /// <summary>Writes one fact on an identity's own row and persists the identity when the row changed — the one
+    /// door a rule effect and the console share, so a fact reaches disk through the same save every other identity
+    /// edit takes.</summary>
+    /// <param name="identity">The identity to write.</param>
+    /// <param name="key">The fact key.</param>
+    /// <param name="value">The fact's integer value.</param>
+    /// <param name="changed">Whether the identity's row changed.</param>
+    /// <param name="reason">Why the write was refused, or empty on success.</param>
+    /// <returns><see langword="true"/> when the fact is in place.</returns>
+    public bool TrySetFact(WorldIdentity identity, CellName key, long value, out bool changed, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: identity);
+
+        if (!identity.TrySetFact(key: key, value: value, changed: out changed, reason: out reason)) {
+            return false;
+        }
+        if (changed) {
+            Save(identity: identity);
+        }
+
+        return true;
+    }
     /// <summary>Persists every owned world.</summary>
     public void Save() {
         foreach (var identity in m_identities) {
