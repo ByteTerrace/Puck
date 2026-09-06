@@ -115,10 +115,12 @@ public sealed class SearchLawTests {
 
     [Fact]
     public void ACheckpointCarriesTheJobAndTwoServersAgree() {
-        using var first = Fixtures.FreshServer(definition: ChessWithSearch());
-        using var second = Fixtures.FreshServer(definition: ChessWithSearch());
+        // Checkpoint transport needs a live, partially explored job, not hundreds of physical chess settling ticks.
+        var definition = MiniNegamaxWorld(depth: 4, nodes: 1);
+        using var first = Fixtures.FreshServer(definition);
+        using var second = Fixtures.FreshServer(definition);
 
-        for (var tick = 0; tick < 450; tick++) {
+        for (var tick = 0; tick < 12; tick++) {
             first.Step();
             second.Step();
         }
@@ -126,6 +128,8 @@ public sealed class SearchLawTests {
         var a = first.Server.SearchStatus()[0];
         var b = second.Server.SearchStatus()[0];
         Assert.Equal(a, b);
+        Assert.True(a.Nodes > 0);
+        Assert.False(a.Done);
         Assert.True(first.Server.TryCaptureCheckpoint(hostRow: WorldAuthorityHostRowCheckpoint.Empty, checkpoint: out var checkpoint, reason: out var reason), reason);
         Assert.NotNull(checkpoint!.Search);
         Assert.Single(checkpoint.Search!.Jobs);

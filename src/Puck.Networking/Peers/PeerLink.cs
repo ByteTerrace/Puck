@@ -48,6 +48,7 @@ public sealed class PeerLink : IAsyncDisposable {
 
     private readonly PeerIdentity m_local;
     private readonly Func<DateTimeOffset> m_now;
+    private readonly TimeProvider m_timeProvider;
     private readonly Action<PeerLink>? m_onClosed;
     private readonly TrustList m_remoteTrust;
     private readonly Stream m_stream;
@@ -59,7 +60,8 @@ public sealed class PeerLink : IAsyncDisposable {
     private int m_closed;
     private Task? m_readLoop;
 
-    internal PeerLink(IPeerConnection connection, Stream stream, PeerIdentity local, KeyId remoteId, byte[] remoteSubjectPublicKeyInfo, Action<PeerLink>? onClosed, Func<DateTimeOffset>? now = null) {
+    internal PeerLink(IPeerConnection connection, Stream stream, PeerIdentity local, KeyId remoteId, byte[] remoteSubjectPublicKeyInfo, Action<PeerLink>? onClosed, Func<DateTimeOffset>? now, TimeProvider timeProvider) {
+        m_timeProvider = timeProvider;
         m_connection = connection;
         m_stream = stream;
         m_local = local;
@@ -360,9 +362,7 @@ public sealed class PeerLink : IAsyncDisposable {
         try {
             // The deadline is the link's, not the caller's: its expiry closes the link, so the stream is only ever
             // aborted mid-frame by a close, never by a send that merely gave up waiting.
-            using var sendDeadline = CancellationTokenSource.CreateLinkedTokenSource(token: m_closeSource.Token);
-
-            sendDeadline.CancelAfter(delay: PeerWireProtocol.SendTimeout);
+            using var sendDeadline = new PeerDeadline(m_closeSource.Token, PeerWireProtocol.SendTimeout, m_timeProvider);
 
             await WireFrame.WriteAsync(
                 body: writer.WrittenMemory,

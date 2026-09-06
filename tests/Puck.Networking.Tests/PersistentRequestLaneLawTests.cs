@@ -94,26 +94,16 @@ public sealed class PersistentRequestLaneLawTests {
     // The lane is transport-neutral. This fixture deliberately injects a socket stream to isolate retry and
     // deadline behavior; production World callers inject the shared authenticated QUIC peer network.
     private static async ValueTask<Stream> ConnectTestStreamAsync(IPEndPoint endpoint, CancellationToken ct) {
+        if (endpoint.Port == 0) { throw new SocketException((int)SocketError.ConnectionRefused); }
         var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
         try {
             await socket.ConnectAsync(endpoint, ct);
             return new NetworkStream(socket, ownsSocket: true);
         } catch { socket.Dispose(); throw; }
     }
-    private static IPEndPoint UnreachableEndpoint() {
-        using var probe = new TcpListener(
-            localaddr: IPAddress.Loopback,
-            port: 0
-        );
-
-        probe.Start();
-
-        var endpoint = ((IPEndPoint)probe.LocalEndpoint);
-
-        probe.Stop();
-
-        return endpoint;
-    }
+    // Port zero is a fixture marker, never dialed. Refuse through the same transport seam without waiting
+    // for the OS's SYN retry policy, or racing another test for a recently released ephemeral port.
+    private static IPEndPoint UnreachableEndpoint() => new(IPAddress.Loopback, 0);
 
     /// <summary>A break on an already-established connection reconnects and re-sends exactly once, without ever
     /// calling the lane unreachable. Falsifier: dropping the <c>hadConnection</c> branch (always taking the

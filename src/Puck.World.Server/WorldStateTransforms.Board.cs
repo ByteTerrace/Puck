@@ -10,7 +10,7 @@ public static partial class WorldStateTransforms {
         if (row.EffectiveDomain is not StateDomain.CellsOf board || WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology || topology.CellCount > BoardMask.MaxCells) {
             return Refuse($"writeSet requires a board row over a topology of at most {BoardMask.MaxCells} cells", out reason);
         }
-        if (setRow.Kind != CellKind.Int || StateRows.FindCell(setRow.Cells, CellName.Parse(writeSet.SetKey ?? WorldStateRow.SlotKey)) is not { } setCell) {
+        if (setRow.Kind != CellKind.Int || !CellName.TryParse(writeSet.SetKey ?? WorldStateRow.SlotKey, out var setKey, out _) || StateRows.FindCell(setRow.Cells, setKey) is not { } setCell) {
             return Refuse("writeSet reads its cell set from an integer cell", out reason);
         }
         if (row.ClampToEnvelope(writeSet.Value) != writeSet.Value || (row.Kind == CellKind.Bool && writeSet.Value is not (0 or 1))) {

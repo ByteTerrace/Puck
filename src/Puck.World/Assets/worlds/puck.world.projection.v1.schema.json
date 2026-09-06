@@ -12514,7 +12514,7 @@
                           ],
                           "anyOf": [
                             {
-                              "description": "Moves one token, preserving identity. A random draw advances only when the whole transfer commits.",
+                              "description": "Moves selected tokens, preserving identity. A random draw advances only when the whole transfer commits.",
                               "properties": {
                                 "$type": {
                                   "const": "transfer"
@@ -12539,7 +12539,7 @@
                                   "default": "Key"
                                 },
                                 "key": {
-                                  "description": "The token key for key selection.",
+                                  "description": "The token key for key or slice selection. In an authored rule this may be a dynamic key, resolved from the active store before each transfer; direct mutations carry the resolved literal.",
                                   "type": [
                                     "string",
                                     "null"
@@ -13025,7 +13025,7 @@
                                     ],
                                     "anyOf": [
                                       {
-                                        "description": "Moves one token, preserving identity. A random draw advances only when the whole transfer commits.",
+                                        "description": "Moves selected tokens, preserving identity. A random draw advances only when the whole transfer commits.",
                                         "properties": {
                                           "$type": {
                                             "const": "transfer"
@@ -13050,7 +13050,7 @@
                                             "default": "Key"
                                           },
                                           "key": {
-                                            "description": "The token key for key selection.",
+                                            "description": "The token key for key or slice selection. In an authored rule this may be a dynamic key, resolved from the active store before each transfer; direct mutations carry the resolved literal.",
                                             "type": [
                                               "string",
                                               "null"

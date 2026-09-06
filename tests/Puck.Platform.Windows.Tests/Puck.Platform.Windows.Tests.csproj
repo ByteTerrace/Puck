@@ -20,4 +20,8 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.Platform.Windows\Puck.Platform.Windows.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <!-- Allocation laws measure optimized code directly; JIT promotion must not require thousands of warmup ticks. -->
+        <RuntimeHostConfigurationOption Include="System.Runtime.TieredCompilation" Value="false" />
+    </ItemGroup>
 </Project>

@@ -47,6 +47,7 @@ public sealed class Peer : IAsyncDisposable {
     // Cancelled by DisposeAsync once m_disposed is set, and disposed only after every handshake has drained: every
     // dial and every accepted handshake links its deadline to this token, so disposal unwinds them promptly.
     private readonly CancellationTokenSource m_lifetime = new();
+    private readonly TimeProvider m_timeProvider;
     private readonly Lock m_linksLock = new();
     private readonly List<PeerLink> m_links = [];
 
@@ -65,7 +66,9 @@ public sealed class Peer : IAsyncDisposable {
     /// <param name="identity">This peer's identity.</param>
     /// <param name="transport">The transport every dial and listen goes through.</param>
     /// <param name="now">The verification-boundary clock read, overridable for tests.</param>
-    public Peer(PeerIdentity identity, IPeerTransport transport, Func<DateTimeOffset>? now = null) {
+    /// <param name="timeProvider">The control-stream, handshake, and send deadline clock; defaults to system time.</param>
+    public Peer(PeerIdentity identity, IPeerTransport transport, Func<DateTimeOffset>? now = null, TimeProvider? timeProvider = null) {
+        m_timeProvider = timeProvider ?? TimeProvider.System;
         ArgumentNullException.ThrowIfNull(argument: identity);
         ArgumentNullException.ThrowIfNull(argument: transport);
 
@@ -105,13 +108,7 @@ public sealed class Peer : IAsyncDisposable {
     /// accepts nothing further until it is disposed.</summary>
     public Exception? ListenerFault => Volatile.Read(location: ref m_listenerFault);
 
-    private static CancellationTokenSource Deadline(CancellationToken ct, TimeSpan timeout) {
-        var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: ct);
-
-        deadline.CancelAfter(delay: timeout);
-
-        return deadline;
-    }
+    private PeerDeadline Deadline(CancellationToken ct, TimeSpan timeout) => new(ct, timeout, m_timeProvider);
     private static async ValueTask DisposeQuietlyAsync(IAsyncDisposable disposable) {
         try {
             await disposable.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false);
@@ -231,6 +228,7 @@ public sealed class Peer : IAsyncDisposable {
                         ct: handshakeDeadline.Token,
                         local: m_local,
                         now: m_now,
+                        timeProvider: m_timeProvider,
                         onClosed: Unregister,
                         stream: stream
                     ).ConfigureAwait(continueOnCapturedContext: false);
@@ -322,6 +320,7 @@ public sealed class Peer : IAsyncDisposable {
                 ct: deadline.Token,
                 local: m_local,
                 now: m_now,
+                timeProvider: m_timeProvider,
                 onClosed: Unregister,
                 stream: stream
             ).ConfigureAwait(continueOnCapturedContext: false);

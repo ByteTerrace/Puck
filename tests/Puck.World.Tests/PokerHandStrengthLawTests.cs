@@ -10,26 +10,7 @@ namespace Puck.World.Tests;
 /// plays to showdown and a second folds, proving chip and card conservation, the reveal seam, the phase machine's one
 /// writer, and the discard of an out-of-turn action.</summary>
 public sealed class PokerHandStrengthLawTests {
-    private static readonly WorldDefinition Garden = LoadGarden();
-
-    private static WorldDefinition LoadGarden() {
-        var path = FindGardenWorld();
-        // The loader (not the raw file source): it resolves the garden's state-bound document values, which is what a
-        // server boot needs and what Fixtures.FreshServer's serialize-then-deserialize round trip cannot do itself.
-        Assert.True(WorldDefinitionLoader.TryLoadFile(path, out var definition, out var reason), reason);
-        return definition!;
-    }
-
-    // Walks up from the test assembly's run directory to the repo root (the directory carrying Puck.slnx), then
-    // down to the garden's own shipped document — the same file `puck.world.json` names everywhere else.
-    private static string FindGardenWorld() {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Puck.slnx"))) {
-            directory = directory.Parent;
-        }
-        Assert.NotNull(directory);
-        return Path.Combine(directory!.FullName, "src", "Puck.World", "Assets", "worlds", "puck.world.json");
-    }
+    private static readonly WorldDefinition Garden = AuthoredGameFixtures.Program("poker");
 
     // ------------------------------------------------------------------
     // The card encoding the document authors: bit 16 * (suit - 1) + (rank - 1), suits C D H S = 1..4, ranks 2..14.

@@ -55,7 +55,7 @@ public sealed class HexLinesModuleImportLawTests {
         return definition!;
     }
 
-    private static WorldDefinition LoadGarden() => Load("src", "Puck.World", "Assets", "worlds", "puck.world.json");
+    private static WorldDefinition LoadGarden() => AuthoredGameFixtures.Nexus;
     private static WorldDefinition LoadMinimalHost() => Load("tests", "Puck.World.Tests", "Fixtures", "minimal-hexlines-host.world.json");
 
     private static WorldPlacement Placement(WorldDefinition definition, string id) {
@@ -177,11 +177,11 @@ public sealed class HexLinesModuleImportLawTests {
         Assert.Equal(expected, RowKeys(definition, "hexStoneCell"));
         Assert.Equal(expected, RowKeys(definition, "hexStoneCode"));
 
-        using var fixture = Fixtures.FreshServer(definition: definition);
+        var population = AuthoredGameFixtures.PopulationForIdentityChecks(definition);
         var seated = new HashSet<string>();
 
-        for (var index = 0; (index < fixture.Server.Population.Capacity); index++) {
-            if (fixture.Server.Population.InhabitantPlacementId(index) is { } placementId && placementId.StartsWith("hexStone", StringComparison.Ordinal)) {
+        for (var index = 0; (index < population.Capacity); index++) {
+            if (population.InhabitantPlacementId(index) is { } placementId && placementId.StartsWith("hexStone", StringComparison.Ordinal)) {
                 seated.Add(placementId);
             }
         }
@@ -199,7 +199,8 @@ public sealed class HexLinesModuleImportLawTests {
     public void StonesSettleInsideTheirOwnTrays() {
         var definition = LoadMinimalHost();
 
-        using var fixture = Fixtures.FreshServer(definition: definition);
+        using var fixture = Fixtures.FreshServer(definition);
+        var population = fixture.Server.Population;
 
         for (var tick = 0; (tick < 400); tick++) {
             fixture.Step();
@@ -224,7 +225,7 @@ public sealed class HexLinesModuleImportLawTests {
 
                 Assert.True(ordinal >= 0, $"'{id}' names no declared placement");
 
-                var bodyIndex = fixture.Server.Population.BodyForPlacementOrdinal(ordinal: ordinal);
+                var bodyIndex = population.BodyForPlacementOrdinal(ordinal: ordinal);
 
                 Assert.True(bodyIndex >= 0, $"'{id}' is not inhabited");
 

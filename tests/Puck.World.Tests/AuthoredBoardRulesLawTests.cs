@@ -5,8 +5,7 @@ namespace Puck.World.Tests;
 /// <summary>Checks the shipped board programs against coordinate arithmetic, independent of their bitboards,
 /// direction names, shifts, and attack queries. The physical chess import is covered by ChessModuleImportLawTests.</summary>
 public sealed class AuthoredBoardRulesLawTests {
-    private static readonly Lazy<WorldDefinition> GardenSource = new(() => Load("src/Puck.World/Assets/worlds/puck.world.json"));
-    private static WorldDefinition Garden => GardenSource.Value;
+    private static readonly WorldDefinition Garden = AuthoredGameFixtures.Program("tictactoe");
     private static readonly WorldDefinition ChessModule = Load("tests/Puck.World.Tests/Fixtures/minimal-chess-host.world.json");
 
     private static WorldDefinition Load(string relativePath) {
@@ -86,14 +85,15 @@ public sealed class AuthoredBoardRulesLawTests {
         return false;
     }
 
-    private static void CheckChess(long[] board) {
-        using var fixture = Fixtures.FreshServer(definition: Chess(board));
-        fixture.Step();
-        var actual = WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, "inCheck")!;
+    private RuleFrameFixture? m_chessJudge;
+    private void CheckChess(long[] board) {
+        var position = Chess(board);
+        var fixture = m_chessJudge ??= new RuleFrameFixture(position);
+        fixture.Evaluate(position);
         for (var side = 0; side < 2; side++) {
             var king = Array.IndexOf(board, side == 0 ? 6L : -6L);
             Assert.Equal(Attacked(board, king, side == 0 ? -1 : 1) ? 1L : 0L,
-                actual.Cells!.Single(c => c.Key.Value == side.ToString()).Value);
+                fixture.Read("inCheck", side.ToString()));
         }
     }
 
@@ -196,11 +196,11 @@ public sealed class AuthoredBoardRulesLawTests {
     [InlineData("bk", 61, 1)]
     [InlineData("bq", 59, 1)]
     public void CastleTransitAttacksReadPiecesAtEverySquare(string side, int transit, int sign) {
+        var empty = new long[64];
+        var fixture = new RuleFrameFixture(CastlePosition(empty, empty, "tabletop-castle-transit-attacked"));
         void Check(long[] board) {
-            using var fixture = Fixtures.FreshServer(definition: CastlePosition(board, board, "tabletop-castle-transit-attacked"));
-            fixture.Step();
-            var result = WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, "castleTransitAttacked")!;
-            Assert.Equal(Attacked(board, transit, sign) ? 1L : 0L, result.Cells!.Single(c => c.Key.Value == side).Value);
+            fixture.Evaluate(CastlePosition(board, board, "tabletop-castle-transit-attacked"));
+            Assert.Equal(Attacked(board, transit, sign) ? 1L : 0L, fixture.Read("castleTransitAttacked", side));
         }
         Check(new long[64]);
         for (var piece = 1; piece <= 6; piece++) {
@@ -239,7 +239,8 @@ public sealed class AuthoredBoardRulesLawTests {
         }
     }
 
-    private static long QubicWinner(long[] board) {
+    private RuleFrameFixture? m_qubicJudge;
+    private long QubicWinner(long[] board) {
         var source = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [.. Garden.State.Where(r => r.Name.Value.StartsWith("ttt", StringComparison.Ordinal)).Select(r =>
                 r.Name.Value switch {
@@ -248,9 +249,9 @@ public sealed class AuthoredBoardRulesLawTests {
                 })], Lattices: [Garden.StateRaw!.Lattices!.Single(t => t.Name == "tttCube")]),
             Rules = [Garden.Rules!.Single(r => r.Name.Value == "ttt-check-win")],
         };
-        using var fixture = Fixtures.FreshServer(definition: source);
-        fixture.Step();
-        return WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, "tttWinner")!.Cells!.Single().Value;
+        var fixture = m_qubicJudge ??= new RuleFrameFixture(source);
+        fixture.Evaluate(source);
+        return fixture.Read("tttWinner");
     }
 
     [Theory]

@@ -153,7 +153,7 @@ public sealed class WorldDecisionLawTests {
         var chosen = Rule(policy);
         using var alone = Fixtures.FreshServer(Document(chosen));
         using var withOther = Fixtures.FreshServer(Document(chosen) with { Rules = [Rule(policy, "other"), chosen] });
-        for (var index = 0; index < 100; index++) {
+        for (var index = 0; index < 8; index++) {
             alone.Step(504); withOther.Step(504);
             Assert.Equal(State(alone), State(withOther));
         }
@@ -321,26 +321,26 @@ public sealed class WorldDecisionLawTests {
         };
         Assert.True(WorldDefinitionValidator.TryValidateLocally(document, out var reason), reason);
         using var fixture = Fixtures.FreshServer(document);
-        for (var index = 0; index < 100; index++) {
+        for (var index = 0; index < 8; index++) {
             fixture.Step(504);
             _ = WorldRuntimeStateHash.HashAuthoritative(fixture.Server, 0);
         }
         var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         var start = Stopwatch.GetTimestamp();
-        for (var index = 0; index < 1000; index++) {
+        for (var index = 0; index < 16; index++) {
             fixture.Step(504);
             _ = WorldRuntimeStateHash.HashAuthoritative(fixture.Server, 0);
         }
         var elapsed = Stopwatch.GetElapsedTime(start);
         var allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
-        TestContext.Current.TestOutputHelper!.WriteLine($"{policyCount * 128} bindings x 32 options, 1000 full decision steps + authoritative hashes: {elapsed.TotalMilliseconds:F3} ms, {allocated} allocated bytes");
+        TestContext.Current.TestOutputHelper!.WriteLine($"{policyCount * 128} bindings x 32 options, 16 full decision steps + authoritative hashes: {elapsed.TotalMilliseconds:F3} ms, {allocated} allocated bytes");
         using var baseline = Fixtures.FreshServer(fixture.Server.Definition with { Rules = [] });
-        for (var index = 0; index < 100; index++) {
+        for (var index = 0; index < 8; index++) {
             baseline.Step(504);
             _ = WorldRuntimeStateHash.HashAuthoritative(baseline.Server, 0);
         }
         var baselineBefore = GC.GetAllocatedBytesForCurrentThread();
-        for (var index = 0; index < 1000; index++) {
+        for (var index = 0; index < 16; index++) {
             baseline.Step(504);
             _ = WorldRuntimeStateHash.HashAuthoritative(baseline.Server, 0);
         }

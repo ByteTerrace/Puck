@@ -127,6 +127,7 @@ internal static class PeerHandshake {
     /// <param name="stream">The control stream, opened by one side and accepted by the other.</param>
     /// <param name="onClosed">Invoked once the resulting link closes.</param>
     /// <param name="now">The verification-boundary clock read, overridable for tests.</param>
+    /// <param name="timeProvider">The established link's send deadline clock.</param>
     /// <param name="ct">Cancellation.</param>
     /// <returns>The established link, or the refusal that stopped the handshake:
     /// <see cref="PeerRefusal.ConnectionClosed"/> when the peer closed first (returned without writing anything),
@@ -134,7 +135,7 @@ internal static class PeerHandshake {
     /// decided and sent — <see cref="PeerRefusal.HandshakeMalformed"/>, <see cref="PeerRefusal.ProtocolMismatch"/>,
     /// <see cref="PeerRefusal.ChannelUnbound"/> (including a transport that proved no key at all),
     /// <see cref="PeerRefusal.IdentityKeyInvalid"/>, or <see cref="PeerRefusal.IdentityUnproven"/>.</returns>
-    public static async Task<(PeerLink? Link, PeerFailure Failure)> RunAsync(PeerIdentity local, IPeerConnection connection, Stream stream, Action<PeerLink>? onClosed, Func<DateTimeOffset>? now, CancellationToken ct) {
+    public static async Task<(PeerLink? Link, PeerFailure Failure)> RunAsync(PeerIdentity local, IPeerConnection connection, Stream stream, Action<PeerLink>? onClosed, Func<DateTimeOffset>? now, TimeProvider timeProvider, CancellationToken ct) {
         var ownChallenge = RandomNumberGenerator.GetBytes(count: PeerWireProtocol.ChallengeBytes);
 
         var offer = new WireWriter();
@@ -383,6 +384,7 @@ internal static class PeerHandshake {
             connection: connection,
             local: local,
             now: now,
+            timeProvider: timeProvider,
             onClosed: onClosed,
             remoteId: remoteId,
             remoteSubjectPublicKeyInfo: peerSubjectPublicKeyInfo,

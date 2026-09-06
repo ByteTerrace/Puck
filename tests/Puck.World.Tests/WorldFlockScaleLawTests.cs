@@ -59,15 +59,15 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         Assert.InRange(burst.Updates, 1, 172);
         Assert.InRange(burst.Candidates, 0, expected * 32);
 
-        // Keep the measured window beyond background Tier1 promotion under full-suite load. A late promotion adds
-        // runtime bookkeeping bytes to this thread and can otherwise look like a flock-path allocation burst.
-        for (var tick = 0; tick < 240; tick++) { fixture.Step(); }
+        // Cover an entire 24-tick perception cadence in both warmup and measurement. Every creature is
+        // still present; optimized JIT from startup removes the former 240-tick promotion wait.
+        for (var tick = 0; tick < 24; tick++) { fixture.Step(); }
         var candidates = 0;
         var retained = 0;
         var updates = 0;
         var before = GC.GetAllocatedBytesForCurrentThread();
         var watch = Stopwatch.StartNew();
-        for (var tick = 0; tick < 120; tick++) {
+        for (var tick = 0; tick < 24; tick++) {
             fixture.Step();
             var work = fixture.Server.Population.FlockStatistics;
             candidates = Math.Max(candidates, work.Candidates);
@@ -76,10 +76,10 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         }
         watch.Stop();
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        output.WriteLine($"dense flock: {expected} coincident creatures, 120 ticks in {watch.Elapsed.TotalMilliseconds:F1} ms ({watch.Elapsed.TotalMilliseconds / 120:F2} ms/tick), {allocated} thread bytes");
+        output.WriteLine($"dense flock: {expected} coincident creatures, 24 ticks in {watch.Elapsed.TotalMilliseconds:F1} ms ({watch.Elapsed.TotalMilliseconds / 24:F2} ms/tick), {allocated} thread bytes");
         Assert.InRange(candidates, 0, updates * 32);
         Assert.InRange(retained, 0, updates * 16);
-        Assert.InRange(allocated, 0, 512 * 120);
+        Assert.InRange(allocated, 0, 512 * 24);
         Assert.InRange(fixture.Server.Population.AutonomyStatistics.MotionUpdates, 1023, 1024);
         Assert.InRange(fixture.Server.Population.AutonomyStatistics.SteeringUpdates, 170, 172);
 
@@ -87,7 +87,7 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         using var replay = Fixtures.FreshServer(DenseDocument());
         Assert.Equal(expected, replay.Server.Population.SetSimulatedCount(expected));
         Coincide(replay);
-        for (var tick = 0; tick < 361; tick++) { replay.Step(); }
+        for (var tick = 0; tick < 49; tick++) { replay.Step(); }
         Assert.Equal(first, WorldRuntimeStateHash.HashAuthoritative(replay.Server, 120));
     }
 

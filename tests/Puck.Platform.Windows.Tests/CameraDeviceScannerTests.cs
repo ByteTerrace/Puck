@@ -20,8 +20,9 @@ public sealed class CameraDeviceScannerTests {
         using var scanner = new CameraDeviceScanner(service, TimeSpan.FromSeconds(2));
         try {
             Assert.False(scanner.TryPoll(0, out _));
+            // Check before yielding: once awaited, the pool may legitimately reuse the former caller thread.
+            Assert.NotEqual(caller, Volatile.Read(ref worker));
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
-            Assert.NotEqual(caller, worker);
             var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
             var unexpectedlyCompleted = false;
             for (var index = 0; index < 1000; index++) { unexpectedlyCompleted |= scanner.TryPoll(10 * Stopwatch.Frequency, out _); }

@@ -658,7 +658,11 @@ public sealed class StateFrame : StateStore {
             return false;
         }
 
-        var setKey = CellName.Parse(candidate: writeSet.SetKey ?? StateRow.SlotKey.Value);
+        if (!CellName.TryParse(candidate: (writeSet.SetKey ?? StateRow.SlotKey.Value), name: out var setKey, reason: out _)) {
+            reason = $"writeSet set key '{writeSet.SetKey}' names no cell of set row '{writeSet.Set}'";
+
+            return false;
+        }
 
         if (!TryStored(row: setRow, key: setKey, value: out var bits, text: out _)) {
             reason = $"writeSet found no cell '{setKey}' on set row '{writeSet.Set}'";

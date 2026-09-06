@@ -12,25 +12,7 @@ namespace Puck.World.Tests;
 /// the winner is determined.
 /// </summary>
 public sealed class MancalaModuleLawTests {
-    private static string RepoRoot() {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while ((directory is not null) && !File.Exists(Path.Combine(directory.FullName, "Puck.slnx"))) {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(directory);
-
-        return directory!.FullName;
-    }
-
-    private static WorldDefinition LoadGarden() {
-        var path = Path.Combine(RepoRoot(), "src", "Puck.World", "Assets", "worlds", "puck.world.json");
-
-        Assert.True(WorldDefinitionLoader.TryLoadFile(path, out var definition, out var reason), reason);
-
-        return definition!;
-    }
+    private static readonly WorldDefinition Module = AuthoredGameFixtures.Program("mancala");
 
     private static long ReadCell(WorldFixture fixture, string row, string key) {
         Assert.True(condition: WorldStateReader.TryRead(
@@ -103,7 +85,7 @@ public sealed class MancalaModuleLawTests {
 
     [Fact]
     public void InitialBoard_Has48Seeds_AndZeroStores() {
-        using var fixture = Fixtures.FreshServer(definition: LoadGarden());
+        using var fixture = Fixtures.FreshServer(definition: Module);
 
         var board = ReadBoard(fixture);
 
@@ -129,7 +111,7 @@ public sealed class MancalaModuleLawTests {
 
     [Fact]
     public void StandardSow_And_ExtraTurn_WhenLandingInOwnStore() {
-        using var fixture = Fixtures.FreshServer(definition: LoadGarden());
+        using var fixture = Fixtures.FreshServer(definition: Module);
         var transport = new LoopbackTransport(server: fixture.Server);
 
         // Player 0 plays Pit 2 (4 seeds). Sows into 3, 4, 5, 6 (Store 0).
@@ -149,7 +131,7 @@ public sealed class MancalaModuleLawTests {
 
     [Fact]
     public void NormalTurnTransfer_WhenLandingInRegularPit() {
-        using var fixture = Fixtures.FreshServer(definition: LoadGarden());
+        using var fixture = Fixtures.FreshServer(definition: Module);
         var transport = new LoopbackTransport(server: fixture.Server);
 
         // Player 0 plays Pit 0 (4 seeds). Sows into 1, 2, 3, 4.
@@ -171,7 +153,7 @@ public sealed class MancalaModuleLawTests {
 
     [Fact]
     public void OpponentStore_IsSkipped_ByBothPlayers() {
-        using var fixture = Fixtures.FreshServer(definition: LoadGarden());
+        using var fixture = Fixtures.FreshServer(definition: Module);
         var transport = new LoopbackTransport(server: fixture.Server);
 
         // Set Pit 5 to have 8 seeds. For P0: sows into 6, 7, 8, 9, 10, 11, 12, then skips 13, lands in 0.
@@ -195,7 +177,7 @@ public sealed class MancalaModuleLawTests {
 
     [Fact]
     public void Capture_Rule_SweepsLandingSeedAndOppositePit() {
-        using var fixture = Fixtures.FreshServer(definition: LoadGarden());
+        using var fixture = Fixtures.FreshServer(definition: Module);
         var transport = new LoopbackTransport(server: fixture.Server);
 
         // Setup: P0 Pit 1 is empty (0 seeds). Opposite pit 11 has 5 seeds.
@@ -214,7 +196,7 @@ public sealed class MancalaModuleLawTests {
 
     [Fact]
     public void LargeWrapAround_SowsMoreThan13Seeds() {
-        using var fixture = Fixtures.FreshServer(definition: LoadGarden());
+        using var fixture = Fixtures.FreshServer(definition: Module);
         var transport = new LoopbackTransport(server: fixture.Server);
 
         // Setup: P0 Pit 5 has 15 seeds.
@@ -234,7 +216,7 @@ public sealed class MancalaModuleLawTests {
 
     [Fact]
     public void EndGame_SweepsRemainingSeeds_AndDeclaresWinner() {
-        using var fixture = Fixtures.FreshServer(definition: LoadGarden());
+        using var fixture = Fixtures.FreshServer(definition: Module);
         var transport = new LoopbackTransport(server: fixture.Server);
 
         // Setup: P0 has only 1 seed in Pit 5, all other P0 pits (0..4) are 0.

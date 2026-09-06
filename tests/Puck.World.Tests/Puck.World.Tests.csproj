@@ -43,4 +43,8 @@
     <ItemGroup>
         <Using Include="Puck.State" />
     </ItemGroup>
+    <ItemGroup>
+        <!-- Allocation laws measure optimized code directly; JIT promotion must not require thousands of warmup ticks. -->
+        <RuntimeHostConfigurationOption Include="System.Runtime.TieredCompilation" Value="false" />
+    </ItemGroup>
 </Project>

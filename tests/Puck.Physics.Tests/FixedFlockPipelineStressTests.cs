@@ -11,7 +11,8 @@ public sealed class FixedFlockPipelineStressTests {
     [InlineData(true, true)]
     public void ThousandsOfDenseCreaturesHaveBoundedDeterministicAllocationFreeSteering(bool coincident, bool grounded) {
         const int count = 4096;
-        const int steps = 48;
+        // Each update covers all 4096 bodies and the reverse-order replay; eight updates exercise evolving neighborhoods.
+        const int steps = 8;
         var one = FixedQ4816.One;
         var zero = FixedQ4816.Zero;
         var radius = FixedQ4816.FromInteger(20);

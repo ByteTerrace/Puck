@@ -442,7 +442,10 @@ public static partial class RuleCompiler {
                     }
                 }
                 if (transfer.Key is { } key && TryResolveDynamicKey(key, ruleName, context, "transfer", "key", out var selectedKey)) {
-                    return new TransformStateEffect(transform, $"transformState Transfer {transfer.From} to {transfer.To}", selectedKey);
+                    return new TransformStateEffect(transform, $"transformState Transfer {transfer.From} to {transfer.To} {transfer.Selector} key {key}", selectedKey);
+                }
+                if (transfer.Key is { } literalKey && !CellName.TryParse(literalKey, out _, out _)) {
+                    throw Invalid($"transfer 'key' '{literalKey}' spells neither a token name nor a dynamic key");
                 }
                 break;
             case StateTransform.SetRay ray:

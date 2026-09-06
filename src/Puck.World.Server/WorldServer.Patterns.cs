@@ -51,8 +51,10 @@ public sealed partial class WorldServer {
             return length;
         }
 
-        foreach (var cell in (row.Cells ?? [])) {
-            StateReader.ReadCell(row: source, key: cell.Key.Value, tick: tick, rawValue: out var raw, text: out _);
+        var cells = (row.Cells ?? []);
+
+        for (var index = PatternOperand.StartIndex(cells: cells, start: start); index < cells.Count; index++) {
+            StateReader.ReadCell(row: source, key: cells[index].Key.Value, tick: tick, rawValue: out var raw, text: out _);
             word[length++] = raw ?? 0L;
         }
 

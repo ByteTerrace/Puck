@@ -473,13 +473,7 @@ public static class EffectCosts {
     /// <summary>Sums the cost of a list of effects.</summary>
     /// <param name="effects">The effects.</param>
     /// <param name="context">The compile context.</param>
-    public static long Sum(EffectFact[] effects, RuleCompileContext context) {
-        var cost = 0L;
-        foreach (var effect in effects) {
-            cost = RuleWorkBudget.SaturatingAdd(left: cost, right: effect.Cost(context: context));
-        }
-        return cost;
-    }
+    public static long Sum(EffectFact[] effects, RuleCompileContext context) => RuleWorkBudget.EffectsCost(effects: effects, context: context);
     /// <summary>Prices a base cost plus the effect's live source, if any.</summary>
     /// <param name="baseCost">The kind's own cost.</param>
     /// <param name="effect">The effect.</param>

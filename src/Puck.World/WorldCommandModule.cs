@@ -148,14 +148,14 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
     private static readonly string[] CameraTileAliases = ["camera", "camera-tile", "tile"];
 
     // The one argument grammar every adaptive render-quality lever (world.ao-quality, world.shadow-march,
-    // world.shadow-mask) parses: auto, the exact side, or the fast side, as the ordinal each lever's own three-value
-    // mode enum shares (Auto = 0, exact = 1, fast = 2) — the value the session lever carries.
-    private static bool TryParseAdaptiveMode(in WireArgs args, string[] exact, string[] fast, out int ordinal) {
+    // world.shadow-mask) parses: auto, the exact side, or the fast side — answered as the lever's OWN mode member,
+    // so the value the session lever carries is anchored to the enum declaration, never to a shared ordinal.
+    private static bool TryParseAdaptiveMode<TMode>(in WireArgs args, string[] exact, string[] fast, TMode autoMode, TMode exactMode, TMode fastMode, out TMode mode) where TMode : struct, Enum {
         if (args.Is(
             index: 0,
             value: "auto"
         )) {
-            ordinal = 0;
+            mode = autoMode;
 
             return true;
         }
@@ -164,7 +164,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             args: in args,
             spellings: exact
         )) {
-            ordinal = 1;
+            mode = exactMode;
 
             return true;
         }
@@ -173,12 +173,12 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             args: in args,
             spellings: fast
         )) {
-            ordinal = 2;
+            mode = fastMode;
 
             return true;
         }
 
-        ordinal = -1;
+        mode = default;
 
         return false;
     }
@@ -813,7 +813,10 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     args: in args,
                     exact: ExactOrGather,
                     fast: CameraTileAliases,
-                    ordinal: out var ordinal
+                    autoMode: ShadowMaskMode.Auto,
+                    exactMode: ShadowMaskMode.ExactGather,
+                    fastMode: ShadowMaskMode.CameraTile,
+                    mode: out var mode
                 )) {
                     return CommandResult.Error(output: $"[world.shadow-mask: unknown mode '{args[0]}' — auto|exact|camera-tile]");
                 }
@@ -821,7 +824,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
                     name: WorldSessionLevers.ShadowMask,
-                    a: ordinal,
+                    a: ((double)mode),
                     formatEcho: () => new CommandResult(Output: DescribeShadowMask())
                 );
             }
@@ -839,7 +842,10 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     args: in args,
                     exact: ExactOrQuality,
                     fast: FastOrFleet,
-                    ordinal: out var ordinal
+                    autoMode: AmbientOcclusionMode.Auto,
+                    exactMode: AmbientOcclusionMode.Exact,
+                    fastMode: AmbientOcclusionMode.Fast,
+                    mode: out var mode
                 )) {
                     return CommandResult.Error(output: $"[world.ao-quality: unknown mode '{args[0]}' — auto|exact|fast]");
                 }
@@ -847,7 +853,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
                     name: WorldSessionLevers.AmbientOcclusionQuality,
-                    a: ordinal,
+                    a: ((double)mode),
                     formatEcho: () => new CommandResult(Output: DescribeAmbientOcclusionQuality())
                 );
             }
@@ -865,7 +871,10 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     args: in args,
                     exact: ExactOrQuality,
                     fast: FastOrFleet,
-                    ordinal: out var ordinal
+                    autoMode: ShadowMarchMode.Auto,
+                    exactMode: ShadowMarchMode.Exact,
+                    fastMode: ShadowMarchMode.Fast,
+                    mode: out var mode
                 )) {
                     return CommandResult.Error(output: $"[world.shadow-march: unknown mode '{args[0]}' — auto|exact|fast]");
                 }
@@ -873,7 +882,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
                     name: WorldSessionLevers.ShadowMarch,
-                    a: ordinal,
+                    a: ((double)mode),
                     formatEcho: () => new CommandResult(Output: DescribeShadowMarch())
                 );
             }

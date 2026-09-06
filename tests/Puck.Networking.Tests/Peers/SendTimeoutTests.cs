@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Puck.Networking.Peers;
 using Xunit;
 
@@ -10,11 +9,10 @@ namespace Puck.Networking.Tests.Peers;
 /// and nothing about the caller's token decides any of it. Runs over an in-memory connection pair, because loopback
 /// QUIC cannot be made to withhold credit on cue.</summary>
 public sealed class SendTimeoutTests {
-    private static readonly TimeSpan Slack = TimeSpan.FromSeconds(value: 2);
-
     [Fact]
     public async Task SendAsync_WhenThePeerWithholdsStreamCredit_ClosesTheLinkAsConnectionClosed_AtTheSendTimeout_AndReleasesTheSendQueuedBehindIt() {
         using var deadline = Laws.SocketDeadline();
+        var clock = new DeadlineClock();
 
         var identityA = PeerIdentity.Create();
         var identityB = PeerIdentity.Create();
@@ -27,6 +25,7 @@ public sealed class SendTimeoutTests {
 
         await using var peerA = new Peer(
             identity: identityA,
+            timeProvider: clock,
             transport: new FakePeerTransport(dial: _ => connectionAtA)
         );
         await using var peerB = new Peer(
@@ -50,7 +49,6 @@ public sealed class SendTimeoutTests {
         // parks inside the transport with the write gate held, and the send behind it parks on the gate.
         connectionAtA.WithholdWriteCredit();
 
-        var clock = Stopwatch.StartNew();
         var stalled = linkAtoB.SendAsync(
             ct: deadline.Token,
             payload: "never credited"u8.ToArray()
@@ -59,10 +57,12 @@ public sealed class SendTimeoutTests {
             ct: deadline.Token,
             payload: "behind the stalled send"u8.ToArray()
         );
+        Assert.False(stalled.IsCompleted);
+        Assert.False(queued.IsCompleted);
+        await clock.ExpireAsync(PeerWireProtocol.SendTimeout, deadline.Token);
         var stalledRefusal = await Assert.ThrowsAsync<PeerRefusedException>(testCode: () => stalled.WaitAsync(cancellationToken: deadline.Token));
         var queuedRefusal = await Assert.ThrowsAsync<PeerRefusedException>(testCode: () => queued.WaitAsync(cancellationToken: deadline.Token));
 
-        clock.Stop();
 
         Assert.Equal(
             expected: PeerRefusal.ConnectionClosed,
@@ -76,12 +76,6 @@ public sealed class SendTimeoutTests {
         Assert.Equal(
             expected: PeerRefusal.ConnectionClosed,
             actual: queuedRefusal.Failure.Refusal
-        );
-        // The caller's deadline (Laws.SocketBudget) is far longer than the send clock, so an exit inside the clock
-        // plus slack is the link's own doing.
-        Assert.True(
-            condition: (clock.Elapsed < (PeerWireProtocol.SendTimeout + Slack)),
-            userMessage: $"the stalled send took {clock.Elapsed}; the send clock is {PeerWireProtocol.SendTimeout}"
         );
         Assert.False(condition: linkAtoB.IsOpen);
         Assert.Equal(

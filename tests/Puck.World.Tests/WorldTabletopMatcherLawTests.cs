@@ -115,9 +115,12 @@ public sealed class WorldTabletopMatcherLawTests {
         var state = WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!;
         return state.Cells!.SingleOrDefault(c => c.Key.Value == key)?.Value ?? 0;
     }
-    private static void Check(long[] before, long[] after, bool legal, int turn = 0, int ep = -1, int rights = 0, int collisions = 0) {
-        using var fixture = Fixtures.FreshServer(Judge(before, after, turn, ep, rights, collisions));
-        fixture.Step();
+    private RuleFrameFixture? m_judge;
+    private static long Read(RuleFrameFixture fixture, string row, string key = "$value") => fixture.Read(row, key);
+    private void Check(long[] before, long[] after, bool legal, int turn = 0, int ep = -1, int rights = 0, int collisions = 0) {
+        var position = Judge(before, after, turn, ep, rights, collisions);
+        var fixture = m_judge ??= new RuleFrameFixture(position);
+        fixture.Evaluate(position);
         Assert.Equal(legal ? 1 : 0, Read(fixture, "verdict"));
         Assert.Equal(legal ? 1 - turn : turn, Read(fixture, "turn"));
         for (var i = 0; i < 64; i++) { Assert.Equal((legal ? after : before)[i], Read(fixture, "lastLegal", i.ToString())); }
@@ -170,10 +173,10 @@ public sealed class WorldTabletopMatcherLawTests {
         int[] back = [4, 2, 3, 5, 6, 3, 2, 4];
         for (var i = 0; i < 8; i++) { before[i] = back[i]; before[i + 8] = 1; before[i + 48] = -1; before[i + 56] = -back[i]; }
         var accepted = 0;
+        var fixture = new RuleFrameFixture(Judge(before, before));
         for (var from = 0; from < 16; from++) {
             for (var to = 16; to < 48; to++) {
-                using var fixture = Fixtures.FreshServer(Judge(before, Move(before, from, to)));
-                fixture.Step();
+                fixture.Evaluate(Judge(before, Move(before, from, to)));
                 if (Read(fixture, "verdict") == 1) { accepted++; }
             }
         }
@@ -263,21 +266,23 @@ public sealed class WorldTabletopMatcherLawTests {
         (int Cell, int Piece, int Rights)[] homes = [(0, 4, 1), (4, 6, 3), (7, 4, 2),
             (56, -4, 4), (60, -6, 12), (63, -4, 8)];
         var before = Position((0, 4), (7, 4), (56, -4), (63, -4));
+        RuleFrameFixture? judge = null;
         void CheckRights(long[] after, int rights) {
             var source = Judge(before, after, rights: rights);
             var expected = rights;
             foreach (var home in homes) {
                 if (before[home.Cell] == home.Piece && after[home.Cell] != home.Piece) { expected |= home.Rights; }
             }
-            using var fixture = Fixtures.FreshServer(source with {
+            var position = source with {
                 StateRaw = source.StateRaw! with { World = [.. source.State.Select(row => row.Name.Value switch {
                     "verdict" => Slot(row, 1),
                     "move" => row with { Cells = [.. row.Cells!.Select(c => c.Key.Value == "kind" ? c with { Value = 1 } : c)] },
                     _ => row,
                 })] },
                 Rules = [.. source.Rules!.Where(r => r.Name.Value == "tabletop-advance-turn")],
-            });
-            fixture.Step();
+            };
+            var fixture = judge ??= new RuleFrameFixture(position);
+            fixture.Evaluate(position);
             Assert.Equal(expected, Read(fixture, "castleRights"));
             Assert.Equal(1, Read(fixture, "turn"));
         }
@@ -324,13 +329,15 @@ public sealed class WorldTabletopMatcherLawTests {
 
     [Fact]
     public void FootprintCountsAgreeWithAFullBoardComparison() {
+        RuleFrameFixture? judge = null;
         void Compare(long[] before, long[] after, int turn) {
             var source = Judge(before, after, turn);
-            using var fixture = Fixtures.FreshServer(source with {
+            var position = source with {
                 Rules = [.. source.Rules!.Where(r => r.Name.Value is
                     "tabletop-candidate-cells" or "tabletop-candidate-move" or "tabletop-candidate-match")],
-            });
-            fixture.Step();
+            };
+            var fixture = judge ??= new RuleFrameFixture(position);
+            fixture.Evaluate(position);
             var from = (int)Read(fixture, "move", "from");
             var to = (int)Read(fixture, "move", "to");
             var kind = Read(fixture, "move", "kind");

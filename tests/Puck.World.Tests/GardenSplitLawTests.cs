@@ -52,13 +52,7 @@ public sealed class GardenSplitLawTests {
         }
     }
 
-    private static WorldDefinition LoadGarden() {
-        var path = Path.Combine(RepoRoot(), "src", "Puck.World", "Assets", "worlds", "puck.world.json");
-
-        Assert.True(WorldDefinitionLoader.TryLoadFile(path, out var definition, out var reason), reason);
-
-        return definition!;
-    }
+    private static WorldDefinition LoadGarden() => AuthoredGameFixtures.Nexus;
 
     [Fact]
     public void HoundIdentitiesBelongToTheGardenAndFitTheirDestinationRows() {
@@ -93,15 +87,15 @@ public sealed class GardenSplitLawTests {
     [Fact]
     public void ChessPieceBodies_MatchDeclaredPiecePlacementIds() {
         var definition = LoadGarden();
-        using var fixture = Fixtures.FreshServer(definition: definition);
+        var population = AuthoredGameFixtures.PopulationForIdentityChecks(definition);
 
         var fromPieceCell = KeysAsPlacementIds(definition, "pieceCell");
         var fromPieceCode = KeysAsPlacementIds(definition, "pieceCode");
         var declaredPieceIds = definition.Placements.Where(p => (p.Id.StartsWith("piece", StringComparison.Ordinal) && (p.Inhabit is not null))).Select(p => p.Id).ToHashSet();
         var fromPopulation = new HashSet<string>();
 
-        for (var index = 0; (index < fixture.Server.Population.Capacity); index++) {
-            if (fixture.Server.Population.InhabitantPlacementId(index) is { } placementId && placementId.StartsWith("piece", StringComparison.Ordinal)) {
+        for (var index = 0; (index < population.Capacity); index++) {
+            if (population.InhabitantPlacementId(index) is { } placementId && placementId.StartsWith("piece", StringComparison.Ordinal)) {
                 fromPopulation.Add(placementId);
             }
         }

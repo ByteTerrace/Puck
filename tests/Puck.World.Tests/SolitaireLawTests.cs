@@ -8,8 +8,7 @@ namespace Puck.World.Tests;
 public sealed class SolitaireLawTests {
     [Fact]
     public void AllSolitaireModulesComposeWithTheShippedNexus() {
-        var path = Path.Combine(Root, "src/Puck.World/Assets/worlds/puck.world.json");
-        Assert.True(WorldDefinitionFileSource.TryLoad(path, out var definition, out _, out var reason), reason);
+        var definition = AuthoredGameFixtures.Nexus;
         Assert.Contains(definition!.State, row => row.Name.Value == "solitaireFreecell");
         Assert.Contains(definition.State, row => row.Name.Value == "solitaireSpider");
         Assert.Contains(definition.State, row => row.Name.Value == "solitaireKlondike");
@@ -39,7 +38,7 @@ public sealed class SolitaireLawTests {
     private static WorldStateRow Row(WorldFixture f, string name) => f.Server.Definition.State.Single(r => r.Name.Value == name);
     private static long Value(WorldFixture f, string game, string key) => Row(f, game).Cells!.Single(c => c.Key.Value == key).Value;
     private static int Count(WorldFixture f, string game, int pile) => Row(f, $"{game}Pile{pile}").Cells?.Count ?? 0;
-    private static void Steps(WorldFixture f, int n = 48) { for (var i = 0; i < n; i++) { f.Step(); } }
+    private static void Steps(WorldFixture f, int n) { for (var i = 0; i < n; i++) { f.Step(); } }
     private static void Request(WorldFixture f, string game, int action, int from = -1, int to = -1, int card = -1) {
         foreach (var (key, value) in new (string, long)[] { ("action", action), ("from", from), ("to", to), ("card", card), ("request", Value(f, game, "request") + 1) }) {
             f.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.Console, Row: game, Value: value, Key: key, Kind: WorldDocumentWriteKind.Set));
@@ -100,7 +99,7 @@ public sealed class SolitaireLawTests {
     [InlineData(3, 18, false)] // wrong rank
     public void KlondikeJudgesRankAndColourBeforeTransferring(int card, int target, bool legal) {
         using var f = Fixtures.FreshServer(Position("solitaireKlondike", new() { [2] = [card], [3] = [target] }, card: card));
-        Steps(f);
+        Settle(f, f.Server.Definition.State.Single(row => row.Name.Value is "solitaireKlondike" or "solitaireSpider" or "solitaireFreecell").Name.Value);
         Assert.Equal(legal ? 1 : -1, Value(f, "solitaireKlondike", "result"));
         Assert.Equal(legal ? 0 : 1, Count(f, "solitaireKlondike", 2));
         Assert.Equal(legal ? new[] { target.ToString(), card.ToString() } : [target.ToString()], Row(f, "solitaireKlondikePile3").Cells!.Select(c => c.Key.Value));
@@ -111,14 +110,14 @@ public sealed class SolitaireLawTests {
     [InlineData(11, false)]
     public void OnlyKingsStartEmptyKlondikeColumns(int card, bool legal) {
         using var f = Fixtures.FreshServer(Position("solitaireKlondike", new() { [2] = [card] }, card: card));
-        Steps(f);
+        Settle(f, f.Server.Definition.State.Single(row => row.Name.Value is "solitaireKlondike" or "solitaireSpider" or "solitaireFreecell").Name.Value);
         Assert.Equal(legal ? 1 : -1, Value(f, "solitaireKlondike", "result"));
     }
 
     [Fact]
     public void KlondikeMovesAnEntireAlternatingRunAndRevealsTheCoveredCard() {
         using var f = Fixtures.FreshServer(Position("solitaireKlondike", new() { [2] = [40, 4, 16, 2], [3] = [18] }, hidden: [40], card: 4));
-        Steps(f);
+        Settle(f, f.Server.Definition.State.Single(row => row.Name.Value is "solitaireKlondike" or "solitaireSpider" or "solitaireFreecell").Name.Value);
         Assert.Equal(1, Value(f, "solitaireKlondike", "result"));
         Assert.Equal(new[] { "18", "4", "16", "2" }, Row(f, "solitaireKlondikePile3").Cells!.Select(c => c.Key.Value));
         Assert.Equal(1, Row(f, "solitaireKlondikeFace").Cells!.Single(c => c.Key.Value == "40").Value);
@@ -128,7 +127,7 @@ public sealed class SolitaireLawTests {
     public void AHiddenOrBrokenRunCannotMove() {
         foreach (var hidden in new[] { true, false }) {
             using var f = Fixtures.FreshServer(Position("solitaireKlondike", new() { [2] = hidden ? [4, 16] : [4, 3], [3] = [18] }, hidden: hidden ? [4] : [], card: 4));
-            Steps(f);
+            Settle(f, f.Server.Definition.State.Single(row => row.Name.Value is "solitaireKlondike" or "solitaireSpider" or "solitaireFreecell").Name.Value);
             Assert.Equal(-1, Value(f, "solitaireKlondike", "result"));
             Assert.Equal(2, Count(f, "solitaireKlondike", 2));
         }
@@ -139,7 +138,7 @@ public sealed class SolitaireLawTests {
     [InlineData("solitaireFreecell")]
     public void FoundationsRequireSuitAndAscendingRank(string game) {
         using var f = Fixtures.FreshServer(Position(game, new() { [2] = [0], [3] = [1], [4] = [13] }, to: 10));
-        Steps(f);
+        Settle(f, f.Server.Definition.State.Single(row => row.Name.Value is "solitaireKlondike" or "solitaireSpider" or "solitaireFreecell").Name.Value);
         Assert.Equal(1, Value(f, game, "result"));
         Request(f, game, 2, 4, 10, 13);
         Assert.Equal(-1, Value(f, game, "result"));
@@ -155,7 +154,7 @@ public sealed class SolitaireLawTests {
         var definition = Position("solitaireKlondike", new() { [0] = [0, 1, 2, 3, 4] }, action: 0);
         definition = definition with { StateRaw = definition.StateRaw! with { World = [.. definition.State.Select(r => r.Name.Value == "solitaireKlondike" ? r with { Cells = [.. r.Cells!.Select(c => c.Key.Value == "activeOption" ? c with { Value = amount } : c)] } : r)] } };
         using var f = Fixtures.FreshServer(definition);
-        Steps(f);
+        Settle(f, f.Server.Definition.State.Single(row => row.Name.Value is "solitaireKlondike" or "solitaireSpider" or "solitaireFreecell").Name.Value);
         Request(f, "solitaireKlondike", 3);
         Assert.Equal(amount, Count(f, "solitaireKlondike", 1));
         while (Count(f, "solitaireKlondike", 0) > 0) { Request(f, "solitaireKlondike", 3); }
@@ -168,7 +167,7 @@ public sealed class SolitaireLawTests {
     [Fact]
     public void SpiderMayBuildAcrossSuitsButOnlyMovesSameSuitRuns() {
         using var f = Fixtures.FreshServer(Position("solitaireSpider", new() { [2] = [4], [3] = [18] }, card: 4));
-        Steps(f);
+        Settle(f, f.Server.Definition.State.Single(row => row.Name.Value is "solitaireKlondike" or "solitaireSpider" or "solitaireFreecell").Name.Value);
         Assert.Equal(1, Value(f, "solitaireSpider", "result"));
         Request(f, "solitaireSpider", 2, 3, 4, 18);
         Assert.Equal(-1, Value(f, "solitaireSpider", "result"));
@@ -180,7 +179,7 @@ public sealed class SolitaireLawTests {
     public void SpiderClearsCompleteSuitRunsAndCountsTheWin() {
         var piles = new Dictionary<int, int[]> { [2] = Enumerable.Range(0, 13).Reverse().ToArray(), [12] = Enumerable.Range(13, 91).ToArray() };
         using var f = Fixtures.FreshServer(Position("solitaireSpider", piles, action: 0));
-        Steps(f);
+        Settle(f, f.Server.Definition.State.Single(row => row.Name.Value is "solitaireKlondike" or "solitaireSpider" or "solitaireFreecell").Name.Value);
         Assert.Equal(104, Count(f, "solitaireSpider", 12));
         Assert.Equal(2, Value(f, "solitaireSpider", "status"));
     }
@@ -192,7 +191,7 @@ public sealed class SolitaireLawTests {
         var piles = Enumerable.Range(2, allOccupied ? 10 : 9).ToDictionary(z => z, z => new[] { z - 2 });
         using var f = Fixtures.FreshServer(Position("solitaireSpider", piles, action: 3));
         var before = Count(f, "solitaireSpider", 0);
-        Steps(f);
+        Settle(f, f.Server.Definition.State.Single(row => row.Name.Value is "solitaireKlondike" or "solitaireSpider" or "solitaireFreecell").Name.Value);
         Assert.Equal(allOccupied ? 1 : -1, Value(f, "solitaireSpider", "result"));
         Assert.Equal(before - (allOccupied ? 10 : 0), Count(f, "solitaireSpider", 0));
     }
@@ -200,7 +199,7 @@ public sealed class SolitaireLawTests {
     [Fact]
     public void FreeCellsHoldOneCardAndFoundationMovesCannotBeUndoneAsTableauMoves() {
         using var f = Fixtures.FreshServer(Position("solitaireFreecell", new() { [2] = [0], [3] = [1] }, to: 14));
-        Steps(f);
+        Settle(f, f.Server.Definition.State.Single(row => row.Name.Value is "solitaireKlondike" or "solitaireSpider" or "solitaireFreecell").Name.Value);
         Assert.Equal(1, Value(f, "solitaireFreecell", "result"));
         Request(f, "solitaireFreecell", 2, 3, 14, 1);
         Assert.Equal(-1, Value(f, "solitaireFreecell", "result"));
@@ -219,7 +218,7 @@ public sealed class SolitaireLawTests {
         // One further card makes only one free cell available: capacity two, or four with a spare column.
         piles[16] = [42];
         using var f = Fixtures.FreshServer(Position("solitaireFreecell", piles, card: 4));
-        Steps(f);
+        Settle(f, f.Server.Definition.State.Single(row => row.Name.Value is "solitaireKlondike" or "solitaireSpider" or "solitaireFreecell").Name.Value);
         Assert.Equal(legal ? 1 : -1, Value(f, "solitaireFreecell", "result"));
     }
     [Theory]
