@@ -14,6 +14,7 @@ namespace Puck.State;
 /// <item>Named forms as calls: <c>min(a, b)</c>, <c>max</c>, <c>clamp(value, min, max)</c>, <c>abs</c>, <c>sign</c>,
 /// <c>popCount</c>, <c>leadingZeroCount</c>, <c>trailingZeroCount</c>, <c>lowestSetBit</c>,
 /// <c>clearLowestSetBit</c>, <c>byteSwap</c>, <c>bitReverse</c>, <c>rotateLeft(value, count)</c>,
+/// <c>replicationMask(width)</c>, <c>repeatBits(pattern, width)</c>,
 /// <c>rotateRight</c>, <c>parallelBitExtract(value, mask)</c>, <c>parallelBitDeposit</c>,
 /// <c>bitField(value, offset, width)</c>, <c>bitInsert(value, field, offset, width)</c>,
 /// <c>boardShift(mask, topology, direction)</c>, <c>boardImage(mask, topology, element)</c>, and
@@ -51,6 +52,8 @@ public static class ExpressionSpelling {
         ["clearLowestSetBit"] = (1, static () => new ValueToken.ClearLowestSetBit()),
         ["byteSwap"] = (1, static () => new ValueToken.ByteSwap()),
         ["bitReverse"] = (1, static () => new ValueToken.BitReverse()),
+        ["replicationMask"] = (1, static () => new ValueToken.ReplicationMask()),
+        ["repeatBits"] = (2, static () => new ValueToken.RepeatBits()),
         ["rotateLeft"] = (2, static () => new ValueToken.RotateLeft()),
         ["rotateRight"] = (2, static () => new ValueToken.RotateRight()),
         ["parallelBitExtract"] = (2, static () => new ValueToken.ParallelBitExtract()),

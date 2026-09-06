@@ -232,4 +232,8 @@ public enum ExpressionOp : byte {
     ArrangementAt,
     /// <summary>The element at position i of the permutation of 0..n−1 at a lexicographic rank.</summary>
     ArrangementMember,
+    /// <summary>A 64-bit mask with one bit at the bottom of each block; the width must divide 64.</summary>
+    ReplicationMask,
+    /// <summary>A pattern repeated across 64 bits; the width must divide 64 and the pattern must fit its block.</summary>
+    RepeatBits,
 }

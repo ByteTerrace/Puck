@@ -17,6 +17,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             values: level.Values
         );
+        writer.WriteUInt64(value: level.Key);
+        writer.WriteInt64(value: level.AlphaEntry);
     }
     private static WorldSearchLevelCheckpoint ReadSearchLevel(ref WireReader reader) {
         var shape = reader.ReadInt32();
@@ -32,6 +34,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader,
             field: "search level values"
         );
+        var key = reader.ReadUInt64();
+        var alphaEntry = reader.ReadInt64();
 
         return new WorldSearchLevelCheckpoint(
             Shape: shape,
@@ -43,7 +47,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             BestToken: bestToken,
             BestTarget: bestTarget,
             BaseTurn: baseTurn,
-            Values: values
+            Values: values,
+            Key: key,
+            AlphaEntry: alphaEntry
         );
     }
     private static void WriteSearchJob(WireWriter writer, WorldSearchJobCheckpoint job) {
@@ -81,6 +87,41 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: job.Levels,
             writeItem: WriteSearchLevel
         );
+        WriteULongArray(
+            writer: writer,
+            values: job.TtKey
+        );
+        WriteLongArray(
+            writer: writer,
+            values: job.TtValue
+        );
+        WriteLongArray(
+            writer: writer,
+            values: job.TtMeta
+        );
+        writer.WriteBoolean(value: (job.Tree is not null));
+
+        if (job.Tree is { } tree) {
+            writer.WriteBoolean(value: tree.Active);
+            writer.WriteInt32(value: tree.Phase);
+            writer.WriteInt32(value: tree.Count);
+            writer.WriteInt32(value: tree.Iteration);
+            writer.WriteUInt64(value: tree.Seed);
+            writer.WriteInt32(value: tree.UShape);
+            writer.WriteInt32(value: tree.UToken);
+            writer.WriteInt32(value: tree.UTarget);
+            writer.WriteInt32(value: tree.UScan);
+            writer.WriteInt32(value: tree.UStart);
+            writer.WriteInt32(value: tree.PlayoutPlies);
+            writer.WriteInt32(value: tree.PathLength);
+
+            foreach (var values in new[] { tree.Parent, tree.FirstChild, tree.ChildCount, tree.Visits, tree.Total, tree.Shape, tree.Token, tree.Target, tree.Expanded, tree.Path, tree.UctValues, tree.PlayValues }) {
+                WriteLongArray(
+                    writer: writer,
+                    values: values
+                );
+            }
+        }
     }
     private static WorldSearchJobCheckpoint ReadSearchJob(ref WireReader reader) {
         var name = reader.ReadRequiredString(
@@ -120,6 +161,48 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "search job levels",
             readItem: static (ref WireReader r) => ReadSearchLevel(reader: ref r)
         );
+        var ttKey = ReadULongArray(
+            reader: ref reader,
+            field: "search job transposition keys"
+        );
+        var ttValue = ReadLongArray(
+            reader: ref reader,
+            field: "search job transposition values"
+        );
+        var ttMeta = ReadLongArray(
+            reader: ref reader,
+            field: "search job transposition meta"
+        );
+        WorldSearchTreeCheckpoint? tree = null;
+
+        if (reader.ReadBoolean()) {
+            var treeActive = reader.ReadBoolean();
+            var phase = reader.ReadInt32();
+            var treeCount = reader.ReadInt32();
+            var iteration = reader.ReadInt32();
+            var seed = reader.ReadUInt64();
+            var uShape = reader.ReadInt32();
+            var uToken = reader.ReadInt32();
+            var uTarget = reader.ReadInt32();
+            var uScan = reader.ReadInt32();
+            var uStart = reader.ReadInt32();
+            var playoutPlies = reader.ReadInt32();
+            var pathLength = reader.ReadInt32();
+            var arrays = new long[12][];
+
+            for (var index = 0; index < arrays.Length; index++) {
+                arrays[index] = ReadLongArray(
+                    reader: ref reader,
+                    field: "search job tree"
+                );
+            }
+
+            tree = new WorldSearchTreeCheckpoint(
+                Active: treeActive, Phase: phase, Count: treeCount, Iteration: iteration, Seed: seed, UShape: uShape, UToken: uToken, UTarget: uTarget, UScan: uScan, UStart: uStart, PlayoutPlies: playoutPlies,
+                Parent: arrays[0], FirstChild: arrays[1], ChildCount: arrays[2], Visits: arrays[3], Total: arrays[4], Shape: arrays[5], Token: arrays[6], Target: arrays[7], Expanded: arrays[8],
+                Path: arrays[9], PathLength: pathLength, UctValues: arrays[10], PlayValues: arrays[11]
+            );
+        }
 
         return new WorldSearchJobCheckpoint(
             Name: name,
@@ -142,7 +225,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             BestTarget: bestTarget,
             Alpha: alpha,
             Beta: beta,
-            Levels: levels
+            Levels: levels,
+            TtKey: ttKey,
+            TtValue: ttValue,
+            TtMeta: ttMeta,
+            Tree: tree
         );
     }
     private static byte[] EncodeSearch(WorldSearchCheckpoint section) {

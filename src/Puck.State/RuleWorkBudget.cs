@@ -293,6 +293,9 @@ public static class RuleWorkBudget {
 
         // Tier 10: Combinatorial & iterative Euclidean loops (40-80)
         ExpressionOp.GreatestCommonDivisor or ExpressionOp.Choose => 40L,
+        // Maths validates divisibility and computes the mask by division; repetition also validates and multiplies.
+        ExpressionOp.ReplicationMask => 40L,
+        ExpressionOp.RepeatBits => 60L,
         ExpressionOp.LeastCommonMultiple => 45L,
         ExpressionOp.Hilbert or ExpressionOp.HilbertX or ExpressionOp.HilbertY => 60L,
         ExpressionOp.SubsetRank or ExpressionOp.SubsetAt or ExpressionOp.SubsetMember

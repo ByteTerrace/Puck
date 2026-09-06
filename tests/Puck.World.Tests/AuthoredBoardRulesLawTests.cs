@@ -25,16 +25,37 @@ public sealed class AuthoredBoardRulesLawTests {
             CellName.Parse(values.Length == 1 ? WorldStateRow.SlotKey : index.ToString()), value))],
     };
 
+    // The board is derived from its token rows (inverse), so a position is seeded as tokens: one token per occupied
+    // cell in cell order, the rest off the board.
+    private static (StateCell[] Cells, StateCell[] Codes) Tokens(long[] board) {
+        var cells = new StateCell[32];
+        var codes = new StateCell[32];
+        var next = 0;
+        for (var cell = 0; cell < board.Length; cell++) {
+            if (board[cell] != 0) {
+                cells[next] = new StateCell(CellName.Parse($"piece{next}"), cell);
+                codes[next] = new StateCell(CellName.Parse($"piece{next}"), board[cell]);
+                next++;
+            }
+        }
+        for (; next < 32; next++) {
+            cells[next] = new StateCell(CellName.Parse($"piece{next}"), -1);
+            codes[next] = new StateCell(CellName.Parse($"piece{next}"), 0);
+        }
+        return (cells, codes);
+    }
+
     private static WorldDefinition Chess(long[] board) {
+        var (tokenCells, tokenCodes) = Tokens(board);
         var rules = ChessModule.Rules!.Where(r => r.Name.Value is
             "tabletop-check-white" or "tabletop-check-black").ToArray();
-        var names = new HashSet<string> { "board", "settleHold", "inCheck" };
+        var names = new HashSet<string> { "board", "pieceCell", "pieceCode", "settleHold", "inCheck" };
         foreach (var effect in rules.SelectMany(r => r.Effects).OfType<ActionEffect.SetState>()) {
             names.Add(effect.State);
         }
         return Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [.. ChessModule.State.Where(r => names.Contains(r.Name.Value)).Select(r =>
-                r.Name.Value switch { "board" => Seed(r, board), "settleHold" => Seed(r, 60), _ => r })],
+                r.Name.Value switch { "pieceCell" => r with { Cells = tokenCells }, "pieceCode" => r with { Cells = tokenCodes }, "settleHold" => Seed(r, 60), _ => r })],
                 Lattices: [ChessModule.StateRaw!.Lattices!.Single(t => t.Name == "chessBoard")]),
             Rules = rules,
         };
@@ -101,11 +122,24 @@ public sealed class AuthoredBoardRulesLawTests {
         var host = new FrameHost(layout, rows, definition.StateCatalog, CompiledPatterns.Empty, []);
         host.Frame.Load(new RowStore(rows));
         var rules = WorldRuleCompiler.CompileAll(definition);
-        var occupancy = WorldDefinitionRows.FindStateRow(rows, "board")!;
+        var tokenRow = WorldDefinitionRows.FindStateRow(rows, "pieceCell")!;
+        var codeRow = WorldDefinitionRows.FindStateRow(rows, "pieceCode")!;
         var check = WorldDefinitionRows.FindStateRow(rows, "inCheck")!;
+        // The board derives from its tokens, so a square is set by moving a token onto it (or off the board for 0):
+        // the token already standing there, else the first token off the board.
         void Put(int square, long code) {
             board[square] = code;
-            Assert.True(host.Frame.TryWrite(occupancy, CellName.Parse(square.ToString()), code, StateWriteKind.Set, out var reason), reason);
+            var token = -1;
+            for (var candidate = 0; candidate < 32 && token < 0; candidate++) {
+                if (host.Frame.TryStoredAt(tokenRow, candidate, out var standing) && standing == square) { token = candidate; }
+            }
+            for (var candidate = 0; candidate < 32 && token < 0; candidate++) {
+                if (host.Frame.TryStoredAt(tokenRow, candidate, out var standing) && standing < 0) { token = candidate; }
+            }
+            Assert.True(token >= 0);
+            var key = CellName.Parse($"piece{token}");
+            Assert.True(host.Frame.TryWrite(codeRow, key, code, StateWriteKind.Set, out var codeReason), codeReason);
+            Assert.True(host.Frame.TryWrite(tokenRow, key, code == 0 ? -1 : square, StateWriteKind.Set, out var reason), reason);
         }
         // Compile the shipped judge once, then exhaust every origin/target/piece/colour
         // through its real frame evaluator. The expected answer uses coordinate rays.
@@ -147,8 +181,9 @@ public sealed class AuthoredBoardRulesLawTests {
 
     private static WorldDefinition CastlePosition(long[] before, long[] after, string ruleName, int moveKind = 4) => Fixtures.BuildDocument() with {
         StateRaw = new WorldStateSection(World: [.. ChessModule.State.Where(r => r.Name.Value is
-            "board" or "lastLegal" or "move" or "settleHold" or "castleRights" or "castleTransitAttacked").Select(r => r.Name.Value switch {
-                "board" => Seed(r, after), "lastLegal" => Seed(r, before), "settleHold" => Seed(r, 60),
+            "board" or "pieceCell" or "pieceCode" or "lastLegal" or "move" or "settleHold" or "castleRights" or "castleTransitAttacked").Select(r => r.Name.Value switch {
+                "pieceCell" => r with { Cells = Tokens(after).Cells }, "pieceCode" => r with { Cells = Tokens(after).Codes },
+                "lastLegal" => Seed(r, before), "settleHold" => Seed(r, 60),
                 "move" => r with { Cells = [.. r.Cells!.Select(c => c with { Value = c.Key.Value == "kind" ? moveKind : -1 })] },
                 _ => r,
             })], Lattices: [ChessModule.StateRaw!.Lattices!.Single(t => t.Name == "chessBoard")]),

@@ -343,6 +343,32 @@ public sealed class WorldExpressionVocabularyLawTests {
         Assert.Contains(expectedSubstring: "kind=int expressions only", actualString: reason);
     }
 
+    [Theory]
+    [InlineData(8L, 0x80L, true)]
+    [InlineData(64L, long.MinValue, true)]
+    [InlineData(7L, 1L, false)]
+    [InlineData(8L, 256L, false)]
+    public void ReplicationReadsLiveOperandsAndRefusesTheWholeTransaction(long width, long pattern, bool accepted) {
+        var definition = Document(
+            state: [Slot("width", width), Slot("pattern", pattern), Slot("mask", 5), Slot("repeated", 7), Slot("failed", 0)],
+            rules: [new WorldRule(Name: Name("replicate"), Effects: [new ActionEffect.Transaction(
+                Effects: [
+                    new TransactionStep.SetCell(State: "mask", Expression: ValueExpression.Parse("replicationMask(width)")),
+                    new TransactionStep.SetCell(State: "repeated", Expression: new ValueExpression(Tokens: [
+                        new ValueToken.State(Name: "pattern"), new ValueToken.State(Name: "width"), new ValueToken.RepeatBits(),
+                    ])),
+                ],
+                OnFailure: [new TransactionStep.SetCell(State: "failed", Value: 1)]
+            )])]
+        );
+        var parsed = WorldDefinitionSerialization.Deserialize(WorldDefinitionSerialization.Serialize(definition));
+        using var fixture = Fixtures.FreshServer(parsed);
+        fixture.Step();
+        Assert.Equal(accepted ? 0L : 1L, Value(fixture, "failed"));
+        Assert.Equal(accepted ? (width == 64 ? 1L : 0x0101010101010101L) : 5L, Value(fixture, "mask"));
+        Assert.Equal(accepted ? (width == 64 ? long.MinValue : unchecked((long)0x8080808080808080UL)) : 7L, Value(fixture, "repeated"));
+    }
+
     private static WorldRule Rule(string name, string target, IReadOnlyList<ValueToken> tokens) => new(
         Name: Name(name),
         Mode: ActionTriggerMode.Edge,

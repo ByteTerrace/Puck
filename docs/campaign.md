@@ -1351,9 +1351,10 @@ judges it. Candidates are authored shapes walked in a fixed order ahead of
 token and target: `relocate` (evicting or not what stood there), `drop` (a
 token off the board into an empty cell), `jump` (two cells along a direction
 over an occupied intermediate that leaves the board), and `pair` (two tokens
-by the same offset — the castle's minimal primitive). A token's code changing
-(promotion) is not a shape yet. Outputs land as ordinary rows through the
-mutation door: `legal` masks for boards to 64 cells, `reach` for the token a
+by the same offset — the castle's minimal primitive), and `promote` (a
+relocation whose code changes to one of an authored list). A card transfer is
+a relocation on a topology whose cells are zones. Outputs land as ordinary
+rows through the mutation door: `legal` masks for boards to 64 cells, `reach` for the token a
 `held` slot names on any board, per-token `counts`, `count`, and — with an
 authored `score` — `best`, from an iterative-deepening negamax with
 alpha-beta on an explicit frame stack that a tick boundary suspends anywhere
@@ -1371,11 +1372,13 @@ verdict's refuse edge. Tokens on a cell is the frame seen from the other
 side: a `cellsOf` row declaring `inverse: {tokens, codes}` is derived from
 its token row at every compose and install and refused a direct write, and
 a frame recomputes only a moved token's two cells; a count is already a
-value. Remaining, in order: UCT for a job with only a terminal outcome, its
-playouts drawn from a hash of tick and node; a transposition table; the
-promotion shape; searching zone-to-zone transfers; the shipped chess world
-adopting `inverse`, `boardShift`, and `boardFill` in place of its hand-kept
-rows and wrap constants. The judge-per-node cost is the strength ceiling —
+value. A job with an authored `outcome` and no score tree-searches instead: UCB1
+over a bounded node pool, playouts drawn from a SplitMix64 stream the job's
+stamp seeds, the outcome folded back with alternating sign; a job with a
+score keeps a transposition table keyed by the frame hash. The shipped chess
+world derives `board` through `inverse` and shifts with `boardShift`; its
+laws seed positions as tokens. Remaining: pile order inside a zone search.
+The judge-per-node cost is the strength ceiling —
 depth one in ticks, depth two or three over seconds — and a plane-native
 make/unmake for strength beyond that is a later decision. Refused: a mate
 detector unrolled into per-piece rules, a privileged bot mutation, a search

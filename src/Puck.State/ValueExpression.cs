@@ -58,6 +58,8 @@ public sealed record ValueExpression(IReadOnlyList<ValueToken> Tokens) {
 [JsonDerivedType(typeof(ValueToken.RotateRight), typeDiscriminator: "rotateRight")]
 [JsonDerivedType(typeof(ValueToken.ByteSwap), typeDiscriminator: "byteSwap")]
 [JsonDerivedType(typeof(ValueToken.BitReverse), typeDiscriminator: "bitReverse")]
+[JsonDerivedType(typeof(ValueToken.ReplicationMask), typeDiscriminator: "replicationMask")]
+[JsonDerivedType(typeof(ValueToken.RepeatBits), typeDiscriminator: "repeatBits")]
 [JsonDerivedType(typeof(ValueToken.Negate), typeDiscriminator: "negate")]
 [JsonDerivedType(typeof(ValueToken.Abs), typeDiscriminator: "abs")]
 [JsonDerivedType(typeof(ValueToken.Sign), typeDiscriminator: "sign")]
@@ -229,6 +231,13 @@ public abstract record ValueToken {
     /// <summary>Consumes one Int value and pushes its 64 bits in reverse order: on an 8x8 bitboard, the board rotated
     /// a half turn. Int only.</summary>
     public sealed record BitReverse : ValueToken;
+    /// <summary>Consumes an Int block width and pushes a 64-bit mask with one bit at each block's bottom.
+    /// Widths are 1, 2, 4, 8, 16, 32, or 64; other widths fail evaluation. Int expressions only.</summary>
+    public sealed record ReplicationMask : ValueToken;
+    /// <summary>Consumes an Int pattern and block width, in that order, and repeats the pattern across 64 bits.
+    /// The width must divide 64 and the pattern must have no set bits outside its block; otherwise evaluation fails.
+    /// Width 64 accepts every bit pattern unchanged. Int expressions only; the result may be negative.</summary>
+    public sealed record RepeatBits : ValueToken;
     /// <summary>Consumes one value and pushes its negation in the same kind; the carrier's minimum fails evaluation.</summary>
     public sealed record Negate : ValueToken;
     /// <summary>Consumes one value and pushes its magnitude in the same kind; the carrier's minimum fails evaluation.</summary>

@@ -505,7 +505,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 var jobs = server.SearchStatus();
                 var output = new List<string>(capacity: jobs.Count + 1) { $"[world.search: {jobs.Count} job(s)]" };
                 foreach (var job in jobs) {
-                    var depth = (job.HasScore ? $" depth={job.PassDepth}/{job.Depth} best=(token={job.BestToken} to={job.BestTarget} score={job.BestScore})" : string.Empty);
+                    var depth = (job.HasScore ? $" depth={job.PassDepth}/{job.Depth} best=(token={job.BestToken} to={job.BestTarget} score={job.BestScore})" : (job.HasOutcome ? $" iteration={job.Iteration}/{job.Iterations} best=(token={job.BestToken} to={job.BestTarget} mean={job.BestScore})" : string.Empty));
                     output.Add(item: $"[world.search {job.Name} {(job.Done ? "done" : (job.Running ? "running" : "idle"))} token={job.Token}/{job.Tokens} target={job.Target}/{job.Cells} accepted={job.Count} judged={job.Nodes} nodesPerTick={job.NodesPerTick} judgeCost={job.JudgeCost} judgeRules={job.JudgeRules}{depth}]");
                 }
                 return new CommandResult(Output: string.Join(separator: Environment.NewLine, values: output));

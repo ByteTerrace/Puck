@@ -102,7 +102,16 @@ Nothing here carries a `World` name — a state library names no world.
   second evaluator), `ValueExpressionJsonConverter` (reads either spelling,
   writes each back in its own), `ExpressionOp` (the compiled opcode), and
   `ExpressionArithmetic` (the allocation-free Int and Q48.16 evaluator every
-  opcode lowers to). Beside arithmetic, comparison, bit and board operations,
+  opcode lowers to). Periodic masks use `replicationMask(width)` (one bit at
+  the bottom of each block) and `repeatBits(pattern, width)` (repeat a block
+  across the 64-bit carrier). Width must be 1, 2, 4, 8, 16, 32, or 64, and a
+  pattern must fit its block; invalid arguments refuse evaluation. Width 64
+  repeats the whole word unchanged, including negative bit patterns. Both
+  calls are Int-only and accept live expressions. For example,
+  `replicationMask(8)` is `0x0101010101010101`, `repeatBits(127, 8)` is
+  `0x7F7F7F7F7F7F7F7F`, and `repeatBits(3, 4)` is the Fermat-style mask
+  `0x3333333333333333`. Calls are evaluated and priced at runtime, including
+  those with literal arguments. Beside arithmetic, comparison, bit and board operations,
   and `select`, the call vocabulary carries one family per prefix over
   `Puck.Maths`: `pair`/`pairX`/`pairY` and the Szudzik algebra (`pairSwap`,
   `pairMax`, `pairMin`, `pairSum`, `pairDifference`, `pairTranslate`,

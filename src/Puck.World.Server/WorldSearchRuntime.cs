@@ -6,7 +6,7 @@ namespace Puck.World.Server;
 /// <summary>One recursive ply's checkpointed progress: the position it enumerates candidates from (<see cref="Values"/>,
 /// a frame snapshot in the layout's own order), its own (shape, token, candidate) cursor, its negamax window, and the
 /// best candidate found so far.</summary>
-public sealed record WorldSearchLevelCheckpoint(int Shape, int Token, int Target, long Alpha, long Beta, long Best, int BestToken, int BestTarget, long BaseTurn, long[] Values);
+public sealed record WorldSearchLevelCheckpoint(int Shape, int Token, int Target, long Alpha, long Beta, long Best, int BestToken, int BestTarget, long BaseTurn, long[] Values, ulong Key = 0UL, long AlphaEntry = 0L);
 
 /// <summary>One job's checkpointed progress. <see cref="Legal"/> holds one mask per token in the token row's cell
 /// order, filled as the job walks — populated only for a board of at most <c>BoardMask.MaxCells</c> cells.
@@ -16,7 +16,16 @@ public sealed record WorldSearchLevelCheckpoint(int Shape, int Token, int Target
 /// the negamax search has descended into it.</summary>
 public sealed record WorldSearchJobCheckpoint(
     string Name, ulong Stamp, bool Running, bool Done, int Shape, int Token, int Target, long Count, long[] Legal, long[] Counts, long[] Wide, long Nodes, long BaseTurn,
-    int PassDepth, int Active, long Best, int BestToken, int BestTarget, long Alpha, long Beta, WorldSearchLevelCheckpoint[] Levels
+    int PassDepth, int Active, long Best, int BestToken, int BestTarget, long Alpha, long Beta, WorldSearchLevelCheckpoint[] Levels,
+    ulong[] TtKey, long[] TtValue, long[] TtMeta, WorldSearchTreeCheckpoint? Tree = null
+);
+
+/// <summary>A job's tree search in flight: the node pool (parallel arrays, <see cref="Count"/> nodes used), the
+/// path from the root, the phase and its cursors, the playout and path frames, and the draw seed.</summary>
+public sealed record WorldSearchTreeCheckpoint(
+    bool Active, int Phase, int Count, int Iteration, ulong Seed, int UShape, int UToken, int UTarget, int UScan, int UStart, int PlayoutPlies,
+    long[] Parent, long[] FirstChild, long[] ChildCount, long[] Visits, long[] Total, long[] Shape, long[] Token, long[] Target, long[] Expanded,
+    long[] Path, int PathLength, long[] UctValues, long[] PlayValues
 );
 
 /// <summary>The search runtime's checkpointed state, in section order.</summary>
@@ -28,7 +37,7 @@ public sealed record WorldSearchCheckpoint(WorldSearchJobCheckpoint[] Jobs) {
 /// <summary>One job's progress as the console reads it.</summary>
 public readonly record struct WorldSearchStatus(
     string Name, bool Running, bool Done, int Token, int Tokens, int Target, int Cells, long Count, long Nodes, int NodesPerTick, long JudgeCost, int JudgeRules,
-    bool HasScore, int Depth, int PassDepth, long BestScore, int BestToken, int BestTarget
+    bool HasScore, int Depth, int PassDepth, long BestScore, int BestToken, int BestTarget, bool HasOutcome = false, int Iteration = 0, int Iterations = 0
 );
 
 /// <summary>Runs the document's search jobs: a frame over the installed section, the rules a frame can evaluate, and
@@ -54,6 +63,9 @@ internal sealed partial class WorldSearchRuntime {
         public int BestToken = -1;
         public int BestTarget = -1;
         public long BaseTurn;
+        // The position's frame hash and the window's lower edge at entry, for the transposition table's store.
+        public ulong Key;
+        public long AlphaEntry;
     }
 
     private sealed class Job {
@@ -63,7 +75,62 @@ internal sealed partial class WorldSearchRuntime {
             Counts = new long[tokenCapacity];
             Wide = ((plan.Row.Reach is not null) ? new long[tokenCapacity * WideWordsPerToken(cellCount: plan.Topology.CellCount)] : null);
             Levels = BuildLevels(depth: plan.Depth, layout: layout, rows: rows);
+
+            if (plan.Score is not null) {
+                TtKey = new ulong[WorldSearchCapacity.TranspositionEntries];
+                TtValue = new long[WorldSearchCapacity.TranspositionEntries];
+                TtMeta = new long[WorldSearchCapacity.TranspositionEntries];
+            }
+            if (plan.Outcome is not null) {
+                var nodes = WorldSearchCapacity.TreeNodes;
+
+                TreeParent = new int[nodes];
+                TreeFirstChild = new int[nodes];
+                TreeChildCount = new int[nodes];
+                TreeVisits = new long[nodes];
+                TreeTotal = new long[nodes];
+                TreeShape = new int[nodes];
+                TreeToken = new int[nodes];
+                TreeTarget = new int[nodes];
+                TreeExpanded = new long[nodes];
+                Path = new int[plan.Depth + 2];
+                UctFrame = new StateFrame(layout: layout, rows: rows);
+                PlayFrame = new StateFrame(layout: layout, rows: rows);
+            }
         }
+
+        // The tree search (WorldSearchRuntime.Uct.cs), allocated only for a job with an outcome.
+        public bool UctActive { get; set; }
+        public int Phase { get; set; }
+        public int TreeCount { get; set; }
+        public int Iteration { get; set; }
+        public ulong Seed;
+        public int UShape { get; set; }
+        public int UToken { get; set; }
+        public int UTarget { get; set; }
+        public int UScan { get; set; }
+        public int UStart { get; set; }
+        public int PlayoutPlies { get; set; }
+        public int PathLength { get; set; }
+        public int[]? TreeParent { get; set; }
+        public int[]? TreeFirstChild { get; set; }
+        public int[]? TreeChildCount { get; set; }
+        public long[]? TreeVisits { get; set; }
+        public long[]? TreeTotal { get; set; }
+        public int[]? TreeShape { get; set; }
+        public int[]? TreeToken { get; set; }
+        public int[]? TreeTarget { get; set; }
+        public long[]? TreeExpanded { get; set; }
+        public int[]? Path { get; set; }
+        public StateFrame? UctFrame { get; set; }
+        public StateFrame? PlayFrame { get; set; }
+
+        // The transposition table: a position's frame hash, the value negamax found there, and (in TtMeta) how many
+        // plies that value covers in the low byte with its bound flag above — 1 exact, 2 lower, 3 upper. Slot 0 of
+        // TtMeta reads 0 for an empty entry, which no stored entry produces. Cleared on restart, kept across passes.
+        public ulong[]? TtKey { get; set; }
+        public long[]? TtValue { get; set; }
+        public long[]? TtMeta { get; set; }
 
         public WorldSearchPlan Plan { get; set; }
         public ulong Stamp { get; set; }
@@ -194,6 +261,16 @@ internal sealed partial class WorldSearchRuntime {
                         level.Frame.Rebind(rows: rows);
                     }
                 }
+                if (kept.TreeParent is not null) {
+                    if (layoutRebuilt) {
+                        kept.UctFrame = new StateFrame(layout: m_layout, rows: rows);
+                        kept.PlayFrame = new StateFrame(layout: m_layout, rows: rows);
+                        kept.Stamp = 0UL;
+                    } else {
+                        kept.UctFrame!.Rebind(rows: rows);
+                        kept.PlayFrame!.Rebind(rows: rows);
+                    }
+                }
 
                 jobs[index] = kept;
             } else {
@@ -254,7 +331,7 @@ internal sealed partial class WorldSearchRuntime {
                 levels[level] = new WorldSearchLevelCheckpoint(
                     Shape: entry.Shape, Token: entry.Token, Target: entry.Target, Alpha: entry.Alpha, Beta: entry.Beta,
                     Best: entry.Best, BestToken: entry.BestToken, BestTarget: entry.BestTarget, BaseTurn: entry.BaseTurn,
-                    Values: entry.Frame.Values.ToArray()
+                    Values: entry.Frame.Values.ToArray(), Key: entry.Key, AlphaEntry: entry.AlphaEntry
                 );
             }
 
@@ -262,12 +339,82 @@ internal sealed partial class WorldSearchRuntime {
                 Name: job.Plan.Row.Name, Stamp: job.Stamp, Running: job.Running, Done: job.Done, Shape: job.Shape, Token: job.Token, Target: job.Target,
                 Count: job.Count, Legal: [.. job.Legal], Counts: [.. job.Counts], Wide: ((job.Wide is { } wide) ? [.. wide] : []), Nodes: job.Nodes, BaseTurn: job.BaseTurn,
                 PassDepth: job.PassDepth, Active: job.Active, Best: job.Best, BestToken: job.BestToken, BestTarget: job.BestTarget,
-                Alpha: job.Alpha, Beta: job.Beta, Levels: levels
+                Alpha: job.Alpha, Beta: job.Beta, Levels: levels,
+                TtKey: ((job.TtKey is { } ttKey) ? [.. ttKey] : []), TtValue: ((job.TtValue is { } ttValue) ? [.. ttValue] : []), TtMeta: ((job.TtMeta is { } ttMeta) ? [.. ttMeta] : []),
+                Tree: CaptureTree(job: job)
             );
         }
 
         return new WorldSearchCheckpoint(Jobs: jobs);
     }
+    private static long[] Widen(int[] values) {
+        var wide = new long[values.Length];
+
+        for (var index = 0; index < values.Length; index++) {
+            wide[index] = values[index];
+        }
+
+        return wide;
+    }
+    private static void Narrow(long[] wide, int[] into) {
+        for (var index = 0; index < into.Length; index++) {
+            into[index] = (int)wide[index];
+        }
+    }
+    private static WorldSearchTreeCheckpoint? CaptureTree(Job job) => ((job.TreeParent is null)
+        ? null
+        : new WorldSearchTreeCheckpoint(
+            Active: job.UctActive, Phase: job.Phase, Count: job.TreeCount, Iteration: job.Iteration, Seed: job.Seed, UShape: job.UShape, UToken: job.UToken, UTarget: job.UTarget,
+            UScan: job.UScan, UStart: job.UStart, PlayoutPlies: job.PlayoutPlies,
+            Parent: Widen(job.TreeParent), FirstChild: Widen(job.TreeFirstChild!), ChildCount: Widen(job.TreeChildCount!), Visits: [.. job.TreeVisits!], Total: [.. job.TreeTotal!],
+            Shape: Widen(job.TreeShape!), Token: Widen(job.TreeToken!), Target: Widen(job.TreeTarget!), Expanded: [.. job.TreeExpanded!],
+            Path: Widen(job.Path!), PathLength: job.PathLength, UctValues: job.UctFrame!.Values.ToArray(), PlayValues: job.PlayFrame!.Values.ToArray()
+        ));
+    private static bool TreeFits(Job job, WorldSearchTreeCheckpoint? tree) {
+        if (job.TreeParent is null) {
+            return (tree is null);
+        }
+        if (tree is null) {
+            return false;
+        }
+
+        var nodes = job.TreeParent.Length;
+
+        return (tree.Parent.Length == nodes) && (tree.FirstChild.Length == nodes) && (tree.ChildCount.Length == nodes) && (tree.Visits.Length == nodes) && (tree.Total.Length == nodes) &&
+            (tree.Shape.Length == nodes) && (tree.Token.Length == nodes) && (tree.Target.Length == nodes) && (tree.Expanded.Length == nodes) &&
+            (tree.Path.Length == job.Path!.Length) && (tree.UctValues.Length == job.UctFrame!.Values.Length) && (tree.PlayValues.Length == job.PlayFrame!.Values.Length);
+    }
+    private static void RestoreTree(Job job, WorldSearchTreeCheckpoint? tree) {
+        if ((job.TreeParent is null) || (tree is null)) {
+            return;
+        }
+
+        job.UctActive = tree.Active;
+        job.Phase = tree.Phase;
+        job.TreeCount = tree.Count;
+        job.Iteration = tree.Iteration;
+        job.Seed = tree.Seed;
+        job.UShape = tree.UShape;
+        job.UToken = tree.UToken;
+        job.UTarget = tree.UTarget;
+        job.UScan = tree.UScan;
+        job.UStart = tree.UStart;
+        job.PlayoutPlies = tree.PlayoutPlies;
+        Narrow(tree.Parent, job.TreeParent);
+        Narrow(tree.FirstChild, job.TreeFirstChild!);
+        Narrow(tree.ChildCount, job.TreeChildCount!);
+        tree.Visits.AsSpan().CopyTo(destination: job.TreeVisits!);
+        tree.Total.AsSpan().CopyTo(destination: job.TreeTotal!);
+        Narrow(tree.Shape, job.TreeShape!);
+        Narrow(tree.Token, job.TreeToken!);
+        Narrow(tree.Target, job.TreeTarget!);
+        tree.Expanded.AsSpan().CopyTo(destination: job.TreeExpanded!);
+        Narrow(tree.Path, job.Path!);
+        job.PathLength = tree.PathLength;
+        tree.UctValues.AsSpan().CopyTo(destination: job.UctFrame!.Values);
+        tree.PlayValues.AsSpan().CopyTo(destination: job.PlayFrame!.Values);
+    }
+
     /// <summary>Restores every job's progress by name; a job the checkpoint lacks, or whose shape the checkpoint no
     /// longer matches, restarts on its next step.</summary>
     /// <param name="checkpoint">The checkpoint.</param>
@@ -279,7 +426,9 @@ internal sealed partial class WorldSearchRuntime {
 
             if (
                 (saved is null) || (saved.Legal.Length != job.Legal.Length) || (saved.Counts.Length != job.Counts.Length) ||
-                (saved.Wide.Length != (job.Wide?.Length ?? 0)) || (saved.Levels.Length != job.Levels.Length)
+                (saved.Wide.Length != (job.Wide?.Length ?? 0)) || (saved.Levels.Length != job.Levels.Length) ||
+                (saved.TtKey.Length != (job.TtKey?.Length ?? 0)) || (saved.TtValue.Length != (job.TtValue?.Length ?? 0)) || (saved.TtMeta.Length != (job.TtMeta?.Length ?? 0)) ||
+                !TreeFits(job: job, tree: saved.Tree)
             ) {
                 job.Stamp = 0UL;
                 job.Running = false;
@@ -326,10 +475,19 @@ internal sealed partial class WorldSearchRuntime {
             job.BestTarget = saved.BestTarget;
             job.Alpha = saved.Alpha;
             job.Beta = saved.Beta;
+            if (job.TtKey is { } ttKey) {
+                saved.TtKey.AsSpan().CopyTo(destination: ttKey);
+                saved.TtValue.AsSpan().CopyTo(destination: job.TtValue!);
+                saved.TtMeta.AsSpan().CopyTo(destination: job.TtMeta!);
+            }
+            RestoreTree(job: job, tree: saved.Tree);
 
             for (var level = 0; level < job.Levels.Length; level++) {
                 var entry = job.Levels[level];
                 var restored = saved.Levels[level];
+
+                entry.Key = restored.Key;
+                entry.AlphaEntry = restored.AlphaEntry;
 
                 entry.Shape = restored.Shape;
                 entry.Token = restored.Token;
@@ -389,8 +547,52 @@ internal sealed partial class WorldSearchRuntime {
                 hash.Add(value: ((uint)level.BestToken));
                 hash.Add(value: ((uint)level.BestTarget));
                 hash.Add(value: level.BaseTurn);
+                hash.Add(value: level.Key);
+                hash.Add(value: level.AlphaEntry);
 
                 foreach (var value in level.Frame.Values) {
+                    hash.Add(value: value);
+                }
+            }
+            if (job.TtKey is { } ttKey) {
+                for (var slot = 0; slot < ttKey.Length; slot++) {
+                    hash.Add(value: ttKey[slot]);
+                    hash.Add(value: job.TtValue![slot]);
+                    hash.Add(value: job.TtMeta![slot]);
+                }
+            }
+            if (job.TreeParent is { } parents) {
+                hash.Add(value: ((byte)(job.UctActive ? 1 : 0)));
+                hash.Add(value: ((uint)job.Phase));
+                hash.Add(value: ((uint)job.TreeCount));
+                hash.Add(value: ((uint)job.Iteration));
+                hash.Add(value: job.Seed);
+                hash.Add(value: ((uint)job.UShape));
+                hash.Add(value: ((uint)job.UToken));
+                hash.Add(value: ((uint)job.UTarget));
+                hash.Add(value: ((uint)job.UScan));
+                hash.Add(value: ((uint)job.UStart));
+                hash.Add(value: ((uint)job.PlayoutPlies));
+                hash.Add(value: ((uint)job.PathLength));
+
+                for (var node = 0; node < job.TreeCount; node++) {
+                    hash.Add(value: ((uint)parents[node]));
+                    hash.Add(value: ((uint)job.TreeFirstChild![node]));
+                    hash.Add(value: ((uint)job.TreeChildCount![node]));
+                    hash.Add(value: job.TreeVisits![node]);
+                    hash.Add(value: job.TreeTotal![node]);
+                    hash.Add(value: ((uint)job.TreeShape![node]));
+                    hash.Add(value: ((uint)job.TreeToken![node]));
+                    hash.Add(value: ((uint)job.TreeTarget![node]));
+                    hash.Add(value: job.TreeExpanded![node]);
+                }
+                for (var index = 0; index < job.PathLength; index++) {
+                    hash.Add(value: ((uint)job.Path![index]));
+                }
+                foreach (var value in job.UctFrame!.Values) {
+                    hash.Add(value: value);
+                }
+                foreach (var value in job.PlayFrame!.Values) {
                     hash.Add(value: value);
                 }
             }
@@ -406,7 +608,8 @@ internal sealed partial class WorldSearchRuntime {
             status[index] = new WorldSearchStatus(
                 Name: job.Plan.Row.Name, Running: job.Running, Done: job.Done, Token: job.Token, Tokens: job.Legal.Length, Target: job.Target,
                 Cells: job.Plan.Topology.CellCount, Count: job.Count, Nodes: job.Nodes, NodesPerTick: job.Plan.Nodes, JudgeCost: job.Plan.JudgeCost, JudgeRules: m_judge.Length,
-                HasScore: (job.Plan.Score is not null), Depth: job.Plan.Depth, PassDepth: job.PassDepth, BestScore: job.Best, BestToken: job.BestToken, BestTarget: job.BestTarget
+                HasScore: (job.Plan.Score is not null), Depth: job.Plan.Depth, PassDepth: job.PassDepth, BestScore: job.Best, BestToken: job.BestToken, BestTarget: job.BestTarget,
+                HasOutcome: (job.Plan.Outcome is not null), Iteration: job.Iteration, Iterations: job.Plan.Iterations
             );
         }
 
@@ -415,7 +618,7 @@ internal sealed partial class WorldSearchRuntime {
 
     // Every framed value except the jobs' own output rows: an output landing never restarts the job that wrote it.
     private ulong Stamp() {
-        var hash = new Fnv1aHash();
+        var hash = Fnv1aHash.Create();
         var values = m_base!.Values;
 
         for (var ordinal = 0; ordinal < m_layout!.RowCount; ordinal++) {
@@ -456,6 +659,12 @@ internal sealed partial class WorldSearchRuntime {
         job.Nodes = 0L;
         job.BaseTurn = Slot(store: m_base!, name: job.Plan.Turn);
         job.PassDepth = 1;
+        job.TtKey?.AsSpan().Clear();
+        job.TtValue?.AsSpan().Clear();
+        job.TtMeta?.AsSpan().Clear();
+        job.UctActive = false;
+        job.TreeCount = 0;
+        job.Iteration = 0;
         ResetPass(job: job);
     }
 

@@ -26,6 +26,8 @@ public enum WorldSearchShapeKind : byte {
     Drop,
     /// <summary>The walked token steps two cells along a direction, over a token that leaves the board.</summary>
     Jump,
+    /// <summary>One token relocates and its code changes to one of an authored list (<see cref="WorldSearchShape.Promote"/>).</summary>
+    Promote,
     /// <summary>The walked token and a second, fixed token relocate together.</summary>
     Pair,
 }
@@ -39,6 +41,7 @@ public enum WorldSearchShapeKind : byte {
 [JsonDerivedType(typeof(WorldSearchShape.Drop), "drop")]
 [JsonDerivedType(typeof(WorldSearchShape.Jump), "jump")]
 [JsonDerivedType(typeof(WorldSearchShape.Paired), "pair")]
+[JsonDerivedType(typeof(WorldSearchShape.Promote), "promote")]
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public abstract record WorldSearchShape {
     /// <summary>One own token moves onto any other cell of the board. <see cref="Displace"/> (default true) evicts
@@ -61,6 +64,12 @@ public abstract record WorldSearchShape {
     /// general rule for every pair's own reach (see the schema README's search section for the reasoning).</summary>
     /// <param name="With">The companion token's cell key in <see cref="WorldSearchRow.Tokens"/>.</param>
     public sealed record Paired(string With) : WorldSearchShape;
+    /// <summary>The walked token relocates onto any other cell, evicting what stood there, and its own code in
+    /// <see cref="Codes"/> becomes one of <see cref="To"/> — one candidate per (cell, code). The judge decides where
+    /// a code may change; the shape only offers the change.</summary>
+    /// <param name="Codes">An integer row keyed by the tokens holding each token's code.</param>
+    /// <param name="To">The codes a token may take, at most <see cref="WorldSearchCapacity.MaxPromotions"/>.</param>
+    public sealed record Promote(string Codes, IReadOnlyList<long> To) : WorldSearchShape;
 }
 
 /// <summary>One job's compiled shape: its kind, and the data the runtime resolves a candidate from.
@@ -72,11 +81,17 @@ public abstract record WorldSearchShape {
 /// target; unused by every other kind.</param>
 /// <param name="Directions">The resolved direction ordinals a <see cref="WorldSearchShapeKind.Jump"/> tries.</param>
 /// <param name="PairWithIndex">The companion token's ordinal for a <see cref="WorldSearchShapeKind.Pair"/>, or -1.</param>
-public sealed record WorldSearchShapePlan(WorldSearchShapeKind Kind, bool Displace, int[] Directions, int PairWithIndex) {
+/// <param name="Codes">The codes row a <see cref="WorldSearchShapeKind.Promote"/> writes, or <see langword="null"/>.</param>
+/// <param name="PromoteTo">The codes a <see cref="WorldSearchShapeKind.Promote"/> offers, or <see langword="null"/>.</param>
+public sealed record WorldSearchShapePlan(WorldSearchShapeKind Kind, bool Displace, int[] Directions, int PairWithIndex, string? Codes = null, long[]? PromoteTo = null) {
     /// <summary>Gets how many candidates this shape enumerates per token: every board cell for every kind but
     /// <see cref="WorldSearchShapeKind.Jump"/>, which enumerates its resolved directions instead.</summary>
     /// <param name="topology">The job's board topology.</param>
-    public int CandidateCount(CompiledTopology topology) => ((Kind == WorldSearchShapeKind.Jump) ? Directions.Length : topology.CellCount);
+    public int CandidateCount(CompiledTopology topology) => Kind switch {
+        WorldSearchShapeKind.Jump => Directions.Length,
+        WorldSearchShapeKind.Promote => (topology.CellCount * (PromoteTo?.Length ?? 0)),
+        _ => topology.CellCount,
+    };
 }
 
 /// <summary>One search job.</summary>
@@ -111,6 +126,10 @@ public sealed record WorldSearchShapePlan(WorldSearchShapeKind Kind, bool Displa
 /// Required when <paramref name="Depth"/> exceeds one, or <paramref name="Best"/> is authored.</param>
 /// <param name="Best">A keyed integer row receiving the deepest completed depth's answer: <c>token</c> (the mover's
 /// ordinal in <paramref name="Tokens"/>), <c>to</c> (its destination cell), and <c>score</c> (the negamax value).</param>
+/// <param name="Outcome">An infix expression read at a position no candidate leaves or at the depth cap, from the
+/// perspective of the side that just moved; a job with one tree-searches (UCB1 selection, one judge per node,
+/// playouts drawn from the job's own seed) instead of negamaxing a score, and the two exclude each other.</param>
+/// <param name="Iterations">How many tree iterations an outcome job runs before it lands the most-visited root move.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldSearchRow(
     string Name,
@@ -128,7 +147,9 @@ public sealed record WorldSearchRow(
     int? Nodes = null,
     int Depth = 1,
     string? Score = null,
-    string? Best = null
+    string? Best = null,
+    string? Outcome = null,
+    int Iterations = 256
 ) {
     /// <summary>The one candidate shape a job with none authored enumerates: a plain relocation that evicts
     /// whatever stood on the target — this section's original, unconditional behavior.</summary>
@@ -150,6 +171,15 @@ public static class WorldSearchCapacity {
     public const int MaxNodesPerTick = 4_096;
     /// <summary>The most plies one job searches ahead.</summary>
     public const int MaxDepth = 32;
+    /// <summary>The most codes one <c>promote</c> shape offers.</summary>
+    public const int MaxPromotions = 8;
+    /// <summary>The transposition table's entries per job with a score: a power of two, indexed by the low bits of a
+    /// position's frame hash.</summary>
+    public const int TranspositionEntries = 1_024;
+    /// <summary>The tree nodes one job with an outcome may grow.</summary>
+    public const int TreeNodes = 2_048;
+    /// <summary>The most tree iterations one job runs before it lands.</summary>
+    public const int MaxIterations = 65_536;
     /// <summary>The magnitude a terminal position (no accepted relocation) scores for the side to move, and the
     /// negamax search window's width — shifted down from <see cref="long.MaxValue"/> so a value repeatedly negated
     /// and compared across the deepest authored search never overflows.</summary>
@@ -169,7 +199,9 @@ public static class WorldSearchCapacity {
 /// <param name="Score">The compiled score program, or <see langword="null"/> when the job carries none.</param>
 /// <param name="Best">The best-move output row, or <see langword="null"/>.</param>
 /// <param name="Shapes">The compiled candidate shapes, in declared order.</param>
-public sealed record WorldSearchPlan(WorldSearchRow Row, CompiledTopology Topology, string Turn, string Verdict, long Off, int Nodes, long JudgeCost, int Depth, CompiledExpressionToken[]? Score, string? Best, WorldSearchShapePlan[] Shapes);
+/// <param name="Outcome">The compiled outcome program, or <see langword="null"/>.</param>
+/// <param name="Iterations">The tree iterations an outcome job runs.</param>
+public sealed record WorldSearchPlan(WorldSearchRow Row, CompiledTopology Topology, string Turn, string Verdict, long Off, int Nodes, long JudgeCost, int Depth, CompiledExpressionToken[]? Score, string? Best, WorldSearchShapePlan[] Shapes, CompiledExpressionToken[]? Outcome = null, int Iterations = 0);
 
 /// <summary>Derives what a search job needs from the document: the rules a frame can evaluate, their cost, and each
 /// job's plan.</summary>
@@ -210,12 +242,13 @@ public static class WorldSearchCompilation {
     }
 
     /// <summary>Compiles a job's authored shapes against its board topology and tokens row.</summary>
+    /// <param name="definition">The world the shapes' rows resolve against.</param>
     /// <param name="row">The job.</param>
     /// <param name="topology">The board's topology.</param>
     /// <param name="tokens">The tokens row.</param>
     /// <param name="shapes">The compiled shapes, in declared order.</param>
     /// <param name="reason">Why a shape does not compile, or empty.</param>
-    private static bool TryCompileShapes(WorldSearchRow row, CompiledTopology topology, WorldStateRow tokens, out WorldSearchShapePlan[] shapes, out string reason) {
+    private static bool TryCompileShapes(WorldDefinition definition, WorldSearchRow row, CompiledTopology topology, WorldStateRow tokens, out WorldSearchShapePlan[] shapes, out string reason) {
         var authored = row.EffectiveShapes;
 
         shapes = [];
@@ -301,6 +334,25 @@ public static class WorldSearchCompilation {
 
                     break;
                 }
+                case WorldSearchShape.Promote promote: {
+                    if (promote.To is not { Count: > 0 and <= WorldSearchCapacity.MaxPromotions }) {
+                        reason = $"search '{row.Name}' shape[{index}] promote offers {promote.To?.Count ?? 0} codes; the count must lie in 1..{WorldSearchCapacity.MaxPromotions}";
+
+                        return false;
+                    }
+
+                    var codesRow = WorldDefinitionRows.FindStateRow(rows: definition.State, name: promote.Codes);
+
+                    if ((codesRow is not { IsKeyed: true, Kind: CellKind.Int }) || ((codesRow.Cells?.Count ?? 0) != (tokens.Cells?.Count ?? 0))) {
+                        reason = $"search '{row.Name}' shape[{index}] promote 'codes' must be an integer row keyed like '{row.Tokens}'";
+
+                        return false;
+                    }
+
+                    compiled[index] = new WorldSearchShapePlan(Kind: WorldSearchShapeKind.Promote, Displace: true, Directions: [], PairWithIndex: -1, Codes: promote.Codes, PromoteTo: [.. promote.To]);
+
+                    break;
+                }
                 default:
                     reason = $"search '{row.Name}' shape[{index}] is an unrecognized shape";
 
@@ -341,7 +393,7 @@ public static class WorldSearchCompilation {
 
             return false;
         }
-        if (!TryCompileShapes(row: row, topology: topology, tokens: tokens, shapes: out var shapes, reason: out reason)) {
+        if (!TryCompileShapes(definition: definition, row: row, topology: topology, tokens: tokens, shapes: out var shapes, reason: out reason)) {
             return false;
         }
 
@@ -432,10 +484,43 @@ public static class WorldSearchCompilation {
 
             return false;
         }
-        if (((row.Depth > 1) || (row.Best is not null)) && (row.Score is null)) {
-            reason = $"search '{row.Name}' names no score — a depth past one, or a best row, needs one to compare plies by";
+        if ((row.Score is not null) && (row.Outcome is not null)) {
+            reason = $"search '{row.Name}' names both a score and an outcome; a job negamaxes a score or tree-searches an outcome, never both";
 
             return false;
+        }
+        if (((row.Depth > 1) || (row.Best is not null)) && (row.Score is null) && (row.Outcome is null)) {
+            reason = $"search '{row.Name}' names no score or outcome — a depth past one, or a best row, needs one to compare plies by";
+
+            return false;
+        }
+        if ((row.Iterations < 1) || (row.Iterations > WorldSearchCapacity.MaxIterations)) {
+            reason = $"search '{row.Name}' iterations {row.Iterations} must lie in 1..{WorldSearchCapacity.MaxIterations}";
+
+            return false;
+        }
+
+        CompiledExpressionToken[]? outcome = null;
+
+        if (row.Outcome is { } outcomeText) {
+            if (!ExpressionSpelling.TryParse(text: outcomeText, tokens: out var outcomeTokens, error: out var outcomeError)) {
+                reason = $"search '{row.Name}' outcome '{outcomeText}' does not parse: {outcomeError}";
+
+                return false;
+            }
+
+            try {
+                outcome = RuleCompiler.CompileExpression(expression: new ValueExpression(Tokens: outcomeTokens), kind: CellKind.Int, ruleName: row.Name, verb: "search outcome", context: context);
+            } catch (RuleException exception) {
+                reason = exception.Message;
+
+                return false;
+            }
+            if (RuleDataflow.ExpressionReadsHost(tokens: outcome)) {
+                reason = $"search '{row.Name}' outcome reads a fact only the world host answers; a frame cannot evaluate it";
+
+                return false;
+            }
         }
 
         CompiledExpressionToken[]? score = null;
@@ -489,7 +574,7 @@ public static class WorldSearchCompilation {
             return false;
         }
 
-        plan = new WorldSearchPlan(Row: row, Topology: topology, Turn: turnName, Verdict: verdictName, Off: off, Nodes: (row.Nodes ?? derived), JudgeCost: judgeCost, Depth: row.Depth, Score: score, Best: row.Best, Shapes: shapes);
+        plan = new WorldSearchPlan(Row: row, Topology: topology, Turn: turnName, Verdict: verdictName, Off: off, Nodes: (row.Nodes ?? derived), JudgeCost: judgeCost, Depth: row.Depth, Score: score, Best: row.Best, Shapes: shapes, Outcome: outcome, Iterations: row.Iterations);
         reason = string.Empty;
 
         return true;

@@ -528,16 +528,20 @@ Geometry then judges that candidate. Empty-ray patterns handle bishops, rooks,
 and queens; coordinate differences handle knights and single king steps; one
 relative-rank pawn expression serves both colours. Attack calculations use
 rule-local bindings instead of persistent intermediate rows. A king mask's
-lowest set bit supplies its local square. On this fixed 8x8 layout, masked
-horizontal shifts form the adjacent and two-files-away sets; vertical shifts
-produce pawn, king, and knight attack neighbourhoods. Logical right shifts
-preserve bit 63, and file masks prevent wraparound. Only the eight ray directions
+lowest set bit supplies its local square. Topology shifts form the adjacent
+and two-files-away sets; vertical shifts produce pawn, king, and knight attack
+neighbourhoods. The topology drops shifts that leave the board, including at
+the sign-bit corner. Only the eight ray directions
 remain in the topology. The observed
 position must retain exactly one king of each colour and leave the mover's
 king unattacked. Castling additionally requires the home rook, a clear path,
 an unspent right, and safe origin and transit squares. Fixed source-square
 masks handle pawn, knight, and king transit attacks; board attack queries handle
-sliders. `castleRights` records four consumed rights: white queenside 1,
+sliders. These masks are written in hexadecimal, one byte per rank. For example,
+`0x5000` marks e2 and g2, the black-pawn origins attacking f1; `byteSwap(0x5000)`
+reflects those ranks to e7 and g7, the white-pawn origins attacking f8.
+The knight and king transit masks use the same reflection.
+`castleRights` records four consumed rights: white queenside 1,
 white kingside 2, black queenside 4, black kingside 8. Only an accepted move
 consumes rights, including a capture of a home rook. A king move consumes both
 of its side's rights; restoring a displaced or illegally moved piece consumes

@@ -2977,6 +2977,24 @@
       },
       "additionalProperties": false
     },
+    "ValueTokenReplicationMask": {
+      "description": "Consumes an Int block width and pushes a 64-bit mask with one bit at each block\u0027s bottom. Widths are 1, 2, 4, 8, 16, 32, or 64; other widths fail evaluation. Int expressions only.",
+      "properties": {
+        "$type": {
+          "const": "replicationMask"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValueTokenRepeatBits": {
+      "description": "Consumes an Int pattern and block width, in that order, and repeats the pattern across 64 bits. The width must divide 64 and the pattern must have no set bits outside its block; otherwise evaluation fails. Width 64 accepts every bit pattern unchanged. Int expressions only; the result may be negative.",
+      "properties": {
+        "$type": {
+          "const": "repeatBits"
+        }
+      },
+      "additionalProperties": false
+    },
     "ValueTokenNegate": {
       "description": "Consumes one value and pushes its negation in the same kind; the carrier\u0027s minimum fails evaluation.",
       "properties": {
@@ -3849,6 +3867,12 @@
           "$ref": "#/$defs/ValueTokenBitReverse"
         },
         {
+          "$ref": "#/$defs/ValueTokenReplicationMask"
+        },
+        {
+          "$ref": "#/$defs/ValueTokenRepeatBits"
+        },
+        {
           "$ref": "#/$defs/ValueTokenNegate"
         },
         {
@@ -4114,7 +4138,7 @@
       "description": "A bounded postfix numeric expression evaluated by a world rule, decision, or flock affinity. Each token either pushes a value or consumes preceding values; the compiler proves stack shape and numeric kind before simulation begins. Authored either as an infix string (ExpressionSpelling, \u0022min(damage, hp) * 2\u0022) or as the postfix { \u0022tokens\u0022: [...] } object; both parse to the same tokens and each writes back in its own spelling.",
       "anyOf": [
         {
-          "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
+          "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, replicationMask(width), repeatBits(pattern, width), rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
           "type": "string",
           "minLength": 1,
           "maxLength": 4096

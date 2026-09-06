@@ -39,6 +39,8 @@ public sealed class FrameLayout {
     // A tokens row ordinal -> the derived board ordinals it feeds, so a keyed write can find what to recompute
     // without a per-write scan of every row. Absent for a row that feeds none.
     private readonly Dictionary<int, int[]> m_dependents = [];
+    // A codes row ordinal -> the derived boards it feeds; a code write recomputes the one cell its token stands on.
+    private readonly Dictionary<int, int[]> m_codeDependents = [];
 
     /// <summary>Lays out a section's rows.</summary>
     /// <param name="rows">The rows.</param>
@@ -55,6 +57,7 @@ public sealed class FrameLayout {
 
         var offset = 0;
         var dependents = new Dictionary<int, List<int>>();
+        var codeDependents = new Dictionary<int, List<int>>();
 
         for (var index = 0; index < rows.Count; index++) {
             var row = rows[index];
@@ -70,11 +73,21 @@ public sealed class FrameLayout {
                 }
 
                 fed.Add(item: index);
+
+                if (!codeDependents.TryGetValue(key: layout.InverseCodesOrdinal, value: out var coded)) {
+                    coded = [];
+                    codeDependents[layout.InverseCodesOrdinal] = coded;
+                }
+
+                coded.Add(item: index);
             }
         }
 
         foreach (var (tokensOrdinal, boards) in dependents) {
             m_dependents[tokensOrdinal] = [.. boards];
+        }
+        foreach (var (codesOrdinal, boards) in codeDependents) {
+            m_codeDependents[codesOrdinal] = [.. boards];
         }
 
         Length = offset;
@@ -84,6 +97,9 @@ public sealed class FrameLayout {
     /// <paramref name="tokensOrdinal"/>, or <see langword="null"/> when that row feeds none.</summary>
     /// <param name="tokensOrdinal">The candidate tokens row's ordinal.</param>
     public int[]? DependentBoards(int tokensOrdinal) => (m_dependents.TryGetValue(key: tokensOrdinal, value: out var boards) ? boards : null);
+    /// <summary>Returns the derived boards a codes row feeds, or <see langword="null"/> when it feeds none.</summary>
+    /// <param name="codesOrdinal">The codes row's ordinal.</param>
+    public int[]? DependentBoardsOfCodes(int codesOrdinal) => (m_codeDependents.TryGetValue(key: codesOrdinal, value: out var boards) ? boards : null);
 
     /// <summary>Gets how many values a frame on this layout holds.</summary>
     public int Length { get; }
@@ -416,6 +432,17 @@ public sealed class StateFrame : StateStore {
         if ((layout.Kind == FrameRowKind.Keyed) && (Layout.DependentBoards(ordinal) is { } boards)) {
             foreach (var boardOrdinal in boards) {
                 RecomputeDerivedBoard(boardOrdinal: boardOrdinal, previousCell: previous, currentCell: next);
+            }
+        }
+        // A code write changes what the token's own cell reads; the token has not moved.
+        if ((layout.Kind == FrameRowKind.Keyed) && (Layout.DependentBoardsOfCodes(ordinal) is { } codedBoards)) {
+            foreach (var boardOrdinal in codedBoards) {
+                var boardLayout = Layout[boardOrdinal];
+                var tokensLayout = Layout[boardLayout.InverseTokensOrdinal];
+
+                if (index < tokensLayout.Length) {
+                    RecomputeDerivedCell(boardLayout: boardLayout, tokensLayout: tokensLayout, codesLayout: Layout[boardLayout.InverseCodesOrdinal], cellCount: boardLayout.Topology!.CellCount, cell: m_values[tokensLayout.Offset + index]);
+                }
             }
         }
 

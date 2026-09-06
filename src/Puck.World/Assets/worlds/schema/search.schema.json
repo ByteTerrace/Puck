@@ -126,6 +126,30 @@
                     "with"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "description": "The walked token relocates onto any other cell, evicting what stood there, and its own code in Codes becomes one of To \u2014 one candidate per (cell, code). The judge decides where a code may change; the shape only offers the change.",
+                  "properties": {
+                    "$type": {
+                      "const": "promote"
+                    },
+                    "codes": {
+                      "description": "An integer row keyed by the tokens holding each token\u0027s code.",
+                      "type": "string"
+                    },
+                    "to": {
+                      "description": "The codes a token may take, at most MaxPromotions.",
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "required": [
+                    "codes",
+                    "to"
+                  ],
+                  "additionalProperties": false
                 }
               ]
             },
@@ -199,6 +223,19 @@
               "null"
             ],
             "default": null
+          },
+          "outcome": {
+            "description": "An infix expression read at a position no candidate leaves or at the depth cap, from the perspective of the side that just moved; a job with one tree-searches (UCB1 selection, one judge per node, playouts drawn from the job\u0027s own seed) instead of negamaxing a score, and the two exclude each other.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "iterations": {
+            "description": "How many tree iterations an outcome job runs before it lands the most-visited root move.",
+            "type": "integer",
+            "default": 256
           }
         },
         "required": [

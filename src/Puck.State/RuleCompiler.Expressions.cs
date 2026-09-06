@@ -66,6 +66,8 @@ public static partial class RuleCompiler {
                 ValueToken.ClearLowestSetBit => IntUnary(ExpressionOp.ClearLowestSetBit),
                 ValueToken.ByteSwap => IntUnary(ExpressionOp.ByteSwap),
                 ValueToken.BitReverse => IntUnary(ExpressionOp.BitReverse),
+                ValueToken.ReplicationMask => IntUnary(ExpressionOp.ReplicationMask),
+                ValueToken.RepeatBits => IntBinary(ExpressionOp.RepeatBits),
                 ValueToken.RotateLeft => IntBinary(ExpressionOp.RotateLeft),
                 ValueToken.RotateRight => IntBinary(ExpressionOp.RotateRight),
                 ValueToken.Negate => Unary(ExpressionOp.Negate),

@@ -701,8 +701,12 @@ section always ran. `drop` (a token off the board enters an empty cell),
 topology declares — two cells along one, over an occupied intermediate that
 leaves the board, onto an empty destination), and `pair` (`with`: a cell key
 of `tokens` — the companion relocates by the same grid offset, its own
-destination empty; grid topologies only) are the other arms. `relocate` with
-`displace: false` leaves the standing token in place rather than evicting it.
+destination empty; grid topologies only), and `promote` (`codes`: an int row keyed
+by the tokens; `to`: up to eight codes — relocate and change the token's code to each in turn) are the other
+arms. `relocate` with `displace: false` leaves the standing token in place rather than evicting it; over a
+topology whose cells are zones that is a card transfer, piles being several tokens on one cell (pile order is
+not searched). A job with a score keeps a transposition table (`WorldSearchCapacity.TranspositionEntries`
+slots keyed by the frame hash) that rides the checkpoint and hash.
 
 Outputs: `legal` (int row keyed by the tokens, a per-token destination mask,
 boards ≤ 64 cells) and `count` (slot). `reach`/`held`/`counts` work for a board
@@ -734,7 +738,9 @@ each accepted root candidate recurses one more ply (negated — the value is
 from the perspective of the side that just moved) while plies remain, else
 `score` evaluates directly; a position with no accepted relocation scores
 `-WorldSearchCapacity.MateScore`. Alpha-beta prunes every ply past the root
-only. The recursion is an explicit stack (one `StateFrame` per ply beyond the
+only. `outcome` (exclusive with `score`) tree-searches instead: `iterations` rounds of UCB1 over a
+`WorldSearchCapacity.TreeNodes` pool, playouts drawn from a SplitMix64 stream seeded by the job's stamp, the
+outcome read from the mover's side at a dead end or the `depth` cap, landing the most-visited root move. The recursion is an explicit stack (one `StateFrame` per ply beyond the
 root), not the call stack, so it suspends at any node across a tick boundary
 and checkpoints byte-for-byte.
 
@@ -1280,10 +1286,13 @@ castling rights, en passant target, accepted check values, and promotion complet
 Unfinished promotion does not advance turn. `boardCollisions` prevents duplicate occupants from
 being accepted; board-history fingerprints remain diagnostic, not repetition adjudication.
 The [chess authoring notes](../../../../src/Puck.World/README.md#the-world-as-data) own these contracts.
-They also own the closed -6..7 encoding, the fixed 8x8 masked shifts, and the bit-extract/deposit
+They also own the closed -6..7 encoding, the topology shifts, and the bit-extract/deposit
 projection of home-piece losses into castling rights. The existing two-rule settle counter
 avoids per-moving-tick epoch writes; `$physics:quiescent` is bool-kind, so an integer
 conditional expression cannot combine its gates.
+Periodic expression masks use `replicationMask(width)` and `repeatBits(pattern, width)`;
+[Puck.State](../../../../src/Puck.State/README.md) owns their Int-only domain and refusal contract.
+Chess's fixed transit masks use hexadecimal base patterns and `byteSwap` for rank reflection.
 The board is
 rendered as 64 `boardSquareLight`/`boardSquareDark` placements, one per cell, colors from the
 `boardColors` text row (the SAME `state.<row>.<key>` palette binding the piece prototypes use for

@@ -46,7 +46,7 @@ public sealed class ValueExpressionJsonConverter : JsonConverter<ValueExpression
     public JsonObject BuildSchema(Func<Type, JsonNode> exportType) => new() {
         ["anyOf"] = new JsonArray(
             new JsonObject {
-                ["description"] = "The infix spelling: C precedence over + - * / % & | ^ ~ << >> >>> == != < <= > >= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
+                ["description"] = "The infix spelling: C precedence over + - * / % & | ^ ~ << >> >>> == != < <= > >= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, replicationMask(width), repeatBits(pattern, width), rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
                 ["type"] = "string",
                 ["minLength"] = 1,
                 ["maxLength"] = ExpressionSpelling.MaxLength,

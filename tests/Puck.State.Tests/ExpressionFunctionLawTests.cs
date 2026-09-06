@@ -185,11 +185,17 @@ public sealed class ExpressionFunctionLawTests {
         Assert.Equal(FixedQ4816.Sin(angle: FixedQ4816.FromDouble(value: 1.5)).Value, Eval("sin(1.5)", kind: CellKind.Fixed));
         Assert.Throws<RuleException>(() => Compile(text: "sin(1)", kind: CellKind.Int));
         Assert.Throws<RuleException>(() => Compile(text: "pair(1, 2)", kind: CellKind.Fixed));
+        Assert.Throws<RuleException>(() => Compile(text: "replicationMask(8)", kind: CellKind.Fixed));
+        Assert.Throws<RuleException>(() => Compile(text: "repeatBits(1, 8)", kind: CellKind.Fixed));
+        Assert.False(ExpressionSpelling.TryParse(text: "replicationMask(8, 8)", tokens: out _, error: out _));
+        Assert.False(ExpressionSpelling.TryParse(text: "repeatBits(1)", tokens: out _, error: out _));
         Assert.False(ExpressionSpelling.TryParse(text: "hilbert(1, 2)", tokens: out _, error: out _));
     }
 
     [Theory]
     [InlineData("pair(a, b)")]
+    [InlineData("replicationMask(width)")]
+    [InlineData("repeatBits(pattern, width)")]
     [InlineData("hexNeighbor(hex(q, r), 3)")]
     [InlineData("layerOffset(i, 6, 6, 1)")]
     [InlineData("hilbert(3, x, y) + mortonX(m)")]
@@ -201,6 +207,8 @@ public sealed class ExpressionFunctionLawTests {
 
     [Theory]
     [InlineData("hexNeighbor", typeof(ValueToken.HexNeighbor))]
+    [InlineData("replicationMask", typeof(ValueToken.ReplicationMask))]
+    [InlineData("repeatBits", typeof(ValueToken.RepeatBits))]
     [InlineData("pairSwap", typeof(ValueToken.PairSwap))]
     [InlineData("layerStart", typeof(ValueToken.LayerStart))]
     [InlineData("sqrt", typeof(ValueToken.SquareRoot))]

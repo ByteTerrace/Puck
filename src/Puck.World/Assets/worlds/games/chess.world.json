@@ -2469,26 +2469,6 @@
     {
       "effects": [
         {
-          "$type": "transformState",
-          "transform": {
-            "$type": "boardCombine",
-            "operation": "clear",
-            "row": "board"
-          }
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-board-clear"
-    },
-    {
-      "effects": [
-        {
           "$type": "setState",
           "fromState": "$board:cellOf:board:placement:$each",
           "key": "$each",
@@ -2553,41 +2533,28 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": "board[pieceCell[$each]] == 0 ? pieceCode[$each] : 7",
-          "key": "$cell:pieceCell:$each",
-          "state": "board"
+          "state": "boardCollisions",
+          "value": 0
         }
       ],
-      "forEach": "pieceCode",
       "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "settleHold",
-            "value": 60
-          },
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "key": "$each",
-            "state": "pieceCell",
-            "value": -1
-          }
-        ]
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "settleHold",
+        "value": 60
       },
       "mode": "Edge",
-      "name": "tabletop-write-board"
+      "name": "tabletop-board-collisions-reset"
     },
     {
       "effects": [
         {
-          "$type": "setState",
-          "expression": "popCount($board:mask:board:7:7)",
+          "$type": "addState",
+          "expression": "(pieceCell[$each] >= 0) * (board[pieceCell[$each]] != pieceCode[$each])",
           "state": "boardCollisions"
         }
       ],
+      "forEach": "pieceCode",
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
@@ -2816,25 +2783,25 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": "(($board:mask:lastLegal:-1:-1 & 20480) != 0) | (($board:mask:lastLegal:-2:-2 & 5277696) != 0) | (($board:mask:lastLegal:-6:-6 & 28752) != 0) | `$board:attacks:lastLegal:-5:-4:N,S,E,W`[5] | `$board:attacks:lastLegal:-3:-3:NE,SE,SW,NW`[5] | `$board:attacks:lastLegal:-5:-5:NE,SE,SW,NW`[5]",
+          "expression": "(($board:mask:lastLegal:-1:-1 & 0x5000) != 0) | (($board:mask:lastLegal:-2:-2 & 0x508800) != 0) | (($board:mask:lastLegal:-6:-6 & 0x7050) != 0) | `$board:attacks:lastLegal:-5:-4:N,S,E,W`[5] | `$board:attacks:lastLegal:-3:-3:NE,SE,SW,NW`[5] | `$board:attacks:lastLegal:-5:-5:NE,SE,SW,NW`[5]",
           "key": "wk",
           "state": "castleTransitAttacked"
         },
         {
           "$type": "setState",
-          "expression": "(($board:mask:lastLegal:-1:-1 & 5120) != 0) | (($board:mask:lastLegal:-2:-2 & 1319424) != 0) | (($board:mask:lastLegal:-6:-6 & 7188) != 0) | `$board:attacks:lastLegal:-5:-4:N,S,E,W`[3] | `$board:attacks:lastLegal:-3:-3:NE,SE,SW,NW`[3] | `$board:attacks:lastLegal:-5:-5:NE,SE,SW,NW`[3]",
+          "expression": "(($board:mask:lastLegal:-1:-1 & 0x1400) != 0) | (($board:mask:lastLegal:-2:-2 & 0x142200) != 0) | (($board:mask:lastLegal:-6:-6 & 0x1C14) != 0) | `$board:attacks:lastLegal:-5:-4:N,S,E,W`[3] | `$board:attacks:lastLegal:-3:-3:NE,SE,SW,NW`[3] | `$board:attacks:lastLegal:-5:-5:NE,SE,SW,NW`[3]",
           "key": "wq",
           "state": "castleTransitAttacked"
         },
         {
           "$type": "setState",
-          "expression": "(($board:mask:lastLegal:1:1 & 22517998136852480) != 0) | (($board:mask:lastLegal:2:2 & 38368557762871296) != 0) | (($board:mask:lastLegal:6:6 & 5796132720425828352) != 0) | `$board:attacks:lastLegal:4:5:N,S,E,W`[61] | `$board:attacks:lastLegal:3:3:NE,SE,SW,NW`[61] | `$board:attacks:lastLegal:5:5:NE,SE,SW,NW`[61]",
+          "expression": "(($board:mask:lastLegal:1:1 & byteSwap(0x5000)) != 0) | (($board:mask:lastLegal:2:2 & byteSwap(0x508800)) != 0) | (($board:mask:lastLegal:6:6 & byteSwap(0x7050)) != 0) | `$board:attacks:lastLegal:4:5:N,S,E,W`[61] | `$board:attacks:lastLegal:3:3:NE,SE,SW,NW`[61] | `$board:attacks:lastLegal:5:5:NE,SE,SW,NW`[61]",
           "key": "bk",
           "state": "castleTransitAttacked"
         },
         {
           "$type": "setState",
-          "expression": "(($board:mask:lastLegal:1:1 & 5629499534213120) != 0) | (($board:mask:lastLegal:2:2 & 9592139440717824) != 0) | (($board:mask:lastLegal:6:6 & 1449033180106457088) != 0) | `$board:attacks:lastLegal:4:5:N,S,E,W`[59] | `$board:attacks:lastLegal:3:3:NE,SE,SW,NW`[59] | `$board:attacks:lastLegal:5:5:NE,SE,SW,NW`[59]",
+          "expression": "(($board:mask:lastLegal:1:1 & byteSwap(0x1400)) != 0) | (($board:mask:lastLegal:2:2 & byteSwap(0x142200)) != 0) | (($board:mask:lastLegal:6:6 & byteSwap(0x1C14)) != 0) | `$board:attacks:lastLegal:4:5:N,S,E,W`[59] | `$board:attacks:lastLegal:3:3:NE,SE,SW,NW`[59] | `$board:attacks:lastLegal:5:5:NE,SE,SW,NW`[59]",
           "key": "bq",
           "state": "castleTransitAttacked"
         }
@@ -2981,12 +2948,12 @@
           "name": "kingSquare"
         },
         {
-          "expression": "(($bind:kingMask << 1) & ~0x0101010101010101) | (($bind:kingMask >>> 1) & 0x7F7F7F7F7F7F7F7F)",
+          "expression": "boardShift($bind:kingMask, chessBoard, E) | boardShift($bind:kingMask, chessBoard, W)",
           "kind": "int",
           "name": "nearFiles"
         },
         {
-          "expression": "(($bind:kingMask << 2) & ~0x0303030303030303) | (($bind:kingMask >>> 2) & 0x3F3F3F3F3F3F3F3F)",
+          "expression": "boardShift(boardShift($bind:kingMask, chessBoard, E), chessBoard, E) | boardShift(boardShift($bind:kingMask, chessBoard, W), chessBoard, W)",
           "kind": "int",
           "name": "farFiles"
         },
@@ -2996,12 +2963,12 @@
           "name": "kingBand"
         },
         {
-          "expression": "((($bind:nearFiles << 8) & $board:mask:board:-1:-1) | (($bind:kingBand | ($bind:kingBand << 8) | ($bind:kingBand >>> 8)) & $board:mask:board:-6:-6)) != 0",
+          "expression": "((boardShift($bind:nearFiles, chessBoard, S) & $board:mask:board:-1:-1) | (($bind:kingBand | boardShift($bind:kingBand, chessBoard, S) | boardShift($bind:kingBand, chessBoard, N)) & $board:mask:board:-6:-6)) != 0",
           "kind": "int",
           "name": "closeHit"
         },
         {
-          "expression": "((($bind:nearFiles << 16) | ($bind:nearFiles >>> 16) | ($bind:farFiles << 8) | ($bind:farFiles >>> 8)) & $board:mask:board:-2:-2) != 0",
+          "expression": "((boardShift(boardShift($bind:nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift($bind:nearFiles, chessBoard, N), chessBoard, N) | boardShift($bind:farFiles, chessBoard, S) | boardShift($bind:farFiles, chessBoard, N)) & $board:mask:board:-2:-2) != 0",
           "kind": "int",
           "name": "knightHit"
         },
@@ -3041,12 +3008,12 @@
           "name": "kingSquare"
         },
         {
-          "expression": "(($bind:kingMask << 1) & ~0x0101010101010101) | (($bind:kingMask >>> 1) & 0x7F7F7F7F7F7F7F7F)",
+          "expression": "boardShift($bind:kingMask, chessBoard, E) | boardShift($bind:kingMask, chessBoard, W)",
           "kind": "int",
           "name": "nearFiles"
         },
         {
-          "expression": "(($bind:kingMask << 2) & ~0x0303030303030303) | (($bind:kingMask >>> 2) & 0x3F3F3F3F3F3F3F3F)",
+          "expression": "boardShift(boardShift($bind:kingMask, chessBoard, E), chessBoard, E) | boardShift(boardShift($bind:kingMask, chessBoard, W), chessBoard, W)",
           "kind": "int",
           "name": "farFiles"
         },
@@ -3056,12 +3023,12 @@
           "name": "kingBand"
         },
         {
-          "expression": "((($bind:nearFiles >>> 8) & $board:mask:board:1:1) | (($bind:kingBand | ($bind:kingBand << 8) | ($bind:kingBand >>> 8)) & $board:mask:board:6:6)) != 0",
+          "expression": "((boardShift($bind:nearFiles, chessBoard, N) & $board:mask:board:1:1) | (($bind:kingBand | boardShift($bind:kingBand, chessBoard, S) | boardShift($bind:kingBand, chessBoard, N)) & $board:mask:board:6:6)) != 0",
           "kind": "int",
           "name": "closeHit"
         },
         {
-          "expression": "((($bind:nearFiles << 16) | ($bind:nearFiles >>> 16) | ($bind:farFiles << 8) | ($bind:farFiles >>> 8)) & $board:mask:board:2:2) != 0",
+          "expression": "((boardShift(boardShift($bind:nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift($bind:nearFiles, chessBoard, N), chessBoard, N) | boardShift($bind:farFiles, chessBoard, S) | boardShift($bind:farFiles, chessBoard, N)) & $board:mask:board:2:2) != 0",
           "kind": "int",
           "name": "knightHit"
         },
@@ -3482,272 +3449,18 @@
     "world": [
       {
         "capacity": 64,
-        "cells": [
-          {
-            "key": "0",
-            "value": 4
-          },
-          {
-            "key": "1",
-            "value": 2
-          },
-          {
-            "key": "2",
-            "value": 3
-          },
-          {
-            "key": "3",
-            "value": 5
-          },
-          {
-            "key": "4",
-            "value": 6
-          },
-          {
-            "key": "5",
-            "value": 3
-          },
-          {
-            "key": "6",
-            "value": 2
-          },
-          {
-            "key": "7",
-            "value": 4
-          },
-          {
-            "key": "8",
-            "value": 1
-          },
-          {
-            "key": "9",
-            "value": 1
-          },
-          {
-            "key": "10",
-            "value": 1
-          },
-          {
-            "key": "11",
-            "value": 1
-          },
-          {
-            "key": "12",
-            "value": 1
-          },
-          {
-            "key": "13",
-            "value": 1
-          },
-          {
-            "key": "14",
-            "value": 1
-          },
-          {
-            "key": "15",
-            "value": 1
-          },
-          {
-            "key": "16",
-            "value": 0
-          },
-          {
-            "key": "17",
-            "value": 0
-          },
-          {
-            "key": "18",
-            "value": 0
-          },
-          {
-            "key": "19",
-            "value": 0
-          },
-          {
-            "key": "20",
-            "value": 0
-          },
-          {
-            "key": "21",
-            "value": 0
-          },
-          {
-            "key": "22",
-            "value": 0
-          },
-          {
-            "key": "23",
-            "value": 0
-          },
-          {
-            "key": "24",
-            "value": 0
-          },
-          {
-            "key": "25",
-            "value": 0
-          },
-          {
-            "key": "26",
-            "value": 0
-          },
-          {
-            "key": "27",
-            "value": 0
-          },
-          {
-            "key": "28",
-            "value": 0
-          },
-          {
-            "key": "29",
-            "value": 0
-          },
-          {
-            "key": "30",
-            "value": 0
-          },
-          {
-            "key": "31",
-            "value": 0
-          },
-          {
-            "key": "32",
-            "value": 0
-          },
-          {
-            "key": "33",
-            "value": 0
-          },
-          {
-            "key": "34",
-            "value": 0
-          },
-          {
-            "key": "35",
-            "value": 0
-          },
-          {
-            "key": "36",
-            "value": 0
-          },
-          {
-            "key": "37",
-            "value": 0
-          },
-          {
-            "key": "38",
-            "value": 0
-          },
-          {
-            "key": "39",
-            "value": 0
-          },
-          {
-            "key": "40",
-            "value": 0
-          },
-          {
-            "key": "41",
-            "value": 0
-          },
-          {
-            "key": "42",
-            "value": 0
-          },
-          {
-            "key": "43",
-            "value": 0
-          },
-          {
-            "key": "44",
-            "value": 0
-          },
-          {
-            "key": "45",
-            "value": 0
-          },
-          {
-            "key": "46",
-            "value": 0
-          },
-          {
-            "key": "47",
-            "value": 0
-          },
-          {
-            "key": "48",
-            "value": -1
-          },
-          {
-            "key": "49",
-            "value": -1
-          },
-          {
-            "key": "50",
-            "value": -1
-          },
-          {
-            "key": "51",
-            "value": -1
-          },
-          {
-            "key": "52",
-            "value": -1
-          },
-          {
-            "key": "53",
-            "value": -1
-          },
-          {
-            "key": "54",
-            "value": -1
-          },
-          {
-            "key": "55",
-            "value": -1
-          },
-          {
-            "key": "56",
-            "value": -4
-          },
-          {
-            "key": "57",
-            "value": -2
-          },
-          {
-            "key": "58",
-            "value": -3
-          },
-          {
-            "key": "59",
-            "value": -5
-          },
-          {
-            "key": "60",
-            "value": -6
-          },
-          {
-            "key": "61",
-            "value": -3
-          },
-          {
-            "key": "62",
-            "value": -2
-          },
-          {
-            "key": "63",
-            "value": -4
-          }
-        ],
         "domain": {
           "$type": "cellsOf",
           "topology": "chessBoard"
         },
         "kind": "int",
-        "max": 7,
+        "max": 6,
         "min": -6,
-        "name": "board"
+        "name": "board",
+        "inverse": {
+          "tokens": "pieceCell",
+          "codes": "pieceCode"
+        }
       },
       {
         "capacity": 64,

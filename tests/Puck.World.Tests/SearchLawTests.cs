@@ -320,6 +320,212 @@ public sealed class SearchLawTests {
     // Drop fixture: a 1x4 strip, one token "a" off the board (value -1) and one token "b" standing on cell 2. A
     // drop candidate is a cell no token occupies, so "a" should own every cell but 2 — the rule accepts every
     // candidate the walk itself resolves, so the occupied-cell exclusion is proven by the walk, not the judge.
+    [Fact]
+    public void DepthThreeNegamaxAgreesWithTheOracleThroughTheTranspositionTable() {
+        using var fixture = Fixtures.FreshServer(definition: MiniNegamaxWorld(depth: 3));
+
+        var status = RunToCompletion(fixture);
+        var expected = ReferenceNegamax(cells: [0L, 3L], boardCells: 4, plies: 3);
+
+        Assert.True(status.Done, status.ToString());
+        Assert.Equal(6L, status.Count);
+        Assert.Equal(expected.Value, status.BestScore);
+        Assert.Equal(expected.Token, status.BestToken);
+        Assert.Equal(expected.Target, status.BestTarget);
+    }
+
+    // Promote fixture: a 1x3 strip, "a" at cell 0 carrying code 1. The judge accepts only a position where a's code
+    // reads 3, so of the four (cell, code) candidates the shape offers, the two that promote to 3 are accepted.
+    private static WorldDefinition PromoteWorld() {
+        var state = new WorldStateSection(
+            World: [
+                new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
+                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), 0L)]),
+                new WorldStateRow(CellName.Parse("pieceCode"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), 1L)]),
+                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
+                new WorldStateRow(CellName.Parse("count"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+            ],
+            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 3, Depth: 1)]
+        );
+        var definition = Fixtures.BuildDocument() with {
+            StateRaw = state,
+            Rules = [
+                new WorldRule(Name: CellName.Parse("accept"), Effects: [
+                    new ActionEffect.SetState(State: "verdict", Expression: ValueExpression.Parse("pieceCode[a] == 3 ? 1 : 0")),
+                    new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                ]),
+            ],
+            SearchRaw = new WorldSearchSection(Jobs: [
+                new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict",
+                    Shapes: [new WorldSearchShape.Promote(Codes: "pieceCode", To: [2L, 3L])], Legal: "legal", Count: "count"),
+            ]),
+        };
+
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+
+        return definition;
+    }
+
+    [Fact]
+    public void PromoteOffersEveryCodeOnEveryOtherCellAndTheJudgeReadsTheNewCode() {
+        using var fixture = Fixtures.FreshServer(definition: PromoteWorld());
+
+        var status = RunToCompletion(fixture);
+
+        Assert.True(status.Done, status.ToString());
+        Assert.Equal(2L, status.Count);
+        Assert.Equal((1L << 1) | (1L << 2), Cell(fixture, "legal", "a"));
+        // The installed section never saw a hypothetical code.
+        Assert.Equal(1L, Cell(fixture, "pieceCode", "a"));
+    }
+
+    // Zones are cells: a 1x3 strip whose cells are three piles, two cards standing on the first two, and a relocate
+    // shape that never evicts — a transfer between zones is a relocation on the zone topology, so the card search
+    // needs no vocabulary of its own.
+    private static WorldDefinition ZoneWorld() {
+        var state = new WorldStateSection(
+            World: [
+                new WorldStateRow(CellName.Parse("pile"), CellKind.Int, Domain: new StateDomain.CellsOf("zones")),
+                new WorldStateRow(CellName.Parse("cardZone"), CellKind.Int, Cells: [new StateCell(CellName.Parse("x"), 0L), new StateCell(CellName.Parse("y"), 1L)]),
+                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("cardZone"))),
+                new WorldStateRow(CellName.Parse("count"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+            ],
+            Lattices: [new LatticeTopology.Grid("zones", new DocumentVector3(0, 0, 0), 1, Width: 3, Depth: 1)]
+        );
+        var definition = Fixtures.BuildDocument() with {
+            StateRaw = state,
+            Rules = [
+                new WorldRule(Name: CellName.Parse("accept"), Effects: [
+                    new ActionEffect.SetState(State: "verdict", Value: 1),
+                    new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                ]),
+            ],
+            SearchRaw = new WorldSearchSection(Jobs: [
+                new WorldSearchRow(Name: "search", Tokens: "cardZone", Board: "pile", Turn: "turn", Verdict: "verdict",
+                    Shapes: [new WorldSearchShape.Relocate(Displace: false)], Legal: "legal", Count: "count"),
+            ]),
+        };
+
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+
+        return definition;
+    }
+
+    [Fact]
+    public void AZoneTransferIsARelocationOnTheZoneTopologyAndPilesShareACell() {
+        using var fixture = Fixtures.FreshServer(definition: ZoneWorld());
+
+        var status = RunToCompletion(fixture);
+
+        Assert.True(status.Done, status.ToString());
+        // Each card may move to either of the two other zones, including the one the other card stands on.
+        Assert.Equal(4L, status.Count);
+        Assert.Equal((1L << 1) | (1L << 2), Cell(fixture, "legal", "x"));
+        Assert.Equal((1L << 0) | (1L << 2), Cell(fixture, "legal", "y"));
+    }
+
+    // Outcome fixture: a 1x4 strip, one token at 0, every relocation accepted. The outcome is read from the mover's
+    // side after the ply: cell 3 wins, cell 1 loses, cell 2 is level — so the tree must settle on cell 3.
+    private static WorldDefinition UctWorld(int iterations, int? nodes = null) {
+        var state = new WorldStateSection(
+            World: [
+                new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
+                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), 0L)]),
+                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("best"), CellKind.Int, Cells: [new StateCell(CellName.Parse("token"), 0L), new StateCell(CellName.Parse("to"), 0L), new StateCell(CellName.Parse("score"), 0L)]),
+            ],
+            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 4, Depth: 1)]
+        );
+        var definition = Fixtures.BuildDocument() with {
+            StateRaw = state,
+            Rules = [
+                new WorldRule(Name: CellName.Parse("accept"), Effects: [
+                    new ActionEffect.SetState(State: "verdict", Value: 1),
+                    new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                ]),
+            ],
+            SearchRaw = new WorldSearchSection(Jobs: [
+                new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict", Depth: 1,
+                    Outcome: "pieceCell[a] == 3 ? 1000 : (pieceCell[a] == 1 ? -1000 : 0)", Best: "best", Iterations: iterations, Nodes: nodes),
+            ]),
+        };
+
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+
+        return definition;
+    }
+
+    [Fact]
+    public void TheTreeSearchSettlesOnTheWinningOutcomeAndLandsIt() {
+        using var fixture = Fixtures.FreshServer(definition: UctWorld(iterations: 64));
+
+        var status = RunToCompletion(fixture);
+
+        Assert.True(status.Done, status.ToString());
+        Assert.True(status.HasOutcome);
+        Assert.Equal(64, status.Iteration);
+        Assert.Equal(3L, status.Count);
+        Assert.Equal(0, status.BestToken);
+        Assert.Equal(3, status.BestTarget);
+        Assert.Equal(1000L, status.BestScore);
+        Assert.Equal(3L, Cell(fixture, "best", "to"));
+        Assert.Equal(1000L, Cell(fixture, "best", "score"));
+    }
+
+    [Fact]
+    public void ACheckpointMidTreeSearchRestoresAndFinishesIdenticallyToAnUninterruptedRun() {
+        var document = UctWorld(iterations: 32, nodes: 1);
+
+        using var continuous = Fixtures.FreshServer(definition: document);
+        var continuousStatus = RunToCompletion(continuous);
+        Assert.True(continuousStatus.Done, continuousStatus.ToString());
+
+        using var interrupted = Fixtures.FreshServer(definition: document);
+
+        for (var tick = 0; tick < 9; tick++) {
+            interrupted.Step();
+        }
+
+        var midStatus = interrupted.Server.SearchStatus()[0];
+        Assert.False(midStatus.Done, "the capture must land mid-search for a restore to prove anything");
+        Assert.True(midStatus.Nodes > 3L, midStatus.ToString());
+
+        Assert.True(interrupted.Server.TryCaptureCheckpoint(hostRow: WorldAuthorityHostRowCheckpoint.Empty, checkpoint: out var checkpoint, reason: out var reason), reason);
+        Assert.NotNull(checkpoint!.Search!.Jobs[0].Tree);
+
+        var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint);
+        Assert.True(WorldAuthorityCheckpointCodec.TryDecode(bytes, out var decoded, out var decodeReason), decodeReason);
+        Assert.Equal(checkpoint.Search.Jobs[0].Tree!.Visits, decoded!.Search!.Jobs[0].Tree!.Visits);
+        Assert.Equal(checkpoint.Search.Jobs[0].Tree!.Seed, decoded.Search.Jobs[0].Tree!.Seed);
+
+        var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint.Server.DefinitionJson);
+        using var restoredMachines = new WorldMachineHost(engines: [], screens: restoredDefinition.Screens);
+        var (restoredServer, _) = WorldServer.FromCheckpoint(
+            checkpoint: checkpoint,
+            instanceIdentity: "boot",
+            machines: restoredMachines,
+            profiles: new WorldOwnedWorlds(directory: Directory.CreateTempSubdirectory(prefix: "puck-search-tests-").FullName, machineId: Guid.NewGuid(), template: restoredDefinition)
+        );
+        using var resumed = new WorldFixture(server: restoredServer, machines: restoredMachines, stateDirectory: Directory.CreateTempSubdirectory(prefix: "puck-search-tests-").FullName);
+
+        var interruptedFinal = RunToCompletion(interrupted);
+        var resumedFinal = RunToCompletion(resumed);
+
+        Assert.True(interruptedFinal.Done, interruptedFinal.ToString());
+        Assert.True(resumedFinal.Done, resumedFinal.ToString());
+        Assert.Equal(continuousStatus.BestTarget, interruptedFinal.BestTarget);
+        Assert.Equal(continuousStatus.BestScore, interruptedFinal.BestScore);
+        Assert.Equal(continuousStatus.Nodes, interruptedFinal.Nodes);
+        Assert.Equal(interruptedFinal.BestTarget, resumedFinal.BestTarget);
+        Assert.Equal(interruptedFinal.BestScore, resumedFinal.BestScore);
+        Assert.Equal(interruptedFinal.Nodes, resumedFinal.Nodes);
+    }
+
     private static WorldDefinition DropWorld() {
         var state = new WorldStateSection(
             World: [

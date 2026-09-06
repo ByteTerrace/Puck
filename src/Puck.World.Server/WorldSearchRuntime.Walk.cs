@@ -1,3 +1,4 @@
+using Puck.Maths;
 namespace Puck.World.Server;
 
 internal sealed partial class WorldSearchRuntime {
@@ -43,6 +44,14 @@ internal sealed partial class WorldSearchRuntime {
         var budget = plan.Nodes;
 
         while ((budget > 0) && job.Running) {
+            if (job.UctActive) {
+                StepUct(job: job, tick: tick, tokens: tokens, tokenCells: tokenCells, rows: rows);
+                job.Nodes++;
+                budget--;
+
+                continue;
+            }
+
             var p = job.Active;
             var frame = Position(job: job, p: p);
             var shapeIndex = CursorShape(job: job, p: p);
@@ -50,7 +59,11 @@ internal sealed partial class WorldSearchRuntime {
             if (shapeIndex >= shapes.Length) {
                 if (p == 0) {
                     if (!hasScore || (job.PassDepth >= plan.Depth)) {
-                        job.Running = false;
+                        if (plan.Outcome is not null) {
+                            StartUct(job: job);
+                        } else {
+                            job.Running = false;
+                        }
                     } else {
                         job.PassDepth++;
                         ResetPass(job: job);
@@ -59,6 +72,7 @@ internal sealed partial class WorldSearchRuntime {
                     var value = -CursorBest(job: job, p: p);
                     var parent = (p - 1);
 
+                    StoreTransposition(job: job, level: job.Levels[p - 1], remaining: (job.PassDepth - p));
                     Fold(job: job, p: parent, value: value, token: CursorToken(job: job, p: parent), target: CursorTarget(job: job, p: parent));
                     AdvanceCandidate(job: job, p: parent, shapes: shapes, topology: plan.Topology, tokenCount: tokenCells.Count);
                     job.Active = parent;
@@ -100,7 +114,7 @@ internal sealed partial class WorldSearchRuntime {
                 continue;
             }
             if (!TryResolveCandidate(shape: shape, plan: plan, frame: frame, tokens: tokens, tokenCells: tokenCells, token: token, from: from, candidateIndex: candidateIndex, cells: cells,
-                target: out var target, mid: out var mid, companionIndex: out var companionIndex, companionTarget: out var companionTarget)) {
+                target: out var target, mid: out var mid, companionIndex: out var companionIndex, companionTarget: out var companionTarget, code: out var code)) {
                 SetCursorTarget(job: job, p: p, value: (candidateIndex + 1));
 
                 continue;
@@ -124,6 +138,14 @@ internal sealed partial class WorldSearchRuntime {
                     _ = scratch.TryWrite(row: tokens, key: tokenCells[companionIndex].Key, value: companionTarget, write: StateWriteKind.Set, reason: out _);
 
                     break;
+                case WorldSearchShapeKind.Promote:
+                    EvictAt(frame: frame, scratch: scratch, tokens: tokens, tokenCells: tokenCells, cell: target, exclude: token, off: plan.Off);
+
+                    if (StateRows.FindStateRow(rows: rows, name: shape.Codes!) is { } codes) {
+                        _ = scratch.TryWrite(row: codes, key: tokenCells[token].Key, value: code, write: StateWriteKind.Set, reason: out _);
+                    }
+
+                    break;
                 default:
                     break;
             }
@@ -144,11 +166,18 @@ internal sealed partial class WorldSearchRuntime {
                     SetWideBit(wide: wide, token: token, cell: target, words: wideWords);
                 }
             }
-            if (hasScore && accepted && (p < (job.PassDepth - 1))) {
+            if (hasScore && accepted && (p < (job.PassDepth - 1)) && TryProbeTransposition(job: job, p: p, position: scratch, remaining: (job.PassDepth - p - 1), value: out var known)) {
+                // The child position was searched to at least this depth already: fold its value without descending.
+                Fold(job: job, p: p, value: -known, token: token, target: target);
+                AdvanceCandidate(job: job, p: p, shapes: shapes, topology: plan.Topology, tokenCount: tokenCells.Count);
+            } else if (hasScore && accepted && (p < (job.PassDepth - 1))) {
                 var next = (p + 1);
-                var levelFrame = job.Levels[next - 1].Frame;
+                var level = job.Levels[next - 1];
+                var levelFrame = level.Frame;
 
                 levelFrame.CopyFrom(other: scratch);
+                level.Key = PositionKey(frame: scratch);
+                level.AlphaEntry = -CursorBeta(job: job, p: p);
                 SetCursorShape(job: job, p: next, value: 0);
                 SetCursorToken(job: job, p: next, value: 0);
                 SetCursorTarget(job: job, p: next, value: 0);
@@ -180,14 +209,28 @@ internal sealed partial class WorldSearchRuntime {
     private static bool TryResolveCandidate(
         WorldSearchShapePlan shape, WorldSearchPlan plan, StateFrame frame, StateRow tokens, IReadOnlyList<StateCell> tokenCells,
         int token, long from, int candidateIndex, int cells,
-        out int target, out int mid, out int companionIndex, out int companionTarget
+        out int target, out int mid, out int companionIndex, out int companionTarget, out long code
     ) {
         target = -1;
         mid = -1;
         companionIndex = -1;
         companionTarget = -1;
+        code = 0L;
 
         switch (shape.Kind) {
+            case WorldSearchShapeKind.Promote: {
+                var offered = shape.PromoteTo!.Length;
+                var cell = (candidateIndex / offered);
+
+                if (cell == from) {
+                    return false;
+                }
+
+                target = cell;
+                code = shape.PromoteTo[candidateIndex % offered];
+
+                return true;
+            }
             case WorldSearchShapeKind.Relocate: {
                 if (candidateIndex == from) {
                     return false;
@@ -288,6 +331,65 @@ internal sealed partial class WorldSearchRuntime {
                 _ = scratch.TryWrite(row: tokens, key: tokenCells[other].Key, value: off, write: StateWriteKind.Set, reason: out _);
             }
         }
+    }
+
+    // A position's identity for the transposition table: every framed value, in layout order.
+    private static ulong PositionKey(StateFrame frame) {
+        var hash = Fnv1aHash.Create();
+
+        foreach (var value in frame.Values) {
+            hash.Add(value: value);
+        }
+
+        return hash.Value;
+    }
+
+    private const long TranspositionExact = 1L;
+    private const long TranspositionLower = 2L;
+    private const long TranspositionUpper = 3L;
+
+    // Reads a stored value for the position the frame holds when it was searched to at least `remaining` plies and
+    // its bound decides the child's window (-beta, -alpha) the way a fresh search would have.
+    private static bool TryProbeTransposition(Job job, int p, StateFrame position, int remaining, out long value) {
+        value = 0L;
+
+        if (job.TtKey is not { } keys) {
+            return false;
+        }
+
+        var key = PositionKey(frame: position);
+        var slot = (int)(key & (ulong)(keys.Length - 1));
+        var meta = job.TtMeta![slot];
+
+        if ((meta == 0L) || (keys[slot] != key) || ((meta & 0xFFL) < remaining)) {
+            return false;
+        }
+
+        var stored = job.TtValue![slot];
+        var flag = (meta >> 8);
+        var childAlpha = -CursorBeta(job: job, p: p);
+        var childBeta = -CursorAlpha(job: job, p: p);
+
+        if ((flag == TranspositionExact) || ((flag == TranspositionLower) && (stored >= childBeta)) || ((flag == TranspositionUpper) && (stored <= childAlpha))) {
+            value = stored;
+
+            return true;
+        }
+
+        return false;
+    }
+    // Stores a completed level's value for its position, flagged by where it landed against the window it entered with.
+    private static void StoreTransposition(Job job, Level level, int remaining) {
+        if (job.TtKey is not { } keys) {
+            return;
+        }
+
+        var slot = (int)(level.Key & (ulong)(keys.Length - 1));
+        var flag = ((level.Best <= level.AlphaEntry) ? TranspositionUpper : ((level.Best >= level.Beta) ? TranspositionLower : TranspositionExact));
+
+        keys[slot] = level.Key;
+        job.TtValue![slot] = level.Best;
+        job.TtMeta![slot] = ((flag << 8) | (long)remaining);
     }
 
     private long EvaluateScore(WorldSearchPlan plan, ulong tick) =>

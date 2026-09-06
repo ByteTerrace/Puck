@@ -14,7 +14,7 @@ public static partial class ExpressionArithmetic {
     /// <param name="left">The left raw operand.</param>
     /// <param name="right">The right raw operand.</param>
     /// <param name="value">The raw result, or zero on refusal.</param>
-    /// <returns>False for an unsupported operation/kind, zero divisor, or unrepresentable result.</returns>
+    /// <returns>False for an unsupported operation/kind, zero divisor, invalid bit-operation argument, or unrepresentable result.</returns>
     public static bool TryBinary(ExpressionOp operation, CellKind kind, long left, long right, out long value) {
         value = 0;
         if (kind is not (CellKind.Int or CellKind.Fixed)) { return false; }
@@ -66,6 +66,11 @@ public static partial class ExpressionArithmetic {
                 if (kind != CellKind.Int) { return false; }
                 value = (long)ParallelDeposit((ulong)left, (ulong)right);
                 return true;
+            case ExpressionOp.RepeatBits:
+                if (kind != CellKind.Int || !IsReplicationWidth(right)) { return false; }
+                if (right != 64 && ((ulong)left >> (int)right) != 0UL) { return false; }
+                value = unchecked((long)((ulong)left).RepeatBits(blockWidth: (int)right));
+                return true;
             case ExpressionOp.Multiply:
                 return kind == CellKind.Int ? Narrow((Int128)left * right, out value) :
                     FusedArithmetic.TryMixedScaleProduct(left, FixedQ4816.FractionBitCount, right,
@@ -87,6 +92,7 @@ public static partial class ExpressionArithmetic {
     public static bool IsUnary(ExpressionOp operation) => operation is ExpressionOp.BitNot or ExpressionOp.PopCount
         or ExpressionOp.LeadingZeroCount or ExpressionOp.TrailingZeroCount or ExpressionOp.LowestSetBit
         or ExpressionOp.ClearLowestSetBit or ExpressionOp.ByteSwap or ExpressionOp.BitReverse
+        or ExpressionOp.ReplicationMask
         or ExpressionOp.Negate or ExpressionOp.Abs or ExpressionOp.Sign;
 
     /// <summary>Evaluates one unary operation. Bit operations read the Int carrier's two's-complement bits; Negate and
@@ -95,7 +101,7 @@ public static partial class ExpressionArithmetic {
     /// <param name="kind">Int or Fixed (raw Q48.16).</param>
     /// <param name="operand">The raw operand.</param>
     /// <param name="value">The raw result, or zero on refusal.</param>
-    /// <returns>False for an unsupported operation/kind or an unrepresentable result.</returns>
+    /// <returns>False for an unsupported operation/kind, invalid replication width, or unrepresentable result.</returns>
     public static bool TryUnary(ExpressionOp operation, CellKind kind, long operand, out long value) {
         value = 0;
         if (kind is not (CellKind.Int or CellKind.Fixed)) { return false; }
@@ -119,6 +125,10 @@ public static partial class ExpressionArithmetic {
             case ExpressionOp.ClearLowestSetBit: value = (long)(bits & (bits - 1UL)); return true;
             case ExpressionOp.ByteSwap: value = (long)BinaryPrimitives.ReverseEndianness(bits); return true;
             case ExpressionOp.BitReverse: value = (long)ReverseBits(bits); return true;
+            case ExpressionOp.ReplicationMask:
+                if (!IsReplicationWidth(operand)) { return false; }
+                value = unchecked((long)((int)operand).ReplicationMask<ulong>());
+                return true;
             default: return false;
         }
     }
@@ -153,6 +163,8 @@ public static partial class ExpressionArithmetic {
     }
 
     private static ulong FieldMask(int width) => (width == 64) ? ulong.MaxValue : ((1UL << width) - 1UL);
+
+    private static bool IsReplicationWidth(long width) => width is 1 or 2 or 4 or 8 or 16 or 32 or 64;
 
     // BMI2 when the machine has it; the software forms walk the mask's set bits from the bottom and are bit-exact
     // with the instructions, so a replay agrees across machines either way.

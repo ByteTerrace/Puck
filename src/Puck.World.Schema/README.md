@@ -1842,6 +1842,9 @@ the bit census `popCount`/`leadingZeroCount`/`trailingZeroCount` (64 for zero;
 `63 - leadingZeroCount` is the integer log2, `trailingZeroCount` the lowest
 occupied square), the piece walk `lowestSetBit`/`clearLowestSetBit`, and the
 8x8 board symmetries `byteSwap` (rank mirror) and `bitReverse` (half turn);
+`replicationMask(width)` and `repeatBits(pattern, width)` construct periodic
+64-bit masks, with Int operands and strict block bounds described in
+[Puck.State](../Puck.State/README.md);
 `parallelBitExtract`/`parallelBitDeposit` (pext/pdep: occupancy along a set
 of squares as a dense index and back); `bitField` (value, offset, width) and
 `bitInsert` (value, field, offset, width) for packed fields, refusing a
@@ -2347,8 +2350,14 @@ same grid offset, provided its own destination is empty; grid topologies
 only, and no eviction of its own — the minimal two-token primitive a castle's
 rook needs, not a general rule for every pair's own reach). `relocate` with
 `displace: false` leaves the standing token in place, so a judge rule that
-reads two tokens sharing a cell decides the candidate itself. Promotion — a
-token's own code changing — is not a shape; it is out of this section's scope.
+reads two tokens sharing a cell decides the candidate itself. `promote`
+(`codes`, an integer row keyed by the tokens; `to`, up to eight codes) relocates
+the walked token onto any other cell, evicting what stood there, with its code
+in `codes` changed to each offered value in turn — one candidate per (cell,
+code); the judge decides where a code may change. A card game searches the
+same way: a topology whose cells are the zones, a token row of cards valued by
+zone, and `relocate` with `displace: false`, so a transfer is a relocation and
+a pile is several tokens on one cell — pile order is not searched.
 
 Outputs are ordinary rows the job writes when it finishes: `legal`, an integer
 row keyed by the tokens receiving per token the mask of cells it may reach
@@ -2404,6 +2413,20 @@ suspend it at any node and a checkpoint carries it byte-for-byte (per-ply
 cursor, window, and best-so-far, plus the ply's own frame values). Depth
 completes before landing: the running best is overwritten every pass, so
 whatever it holds when the final depth finishes is that depth's answer.
+
+`outcome` is the other algorithm, for a game with no score to compare plies
+by: an infix expression read at a position no candidate leaves, or at the
+`depth` cap, from the perspective of the side that just moved. A job with an
+outcome tree-searches after its root walk: `iterations` (default 256) rounds of
+UCB1 selection from the root, expansion that judges every candidate of the
+leaf once and keeps the accepted ones as children (a pool of
+`WorldSearchCapacity.TreeNodes`), a playout that draws candidates from the
+job's own SplitMix64 stream seeded by its stamp — never an RNG in simulation
+state — until nothing is accepted or the depth cap, and a fold of the outcome
+back along the path with alternating sign; it lands the most-visited root
+move in `best` with the mean outcome as `score`. One judge is one node of the
+quota here too, and the whole tree, path, frames, and seed ride the checkpoint
+and hash. `score` and `outcome` exclude each other.
 
 Work derives: one judge run costs the sum of the frame-evaluable rules'
 work-sheet lines, and the per-tick node quota is what `RuleCapacity.

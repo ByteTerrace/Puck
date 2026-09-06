@@ -16,6 +16,25 @@ public sealed class WorldTabletopMatcherLawTests {
     }
 
     private static StateCell[] Cells(long[] board) => [.. board.Select((v, i) => new StateCell(CellName.Parse(i.ToString()), v))];
+    // The board is derived from its token rows (inverse), so a position is seeded as tokens: one token per occupied
+    // cell in cell order, the rest off the board.
+    private static (StateCell[] Cells, StateCell[] Codes) Tokens(long[] board) {
+        var cells = new StateCell[32];
+        var codes = new StateCell[32];
+        var next = 0;
+        for (var cell = 0; cell < board.Length; cell++) {
+            if (board[cell] != 0) {
+                cells[next] = new StateCell(CellName.Parse($"piece{next}"), cell);
+                codes[next] = new StateCell(CellName.Parse($"piece{next}"), board[cell]);
+                next++;
+            }
+        }
+        for (; next < 32; next++) {
+            cells[next] = new StateCell(CellName.Parse($"piece{next}"), -1);
+            codes[next] = new StateCell(CellName.Parse($"piece{next}"), 0);
+        }
+        return (cells, codes);
+    }
     private static long[] Position(params (int Cell, int Piece)[] pieces) {
         var board = new long[64];
         board[4] = 6; board[60] = -6;
@@ -33,12 +52,14 @@ public sealed class WorldTabletopMatcherLawTests {
     }
 
     private static WorldDefinition Judge(long[] before, long[] after, int turn = 0, int ep = -1, int rights = 0, int collisions = 0) {
-        string[] sampled = ["tabletop-settle-hold-advance", "tabletop-settle-hold-reset", "tabletop-board-clear",
-            "tabletop-derive-cell-upright", "tabletop-derive-cell-tilted", "tabletop-write-board",
-            "tabletop-game-start-snapshot", "tabletop-game-start-check", "tabletop-board-collisions"];
+        string[] sampled = ["tabletop-settle-hold-advance", "tabletop-settle-hold-reset",
+            "tabletop-derive-cell-upright", "tabletop-derive-cell-tilted",
+            "tabletop-game-start-snapshot", "tabletop-game-start-check", "tabletop-board-collisions-reset", "tabletop-board-collisions"];
+        var (tokenCells, tokenCodes) = Tokens(after);
         return Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [.. Garden.State.Select(row => row.Name.Value switch {
-                "board" => row with { Cells = Cells(after) },
+                "pieceCell" => row with { Cells = tokenCells },
+                "pieceCode" => row with { Cells = tokenCodes },
                 "lastLegal" => row with { Cells = Cells(before) },
                 "settleHold" => Slot(row, 60), "gameStarted" => Slot(row, 1), "turn" => Slot(row, turn),
                 "enPassantTarget" => Slot(row, ep), "castleRights" => Slot(row, rights),
@@ -252,11 +273,12 @@ public sealed class WorldTabletopMatcherLawTests {
                 "pieceCell" => row with { Cells = [.. codes.Select(c => c with { Value = 28 })] },
                 _ => row,
             })] },
-            Rules = [.. Garden.Rules!.Where(r => r.Name.Value is "tabletop-write-board" or "tabletop-board-collisions")],
+            Rules = [.. Garden.Rules!.Where(r => r.Name.Value is "tabletop-board-collisions-reset" or "tabletop-board-collisions")],
         };
         using var fixture = Fixtures.FreshServer(definition);
         fixture.Step();
-        Assert.Equal(7, Read(fixture, "board", "28"));
+        // The derived board shows the later token in row order; the earlier one reads as a collision.
+        Assert.Equal(codes[^1].Value, Read(fixture, "board", "28"));
         Assert.Equal(1, Read(fixture, "boardCollisions"));
     }
 
@@ -288,11 +310,11 @@ public sealed class WorldTabletopMatcherLawTests {
             Assert.Equal(Enumerable.Range(0, 64).Count(i => expected[i] != after[i]), Read(fixture, "boardMismatch"));
         }
 
-        // Every accepted piece code against every observation code, including empty and
-        // the collision sentinel; both low and sign-bit squares must compare exactly.
+        // Every accepted piece code against every observation code, including empty; both low and sign-bit
+        // squares must compare exactly.
         foreach (var cell in new[] { 0, 31, 63 }) {
             for (var previous = -6; previous <= 6; previous++) {
-                for (var observed = -6; observed <= 7; observed++) {
+                for (var observed = -6; observed <= 6; observed++) {
                     var before = new long[64]; before[cell] = previous;
                     var after = new long[64]; after[cell] = observed;
                     Compare(before, after, previous < 0 ? 1 : 0);

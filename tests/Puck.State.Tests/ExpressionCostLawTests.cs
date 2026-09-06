@@ -90,5 +90,7 @@ public sealed class ExpressionCostLawTests {
         // "gcd(12, 18)": Constant (1) + Constant (1) + GCD (40) = 42
         var gcdExpr = Compile("gcd(12, 18)");
         Assert.Equal(1L + 1L + 40L, RuleWorkBudget.ExpressionCost(tokens: gcdExpr, context: s_context));
+        Assert.Equal(41L, RuleWorkBudget.ExpressionCost(tokens: Compile("replicationMask(8)"), context: s_context));
+        Assert.Equal(62L, RuleWorkBudget.ExpressionCost(tokens: Compile("repeatBits(127, 8)"), context: s_context));
     }
 }
