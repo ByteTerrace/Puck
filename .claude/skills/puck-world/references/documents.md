@@ -234,7 +234,7 @@ journal, and deliberately outside the `gatesDrive` check, which is what lets a
 `valueSeconds`/`fromState`/`text`); because `lookAssignment.rows` and creation
 palettes bind to text cells, and a state write re-resolves every bound value
 (re-running the look resolve when `lookAssignment` is touched), this is how a
-rule restyles a body — `puck.world.frozen.json`'s `look-*` rules drive one
+rule restyles a body — the arena module's (`modules/arena.world.json`) `look-*` rules drive one
 `lookOf.<body>` cell per body. A text row also takes a `fromState` copy from
 another text cell. Two indirections make "the body my `target` cell names"
 addressable: a key spelled `$cell:<row>:<key>` resolves to that cell's integer
@@ -328,7 +328,7 @@ node's orbit). A `symmetryOrbit` generator source draws a node uniformly over
 `ring` or over `node`'s orbit under `word`, dealing the orbit under `mode`.
 `$nearest:<bodyRef>:<row>` is the
 nearest other active body whose cell in keyed `<row>` is nonzero (−1 for none,
-ties to the lowest index) — `puck.world.frozen.json`'s `auto-target` rule is
+ties to the lowest index) — the arena module's `auto-target` rule is
 `setState target.0 fromState $nearest:body:0:enemy`. `save` admits on DIFFERENT
 terms again: like `pose`, it has no `WorldMutation` ordinal — it writes a
 session snapshot to the world's own loaded file
@@ -447,7 +447,7 @@ rule (including the one being fired) still names it — retire the referencing
 rule first, in an earlier mutation of the same or a prior tick, then remove the
 placement. Sense a PERMANENT placement (boot-declared, never removed) rather
 than a token placement a rule itself spawns/removes, for exactly this reason.
-`src/Puck.World/Assets/worlds/puck.world.frozen.json` is the worked example: two
+The arena module (`src/Puck.World/Assets/worlds/modules/arena.world.json`) is the worked example: two
 boot-declared region placements (`firePit`/`icePool`), `Region` interactions
 that set countdown cells, and `Level` rules that drain/countdown them.
 
@@ -904,10 +904,10 @@ at most 126 cells, fitting the padded 128³ render brick without truncation.
 Cell values are sim state beside the population — stepped
 after the rules, checkpointed (`Fields` block), delivered as `FieldCells`
 deltas on the snapshot (`FieldsFull` on a primer) — never document rows, so
-nothing journals them. Read back with `world.fields`. `puck.world.frozen.json`'s
-island paints grass beside an ice glacier; a burning body emits heat, heat
-ignites grass, fire emits heat and consumes grass, heat melts ice into water,
-water quenches fire — no interaction names the boundary.
+nothing journals them. Read back with `world.fields`. A lattice can paint grass
+beside an ice glacier; a burning body emits heat, heat ignites grass, fire emits
+heat and consumes grass, heat melts ice into water, water quenches fire — no
+interaction names the boundary.
 
 ### Authored randomness — SOURCE x SITE x MOMENT
 
@@ -1347,11 +1347,7 @@ table and moves pieces by console verb (`body.impulse`/`body.pose`), never by ha
 one. The `plan` row is a rendered-nothing seam: an addon may write candidate cell keys into it and
 `world.tabletop` echoes them back, but no client code paints a highlight from it — chess set style and
 board rendering are this lane's; painting `plan` is deliberately left to a future addon.
-An explicit path or the shipped default that cannot be loaded refuses the boot by name.
-`puck.world.frozen.json` ships beside them: the frozen floating-island diorama, reference-only,
-reachable via `--world`, never extended, deleted on owner order — the worked examples this file cites
-from it (rules, lattice chemistry, regions) live there, and it is the ONLY document layering over the
-likewise-frozen `puck.basis.frozen.json`. The loader is
+An explicit path or the shipped default that cannot be loaded refuses the boot by name. The loader is
 `src/Puck.World.Schema/WorldDefinitionLoader.cs`.
 
 ## Document composition (`basis` and `imports`)
@@ -1808,7 +1804,7 @@ that case.
 
 A `Medium` row is the ONLY spelling of the medium law — `ApplyHold` runs it
 against the row `ResolveHold` took, and `WorldMediumLawTests` pins it to a
-recorded 240-tick fixed-point trace. `puck.world.frozen.json`'s `fishKit` is
+recorded 240-tick fixed-point trace. The garden's `fishKit` (`puck.world.json`) is
 the worked example: a kit whose `fishMotion` program runs
 `ResolveHold`/`ApplyHold` over a `water` row carrying the five medium facets,
 and a trailing `air` row (`Free`, `Gravity`) for the water's own dry fallback.

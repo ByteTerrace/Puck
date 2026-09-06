@@ -28,9 +28,9 @@ selects the file with `--extensions-config-file`; `world.extensions.catalog`
 lists installed provider types and `world.extensions` reads back the configured
 connections. Imported world content cannot enable cloud access by itself.
 
-The [partition granaries](Assets/worlds/modules/README.md) demonstrate read-only
-discovery of the existing Azure deployment as an importable, authored storeyard.
-The same collection tables can serve a text world without placement projection.
+The [granaries district](Assets/worlds/modules/README.md) renders the existing Azure
+deployment's storage inventory on the island's own plaza as an importable, authored
+storeyard; the same collection tables can serve a text world.
 
 ```
 dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 6
@@ -342,22 +342,12 @@ Facts a script needs:
   validated against.
 - `WorldRecordingCommandModule.cs` — the recording-session command surface;
   generic frame capture lives in Hosting and is driven by Launcher.
-- `Assets/` — the checked-in worlds (`worlds/*.world.json`, count them there
-  rather than here: `default` — a partial `basis` template carrying the one
-  shipped binding document (movement and roster groups, and
-  the `contexts` rows that map roster states to them); the engine
-  itself ships no bindings, so a world names this basis, authors its own, or
-  has none — `play` — the hub and boot default — `dive`, `kart`, `jump`
-  — the four-world charter's whole game roster, 2026-08-06 — plus `studio`, a
-  non-game dev canvas for character work reached only with `--world`: neutral
-  floor, no scenery or crowd, four anchored camera eyes and a `sheet` layout
-  composing front/three-quarter/side/back at once; `null` — the standard
-  control scheme's proving ground — a `basis` delta over `standard`, the
-  partial template carrying the shared `channels`, `bodyMotionPrograms`,
-  `kits`, and `bindingOverlays` any world may layer over; and the `quilt-*` documents,
-  test content for adjacency and corner-crossing work, outside the
-  charter roster and not game worlds — each a `basis` delta over the
-  `quilt-base` template, the worked example of document composition; see
+- `Assets/` — the one shipped world, `worlds/puck.world.json` (the island; the
+  boot default), a delta over `worlds/standard.basis.json` (the standards as
+  state, the safety net under everything at y = -64, and its debug texture);
+  its districts under `worlds/modules/` (`modules/README.md`) and the tabletop
+  games under `worlds/games/`, each an imported fragment; the corner shards
+  under `worlds/shards/`, each a `basis` delta over the island; see
   `src/Puck.World.Schema/README.md`, "Document composition"), the default recording document
   (`recordings/`), two shipped
   WASM addons (`addons/`: `default`, `hudbuilder`; mounted by no shipped world
@@ -437,13 +427,15 @@ placements are the garden's proof fixture — see the
 for the mechanics and the [schema reference](../Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
 for the authored facet.
 
-Each garden game — chess, poker, dominoes, billiards, bowling, tic-tac-toe,
-hex lines — lives in its own file under `Assets/worlds/games/`, imported by the garden's
+Each tabletop game — chess, poker, dominoes, billiards, bowling, tic-tac-toe,
+hex lines, mancala, the solitaires — lives in its own file under `Assets/worlds/games/`, imported bare by
 `puck.world.json` (`WorldDefinition.Imports`; see the
-[`puck-world` skill's documents reference](../../.claude/skills/puck-world/references/documents.md#document-composition-basis-and-imports)).
-The shared substrate — channels, kits, population capacity, the tabletop
-placement, spawn points, the island, hud/views, and everything no game's own
-content touches — stays in `puck.world.json` itself; `world.imports` reads the
+[`puck-world` skill's documents reference](../../.claude/skills/puck-world/references/documents.md#document-composition-basis-and-imports)),
+and every district lives under `Assets/worlds/modules/`, imported under its alias. The island restates
+each game's root placement row onto the market hall's floor (`parent: marketCourt`) and each district's
+`<alias>Court` row where the district stands, so a module's own rows never carry island coordinates. The
+shared substrate — channels, kits, population capacity, spawn points, the island's own ground, hud/views,
+and everything no module's content touches — stays in `puck.world.json` itself; `world.imports` reads the
 resolved stack back. A module addresses the world through placements, never
 absolute coordinates: chess's squares and pieces carry `parent: tabletop`, its
 board topology anchors to that placement, its piece rows are keyed by
@@ -983,10 +975,9 @@ compositor calls `TryAcquire` each produced frame to bind the element's
 overlay slot. Two elements naming an identical (source, seat) pair share one
 key, one feed, and one slot — keying on the pair, not the source alone, is
 what keeps two seats' otherwise-identical bare camera panels (both authoring
-no `seat`) from collapsing onto the same feed. `puck.basis.frozen.json`'s
-`hud.panels` ships one such panel (`portrait`) — a mirrored, rounded
-picture-in-picture of the color camera — inherited by the frozen world naming
-it as its `basis`.
+no `seat`) from collapsing onto the same feed. A `portrait` panel — a mirrored,
+rounded picture-in-picture of the color camera — is the shape such an element
+takes.
 
 ## Native capture
 

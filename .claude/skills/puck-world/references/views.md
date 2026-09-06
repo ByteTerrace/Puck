@@ -33,8 +33,7 @@ Primary code:
 The engine declares no rig of its own: `views` is REQUIRED exactly when the
 census implies a body (`population.capacity > 0`), the same derived refusal
 `kits` carries, and a seatless document may author none. The standard chase
-framing below is AUTHORED — the bare `puck.world.json` states its own, and the
-frozen diorama inherits one from `puck.basis.frozen.json`:
+framing below is AUTHORED — `puck.world.json` states its own:
 
 ```json
 "views": {

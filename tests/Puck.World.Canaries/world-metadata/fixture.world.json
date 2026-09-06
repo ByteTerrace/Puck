@@ -1,0 +1,13 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "world-metadata-canary",
+  "basis": "../../../src/Puck.World/Assets/worlds/puck.world.json",
+  "metadata": {
+    "title": "Nexus",
+    "description": "The floating island above the planetoids",
+    "authors": [
+      { "name": "Puck", "oid": "11111111-1111-1111-1111-111111111111" }
+    ],
+    "tags": ["nexus", "hub"]
+  }
+}

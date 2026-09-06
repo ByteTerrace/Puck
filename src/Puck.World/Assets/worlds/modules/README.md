@@ -1,4 +1,37 @@
 # Modules
+# The island's districts
+
+Every district of the one world is a module in this directory: a `puck.world.def.v1` fragment with no
+`basis`, `host`, `bodies` census, `views`, or `channels`, imported by `puck.world.json` under an alias
+(`imports: [{"document": "modules/<name>.world.json", "as": "<alias>"}]`). A module declares its own
+`prototypes`, `placements` rooted under one court placement named `<alias>Court` at local origin, `state.world`
+rows, `rules`, `interactions`, at least one spawn point named `<alias>-arrival`, `navigation.domains` for its
+walkable ground, and an `exports` record naming the only rows a host may read, write, or bind. Names are
+spelled bare inside the module and compose as `<alias>_<name>` (`world.state dive_depth`); placement ids,
+spawn point ids, kit names, and camera names compose as authored, which is how the island restates a
+district's court (`{"id": "diveCourt", "position": [...], "yawDegrees": ...}`) and its arrival spawn without
+naming anything private. Rows that carry absolute positions — a `state.lattices` origin, a navigation domain
+origin, a curve's knots — are authored against the court at the origin and translated to the court's island
+position when the district is placed. A module authors no world-level tunable (a simulation rate, a seat
+count); it reads the island's.
+
+| Alias | File | District |
+|---|---|---|
+| `granaries` | `granaries.world.json` | The platform twin's storage court, dealt from the deployment's inventory rows |
+| `arcade` | `arcade.world.json` | Two cabinets and a handheld, each booting an authored cartridge |
+| `dive` | `dive.world.json` | The pool: a medium lattice, a diver kit, fish, a depth row |
+| `kart` | `kart.world.json` | A track on a curve, a kart kit, gates, a lap counter |
+| `jump` | `jump.world.json` | A platform course rising from the shard steps, a vaulter kit, a trophy |
+| `arena` | `arena.world.json` | The hp/targeting/attack and elemental suites in a walled yard |
+| `studio` | `studio.world.json` | A flat stage for character work, look cycling, a mirror wall |
+
+The island places the courts on its crown: `dive` north at (0, 0, -46), `kart` east at (48, 0, 0), `jump`
+south at (0, 0, 52), `studio` west at (-42, 0, 0), `arena` north-east at (46, 0, -46), `arcade` at (26, 0, 12),
+and `granaries` at (-10, -0.5, 40); the market hall, the proving ground, and the garden are the island's own
+districts under `marketCourt`, `provingCourt`, and `gardenCourt`. `world.imports` prints every layer with its
+alias and exports; `body.pose spawn:<alias>-arrival` stands a seat in a district.
+
+## The partition granaries
 
 A module is a `puck.world.def.v1` fragment the island imports under an alias
 (`imports: [{"document": "modules/<name>.world.json", "as": "<alias>"}]`),
@@ -49,7 +82,7 @@ world.state.cell.remove granaryNames bytrcstp004            # removes it, the ot
 From the repository root, with Azure CLI signed into the approved tenant:
 
 ```text
-dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/granaries.world.json --extensions-config-file src/Puck.World/Assets/hosting/granaries.extensions.json
+dotnet run --project src/Puck.World -c Release -- --extensions-config-file src/Puck.World/Assets/hosting/granaries.extensions.json
 ```
 
 The checked-in host configuration selects the `byteterrace` resource group,
@@ -104,8 +137,8 @@ inventory claim it can substantiate.
 
 ## Import and reinterpret
 
-Import `modules/granaries.world.json` from another shipped world. The main Puck
-world already imports it. Move `granaryCourt` to place the whole storeyard, or
+The island imports `modules/granaries.world.json` under the alias `granaries` and restates
+`granaryCourt` on its plaza. Move `granaryCourt` to place the whole storeyard, or
 replace the three prototypes to reinterpret the same accounts. Generated buildings
 are children of the court, using its position and yaw. Keep its scale at one.
 The court's title uses the existing hash-pinned font at `fonts/inter-regular.ttf`,

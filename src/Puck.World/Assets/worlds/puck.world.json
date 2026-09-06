@@ -84,6 +84,38 @@
                     "gamepad.buttonSouth",
                     "keyboard.space"
                   ]
+                },
+                {
+                  "command": "view.override",
+                  "id": "layoutAction",
+                  "sources": [
+                    "gamepad.buttonEast"
+                  ],
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      1,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "command": "view.override",
+                  "id": "layoutSplit",
+                  "sources": [
+                    "gamepad.buttonWest"
+                  ],
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      2,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
                 }
               ],
               "id": "base"
@@ -97,9 +129,13 @@
     }
   ],
   "bodies": {
-    "capacity": 128,
+    "capacity": 192,
     "localSeats": 2,
-    "scaleRow": "scale"
+    "scaleRow": "scale",
+    "seatSpawns": [
+      "plaza-1",
+      "plaza-2"
+    ]
   },
   "bodyMotionPrograms": [
     {
@@ -187,6 +223,714 @@
       "version": "puck.body-motion.v1"
     }
   ],
+  "cameras": [
+    {
+      "anchor": null,
+      "name": "plaza-cam",
+      "renderHeight": 192,
+      "renderWidth": 256,
+      "rig": {
+        "name": "plaza-cam",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                9,
+                26
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                1,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.9
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "anchor": null,
+      "name": "dive-arrival-cam",
+      "renderHeight": 192,
+      "renderWidth": 256,
+      "rig": {
+        "name": "dive-arrival-cam",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0.0,
+                8.0,
+                -32.0
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0.0,
+                0.5,
+                -46.0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.85
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "anchor": null,
+      "name": "kart-arrival-cam",
+      "renderHeight": 192,
+      "renderWidth": 256,
+      "rig": {
+        "name": "kart-arrival-cam",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                34.0,
+                8.0,
+                0.0
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                48.0,
+                0.5,
+                0.0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.85
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "anchor": null,
+      "name": "jump-arrival-cam",
+      "renderHeight": 192,
+      "renderWidth": 256,
+      "rig": {
+        "name": "jump-arrival-cam",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0.0,
+                8.0,
+                38.0
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0.0,
+                0.5,
+                52.0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.85
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "anchor": null,
+      "name": "studio-arrival-cam",
+      "renderHeight": 192,
+      "renderWidth": 256,
+      "rig": {
+        "name": "studio-arrival-cam",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                -28.0,
+                8.0,
+                0.0
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                -42.0,
+                0.5,
+                0.0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.85
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "anchor": null,
+      "name": "arena-arrival-cam",
+      "renderHeight": 192,
+      "renderWidth": 256,
+      "rig": {
+        "name": "arena-arrival-cam",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                36.1,
+                8.0,
+                -36.1
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                46.0,
+                0.5,
+                -46.0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.85
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "anchor": null,
+      "name": "arcade-arrival-cam",
+      "renderHeight": 192,
+      "renderWidth": 256,
+      "rig": {
+        "name": "arcade-arrival-cam",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                13.29,
+                8.0,
+                6.13
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                26.0,
+                0.5,
+                12.0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.85
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "anchor": null,
+      "name": "granaries-arrival-cam",
+      "renderHeight": 192,
+      "renderWidth": 256,
+      "rig": {
+        "name": "granaries-arrival-cam",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                -11.46,
+                8.0,
+                14.9
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                -20.0,
+                0.5,
+                26.0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.85
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "anchor": null,
+      "name": "market-arrival-cam",
+      "renderHeight": 192,
+      "renderWidth": 256,
+      "rig": {
+        "name": "market-arrival-cam",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                11.64,
+                8.0,
+                -10.58
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                22.0,
+                0.5,
+                -20.0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.85
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "anchor": null,
+      "name": "proving-arrival-cam",
+      "renderHeight": 192,
+      "renderWidth": 256,
+      "rig": {
+        "name": "proving-arrival-cam",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                -30.1,
+                8.0,
+                -30.1
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                -40.0,
+                0.5,
+                -40.0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.85
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "anchor": null,
+      "name": "garden-arrival-cam",
+      "renderHeight": 192,
+      "renderWidth": 256,
+      "rig": {
+        "name": "garden-arrival-cam",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                30.1,
+                8.0,
+                30.1
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                40.0,
+                0.5,
+                40.0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.85
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "anchor": null,
+      "name": "district-select",
+      "renderHeight": 480,
+      "renderWidth": 640,
+      "rig": {
+        "name": "district-select",
+        "operations": [
+          {
+            "$type": "select",
+            "cases": [
+              {
+                "program": "plaza-cam",
+                "value": 0
+              },
+              {
+                "program": "dive-arrival-cam",
+                "value": 1
+              },
+              {
+                "program": "kart-arrival-cam",
+                "value": 2
+              },
+              {
+                "program": "jump-arrival-cam",
+                "value": 3
+              },
+              {
+                "program": "studio-arrival-cam",
+                "value": 4
+              },
+              {
+                "program": "arena-arrival-cam",
+                "value": 5
+              },
+              {
+                "program": "arcade-arrival-cam",
+                "value": 6
+              },
+              {
+                "program": "granaries-arrival-cam",
+                "value": 7
+              },
+              {
+                "program": "market-arrival-cam",
+                "value": 8
+              },
+              {
+                "program": "proving-arrival-cam",
+                "value": 9
+              },
+              {
+                "program": "garden-arrival-cam",
+                "value": 10
+              }
+            ],
+            "default": "plaza-cam",
+            "key": "state.captureStation"
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    }
+  ],
+  "captures": {
+    "directory": "captures",
+    "rows": [
+      {
+        "palette": [
+          {
+            "color": "#5FA04A",
+            "material": 0
+          },
+          {
+            "color": "#B8B0A2",
+            "material": 1
+          },
+          {
+            "color": "#132048",
+            "material": 2
+          }
+        ],
+        "station": "plaza",
+        "ticks": [
+          60
+        ]
+      },
+      {
+        "palette": [
+          {
+            "color": "#5FA04A",
+            "material": 0
+          },
+          {
+            "color": "#B8B0A2",
+            "material": 1
+          },
+          {
+            "color": "#132048",
+            "material": 2
+          }
+        ],
+        "station": "dive",
+        "ticks": [
+          90
+        ]
+      },
+      {
+        "palette": [
+          {
+            "color": "#5FA04A",
+            "material": 0
+          },
+          {
+            "color": "#B8B0A2",
+            "material": 1
+          },
+          {
+            "color": "#132048",
+            "material": 2
+          }
+        ],
+        "station": "kart",
+        "ticks": [
+          120
+        ]
+      },
+      {
+        "palette": [
+          {
+            "color": "#5FA04A",
+            "material": 0
+          },
+          {
+            "color": "#B8B0A2",
+            "material": 1
+          },
+          {
+            "color": "#132048",
+            "material": 2
+          }
+        ],
+        "station": "jump",
+        "ticks": [
+          150
+        ]
+      },
+      {
+        "palette": [
+          {
+            "color": "#5FA04A",
+            "material": 0
+          },
+          {
+            "color": "#B8B0A2",
+            "material": 1
+          },
+          {
+            "color": "#132048",
+            "material": 2
+          }
+        ],
+        "station": "studio",
+        "ticks": [
+          180
+        ]
+      },
+      {
+        "palette": [
+          {
+            "color": "#5FA04A",
+            "material": 0
+          },
+          {
+            "color": "#B8B0A2",
+            "material": 1
+          },
+          {
+            "color": "#132048",
+            "material": 2
+          }
+        ],
+        "station": "arena",
+        "ticks": [
+          210
+        ]
+      },
+      {
+        "palette": [
+          {
+            "color": "#5FA04A",
+            "material": 0
+          },
+          {
+            "color": "#B8B0A2",
+            "material": 1
+          },
+          {
+            "color": "#132048",
+            "material": 2
+          }
+        ],
+        "station": "arcade",
+        "ticks": [
+          240
+        ]
+      },
+      {
+        "palette": [
+          {
+            "color": "#5FA04A",
+            "material": 0
+          },
+          {
+            "color": "#B8B0A2",
+            "material": 1
+          },
+          {
+            "color": "#132048",
+            "material": 2
+          }
+        ],
+        "station": "granaries",
+        "ticks": [
+          270
+        ]
+      },
+      {
+        "palette": [
+          {
+            "color": "#5FA04A",
+            "material": 0
+          },
+          {
+            "color": "#B8B0A2",
+            "material": 1
+          },
+          {
+            "color": "#132048",
+            "material": 2
+          }
+        ],
+        "station": "market",
+        "ticks": [
+          300
+        ]
+      },
+      {
+        "palette": [
+          {
+            "color": "#5FA04A",
+            "material": 0
+          },
+          {
+            "color": "#B8B0A2",
+            "material": 1
+          },
+          {
+            "color": "#132048",
+            "material": 2
+          }
+        ],
+        "station": "proving",
+        "ticks": [
+          330
+        ]
+      },
+      {
+        "palette": [
+          {
+            "color": "#5FA04A",
+            "material": 0
+          },
+          {
+            "color": "#B8B0A2",
+            "material": 1
+          },
+          {
+            "color": "#132048",
+            "material": 2
+          }
+        ],
+        "station": "garden",
+        "ticks": [
+          360
+        ]
+      }
+    ]
+  },
   "channels": [
     {
       "frame": "Heading",
@@ -435,6 +1179,73 @@
     }
   ],
   "gravity": {
+    "areas": [
+      {
+        "acceleration": {
+          "$type": "radial",
+          "magnitude": 14
+        },
+        "bounds": {
+          "$type": "sphere",
+          "radius": 3.6
+        },
+        "mode": "Replace",
+        "placementId": "planetoid-east",
+        "priority": 1
+      },
+      {
+        "acceleration": {
+          "$type": "radial",
+          "magnitude": 14
+        },
+        "bounds": {
+          "$type": "sphere",
+          "radius": 3.6
+        },
+        "mode": "Replace",
+        "placementId": "planetoid-west",
+        "priority": 1
+      },
+      {
+        "acceleration": {
+          "$type": "radial",
+          "magnitude": 14
+        },
+        "bounds": {
+          "$type": "sphere",
+          "radius": 3.6
+        },
+        "mode": "Replace",
+        "placementId": "planetoid-north",
+        "priority": 1
+      },
+      {
+        "acceleration": {
+          "$type": "radial",
+          "magnitude": 14
+        },
+        "bounds": {
+          "$type": "sphere",
+          "radius": 3.6
+        },
+        "mode": "Replace",
+        "placementId": "planetoid-south",
+        "priority": 1
+      },
+      {
+        "acceleration": {
+          "$type": "radial",
+          "magnitude": 14
+        },
+        "bounds": {
+          "$type": "sphere",
+          "radius": 3.6
+        },
+        "mode": "Replace",
+        "placementId": "planetoid-hub",
+        "priority": 1
+      }
+    ],
     "attractors": [],
     "gravitationalConstant": 0.0,
     "softeningLength": 0.5,
@@ -490,7 +1301,32 @@
       "document": "games/solitaire.world.json"
     },
     {
+      "as": "granaries",
       "document": "modules/granaries.world.json"
+    },
+    {
+      "as": "arcade",
+      "document": "modules/arcade.world.json"
+    },
+    {
+      "as": "dive",
+      "document": "modules/dive.world.json"
+    },
+    {
+      "as": "kart",
+      "document": "modules/kart.world.json"
+    },
+    {
+      "as": "jump",
+      "document": "modules/jump.world.json"
+    },
+    {
+      "as": "arena",
+      "document": "modules/arena.world.json"
+    },
+    {
+      "as": "studio",
+      "document": "modules/studio.world.json"
     }
   ],
   "interactions": {
@@ -1458,6 +2294,28 @@
         "agentRadius": 0.2,
         "arrivalDistance": 0.9,
         "cellSize": 1,
+        "depth": 40,
+        "kind": "Surface",
+        "layers": 1,
+        "maxExpandedNodes": 1600,
+        "maxPathNodes": 128,
+        "maxSlopeDegrees": 60,
+        "maxStepHeight": 0.55,
+        "name": "plaza",
+        "origin": [
+          -20,
+          -2,
+          -20
+        ],
+        "probeDown": 3,
+        "probeUp": 2.5,
+        "width": 40
+      },
+      {
+        "agentHeight": 0.5,
+        "agentRadius": 0.2,
+        "arrivalDistance": 0.9,
+        "cellSize": 1,
         "depth": 48,
         "kind": "Surface",
         "layers": 1,
@@ -1467,9 +2325,9 @@
         "maxStepHeight": 0.55,
         "name": "deck",
         "origin": [
-          -24,
+          16.0,
           -2,
-          -24
+          16.0
         ],
         "probeDown": 3,
         "probeUp": 2.5,
@@ -1486,9 +2344,9 @@
         "maxPathNodes": 64,
         "name": "sky",
         "origin": [
-          -12,
+          28.0,
           0.75,
-          2
+          42.0
         ],
         "width": 24
       },
@@ -1504,25 +2362,494 @@
         "medium": "water",
         "name": "pond",
         "origin": [
-          12,
+          52.0,
           -0.5,
-          10
+          50.0
         ],
         "shared": {
           "expandedNodesPerTick": 64,
           "goalCapacity": 2
         },
         "width": 16
+      },
+      {
+        "agentHeight": 0.5,
+        "agentRadius": 0.2,
+        "arrivalDistance": 0.9,
+        "cellSize": 1,
+        "depth": 24,
+        "kind": "Surface",
+        "layers": 1,
+        "maxExpandedNodes": 576,
+        "maxPathNodes": 128,
+        "maxSlopeDegrees": 60,
+        "maxStepHeight": 0.55,
+        "name": "market",
+        "origin": [
+          10.0,
+          -2,
+          -32.0
+        ],
+        "probeDown": 3,
+        "probeUp": 2.5,
+        "width": 24
+      },
+      {
+        "agentHeight": 0.5,
+        "agentRadius": 0.2,
+        "arrivalDistance": 0.9,
+        "cellSize": 2,
+        "depth": 24,
+        "kind": "Surface",
+        "layers": 1,
+        "maxExpandedNodes": 576,
+        "maxPathNodes": 128,
+        "maxSlopeDegrees": 60,
+        "maxStepHeight": 0.55,
+        "name": "proving",
+        "origin": [
+          -64.0,
+          -2,
+          -64.0
+        ],
+        "probeDown": 3,
+        "probeUp": 2.5,
+        "width": 24
       }
     ]
   },
   "placements": {
+    "policy": {
+      "authoringHeadroomPlacements": 16,
+      "authoringHeadroomScreens": 4,
+      "candidateCap": 16,
+      "candidateRadius": 32,
+      "derivedFaceScreens": 8,
+      "maxPlacementScale": 5.0,
+      "minPlacementScale": 0.2,
+      "previewDeadlineFrames": 12
+    },
     "rows": [
+      {
+        "id": "crownCore",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "prototypeId": "crownCore",
+        "scale": 1.0,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0.0
+      },
+      {
+        "id": "lobe-dive",
+        "position": [
+          0,
+          0,
+          -46
+        ],
+        "prototypeId": "crownLobe",
+        "scale": 1.0,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0.0
+      },
+      {
+        "id": "lobe-kart",
+        "position": [
+          48,
+          0,
+          0
+        ],
+        "prototypeId": "crownLobe",
+        "scale": 1.0,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0.0
+      },
+      {
+        "id": "lobe-jump",
+        "position": [
+          0,
+          0,
+          52
+        ],
+        "prototypeId": "crownLobe",
+        "scale": 0.85,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0.0
+      },
+      {
+        "id": "lobe-studio",
+        "position": [
+          -42,
+          0,
+          0
+        ],
+        "prototypeId": "crownLobe",
+        "scale": 0.9,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0.0
+      },
+      {
+        "id": "lobe-arena",
+        "position": [
+          46,
+          0,
+          -46
+        ],
+        "prototypeId": "crownLobe",
+        "scale": 0.85,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0.0
+      },
+      {
+        "id": "lobe-garden",
+        "position": [
+          38,
+          0,
+          44
+        ],
+        "prototypeId": "crownLobe",
+        "scale": 1.0,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0.0
+      },
+      {
+        "id": "lobe-market",
+        "position": [
+          22,
+          0,
+          -20
+        ],
+        "prototypeId": "crownLobe",
+        "scale": 0.8,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0.0
+      },
+      {
+        "id": "lobe-arcade",
+        "position": [
+          28,
+          0,
+          14
+        ],
+        "prototypeId": "crownLobe",
+        "scale": 0.55,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0.0
+      },
+      {
+        "id": "lobe-granaries",
+        "position": [
+          -10,
+          0,
+          30
+        ],
+        "prototypeId": "crownLobe",
+        "scale": 1.1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0.0
+      },
+      {
+        "id": "isleRoot",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "prototypeId": "isleRoot",
+        "scale": 1.4,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0.0
+      },
+      {
+        "id": "shard-step-1",
+        "position": [
+          4,
+          0.7,
+          68
+        ],
+        "prototypeId": "isleShard",
+        "scale": 1.6,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 20
+      },
+      {
+        "id": "shard-step-2",
+        "position": [
+          -3,
+          3.9000000000000004,
+          78
+        ],
+        "prototypeId": "isleShard",
+        "scale": 1.4,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 140
+      },
+      {
+        "id": "shard-step-3",
+        "position": [
+          5,
+          7.5,
+          88
+        ],
+        "prototypeId": "isleShard",
+        "scale": 1.5,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 260
+      },
+      {
+        "id": "shard-drift-east",
+        "position": [
+          80,
+          6,
+          30
+        ],
+        "prototypeId": "isleShard",
+        "scale": 1.15,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 40
+      },
+      {
+        "id": "shard-drift-west",
+        "position": [
+          -78,
+          -6,
+          -26
+        ],
+        "prototypeId": "isleShard",
+        "scale": 0.85,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 160
+      },
+      {
+        "id": "shard-drift-north",
+        "position": [
+          22,
+          -12,
+          -84
+        ],
+        "prototypeId": "isleShard",
+        "scale": 1.3,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 250
+      },
+      {
+        "id": "planetoid-east",
+        "position": [
+          70,
+          -30,
+          22
+        ],
+        "prototypeId": "planetoid",
+        "scale": 4.0,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0.0
+      },
+      {
+        "id": "planetoid-west",
+        "position": [
+          -68,
+          -36,
+          -22
+        ],
+        "prototypeId": "planetoid",
+        "scale": 4.4,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0.0
+      },
+      {
+        "id": "planetoid-north",
+        "position": [
+          14,
+          -42,
+          -72
+        ],
+        "prototypeId": "planetoid",
+        "scale": 3.2,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0.0
+      },
+      {
+        "id": "planetoid-south",
+        "position": [
+          -24,
+          -34,
+          68
+        ],
+        "prototypeId": "planetoid",
+        "scale": 4.6,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0.0
+      },
+      {
+        "id": "planetoid-hub",
+        "position": [
+          4,
+          -50,
+          2
+        ],
+        "prototypeId": "planetoid",
+        "scale": 5.0,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0.0
+      },
+      {
+        "faceSources": [
+          {
+            "face": "screen",
+            "source": {
+              "$type": "view",
+              "cameraName": "dive-arrival-cam"
+            }
+          }
+        ],
+        "id": "arch-dive",
+        "position": [
+          0.0,
+          0.0,
+          -11.0
+        ],
+        "prototypeId": "arch-dive",
+        "scale": 1.0,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0.0
+      },
+      {
+        "faceSources": [
+          {
+            "face": "screen",
+            "source": {
+              "$type": "view",
+              "cameraName": "kart-arrival-cam"
+            }
+          }
+        ],
+        "id": "arch-kart",
+        "position": [
+          11.0,
+          0.0,
+          0.0
+        ],
+        "prototypeId": "arch-kart",
+        "scale": 1.0,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": -90.0
+      },
+      {
+        "faceSources": [
+          {
+            "face": "screen",
+            "source": {
+              "$type": "view",
+              "cameraName": "jump-arrival-cam"
+            }
+          }
+        ],
+        "id": "arch-jump",
+        "position": [
+          0.0,
+          0.0,
+          11.0
+        ],
+        "prototypeId": "arch-jump",
+        "scale": 1.0,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 180.0
+      },
+      {
+        "faceSources": [
+          {
+            "face": "screen",
+            "source": {
+              "$type": "view",
+              "cameraName": "studio-arrival-cam"
+            }
+          }
+        ],
+        "id": "arch-studio",
+        "position": [
+          -11.0,
+          0.0,
+          0.0
+        ],
+        "prototypeId": "arch-studio",
+        "scale": 1.0,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 90.0
+      },
+      {
+        "id": "provingCourt",
+        "position": [
+          -40.0,
+          0,
+          -40.0
+        ],
+        "prototypeId": "courtStone",
+        "scale": 1.0,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0.0
+      },
       {
         "grip": {
           "holdable": true
         },
         "id": "debugRoom",
+        "parent": "provingCourt",
         "position": [
           0,
           0,
@@ -1536,21 +2863,22 @@
         "yawDegrees": 0
       },
       {
-        "id": "farPillar",
+        "id": "gardenCourt",
         "position": [
+          40.0,
           0,
-          -16,
-          -120
+          40.0
         ],
-        "prototypeId": "farPillar",
-        "scale": 1,
+        "prototypeId": "courtStone",
+        "scale": 1.0,
         "solid": {
           "margin": 0
         },
-        "yawDegrees": 0
+        "yawDegrees": 0.0
       },
       {
         "id": "bone",
+        "parent": "gardenCourt",
         "position": [
           -8,
           -0.5,
@@ -1565,6 +2893,7 @@
       },
       {
         "id": "pondBasin",
+        "parent": "gardenCourt",
         "position": [
           16,
           -0.5,
@@ -1599,6 +2928,7 @@
             "name": "pack"
           }
         },
+        "parent": "gardenCourt",
         "position": [
           -14,
           0,
@@ -1630,6 +2960,7 @@
             "name": "stalk"
           }
         },
+        "parent": "gardenCourt",
         "position": [
           14,
           0,
@@ -1661,6 +2992,7 @@
             "name": "swarm"
           }
         },
+        "parent": "gardenCourt",
         "position": [
           0,
           2.5,
@@ -1692,6 +3024,7 @@
             "name": "school"
           }
         },
+        "parent": "gardenCourt",
         "position": [
           16,
           0.2,
@@ -1703,6 +3036,7 @@
       },
       {
         "id": "drinkMe",
+        "parent": "gardenCourt",
         "position": [
           -8,
           -0.5,
@@ -1717,6 +3051,7 @@
       },
       {
         "id": "eatMe",
+        "parent": "gardenCourt",
         "position": [
           -8,
           -0.5,
@@ -1731,6 +3066,7 @@
       },
       {
         "id": "tetherPost1",
+        "parent": "gardenCourt",
         "position": [
           -20,
           0,
@@ -1741,6 +3077,143 @@
         "solid": {
           "margin": 0
         },
+        "yawDegrees": 0
+      },
+      {
+        "id": "marketCourt",
+        "position": [
+          22.0,
+          0,
+          -20.0
+        ],
+        "prototypeId": "marketHall",
+        "scale": 1.0,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0.0
+      },
+      {
+        "id": "tabletop",
+        "parent": "marketCourt",
+        "position": [
+          -8,
+          -0.5,
+          6
+        ],
+        "yawDegrees": 0
+      },
+      {
+        "id": "hexTable",
+        "parent": "marketCourt",
+        "position": [
+          -8,
+          -0.5,
+          -6
+        ],
+        "yawDegrees": 0
+      },
+      {
+        "id": "mancalaTable",
+        "parent": "marketCourt",
+        "position": [
+          0,
+          -0.5,
+          -8
+        ],
+        "yawDegrees": 0
+      },
+      {
+        "id": "billiardsTray",
+        "parent": "marketCourt",
+        "position": [
+          7,
+          0,
+          -6
+        ],
+        "yawDegrees": 0
+      },
+      {
+        "id": "bowlingLane",
+        "parent": "marketCourt",
+        "position": [
+          8,
+          0,
+          5
+        ],
+        "yawDegrees": 0
+      },
+      {
+        "id": "dominoRun",
+        "parent": "marketCourt",
+        "position": [
+          0,
+          -0.45,
+          3
+        ],
+        "yawDegrees": 0
+      },
+      {
+        "id": "diveCourt",
+        "position": [
+          0.0,
+          0,
+          -46.0
+        ],
+        "yawDegrees": 0
+      },
+      {
+        "id": "kartCourt",
+        "position": [
+          48.0,
+          0,
+          0.0
+        ],
+        "yawDegrees": 0
+      },
+      {
+        "id": "jumpCourt",
+        "position": [
+          0.0,
+          0,
+          52.0
+        ],
+        "yawDegrees": 0
+      },
+      {
+        "id": "studioCourt",
+        "position": [
+          -42.0,
+          0,
+          0.0
+        ],
+        "yawDegrees": 0
+      },
+      {
+        "id": "arenaCourt",
+        "position": [
+          46.0,
+          0,
+          -46.0
+        ],
+        "yawDegrees": 0
+      },
+      {
+        "id": "arcadeCourt",
+        "position": [
+          26.0,
+          0,
+          12.0
+        ],
+        "yawDegrees": 0
+      },
+      {
+        "id": "granaryCourt",
+        "position": [
+          -10.0,
+          -0.5,
+          40.0
+        ],
         "yawDegrees": 0
       }
     ]
@@ -2217,39 +3690,6 @@
         ]
       },
       "id": "debugRoom"
-    },
-    {
-      "document": {
-        "name": "farPillar",
-        "palette": [
-          {
-            "color": "state.colors.groundPrimary"
-          }
-        ],
-        "schema": "puck.creation.v1",
-        "shapes": [
-          {
-            "blend": "Union",
-            "id": 0,
-            "material": 0,
-            "name": "pillar",
-            "position": [
-              0,
-              30,
-              0
-            ],
-            "rotation": "state.transforms.identity",
-            "scale": [
-              2,
-              30,
-              2
-            ],
-            "smooth": 0,
-            "type": "Cylinder"
-          }
-        ]
-      },
-      "id": "farPillar"
     },
     {
       "document": {
@@ -6904,6 +8344,1365 @@
         ]
       },
       "id": "tetherPost"
+    },
+    {
+      "document": {
+        "name": "crownCore",
+        "palette": [
+          {
+            "color": "state.islandColors.meadow",
+            "shininess": 8,
+            "specular": 0.04
+          },
+          {
+            "color": "state.islandColors.plaza",
+            "shininess": 12,
+            "specular": 0.08
+          },
+          {
+            "color": "state.islandColors.soil",
+            "shininess": 6,
+            "specular": 0.03
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "meadow",
+            "position": [
+              0,
+              -2.5,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              32,
+              2.0,
+              32
+            ],
+            "smooth": 0.0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 1,
+            "name": "plaza",
+            "position": [
+              0,
+              -1.0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              14,
+              1.0,
+              14
+            ],
+            "smooth": 0.0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 2,
+            "material": 2,
+            "name": "soil-skirt",
+            "position": [
+              0,
+              -3.9,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              33,
+              1.4,
+              33
+            ],
+            "smooth": 0.5,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "crownCore"
+    },
+    {
+      "document": {
+        "name": "crownLobe",
+        "palette": [
+          {
+            "color": "state.islandColors.meadow",
+            "shininess": 8,
+            "specular": 0.04
+          },
+          {
+            "color": "state.islandColors.soil",
+            "shininess": 6,
+            "specular": 0.03
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "meadow",
+            "position": [
+              0,
+              -2.5,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              26,
+              2.0,
+              26
+            ],
+            "smooth": 0.0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 1,
+            "name": "soil-skirt",
+            "position": [
+              0,
+              -3.9,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              27,
+              1.4,
+              27
+            ],
+            "smooth": 0.5,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "crownLobe"
+    },
+    {
+      "document": {
+        "name": "isleRoot",
+        "noise": {
+          "amplitude": 0.6,
+          "frequency": 0.18,
+          "octaves": 3,
+          "seed": 7
+        },
+        "palette": [
+          {
+            "color": "state.islandColors.rock",
+            "shininess": 10,
+            "specular": 0.05
+          },
+          {
+            "color": "state.islandColors.rockDeep",
+            "shininess": 10,
+            "specular": 0.05
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "belly-core",
+            "position": [
+              0,
+              -13.5,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              12,
+              12,
+              12
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 0,
+            "name": "lump-e",
+            "position": [
+              10,
+              -12,
+              4
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              9.5,
+              9.5,
+              9.5
+            ],
+            "smooth": 0.6,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 2,
+            "material": 0,
+            "name": "lump-w",
+            "position": [
+              -9.5,
+              -11.5,
+              -4
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              9,
+              9,
+              9
+            ],
+            "smooth": 0.6,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 3,
+            "material": 0,
+            "name": "lump-s",
+            "position": [
+              3,
+              -10,
+              11
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              8,
+              8,
+              8
+            ],
+            "smooth": 0.6,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 4,
+            "material": 0,
+            "name": "lump-n",
+            "position": [
+              -2,
+              -9.5,
+              -10
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              8.5,
+              8.5,
+              8.5
+            ],
+            "smooth": 0.6,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 5,
+            "material": 1,
+            "name": "lump-deep",
+            "position": [
+              2.5,
+              -16,
+              1
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              8,
+              8,
+              8
+            ],
+            "smooth": 0.6,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 6,
+            "material": 1,
+            "name": "lump-deep-w",
+            "position": [
+              -6,
+              -14.5,
+              3
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              6.5,
+              6.5,
+              6.5
+            ],
+            "smooth": 0.6,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 7,
+            "material": 1,
+            "name": "root-main",
+            "position": [
+              0.5,
+              -21,
+              0.5
+            ],
+            "rotation": [
+              1,
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              6.5,
+              5.5,
+              6.5
+            ],
+            "smooth": 0.6,
+            "type": "Cone"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 8,
+            "material": 1,
+            "name": "root-east",
+            "position": [
+              8.5,
+              -17.5,
+              4
+            ],
+            "rotation": [
+              1,
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              3.6,
+              4,
+              3.6
+            ],
+            "smooth": 0.6,
+            "type": "Cone"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 9,
+            "material": 1,
+            "name": "root-west",
+            "position": [
+              -8,
+              -16,
+              -5
+            ],
+            "rotation": [
+              1,
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              2.6,
+              3.2,
+              2.6
+            ],
+            "smooth": 0.6,
+            "type": "Cone"
+          }
+        ]
+      },
+      "id": "isleRoot"
+    },
+    {
+      "document": {
+        "name": "isleShard",
+        "palette": [
+          {
+            "color": "state.islandColors.rock",
+            "shininess": 10,
+            "specular": 0.05
+          },
+          {
+            "color": "state.islandColors.meadow",
+            "shininess": 8,
+            "specular": 0.04
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "rock",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              2,
+              2,
+              2
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 0,
+            "name": "rock-b",
+            "position": [
+              1.1,
+              -0.4,
+              0.6
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.3,
+              1.3,
+              1.3
+            ],
+            "smooth": 0.45,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 2,
+            "material": 1,
+            "name": "cap",
+            "position": [
+              0,
+              1.35,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.6,
+              1.6,
+              1.6
+            ],
+            "smooth": 0.4,
+            "type": "Sphere"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 3,
+            "material": 0,
+            "name": "root",
+            "position": [
+              0,
+              -1.9,
+              0
+            ],
+            "rotation": [
+              1,
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              1.1,
+              1.4,
+              1.1
+            ],
+            "smooth": 0.5,
+            "type": "Cone"
+          }
+        ]
+      },
+      "id": "isleShard"
+    },
+    {
+      "document": {
+        "name": "planetoid",
+        "palette": [
+          {
+            "color": "state.islandColors.rock",
+            "shininess": 6,
+            "specular": 0.05
+          },
+          {
+            "color": "state.islandColors.rockDeep",
+            "shininess": 10,
+            "specular": 0.08
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "core",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.5,
+              1.5,
+              1.5
+            ],
+            "smooth": 0.0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "polar",
+                "axis": "Y",
+                "count": 6
+              }
+            ],
+            "id": 1,
+            "material": 1,
+            "name": "outcrop",
+            "position": [
+              1.32,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.3,
+              0.3,
+              0.3
+            ],
+            "smooth": 0.3,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "planetoid"
+    },
+    {
+      "document": {
+        "behavior": {
+          "faces": [
+            {
+              "name": "screen",
+              "shapeId": 0
+            }
+          ],
+          "locomotion": "walk"
+        },
+        "name": "arch-dive",
+        "palette": [
+          {
+            "color": "state.islandColors.archStone",
+            "shininess": 12,
+            "specular": 0.2
+          },
+          {
+            "color": "state.islandColors.archScreen",
+            "emissive": 0.12,
+            "shininess": 24,
+            "specular": 0.4
+          },
+          {
+            "color": "state.districtColors.dive",
+            "emissive": 0.55,
+            "shininess": 18,
+            "specular": 0.3
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 1,
+            "name": "screen",
+            "position": [
+              0,
+              1.7,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.7,
+              2.4,
+              0.3
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 0,
+            "name": "pillar-left",
+            "position": [
+              -2,
+              2.1,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.3,
+              2.35,
+              0.3
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 2,
+            "material": 0,
+            "name": "pillar-right",
+            "position": [
+              2,
+              2.1,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.3,
+              2.35,
+              0.3
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 3,
+            "material": 0,
+            "name": "lintel",
+            "position": [
+              0,
+              4.65,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              2.5,
+              0.28,
+              0.42
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 4,
+            "material": 2,
+            "name": "keystone",
+            "position": [
+              0,
+              5.0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.55,
+              0.16,
+              0.5
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 5,
+            "material": 0,
+            "name": "plinth",
+            "position": [
+              0,
+              -0.3,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              2.6,
+              0.32,
+              0.6
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "arch-dive"
+    },
+    {
+      "document": {
+        "behavior": {
+          "faces": [
+            {
+              "name": "screen",
+              "shapeId": 0
+            }
+          ],
+          "locomotion": "walk"
+        },
+        "name": "arch-kart",
+        "palette": [
+          {
+            "color": "state.islandColors.archStone",
+            "shininess": 12,
+            "specular": 0.2
+          },
+          {
+            "color": "state.islandColors.archScreen",
+            "emissive": 0.12,
+            "shininess": 24,
+            "specular": 0.4
+          },
+          {
+            "color": "state.districtColors.kart",
+            "emissive": 0.55,
+            "shininess": 18,
+            "specular": 0.3
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 1,
+            "name": "screen",
+            "position": [
+              0,
+              1.7,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.7,
+              2.4,
+              0.3
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 0,
+            "name": "pillar-left",
+            "position": [
+              -2,
+              2.1,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.3,
+              2.35,
+              0.3
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 2,
+            "material": 0,
+            "name": "pillar-right",
+            "position": [
+              2,
+              2.1,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.3,
+              2.35,
+              0.3
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 3,
+            "material": 0,
+            "name": "lintel",
+            "position": [
+              0,
+              4.65,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              2.5,
+              0.28,
+              0.42
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 4,
+            "material": 2,
+            "name": "keystone",
+            "position": [
+              0,
+              5.0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.55,
+              0.16,
+              0.5
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 5,
+            "material": 0,
+            "name": "plinth",
+            "position": [
+              0,
+              -0.3,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              2.6,
+              0.32,
+              0.6
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "arch-kart"
+    },
+    {
+      "document": {
+        "behavior": {
+          "faces": [
+            {
+              "name": "screen",
+              "shapeId": 0
+            }
+          ],
+          "locomotion": "walk"
+        },
+        "name": "arch-jump",
+        "palette": [
+          {
+            "color": "state.islandColors.archStone",
+            "shininess": 12,
+            "specular": 0.2
+          },
+          {
+            "color": "state.islandColors.archScreen",
+            "emissive": 0.12,
+            "shininess": 24,
+            "specular": 0.4
+          },
+          {
+            "color": "state.districtColors.jump",
+            "emissive": 0.55,
+            "shininess": 18,
+            "specular": 0.3
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 1,
+            "name": "screen",
+            "position": [
+              0,
+              1.7,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.7,
+              2.4,
+              0.3
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 0,
+            "name": "pillar-left",
+            "position": [
+              -2,
+              2.1,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.3,
+              2.35,
+              0.3
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 2,
+            "material": 0,
+            "name": "pillar-right",
+            "position": [
+              2,
+              2.1,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.3,
+              2.35,
+              0.3
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 3,
+            "material": 0,
+            "name": "lintel",
+            "position": [
+              0,
+              4.65,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              2.5,
+              0.28,
+              0.42
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 4,
+            "material": 2,
+            "name": "keystone",
+            "position": [
+              0,
+              5.0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.55,
+              0.16,
+              0.5
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 5,
+            "material": 0,
+            "name": "plinth",
+            "position": [
+              0,
+              -0.3,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              2.6,
+              0.32,
+              0.6
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "arch-jump"
+    },
+    {
+      "document": {
+        "behavior": {
+          "faces": [
+            {
+              "name": "screen",
+              "shapeId": 0
+            }
+          ],
+          "locomotion": "walk"
+        },
+        "name": "arch-studio",
+        "palette": [
+          {
+            "color": "state.islandColors.archStone",
+            "shininess": 12,
+            "specular": 0.2
+          },
+          {
+            "color": "state.islandColors.archScreen",
+            "emissive": 0.12,
+            "shininess": 24,
+            "specular": 0.4
+          },
+          {
+            "color": "state.districtColors.studio",
+            "emissive": 0.55,
+            "shininess": 18,
+            "specular": 0.3
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 1,
+            "name": "screen",
+            "position": [
+              0,
+              1.7,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.7,
+              2.4,
+              0.3
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 0,
+            "name": "pillar-left",
+            "position": [
+              -2,
+              2.1,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.3,
+              2.35,
+              0.3
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 2,
+            "material": 0,
+            "name": "pillar-right",
+            "position": [
+              2,
+              2.1,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.3,
+              2.35,
+              0.3
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 3,
+            "material": 0,
+            "name": "lintel",
+            "position": [
+              0,
+              4.65,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              2.5,
+              0.28,
+              0.42
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 4,
+            "material": 2,
+            "name": "keystone",
+            "position": [
+              0,
+              5.0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.55,
+              0.16,
+              0.5
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 5,
+            "material": 0,
+            "name": "plinth",
+            "position": [
+              0,
+              -0.3,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              2.6,
+              0.32,
+              0.6
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "arch-studio"
+    },
+    {
+      "document": {
+        "name": "courtStone",
+        "palette": [
+          {
+            "color": "state.islandColors.plaza",
+            "shininess": 12,
+            "specular": 0.08
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "stone",
+            "position": [
+              0,
+              -0.45,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.8,
+              0.15,
+              0.8
+            ],
+            "smooth": 0.0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "courtStone"
+    },
+    {
+      "document": {
+        "name": "marketHall",
+        "palette": [
+          {
+            "color": "state.islandColors.plaza",
+            "shininess": 12,
+            "specular": 0.08
+          },
+          {
+            "color": "state.islandColors.timber",
+            "shininess": 8,
+            "specular": 0.05
+          },
+          {
+            "color": "state.islandColors.roof",
+            "shininess": 6,
+            "specular": 0.04
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "floor",
+            "position": [
+              0,
+              -0.8,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              13,
+              0.3,
+              13
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 1,
+            "name": "pillar-1",
+            "position": [
+              -11.5,
+              2.5,
+              -11.5
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.35,
+              3.0,
+              0.35
+            ],
+            "smooth": 0.0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 2,
+            "material": 1,
+            "name": "pillar-2",
+            "position": [
+              -11.5,
+              2.5,
+              11.5
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.35,
+              3.0,
+              0.35
+            ],
+            "smooth": 0.0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 3,
+            "material": 1,
+            "name": "pillar-3",
+            "position": [
+              0,
+              2.5,
+              -11.5
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.35,
+              3.0,
+              0.35
+            ],
+            "smooth": 0.0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 4,
+            "material": 1,
+            "name": "pillar-4",
+            "position": [
+              0,
+              2.5,
+              11.5
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.35,
+              3.0,
+              0.35
+            ],
+            "smooth": 0.0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 5,
+            "material": 1,
+            "name": "pillar-5",
+            "position": [
+              11.5,
+              2.5,
+              -11.5
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.35,
+              3.0,
+              0.35
+            ],
+            "smooth": 0.0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 6,
+            "material": 1,
+            "name": "pillar-6",
+            "position": [
+              11.5,
+              2.5,
+              11.5
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.35,
+              3.0,
+              0.35
+            ],
+            "smooth": 0.0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 7,
+            "material": 2,
+            "name": "roof",
+            "position": [
+              0,
+              5.9,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              14,
+              0.25,
+              14
+            ],
+            "smooth": 0.0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "marketHall"
     }
   ],
   "render": {
@@ -7263,6 +10062,176 @@
       ],
       "mode": "Level",
       "name": "physics-settled"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "captureStation",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$tick",
+        "value": 75
+      },
+      "mode": "Edge",
+      "name": "capture-dive"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "captureStation",
+          "value": 2
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$tick",
+        "value": 105
+      },
+      "mode": "Edge",
+      "name": "capture-kart"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "captureStation",
+          "value": 3
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$tick",
+        "value": 135
+      },
+      "mode": "Edge",
+      "name": "capture-jump"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "captureStation",
+          "value": 4
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$tick",
+        "value": 165
+      },
+      "mode": "Edge",
+      "name": "capture-studio"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "captureStation",
+          "value": 5
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$tick",
+        "value": 195
+      },
+      "mode": "Edge",
+      "name": "capture-arena"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "captureStation",
+          "value": 6
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$tick",
+        "value": 225
+      },
+      "mode": "Edge",
+      "name": "capture-arcade"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "captureStation",
+          "value": 7
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$tick",
+        "value": 255
+      },
+      "mode": "Edge",
+      "name": "capture-granaries"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "captureStation",
+          "value": 8
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$tick",
+        "value": 285
+      },
+      "mode": "Edge",
+      "name": "capture-market"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "captureStation",
+          "value": 9
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$tick",
+        "value": 315
+      },
+      "mode": "Edge",
+      "name": "capture-proving"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "captureStation",
+          "value": 10
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$tick",
+        "value": 345
+      },
+      "mode": "Edge",
+      "name": "capture-garden"
     }
   ],
   "schema": "puck.world.def.v1",
@@ -7301,120 +10270,220 @@
   },
   "spawnPoints": [
     {
-      "id": "origin",
+      "id": "plaza-1",
       "position": [
+        -1.5,
+        0.5,
+        4
+      ],
+      "yawDegrees": 0
+    },
+    {
+      "id": "plaza-2",
+      "position": [
+        1.5,
+        0.5,
+        4
+      ],
+      "yawDegrees": 0
+    },
+    {
+      "id": "proving-arrival",
+      "position": [
+        -40.0,
         0,
-        0,
-        0
+        -40.0
       ],
       "yawDegrees": 0
     },
     {
       "id": "ramps",
       "position": [
-        5.5,
+        -34.5,
         0,
-        -1
+        -41.0
       ],
       "yawDegrees": 0
     },
     {
       "id": "stairs",
       "position": [
-        -2,
+        -42.0,
         0,
-        0
+        -40.0
       ],
       "yawDegrees": 90
     },
     {
       "id": "wall",
       "position": [
-        3,
+        -37.0,
         0,
-        3
+        -37.0
       ],
       "yawDegrees": -90
     },
     {
       "id": "pit",
       "position": [
+        -40.0,
         0,
-        0,
-        3
+        -37.0
       ],
       "yawDegrees": 180
     },
     {
       "id": "ladder",
       "position": [
-        -2,
+        -42.0,
         0,
-        -6
+        -46.0
       ],
       "yawDegrees": 90
     },
     {
       "id": "edge",
       "position": [
+        -40.0,
         0,
-        0,
-        -9
+        -49.0
       ],
       "yawDegrees": 0
     },
     {
       "id": "pack",
       "position": [
-        -10,
+        30.0,
         0,
-        -10
+        30.0
       ],
       "yawDegrees": 45
     },
     {
       "id": "colony",
       "position": [
-        10,
+        50.0,
         0,
-        -10
+        30.0
       ],
       "yawDegrees": -45
     },
     {
       "id": "swarm",
       "position": [
-        0,
+        40.0,
         2,
-        24
+        64.0
       ],
       "yawDegrees": 0
     },
     {
       "id": "pond",
       "position": [
-        16,
+        56.0,
         0.5,
-        22
+        62.0
       ],
       "yawDegrees": 0
     },
     {
       "id": "table",
       "position": [
-        -8,
+        32.0,
         0,
-        19
+        59.0
       ],
       "yawDegrees": 0
     },
     {
       "id": "tether",
       "position": [
-        -20,
+        20.0,
         0,
-        18
-      ]
+        58.0
+      ],
+      "yawDegrees": 0
+    },
+    {
+      "id": "garden-arrival",
+      "position": [
+        40.0,
+        0.0,
+        36.0
+      ],
+      "yawDegrees": 0
+    },
+    {
+      "id": "market-arrival",
+      "position": [
+        22.0,
+        0.0,
+        -10.0
+      ],
+      "yawDegrees": 0
+    },
+    {
+      "id": "dive-arrival",
+      "position": [
+        0.0,
+        0.0,
+        -43.0
+      ],
+      "yawDegrees": 0
+    },
+    {
+      "id": "kart-arrival",
+      "position": [
+        48.0,
+        0.0,
+        3.0
+      ],
+      "yawDegrees": 0
+    },
+    {
+      "id": "jump-arrival",
+      "position": [
+        0.0,
+        0.0,
+        55.0
+      ],
+      "yawDegrees": 0
+    },
+    {
+      "id": "studio-arrival",
+      "position": [
+        -42.0,
+        0.0,
+        3.0
+      ],
+      "yawDegrees": 0
+    },
+    {
+      "id": "arena-arrival",
+      "position": [
+        46.0,
+        0.0,
+        -43.0
+      ],
+      "yawDegrees": 0
+    },
+    {
+      "id": "arcade-arrival",
+      "position": [
+        26.0,
+        0.0,
+        15.0
+      ],
+      "yawDegrees": 0
+    },
+    {
+      "id": "granaries-arrival",
+      "position": [
+        -20.0,
+        0.0,
+        38.0
+      ],
+      "yawDegrees": 180
     }
   ],
   "state": {
@@ -7438,9 +10507,9 @@
         "layers": 1,
         "name": "pondBasin",
         "origin": [
-          12,
+          52.0,
           -0.5,
-          10
+          50.0
         ],
         "stepEveryTicks": 8,
         "width": 16
@@ -7448,8 +10517,6 @@
     ],
     "world": [
       {
-        "name": "houndIdentity",
-        "kind": "int",
         "capacity": 6,
         "cells": [
           {
@@ -7476,7 +10543,9 @@
             "key": "95",
             "value": 95
           }
-        ]
+        ],
+        "kind": "int",
+        "name": "houndIdentity"
       },
       {
         "cells": [
@@ -7786,10 +10855,10 @@
           "paint": [
             {
               "$type": "rect",
-              "maxX": 20,
-              "maxZ": 18,
-              "minX": 12,
-              "minZ": 10,
+              "maxX": 60.0,
+              "maxZ": 58.0,
+              "minX": 52.0,
+              "minZ": 50.0,
               "value": 1.4
             }
           ]
@@ -7874,6 +10943,77 @@
         "kind": "int",
         "name": "boneHolderClaimMark",
         "nonNegative": true
+      },
+      {
+        "cells": [
+          {
+            "key": "meadow",
+            "value": "#5FA04A"
+          },
+          {
+            "key": "plaza",
+            "value": "#B8B0A2"
+          },
+          {
+            "key": "soil",
+            "value": "#7A5A3C"
+          },
+          {
+            "key": "rock",
+            "value": "#8A8072"
+          },
+          {
+            "key": "rockDeep",
+            "value": "#6E6455"
+          },
+          {
+            "key": "archStone",
+            "value": "#29262B"
+          },
+          {
+            "key": "archScreen",
+            "value": "#0D141F"
+          },
+          {
+            "key": "timber",
+            "value": "#6B4A2E"
+          },
+          {
+            "key": "roof",
+            "value": "#8E3B2C"
+          }
+        ],
+        "kind": "text",
+        "name": "islandColors"
+      },
+      {
+        "cells": [
+          {
+            "key": "dive",
+            "value": "#2F8FE0"
+          },
+          {
+            "key": "kart",
+            "value": "#E0452F"
+          },
+          {
+            "key": "jump",
+            "value": "#3FBF5A"
+          },
+          {
+            "key": "studio",
+            "value": "#9B5DE5"
+          }
+        ],
+        "kind": "text",
+        "name": "districtColors"
+      },
+      {
+        "kind": "int",
+        "max": 16,
+        "min": 0,
+        "name": "captureStation",
+        "value": 0
       }
     ]
   },
@@ -7907,6 +11047,43 @@
         ],
         "transitionRenderScale": 0.5,
         "transitionSeconds": 0.4
+      },
+      {
+        "name": "split",
+        "seatCount": 2,
+        "slots": [
+          {
+            "camera": null,
+            "height": 1,
+            "width": 0.5,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "camera": null,
+            "height": 1,
+            "width": 0.5,
+            "x": 0.5,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 0.5,
+        "transitionSeconds": 0.4
+      },
+      {
+        "name": "parity",
+        "seatCount": 0,
+        "slots": [
+          {
+            "camera": "district-select",
+            "height": 1,
+            "width": 1,
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0
       }
     ],
     "seatControl": {

@@ -150,7 +150,7 @@ public sealed class HexLinesModuleImportLawTests {
     public void GardenImportsSixtyOneTilesInRingOrderOverTheTable() {
         var definition = LoadGarden();
 
-        Assert.Equal(new Vector3(-16f, -0.5f, 5f), WorldPosition(definition, "hexTable"));
+        Assert.Equal(new Vector3(14f, -0.5f, -26f), WorldPosition(definition, "hexTable"));
         AssertTilesFollowTheTable(definition);
         AssertTopologyIsCentredOnTheTable(definition);
     }

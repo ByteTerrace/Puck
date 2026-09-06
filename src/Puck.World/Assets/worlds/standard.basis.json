@@ -8,7 +8,7 @@
         "id": "groundPlane",
         "position": [
           0,
-          -16,
+          -64,
           0
         ],
         "prototypeId": "groundPlane",
@@ -22,7 +22,7 @@
         "id": "groundTexture",
         "position": [
           0,
-          -16.24,
+          -64.24,
           0
         ],
         "prototypeId": "groundTexture",

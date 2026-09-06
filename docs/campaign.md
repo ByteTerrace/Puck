@@ -205,9 +205,9 @@ facet.
 floating-island diorama was ruled unplayable as a game: the island existed as four unrelated
 descriptions — hand-placed `puck.creation.v1` SDF piles, rect-painted lattice heights, flat-Y prop
 scatter, and detached ground quads — that agreed only by eyeball, so the surface seen and the surface
-collided with could never be the same thing. That document is frozen verbatim as
-`puck.world.frozen.json` (reachable via `--world`; deleted when the owner says so, never extended),
-and the old basis froze with it as `puck.basis.frozen.json` — only the frozen world references it.
+collided with could never be the same thing. That document and its basis are deleted; the island's
+crown, root, and planetoids are re-authored on the one-description rule in `puck.world.json`, and its
+combat and elemental suites live in the arena module.
 The new `puck.world.json` is a delta over the new `standard.basis.json`, which carries the standards,
 defined AS STATE (owner ruling, same day) — a `transforms` text row (`identity`/`origin`/`unit`) and
 a `colors` text row that document values reference by `state.<row>.<key>` instead of restating

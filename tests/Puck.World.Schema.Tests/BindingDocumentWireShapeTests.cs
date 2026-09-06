@@ -21,18 +21,18 @@ public sealed class BindingDocumentWireShapeTests {
         "page",
     ];
 
-    private static string BasisPath() => Path.Combine(
+    private static string WorldPath() => Path.Combine(
         path1: AppContext.BaseDirectory,
         path2: "Assets",
-        path3: "puck.basis.frozen.json"
+        path3: "puck.world.json"
     );
-    // Every CommandValue-shaped node anywhere in the shipped basis, found by SHAPE rather than by path: an authored
+    // Every CommandValue-shaped node anywhere in the shipped world, found by SHAPE rather than by path: an authored
     // constant rides a binding page entry, a wheel ring entry, and anywhere else a command takes a value, and a walk
     // that enumerated the paths it knew about would keep passing as new ones appeared.
-    private static IEnumerable<JsonNode> BasisCommandValues() {
+    private static IEnumerable<JsonNode> WorldCommandValues() {
         var pending = new Stack<JsonNode>();
 
-        pending.Push(item: JsonNode.Parse(json: File.ReadAllText(path: BasisPath()))!);
+        pending.Push(item: JsonNode.Parse(json: File.ReadAllText(path: WorldPath()))!);
 
         while (pending.Count > 0) {
             var node = pending.Pop();
@@ -68,12 +68,12 @@ public sealed class BindingDocumentWireShapeTests {
             }
         }
     }
-    // The `document` member of every bindingOverlays row of the shipped basis world, as authored. Held as
+    // The `document` member of every bindingOverlays row of the shipped world world, as authored. Held as
     // JsonElement rather than a parsed model so each caller decides which context reads it.
-    private static IEnumerable<JsonElement> BasisBindingOverlays() {
-        using var basis = JsonDocument.Parse(json: File.ReadAllText(path: BasisPath()));
+    private static IEnumerable<JsonElement> WorldBindingOverlays() {
+        using var world = JsonDocument.Parse(json: File.ReadAllText(path: WorldPath()));
 
-        foreach (var overlay in basis.RootElement.GetProperty(propertyName: "bindingOverlays").EnumerateArray()) {
+        foreach (var overlay in world.RootElement.GetProperty(propertyName: "bindingOverlays").EnumerateArray()) {
             if (overlay.TryGetProperty(propertyName: "document", value: out var document)) {
                 yield return document.Clone();
             }
@@ -144,16 +144,16 @@ public sealed class BindingDocumentWireShapeTests {
         Assert.Equal(actual: string.Join(separator: ", ", values: offenders), expected: string.Empty);
     }
     [Fact]
-    public void TheShippedBasisBindingsWriteTheSameBytesThroughBothContexts() {
+    public void TheShippedWorldBindingsWriteTheSameBytesThroughBothContexts() {
         // The one-canonical-wire-shape claim, made on real authored data rather than a fixture: every binding
-        // document the shipped basis world carries is read through the WORLD's context and written back through
+        // document the shipped world world carries is read through the WORLD's context and written back through
         // BOTH — Puck.Commands' package-local BindingProfileJsonContext and the world document's own writer — and
         // the two must be the same bytes. They agree because neither context defines the shape: CommandValue,
         // ChannelRef, DocumentIdentifier and every binding enum declare their converter on the TYPE, so a future
         // edit that moved one back onto a context's converter list would break this by construction.
         var documents = 0;
 
-        foreach (var overlay in BasisBindingOverlays()) {
+        foreach (var overlay in WorldBindingOverlays()) {
             var document = overlay.Deserialize(jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument);
 
             Assert.NotNull(@object: document);
@@ -170,12 +170,12 @@ public sealed class BindingDocumentWireShapeTests {
             ++documents;
         }
 
-        // The fixture is only worth anything if the basis actually carries bindings; a silently empty walk would
+        // The fixture is only worth anything if the world actually carries bindings; a silently empty walk would
         // pass every assertion above.
         Assert.True(condition: (documents > 0));
     }
     [Fact]
-    public void TheShippedBasisSpellsEveryCommandValueTheWayItsOwnWriterDoes() {
+    public void TheShippedWorldSpellsEveryCommandValueTheWayItsOwnWriterDoes() {
         // A checked-in document that the canonical writer would write back DIFFERENTLY rewrites itself on the first
         // save, turning someone's unrelated edit into a diff nobody made. CommandValue.Raw is a Vector4 of floats and
         // Utf8JsonWriter spells a whole float without a fractional part, so the authored `2.0` came back as `2`. The
@@ -184,7 +184,7 @@ public sealed class BindingDocumentWireShapeTests {
         var options = new JsonSerializerOptions();
         var values = 0;
 
-        foreach (var authored in BasisCommandValues()) {
+        foreach (var authored in WorldCommandValues()) {
             var text = authored.ToJsonString();
             var reader = new Utf8JsonReader(jsonData: Encoding.UTF8.GetBytes(s: text));
 
@@ -214,11 +214,11 @@ public sealed class BindingDocumentWireShapeTests {
         Assert.True(condition: (values > 0));
     }
     [Fact]
-    public void TheShippedBasisBindingsReadBackThroughThePackageContextAlone() {
+    public void TheShippedWorldBindingsReadBackThroughThePackageContextAlone() {
         // The consumer's path, with no world assembly anywhere near it: read the authored section through
         // Puck.Commands' own context, write it back, and the text is stable. This is what a Native AOT consumer
         // does; the World's context never touches it.
-        foreach (var overlay in BasisBindingOverlays()) {
+        foreach (var overlay in WorldBindingOverlays()) {
             var document = overlay.Deserialize(jsonTypeInfo: BindingProfileJsonContext.Default.BindingProfileDocument);
             var written = JsonSerializer.Serialize(
                 jsonTypeInfo: BindingProfileJsonContext.Default.BindingProfileDocument,
