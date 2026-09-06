@@ -22,6 +22,9 @@
         <!-- The self-update canary's throwaway root/issuing/subject signing chain (CanaryCommand.cs), the same
              primitive the federation identity chain already mints for its own legs. -->
         <ProjectReference Include="..\Puck.Attestation\Puck.Attestation.csproj" />
+        <!-- The `puck bench world` lane's EngineTicks.PerRate — the same per-rate tick-width conversion the World
+             test fixtures step by. -->
+        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <!-- puck publish (Publish/PublishCommand.cs) and the self-update canary's stub-boot leg mode both build/read
              puck.release.v1 documents (ReleaseManifest/ReleaseCanonicalizer) and mint an AttestationReleaseVerifier
              — reusing the one type rather than a second hand-rolled mirror of it (rule 8). -->
@@ -30,6 +33,9 @@
         <ProjectReference Include="..\Puck.Scripting\Puck.Scripting.csproj" />
         <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
         <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
+        <!-- The `puck bench world` lane boots a real WorldServer over the shipped world and a checked-in Klondike
+             fixture document. -->
+        <ProjectReference Include="..\Puck.World.Server\Puck.World.Server.csproj" />
         <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
     </ItemGroup>
     <Target Name="PublishPuckLauncher" AfterTargets="Publish">

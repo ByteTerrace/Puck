@@ -4,12 +4,15 @@ using BenchmarkDotNet.Running;
 
 namespace Puck.Cli.Bench;
 
-// The `puck bench` verb: the on-demand Puck.Maths microscope. The original algebra classes remain named 1:1 after
-// scenarios of the standalone quadratic-algebra bench, which no longer builds; workload-specific classes cover
-// transforms and other Maths kernels. Of the retired grid only the complex-multiply ratio is still measured
-// automatically, by BenchTests in tests/Puck.Maths.Tests.
+// The `puck bench` verb: the on-demand Puck.Maths microscope, plus the `world` lane
+// (WorldBenchmarks) — the Puck.World.Server tick-path stopwatch harness, since a server construction against the
+// shipped world costs tens of seconds and cannot amortize inside a BenchmarkDotNet job. The original algebra classes
+// remain named 1:1 after scenarios of the standalone quadratic-algebra bench, which no longer builds; workload-
+// specific classes cover transforms and other Maths kernels. Of the retired grid only the complex-multiply ratio is
+// still measured automatically, by BenchTests in tests/Puck.Maths.Tests.
 //
 //   puck bench --filter '*Norm*'
+//   puck bench world
 //
 // Job rigor is chosen on the command line and layered over the base config below:
 //   (default, no --job) : BenchmarkDotNet's adaptive default — the sane balanced setting for everyday runs.
@@ -17,6 +20,10 @@ namespace Puck.Cli.Bench;
 //   --job long          : thorough verdict (many iterations, tight error bars) before a retention decision.
 internal static class BenchRunner {
     public static int Run(string[] args) {
+        if (args is ["world"]) {
+            return WorldBenchmarks.Run();
+        }
+
         // MemoryDiagnoser rides on every scenario: these kernels are meant to be zero-alloc, and its byte columns are
         // the only thing that reports whether they are. DisassemblyDiagnoser is attached per-class, only on the
         // fixed-point kernels, via attribute — the extension scenario is modular-ulong arithmetic, not a fixed-point

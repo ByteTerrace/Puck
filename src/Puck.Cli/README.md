@@ -8,7 +8,7 @@ with hand-rolled first-positional verb dispatch:
 | [`puck canary`](#puck-canary--real-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
 | [`puck citations`](#puck-citations--cited-verb-token-check) | checks every verb-shaped token skills and XML docs cite against vocabularies swept from the code, including a live `Puck.World` console boot. |
 | [`puck search`](#puck-search--content-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
-| [`puck bench`](#puck-bench--the-puckmaths-microscope) | the on-demand `Puck.Maths` micro-benchmark microscope, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet). |
+| [`puck bench`](#puck-bench--the-puckmaths-microscope) | the on-demand `Puck.Maths` micro-benchmark microscope, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet); `puck bench world` is the `Puck.World.Server` tick-path stopwatch lane. |
 | [`puck scan`](#puck-scan--source-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
 | [`puck schema`](#puck-schema--worlddef-json-schema) | the generated JSON Schema for `puck.world.def.v1`, checked and regenerated. |
 | [`puck format`](#puck-format--source-rewriters) | source rewriters for the conventions `.editorconfig` cannot express. |
@@ -424,6 +424,32 @@ kernels are measured exactly as written (the `Int128` widening multiply in the
 wide path is deliberate and is not "fixed" here). Do not commit result artifacts;
 this verb produces evidence for a decision, not baselines to pin — the
 `BenchmarkDotNet.Artifacts/` directory it writes under the cwd is git-ignored.
+
+### `puck bench world`
+
+The `Puck.World.Server` tick-path lane: `puck bench world` boots the shipped
+`puck.world.json` and a checked-in Klondike fixture document
+(`Bench/klondike.fixture.world.json`, spliced the way
+`tests/Puck.World.Tests/SolitaireFixtures.cs`'s `Game` builds one, without this
+project referencing the test project) and prints one row per number —
+shipped-world server construction time, idle-tick time and quiet-tick
+allocation (median over a sampled window, after a warmup), and a scripted
+Klondike deal's per-tick time and per-mutation allocation. A server
+construction against the shipped world costs tens of seconds
+(`WorldNavigationRuntime.BuildEdges` sphere-casting through the static SDF
+program) — far past what an iteration-based BenchmarkDotNet job can amortize
+honestly — so this lane is a plain stopwatch harness (`WorldBenchmarks.cs`,
+`WorldBenchHarness.cs`) rather than a `[Benchmark]` class, run directly by
+`BenchRunner` before it reaches `BenchmarkSwitcher`:
+
+```sh
+puck bench world
+```
+
+Regenerate the fixture document only when
+`tests/Puck.World.Tests/Fixtures.BuildDocument`'s shape or
+`src/Puck.World/Assets/worlds/games/klondike.world.json` changes underneath
+it — it is a checked-in snapshot, not derived at run time.
 
 ---
 
