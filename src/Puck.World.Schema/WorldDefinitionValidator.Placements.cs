@@ -1427,6 +1427,18 @@ public static partial class WorldDefinitionValidator {
         // The one face derivation, read for both the per-face portal refusals below and the screen budget after the
         // loop — never a second walk of (placements x declared faces) to answer the same questions.
         var faces = WorldFaceCatalog.For(definition: definition);
+        // The id lookup a dealt child's parent resolves through; the first row wins a duplicate id exactly as
+        // WorldDefinitionRows.FindPlacement's scan would.
+        var placementsById = new Dictionary<string, WorldPlacement>(comparer: StringComparer.Ordinal);
+
+        for (var placementIndex = 0; (placementIndex < placements.Count); placementIndex++) {
+            if (placements[placementIndex] is { Id: not null } placementRow) {
+                _ = placementsById.TryAdd(
+                    key: placementRow.Id,
+                    value: placementRow
+                );
+            }
+        }
 
         for (var index = 0; (index < placements.Count); index++) {
             var placement = placements[index];
@@ -1445,6 +1457,27 @@ public static partial class WorldDefinitionValidator {
                 field: "id",
                 errors: errors
             );
+
+            // A dealt child is the one row whose id may spell the child separator, and only in the exact shape the
+            // sweep mints — <template>/<cellKey> under a parent carrying the deal facet.
+            _ = TryFindRow(
+                key: placement.Parent,
+                map: placementsById,
+                row: out var parentRow
+            );
+
+            var isDealtChild = WorldPlacementDeal.IsChild(
+                placement: placement,
+                parent: parentRow
+            );
+
+            if (
+                !isDealtChild &&
+                (placement.Id is not null) &&
+                WorldPlacementDeal.IsChildId(id: placement.Id)
+            ) {
+                errors.Add(item: $"{path}.id '{placement.Id}' spells the dealt-child separator '{WorldPlacementDeal.ChildSeparator}' — only a deal sweep mints an id of that shape (<template>{WorldPlacementDeal.ChildSeparator}<cellKey> under a parent carrying .deal); author the id without it.");
+            }
 
             RequireDeclared(
                 value: placement.PrototypeId,
@@ -1585,8 +1618,9 @@ public static partial class WorldDefinitionValidator {
                     }
 
                     // The field provider compiles every solid row into ONE program instead of one collider per copy,
-                    // so the analytic ceiling does not describe what it costs.
-                    if (!requiresField) {
+                    // so the analytic ceiling does not describe what it costs. A dealt child is charged by its
+                    // template's region count, never a second time as its own row.
+                    if (!requiresField && !isDealtChild) {
                         var copies = WorldPlacementStamp.MaterializedCopyCeiling(
                             ceiling: (WorldPlacementPolicy.MaxSolidPlacementColliders + 1L),
                             placement: placement
@@ -1678,7 +1712,8 @@ public static partial class WorldDefinitionValidator {
 
             if (
                 !isAnimated &&
-                (placement.Inhabit is null)
+                (placement.Inhabit is null) &&
+                !isDealtChild
             ) {
                 // A scope-free static stamp materializes one engine instance PER SHAPE (the tight-bound emission
                 // split — Puck.World.Authoring.CreationStampEmitter.PerCopyInstanceCount), so the ceiling charges
@@ -1822,6 +1857,19 @@ public static partial class WorldDefinitionValidator {
                     prototypeIds: prototypeIds
                 );
             }
+
+            // The deal facet: the row is a template whose children are dealt from a keyed state row (see
+            // WorldPlacementDeal).
+            if (placement.Deal is { } deal) {
+                ValidatePlacementDeal(
+                    deal: deal,
+                    definition: definition,
+                    errors: errors,
+                    placement: placement,
+                    path: path,
+                    prototypeIds: prototypeIds
+                );
+            }
         }
 
         // Every row's PARENT chain, checked once across the whole set rather than per row (a cycle or a distributed/
@@ -1855,6 +1903,136 @@ public static partial class WorldDefinitionValidator {
         // entity table itself, and a genuinely full table is rejected loudly at JOIN time (a runtime fact the static
         // document validator cannot know), never pre-rejected here.
         return ids;
+    }
+    // The deal facet (see WorldPlacementDeal): the dealt row and the variant row must be declared keyed rows, the
+    // region must materialize a fixed instance count at least the dealt row's capacity, every prototype a child could
+    // show must be a declared static creation, and the template carries none of the facets a child cannot copy.
+    private static void ValidatePlacementDeal(WorldPlacementDeal deal, WorldPlacement placement, WorldDefinition definition, HashSet<string> prototypeIds, string path, List<string> errors) {
+        var dealPath = $"{path}.deal";
+
+        if (
+            (placement.Inhabit is not null) ||
+            (placement.Attach is not null) ||
+            (placement.Respond is not null) ||
+            (placement.Mirror is not null) ||
+            (placement.FaceSources is not null)
+        ) {
+            errors.Add(item: $"{dealPath} is refused alongside inhabit/attach/respond/mirror/faceSources — a dealt template is a layout, and its children are plain static stamps of its prototype, solid, grip, region, and emission.");
+        }
+
+        RequireStaticCreation(
+            creations: definition.Creations,
+            errors: errors,
+            path: $"{path}.prototypeId",
+            prototypeId: placement.PrototypeId,
+            prototypeIds: prototypeIds
+        );
+
+        var instanceCount = -1;
+
+        switch (placement.Distribution?.Region) {
+            case null:
+                errors.Add(item: $"{dealPath} requires {path}.distribution — the region is what lays the dealt children out.");
+
+                break;
+            case WorldDistributionRegion.Lattice or WorldDistributionRegion.Noise or WorldDistributionRegion.Scatter:
+                instanceCount = WorldPlacementDeal.InstanceCount(
+                    template: placement,
+                    worldSeed: (definition.Generation?.WorldSeed ?? 0UL)
+                );
+
+                break;
+            case { } region:
+                errors.Add(item: $"{dealPath} requires a distribution whose region materializes a fixed instance count (lattice, noise, scatter); '{region.GetType().Name.ToLowerInvariant()}' does not.");
+
+                break;
+        }
+
+        if (RequireDealtRow(
+            definition: definition,
+            errors: errors,
+            name: deal.Row,
+            path: $"{dealPath}.row",
+            row: out var dealtRow
+        ) && (instanceCount >= 0) && (dealtRow.CellCeiling > instanceCount)) {
+            errors.Add(item: $"{dealPath}.row '{deal.Row}' has capacity {dealtRow.CellCeiling}, but {path}.distribution materializes {instanceCount} instance(s) — a dealt row can never hold more cells than the region has offsets.");
+        }
+
+        if (deal.Variants is not { } variants) {
+            return;
+        }
+
+        var variantsPath = $"{dealPath}.variants";
+
+        _ = RequireDealtRow(
+            definition: definition,
+            errors: errors,
+            name: variants.Row,
+            path: $"{variantsPath}.row",
+            row: out _
+        );
+
+        if (variants.Map is not { } map) {
+            errors.Add(item: $"{variantsPath}.map is required.");
+
+            return;
+        }
+
+        foreach (var (text, prototypeId) in map) {
+            var entryPath = $"{variantsPath}.map['{text}']";
+
+            if (string.IsNullOrEmpty(value: text)) {
+                errors.Add(item: $"{variantsPath}.map carries an empty key — a variant is selected by a cell's text.");
+            }
+
+            if (!RequireDeclared(
+                value: prototypeId,
+                declaredSet: prototypeIds,
+                path: entryPath,
+                field: string.Empty,
+                rowNoun: "creation",
+                errors: errors
+            )) {
+                continue;
+            }
+
+            RequireStaticCreation(
+                creations: definition.Creations,
+                errors: errors,
+                path: entryPath,
+                prototypeId: prototypeId,
+                prototypeIds: prototypeIds
+            );
+        }
+    }
+    // A deal's row reference: a declared state.world row that is keyed (a slot row deals nothing), of any cell kind.
+    private static bool RequireDealtRow(string? name, WorldDefinition definition, string path, List<string> errors, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldStateRow? row) {
+        row = null;
+
+        if (string.IsNullOrWhiteSpace(value: name)) {
+            errors.Add(item: $"{path} is required.");
+
+            return false;
+        }
+
+        if (WorldDefinitionRows.FindStateRow(
+            rows: definition.State,
+            name: name
+        ) is not { } declared) {
+            errors.Add(item: $"{path} names state row '{name}', which state.world does not declare.");
+
+            return false;
+        }
+
+        if (!declared.IsKeyed) {
+            errors.Add(item: $"{path} names state row '{name}', which is a slot — a deal reads a keyed row, one child per cell.");
+
+            return false;
+        }
+
+        row = declared;
+
+        return true;
     }
     // The PORTAL facet: destination must name an existing destinations row. Travel/Arrival enum shape is already
     // refused at strict parse. This pass owns what parse cannot: that the named destination row exists, and that

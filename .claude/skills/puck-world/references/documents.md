@@ -2059,6 +2059,25 @@ current model.
   to a declared, non-animated creation, and the analytic solid-collider
   ceiling counts the WORST CASE across every variant the row could show.
   Read back with `world.responses`.
+  `WorldPlacement.Deal` (`WorldPlacementDeal`) is the DEAL facet — the row is
+  a template whose children are dealt from a keyed `state.world` row of any
+  cell kind, one child placement per cell named `<template>/<cellKey>`,
+  parented to the template at an offset of its own `distribution` region
+  (Lattice/Noise/Scatter only; the region must materialize at least the
+  row's capacity), carrying the template's prototype and `solid`/`grip`/
+  `region`/`emission`; `deal.variants` maps a second keyed row's same-keyed
+  cell text to a prototype. The per-tick `SweepPlacementDeals` pass
+  (`WorldServer.Deals.cs`, right after the response sweep) lands children as
+  ordinary placement mutations in one `Batch` under `WorldPrincipal.World`:
+  a child keeps its offset while its cell is present, a departing cell frees
+  its offset and moves no sibling, an arriving cell takes the lowest free
+  offset, and the sweep only re-deals when the row, the variant row, or the
+  template changes — so `world.undo` of a deal stays undone until the row
+  moves. The template renders and collides as nothing; an authored id
+  spelling `/` refuses by name. Read back with `world.placements` (`dealt
+  from <row> (<n> of <capacity>)` / `dealt by <template>`); `world.budget`
+  counts every template's offsets. The granaries module
+  (`modules/granaries.world.json`) is the worked example.
 
 ## Owned-world identities
 

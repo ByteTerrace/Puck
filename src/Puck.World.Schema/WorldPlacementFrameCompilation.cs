@@ -101,7 +101,9 @@ public static class WorldPlacementFrameCompilation {
                 return false;
             }
 
-            if ((parent.Distribution is not null) || (parent.Mirror is not null)) {
+            // A dealt template's distribution is the layout its children are dealt over, never an expansion of the
+            // template itself, so it stays a single frame to compose against.
+            if (((parent.Distribution is not null) && (parent.Deal is null)) || (parent.Mirror is not null)) {
                 reason = $"placement '{placement.Id}' names parent '{parentId}', which is distributed/mirrored — a child of an expanded row has no single frame.";
 
                 return false;
@@ -144,7 +146,7 @@ public static class WorldPlacementFrameCompilation {
             (placement.Parent is not { Length: > 0 } parentId) ||
             string.Equals(a: parentId, b: placement.Id, comparisonType: StringComparison.Ordinal) ||
             !byId.TryGetValue(key: parentId, value: out var parent) ||
-            (parent.Distribution is not null) ||
+            ((parent.Distribution is not null) && (parent.Deal is null)) ||
             (parent.Mirror is not null) ||
             (parent.Scale != 1f) ||
             !visiting.Add(item: placement.Id)

@@ -6,8 +6,8 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The inhabitation and creation-facet read-back surface — six Immediate censuses:
-/// <c>world.inhabitants</c>, <c>world.faces</c>, <c>world.attachments</c>, <c>world.portals</c>,
+/// The inhabitation and creation-facet read-back surface — seven Immediate censuses:
+/// <c>world.placements</c>, <c>world.inhabitants</c>, <c>world.faces</c>, <c>world.attachments</c>, <c>world.portals</c>,
 /// <c>world.adjacencies</c>, <c>world.destinations</c>. A placement's <c>inhabit</c> and <c>faceSources</c> facets ride its whole row through
 /// the general <see cref="WorldRowCommandModule"/> (<c>world.row.set placements &lt;json&gt;</c>), and
 /// <c>world.placement.get</c> (<see cref="WorldMutationCommandModule"/>) is the round-trip twin that harvests its
@@ -517,6 +517,26 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.placements",
+            description: "Reports the placement census (Immediate; reads the settled state after any pending mutation): one entry per placement row — id, prototypeId, resolved world position/yaw (the parent chain composed), scale, parent, and every facet it carries; a dealt template echoes 'dealt from <row> (<children present> of <row capacity>)' and a dealt child 'dealt by <template>'. A trailing instance:<name> token reads a named running instance's own document instead of the boot world's.",
+            handler: (_, args) => {
+                if (!TryResolveInstance(
+                    args: in args,
+                    error: out var tokenError,
+                    instance: out var instance,
+                    verb: "world.placements"
+                )) {
+                    return tokenError!.Value;
+                }
+
+                return new CommandResult(Output: WithInstanceTag(
+                    text: ((instance?.Server ?? server).DescribePlacements()),
+                    instance: instance
+                ));
+            }
+        );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.inhabitants",

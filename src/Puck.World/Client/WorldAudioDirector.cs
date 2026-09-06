@@ -579,7 +579,9 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
         );
     private void DeriveCreationSounds(WorldDefinition definition, WorldAudioDefaults audio) {
         foreach (var placement in definition.Placements) {
+            // A dealt template sounds nothing itself; its dealt children carry its creation and emission.
             if (
+                (placement.Deal is not null) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
                 id: placement.PrototypeId
@@ -624,7 +626,7 @@ internal sealed class WorldAudioDirector : IWorldAudioLever, IWorldAudioFrameFee
     }
     private void DeriveEmissionFacets(WorldDefinition definition, WorldAudioDefaults audio) {
         foreach (var placement in definition.Placements) {
-            if (placement.Emission is { } emission) {
+            if ((placement.Emission is { } emission) && (placement.Deal is null)) {
                 // Root-only under Pattern (documented on WorldPlacement): the emission binds the placement root.
                 // isAttached tells TryResolvePosition to go SILENT rather than fall back to the row's inert static
                 // Position when the attach target is not live this frame.

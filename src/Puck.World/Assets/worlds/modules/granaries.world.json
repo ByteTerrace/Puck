@@ -1,4 +1,99 @@
 {
+  "exports": {
+    "reads": [
+      "granaryNames",
+      "granaryResources",
+      "granaryRegions",
+      "granaryKinds",
+      "granarySkus"
+    ],
+    "actions": [],
+    "bindings": []
+  },
+  "navigation": {
+    "domains": [
+      {
+        "agentHeight": 0.5,
+        "agentRadius": 0.2,
+        "arrivalDistance": 0.9,
+        "cellSize": 1,
+        "depth": 32,
+        "kind": "Surface",
+        "layers": 1,
+        "maxExpandedNodes": 1024,
+        "maxPathNodes": 128,
+        "maxSlopeDegrees": 60,
+        "maxStepHeight": 0.55,
+        "name": "granaryYard",
+        "origin": [
+          -30,
+          -2,
+          -30
+        ],
+        "probeDown": 3,
+        "probeUp": 2.5,
+        "width": 40
+      }
+    ]
+  },
+  "placements": {
+    "rows": [
+      {
+        "id": "granaryCourt",
+        "prototypeId": "granaryCourt",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "granaryStores",
+        "prototypeId": "granaryStore",
+        "parent": "granaryCourt",
+        "position": [
+          -10,
+          0,
+          -15
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "distribution": {
+          "fill": {
+            "name": "none",
+            "offset": 0,
+            "step": 0
+          },
+          "region": {
+            "$type": "scatter",
+            "cellSize": 1.6,
+            "depth": 16,
+            "radius": 1,
+            "seed": 7,
+            "spacing": 4,
+            "width": 16
+          }
+        },
+        "deal": {
+          "row": "granaryNames",
+          "variants": {
+            "row": "granaryNames",
+            "map": {
+              "bytrcstp001": "granaryAnchor"
+            }
+          }
+        }
+      }
+    ]
+  },
   "prototypes": [
     {
       "id": "granaryStore",
@@ -1807,24 +1902,17 @@
       }
     }
   ],
-  "placements": {
-    "rows": [
-      {
-        "id": "granaryCourt",
-        "prototypeId": "granaryCourt",
-        "position": [
-          -14,
-          -15.9,
-          -63
-        ],
-        "yawDegrees": 0,
-        "scale": 1,
-        "solid": {
-          "margin": 0
-        }
-      }
-    ]
-  },
+  "spawnPoints": [
+    {
+      "id": "granaries-arrival",
+      "position": [
+        -10,
+        0,
+        1.5
+      ],
+      "yawDegrees": 180
+    }
+  ],
   "state": {
     "world": [
       {

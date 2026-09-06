@@ -285,7 +285,17 @@ disconnected seat or peer past its reconnect grace). `SweepDeadlines`
 stays a separate call after `SweepPlacementResponses`
 (`WorldServer.Responses.cs` — right after `StepFields`, so it reads this
 tick's own lattice writes: the first `WorldPlacementResponse` entry whose
-condition holds at a placement's coupled cell becomes its prototype). Escrow
+condition holds at a placement's coupled cell becomes its prototype) and
+`SweepPlacementDeals` (`WorldServer.Deals.cs` — right after the response
+sweep, so the rule frame has folded and a cell a rule wrote this tick deals on
+this tick: each placement carrying a `WorldPlacementDeal` is a template whose
+children follow its keyed row, one `UpsertPlacement`/`RemovePlacement` per
+arriving, leaving, or re-variant cell, folded into one `Batch` under
+`WorldPrincipal.World`; a child keeps the region offset it was dealt and a new
+cell takes the lowest free one; the sweep returns at once when the installed
+document is the one it last left, and skips a template whose row, variant
+row, and own row are unchanged before reading its children, so a quiet tick
+allocates nothing; read back with `world.placements`). Escrow
 reclaim, transfer expiry, and park teardown are all driven by a
 `WorldDeadlineTable<TToken>` — entries sorted by due tick, drained from the
 front, so a tick with nothing due pays for one comparison rather than a walk

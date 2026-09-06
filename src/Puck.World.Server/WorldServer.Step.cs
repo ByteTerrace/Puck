@@ -1008,6 +1008,9 @@ public sealed partial class WorldServer {
         // Placement response sweep — AFTER StepFields, so a response condition reads this tick's own lattice writes;
         // a state-driven prototype swap for a placement carrying a Respond trait (see WorldPlacementResponse).
         SweepPlacementResponses(tick: tick);
+        // Placement deal sweep — after the rule frame has folded, so a cell a rule wrote this tick deals on this
+        // tick; each dealt template's children follow its row (see WorldPlacementDeal).
+        SweepPlacementDeals(tick: tick);
         // Reconnect-park recovery — the same tick-driven, replay-deterministic shape ReclaimExpiredEscrows already
         // establishes, for a disconnected body's deferred teardown instead of an unaccepted ownership offer's. The
         // body half only: a peer generation's grant rows go at its PeerDisconnected event, and a restored parked

@@ -618,6 +618,24 @@ through an ordinary `UpsertPlacement`; nothing reverts a swap when no entry
 holds. Refused alongside `Attach`/`Inhabit`/`FaceSources`, and every candidate
 prototype (the row's own and every entry's) must be a declared, non-animated
 creation. Read back with `world.responses`.
+`Deal` (`WorldPlacementDeal`) makes the row a template whose instances are
+dealt from a keyed `state.world` row of any cell kind: one child placement per
+cell, named `<template>/<cellKey>`, parented to the template at an offset of
+the template's own `Distribution` region (Lattice, Noise, or Scatter — a Disc
+or Points region is refused by name; the region must materialize at least the
+row's capacity, refused quoting both), carrying the template's prototype,
+`Solid`, `Grip`, `Region`, and `Emission`. `deal.variants` names a second keyed
+row read at the same key and maps its cell's text (an integer cell spelled as
+text) to the prototype the child shows; every map value must resolve to a
+declared, non-animated creation. The template renders nothing and collides
+with nothing itself (`Client/WorldPlacementStamper.IsStaticStamp`,
+`Server/WorldColliderSet`, `Server/WorldSolidField`, `Server/WorldEventFeed.CollectRegions`
+all skip it), and is exempt from the distributed-parent refusal
+(`WorldPlacementFrameCompilation`). Refused alongside `Inhabit`/`Attach`/
+`Respond`/`Mirror`/`FaceSources`. An authored placement id spelling the child
+separator `/` is refused by name; only the per-tick sweep
+(`Server/WorldServer.Deals.cs`) mints one. Read back with `world.placements`;
+`world.budget` counts every template's offsets beside the static instances.
 `Solid` compiles the same creation-shape transform chain the renderer emits.
 The field provider evaluates that SDF geometry directly; the analytic provider
 materializes exact isotropically scaled spheres and conservative world-axis

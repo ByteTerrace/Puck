@@ -261,8 +261,10 @@ public sealed class WorldSolidField : IContactField {
         }
 
         foreach (var placement in definition.Placements) {
+            // A dealt template collides with nothing itself; its solid facet is what its dealt children carry.
             if (
                 (placement.Solid is not { } solid) ||
+                (placement.Deal is not null) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
                 id: placement.PrototypeId

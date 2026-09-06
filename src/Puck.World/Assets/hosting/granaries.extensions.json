@@ -42,10 +42,6 @@
         {
           "capability": "mutate",
           "subject": "section:state"
-        },
-        {
-          "capability": "mutate",
-          "subject": "section:placements"
         }
       ]
     }
@@ -80,18 +76,6 @@
         "region": "granaryRegions",
         "kind": "granaryKinds",
         "sku": "granarySkus"
-      },
-      "placements": {
-        "template": "granaryCourt",
-        "prefix": "granary-",
-        "prototype": "granaryStore",
-        "columns": 3,
-        "spacingX": 10,
-        "spacingZ": 10,
-        "variantField": "name",
-        "variants": {
-          "bytrcstp001": "granaryAnchor"
-        }
       }
     }
   ]

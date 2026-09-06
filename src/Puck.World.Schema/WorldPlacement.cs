@@ -253,6 +253,11 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// carry neither a <see cref="Distribution"/> nor a <see cref="Mirror"/> (an expanded row has no single frame to
 /// compose against) nor a <see cref="Scale"/> other than 1 (composition rotates and translates only — nothing
 /// composes a parent's scale into a child's local offset).</param>
+/// <param name="Deal">The placement's deal facet (see <see cref="WorldPlacementDeal"/>) — the row is a template whose
+/// instances are dealt from a keyed state row as child placements over its own <see cref="Distribution"/> region, or
+/// <see langword="null"/> for an ordinary placement. A template renders nothing and collides with nothing itself.
+/// Omitted from the wire when null. Requires <see cref="Distribution"/>; refused together with <see cref="Inhabit"/>,
+/// <see cref="Attach"/>, <see cref="Respond"/>, <see cref="Mirror"/>, and <see cref="FaceSources"/>.</param>
 public sealed record WorldPlacement(
     string Id,
     string PrototypeId,
@@ -271,7 +276,8 @@ public sealed record WorldPlacement(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacementResponse>? Respond = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementGrip? Grip = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementBoard? Board = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Parent = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Parent = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementDeal? Deal = null
 );
 /// <summary>Adapts placement document facets to the shared creation-stamp vocabulary.</summary>
 public static class WorldPlacementStamp {

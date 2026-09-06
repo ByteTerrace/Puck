@@ -582,9 +582,11 @@ public sealed class WorldEventFeed {
         var ordinal = 0;
 
         foreach (var placement in definition.Placements) {
+            // A dealt template senses nothing itself; its region facet is what its dealt children carry.
             if (
                 (placement is null) ||
-                (placement.Region is not { } region)
+                (placement.Region is not { } region) ||
+                (placement.Deal is not null)
             ) {
                 continue;
             }

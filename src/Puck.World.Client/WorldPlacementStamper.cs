@@ -424,11 +424,12 @@ public static class WorldPlacementStamper {
     /// ATTACHES (the stamp pool roots it on a live body's pose plus the facet's local offset, so its authored transform
     /// is inert). This ONE fork is what keeps an attached row from drawing twice — the static pass skips it here and its
     /// instances stop charging <see cref="StaticStampInstances"/>, because the constant-size pool already reserves
-    /// them.</summary>
+    /// them. A dealt template (<see cref="WorldPlacement.Deal"/>) renders nothing itself: its dealt children are the
+    /// static stamps.</summary>
     /// <param name="placement">The placement row.</param>
     /// <param name="creation">The placement's resolved creation.</param>
     public static bool IsStaticStamp(WorldPlacement placement, WorldPrototype creation) =>
-        (!IsAnimated(creation: creation) && (placement.Inhabit is null) && (placement.Attach is null));
+        (!IsAnimated(creation: creation) && (placement.Inhabit is null) && (placement.Attach is null) && (placement.Deal is null));
     /// <summary>The total static stamp instances of a placement set (animated rows ride the constant replay pool and
     /// charge nothing here) — the apply-time measure's placement charge unit.</summary>
     /// <param name="creations">The world's creation rows.</param>

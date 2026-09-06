@@ -217,7 +217,20 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
             placements: server.Definition.Placements,
             worldSeed: (server.Definition.Generation?.WorldSeed ?? 0UL)
         );
-        var placements = $"placements {placementInstances} static instance(s) ({server.Definition.Placements.Count} row(s))";
+        var dealtTemplates = 0;
+        var dealtInstances = 0;
+
+        foreach (var row in server.Definition.Placements) {
+            if (row.Deal is not null) {
+                dealtTemplates++;
+                dealtInstances += WorldPlacementDeal.InstanceCount(
+                    template: row,
+                    worldSeed: (server.Definition.Generation?.WorldSeed ?? 0UL)
+                );
+            }
+        }
+
+        var placements = $"placements {placementInstances} static instance(s) ({server.Definition.Placements.Count} row(s), {dealtInstances} dealt offset(s) over {dealtTemplates} template(s))";
         var curves = $"curves {population.CountCurveFollowers()} follower(s)";
         var navigationWork = population.NavigationWork();
         var navigation = $"navigation {population.NavigationCellCount} compiled cell(s), {population.NavigationWorkspaceBytes} workspace byte(s), declared search {population.NavigationDeclaredSearchWork} expansion(s), live {navigationWork.Followers} follower(s) / last {navigationWork.LastExpanded} expansion(s) / simultaneous-replan ceiling {navigationWork.WorstExpanded} expansion(s)";
@@ -262,7 +275,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.budget",
-            description: "Prints the immediate compose-time cost sheet: rendering, far-distance, fields, gravity, placements, state/rules, curves, bounded navigation, and local flock perception work. Rendering reads 'not built yet' under a headless host; authoritative costs remain available.",
+            description: "Prints the immediate compose-time cost sheet: rendering, far-distance, fields, gravity, placements (static instances, rows, and the offsets every dealt template reserves), state/rules, curves, bounded navigation, and local flock perception work. Rendering reads 'not built yet' under a headless host; authoritative costs remain available.",
             handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.budget") is { } refusal)
                 ? refusal
                 : new CommandResult(Output: DescribeBudget())),
