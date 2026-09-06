@@ -149,6 +149,33 @@ Client code never mutates local state before the server's verdict
 (completions, not discarded replies). Details:
 [references/authority.md](references/authority.md).
 
+**Rule writes land on a frame; the document installs once per tick.** During
+`EvaluateWorldRules` every state effect writes the host's `StateFrame`
+(`WorldServer.RuleFrame.cs`) and rules read through it; what the frame
+accumulated folds into ONE mutation through the ordinary door at the end of the
+tick, so every other reader (bodies, fields, search, the console) sees a rule's
+write only after that fold. Row versions on the frame drive the rule scheduler
+and memoized bindings (`RuleSchedule`, `IRuleReader.TryRowVersion`); a rule
+whose read rows are unchanged keeps its closed verdict. A text cell, a removal,
+a draw, a shuffle, and a random or slice transfer take the cross-row path,
+which composes but still folds once. `puck bench world` measures the tick path
+on the fixture and the shipped world.
+
+**Narrate through the hub, never the console.** Server writes nothing to
+`System.Console`; every line is a `WorldNarration` through
+`WorldOutputHub.Narrate(channel, text)` under `HasNarrationSink` (a lambda that
+captures locals allocates its closure on every call, sink or none), and the
+composition root binds `WorldConsoleNarrationSink` to stderr, or stdout for the
+few lines a script reads as answers. A fixture server narrates only if it is
+handed the sink (`Fixtures.FreshServer` does), so a law that captures
+`Console.Error` reads what the game prints. `ServerConsoleLawTests` holds the
+tree to the one writer until the architecture gate's console denial is armed.
+A body sleeps after `bodies.sleepAfterTicks` idle engine ticks (0 never sleeps)
+and wakes on intent, pose, transfer, admission, a designation, a dynamic
+contact, or a contact-field version bump (`WorldBody.Sleep.cs`). A value write
+delivers `DeliverState`; a shape change delivers `DeliverDefinition`; the
+install marks which is pending and the step delivers once.
+
 **Add a read-back.** Do not land a new decision surface without a verb that
 echoes it, in the same change — a decision nothing can echo can only be
 asserted through downstream inference. `world.why`, `world.grants`,
