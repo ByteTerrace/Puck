@@ -33,6 +33,25 @@ information-set search nodes, multi-hop candidate chains, n-player search, a cue
 that needs it, never by asserting it. The four-world reading below stays as the record of what each
 district is for.
 
+Three further rulings the same day. **The shipped rate is 30 Hz.** The 240 Hz default was the stress
+requirement every primitive had to survive, never the game's rate: a world that authors no `simulation.rateHz`
+runs at 30, a fixture that wants the stress rate authors 240 by name, and no document, skill, or law says
+"240 Hz" as if it were the world's own. **Adjacencies return, with the four-corners stressor.** The one
+world is the centre authority of a quilt: four corner shards, each a basis delta over `puck.world.json`
+with its own `documentId` and reciprocal `adjacencies` rows, so a body walks off the island's ground onto
+a neighbour's without a portal, and `four-corners-sharded`, `seamless-adjacency`, and the circuit canaries
+run against those shards rather than the retired prototypes. The instance-ceiling overrun that once ruled
+the island out of the quilt is a measurement to retake, and an engine gap to close if it holds, never a
+reason to leave the seams off. **The product is a Trojan horse over the one world.** Each retail title
+is a basis delta over the island that pins the boot seat, layout, and district and hides the plaza until an
+identity fact flips; the reveal is authored presentation reading facts (a camera program selecting on a
+row, a binding overlay swapped by a row, a sky reading a cell), and the true game beyond it is the
+federation the 2026-08-03 rulings describe — every player owns a world, meaning between worlds is
+bilateral, the grant table is the rulebook, a duel or a wager is a pair of signed attestations each side's
+document honours plus provenance on what changes hands. No accord subsystem, no realm type, no
+seat-router enforcement: the missing primitive is provenance signing for carried state, and it is the
+federation arc's.
+
 
 **Four game worlds, no others.** **Nexus** — the overworld hub, a floating island above a field of
 planetoids, a plaza that local multiplayer shares — and three instanced "dungeons" reached from it:
@@ -1539,6 +1558,13 @@ answers what has landed:
   `Assets/scenarios/*`, the canaries that booted them (re-recorded against the one world in the same
   change or deleted with a named successor), and `experimental/Puck.Demo` with a ledger naming each
   folder's live successor.
+- **The same wave** moves the unauthored rate to 30 Hz and re-records what that moves, and brings the
+  quilt back as four corner shards over the island with their canaries.
+- **The reveal wave**: the retail basis deltas (the games suite, the platform craft, the retro handheld,
+  the arena), the camera pullback from a screen face to the seat rig on a fact, the binding overlay swapped
+  on a fact, the sky reading a cell, and the handheld held in the avatar's hands.
+- **The federation wave**: provenance signing for carried state, the bilateral attestation rows a duel or
+  wager is, a profile world docking at a shard's seam, then the silo-hosted hub.
 - **Then the market's engine gaps**, sequenced by what an authored probe world refuses first: Backgammon
   for chance nodes, Chinese Checkers for chains and n-player search, billiards for the cue gesture,
   Riichi Mahjong for priority windows.
