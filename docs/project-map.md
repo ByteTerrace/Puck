@@ -51,7 +51,6 @@ been quarantined out of the repository.
 
 ```text
 Optional extensions      Puck.World.AgentBridge  Puck.World.AgentHarness
-                         Puck.World.Azure
 Composition roots        Puck.Actors  Puck.Azure.Functions  Puck.Launcher.Stub
                          Puck.World  Puck.World.Silo
 Validation               Puck.AdvancedGamingBrick.Post  Puck.GamingBricks.Post
@@ -64,9 +63,9 @@ Engine services          Puck.AdvancedGamingBrick
                          Puck.Recording  Puck.SdfVm  Puck.ShaderVm
                          Puck.SignedDistance  Puck.State  Puck.Text
                          Puck.World.Addons  Puck.World.Authoring
-                         Puck.World.Client  Puck.World.Console
-                         Puck.World.Protocol  Puck.World.Schema
-                         Puck.World.Server
+                         Puck.World.Azure  Puck.World.Client
+                         Puck.World.Console  Puck.World.Protocol
+                         Puck.World.Schema  Puck.World.Server
 Presentation             Puck.DirectX.Presentation  Puck.Launcher.Linux
                          Puck.Launcher.Windows  Puck.Vulkan.Presentation
 Backends                 Puck.DirectX  Puck.Vulkan

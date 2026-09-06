@@ -491,6 +491,7 @@
       "puck.world.azure": {
         "type": "Project",
         "dependencies": {
+          "Azure.Identity": "[1.*, )",
           "Azure.ResourceManager": "[1.*, 2.0.0)",
           "Puck.World.Server": "[1.0.0, )"
         }

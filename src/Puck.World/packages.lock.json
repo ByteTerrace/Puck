@@ -60,6 +60,14 @@
           "Azure.Core": "1.53.0"
         }
       },
+      "Azure.ResourceManager": {
+        "type": "Transitive",
+        "resolved": "1.14.0",
+        "contentHash": "i925pQG3EPXQ+jgTfO/26aODZ7IqWBo34nYg+kCgCPLGsMulbzjuJDiJH+PHV+xoWEjFKGvm1SBaAAXbG4887A==",
+        "dependencies": {
+          "Azure.Core": "1.51.1"
+        }
+      },
       "Azure.Storage.Blobs": {
         "type": "Transitive",
         "resolved": "12.29.2",
@@ -695,6 +703,14 @@
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.SignedDistance": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Text": "[0.1.0-alpha, )"
+        }
+      },
+      "puck.world.azure": {
+        "type": "Project",
+        "dependencies": {
+          "Azure.Identity": "[1.*, )",
+          "Azure.ResourceManager": "[1.*, 2.0.0)",
+          "Puck.World.Server": "[1.0.0, )"
         }
       },
       "puck.world.client": {

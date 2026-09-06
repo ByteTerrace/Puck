@@ -22,6 +22,12 @@ project is for is [`docs/project-map.md`](../../docs/project-map.md).
 
 ## Run it
 
+For service extensions, use the [configuration guide](../Puck.World.Server/ExtensionConfiguration.md)
+and the [Azure example](Assets/hosting/azure.extensions.example.json). The operator
+selects the file with `--extensions-config-file`; `world.extensions.catalog`
+lists installed provider types and `world.extensions` reads back the configured
+connections. Imported world content cannot enable cloud access by itself.
+
 ```
 dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 6
 ```

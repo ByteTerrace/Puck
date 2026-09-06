@@ -14,6 +14,21 @@ public sealed class AzureResourceOperationTests {
     private static CancellationToken Cancel => TestContext.Current.CancellationToken;
 
     [Theory]
+    [InlineData("managedIdentity")]
+    [InlineData("azureCli")]
+    public void DeclarativeProviderSelectsExplicitAuthenticationAndBindsGenericOperationsWithoutCalls(string authentication) {
+        using var settings = System.Text.Json.JsonDocument.Parse("{\"authentication\":\"" + authentication + "\"}");
+        using var provider = AzureConfiguredProvider.Registration.Create(settings.RootElement);
+        using var operationSettings = System.Text.Json.JsonDocument.Parse("{\"resourceId\":\"" + ResourceId + "\",\"incarnation\":\"one\",\"method\":\"delete\",\"apiVersion\":\"2025-01-01\"}");
+        var operation = provider.Bind("creature.delete", "Delete the associated resource", operationSettings.RootElement);
+        Assert.Equal("creature.delete", operation.CreateRequest("request/1", "{}").Binding);
+        using var invalid = System.Text.Json.JsonDocument.Parse("{\"authentication\":\"azureCli\",\"password\":\"must-not-be-accepted\"}");
+        Assert.Throws<System.Text.Json.JsonException>(() => AzureConfiguredProvider.Registration.Create(invalid.RootElement));
+        using var implicitCredential = System.Text.Json.JsonDocument.Parse("{\"authentication\":\"default\"}");
+        Assert.Throws<ArgumentException>(() => AzureConfiguredProvider.Registration.Create(implicitCredential.RootElement));
+    }
+
+    [Theory]
     [InlineData("17", 17)]
     [InlineData("Thu, 01 Jan 2026 00:00:20 GMT", 20)]
     [InlineData("Wed, 31 Dec 2025 23:59:59 GMT", 0)]

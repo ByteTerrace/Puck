@@ -60,6 +60,10 @@ code running under the host's OS identity. Crash and power-loss durability also
 depend on the filesystem and volume. Use a suitably durable target for external
 operation history, which must survive independently of rewindable game saves.
 
+`ConfinedFile.ReadAllBytes` applies the same no-follow directory walk, regular-file
+checks, and preallocation byte ceiling to an exact host-selected configuration
+file. It is for the trusted composition root, not an extension's arbitrary-path API.
+
 The native contracts are documented in Microsoft's
 [CreateFile reference](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilea)
 and Linux's [openat](https://man7.org/linux/man-pages/man2/openat.2.html) and

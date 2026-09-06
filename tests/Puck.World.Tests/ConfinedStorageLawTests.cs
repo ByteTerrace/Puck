@@ -9,6 +9,19 @@ namespace Puck.World.Tests;
 public sealed partial class ConfinedStorageLawTests {
     private static CancellationToken Cancel => TestContext.Current.CancellationToken;
 
+    [Fact]
+    public void HostConfigurationReadsAreBoundedAndRejectLinkedParents() {
+        using var directory = new TempWorldDirectory();
+        var file = Path.Combine(directory.RootPath, "extensions.json");
+        File.WriteAllText(file, "{}");
+        Assert.Equal("{}", Encoding.UTF8.GetString(ConfinedFile.ReadAllBytes(file, 2)));
+        Assert.Throws<IOException>(() => ConfinedFile.ReadAllBytes(file, 1));
+        var link = Path.Combine(directory.RootPath, "linked");
+        CreateDirectoryLink(link, directory.RootPath);
+        try { Assert.Throws<IOException>(() => ConfinedFile.ReadAllBytes(Path.Combine(link, "extensions.json"), 2)); }
+        finally { Directory.Delete(link); }
+    }
+
     [Theory]
     [InlineData("../escape")]
     [InlineData("nested/../../escape")]

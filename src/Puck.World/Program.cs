@@ -93,6 +93,10 @@ var updateConfigFileOption = new Option<string?>(name: "--update-config-file") {
     DefaultValueFactory = static _ => null,
     Description = "A test/ops-only override for the release-source directory and the trust anchor (ReleaseSourceDirectory/TrustAnchor*) — see Puck.Launcher.Release.SelfUpdateConfigFile. Absent, self-update runs against an empty release source and the refusing build-time placeholder trust anchor.",
 };
+// Deployment authority, like the federation key and update trust configuration; never world-authored input.
+var extensionsConfigFileOption = new Option<string?>(name: "--extensions-config-file") {
+    Description = "Host-approved service extension composition (puck.world.extensions.v1). Absent disables external services. The file selects installed provider types, bindings, grants, and state connections; it never loads executable code.",
+};
 var launchCommand = new RootCommand(description: "Puck World") {
     backendOption,
     connectOption,
@@ -108,6 +112,7 @@ var launchCommand = new RootCommand(description: "Puck World") {
     storageDiscoveryUriOption,
     storageUriOption,
     updateConfigFileOption,
+    extensionsConfigFileOption,
     userIdOption,
     widthOption,
     worldOption,
@@ -123,6 +128,16 @@ if (parseResult.Errors.Count > 0) {
     return 1;
 }
 var connectTarget = parseResult.GetValue(option: connectOption);
+Puck.World.Server.WorldExtensionConfiguration? extensionsConfiguration = null;
+if (parseResult.GetValue(extensionsConfigFileOption) is { } extensionsPath) {
+    try {
+        if (connectTarget is not null) { throw new InvalidOperationException("Service extensions require a local authority, not a remote client boot."); }
+        extensionsConfiguration = Puck.World.Server.WorldExtensionConfiguration.Parse(Puck.Storage.ConfinedFile.ReadAllBytes(extensionsPath, 1048576));
+    } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Text.Json.JsonException) {
+        Console.Error.WriteLine($"[world.extensions: configuration refused: {exception.Message}]");
+        return 1;
+    }
+}
 if (parseResult.GetValue(option: stateDirOption) is { } stateDirOverride) {
     Puck.World.Server.WorldStateRoot.Override(path: stateDirOverride);
 }
@@ -309,6 +324,7 @@ services.AddSingleton(implementationInstance: seatBindings);
 // root, overlays, audio device, screens/machines, gamepads, and editor register only when presentation is
 // composed. See WorldBootComposition for the full split and WorldPostBuildWiring for the shared every-shape wiring.
 services.AddWorldAuthoritativeCore();
+services.AddSingleton(new WorldServiceExtensionOptions(extensionsConfiguration));
 if (hostSettings.Headless) {
     // No window, GPU device, swapchain, allocator, backend presenter, or audio device — the headless twin of the
     // block below (command pump + tick host). Nothing under AddWorldPresentation is ever called on this path.

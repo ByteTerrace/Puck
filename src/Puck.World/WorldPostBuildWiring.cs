@@ -69,6 +69,12 @@ internal static class WorldPostBuildWiring {
         }
 
         var consoleRegistry = services.GetRequiredService<CommandRegistry>();
+        try {
+            services.GetRequiredService<WorldServiceExtensions>().Initialize();
+        } catch (Exception exception) when (exception is ArgumentException or UnauthorizedAccessException or InvalidOperationException or System.Text.Json.JsonException or IOException) {
+            Console.Error.WriteLine($"[world.extensions: configuration refused: {exception.Message}]");
+            return false;
+        }
 
         // The QUIC socket door: bound ONLY when host.listen/--listen names an endpoint — a world with no Listen field
         // never opens a socket, exactly like a headless flag never opening a window. Started here (not a factory)

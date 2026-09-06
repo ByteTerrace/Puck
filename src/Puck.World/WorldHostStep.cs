@@ -14,7 +14,7 @@ namespace Puck.World;
 /// clock a <c>world.wait</c> counts in lives here, as does the per-phase timing <c>world.timing</c> arms. Also the
 /// <see cref="IWorldSimulationClock"/> a frame producer reads, in every shape.
 /// </summary>
-internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldPeerHost peerHost, WorldInstanceHost instances) : IWorldSimulationClock {
+internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldPeerHost peerHost, WorldInstanceHost instances, WorldServiceExtensions extensions) : IWorldSimulationClock {
     private readonly WorldServer m_server = server;
     private readonly WorldReplayTape m_replayTape = replayTape;
     private readonly WorldConsoleWaitGate m_waitGate = waitGate;
@@ -94,6 +94,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
         var populationTicks = (timingEnabled ? (Stopwatch.GetTimestamp() - phaseStart) : 0L);
         phaseStart = (timingEnabled ? Stopwatch.GetTimestamp() : 0L);
         m_instances.FinishSeatIntents();
+        extensions.Pump(Tick);
 
         var finishTicks = (timingEnabled ? (Stopwatch.GetTimestamp() - phaseStart) : 0L);
 

@@ -1,9 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <PuckKind>Production</PuckKind>
-        <PuckLayer>Optional extensions</PuckLayer>
+        <!-- A configured service adapter consumed by the normal composition root, alongside the WASM adapter. -->
+        <PuckLayer>Engine services</PuckLayer>
     </PropertyGroup>
     <ItemGroup>
+        <PackageReference Include="Azure.Identity" Version="[1.*, )" />
         <PackageReference Include="Azure.ResourceManager" Version="[1.*,2.0)" />
         <ProjectReference Include="..\Puck.World.Server\Puck.World.Server.csproj" />
     </ItemGroup>

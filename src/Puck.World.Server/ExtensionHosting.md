@@ -1,5 +1,9 @@
 # Hosting service extensions
 
+Host operators can use [declarative composition](ExtensionConfiguration.md) in
+the normal executable. This guide owns the underlying C# hosting API used by
+that composition and by custom hosts.
+
 `WorldExtensionHost` gives a host one place to register service operations,
 grant callers access, and run durable work. A caller receives a
 `WorldExtensionClient`, which can discover its permitted operations, invoke
@@ -103,8 +107,9 @@ After replay, explicitly select safe bindings and history, reopen the recorded
 extension epoch, and create fresh clients. Forks require separate namespaces
 and bindings. No live cloud connection resumes merely because a save was loaded.
 
-This host does not install a document-level request watcher or an MCP server.
-Those adapters select game-specific triggers and map them onto this client API;
+`WorldConfiguredExtensions` supplies the configurable state-table connector
+described in [declarative composition](ExtensionConfiguration.md). Custom
+adapters, including MCP transports, can map other triggers onto this client API;
 they must not expose provider objects, credentials, or the private journal.
 `WorldExtensionHostLawTests` verifies caller isolation, replay revocation,
 bounded admission, worker startup, and recovery without repeating effects.

@@ -23,7 +23,8 @@ the rule kinds only a world evaluates. The addon guest runtime itself is
 project rather than the reverse — see `IWorldAddonHost` below.
 
 Recorded providers and durable external operations share the engine's authority
-and replay paths. Start with [Hosting service extensions](ExtensionHosting.md)
+and replay paths. Operators start with [declarative composition](ExtensionConfiguration.md).
+Developers can use [Hosting service extensions](ExtensionHosting.md)
 for scoped clients and the shared worker. See [Extensions and external operations](Extensions.md) for
 the hosting contract, operation recovery, and the distinction between a
 deterministic WASM guest and a provider whose contributions are recorded.

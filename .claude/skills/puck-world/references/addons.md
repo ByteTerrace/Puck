@@ -23,7 +23,7 @@ stopping recording. Keep pinned modules available. After a live replay, only an
 explicit host `StartRecordedExtensionEpoch` admits fresh recorded runtimes;
 it refuses during active replay and never revives old instances.
 
-`src/Puck.World.Azure/README.md` owns the optional generic ARM provider. Keep
+`src/Puck.World.Azure/README.md` owns the installed, explicitly enabled generic ARM provider. Keep
 its SDK dependency above Server. Reconciliation receives the last durable
 provider result, not the authority recovery image; preserve that result when a
 status query fails. SDK retries of mutations and cross-origin polling must not
@@ -40,6 +40,22 @@ byte limit, and lifetime; retain replay revocation on saved handles. Follow
 handle-based containment with a string-prefix check. Verify changes with
 `WorldExtensionHostLawTests`, `WorldExtensionLawTests`, and
 `ConfinedStorageLawTests`; the latter needs Windows and Linux filesystem legs.
+
+`WorldConfiguredExtensions` now assembles installed provider types through the
+existing `WorldExtensionRegistry`, from strict `puck.world.extensions.v1` host
+configuration. `--extensions-config-file` is deployment authority, not a world
+field: never load it through imports or an addon-controlled path. Its exact world
+ID pins the boot authority. `WorldServiceExtensions` registers `azure.resource`
+in every boot shape; Azure is an Engine services adapter consumed by the root,
+not an upward Optional extensions dependency. No configuration loads assemblies.
+Read `src/Puck.World.Server/ExtensionConfiguration.md` before changing this seam.
+State connectors read through disclosure and manifests, capture cause on the
+closed simulation boundary, then do journal work asynchronously. Responses use
+the original request key; read back admitted status before caching completion.
+`world.extensions.catalog` and `world.extensions` own operator diagnostics.
+Run `WorldConfiguredExtensionLawTests` plus the existing extension/storage laws,
+and run the real headless executable for composition changes. Use only local
+input refusals or empty request tables for Azure boot canaries; never cloud mutations.
 
 ## Contents
 

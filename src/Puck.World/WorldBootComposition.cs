@@ -62,6 +62,9 @@ internal static class WorldBootComposition {
         // container): loaded once at startup, malformed documents refused by name — the roster and the settings verbs
         // read it live.
         services.AddWorldOwnedWorlds();
+        services.AddSingleton<WorldServiceExtensions>();
+        services.AddHostedService(static sp => sp.GetRequiredService<WorldServiceExtensions>());
+        services.AddSingleton<ICommandModule>(static sp => new WorldServiceExtensionCommandModule(() => sp.GetRequiredService<WorldServiceExtensions>()));
 
         // The participant roster (up to four players, one avatar + viewport each; player 1 always joined, seated on
         // the boot profile) and its console/keyboard verb surface, plus the real-time profile/settings verbs

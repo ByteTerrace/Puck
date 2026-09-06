@@ -120,7 +120,7 @@ public sealed partial class WorldExtensionHost : IAsyncDisposable {
     }
 
     internal async ValueTask<WorldExtensionOperationHandle> InvokeAsync(WorldExtensionClient client, string name, string requestKey,
-        string input, CancellationToken cancellationToken) {
+        string input, CancellationToken cancellationToken, Func<string>? captureCause = null) {
         var handle = GetOperation(client, name, requestKey);
         ArgumentNullException.ThrowIfNull(input);
         if (Encoding.UTF8.GetByteCount(input) > m_options.MaximumInputBytes) { throw new ArgumentException("Operation input exceeds its byte budget.", nameof(input)); }
@@ -137,7 +137,7 @@ public sealed partial class WorldExtensionHost : IAsyncDisposable {
                 if (existing.Operation != request) { throw new InvalidOperationException("A request key was reused with different input or binding identity."); }
                 return handle;
             }
-            await client.Dispatcher.CommitAsync(request, m_captureCause(), cancellationToken).ConfigureAwait(false);
+            await client.Dispatcher.CommitAsync(request, (captureCause ?? m_captureCause)(), cancellationToken).ConfigureAwait(false);
             return handle;
         } finally { m_submissions.Release(); }
     }

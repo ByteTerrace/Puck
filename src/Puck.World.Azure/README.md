@@ -23,9 +23,21 @@ and [ARM resource pipeline](https://learn.microsoft.com/en-us/dotnet/api/azure.r
 
 ## Host composition
 
-Reference this project from an extension-capable host. The base world executable
-does not automatically load it, and a document's `addons` section still mounts
-WASM modules. The host supplies a `TokenCredential`, using its chosen managed
+The normal world executable registers `azure.resource` as an installed provider
+type. Operators select instances and bindings with
+[declarative extension configuration](../Puck.World.Server/ExtensionConfiguration.md).
+External access stays disabled unless the operator selects a configuration file.
+A document's `addons` section still mounts WASM modules.
+
+Provider `settings.authentication` explicitly selects `managedIdentity`
+(optional `clientId`) or `azureCli` (optional `tenantId`). `cloud` selects `public`,
+`government`, or `china`. The Azure CLI option uses the CLI's existing sign-in;
+managed identity uses the configured host identity. There is no implicit fallback
+credential chain and no client-secret or arbitrary token-file configuration.
+See the SDK's [managed identity selection](https://learn.microsoft.com/en-us/dotnet/api/azure.identity.managedidentityid).
+
+Custom C# hosts may also reference this project directly. They supply a
+`TokenCredential`, using their chosen managed
 identity, workload identity, or other Azure authentication arrangement.
 This library never searches for credentials or selects a subscription implicitly.
 
@@ -131,7 +143,7 @@ dotnet test tests/Puck.World.Azure.Tests/Puck.World.Azure.Tests.csproj -c Releas
 dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --filter FullyQualifiedName~WorldExtensionLawTests
 ```
 
-The Azure suite exercises the real SDK authentication and HTTP pipeline against
+The Azure suite exercises declarative provider setup and the real SDK authentication and HTTP pipeline against
 a scripted in-memory service: generic verbs, unchanged JSON, pinned identities,
 preconditions, pending operations, restart polling, ambiguous failures, URL
 containment, and byte limits. The server suite exercises durable dispatch,
@@ -140,6 +152,7 @@ account and perform no live resource changes.
 
 ARM covers the management plane. Data-plane operations such as uploading blob
 contents may need their service SDK and a separately scoped provider. The Azure
-extension supplies metadata to the shared client's operation catalog. It does
-not add an MCP transport, managed-assembly loader, or automatic world-state
-watcher; those remain host composition concerns.
+extension supplies metadata to the shared client's operation catalog. The shared
+configuration layer connects ordinary state request/status tables; it introduces
+no Azure-specific gameplay rules. MCP transports and additional installed adapter
+types remain separate from this provider.

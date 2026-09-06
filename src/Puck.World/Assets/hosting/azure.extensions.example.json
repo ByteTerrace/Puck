@@ -1,0 +1,47 @@
+{
+  "schema": "puck.world.extensions.v1",
+  "world": "puck",
+  "lineage": "d93ee285-36e6-40b9-a2f3-a554885d0a82",
+  "providers": [
+    {
+      "name": "azure",
+      "type": "azure.resource",
+      "settings": { "authentication": "managedIdentity" }
+    }
+  ],
+  "operations": [
+    {
+      "name": "creature.delete",
+      "provider": "azure",
+      "description": "Delete the creature's associated resource",
+      "settings": {
+        "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/example/providers/Microsoft.Example/widgets/creature",
+        "incarnation": "creature-1",
+        "method": "delete",
+        "apiVersion": "2025-01-01"
+      }
+    }
+  ],
+  "clients": [
+    {
+      "principal": "console",
+      "operations": ["creature.delete"],
+      "requests": [
+        { "capability": "observe", "subject": "state:cloud-requests" },
+        { "capability": "observe", "subject": "state:cloud-status" },
+        { "capability": "mutate", "subject": "state:cloud-status" }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "name": "creature-resource",
+      "client": "console",
+      "operation": "creature.delete",
+      "requests": "cloud-requests",
+      "status": "cloud-status"
+    }
+  ],
+  "scanEveryTicks": 240,
+  "recovery": "recording"
+}

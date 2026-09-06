@@ -35,6 +35,9 @@ Network deadline tests use controlled timers and wait for the relevant work
 to arrive before expiring it; production timeout lengths need not elapse.
 
 Extension hosting tests use fake providers and controlled scheduling time.
+`WorldConfiguredExtensionLawTests` composes multiple providers from configuration,
+drives request/status tables through the real authority, and checks restart,
+revocation, failed composition cleanup, and isolation of invalid requests.
 `ConfinedStorageLawTests` uses real files for link, namespace, concurrent
 replacement, and conditional-write behavior. Run that class on Windows and
 Linux x64: Windows covers junctions and hard links, while Linux also covers
