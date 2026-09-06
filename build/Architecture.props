@@ -333,17 +333,15 @@
     </ItemGroup>
 
     <!--
-        THE SYSTEM.CONSOLE DENIAL FOR Puck.World.Server — declared, not yet armed.
+        The System.Console denial for Puck.World.Server — declared, not yet armed.
 
-        W2.1 moved every reachable Console.Error.WriteLine under Puck.World.Server to a typed WorldNarration
-        delivered through WorldOutputHub, formatted only when a sink is attached (see WorldNarration.cs,
-        WorldOutputHub.Narration.cs). Four sites remain, in files a sibling task in the same wave owns and this
-        one may not touch: WorldServer.MutationApply.cs, WorldServer.RuleHost.cs, WorldServer.Step.cs (rule/
-        mutation-apply task), and WorldPopulation.Admission.cs (body/population task). This lane states the
-        destination — Puck.World.Server holds no reference to System.Console — but PuckArchitectureDenyConsoleEnabled
-        stays false until those four files land their own conversion; arming it now would fail the build on
-        work this task was never authorized to touch. No PuckArchitectureGate.cs check reads this item yet —
-        integration wires the check when it flips the flag.
+        Every reachable Console.Error.WriteLine under Puck.World.Server is now a typed WorldNarration delivered
+        through WorldOutputHub, formatted only when a sink is attached (see WorldNarration.cs,
+        WorldOutputHub.Narration.cs), except four sites in WorldServer.MutationApply.cs, WorldServer.RuleHost.cs,
+        WorldServer.Step.cs, and WorldPopulation.Admission.cs. This lane states the destination —
+        Puck.World.Server holds no reference to System.Console — but PuckArchitectureDenyConsoleEnabled stays
+        false until those four files land their own conversion; arming it now would fail the build on the
+        remaining sites. No PuckArchitectureGate.cs check reads this item yet.
     -->
     <PropertyGroup>
         <PuckArchitectureDenyConsoleEnabled Condition="'$(PuckArchitectureDenyConsoleEnabled)' == ''">false</PuckArchitectureDenyConsoleEnabled>

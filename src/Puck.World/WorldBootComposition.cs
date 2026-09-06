@@ -268,9 +268,9 @@ internal static class WorldBootComposition {
                     derivedFaceScreens: definition.Authoring.DerivedFaceScreens
                 )];
 
-        // WorldMachineHost's own narration hub: it is a PEER singleton to WorldServer (constructed before it, as its
+        // WorldMachineHost's own narration hub: it is a peer singleton to WorldServer (constructed before it, as its
         // own constructor parameter — see the remarks below), so it cannot share WorldServer's hub without a
-        // circular dependency; this one is its own. Bound to stderr in the SAME factory that constructs it, before
+        // circular dependency; this one is its own. Bound to stderr in the same factory that constructs it, before
         // anything resolves it — WorldMachineHost narrates from inside its own constructor (a declared machine's
         // boot fault), so attaching only after the container finishes building the host, the way
         // WorldPostBuildWiring.Install attaches WorldInstanceHost's, would miss those lines.

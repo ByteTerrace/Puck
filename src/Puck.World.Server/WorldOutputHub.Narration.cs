@@ -2,7 +2,7 @@ namespace Puck.World.Server;
 
 public sealed partial class WorldOutputHub {
     // One attached narration sink slot, the same lease shape the typed-lane Subscription above uses. A class (not a
-    // struct) so the lease AttachNarrationSink returns IS this object — no separate handle to invalidate.
+    // struct) so the lease AttachNarrationSink returns is this object — no separate handle to invalidate.
     private sealed class NarrationSubscription(WorldOutputHub hub, IWorldNarrationSink sink) : IDisposable {
         public readonly IWorldNarrationSink Sink = sink;
         public bool Active = true;

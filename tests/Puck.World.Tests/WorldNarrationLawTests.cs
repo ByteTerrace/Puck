@@ -6,7 +6,7 @@ using Puck.World.Server;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// Proves W2.1's typed-narration seam directly against a fresh in-process server: a sink attached through
+/// Proves the typed-narration seam directly against a fresh in-process server: a sink attached through
 /// <see cref="WorldServer.AttachNarrationSink"/> observes exactly one <see cref="WorldNarration"/> record for one
 /// applied mutation, carrying the same channel tag and formatted line a direct <c>Console.Error.WriteLine</c> would
 /// have produced — and, with no sink attached, the narration goes undelivered rather than falling back to
