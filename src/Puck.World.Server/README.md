@@ -369,8 +369,9 @@ received no intent for `bodies.sleepAfterTicks` engine ticks (`WorldBody.Sleep.c
 0, the default, never sleeps). `WorldPopulation.AdvanceSimulated` skips a
 sleeping body outright — no producer staging, no motion program, no contact
 solve — until something wakes it: an adopted intent (tape, submitted, or
-producer), a hard teleport, a transfer, a targeted effect, a parked peer
-resuming, or a bump to `WorldPopulation.ContactFieldVersion`. That version sums
+producer), a hard teleport, a transfer, a targeted effect, a designation
+written into one of its own registers, a parked peer resuming, or a bump to
+`WorldPopulation.ContactFieldVersion`. That version sums
 three independently-increasing counters — a document install/adjacency
 reconfigure, `WorldColliderSet.RefreshAttached` finding an attached row at a
 new pose, and the field lattice's own `Revision` — so an unchanged sum proves

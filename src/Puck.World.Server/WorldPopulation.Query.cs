@@ -713,10 +713,12 @@ public sealed partial class WorldPopulation {
             m_entries[slot].CatalogRig = catalogRig;
         }
     }
-    /// <summary>Writes one already-validated target into a body's named register.</summary>
+    /// <summary>Writes one already-validated target into a body's named register. Wakes the target body — its own
+    /// producer reads this register to steer, and a sleeping body's producer never runs to notice the change.</summary>
     public void SetDesignation(int bodyIndex, int registerIndex, WorldTargetDesignation target) {
         m_entries[bodyIndex].Designations[registerIndex] = target;
         m_entries[bodyIndex].DesignationRefusal = string.Empty;
+        m_entries[bodyIndex].Body?.WakeUp();
     }
     /// <summary>Installs the committed mobility epoch on an already-admitted destination occupant.</summary>
     public void SetMobility(int index, in WorldMobilityIdentity mobility) {

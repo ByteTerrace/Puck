@@ -1,12 +1,13 @@
 using Puck.Maths;
 using Puck.World.Protocol;
+using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Tests;
 
 /// <summary>A non-seat body's <c>bodies.sleepAfterTicks</c> idle floor: falls asleep once its program has produced
-/// no motion and received no intent for the authored ticks, and wakes on either an adopted intent or a contact-field
-/// version bump.</summary>
+/// no motion and received no intent for the authored ticks, and wakes on an adopted intent, a contact-field version
+/// bump, or a designation targeting it.</summary>
 public sealed class BodySleepLawTests {
     // Comfortably above one fixture Step's own engine-tick width (240 Hz => 210 engine ticks/step), so a body that
     // wakes for one tick genuinely stays awake that tick rather than crossing straight back over the floor from the
@@ -90,6 +91,31 @@ public sealed class BodySleepLawTests {
         fixture.Step();
 
         Assert.NotEqual(expected: versionBeforeBump, actual: population.ContactFieldVersion);
+        Assert.False(condition: body.Asleep);
+    }
+
+    [Fact]
+    public void RestingBodyWakesOnDesignationTargetingIt() {
+        var definition = (Document() with {
+            TargetRegistersRaw = [new WorldTargetRegister(Name: "goal", MaximumRange: 100f, MaximumHalfAngleDegrees: 180f, RequiresLineOfSight: false)],
+        });
+        using var fixture = Fixtures.FreshServer(definition);
+        var population = fixture.Server.Population;
+
+        Assert.Equal(expected: 1, actual: population.SetSimulatedCount(count: 1));
+
+        var index = WorldBodiesLimits.LocalSeatCount;
+        var body = population.EntryBody(index: index)!;
+
+        for (var tick = 0; (tick < 5); tick++) {
+            fixture.Step();
+        }
+
+        Assert.True(condition: body.Asleep);
+        Assert.True(condition: population.TryResolveTargetRegister(name: "goal", index: out var registerIndex));
+
+        population.SetDesignation(bodyIndex: index, registerIndex: registerIndex, target: WorldTargetDesignation.Body(index: 0));
+
         Assert.False(condition: body.Asleep);
     }
 }
