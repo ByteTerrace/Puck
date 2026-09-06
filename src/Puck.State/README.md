@@ -272,15 +272,21 @@ Nothing here carries a `World` name — a state library names no world.
   prove unchanged: `RuleDataflow.ReadsHost`, `RuleDataflow.ReadsTick` (the
   `$tick` operand), an unresolved row, or a row whose slot or a keyed cell
   carries `StateAdvance`/`StateCycle` (a value that drifts with the tick
-  alone). `RuleEvaluator.SchedulingEnabled` (default on) lets a rule whose
-  gate closed last time keep that verdict, and lets a binding whose reads
-  are unchanged reuse its memoized value, whenever every row it reads
-  reports the same version it did last time and it carries no such
+  alone). A `$bind:` read folds in whatever the referenced binding itself
+  reads and depends on, transitively (`BindingOperand.Source`/`CollectReads`/
+  `HostOnly`), so a chain of bindings is only as safe to skip as the row it
+  ultimately rests on. `RuleEvaluator.SchedulingEnabled` (default on) lets a
+  rule whose gate closed last time keep that verdict, and lets a binding
+  whose reads are unchanged reuse its memoized value, whenever every row it
+  reads reports the same version it did last time and it carries no such
   dependency; an open gate and a traced evaluation always run in full. The
   row-version and memoized-value caches live in `RuleLatch` beside the edge
-  latch, per rule and per forEach binding, but are not simulation state —
-  they never enter `AppendStateHash`, `Flatten`, or `Restore` — since the
-  skip only elides a re-derivation already proven to answer the same.
+  latch, per rule and per forEach binding, keyed against the exact
+  `RuleSchedule` instance that captured them — a rule recompiled under the
+  same name mints a new schedule, so its stale cache is never mistaken for a
+  match — but are not simulation state — they never enter `AppendStateHash`,
+  `Flatten`, or `Restore` — since the skip only elides a re-derivation
+  already proven to answer the same.
 - *Analyses:* `RuleDataflow` (a rule's read and write sets), `RuleHazards`
   (the write-after-read and write-after-write pairs document order decides,
   skipping pairs whose gates pin one cell to disjoint ranges), and

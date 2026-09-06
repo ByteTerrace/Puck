@@ -71,13 +71,23 @@ public sealed class RuleLatch {
         public long Value;
         /// <summary>The row versions observed when <see cref="Value"/> was computed.</summary>
         public ulong[] Versions = [];
+        /// <summary>The <see cref="RuleSchedule"/> instance <see cref="Versions"/> was captured against — a rule
+        /// recompiled under the same name mints a new schedule instance, so an entry whose owner no longer matches
+        /// the caller's current schedule names a stale cache, never a coincidental match on row count alone.</summary>
+        public object? Owner;
+    }
+    /// <summary>The row versions a rule's gate observed the last time it closed, tied to the exact schedule instance
+    /// that computed them — the same owner discipline as <see cref="BindingMemo.Owner"/>, and for the same reason.</summary>
+    private sealed class GateVersionEntry {
+        public object? Owner;
+        public ulong[] Versions = [];
     }
 
     private readonly Dictionary<string, Dictionary<LatchKey, bool>> m_byRule = new(comparer: StringComparer.Ordinal);
     // A scheduler's own caches, keyed the same way as m_byRule: the row versions a rule's gate observed when it last
     // closed, and each binding's memoized value. Neither is simulation state — a verdict never depends on them, only
     // on whether re-deriving it can be skipped — so neither is hashed, flattened, or restored.
-    private readonly Dictionary<string, Dictionary<LatchKey, ulong[]>> m_gateVersions = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, Dictionary<LatchKey, GateVersionEntry>> m_gateVersions = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, Dictionary<LatchKey, BindingMemo?[]>> m_bindingMemos = new(comparer: StringComparer.Ordinal);
     private readonly HashSet<LatchKey> m_touched = [];
     private readonly List<KeyValuePair<LatchKey, bool>> m_hashScratch = [];
@@ -171,20 +181,31 @@ public sealed class RuleLatch {
             }
         }
     }
-    /// <summary>Returns the row versions a rule's binding observed the last time its gate closed, or
-    /// <see langword="null"/> when never recorded.</summary>
+    /// <summary>Returns the row versions a rule's binding observed the last time its gate closed under the same
+    /// schedule instance, or <see langword="null"/> when never recorded or the recorded entry's owner no longer
+    /// matches <paramref name="owner"/> (a recompile minted a new schedule for this rule name).</summary>
     /// <param name="name">The rule's name.</param>
     /// <param name="binding">The binding.</param>
-    internal ulong[]? GateVersions(string name, LatchKey binding) =>
-        ((m_gateVersions.TryGetValue(key: name, value: out var bindings) && bindings.TryGetValue(key: binding, value: out var versions)) ? versions : null);
-    /// <summary>Records the row versions a rule's binding observed when its gate closed.</summary>
+    /// <param name="owner">The schedule instance the caller will compare the versions against.</param>
+    internal ulong[]? GateVersions(string name, LatchKey binding, object owner) =>
+        ((m_gateVersions.TryGetValue(key: name, value: out var bindings) &&
+            bindings.TryGetValue(key: binding, value: out var entry) &&
+            ReferenceEquals(objA: entry.Owner, objB: owner))
+                ? entry.Versions
+                : null);
+    /// <summary>Records the row versions a rule's binding observed when its gate closed, against the schedule
+    /// instance that computed them.</summary>
     /// <param name="name">The rule's name.</param>
     /// <param name="binding">The binding.</param>
+    /// <param name="owner">The schedule instance the versions were captured against.</param>
     /// <param name="versions">The versions.</param>
-    internal void SetGateVersions(string name, LatchKey binding, ulong[] versions) {
+    internal void SetGateVersions(string name, LatchKey binding, object owner, ulong[] versions) {
         ref var bindings = ref CollectionsMarshal.GetValueRefOrAddDefault(dictionary: m_gateVersions, key: name, exists: out _);
+        ref var entry = ref CollectionsMarshal.GetValueRefOrAddDefault(dictionary: (bindings ??= []), key: binding, exists: out _);
 
-        (bindings ??= [])[binding] = versions;
+        entry ??= new GateVersionEntry();
+        entry.Owner = owner;
+        entry.Versions = versions;
     }
     /// <summary>Returns one rule's per-ordinal binding memo array, sized to <paramref name="count"/> — a stale array
     /// (a recompile changed the binding count) is replaced, discarding its cached values.</summary>

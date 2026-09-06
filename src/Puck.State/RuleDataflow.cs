@@ -85,7 +85,7 @@ public static class RuleDataflow {
             }
         }
         foreach (var token in rule.Gate) {
-            if ((token.Left is TickOperand) || (token.Comparand is TickOperand) || ExpressionReadsTick(tokens: token.LeftExpression) || ExpressionReadsTick(tokens: token.RightExpression)) {
+            if (OperandReadsTick(operand: token.Left) || OperandReadsTick(operand: token.Comparand) || ExpressionReadsTick(tokens: token.LeftExpression) || ExpressionReadsTick(tokens: token.RightExpression)) {
                 return true;
             }
         }
@@ -102,13 +102,18 @@ public static class RuleDataflow {
         }
 
         foreach (var token in tokens) {
-            if (token.Operand is TickOperand) {
+            if (OperandReadsTick(operand: token.Operand)) {
                 return true;
             }
         }
 
         return false;
     }
+
+    // A binding read chains to whatever the referenced binding itself reads, so a $bind: to a tick-dependent
+    // binding is tick-dependent too — the same chain BindingOperand.HostOnly walks for a host dependency.
+    private static bool OperandReadsTick(OperandFact? operand) =>
+        (operand is TickOperand) || ((operand is BindingOperand { Source: { } source }) && ExpressionReadsTick(tokens: source.Expression));
 
     /// <summary>Appends the cells a gate reads: every operand and expression of every token.</summary>
     public static void CollectGate(GateToken[] gate, List<RuleAccess> into) {

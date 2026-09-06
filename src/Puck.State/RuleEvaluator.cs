@@ -217,7 +217,7 @@ public sealed partial class RuleEvaluator {
         // Scheduling never runs under a trace: a traced evaluation wants every binding and conjunct computed fresh.
         var schedule = ((SchedulingEnabled && (trace is null)) ? rule.Schedule(reader: m_host) : null);
 
-        if (existed && !wasOpen && (schedule is { Volatile: false } sched) && VersionsMatch(schedule: sched, cached: latch.GateVersions(name: rule.Name, binding: binding))) {
+        if (existed && !wasOpen && (schedule is { Volatile: false } sched) && VersionsMatch(schedule: sched, cached: latch.GateVersions(name: rule.Name, binding: binding, owner: sched))) {
             // Nothing this rule reads has changed since it last closed, and it reads no host or tick fact a version
             // cannot see through — the verdict is still closed, so bindings and gate need not run at all.
             latch.Touch(binding: binding);
@@ -238,7 +238,7 @@ public sealed partial class RuleEvaluator {
             if (memos is { } cached) {
                 var bindingSchedule = declared.Schedule(reader: m_host);
 
-                if (!bindingSchedule.Volatile && (cached[ordinal] is { } memo) && VersionsMatch(schedule: bindingSchedule, cached: memo.Versions)) {
+                if (!bindingSchedule.Volatile && (cached[ordinal] is { } memo) && ReferenceEquals(objA: memo.Owner, objB: bindingSchedule) && VersionsMatch(schedule: bindingSchedule, cached: memo.Versions)) {
                     m_bindingValues[ordinal] = memo.Value;
                     trace?.Bindings.Add(item: $"{declared.Name}={RuleEvaluation.DescribeFact(value: memo.Value, kind: declared.Kind, isForever: false)}");
 
@@ -260,9 +260,11 @@ public sealed partial class RuleEvaluator {
 
             if (memos is { } cache) {
                 var memo = (cache[ordinal] ??= new RuleLatch.BindingMemo());
+                var bindingSchedule = declared.Schedule(reader: m_host);
 
                 memo.Value = value;
-                CaptureVersions(schedule: declared.Schedule(reader: m_host), cache: ref memo.Versions);
+                memo.Owner = bindingSchedule;
+                CaptureVersions(schedule: bindingSchedule, cache: ref memo.Versions);
             }
 
             trace?.Bindings.Add(item: $"{declared.Name}={RuleEvaluation.DescribeFact(value: value, kind: declared.Kind, isForever: false)}");
@@ -278,10 +280,10 @@ public sealed partial class RuleEvaluator {
 
         if ((schedule is { } closedSchedule) && !open) {
             // The gate closed again: remember what its reads looked like, so an unchanged read next time skips.
-            var cache = (latch.GateVersions(name: rule.Name, binding: binding) ?? []);
+            var cache = (latch.GateVersions(name: rule.Name, binding: binding, owner: closedSchedule) ?? []);
 
             CaptureVersions(schedule: closedSchedule, cache: ref cache);
-            latch.SetGateVersions(name: rule.Name, binding: binding, versions: cache);
+            latch.SetGateVersions(name: rule.Name, binding: binding, owner: closedSchedule, versions: cache);
         }
 
         var fires = (open && ((rule.Mode != ActionTriggerMode.Edge) || !wasOpen));

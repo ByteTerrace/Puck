@@ -379,7 +379,7 @@ public static partial class RuleCompiler {
         var scope = (context.RuleBindings ?? []);
         for (var ordinal = 0; ordinal < scope.Count; ordinal++) {
             if (string.Equals(a: scope[ordinal].Name, b: bound, comparisonType: StringComparison.Ordinal)) {
-                return new ResolvedOperand(operand: new BindingOperand(ordinal: ordinal, name: bound, valueKind: scope[ordinal].Kind), describe: name);
+                return new ResolvedOperand(operand: new BindingOperand(ordinal: ordinal, name: bound, valueKind: scope[ordinal].Kind, source: scope[ordinal]), describe: name);
             }
         }
         throw new RuleException(

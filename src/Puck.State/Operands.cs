@@ -58,19 +58,35 @@ public sealed class BindingOperand : OperandFact {
     /// <param name="ordinal">The binding's slot in the evaluation's bound-value scratch.</param>
     /// <param name="name">The authored binding name.</param>
     /// <param name="valueKind">The kind the binding was compiled in.</param>
-    public BindingOperand(int ordinal, string name, CellKind valueKind) : base(valueKind) {
+    /// <param name="source">The referenced binding's own compiled form — a binding may name only one declared
+    /// before it, so this is always the fully compiled binding by the time this operand exists — or
+    /// <see langword="null"/> when no source is available (never the case for a rule-compiled read).</param>
+    public BindingOperand(int ordinal, string name, CellKind valueKind, CompiledRuleBinding? source = null) : base(valueKind) {
         Ordinal = ordinal;
         Name = name;
+        Source = source;
     }
     /// <summary>Gets the binding's slot in the evaluation's bound-value scratch.</summary>
     public int Ordinal { get; }
     /// <summary>Gets the authored binding name.</summary>
     public string Name { get; }
+    /// <summary>Gets the referenced binding's own compiled form, for folding its reads and host/tick dependence into
+    /// whatever reads this operand — a read chained through <c>$bind:</c> is only as safe to skip as the whole chain
+    /// it rests on.</summary>
+    public CompiledRuleBinding? Source { get; }
 
     /// <inheritdoc/>
     public override RuleFact Read(IRuleReader reader) => RuleFact.Finite(value: reader.BindingValue(ordinal: Ordinal), kind: ValueKind);
     /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) => 1L;
+    /// <inheritdoc/>
+    public override void CollectReads(List<RuleAccess> into) {
+        if (Source is { } source) {
+            RuleDataflow.CollectExpression(tokens: source.Expression, into: into);
+        }
+    }
+    /// <inheritdoc/>
+    public override bool HostOnly => ((Source is { } source) && RuleDataflow.ExpressionReadsHost(tokens: source.Expression));
 }
 
 /// <summary>A static table entry (<see cref="RuleFacts.TablePrefix"/>). A key the table does not carry reads
