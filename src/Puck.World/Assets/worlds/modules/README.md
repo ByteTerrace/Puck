@@ -274,3 +274,67 @@ then reads `value=1`. A LEFT-Z convention note for whoever authors the next cour
 channel at `yaw=0` moves the body toward WORLD -Z (observed directly with `body.where`, not assumed), so this
 course runs from the arrival deck at `z=+3` out to the trophy at `z=-10` — a course authored the opposite way
 around would need its `forward` sign flipped in any driving script, never the channel itself.
+# The studio district
+
+`studio.world.json` is a flat stage for character work: a lit floor, a turntable a
+body stands on, a mirror wall that shows the stage's own camera, and a counter a
+seat cycles by pressing the jump channel while standing on the turntable. It carries
+no bodies of its own — a visiting seat brings its own avatar and kit.
+
+## Shape
+
+- One creation, `studioStage`, is the floor and the turntable's raised disc marking —
+  rendered and collided from the same shapes, so nothing sits on ground that never
+  matched what a body stood on.
+- `studioTurntable` is a child of `studioCourt` carrying a `region` facet (radius 1.6)
+  over an empty (invisible) creation — a sensing volume flush with the floor, not a
+  second piece of standing geometry.
+- `studioMirror` is a child wall carrying a `view` screen face (`mirror`) that shows
+  the `studioStage` camera, itself anchored on the turntable and looking back at it —
+  the reflection a body on the turntable sees of itself.
+- `studioCourt` is the district's one root placement; moving it (position and yaw)
+  moves the whole stage, its turntable, and its mirror together.
+
+## The look counter
+
+`look` is a slot `int` row, range `0..7`, that a rule (`studio-look-cycle`) advances
+by one (wrapping) on the tick a body's seat presses the world's `jump` channel while
+the region reads at least one occupant:
+
+```text
+gate: $region:studioTurntable >= 1  AND  $channel:1:jump >= 1
+mode: Edge
+effect: setState look = (look + 1) % 8
+```
+
+A world-rule channel read is a fixed 1-based seat number, not "whichever body is in
+the region" — the closest primitive the engine offers today reads local seat 1's own
+`jump` channel, so a second local seat standing on the turntable does not itself
+advance the counter. `look` is the reveal ladder's future selector into whatever the
+importing world's own `looks.rows` declares (the wren's look among them) — this
+district only counts; nothing here swaps a body's rendered look yet, since no
+document primitive binds a placement or body look to a live state row (that swap is
+reveal-wave work the counter is built to feed).
+
+Exported: `reads: [look]`, `bindings: [look]` — a host may gate a rule on the count
+or bind it to a HUD/overlay element; `actions` is empty, since nothing outside the
+module drives the counter.
+
+## Import
+
+Import `modules/studio.world.json` under an alias (`{"document": "modules/studio.world.json",
+"as": "studio"}`). `studioCourt`/`studioTurntable`/`studioMirror` and the `studioStage`
+camera are placement/camera names, which the engine never rewrites on import — keep
+them distinctive so a second module's own bare names cannot collide with them. The
+module's own declared rows (`look`, the `studio-look-cycle` rule, the `studioFloor`
+navigation domain) still get the alias prefix, so a host reads the counter as
+`<alias>_look` (`world.state studio_look` under alias `studio`) and poses a seat at
+`spawn:<alias>-arrival` (spawn point ids are not rewritten either — the bare name
+already carries the alias word, by convention, exactly as the granary placements
+above do).
+
+The importing host must declare its own `channels` row named `jump` (the shipped
+island already does) and a `placements.policy.derivedFaceScreens` reservation of at
+least 1 for the mirror's face to bind; a host authoring neither still boots the rest
+of the district, but the counter never advances and the mirror shows the no-signal
+card.
