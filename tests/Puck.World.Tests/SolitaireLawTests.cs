@@ -322,4 +322,19 @@ public sealed class SolitaireLawTests {
         Assert.Equal(3, Count(f, "solitaireKlondike", 1));
     }
 
+    [Fact]
+    public void SpiderLocksItsSuitCountWhenTheDealIsAccepted() {
+        using var f = Fixtures.FreshServer(Game("solitaireSpider", source => {
+            Set(source, "solitaireSpider", "option", 4);
+            Set(source, "solitaireSpider", "action", 1);
+            Set(source, "solitaireSpider", "request", 1);
+        }));
+        Steps(f, 2);
+        f.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.Console, Row: "solitaireSpider", Value: 1, Key: "option", Kind: WorldDocumentWriteKind.Set));
+        Settle(f, "solitaireSpider");
+        Assert.Equal(4, Value(f, "solitaireSpider", "activeOption"));
+        Assert.Equal(4, Row(f, "solitaireSpiderSuit").Cells!.Select(c => c.Value).Distinct().Count());
+        Assert.Equal(1, Value(f, "solitaireSpider", "option"));
+    }
+
 }

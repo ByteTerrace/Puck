@@ -691,7 +691,7 @@ propagating one body-hop per tick.
 A kit's `rigid` facet (`mass`, `restitution`, `friction`, `rollingFriction`,
 `linearDamping`, `angularDamping`) hands its bodies to the rigid solver
 instead of a locomotion program — see
-[the server reference](../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs).
+[the server reference](../../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs).
 `mass` is required and positive; the other four are non-negative per-second
 decay rates, never per-tick fractions. Requires `collider` (sphere, capsule,
 or box — never `fromCreation`) and `bodyContact: solid`.
