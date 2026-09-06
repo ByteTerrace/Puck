@@ -18,8 +18,10 @@ namespace Puck.World;
 /// headless stdin every one of these refuses as unknown. The participant/census verbs (<c>world.players</c>,
 /// <c>world.devices</c>, <c>world.population</c>) and authoritative diagnostics (<c>world.navigation</c>,
 /// <c>world.budget</c>) moved to <see cref="WorldPopulationCommandModule"/> — server-safe, registered in core either
-/// way. Metrics are armed and read over the pipe (<c>world.timing</c> / <c>world.gpu</c>),
-/// not through an environment variable. Every setting rides <see cref="WorldRenderSettings"/> or a live control
+/// way. The arming verb, <c>world.timing</c>, moved the same way, to <c>WorldTimingCommandModule</c>
+/// (<c>Puck.World.Console</c>) — a headless boot needs it too, to light the world-simulation timing digest.
+/// <c>world.gpu</c> stays here and reads the armed digest over the pipe, not through an environment variable. Every
+/// setting rides <see cref="WorldRenderSettings"/> or a live control
 /// (<see cref="PresentPacingControl"/>, <see cref="GpuTimingControl"/>), read by the frame source each captured frame.
 /// </summary>
 internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPacingControl pacing, WorldPopulation population, WorldRenderSettings settings, WorldRenderProbe renderProbe, WorldServer server, WorldScreenBinder screens, IServerLink link, WorldOverlayFacts facts, PlayerRoster roster) : ICommandModule {
@@ -1085,30 +1087,6 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     a: WorldRenderScaleTiers.Scale(tier: preset.RenderScale),
                     formatEcho: () => new CommandResult(Output: DescribeQuality())
                 );
-            }
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.timing",
-            description: "Arms per-pass GPU timing engine-wide, live (no restart, no magic env var): world.timing [on|off] — no argument echoes the armed state. On lights BOTH the GPU per-pass digest (readable with world.gpu) and the launcher's CPU frame-timing hub; performance metrics are a first-class citizen here.",
-            handler: (_, args) => {
-                if (args.Count == 0) {
-                    return new CommandResult(Output: $"[world.timing: {(GpuTimingControl.Shared.Armed
-                        ? "on"
-                        : "off")}]");
-                }
-
-                var on = ParseOnOff(token: args[0]);
-
-                if (on is not { } resolved) {
-                    return CommandResult.Error(output: $"[world.timing: unknown state '{args[0]}' — on|off]");
-                }
-
-                GpuTimingControl.Shared.SetArmed(armed: resolved);
-
-                return new CommandResult(Output: $"[world.timing: {(resolved
-                    ? "on"
-                    : "off")}]");
             }
         );
         yield return CommandDefinition.Verb(

@@ -417,6 +417,12 @@ internal static class WorldBootComposition {
         services.AddSingleton<IWorldWaitGateResolver, WorldSingleWaitGateResolver>();
         services.AddSingleton<ICommandModule, WorldWaitCommandModule>();
 
+        // The live performance-metrics arming verb: world.timing [on|off]. CORE — it lights the world-simulation
+        // worst-of-N digest (WorldHostStep, via SimulationTimingReporter) in every boot shape, headless included;
+        // where presentation is also composed, the same GpuTimingControl arming additionally lights world.gpu and
+        // the launcher's own frame-timing hub.
+        services.AddSingleton<ICommandModule, WorldTimingCommandModule>();
+
         // The captures section's tick-scheduled arm, wired beside the wait gate at the SAME publishTick call site
         // (HeadlessWorldSimulation/WorldSimulation compose the two delegates together). CORE — a headless boot still
         // schedules and hashes/manifests every capture; it simply has no renderer to arm, narrated by name rather

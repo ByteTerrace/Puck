@@ -15,8 +15,6 @@ namespace Puck.World;
 /// <see cref="IWorldSimulationClock"/> a frame producer reads, in every shape.
 /// </summary>
 internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldPeerHost peerHost, WorldInstanceHost instances) : IWorldSimulationClock {
-    private const ulong TimingReportInterval = 60UL;
-
     private readonly WorldServer m_server = server;
     private readonly WorldReplayTape m_replayTape = replayTape;
     private readonly WorldConsoleWaitGate m_waitGate = waitGate;
@@ -31,8 +29,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
         captureScheduler.PublishTick(server.NextInputTick - 1UL);
     };
 
-    private ulong m_timingSamples;
-    private SimulationTiming m_timingWorst;
+    private readonly SimulationTimingReporter m_timingReporter = new();
 
     /// <summary>The exact engine time completed on the current authority timeline.</summary>
     public ulong ElapsedTicks => m_server.CompletedEngineTicks;
@@ -101,7 +98,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
         var finishTicks = (timingEnabled ? (Stopwatch.GetTimestamp() - phaseStart) : 0L);
 
         if (timingEnabled) {
-            ReportTiming(sample: new SimulationTiming(
+            m_timingReporter.Report(sample: new SimulationTimingReporter.Sample(
                 Tick: Tick,
                 PopulationTicks: populationTicks,
                 RosterTicks: rosterTicks,
@@ -149,47 +146,5 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
                 Console.Error.WriteLine(value: "[world.wait: released — the boot world stopped stepping (paused, rateHz 0, or a rate change the fixed-step pump has not caught up to yet) before its requested tick count was reached; resume it (world.rate resume) before arming a new wait]");
             }
         }
-    }
-    private void ReportTiming(SimulationTiming sample) {
-        m_timingSamples++;
-
-        if (sample.TotalTicks >= m_timingWorst.TotalTicks) {
-            m_timingWorst = sample;
-        }
-
-        if (0UL != (m_timingSamples % TimingReportInterval)) {
-            return;
-        }
-
-        var worst = m_timingWorst;
-        var frequency = Stopwatch.Frequency;
-
-        static double ToMs(long ticks, long frequency) =>
-            ((((double)ticks) * 1000.0) / frequency);
-
-        Console.Error.WriteLine(value: $"[frame-timing] world-simulation worst-of-{TimingReportInterval} tick {worst.Tick} total {ToMs(
-            ticks: worst.TotalTicks,
-            frequency: frequency
-        ):0.000}ms | population {ToMs(
-            ticks: worst.PopulationTicks,
-            frequency: frequency
-        ):0.000} | roster {ToMs(
-            ticks: worst.RosterTicks,
-            frequency: frequency
-        ):0.000} | finish {ToMs(
-            ticks: worst.FinishTicks,
-            frequency: frequency
-        ):0.000}");
-
-        m_timingWorst = default;
-    }
-
-    private readonly record struct SimulationTiming(
-        ulong Tick,
-        long PopulationTicks,
-        long RosterTicks,
-        long FinishTicks
-    ) {
-        public long TotalTicks => ((PopulationTicks + RosterTicks) + FinishTicks);
     }
 }

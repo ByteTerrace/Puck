@@ -251,10 +251,12 @@ Facts a script needs:
   gate's and capture scheduler's `PublishTick` — or, while boot is paused,
   drain an administrative mutation and release a stalled `world.wait`; step
   every other instance; run the shell's post-step; finish the seat intents.
-  It counts the host work a `world.wait` is clocked by, carries the per-phase
-  timing `world.timing` arms, and is the `IWorldSimulationClock` the frame
-  producer reads. `Puck.Launcher.FixedStepPump` (not in this project) owns the
-  accumulator both boot shapes' hosted services drive it through.
+  It counts the host work a `world.wait` is clocked by, measures the per-phase
+  timing `world.timing` arms and feeds it to `Puck.Hosting.SimulationTimingReporter`
+  (the `[frame-timing] world-simulation …` worst-of-N digest), and is the
+  `IWorldSimulationClock` the frame producer reads. `Puck.Launcher.FixedStepPump`
+  (not in this project) owns the accumulator both boot shapes' hosted services
+  drive it through.
 - `WorldInstanceHost.cs` / `WorldInstance.cs` — the process's running world
   instances. The boot world is one entry (name `boot`) beside every instance
   `world.instance.start` adds; each non-boot instance holds its own

@@ -21,19 +21,26 @@ the tabletop primitive's read-back: every placement carrying a `board` facet,
 its anchored frame, its occupancy row's live cells, and any bound
 `turn`/`verdict`/`move`/`plan` rows; read-only, since a board's rows are
 authored/mutated through the same ordinary state doors any other row uses),
-`world.update` (`WorldUpdateCommandModule`), and
+`world.update` (`WorldUpdateCommandModule`),
 `world.wait` (`WorldWaitCommandModule`, alongside the tick-barrier gate it
 arms, `WorldConsoleWaitGate`, and `IWorldWaitGateResolver` — the row's own
 gate, since a host running several rows has one gate per row and a singleton
-would always arm whichever row it was constructed against). `WorldCommandArguments` (the free-text-tail
+would always arm whichever row it was constructed against), and `world.timing`
+(`WorldTimingCommandModule` — the live performance-metrics arming verb,
+registered here so a headless boot lights the world-simulation timing digest
+too; `world.gpu`, the GPU per-pass read-back the same arming lights when a
+window is present, stays in `Puck.World`). `WorldCommandArguments` (the free-text-tail
 reconstruction every JSON/prose-tailed verb shares) lives in
 [`Puck.World.Server`](../Puck.World.Server/README.md) instead, since modules
 that stayed in `Puck.World` need it too.
 
 Project references: `Puck.World.Server`, `Puck.World.Protocol`,
 `Puck.World.Schema`, `Puck.Commands`, `Puck.Launcher` (the
-`ITextCommandHoldGate` seam `WorldConsoleWaitGate` implements). `Puck.Networking`
-is reached only through `Puck.World.Server`; nothing here names it directly.
+`ITextCommandHoldGate` seam `WorldConsoleWaitGate` implements). `Puck.Hosting`
+(`GpuTimingControl`, the arming authority `WorldTimingCommandModule` reads and
+writes) and `Puck.Networking` are reached only transitively, through
+`Puck.Launcher`/`Puck.World.Server`; no `ProjectReference` here names either
+directly.
 
 ## `IWorldConsoleAuthority`
 

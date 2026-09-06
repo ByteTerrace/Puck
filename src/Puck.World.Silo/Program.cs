@@ -63,6 +63,7 @@ builder.Services.AddSingleton<IWorldWaitGateResolver>(implementationFactory: sta
 builder.Services.AddHostedService<WorldSiloActivations>();
 builder.Services.AddSingleton<ICommandModule, SiloCommandModule>();
 builder.Services.AddSingleton<ICommandModule, WorldWaitCommandModule>();
+builder.Services.AddSingleton<ICommandModule, WorldTimingCommandModule>();
 builder.Services.AddSingleton<ICommandModule, WorldNetworkCommandModule>();
 // A bare router/registry: the silo embodies no local seats and drives no physical input, so the bindings and
 // principal resolver below bind nothing and claim no principal — HeadlessTickHostedService still requires exactly
