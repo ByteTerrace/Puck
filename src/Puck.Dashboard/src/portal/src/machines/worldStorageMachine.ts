@@ -171,7 +171,7 @@ export const worldStorageMachine = setup({
             publicWorlds: event.output.publicWorlds,
             checkpoints: event.output.checkpoints,
             error: null,
-            statusMessage: "Vault synchronized with storage substrate.",
+            statusMessage: "Local library loaded.",
           })),
         },
         onError: {
@@ -197,7 +197,7 @@ export const worldStorageMachine = setup({
           actions: assign(({ event }: any) => ({
             privateWorlds: event.output.privateWorlds,
             checkpoints: event.output.checkpoints,
-            statusMessage: `Saved CAS Checkpoint: ${event.output.hash.slice(0, 16)}...`,
+            statusMessage: `Saved locally: ${event.output.hash.metadata.checkpointHash}...`,
             error: null,
           })),
         },

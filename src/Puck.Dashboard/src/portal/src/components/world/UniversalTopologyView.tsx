@@ -1,456 +1,166 @@
-import React, { useState } from "react";
-import {
-  Box,
-  Card,
-  Group,
-  Stack,
-  Text,
-  Badge,
-  SegmentedControl,
-  Tooltip,
-  Paper,
-} from "@mantine/core";
-import { RiGridFill, RiCompass3Fill, RiStackLine } from "@remixicon/react";
-import SpatialTopology3D from "./SpatialTopology3D";
-import { TopologyDefinition } from "../../engine/evaluator";
-
+import React, { useId, useMemo, useRef, useState } from "react";
+import { Badge, Button, Card, Group, Select, Stack, Text } from "@mantine/core";
+import { getTopologyCoordinates, TopologyDefinition } from "../../engine/evaluator";
 export type { TopologyDefinition };
-
 export interface UniversalTopologyViewProps {
   topology: TopologyDefinition;
   cellValues?: Record<number, number>;
   selectedCell?: number | null;
   onSelectCell?: (cellIndex: number) => void;
-  activeDirection?: { name: string; x: number; y: number; z: number } | null;
+  activeDirection?: {
+    name: string;
+    x: number;
+    y: number;
+    z: number;
+  } | null;
   hoveredMask?: bigint | null;
-  activeWinningRay?: { name: string; cells: number[] } | null;
+  activeWinningRay?: {
+    name: string;
+    cells: number[];
+  } | null;
   ghostCell?: number | null;
   ghostPlayer?: number;
   onHoverCell?: (cellIndex: number | null) => void;
 }
-
-export const UniversalTopologyView: React.FC<UniversalTopologyViewProps> = ({
-  topology,
-  cellValues = {},
-  selectedCell,
-  onSelectCell,
-  activeDirection,
-  hoveredMask,
-  activeWinningRay,
-  ghostCell,
-  ghostPlayer = 1,
-  onHoverCell,
-}) => {
-  const is3DTopology = topology.$type === "box" || (topology.layers ?? 1) > 1;
-  const [viewMode, setViewMode] = useState<"3d" | "2d">(is3DTopology ? "3d" : "2d");
-  const [activeSlice, setActiveSlice] = useState<number>(0);
-
-  // 1. Grid Renderer (2D rectangular)
-  const renderGrid = () => {
-    const width = topology.width ?? 8;
-    const depth = topology.depth ?? 8;
-
-    return (
-      <Box style={{ overflowX: "auto", padding: 12 }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: `repeat(${width}, minmax(40px, 52px))`,
-            gap: 6,
-            justifyContent: "center",
-          }}
-        >
-          {Array.from({ length: depth }).map((_, z) =>
-            Array.from({ length: width }).map((_, x) => {
-              const cellIdx = z * width + x;
-              const val = cellValues[cellIdx] ?? 0;
-              const isSelected = selectedCell === cellIdx;
-
-              return (
-                <Tooltip
-                  key={cellIdx}
-                  label={`Cell ${cellIdx} (x:${x}, z:${z}) = ${val}`}
-                  withArrow
-                >
-                  <Paper
-                    onClick={() => onSelectCell?.(cellIdx)}
-                    style={{
-                      height: 48,
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      cursor: "pointer",
-                      borderRadius: 6,
-                      background: isSelected
-                        ? "var(--accent-ink)"
-                        : Number(val) > 0
-                        ? "var(--quote-bg)"
-                        : "var(--paper-2)",
-                      border: isSelected
-                        ? "2px solid var(--accent)"
-                        : "1px solid var(--rule)",
-                      transition: "all 0.15s ease",
-                      userSelect: "none",
-                    }}
-                  >
-                    <Text size="xs" style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', color: "var(--ink-faint)" }}>
-                      {cellIdx}
-                    </Text>
-                    <Text fw={700} size="sm" style={{ fontFamily: '"JetBrains Mono", monospace', color: Number(val) === 1 ? "var(--accent)" : Number(val) === 2 ? "var(--accent-2)" : "var(--ink-faint)" }}>
-                      {Number(val) === 1 ? "X" : Number(val) === 2 ? "O" : val !== 0 ? String(val) : "·"}
-                    </Text>
-                  </Paper>
-                </Tooltip>
-              );
-            })
-          )}
-        </div>
-      </Box>
-    );
-  };
-
-  // 2. Ring Renderer (1D cyclic sequence)
-  const renderRing = () => {
-    const count = topology.width ?? 14;
-    const radius = Math.min(180, count * 14);
-    const center = radius + 40;
-
-    return (
-      <Box style={{ display: "flex", justifyContent: "center", padding: 16 }}>
-        <svg width={center * 2} height={center * 2}>
-          <circle
-            cx={center}
-            cy={center}
-            r={radius}
-            fill="none"
-            stroke="var(--rule)"
-            strokeWidth="2"
-            strokeDasharray="4 4"
-          />
-          {Array.from({ length: count }).map((_, i) => {
-            const angle = (i / count) * 2 * Math.PI - Math.PI / 2;
-            const x = center + radius * Math.cos(angle);
-            const y = center + radius * Math.sin(angle);
-            const val = cellValues[i] ?? 0;
-            const isSelected = selectedCell === i;
-
-            return (
-              <g
-                key={i}
-                onClick={() => onSelectCell?.(i)}
-                style={{ cursor: "pointer" }}
-              >
-                <circle
-                  cx={x}
-                  cy={y}
-                  r={20}
-                  fill={isSelected ? "var(--accent-ink)" : Number(val) > 0 ? "var(--quote-bg)" : "var(--paper-2)"}
-                  stroke={isSelected ? "var(--accent)" : "var(--rule)"}
-                  strokeWidth={isSelected ? 2 : 1}
-                />
-                <text
-                  x={x}
-                  y={y - 4}
-                  textAnchor="middle"
-                  fill="var(--ink-faint)"
-                  fontSize="9"
-                  fontFamily='"JetBrains Mono", monospace'
-                >
-                  {i}
-                </text>
-                <text
-                  x={x}
-                  y={y + 10}
-                  textAnchor="middle"
-                  fill={Number(val) === 1 ? "var(--accent)" : Number(val) === 2 ? "var(--accent-2)" : "var(--ink-faint)"}
-                  fontSize="12"
-                  fontWeight="bold"
-                  fontFamily='"JetBrains Mono", monospace'
-                >
-                  {Number(val) === 1 ? "X" : Number(val) === 2 ? "O" : val !== 0 ? String(val) : "·"}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-      </Box>
-    );
-  };
-
-  // 3. Hex Renderer (Axial hexagon disk)
-  const renderHex = () => {
-    const radius = topology.radius ?? 3;
-    const hexSize = 22;
-    const hexHeight = hexSize * 2;
-    const hexWidth = Math.sqrt(3) * hexSize;
-    const center = (radius * 2 + 1) * hexSize * 1.5;
-
-    // Generate axial coordinates (q, r) where |q| <= R, |r| <= R, |q + r| <= R
-    const hexes: Array<{ q: number; r: number; index: number }> = [];
-    let idx = 0;
-    for (let q = -radius; q <= radius; q++) {
-      const r1 = Math.max(-radius, -q - radius);
-      const r2 = Math.min(radius, -q + radius);
-      for (let r = r1; r <= r2; r++) {
-        hexes.push({ q, r, index: idx++ });
-      }
+const label = (value: number) => value === 1 ? "X" : value === 2 ? "O" : value === 0 ? "Empty" : String(value);
+export const UniversalTopologyView: React.FC<UniversalTopologyViewProps> = ({ topology, cellValues = {}, onSelectCell, hoveredMask, activeWinningRay }) => {
+  const helpId = useId();
+  const coordinates = useMemo(() => {
+    try {
+      return getTopologyCoordinates(topology);
     }
-
-    return (
-      <Box style={{ display: "flex", justifyContent: "center", overflowX: "auto", padding: 16 }}>
-        <svg width={center * 2} height={center * 2}>
-          {hexes.map(({ q, r, index }) => {
-            const x = center + hexWidth * (q + r / 2);
-            const y = center + hexHeight * (3 / 4) * r;
-            const val = cellValues[index] ?? 0;
-            const isSelected = selectedCell === index;
-
-            // Compute hexagon vertices
-            const points = [0, 1, 2, 3, 4, 5]
-              .map((i) => {
-                const angle = (Math.PI / 180) * (60 * i - 30);
-                return `${x + hexSize * Math.cos(angle)},${y + hexSize * Math.sin(angle)}`;
-              })
-              .join(" ");
-
-            return (
-              <g
-                key={index}
-                onClick={() => onSelectCell?.(index)}
-                style={{ cursor: "pointer" }}
-              >
-                <polygon
-                  points={points}
-                  fill={isSelected ? "var(--accent-ink)" : Number(val) > 0 ? "var(--quote-bg)" : "var(--paper-2)"}
-                  stroke={isSelected ? "var(--accent)" : "var(--rule)"}
-                  strokeWidth={isSelected ? 2 : 1}
-                />
-                <text
-                  x={x}
-                  y={y - 3}
-                  textAnchor="middle"
-                  fill="var(--ink-faint)"
-                  fontSize="8"
-                  fontFamily='"JetBrains Mono", monospace'
-                >
-                  {index}
-                </text>
-                <text
-                  x={x}
-                  y={y + 8}
-                  textAnchor="middle"
-                  fill={Number(val) === 1 ? "var(--accent)" : Number(val) === 2 ? "var(--accent-2)" : "var(--ink-faint)"}
-                  fontSize="11"
-                  fontWeight="bold"
-                  fontFamily='"JetBrains Mono", monospace'
-                >
-                  {Number(val) === 1 ? "X" : Number(val) === 2 ? "O" : val !== 0 ? String(val) : "·"}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-      </Box>
-    );
-  };
-
-  // 4. Lattice & Box Renderer (Zero-3D Planar Slice Projection)
-  const renderLatticeOrBox = () => {
-    // If explicit coordinates exist (e.g. 4x4x4 Qubic tttCube), slice by Z
-    const coords = topology.coordinates ?? [];
-    const zLayers = Array.from(new Set(coords.map((c) => c.z))).sort((a, b) => a - b);
-    const effectiveLayers = zLayers.length > 0 ? zLayers : [0, 1, 2, 3];
-    const currentZ = effectiveLayers[activeSlice] ?? effectiveLayers[0];
-
-    // Filter cells in this planar slice
-    const sliceCoords = coords
-      .map((c, originalIndex) => ({ ...c, originalIndex }))
-      .filter((c) => c.z === currentZ);
-
-    const xVals = Array.from(new Set(sliceCoords.map((c) => c.x))).sort((a, b) => a - b);
-    const yVals = Array.from(new Set(sliceCoords.map((c) => c.y))).sort((a, b) => a - b);
-    const xSize = Math.max(xVals.length, topology.dimensions?.x ?? topology.width ?? 4);
-
-    return (
-      <Stack gap="md" p="md">
-        <Group justify="space-between" align="center">
-          <Group gap="xs">
-            <RiStackLine size={18} color="#38bdf8" />
-            <Text size="sm" fw={600}>
-              Planar Slice (Z = {currentZ})
-            </Text>
-            <Badge variant="light" color="blue" size="sm">
-              Layer {activeSlice + 1} of {effectiveLayers.length}
-            </Badge>
-          </Group>
-          <SegmentedControl
-            size="xs"
-            value={String(activeSlice)}
-            onChange={(val) => setActiveSlice(Number(val))}
-            data={effectiveLayers.map((z, idx) => ({
-              label: `Slice Z=${z}`,
-              value: String(idx),
-            }))}
-          />
-        </Group>
-
-        {/* The 2D Planar Slice Grid */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: `repeat(${xSize}, minmax(48px, 60px))`,
-            gap: 8,
-            justifyContent: "center",
-            padding: 12,
-          }}
-        >
-          {yVals.map((y) =>
-            xVals.map((x) => {
-              const item = sliceCoords.find((c) => c.x === x && c.y === y);
-              if (!item) return <div key={`empty-${x}-${y}`} />;
-
-              const cellIdx = item.originalIndex;
-              const val = cellValues[cellIdx] ?? 0;
-              const isSelected = selectedCell === cellIdx;
-              const isGhost = ghostCell === cellIdx && Number(val) === 0;
-
-              return (
-                <Tooltip
-                  key={cellIdx}
-                  label={`Cell ${cellIdx} (x:${x}, y:${y}, z:${currentZ}) = ${val}${isGhost ? " [Speculative Ghost Move]" : ""}`}
-                  withArrow
-                >
-                  <Paper
-                    onClick={() => onSelectCell?.(cellIdx)}
-                    onMouseEnter={() => onHoverCell?.(cellIdx)}
-                    onMouseLeave={() => onHoverCell?.(null)}
-                    style={{
-                      height: 54,
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      cursor: "pointer",
-                      borderRadius: 6,
-                      background: isSelected
-                        ? "var(--accent-ink)"
-                        : Number(val) > 0
-                        ? "var(--quote-bg)"
-                        : isGhost
-                        ? "var(--accent-ink)"
-                        : "var(--paper-2)",
-                      border: isSelected
-                        ? "2px solid var(--accent)"
-                        : isGhost
-                        ? "2px dashed var(--accent)"
-                        : "1px solid var(--rule)",
-                      transition: "all 0.15s ease",
-                      userSelect: "none",
-                    }}
-                  >
-                    <Text size="xs" style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', color: "var(--ink-faint)" }}>
-                      #{cellIdx}
-                    </Text>
-                    <Text
-                      fw={700}
-                      size="md"
-                      style={{
-                        fontFamily: '"JetBrains Mono", monospace',
-                        color:
-                          Number(val) === 1
-                            ? "var(--accent)"
-                            : Number(val) === 2
-                            ? "var(--accent-2)"
-                            : isGhost
-                            ? ghostPlayer === 1
-                              ? "var(--accent)"
-                              : "var(--accent-2)"
-                            : "var(--ink-faint)",
-                        opacity: isGhost ? 0.65 : 1,
-                      }}
-                    >
-                      {Number(val) === 1
-                        ? "X"
-                        : Number(val) === 2
-                        ? "O"
-                        : isGhost
-                        ? ghostPlayer === 1
-                          ? "X"
-                          : "O"
-                        : val !== 0
-                        ? String(val)
-                        : "·"}
-                    </Text>
-                  </Paper>
-                </Tooltip>
-              );
-            })
-          )}
-        </div>
-      </Stack>
-    );
-  };
-
-  return (
-    <Card withBorder radius="md" p="sm" style={{ background: "var(--paper-2)", borderColor: "var(--rule)" }}>
-      <Group justify="space-between" mb="xs">
-        <Group gap="xs">
-          <RiGridFill size={18} color="var(--accent)" />
-          <Text fw={600} size="sm" style={{ fontFamily: '"Lora", Georgia, serif', color: "var(--ink)" }}>
-            {topology.name || "Topology"}
-          </Text>
-          <Badge variant="light" color="coral" size="xs" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
-            {topology.$type.toUpperCase()}
-          </Badge>
-        </Group>
-
-        <Group gap="xs">
-          {is3DTopology && (
-            <SegmentedControl
-              size="xs"
-              value={viewMode}
-              onChange={(val: any) => setViewMode(val)}
-              data={[
-                { label: "3D Spatial Orbit", value: "3d" },
-                { label: "2D Planar Slices", value: "2d" },
-              ]}
-            />
-          )}
-
-          {activeDirection && (
-            <Group gap={4}>
-              <RiCompass3Fill size={14} color="var(--accent-2)" />
-              <Text size="xs" style={{ fontFamily: '"JetBrains Mono", monospace', color: "var(--ink-soft)" }}>
-                Ray: {activeDirection.name} ({activeDirection.x}, {activeDirection.y}, {activeDirection.z})
-              </Text>
-            </Group>
-          )}
-        </Group>
-      </Group>
-
-      {is3DTopology && viewMode === "3d" ? (
-        <SpatialTopology3D
-          topology={topology}
-          cellValues={cellValues}
-          selectedCell={selectedCell}
-          onSelectCell={onSelectCell}
-          hoveredMask={hoveredMask}
-          activeWinningRay={activeWinningRay}
-          ghostCell={ghostCell}
-          ghostPlayer={ghostPlayer}
-          onHoverCell={onHoverCell}
-        />
-      ) : (
-        <>
-          {topology.$type === "grid" && renderGrid()}
-          {topology.$type === "ring" && renderRing()}
-          {topology.$type === "hex" && renderHex()}
-          {(topology.$type === "lattice" || topology.$type === "box") && renderLatticeOrBox()}
-        </>
-      )}
-    </Card>
-  );
+    catch {
+      return [];
+    }
+  }, [topology]);
+  const slices = useMemo(() => [...new Set(coordinates.map(c => c.z))].sort((a, b) => a - b), [coordinates]);
+  const [slice, setSlice] = useState(0);
+  const [page, setPage] = useState(0);
+  const [inspected, setInspected] = useState<number | null>(null);
+  const [focused, setFocused] = useState(0);
+  const buttons = useRef(new Map<number, HTMLButtonElement>());
+  const z = slices.includes(slice) ? slice : slices[0];
+  const cells = useMemo(() => coordinates.map((c, index) => ({ ...c, index })).filter(c => c.z === z), [coordinates, z]);
+  const pageCount = Math.max(1, Math.ceil(cells.length / 144));
+  const currentPage = Math.min(page, pageCount - 1);
+  const visible = cells.slice(currentPage * 144, (currentPage + 1) * 144);
+  const columns = Math.min(12, topology.$type === "ring" ? 8 : Math.max(1, new Set(visible.map(c => c.x)).size));
+  const spatialHex = topology.$type === "hex" && pageCount === 1;
+  const minHexX = Math.min(...visible.map(c => 2 * c.x - c.y));
+  const minHexY = Math.min(...visible.map(c => c.y));
+  const hexColumns = Math.max(...visible.map(c => 2 * c.x - c.y)) - minHexX + 2;
+  const focusIndex = visible.some(c => c.index === focused) ? focused : visible[0]?.index;
+  const inspectedCell = inspected === null ? undefined : coordinates[inspected];
+  return <Card
+    withBorder
+    radius="md"
+    p="md"
+    className="studio-board">
+    <Group
+      justify="space-between"
+      mb="md">
+      <div><Text
+        component="h2"
+        fw={650}
+        size="lg"
+        m={0}>{topology.name}</Text><Text
+          size="sm"
+          c="var(--ink-soft)">Board preview</Text></div>
+      <Badge
+        variant="light"
+        color="jade">{coordinates.length} cells · {topology.$type}</Badge>
+    </Group>
+    <Group
+      justify="space-between"
+      mb="sm"
+      mih={50}>
+      <Text
+        size="sm"
+        c="var(--ink-soft)">{slices.length > 1 ? "Explore one layer at a time" : topology.$type === "hex" ? "Native hex cell order" : "Select a cell to submit a demo move"}</Text>
+      {slices.length > 1 && <Select
+        label="Layer"
+        value={String(z)}
+        onChange={value => { setSlice(Number(value)); setPage(0); setInspected(null); }}
+        data={slices.map(value => ({ value: String(value), label: "z = " + value }))}
+        w={120}
+        allowDeselect={false} />}
+    </Group>
+    <div
+      className="studio-board-surface"
+      onMouseLeave={() => setInspected(null)}>
+      <div
+        role="group"
+        aria-label={topology.name + " cells"}
+        aria-describedby={helpId}
+        className="studio-cell-grid"
+        data-hex={spatialHex || undefined}
+        style={{ gridTemplateColumns: spatialHex ? "repeat(" + hexColumns + ", 24px)" : "repeat(" + columns + ", minmax(44px, 1fr))" }}>
+        {visible.map((c, position) => {
+          const value = cellValues[c.index] ?? 0;
+          const highlighted = activeWinningRay?.cells.includes(c.index) || (c.index < 64 && hoveredMask != null && (hoveredMask & (1n << BigInt(c.index))) !== 0n);
+          return <button
+            key={c.index}
+            type="button"
+            className="studio-cell"
+            style={spatialHex ? { gridColumn: (2 * c.x - c.y - minHexX + 1) + " / span 2", gridRow: c.y - minHexY + 1, aspectRatio: "1", minHeight: 48 } : undefined}
+            data-value={value}
+            data-highlighted={highlighted || undefined}
+            ref={node => {
+              if(node)
+                buttons.current.set(c.index, node);
+              else
+                buttons.current.delete(c.index);
+            }}
+            tabIndex={focusIndex === c.index ? 0 : -1}
+            aria-label={"Cell " + c.index + ", x " + c.x + ", y " + c.y + ", z " + c.z + ", " + label(value)}
+            onFocus={() => { setFocused(c.index); setInspected(c.index); }}
+            onMouseEnter={() => setInspected(c.index)}
+            onClick={() => onSelectCell?.(c.index)}
+            onKeyDown={event => {
+              const delta: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -columns, ArrowDown: columns, Home: -position, End: visible.length - position - 1 };
+              if(event.key in delta) {
+                event.preventDefault();
+                let next = visible[Math.max(0, Math.min(visible.length - 1, position + delta[event.key]))];
+                if(spatialHex && event.key.startsWith("Arrow")) {
+                  const dx = event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0;
+                  const dy = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+                  const candidates = visible.filter(other => dx ? ((2 * other.x - other.y) - (2 * c.x - c.y)) * dx > 0 && other.y === c.y : (other.y - c.y) * dy > 0);
+                  next = candidates.sort((a, b) => (Math.abs(a.y - c.y) * 100 + Math.abs(2 * a.x - a.y - (2 * c.x - c.y))) - (Math.abs(b.y - c.y) * 100 + Math.abs(2 * b.x - b.y - (2 * c.x - c.y))))[0] ?? c;
+                }
+                buttons.current.get(next.index)?.focus();
+              }
+            }}>
+            <span
+              className="studio-cell-index">{c.index}</span><span
+                className="studio-cell-value"
+                aria-hidden="true">{value === 0 ? "·" : label(value)}</span>
+          </button>;
+        })}
+      </div>
+      {!coordinates.length && <Text>Geometry is unavailable for this topology in offline preview.</Text>}
+    </div>
+    {pageCount > 1 && <Group
+      justify="space-between"
+      mt="sm"><Button
+        variant="default"
+        disabled={!currentPage}
+        onClick={() => setPage(currentPage - 1)}>Previous cells</Button><Text
+          size="sm">{currentPage + 1} / {pageCount}</Text><Button
+            variant="default"
+            disabled={currentPage + 1 === pageCount}
+            onClick={() => setPage(currentPage + 1)}>Next cells</Button></Group>}
+    <Stack
+      gap={4}
+      className="studio-cell-inspector"
+      mt="md">
+      <Text
+        size="sm"
+        fw={600}>{inspectedCell ? "Cell " + inspected + " · " + label(cellValues[inspected!] ?? 0) + " · (" + inspectedCell.x + ", " + inspectedCell.y + ", " + inspectedCell.z + ")" : "Point to or focus a cell to inspect it"}</Text>
+      <Text
+        id={helpId}
+        size="xs"
+        c="var(--ink-soft)">Arrow keys move focus. Enter or Space submits a move. Hover never changes preview state.</Text>
+    </Stack>
+  </Card>;
 };
-
-export default UniversalTopologyView;
+export default React.memo(UniversalTopologyView);

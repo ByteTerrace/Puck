@@ -1,207 +1,70 @@
-import React from "react";
-import {
-  Card,
-  Group,
-  Stack,
-  Text,
-  Badge,
-  ScrollArea,
-  Paper,
-  Box,
-} from "@mantine/core";
-import {
-  RiGitCommitLine,
-  RiCheckFill,
-  RiCloseFill,
-  RiTimeLine,
-} from "@remixicon/react";
+import React, { useState } from "react";
+import { Button, Card, Group, Pagination, Stack, Text } from "@mantine/core";
 import { TickSnapshot } from "../../engine/replayTape";
 import PredicateTruthTree from "./PredicateTruthTree";
-
 export interface ExecutionTraceLogProps {
   snapshots: TickSnapshot[];
   currentTickIndex: number;
-  onJumpToTick: (tickIndex: number) => void;
+  onJumpToTick: (index: number) => void;
 }
-
-export const ExecutionTraceLog: React.FC<ExecutionTraceLogProps> = ({
-  snapshots,
-  currentTickIndex,
-  onJumpToTick,
-}) => {
-  return (
-    <Card withBorder radius="md" p="sm" style={{ background: "var(--paper-2)", borderColor: "var(--rule)" }}>
-      <Group justify="space-between" mb="xs">
-        <Group gap="xs">
-          <RiGitCommitLine size={18} color="var(--accent)" />
-          <Text fw={600} size="sm" style={{ fontFamily: '"Lora", Georgia, serif', color: "var(--ink)" }}>
-            Causal Execution Trace Log
-          </Text>
-          <Badge variant="light" color="coral" size="xs">
-            {snapshots.length} Ticks
-          </Badge>
-        </Group>
-
-        <Text size="xs" style={{ fontFamily: '"JetBrains Mono", monospace', color: "var(--ink-faint)" }}>
-          Click tick to time-travel
-        </Text>
-      </Group>
-
-      <ScrollArea h={420} offsetScrollbars>
-        <Stack gap="xs">
-          {snapshots.map((snap, idx) => {
-            const isCurrent = idx === currentTickIndex;
-            const trace = snap.trace;
-            const ruleEvents = trace?.ruleEvents ?? [];
-            const firedEvents = ruleEvents.filter((e) => e.fired);
-            const blockedEvents = ruleEvents.filter((e) => !e.fired);
-
-            return (
-              <Paper
-                key={`snap-${idx}`}
-                p="xs"
-                radius="sm"
-                onClick={() => onJumpToTick(idx)}
-                style={{
-                  cursor: "pointer",
-                  background: isCurrent ? "var(--quote-bg)" : "var(--paper-2)",
-                  border: isCurrent ? "2px solid var(--accent)" : "1px solid var(--rule)",
-                  transition: "all 0.15s ease",
-                }}
-              >
-                <Group justify="space-between" mb={4}>
-                  <Group gap={6}>
-                    <Badge
-                      size="xs"
-                      color={isCurrent ? "coral" : "gray"}
-                      variant={isCurrent ? "filled" : "light"}
-                    >
-                      Tick #{snap.tickNumber}
-                    </Badge>
-                    <Text fw={600} size="xs" style={{ fontFamily: '"JetBrains Mono", monospace', color: "var(--ink)" }}>
-                      {trace?.intentDescription || "Tick"}
-                    </Text>
-                  </Group>
-
-                  {isCurrent && (
-                    <Badge size="xs" color="jade" variant="light" leftSection={<RiTimeLine size={10} />}>
-                      Current Active State
-                    </Badge>
-                  )}
-                </Group>
-
-                {/* State deltas mutated in this tick */}
-                {trace?.allDeltas && trace.allDeltas.length > 0 && (
-                  <Group gap={4} mb={6} wrap="wrap">
-                    <Text size="xs" style={{ fontFamily: '"JetBrains Mono", monospace', color: "var(--ink-faint)", fontSize: 10 }}>
-                      MUTATIONS:
-                    </Text>
-                    {trace.allDeltas.map((d, dIdx) => (
-                      <Badge
-                        key={dIdx}
-                        size="xs"
-                        variant="outline"
-                        color="coral"
-                        style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 10 }}
-                      >
-                        {d.target}{d.key !== undefined ? `[${d.key}]` : ""}: {String(d.oldValue)} ➔ {String(d.newValue)}
-                      </Badge>
-                    ))}
-                  </Group>
-                )}
-
-                {/* Fired rules */}
-                {firedEvents.length > 0 && (
-                  <Stack gap={6} mt={4}>
-                    {firedEvents.map((e, eIdx) => (
-                      <Paper
-                        key={eIdx}
-                        p={6}
-                        radius="xs"
-                        style={{
-                          background: "var(--code-bg)",
-                          borderLeft: e.mode === "Edge" ? "3px solid var(--accent)" : "3px solid var(--accent-2)",
-                        }}
-                      >
-                        <Group justify="space-between" wrap="nowrap" mb={4}>
-                          <Group gap={6} wrap="nowrap">
-                            <RiCheckFill size={12} color={e.mode === "Edge" ? "var(--accent)" : "var(--accent-2)"} />
-                            <Badge size="xs" variant="light" color={e.mode === "Edge" ? "coral" : "jade"}>
-                              {e.mode}
-                            </Badge>
-                            <Text size="xs" ff="monospace" style={{ color: "var(--code-fg)", fontWeight: 600 }}>
-                              {e.ruleName}
-                            </Text>
-                          </Group>
-                          <Text size="xs" c="var(--ink-faint)" ff="monospace" style={{ fontSize: 10 }}>
-                            {e.gateSummary}
-                          </Text>
-                        </Group>
-
-                        {e.gate && (
-                          <Box mt={4}>
-                            <PredicateTruthTree
-                              gate={e.gate}
-                              state={snap.state}
-                              boardCells={snap.boardCells}
-                              initialExpanded={false}
-                            />
-                          </Box>
-                        )}
-                      </Paper>
-                    ))}
-                  </Stack>
-                )}
-
-                {/* Blocked rules if intent was rejected or to inspect guards */}
-                {blockedEvents.length > 0 && (
-                  <Stack gap={6} mt={4}>
-                    {blockedEvents.map((e, eIdx) => (
-                      <Paper
-                        key={eIdx}
-                        p={6}
-                        radius="xs"
-                        style={{
-                          background: "var(--code-bg)",
-                          borderLeft: "3px solid var(--accent)",
-                        }}
-                      >
-                        <Group justify="space-between" wrap="nowrap" mb={4}>
-                          <Group gap={6} wrap="nowrap">
-                            <RiCloseFill size={12} color="var(--accent)" />
-                            <Badge size="xs" variant="light" color="red">
-                              BLOCKED
-                            </Badge>
-                            <Text size="xs" ff="monospace" style={{ color: "var(--accent)", fontWeight: 600 }}>
-                              {e.ruleName}
-                            </Text>
-                          </Group>
-                          <Text size="xs" c="var(--ink-faint)" ff="monospace" style={{ fontSize: 10 }}>
-                            {e.gateSummary}
-                          </Text>
-                        </Group>
-
-                        {e.gate && (
-                          <Box mt={4}>
-                            <PredicateTruthTree
-                              gate={e.gate}
-                              state={snap.state}
-                              boardCells={snap.boardCells}
-                              initialExpanded={true}
-                            />
-                          </Box>
-                        )}
-                      </Paper>
-                    ))}
-                  </Stack>
-                )}
-              </Paper>
-            );
-          })}
-        </Stack>
-      </ScrollArea>
-    </Card>
-  );
+export const ExecutionTraceLog: React.FC<ExecutionTraceLogProps> = ({ snapshots, currentTickIndex, onJumpToTick }) => {
+  const [page, setPage] = useState(1);
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const count = Math.max(1, Math.ceil(snapshots.length / 10));
+  const currentPage = Math.min(page, count);
+  return <Card
+    withBorder
+    radius="md"
+    p="md"><Stack><Text
+      component="h2"
+      size="md"
+      fw={650}>Preview history</Text>
+      <Text
+        size="sm"
+        c="var(--ink-soft)">Up to 128 snapshots. Board moves include an input tick and an idle tick. Expand a snapshot to inspect gates at the time they ran.</Text>
+      {snapshots.slice((currentPage - 1) * 10, currentPage * 10).map((snap, position) => {
+        const index = (currentPage - 1) * 10 + position;
+        return <div
+          key={snap.tickNumber}
+          className="studio-trace-row">
+          <Group
+            justify="space-between"><Text
+              size="sm"
+              fw={600}>Tick {snap.tickNumber}{index === currentTickIndex ? " · current" : ""}</Text><Group
+                gap="xs"><Button
+                  variant="default"
+                  disabled={index === currentTickIndex}
+                  onClick={() => onJumpToTick(index)}>Go to tick {snap.tickNumber}</Button><Button
+                    variant="subtle"
+                    aria-expanded={expanded === index}
+                    onClick={() => setExpanded(expanded === index ? null : index)}>Details</Button></Group></Group>
+          <Text
+            size="xs"
+            c="var(--ink-soft)">{snap.trace?.intentDescription}</Text>
+          {expanded === index && <Stack
+            gap="sm"
+            mt="sm">{snap.trace?.ruleEvents.map((event, i) => <div
+              key={i}><Text
+                size="sm"
+                fw={600}>{event.ruleName} · {event.mode} · {event.fired ? "fired" : "did not fire"}</Text><Text
+                  size="xs"
+                  c="var(--ink-soft)">{event.gateSummary}</Text>
+              {event.deltas.map((delta, j) => <Text
+                size="xs"
+                ff="monospace"
+                key={j}>{delta.target}{delta.key !== undefined ? "[" + delta.key + "]" : ""}: {String(delta.oldValue)} → {String(delta.newValue)}</Text>)}
+              {event.gate && <PredicateTruthTree
+                gate={event.gate}
+                state={event.gateState ?? snap.state}
+                boardCells={event.gateBoardCells ?? snap.boardCells}
+                initialExpanded={false} />}
+            </div>)}</Stack>}
+        </div>;
+      })}
+      {count > 1 && <Pagination
+        value={currentPage}
+        onChange={setPage}
+        total={count} />}
+    </Stack></Card>;
 };
-
 export default ExecutionTraceLog;

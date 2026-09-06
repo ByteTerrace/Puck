@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import { usePreviewBatch } from "../../hooks/usePreviewBatch";
+import React from "react";
 import {
   Card,
   Group,
@@ -25,7 +26,6 @@ import {
   TopologyDefinition,
 } from "../../engine/evaluator";
 import {
-  runWorldScenario,
   ScenarioExecutionResult,
   STANDARD_WORLD_SCENARIOS,
   WorldTestScenario,
@@ -33,6 +33,7 @@ import {
 
 export interface ScenarioTestStudioProps {
   worldId: string;
+  initial?: {state:Record<string,any>;boardCells:Record<string,Record<number,number>>};
   rules: WorldRule[];
   topologies: Record<string, TopologyDefinition>;
   customScenarios?: WorldTestScenario[];
@@ -41,6 +42,7 @@ export interface ScenarioTestStudioProps {
 
 export const ScenarioTestStudio: React.FC<ScenarioTestStudioProps> = ({
   worldId,
+  initial,
   rules,
   topologies,
   customScenarios = [],
@@ -49,26 +51,10 @@ export const ScenarioTestStudio: React.FC<ScenarioTestStudioProps> = ({
   const standard = STANDARD_WORLD_SCENARIOS[worldId] ?? [];
   const scenarios = [...standard, ...customScenarios];
 
-  const [results, setResults] = useState<Record<string, ScenarioExecutionResult>>({});
-  const [isRunning, setIsRunning] = useState(false);
-
-  const handleRunAll = () => {
-    setIsRunning(true);
-    const newResults: Record<string, ScenarioExecutionResult> = {};
-
-    setTimeout(() => {
-      for (const sc of scenarios) {
-        newResults[sc.id] = runWorldScenario(sc, rules, topologies);
-      }
-      setResults(newResults);
-      setIsRunning(false);
-    }, 50);
-  };
-
-  const handleRunSingle = (scenario: WorldTestScenario) => {
-    const res = runWorldScenario(scenario, rules, topologies);
-    setResults((prev) => ({ ...prev, [scenario.id]: res }));
-  };
+  const {run,stop,running:isRunning,error,result}=usePreviewBatch<Record<string,ScenarioExecutionResult>>();
+  const results=result??{};
+  const handleRunAll=()=>run({kind:"scenarios",scenarios,rules,topologies,initial});
+  const handleRunSingle=(scenario:WorldTestScenario)=>run({kind:"scenarios",scenarios:[scenario],rules,topologies,initial});
 
   const total = scenarios.length;
   const executedCount = Object.keys(results).length;
@@ -78,12 +64,14 @@ export const ScenarioTestStudio: React.FC<ScenarioTestStudioProps> = ({
 
   return (
     <Card withBorder radius="md" p="sm" style={{ background: "var(--paper-2)", borderColor: "var(--rule)" }}>
+      {error&&<Text role="alert" c="red">{error}</Text>}
+      {isRunning&&<Button onClick={stop} variant="default">Cancel checks</Button>}
       {/* Header */}
       <Group justify="space-between" mb="xs">
         <Group gap="xs">
           <RiFlaskLine size={18} color="var(--accent)" />
           <Text fw={600} size="sm" style={{ fontFamily: '"Lora", Georgia, serif', color: "var(--ink)" }}>
-            World Verification Suite
+            Offline scenario checks
           </Text>
           <Badge variant="light" color="coral" size="xs" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
             {total} SPECIFICATIONS
@@ -147,7 +135,7 @@ export const ScenarioTestStudio: React.FC<ScenarioTestStudioProps> = ({
                 p="xs"
                 radius="sm"
                 style={{
-                  background: "var(--code-bg)",
+                  background: "var(--paper-2)",
                   border: hasRun
                     ? res.passed
                       ? "1px solid rgba(79, 208, 180, 0.4)"
@@ -190,6 +178,7 @@ export const ScenarioTestStudio: React.FC<ScenarioTestStudioProps> = ({
 
                     <Tooltip label="Run single scenario">
                       <ActionIcon
+                        aria-label={"Run scenario " + sc.name}
                         size="xs"
                         variant="subtle"
                         color="coral"

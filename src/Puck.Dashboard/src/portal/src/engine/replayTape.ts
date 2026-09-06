@@ -1,6 +1,7 @@
 import { StepTrace } from "./tickRunner";
 
 export interface TickSnapshot {
+  edgeLatches?: Record<string, boolean>;
   tickNumber: number;
   state: Record<string, any>;
   boardCells: Record<string, Record<number, number>>;

@@ -149,6 +149,7 @@ export const WorldHudDesignerModal: React.FC<WorldHudDesignerModalProps> = ({
 
   return (
     <Modal
+      closeButtonProps={{"aria-label":"Close designer"}}
       opened={opened}
       onClose={onClose}
       title={

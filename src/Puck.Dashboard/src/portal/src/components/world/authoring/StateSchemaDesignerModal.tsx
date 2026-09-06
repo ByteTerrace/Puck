@@ -88,6 +88,7 @@ export const StateSchemaDesignerModal: React.FC<StateSchemaDesignerModalProps> =
   const handleSelectForEdit = (idx: number) => {
     const item = states[idx];
     if (!item) return;
+    if (item.value !== undefined && typeof item.value !== "number") { setFormError("Edit this value in JSON to preserve its authored type."); return; }
     setSelectedIdx(idx);
     setVarName(item.name);
     setVarKind(item.kind ?? "int");
@@ -126,16 +127,22 @@ export const StateSchemaDesignerModal: React.FC<StateSchemaDesignerModalProps> =
     }
 
     const newDef: StateRowDefinition = {
+      ...(selectedIdx !== null ? states[selectedIdx] : {}),
       name: trimmedName,
       kind: varKind,
     };
 
     if (varCategory === "domain") {
+      delete newDef.value;
       newDef.domain = {
+        ...(selectedIdx !== null ? states[selectedIdx].domain : {}),
         $type: "cellsOf",
         topology: varTopology || (availableTopologies[0]?.name ?? "board"),
       };
     } else {
+      delete newDef.domain;
+      delete (newDef as any).cells;
+      delete newDef.min; delete newDef.max; delete newDef.nonNegative;
       newDef.value = varValue;
       if (varMin !== undefined) newDef.min = varMin;
       if (varMax !== undefined) newDef.max = varMax;
@@ -171,6 +178,7 @@ export const StateSchemaDesignerModal: React.FC<StateSchemaDesignerModalProps> =
 
   return (
     <Modal
+      closeButtonProps={{"aria-label":"Close designer"}}
       opened={opened}
       onClose={onClose}
       title={

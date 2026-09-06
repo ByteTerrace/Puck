@@ -158,6 +158,7 @@ export const RuleAuthoringModal: React.FC<RuleAuthoringModalProps> = ({
 
   return (
     <Modal
+      closeButtonProps={{"aria-label":"Close designer"}}
       opened={opened}
       onClose={onClose}
       title={

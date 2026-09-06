@@ -7,7 +7,7 @@
     ],
     "scripts": {
         "build": "npm --prefix host run build && npm --prefix portal run build",
-        "restore": "npm --prefix host ci && npm --prefix portal ci",
+        "restore": "npm ci",
         "stage": "node ../scripts/stageDeploy.mjs"
     },
     "devDependencies": {

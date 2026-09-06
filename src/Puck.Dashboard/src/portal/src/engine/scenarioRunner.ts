@@ -5,7 +5,7 @@ import {
   boardShift,
   getTopologyCoordinates,
 } from "./evaluator";
-import { executeSimulationTick, StepTrace } from "./tickRunner";
+import { executePreviewAction, StepTrace } from "./tickRunner";
 
 export interface WorldTestScenario {
   id: string;
@@ -60,7 +60,8 @@ export interface MonteCarloSummary {
 export function runWorldScenario(
   scenario: WorldTestScenario,
   rules: WorldRule[],
-  topologies: Record<string, TopologyDefinition>
+  topologies: Record<string, TopologyDefinition>,
+  authoredState?: {state:Record<string,any>;boardCells:Record<string,Record<number,number>>}
 ): ScenarioExecutionResult {
   const startTime = performance.now();
   const defaultInitialState: Record<string, any> = {
@@ -80,11 +81,11 @@ export function runWorldScenario(
   };
 
   let currentState: Record<string, any> = {
-    ...defaultInitialState,
+    ...(authoredState?.state ?? defaultInitialState),
     ...(scenario.initialState ?? {}),
   };
   let currentBoardCells: Record<string, Record<number, number>> = {
-    tttBoard: {},
+    ...(authoredState?.boardCells ?? { tttBoard: {} }),
   };
 
   if (scenario.initialBoardCells) {
@@ -93,10 +94,12 @@ export function runWorldScenario(
     }
   }
 
+  if (scenario.moves.length > 128) throw new Error("Scenarios are limited to 128 moves.");
   const traces: StepTrace[] = [];
   const errors: string[] = [];
   const rulesFiredSet = new Set<string>();
 
+  let latches: Record<string,boolean> = {};
   let tick = 0;
   for (const move of scenario.moves) {
     tick++;
@@ -112,15 +115,16 @@ export function runWorldScenario(
       mutations["hexMoveRequest"] = moveReqSeq;
     }
 
-    const res = executeSimulationTick(
+    const res = executePreviewAction(
       tick,
       move.description ?? `Scenario Move ${tick}`,
       mutations,
       currentState,
       currentBoardCells,
       rules,
-      topologies
+      topologies, latches
     );
+    tick = res.trace.tick; latches = res.nextEdgeLatches;
 
     currentState = res.nextState;
     currentBoardCells = res.nextBoardCells;
@@ -194,8 +198,11 @@ export function runMonteCarloRollout(
     policy?: "random" | "greedy";
   }
 ): MonteCarloSummary {
+  if (!Number.isInteger(simulationsCount) || simulationsCount < 1 || simulationsCount > 200) throw new Error("Choose 1 to 200 games.");
+  if (!Object.hasOwn(initialState,"tttMoveRequest") && !Object.hasOwn(initialState,"hexMoveRequest")) throw new Error("This document has no supported board input adapter.");
   const startTime = performance.now();
-  const maxTicks = options?.maxTicks ?? 64;
+  const maxTicks = options?.maxTicks ?? 128;
+  if (!Number.isInteger(maxTicks) || maxTicks < 1 || maxTicks > 128) throw new Error("Rollouts are limited to 128 ticks per game.");
   const policy = options?.policy ?? "random";
 
   let p1Wins = 0;
@@ -217,6 +224,7 @@ export function runMonteCarloRollout(
   const primaryTopo = Object.values(topologies)[0];
   const allCoords = primaryTopo ? getTopologyCoordinates(primaryTopo) : [];
   const boardSize = allCoords.length > 0 ? allCoords.length : 64;
+  if (boardSize > 64) throw new Error("Demo rollouts support boards up to 64 cells.");
 
   for (let sim = 0; sim < simulationsCount; sim++) {
     let state = { ...initialState };
@@ -226,6 +234,7 @@ export function runMonteCarloRollout(
     }
 
     const rulesFiredThisGame = new Set<string>();
+    let latches: Record<string,boolean> = {};
     let tick = 0;
     let gameFinished = false;
 
@@ -279,7 +288,7 @@ export function runMonteCarloRollout(
       }
 
       const moveReqSeq = Number(state["tttMoveRequest"] ?? 0) + 1;
-      const res = executeSimulationTick(
+      const res = executePreviewAction(
         tick,
         `Rollout #${sim + 1} Tick #${tick}`,
         {
@@ -291,8 +300,9 @@ export function runMonteCarloRollout(
         state,
         boardCells,
         rules,
-        topologies
+        topologies, latches
       );
+      tick = res.trace.tick; latches = res.nextEdgeLatches;
 
       state = res.nextState;
       boardCells = res.nextBoardCells;

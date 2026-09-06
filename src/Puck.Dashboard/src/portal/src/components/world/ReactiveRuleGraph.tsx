@@ -22,6 +22,7 @@ import {
   ActionPredicate,
   ActionEffect,
   WorldRule,
+  evaluatePuckPredicate,
 } from "../../engine/evaluator";
 
 export type { ActionPredicate, ActionEffect, WorldRule };
@@ -29,61 +30,26 @@ export type { ActionPredicate, ActionEffect, WorldRule };
 export interface ReactiveRuleGraphProps {
   rules: WorldRule[];
   currentState?: Record<string, any>;
+  boardCells?: Record<string,Record<number,number>>;
   onSelectRule?: (ruleName: string) => void;
 }
 
 export const ReactiveRuleGraph: React.FC<ReactiveRuleGraphProps> = ({
   rules,
   currentState = {},
+  boardCells = {},
   onSelectRule,
 }) => {
-  // Evaluates a predicate against the current state frame
   const evaluatePredicate = (pred: ActionPredicate): boolean => {
-    if (!pred) return true;
-
-    if (pred.$type === "all") {
-      return (pred.predicates ?? []).every((p) => evaluatePredicate(p));
-    }
-    if (pred.$type === "any") {
-      return (pred.predicates ?? []).some((p) => evaluatePredicate(p));
-    }
-    if (pred.$type === "not") {
-      return pred.predicate ? !evaluatePredicate(pred.predicate) : true;
-    }
-
-    if (pred.$type === "compareState") {
-      const leftVal = currentState[pred.state ?? ""] ?? 0;
-      const rightVal =
-        pred.comparandState !== undefined
-          ? currentState[pred.comparandState] ?? 0
-          : pred.value ?? 0;
-
-      switch (pred.comparison) {
-        case "Equal":
-          return leftVal == rightVal;
-        case "NotEqual":
-          return leftVal != rightVal;
-        case "Greater":
-          return leftVal > rightVal;
-        case "GreaterOrEqual":
-          return leftVal >= rightVal;
-        case "Less":
-          return leftVal < rightVal;
-        case "LessOrEqual":
-          return leftVal <= rightVal;
-        default:
-          return true;
-      }
-    }
-
-    return true;
+    try { return evaluatePuckPredicate(pred,currentState,boardCells).passed; } catch { return false; }
   };
 
   // Render a recursive gate predicate tree
   const renderPredicateTree = (pred: ActionPredicate, depth = 0): React.ReactNode => {
     if (!pred) return <Text size="xs" c="var(--ink-faint)">Always (No Gate)</Text>;
 
-    const isPass = evaluatePredicate(pred);
+    let isPass: boolean;
+    try { isPass = evaluatePuckPredicate(pred,currentState,boardCells).passed; } catch (error) { return <Text size="xs">Preview unavailable: {(error as Error).message}</Text>; }
 
     if (pred.$type === "all" || pred.$type === "any") {
       const isAll = pred.$type === "all";

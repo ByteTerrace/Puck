@@ -1,3 +1,5 @@
+import { previewExpression } from "./previewExpression";
+
 export interface TopologyCoordinate {
   x: number;
   y: number;
@@ -56,33 +58,55 @@ export interface WorldRule {
   effects?: ActionEffect[];
 }
 
-// Generate (x, y, z) coordinate array for a topology if not explicitly provided
+// Preview geometry is bounded and cached by immutable topology identity.
+export const MAX_PREVIEW_CELLS = 4096;
+const coordinateCache = new WeakMap<TopologyDefinition, TopologyCoordinate[]>();
+const indexCache = new WeakMap<TopologyCoordinate[], Map<string, number>>();
 export function getTopologyCoordinates(topo: TopologyDefinition): TopologyCoordinate[] {
-  if (topo.coordinates && topo.coordinates.length > 0) {
-    return topo.coordinates;
-  }
-
-  const width = topo.dimensions?.x ?? topo.width ?? 4;
-  const depth = topo.dimensions?.y ?? topo.depth ?? 4;
-  const layers = topo.dimensions?.z ?? topo.layers ?? (topo.$type === "box" ? 4 : 1);
-
-  const coords: TopologyCoordinate[] = [];
-  for (let z = 0; z < layers; z++) {
-    for (let y = 0; y < depth; y++) {
-      for (let x = 0; x < width; x++) {
-        coords.push({ x, y, z });
-      }
+  if (!["grid", "ring", "hex", "box", "lattice"].includes(topo.$type)) throw new Error("Unsupported preview topology.");
+  if (topo.$type === "lattice" && !topo.coordinates?.length) return [];
+  const cached = coordinateCache.get(topo);
+  if (cached) return cached;
+  const size = (value: number | undefined, fallback: number) => {
+    const n = value ?? fallback;
+    if (!Number.isInteger(n) || n < 1 || n > MAX_PREVIEW_CELLS) throw new Error("Invalid preview topology size.");
+    return n;
+  };
+  let coords: TopologyCoordinate[] = [];
+  if (topo.coordinates?.length) {
+    if (topo.coordinates.length > MAX_PREVIEW_CELLS) throw new Error("Preview supports up to 4,096 cells.");
+    coords = topo.coordinates;
+  } else if (topo.$type === "hex") {
+    const radius = size(topo.radius, 3);
+    if (1 + 3 * radius * (radius + 1) > MAX_PREVIEW_CELLS) throw new Error("Preview supports up to 4,096 cells.");
+    coords.push({x: 0, y: 0, z: 0});
+    // The native HexagonalIndex.Decode order and Eisenstein basis.
+    for (let r = 1; r <= radius; r++) for (let i = 0; i < 6 * r; i++) {
+      const offset = (i - (r - 1) + 6 * r) % (6 * r);
+      const side = Math.floor(offset / r), k = offset % r;
+      const [x, y] = [[r,k],[r-k,r],[-k,r-k],[-r,-k],[k-r,-r],[k,k-r]][side];
+      coords.push({x:x || 0,y:y || 0,z:0});
     }
+  } else {
+    const width = size(topo.width ?? topo.dimensions?.x, 4);
+    const depth = topo.$type === "ring" ? 1 : size(topo.depth ?? topo.dimensions?.y, 4);
+    const layers = topo.$type === "box" ? size(topo.layers ?? topo.dimensions?.z, 4) : 1;
+    if (width * depth * layers > MAX_PREVIEW_CELLS) throw new Error("Preview supports up to 4,096 cells.");
+    for (let z = 0; z < layers; z++) for (let y = 0; y < depth; y++) for (let x = 0; x < width; x++) coords.push({x,y,z});
   }
+  coordinateCache.set(topo, coords);
   return coords;
 }
 
 // Map from coordinate key string "x,y,z" to cell index
 export function getCoordinateIndexMap(coords: TopologyCoordinate[]): Map<string, number> {
+  const cached = indexCache.get(coords);
+  if (cached) return cached;
   const map = new Map<string, number>();
   coords.forEach((c, idx) => {
     map.set(`${c.x},${c.y},${c.z}`, idx);
   });
+  indexCache.set(coords, map);
   return map;
 }
 
@@ -107,9 +131,9 @@ export function boardShift(
     const bit = 1n << BigInt(i);
     if ((mask & bit) !== 0n) {
       const srcCoord = coords[i];
-      const targetX = srcCoord.x + dir.x;
-      const targetY = srcCoord.y + dir.y;
-      const targetZ = srcCoord.z + dir.z;
+      const targetX = topo.$type === "ring" ? ((srcCoord.x + dir.x) % coords.length + coords.length) % coords.length : srcCoord.x + dir.x;
+      const targetY = srcCoord.y + (dir.y ?? 0);
+      const targetZ = srcCoord.z + (dir.z ?? 0);
 
       const targetIdx = indexMap.get(`${targetX},${targetY},${targetZ}`);
       if (targetIdx !== undefined) {
@@ -124,148 +148,42 @@ export function boardShift(
 // Computes a 64-bit bitboard mask where bit i is set if cell boardCells[i] == targetVal
 export function computeBoardMask(
   boardCells: Record<number, number> | number[],
-  targetVal: number
+  targetVal: number,
+  upper = targetVal,
+  cellCount = 64
 ): bigint {
   let mask = 0n;
-  for (let i = 0; i < 64; i++) {
-    const val = (boardCells as any)[i];
-    if (val === targetVal) {
+  for (let i = 0; i < Math.min(cellCount, 64); i++) {
+    const val = (boardCells as any)[i] ?? 0;
+    if (val >= targetVal && val <= upper) {
       mask |= (1n << BigInt(i));
     }
   }
   return mask;
 }
 
-// Parse balanced-parentheses boardShift calls from innermost to outermost
-function resolveBoardShiftCalls(
-  str: string,
-  evalFn: (subExpr: string, topoName: string, dirName: string) => string
-): string {
-  let pos = 0;
-  while (true) {
-    const idx = str.indexOf("boardShift(", pos);
-    if (idx === -1) break;
-
-    let depth = 0;
-    let endIdx = -1;
-    for (let i = idx + "boardShift".length; i < str.length; i++) {
-      if (str[i] === "(") depth++;
-      else if (str[i] === ")") {
-        depth--;
-        if (depth === 0) {
-          endIdx = i;
-          break;
-        }
-      }
+// This offline subset uses integer arithmetic and refuses unsupported syntax.
+export function evaluatePuckExpression(expression: string, state: Record<string, any>, boardCells: Record<string, Record<number, number>>, topologies: Record<string, TopologyDefinition>): number | bigint {
+  return previewExpression(expression, name => {
+    const mask = name.match(/^\$board:mask:([^:]+):(-?\d+):(-?\d+)$/);
+    if (mask) {
+      if (!Object.hasOwn(boardCells,mask[1])) throw new Error("Unknown preview board: " + mask[1]);
+      const shapes=Object.values(topologies);
+      if (shapes.length !== 1) throw new Error("Mask preview currently requires one topology.");
+      const count=getTopologyCoordinates(shapes[0]).length;
+      if(count>64)throw new Error("Bitboard preview is limited to 64 cells.");
+      return computeBoardMask(boardCells[mask[1]],Number(mask[2]),Number(mask[3]),count);
     }
-    if (endIdx === -1) {
-      pos = idx + 1;
-      continue;
-    }
-
-    const inside = str.slice(idx + "boardShift(".length, endIdx);
-    if (inside.includes("boardShift(")) {
-      pos = idx + "boardShift(".length;
-      continue;
-    }
-
-    const lastComma = inside.lastIndexOf(",");
-    const secondLastComma = inside.lastIndexOf(",", lastComma - 1);
-    if (lastComma !== -1 && secondLastComma !== -1) {
-      const subExpr = inside.slice(0, secondLastComma).trim();
-      const topoName = inside.slice(secondLastComma + 1, lastComma).trim();
-      const dirName = inside.slice(lastComma + 1).trim();
-      const val = evalFn(subExpr, topoName, dirName);
-      str = str.slice(0, idx) + val + str.slice(endIdx + 1);
-      pos = 0;
-    } else {
-      pos = idx + 1;
-    }
-  }
-  return str;
-}
-
-// Tokenize and evaluate expression string with BigInt and arithmetic support
-export function evaluatePuckExpression(
-  expression: string,
-  state: Record<string, any>,
-  boardCells: Record<string, Record<number, number>>,
-  topologies: Record<string, TopologyDefinition>
-): any {
-  let trimmed = expression.trim();
-  if (!trimmed) return 0;
-
-  // 1. Literal numbers
-  if (/^-?\d+n?$/.test(trimmed)) {
-    return trimmed.endsWith("n") ? BigInt(trimmed.slice(0, -1)) : Number(trimmed);
-  }
-
-  // 2. Standalone $board:mask:boardState:targetValue:maskBit
-  const boardMaskMatch = trimmed.match(/^\$board:mask:([^:]+):(-?\d+):(-?\d+)$/);
-  if (boardMaskMatch) {
-    const [, boardName, targetValStr] = boardMaskMatch;
-    const targetVal = Number(targetValStr);
-    const cells = boardCells[boardName] ?? {};
-    return computeBoardMask(cells, targetVal);
-  }
-
-  // 3. Simple state read
-  if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)) {
-    const val = state[trimmed];
-    return val !== undefined ? val : 0;
-  }
-
-  // Pre-process function calls: resolve nested boardShift calls from innermost to outermost
-  trimmed = resolveBoardShiftCalls(trimmed, (subExpr, topoName, dirName) => {
-    const subVal = evaluatePuckExpression(subExpr, state, boardCells, topologies);
-    const maskBigInt = typeof subVal === "bigint" ? subVal : BigInt(subVal || 0);
-    const topo = topologies[topoName];
-    const result = boardShift(maskBigInt, topo, dirName);
-    return `${result.toString()}n`;
+    if (!Object.hasOwn(state, name)) throw new Error("Unknown preview register: " + name);
+    const value = state[name];
+    if (!["number", "bigint", "boolean"].includes(typeof value)) throw new Error("Unsupported preview value: " + name);
+    return value;
+  }, (mask, topology, direction) => {
+    const topo = topologies[topology];
+    if (!topo || !topo.directions?.some(d => d.name === direction)) throw new Error("Unknown preview topology or direction.");
+    if (getTopologyCoordinates(topo).length > 64) throw new Error("Bitboard preview is limited to 64 cells.");
+    return boardShift(mask, topo, direction);
   });
-
-  // Replace $board:mask references inside compound expressions
-  trimmed = trimmed.replace(
-    /\$board:mask:([a-zA-Z0-9_]+):(-?\d+):(-?\d+)/g,
-    (_, bName, tVal) => {
-      const mask = computeBoardMask(boardCells[bName] ?? {}, Number(tVal));
-      return `${mask.toString()}n`;
-    }
-  );
-
-  // Normalize comparisons against 0 for BigInt operands: '!= 0' -> '!= 0n'
-  trimmed = trimmed.replace(/!=\s*0\b/g, "!= 0n");
-  trimmed = trimmed.replace(/==\s*0\b/g, "== 0n");
-
-  // Substitute state variables with BigInt/number representation
-  // Sort keys by length descending to prevent substring collisions
-  const varNames = Object.keys(state).sort((a, b) => b.length - a.length);
-  for (const vName of varNames) {
-    const val = state[vName];
-    const regex = new RegExp(`\\b${vName}\\b`, "g");
-    if (typeof val === "bigint") {
-      trimmed = trimmed.replace(regex, `${val.toString()}n`);
-    } else if (typeof val === "number") {
-      trimmed = trimmed.replace(regex, `${val}`);
-    } else if (typeof val === "boolean") {
-      trimmed = trimmed.replace(regex, val ? "true" : "false");
-    }
-  }
-
-  try {
-    const fn = new Function(`
-      try {
-        const res = (${trimmed});
-        if (typeof res === "boolean") return res ? 1 : 0;
-        return res;
-      } catch (e) {
-        return 0;
-      }
-    `);
-    return fn();
-  } catch {
-    return 0;
-  }
 }
 
 // Resolve key patterns like "$cell:tttMoveCell:$value"
@@ -282,6 +200,7 @@ export function resolveEffectKey(
     return state[stateVar] !== undefined ? Number(state[stateVar]) : null;
   }
 
+  if (/^-?\d+$/.test(keyPattern)) return Number(keyPattern);
   return keyPattern;
 }
 
@@ -289,14 +208,16 @@ export function resolveEffectKey(
 export function evaluatePuckPredicate(
   pred: ActionPredicate | null | undefined,
   state: Record<string, any>,
-  boardCells: Record<string, Record<number, number>>
+  boardCells: Record<string, Record<number, number>>,
+  budget = {remaining:4096}, depth = 0,
 ): { passed: boolean; details: string } {
+  if (--budget.remaining < 0 || depth > 32) throw new Error("Preview predicate budget exceeded.");
   if (!pred) return { passed: true, details: "No gate condition" };
 
   if (pred.$type === "all") {
     const children = pred.predicates ?? [];
     for (const child of children) {
-      const res = evaluatePuckPredicate(child, state, boardCells);
+      const res = evaluatePuckPredicate(child, state, boardCells, budget, depth + 1);
       if (!res.passed) {
         return { passed: false, details: `ALL failed on: ${res.details}` };
       }
@@ -307,7 +228,7 @@ export function evaluatePuckPredicate(
   if (pred.$type === "any") {
     const children = pred.predicates ?? [];
     for (const child of children) {
-      const res = evaluatePuckPredicate(child, state, boardCells);
+      const res = evaluatePuckPredicate(child, state, boardCells, budget, depth + 1);
       if (res.passed) {
         return { passed: true, details: `ANY passed on: ${res.details}` };
       }
@@ -316,7 +237,7 @@ export function evaluatePuckPredicate(
   }
 
   if (pred.$type === "not") {
-    const res = evaluatePuckPredicate(pred.predicate, state, boardCells);
+    const res = evaluatePuckPredicate(pred.predicate, state, boardCells, budget, depth + 1);
     return { passed: !res.passed, details: `NOT (${res.details})` };
   }
 
@@ -332,13 +253,14 @@ export function evaluatePuckPredicate(
       }
     }
 
-    if (leftVal === undefined) leftVal = 0;
+    if (leftVal === undefined) throw new Error("Unknown preview register or cell key: " + stateName);
 
     let rightVal =
       pred.comparandState !== undefined
-        ? state[pred.comparandState] ?? 0
+        ? state[pred.comparandState]
         : pred.value ?? 0;
 
+    if (rightVal === undefined) throw new Error("Unknown comparison register.");
     const op = pred.comparison;
     let passed = false;
 
@@ -350,24 +272,24 @@ export function evaluatePuckPredicate(
         passed = leftVal != rightVal;
         break;
       case "Greater":
-        passed = Number(leftVal) > Number(rightVal);
+        passed = BigInt(leftVal) > BigInt(rightVal);
         break;
       case "GreaterOrEqual":
-        passed = Number(leftVal) >= Number(rightVal);
+        passed = BigInt(leftVal) >= BigInt(rightVal);
         break;
       case "Less":
-        passed = Number(leftVal) < Number(rightVal);
+        passed = BigInt(leftVal) < BigInt(rightVal);
         break;
       case "LessOrEqual":
-        passed = Number(leftVal) <= Number(rightVal);
+        passed = BigInt(leftVal) <= BigInt(rightVal);
         break;
       default:
-        passed = true;
+        throw new Error("Unsupported preview comparison: " + op);
     }
 
     const desc = `${stateName}${pred.key ? `[${pred.key}]` : ""} (${leftVal}) ${op} ${pred.comparandState ?? String(pred.value)} (${rightVal})`;
     return { passed, details: desc };
   }
 
-  return { passed: true, details: "True" };
+  throw new Error("Unsupported preview predicate: " + pred.$type);
 }

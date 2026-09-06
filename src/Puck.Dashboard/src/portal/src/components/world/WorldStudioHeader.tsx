@@ -42,12 +42,14 @@ export type StudioModalType = "vault" | "save" | "topology" | "schema" | "rule" 
 
 export interface WorldStudioHeaderProps {
   selectedPresetId: string;
+  draftDirty?: boolean;
   onSelectPreset: (presetId: string, metadata: Partial<WorldMetadata>) => void;
   onOpenModal: (modal: StudioModalType) => void;
 }
 
 export const WorldStudioHeader: React.FC<WorldStudioHeaderProps> = ({
   selectedPresetId,
+  draftDirty = false,
   onSelectPreset,
   onOpenModal,
 }) => {
@@ -58,7 +60,8 @@ export const WorldStudioHeader: React.FC<WorldStudioHeaderProps> = ({
   const tickCount = SimulationContext.useSelector(selectTickCount);
   const topologies = SimulationContext.useSelector(selectTopologies);
   const selectedTopologyName = SimulationContext.useSelector(selectSelectedTopologyName);
-  const isDirty = SimulationContext.useSelector(selectIsDirty);
+  const documentDirty = SimulationContext.useSelector(selectIsDirty);
+  const isDirty = documentDirty || draftDirty;
   const canUndo = SimulationContext.useSelector(selectCanUndo);
   const canRedo = SimulationContext.useSelector(selectCanRedo);
 
@@ -66,8 +69,6 @@ export const WorldStudioHeader: React.FC<WorldStudioHeaderProps> = ({
     if (!presetId) return;
     const item = AVAILABLE_PRESETS.find((p) => p.id === presetId);
     if (item) {
-      const json = JSON.stringify(item.world, null, 2);
-      simActor.send({ type: "LOAD_WORLD", worldJsonText: json });
       onSelectPreset(item.id, {
         name: item.name,
         author: "ByteTerrace Catalog",
@@ -90,14 +91,16 @@ export const WorldStudioHeader: React.FC<WorldStudioHeaderProps> = ({
         <Group gap="sm">
           <RiGamepadLine size={26} color="var(--accent)" />
           <div>
-            <div className="kicker">Puck World Simulation IDE</div>
+            <div className="kicker">Puck authoring studio</div>
             <Group gap={8} align="baseline">
               <Text
+                component="h1"
+                m={0}
                 fw={600}
                 size="md"
                 style={{ fontFamily: '"Lora", Georgia, serif', color: "var(--ink)" }}
               >
-                Formal State Simulation, CAD & Rule Studio
+                Make a world. Explore its rules.
               </Text>
             </Group>
           </div>
@@ -133,7 +136,7 @@ export const WorldStudioHeader: React.FC<WorldStudioHeaderProps> = ({
             />
           )}
 
-          <Tooltip label="Open Cloud World Vault, Revisions & Community Gallery">
+          <Tooltip label="Open local documents and examples">
             <Button
               size="xs"
               variant="light"
@@ -141,15 +144,15 @@ export const WorldStudioHeader: React.FC<WorldStudioHeaderProps> = ({
               leftSection={<RiFolderShield2Line size={15} />}
               onClick={() => onOpenModal("vault")}
             >
-              Cloud Vault
+              Local library
             </Button>
           </Tooltip>
 
           <Tooltip
             label={
               isDirty
-                ? "Save modifications to cloud storage"
-                : "Save snapshot of current world"
+                ? "Save applied document in this browser"
+                : "Save applied document in this browser"
             }
           >
             <Button
@@ -159,7 +162,7 @@ export const WorldStudioHeader: React.FC<WorldStudioHeaderProps> = ({
               leftSection={<RiUploadCloud2Line size={15} />}
               onClick={() => onOpenModal("save")}
             >
-              {isDirty ? "Save to Cloud *" : "Save World"}
+              {isDirty ? "Save locally *" : "Save locally"}
             </Button>
           </Tooltip>
 
@@ -168,12 +171,12 @@ export const WorldStudioHeader: React.FC<WorldStudioHeaderProps> = ({
             <Menu.Target>
               <Button
                 size="xs"
-                variant="gradient"
+                variant="light"
                 gradient={{ from: "pink", to: "violet" }}
                 leftSection={<RiToolsLine size={15} />}
                 rightSection={<RiArrowDownSLine size={14} />}
               >
-                Authoring CAD
+                Design
               </Button>
             </Menu.Target>
             <Menu.Dropdown>
@@ -222,7 +225,7 @@ export const WorldStudioHeader: React.FC<WorldStudioHeaderProps> = ({
               leftSection={<RiCloudLine size={12} />}
               style={{ height: 30, display: "flex", alignItems: "center" }}
             >
-              Vault Synced
+              No unsaved changes
             </Badge>
           )}
         </Group>

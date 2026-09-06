@@ -1,3 +1,4 @@
+import { usePreviewBatch } from "../../hooks/usePreviewBatch";
 import React, { useState } from "react";
 import {
   Card,
@@ -24,7 +25,6 @@ import {
 } from "@remixicon/react";
 import { WorldRule, TopologyDefinition } from "../../engine/evaluator";
 import {
-  runMonteCarloRollout,
   MonteCarloSummary,
 } from "../../engine/scenarioRunner";
 
@@ -43,24 +43,8 @@ export const MonteCarloStudio: React.FC<MonteCarloStudioProps> = ({
 }) => {
   const [gameCount, setGameCount] = useState<number>(50);
   const [policy, setPolicy] = useState<"random" | "greedy">("random");
-  const [isRunning, setIsRunning] = useState<boolean>(false);
-  const [summary, setSummary] = useState<MonteCarloSummary | null>(null);
-
-  const handleRunRollout = () => {
-    setIsRunning(true);
-    setTimeout(() => {
-      const res = runMonteCarloRollout(
-        gameCount,
-        rules,
-        topologies,
-        initialState,
-        initialBoardCells,
-        { policy }
-      );
-      setSummary(res);
-      setIsRunning(false);
-    }, 40);
-  };
+  const {run,stop,running:isRunning,error,result:summary}=usePreviewBatch<MonteCarloSummary>();
+  const handleRunRollout=()=>run({kind:"rollout",args:[gameCount,rules,topologies,initialState,initialBoardCells,{policy}]});
 
   const p1Pct = summary && summary.simulationsCount > 0 ? Math.round((summary.player1Wins / summary.simulationsCount) * 100) : 0;
   const p2Pct = summary && summary.simulationsCount > 0 ? Math.round((summary.player2Wins / summary.simulationsCount) * 100) : 0;
@@ -91,6 +75,9 @@ export const MonteCarloStudio: React.FC<MonteCarloStudioProps> = ({
         </Button>
       </Group>
 
+      {isRunning && <Button variant="default" onClick={stop}>Cancel batch</Button>}
+      {error && <Alert color="red" role="alert">{error}</Alert>}
+      <Text size="sm" c="var(--ink-soft)" mb="sm">Random demo rollouts in a background worker. Results are observations of the offline subset, not native verification.</Text>
       {/* Control Configuration Bar */}
       <Paper p="xs" mb="xs" radius="sm" style={{ background: "var(--paper-3)", border: "1px solid var(--rule)" }}>
         <Group justify="space-between" align="center">
@@ -100,6 +87,7 @@ export const MonteCarloStudio: React.FC<MonteCarloStudioProps> = ({
                 Batch Size: {gameCount} Games
               </Text>
               <Slider
+                aria-label="Number of games"
                 size="xs"
                 color="coral"
                 value={gameCount}
@@ -121,6 +109,7 @@ export const MonteCarloStudio: React.FC<MonteCarloStudioProps> = ({
                 Agent Policy:
               </Text>
               <SegmentedControl
+                aria-label="Agent policy"
                 size="xs"
                 value={policy}
                 onChange={(val: any) => setPolicy(val)}
@@ -150,11 +139,11 @@ export const MonteCarloStudio: React.FC<MonteCarloStudioProps> = ({
           {summary.deadlocksDetected > 0 && (
             <Alert
               icon={<RiAlertLine size={16} />}
-              title="Livelock / Deadlock Detected!"
+              title="Games without a terminal result"
               color="red"
               variant="light"
             >
-              {summary.deadlocksDetected} of {summary.simulationsCount} games reached max tick limits without terminating or updating game state. Check for missing termination rules or circular guards.
+              {summary.deadlocksDetected} of {summary.simulationsCount} games ended without a declared winner or draw within the preview budget. This does not prove a deadlock.
             </Alert>
           )}
 

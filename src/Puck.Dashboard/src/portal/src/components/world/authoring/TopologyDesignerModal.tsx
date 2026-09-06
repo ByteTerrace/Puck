@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Modal,
   TextInput,
@@ -52,6 +52,8 @@ export const TopologyDesignerModal: React.FC<TopologyDesignerModalProps> = ({
     { name: "L8", x: 1, y: 0, z: 0, opposite: "L8Back" },
   ]);
 
+  useEffect(() => { if (opened) setName("topology" + (existingTopologies.length + 1)); },[opened,existingTopologies.length]);
+
   const handleAddDirection = () => {
     const nextIdx = directions.length;
     setDirections((prev) => [
@@ -76,7 +78,7 @@ export const TopologyDesignerModal: React.FC<TopologyDesignerModalProps> = ({
       $type: type,
       name: cleanName,
       cellSize,
-      directions,
+      directions: directions.map(({name,x,y,z}) => ({name,x,y,z})),
     };
 
     if (type === "box") {
@@ -84,7 +86,6 @@ export const TopologyDesignerModal: React.FC<TopologyDesignerModalProps> = ({
       topo.depth = depth;
       topo.layers = layers;
       topo.layerHeight = layerHeight;
-      topo.dimensions = { x: width, y: depth, z: layers };
     } else if (type === "grid") {
       topo.width = width;
       topo.depth = depth;
@@ -100,6 +101,7 @@ export const TopologyDesignerModal: React.FC<TopologyDesignerModalProps> = ({
 
   return (
     <Modal
+      closeButtonProps={{"aria-label":"Close designer"}}
       opened={opened}
       onClose={onClose}
       title={

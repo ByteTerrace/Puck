@@ -42,7 +42,7 @@ import "@mantine/core/styles.css";
 import "./theme.css";
 
 const puckTheme = createTheme({
-  fontFamily: '"Lora", Georgia, "Iowan Old Style", "Palatino Linotype", serif',
+  fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
   fontFamilyMonospace: '"JetBrains Mono", ui-monospace, monospace',
   headings: {
     fontFamily: '"Lora", Georgia, "Iowan Old Style", "Palatino Linotype", serif',
@@ -153,12 +153,22 @@ function App({ context }: { context?: HostContextValue }) {
     () => createGraphClient(tokenCredential),
     [tokenCredential]
   );
-  const [opened, { toggle }] = useDisclosure();
+  const [opened, { toggle, close }] = useDisclosure();
   const [activeSection, setActiveSection] = useState<Section>(sectionFromLocation);
   const userObjectId = context?.activeAccount?.localAccountId;
 
   useEffect(() => {
-    const syncToLocation = () => setActiveSection(sectionFromLocation());
+    const syncToLocation = () => {
+      const next = sectionFromLocation();
+      if (next === activeSection) return;
+      const destination = location.pathname + location.search + location.hash;
+      const continueNavigation = () => { history.replaceState(null,"",destination); setActiveSection(next); close(); };
+      if (!window.dispatchEvent(new CustomEvent("puck-before-navigate",{cancelable:true,detail:{continueNavigation}}))) {
+        history.pushState(null,"",activeSection === "audit" ? "/audit" : activeSection === "data" ? "/data" : "/");
+        return;
+      }
+      continueNavigation();
+    };
 
     window.addEventListener("byteterrace-share", syncToLocation);
     window.addEventListener("popstate", syncToLocation);
@@ -167,15 +177,16 @@ function App({ context }: { context?: HostContextValue }) {
       window.removeEventListener("byteterrace-share", syncToLocation);
       window.removeEventListener("popstate", syncToLocation);
     };
-  }, []);
+  }, [activeSection,close]);
 
   const navigateTo = (section: Section) => {
-    history.pushState(
-      null,
-      "",
-      "audit" === section ? "/audit" : "data" === section ? "/data" : "/",
-    );
-    setActiveSection(section);
+    const continueNavigation = () => {
+      close();
+      history.pushState(null,"",section === "audit" ? "/audit" : section === "data" ? "/data" : "/");
+      setActiveSection(section);
+    };
+    if (section !== activeSection && !window.dispatchEvent(new CustomEvent("puck-before-navigate", {cancelable:true,detail:{continueNavigation}}))) return;
+    continueNavigation();
   };
 
   return (
@@ -185,6 +196,7 @@ function App({ context }: { context?: HostContextValue }) {
         colorSchemeManager={colorSchemeManager}
         defaultColorScheme={"auto"}
       >
+        <a href="#main-content" className="skip-link">Skip to main content</a>
         <AppShell //
           header={{ height: 60 }}
           navbar={{
@@ -270,7 +282,7 @@ function App({ context }: { context?: HostContextValue }) {
               />
             </Box>
           </AppShell.Navbar>
-          <AppShell.Main>
+          <AppShell.Main id="main-content" tabIndex={-1}>
             {"data" === activeSection ? (
               context?.isSignedIn && userObjectId ? (
                 <Suspense fallback="loading…">

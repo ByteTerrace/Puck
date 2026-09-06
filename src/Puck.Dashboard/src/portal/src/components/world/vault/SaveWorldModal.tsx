@@ -1,10 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Modal,
   TextInput,
   Textarea,
   Select,
-  SegmentedControl,
   Button,
   Group,
   Stack,
@@ -14,8 +13,6 @@ import {
 import {
   RiCloudLine,
   RiCheckLine,
-  RiLockLine,
-  RiGlobalLine,
 } from "@remixicon/react";
 import { WorldMetadata } from "../../../clients/worldStorageClient";
 
@@ -39,7 +36,7 @@ export const SaveWorldModal: React.FC<SaveWorldModalProps> = ({
   const [author, setAuthor] = useState("You");
   const [description, setDescription] = useState("Authored in Puck World Studio");
   const [category, setCategory] = useState<any>("Strategy");
-  const [visibility, setVisibility] = useState<"private" | "public">("private");
+  useEffect(() => { if (opened) { setWorldId(currentId); setName(defaultName); setError(null); } }, [opened,currentId,defaultName]);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,7 +60,7 @@ export const SaveWorldModal: React.FC<SaveWorldModalProps> = ({
         author: author.trim() || "You",
         description: description.trim(),
         category,
-        visibility,
+        visibility: "private",
       });
       setIsSaving(false);
       onClose();
@@ -75,13 +72,14 @@ export const SaveWorldModal: React.FC<SaveWorldModalProps> = ({
 
   return (
     <Modal
+      closeButtonProps={{"aria-label":"Close designer"}}
       opened={opened}
-      onClose={onClose}
+      onClose={() => { if (!isSaving) onClose(); }}
       title={
         <Group gap="xs">
           <RiCloudLine size={18} color="var(--accent)" />
           <Text fw={600} style={{ fontFamily: '"Lora", Georgia, serif' }}>
-            Save World to Cloud Storage Substrate
+            Save document locally
           </Text>
         </Group>
       }
@@ -99,11 +97,11 @@ export const SaveWorldModal: React.FC<SaveWorldModalProps> = ({
         )}
 
         <TextInput
-          label="World Identifier (SafeName)"
-          description="Lowercase alphanumeric with hyphens. Used in blob address and Orleans identity."
+          label="Document ID"
+          description="A short name for this document in your local library."
           placeholder="e.g. hypercube-tactics"
           value={worldId}
-          onChange={(e) => setWorldId(e.currentTarget.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+          onChange={(e) => setWorldId(e.currentTarget.value)}
           error={!isSafeNameValid && "Invalid SafeName format"}
           size="xs"
           styles={{ input: { fontFamily: '"JetBrains Mono", monospace' } }}
@@ -143,36 +141,7 @@ export const SaveWorldModal: React.FC<SaveWorldModalProps> = ({
           />
         </Group>
 
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Vault Visibility & Access Control
-          </Text>
-          <SegmentedControl
-            size="xs"
-            value={visibility}
-            onChange={(val: any) => setVisibility(val)}
-            data={[
-              {
-                label: (
-                  <Group gap={4} justify="center">
-                    <RiLockLine size={13} />
-                    <span>Private Vault (Only Me)</span>
-                  </Group>
-                ),
-                value: "private",
-              },
-              {
-                label: (
-                  <Group gap={4} justify="center">
-                    <RiGlobalLine size={13} />
-                    <span>Public Gallery (Community)</span>
-                  </Group>
-                ),
-                value: "public",
-              },
-            ]}
-          />
-        </Stack>
+        <Text size="sm" c="var(--ink-soft)">Saved in this browser. Export JSON for a portable backup.</Text>
 
         <Textarea
           label="Description & Rules Overview"
@@ -195,7 +164,7 @@ export const SaveWorldModal: React.FC<SaveWorldModalProps> = ({
             loading={isSaving}
             disabled={!isSafeNameValid}
           >
-            Save to Cloud Vault
+            Save locally
           </Button>
         </Group>
       </Stack>
