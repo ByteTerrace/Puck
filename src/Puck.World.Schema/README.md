@@ -611,7 +611,7 @@ there is no creationless placement to represent — the validator pins the pair
 ordered list of `{When, PrototypeId}` entries, each `When` the SAME
 `WorldFieldCondition` grammar a `fields.reactions` Transform/Expose condition
 uses, tested at the placement's own coupled lattice cell
-(`Server/WorldFieldLattice.TryBodyCellOf`). The per-tick sweep
+(`Puck.Physics.Fields.FieldLattice.TryBodyCellOf`). The per-tick sweep
 (`Server/WorldServer.Responses.cs`, run right after the field lattice steps)
 tries entries in authored order and swaps to the first whose condition holds,
 through an ordinary `UpsertPlacement`; nothing reverts a swap when no entry
@@ -836,7 +836,7 @@ A `state.world` row's `field` trait may carry a `medium` facet
 (`WorldLatticeMedium`, `WorldFields.cs`): the row's value times its
 `heightScale`, over the lattice origin, is a fluid free surface every active
 body samples at its coupled cell each tick (the same coupling
-`WorldFieldLattice.TryBodyCellOf` resolves for `emit`/`expose`). No document
+`Puck.Physics.Fields.FieldLattice.TryBodyCellOf` resolves for `emit`/`expose`). No document
 authors a global waterline any more — a medium is lattice content like any
 other field, so it can vary by region, rise and fall under a reaction, or be
 absent entirely (a body outside every medium field's footprint floats

@@ -221,7 +221,7 @@ shapes. `WorldPopulation` owns the document seam: `CompileNavigationDomains`
 (`WorldPopulation.Navigation.cs`) compiles each authored `navigation.domains`
 row into a `NavigationDomainInput` once at resolve time, mapping the
 document's own kind/connectivity enums onto the kernel's, and
-`NavigationMediumFieldAdapter` bridges `WorldFieldLattice` to the kernel's
+`NavigationMediumFieldAdapter` bridges `FieldLattice` to the kernel's
 `INavigationMediumField` seam so a medium-kind domain never needs the
 lattice's own representation.
 
@@ -310,35 +310,44 @@ buffer sized for 32 bindings on one source, far above what one page plus the
 host plane authors, and a signal that exceeded it would fall back to a heap
 buffer for that fold alone.
 
-## The field lattice (`WorldFieldLattice.cs`)
+## Field lattice
 
-The live cell values of a `state.lattices` topology, and the reactions that
-evolve them — simulation state beside the population, values `FixedQ4816`,
-every reaction integer arithmetic in a fixed cell order, so one document and
-input reproduce the same fields bit for bit. `WorldServer.StepFields` runs
-after the rules (so a tag a rule wrote this tick is what an `emit`/`expose`
-reaction reads this same step) and before the snapshot (so the step's cell
-writes ride this tick's delivery), on the topology's own `stepEveryTicks`
-cadence. A reaction scalar (literal or `{"row": "name"}`) resolves through
-`ReadScalarSlot`, the SAME `WorldStateReader.TryRead` seam (`Puck.State.StateReader`
-over the live document) every other state
-read uses — a season row a rule writes and a reaction reads can never
-disagree about the value. `expose` writes land through the ordinary
-`UpsertStateCell` mutation (`WorldPrincipal.World`, journaled, undoable), never
-a bypass. Cell values are checkpointed (`WorldFieldCheckpoint`) and delivered
-as `FieldCells` deltas on the snapshot (`FieldsFull` on a primer) — never
-document rows, so nothing journals them directly.
+The reaction integrator — `Puck.Physics.Fields.FieldLattice` — is Physics
+vocabulary; see [its README](../Puck.Physics/README.md#-field-lattice-fields)
+for the reaction kinds, paint fills, medium-coupling geometry, and checkpoint
+shape. `WorldPopulation` owns the document seam:
+`WorldPopulation.CompileFieldLatticeInput` (`WorldPopulation.Resolve.cs`)
+flattens the already-compiled `WorldFieldProgram` (Schema — the typed
+executable reaction IR over `StateHandle`s) into a `FieldLatticeInput`,
+mapping field handles to ordinals and `WorldFieldWriteOp` onto the kernel's
+own enum, so the kernel parses no document; the companion `WorldFieldsSection`
+otherwise remains authoritative for topology, cadence, paint, and
+presentation.
 
-`WorldFieldLattice` receives the complete `WorldFieldsSection` companion plus
-the already-compiled `WorldFieldProgram`: the companion remains authoritative
-for topology, cadence, paint, and presentation, while the typed program is the
-one executable reaction IR. `StepFields` reads and writes reaction state by
-`StateHandle`, not by repeating row-name lookup. A whole-document rebuild
-may replace compatible reactions in place without resetting cells, deltas,
-revision, or checkpoint shape; adding/removing a lattice or changing topology,
-cadence, or a field envelope refuses and asks for a host restart. The
-`world.fields` read-back includes installed node order, dependency edges, and
-cell/body pass counts.
+`WorldServer.StepFields` runs after the rules (so a tag a rule wrote this tick
+is what an `emit`/`expose` reaction reads this same step) and before the
+snapshot (so the step's cell writes ride this tick's delivery), on the
+lattice's own `stepEveryTicks` cadence. `WorldServer` is the
+`IFieldLatticeHost`: `ReadScalar`/`AddScalar` resolve through
+`ReadScalarSlot`/`AddScalarSlot`, the SAME `WorldStateReader.TryRead` seam
+every other state read uses, and `AddScalarSlot`'s write lands through the
+ordinary `UpsertStateCell` mutation (`WorldPrincipal.World`, journaled,
+undoable), never a bypass — a season row a rule writes and a reaction reads
+can never disagree about the value. `WorldServer.Responses.cs`'s
+`WorldPlacementResponse` condition resolves its scalar the same way, by row
+name, since a response trait is authored outside the compiled reaction
+program and carries no precompiled handle.
+
+Cell values are checkpointed (`FieldLattice.Checkpoint`) and delivered as
+`FieldCells` deltas on the snapshot (`FieldsFull` on a primer) — never
+document rows, so nothing journals them directly;
+`WorldAuthorityCheckpointCodec` owns the wire encoding. A whole-document
+rebuild may replace compatible reactions in place without resetting cells,
+deltas, revision, or checkpoint shape (`FieldLattice.CanInstallInput`/
+`InstallInput`); adding/removing a lattice or changing topology, cadence, or
+a field envelope refuses and asks for a host restart. The `world.fields`
+read-back includes installed node order, dependency edges, and cell/body pass
+counts.
 
 ## Simulation authority
 

@@ -1,4 +1,5 @@
 using Puck.Assets.Documents;
+using Puck.Physics.Fields;
 using Puck.Maths;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -655,7 +656,7 @@ public sealed class WorldRuleExtensionLawTests {
 
         fixture.Step();
 
-        var lattice = Assert.IsType<WorldFieldLattice>(@object: fixture.Server.Population.Fields);
+        var lattice = Assert.IsType<FieldLattice>(@object: fixture.Server.Population.Fields);
         var painted = 0;
         for (var cell = 0; cell < lattice.CellCount; cell++) {
             if (lattice.Value(field: 0, cell: cell) != FixedQ4816.Zero) {

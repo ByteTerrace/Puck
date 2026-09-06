@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Physics.Fields;
 using Puck.Physics.Navigation;
 
 namespace Puck.World.Server;
@@ -34,7 +35,7 @@ public sealed partial class WorldPopulation {
 
     // Bridges the server's own field-lattice representation to the kernel's narrow medium-field seam, so the
     // navigation runtime depends on neither the document schema nor the lattice's representation.
-    private sealed class NavigationMediumFieldAdapter(WorldFieldLattice lattice) : INavigationMediumField {
+    private sealed class NavigationMediumFieldAdapter(FieldLattice lattice) : INavigationMediumField {
         public ulong ValueRevision(int field) => lattice.ValueRevision(field: field);
         public bool IsInsideMedium(int field, in FixedVector3 position, FixedQ4816 clearance) =>
             lattice.IsInsideMedium(field: field, position: in position, clearance: clearance);

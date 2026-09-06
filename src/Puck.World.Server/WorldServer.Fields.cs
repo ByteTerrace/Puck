@@ -1,9 +1,10 @@
 using Puck.Maths;
+using Puck.Physics.Fields;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
-public sealed partial class WorldServer : IWorldFieldLatticeHost {
+public sealed partial class WorldServer : IFieldLatticeHost {
     /// <summary>Describes the field lattice for a console read-back.</summary>
     /// <returns>One line, or a none line when the world declares no <c>fields</c> section.</returns>
     public string DescribeFields() => ((m_population.Fields is { } lattice)
@@ -26,27 +27,27 @@ public sealed partial class WorldServer : IWorldFieldLatticeHost {
         );
     }
 
-    FixedVector3? IWorldFieldLatticeHost.BodyPosition(int body) => Body(index: body)?.FixedPosition;
-    long IWorldFieldLatticeHost.ReadTag(StateHandle row, int body, ulong tick) => ReadTagCell(
+    FixedVector3? IFieldLatticeHost.BodyPosition(int body) => Body(index: body)?.FixedPosition;
+    long IFieldLatticeHost.ReadTag(StateHandle row, int body, ulong tick) => ReadTagCell(
         body: body,
-        catalog: m_population.Fields!.Program.StateCatalog,
+        catalog: m_definition.StateCatalog,
         row: row,
         tick: tick
     );
-    void IWorldFieldLatticeHost.WriteTag(StateHandle row, int body, long value, ulong tick) => WriteTagCell(
+    void IFieldLatticeHost.WriteTag(StateHandle row, int body, long value, ulong tick) => WriteTagCell(
         body: body,
-        catalog: m_population.Fields!.Program.StateCatalog,
+        catalog: m_definition.StateCatalog,
         row: row,
         tick: tick,
         value: value
     );
-    FixedQ4816 IWorldFieldLatticeHost.ReadScalar(StateHandle row, ulong tick) => ReadScalarSlot(
-        catalog: m_population.Fields!.Program.StateCatalog,
+    FixedQ4816 IFieldLatticeHost.ReadScalar(StateHandle row, ulong tick) => ReadScalarSlot(
+        catalog: m_definition.StateCatalog,
         row: row,
         tick: tick
     );
-    void IWorldFieldLatticeHost.AddScalar(StateHandle row, FixedQ4816 amount, ulong tick) => AddScalarSlot(
-        catalog: m_population.Fields!.Program.StateCatalog,
+    void IFieldLatticeHost.AddScalar(StateHandle row, FixedQ4816 amount, ulong tick) => AddScalarSlot(
+        catalog: m_definition.StateCatalog,
         row: row,
         amount: amount,
         tick: tick

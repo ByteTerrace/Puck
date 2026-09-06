@@ -3,6 +3,7 @@ using System.Numerics;
 using Xunit;
 
 using Puck.Assets.Documents;
+using Puck.Physics.Fields;
 using Puck.Maths;
 using Puck.Physics.Motion;
 using Puck.Storage;
@@ -161,7 +162,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
     [Fact]
     public void Field_section_round_trips_structurally() {
         var checkpoint = CapturedCheckpoint() with {
-            Fields = new WorldFieldLattice.WorldFieldCheckpoint(Raw: [
+            Fields = new FieldLattice.Checkpoint(Raw: [
                 [FixedQ4816.Zero.Value, FixedQ4816.FromInteger(value: 1).Value],
                 [FixedQ4816.FromInteger(value: -2).Value, FixedQ4816.FromInteger(value: 3).Value],
             ]),

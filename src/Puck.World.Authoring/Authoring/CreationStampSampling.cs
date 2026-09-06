@@ -7,7 +7,7 @@ namespace Puck.World.Authoring;
 /// Noise/Scatter regions (see <c>Puck.World.WorldDistributionRegion.Noise</c>/<c>.Scatter</c>), resolving the
 /// placement-local instance offsets a static placement multiplies into. Routes through
 /// <see cref="Pcg3dLatticeNoise"/> — the same integer PCG3D mix, the same quintic-smoothed value noise, the same
-/// Q48.16 arithmetic throughout as <c>Puck.World.Server.WorldFieldLattice</c>'s Noise/Scatter field fills — so a
+/// Q48.16 arithmetic throughout as <c>Puck.Physics.Fields.FieldLattice</c>'s Noise/Scatter field fills — so a
 /// scattered stand of trees and a patchy field paint agree on what "the same seed" means. Every decision is
 /// integer/fixed-point; no float ever enters the admission or position math (placements feed colliders, which are
 /// simulation state).
@@ -37,7 +37,7 @@ public static class CreationStampSampling {
     public static long NoiseInstanceCeiling(int width, int depth) => (((long)Math.Max(val1: width, val2: 0)) * Math.Max(val1: depth, val2: 0));
     /// <summary>Resolves a Scatter region's one-jittered-point-per-block local offsets (Y = 0), centered on the
     /// placement origin — integer PCG3D hash, Q48.16 throughout, the placement twin of
-    /// <c>WorldFieldLattice.ApplyScatterFill</c>'s per-block jitter (unlike the field fill's disc admission, every
+    /// <c>FieldLattice.ApplyScatterFill</c>'s per-block jitter (unlike the field fill's disc admission, every
     /// block here yields exactly the one jittered POINT itself, never a filled neighborhood).</summary>
     /// <param name="cellSize">The local grid's cubic cell edge, world units.</param>
     /// <param name="width">Cells along the placement's local +X.</param>
@@ -68,7 +68,7 @@ public static class CreationStampSampling {
                     z: hashSeed
                 );
                 // The point sits inside its block, radius-inset so it (and the creation's own footprint) stays clear
-                // of the block edge — the same inset WorldFieldLattice.ApplyScatterFill derives its disc from.
+                // of the block edge — the same inset FieldLattice.ApplyScatterFill derives its disc from.
                 var px = (((bx * effectiveSpacing) + effectiveRadius) + ((inset > 0) ? (int)(h.X % ((uint)inset)) : 0));
                 var pz = (((bz * effectiveSpacing) + effectiveRadius) + ((inset > 0) ? (int)(h.Y % ((uint)inset)) : 0));
 
@@ -84,7 +84,7 @@ public static class CreationStampSampling {
     }
     /// <summary>Resolves a Noise region's admitted-cell local offsets (Y = 0), centered on the placement origin —
     /// fixed-point hash-lattice fBm over the cell index, threshold-admitted, the placement twin of
-    /// <c>WorldFieldLattice.ApplyNoiseFill</c>. One instance per admitted cell, at the cell's center.</summary>
+    /// <c>FieldLattice.ApplyNoiseFill</c>. One instance per admitted cell, at the cell's center.</summary>
     /// <param name="cellSize">The local grid's cubic cell edge, world units.</param>
     /// <param name="width">Cells along the placement's local +X.</param>
     /// <param name="depth">Cells along the placement's local +Z.</param>
@@ -106,7 +106,7 @@ public static class CreationStampSampling {
         for (var z = 0; (z < effectiveDepth); z++) {
             for (var x = 0; (x < effectiveWidth); x++) {
                 // fBm: per-octave halved amplitude, halved noise-cell edge (floored at 1), decorrelated seed stream —
-                // the SAME construction WorldFieldLattice.ApplyNoiseFill sums.
+                // the SAME construction FieldLattice.ApplyNoiseFill sums.
                 var amplitude = FixedQ4816.One;
                 var total = FixedQ4816.Zero;
                 var weight = FixedQ4816.Zero;

@@ -8,6 +8,7 @@ using Puck.Abstractions.Machines;
 using Puck.Assets.Documents;
 using Puck.World.Authoring;
 using Puck.Hosting;
+using Puck.Physics.Fields;
 using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
@@ -681,15 +682,15 @@ internal static class Fixtures {
         }
     }
 
-    /// <summary>The test double for <see cref="IWorldFieldLatticeHost"/>: every hook defaults to the same
-    /// no-op/zero <see cref="WorldFieldLattice.Step"/> itself falls back to when a caller omits a delegate.</summary>
+    /// <summary>The test double for <see cref="IFieldLatticeHost"/>: every hook defaults to the same
+    /// no-op/zero <see cref="FieldLattice.Step"/> itself falls back to when a caller omits a delegate.</summary>
     public sealed class LambdaHost(
         Func<int, FixedVector3?>? bodyPosition = null,
         Func<StateHandle, int, ulong, long>? readTag = null,
         Action<StateHandle, int, long, ulong>? writeTag = null,
         Func<StateHandle, ulong, FixedQ4816>? readScalar = null,
         Action<StateHandle, FixedQ4816, ulong>? addScalar = null
-    ) : IWorldFieldLatticeHost {
+    ) : IFieldLatticeHost {
         public FixedVector3? BodyPosition(int body) => bodyPosition?.Invoke(body);
         public long ReadTag(StateHandle row, int body, ulong tick) => (readTag?.Invoke(row, body, tick) ?? 0L);
         public void WriteTag(StateHandle row, int body, long value, ulong tick) => writeTag?.Invoke(row, body, value, tick);
@@ -697,17 +698,17 @@ internal static class Fixtures {
         public void AddScalar(StateHandle row, FixedQ4816 amount, ulong tick) => addScalar?.Invoke(row, amount, tick);
     }
 
-    /// <summary>Advances one <see cref="WorldFieldLattice"/> a single tick with no bodies, against
+    /// <summary>Advances one <see cref="FieldLattice"/> a single tick with no bodies, against
     /// <paramref name="host"/> or an all-default <see cref="LambdaHost"/>.</summary>
-    public static void StepLattice(WorldFieldLattice lattice, IWorldFieldLatticeHost? host = null) => lattice.Step(
+    public static void StepLattice(FieldLattice lattice, IFieldLatticeHost? host = null) => lattice.Step(
         tick: 1,
         bodyCount: 0,
         host: (host ?? new LambdaHost())
     );
 
     /// <summary>Compiles <paramref name="document"/> (plus any extra world <paramref name="state"/> rows) into a
-    /// <see cref="WorldFieldLattice"/> the way a booted world would.</summary>
-    public static WorldFieldLattice BuildLattice(
+    /// <see cref="FieldLattice"/> the way a booted world would.</summary>
+    public static FieldLattice BuildLattice(
         WorldFieldsSection document,
         ulong worldSeed = 0UL,
         IReadOnlyList<WorldStateRow>? state = null
@@ -720,9 +721,11 @@ internal static class Fixtures {
 
         var catalog = StateCatalog.Compile(section: section);
 
-        return new WorldFieldLattice(
-            document: document,
-            program: WorldFieldProgram.Compile(document: document, state: catalog),
+        return new FieldLattice(
+            input: WorldPopulation.CompileFieldLatticeInput(
+                document: document,
+                program: WorldFieldProgram.Compile(document: document, state: catalog)
+            ),
             worldSeed: worldSeed
         );
     }

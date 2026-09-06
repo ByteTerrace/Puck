@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Physics.Fields;
 using Puck.Physics.Navigation;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -217,7 +218,7 @@ public sealed partial class NavigationLawTests {
         _ = JoinNavigator(fixture, SharedGoal());
         fixture.Step(); fixture.Step();
         var fields = fixture.Server.Population.Fields!;
-        fields.Restore(new WorldFieldLattice.WorldFieldCheckpoint([new long[fields.CellCount]]));
+        fields.Restore(new FieldLattice.Checkpoint([new long[fields.CellCount]]));
         Assert.All(SharedTrees(fixture), tree => Assert.Equal(-1, tree.Goal));
         Assert.True(fixture.Server.TryCaptureCheckpoint(checkpoint: out var captured, hostRow: EmptyHostRow(), reason: out var reason), reason);
         var before = WorldRuntimeStateHash.HashAuthoritative(fixture.Server, 2);
@@ -254,7 +255,7 @@ public sealed partial class NavigationLawTests {
         fixture.Step(); fixture.Step(); fixture.Step();
         var before = SharedTrees(fixture).Sum(tree => tree.Nodes.Count(node => node.Settled));
         Assert.Equal(6, before);
-        Assert.Equal(1, fixture.Server.Population.Fields!.PaintSphere("heat", 0, 0, 0, 0, WorldFieldWriteOp.Set, FixedQ4816.One));
+        Assert.Equal(1, fixture.Server.Population.Fields!.PaintSphere("heat", 0, 0, 0, 0, FieldWriteOp.Set, FixedQ4816.One));
         fixture.Step();
         Assert.Equal(before + 3, SharedTrees(fixture).Sum(tree => tree.Nodes.Count(node => node.Settled)));
     }

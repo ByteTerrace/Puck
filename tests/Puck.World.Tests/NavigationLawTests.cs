@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Assets.Documents;
+using Puck.Physics.Fields;
 using Puck.Maths;
 using Puck.Physics.Motion;
 using Puck.SignedDistance;
@@ -400,8 +401,8 @@ public sealed partial class NavigationLawTests {
         fixture.Step();
         Assert.Equal(expected: 1L, actual: fixture.Server.Population.NavigationFact(index: 0, facet: "hasPath"));
 
-        var fields = Assert.IsType<WorldFieldLattice>(@object: fixture.Server.Population.Fields);
-        fields.Restore(checkpoint: new WorldFieldLattice.WorldFieldCheckpoint(Raw: [new long[fields.CellCount]]));
+        var fields = Assert.IsType<FieldLattice>(@object: fixture.Server.Population.Fields);
+        fields.Restore(checkpoint: new FieldLattice.Checkpoint(Raw: [new long[fields.CellCount]]));
         fixture.Step();
 
         Assert.Equal(expected: 0L, actual: fixture.Server.Population.NavigationFact(index: 0, facet: "hasPath"));
@@ -416,7 +417,7 @@ public sealed partial class NavigationLawTests {
         var dry = new FixedVector3(FixedQ4816.One, FixedQ4816.Zero, FixedQ4816.Zero);
         Assert.True(fields.TryCellOf(dry, out var dryCell));
         raw[dryCell] = 0;
-        fields.Restore(new WorldFieldLattice.WorldFieldCheckpoint([raw]));
+        fields.Restore(new FieldLattice.Checkpoint([raw]));
         // Cross x=.5 before z=.5, briefly entering cell (1,0,0). Both endpoints and the old half-cell
         // samples are wet: endpoint sampling alone incorrectly admitted this segment.
         var from = new FixedVector3(FixedQ4816.FromDouble(.40), FixedQ4816.Zero, FixedQ4816.FromDouble(.38));
@@ -426,7 +427,7 @@ public sealed partial class NavigationLawTests {
         Assert.False(fields.IsSegmentInsideMedium(0, from, to, FixedQ4816.Zero, 32));
         Assert.False(fields.IsSegmentInsideMedium(0, to, from, FixedQ4816.Zero, 32));
         raw[dryCell] = FixedQ4816.One.Value;
-        fields.Restore(new WorldFieldLattice.WorldFieldCheckpoint([raw]));
+        fields.Restore(new FieldLattice.Checkpoint([raw]));
         Assert.True(fields.IsSegmentInsideMedium(0, from, to, FixedQ4816.Zero, 32));
     }
 
@@ -440,7 +441,7 @@ public sealed partial class NavigationLawTests {
         // Origin=-.5, heightScale=8: the lower cell is wet only up to y=.375. Cube bottom=.25,
         // center=.5 and top=.75 are all wet, but its interior between .375 and .5 is dry.
         raw[bottomCell] = FixedQ4816.FromDouble(.875 / 8).Value;
-        fields.Restore(new WorldFieldLattice.WorldFieldCheckpoint([raw]));
+        fields.Restore(new FieldLattice.Checkpoint([raw]));
         Assert.True(fields.IsInsideMedium(0, center with { Y = FixedQ4816.FromDouble(.25) }));
         Assert.True(fields.IsInsideMedium(0, center));
         Assert.True(fields.IsInsideMedium(0, center with { Y = FixedQ4816.FromDouble(.75) }));
@@ -459,12 +460,12 @@ public sealed partial class NavigationLawTests {
         // Only the bottom layer is wet; its projected free surface (heightScale 8) reaches far past the
         // top layer, but that layer's own voxel is dry and must still gate a box that touches it.
         raw[bottomCell] = FixedQ4816.One.Value;
-        fields.Restore(new WorldFieldLattice.WorldFieldCheckpoint([raw]));
+        fields.Restore(new FieldLattice.Checkpoint([raw]));
         var straddling = new FixedVector3(FixedQ4816.Zero, FixedQ4816.FromDouble(.4), FixedQ4816.Zero);
         Assert.False(fields.IsInsideMedium(0, straddling, FixedQ4816.FromDouble(.2)));
         Assert.False(fields.IsSegmentInsideMedium(0, straddling, straddling, FixedQ4816.FromDouble(.2), 32));
         raw[topCell] = FixedQ4816.One.Value;
-        fields.Restore(new WorldFieldLattice.WorldFieldCheckpoint([raw]));
+        fields.Restore(new FieldLattice.Checkpoint([raw]));
         Assert.True(fields.IsInsideMedium(0, straddling, FixedQ4816.FromDouble(.2)));
         Assert.True(fields.IsSegmentInsideMedium(0, straddling, straddling, FixedQ4816.FromDouble(.2), 32));
     }

@@ -257,7 +257,7 @@ of finite grids a host compiles once from its own document boundary into
 Server reference; a host's live-medium field implements the narrow
 `INavigationMediumField` seam instead of the kernel depending on that
 representation. `Puck.World.Server.WorldPopulation` is today's host: it
-compiles `navigation.domains` rows and bridges its own `WorldFieldLattice`
+compiles `navigation.domains` rows and bridges the field lattice below
 through that seam (see [its README](../Puck.World.Server/README.md#navigation)).
 
 A `Surface` domain samples ground through the host's `IWorldQuery.TryGroundHeight`,
@@ -309,6 +309,51 @@ digests are cached in 64-cell blocks — only changed blocks rehash, and an
 unchanged tree contributes its cached digest in constant time. Pending starts
 hash in sorted order from their bounded request list, never by scanning the
 domain.
+
+## 🌾 Field lattice (`Fields/`)
+
+`FieldLattice` is the reaction integrator behind a world's live field-lattice
+state — the other half of the seam `FixedFieldContactSolver` sits on: it
+measures a body against a scalar field, and this evolves one. It parses no
+document: it builds and reinstalls from a plain `FieldLatticeInput` (topology,
+field envelopes, reactions, and paint, all in fixed point, fields addressed
+by ordinal) a host compiles once from its own document boundary, the same
+seam `NavigationDomainInput` crosses for the navigation kernel.
+`Puck.World.Server.WorldPopulation` is today's host — see
+[its README](../Puck.World.Server/README.md#field-lattice).
+
+Six reaction kinds run in document order each cadence step: `Diffuse` (toward
+the face-neighbour mean, Jacobi-style — snapshot then write), `Decay` (toward
+zero), `Transform` (ordered writes where every condition holds), `Emit`
+(deposits into a body's coupled cell from a keyed tag row), `Expose` (writes a
+keyed tag row from a field comparison at a body's coupled cell), and `Flow`
+(mass-conserving downhill transport over a combined terrain height, with an
+optional edge spill into a scalar state row). A reaction's own read/write
+field and state sets are derived once per install and drive the `world.fields`
+read-back's dependency plan — informational only, since `Step` always executes
+in document order regardless. `IFieldLatticeHost` is the body-position and
+state-row seam a step reaches through, so the kernel never allocates a
+per-call delegate.
+
+`TryBodyCellOf` resolves the column a body couples to for `Emit`/`Expose`
+and for the `MediumSurface` a medium hold floats against — Y is admitted up
+to a DERIVED coupling ceiling (the volume's own top plus the tallest surface
+any height-bearing field can raise), not just the raw voxel volume, since a
+body standing on a one-layer ground lattice always rests above the half-unit
+slab a bare inside test would refuse. `IsInsideMedium`/`IsSegmentInsideMedium`
+give navigation's medium domain the same free-surface reach as a point test,
+proven over a swept clearance box rather than sample points alone.
+
+`FieldLatticeSolid` (an `IFieldEvaluator`) turns a lattice's height columns
+into a contact field — exact within two cells of a column, a conservative
+lower bound beyond — and `UnionField` composes it with another field
+(a world's authored solids) by nearest distance, so a glacier or a filled pond
+is real geometry a body's contact resolve reaches through the ordinary field
+seam. `Checkpoint`/`Capture`/`Restore`/`AppendStateHash` and the delta stream
+(`TakeDeltas`) are the host's checkpoint/snapshot/hash boundary; `CanInstallInput`/
+`InstallInput` let a compatible reaction-only, colour, or paint edit replace
+the live plan without migrating cells — a topology, cadence, or field-envelope
+change refuses and asks for a host restart.
 
 ## 🚀 Basic use
 

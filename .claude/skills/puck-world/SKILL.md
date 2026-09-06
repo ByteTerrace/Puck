@@ -138,7 +138,7 @@ medium field before traversing its cached edge — a medium's free surface
 (value × heightScale) is bounded by the shared lattice's body-coupling
 ceiling, not by its topology's own layer count, so a shallow `layers: 1`
 topology under a deep medium still resolves correctly
-(`WorldFieldLattice.IsInsideMedium`/`IsSegmentInsideMedium`). Extend this
+(`Puck.Physics.Fields.FieldLattice.IsInsideMedium`/`IsSegmentInsideMedium`). Extend this
 vocabulary for
 engine-integral movement semantics; addons/agent extensions remain the home
 for arbitrary policy and planning, not collision/path correctness.

@@ -794,10 +794,21 @@ public sealed partial class WorldServer {
         }
 
         var fieldsFull = false;
-        var fieldCells = (m_population.Fields?.TakeDeltas(
+        var latticeDeltas = (m_population.Fields?.TakeDeltas(
             full: !consumeContinuity,
             isFull: out fieldsFull
         ) ?? []);
+        // The kernel's own delta shape carries no Puck.World.Protocol reference; the wire shape is minted here,
+        // the one caller that needs both.
+        var fieldCells = new FieldCellDelta[latticeDeltas.Length];
+
+        for (var index = 0; (index < latticeDeltas.Length); index++) {
+            fieldCells[index] = new FieldCellDelta(
+                Cell: latticeDeltas[index].Cell,
+                Field: latticeDeltas[index].Field,
+                Raw: latticeDeltas[index].Raw
+            );
+        }
 
         return new WorldSnapshot(
             Tick: tick,

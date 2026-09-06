@@ -1,5 +1,6 @@
 using System.Text;
 using Puck.Assets.Documents;
+using Puck.Physics.Fields;
 using Puck.Maths;
 using Puck.World.Server;
 using Xunit;
@@ -140,8 +141,8 @@ public sealed class WorldRuntimeStateHashLawTests {
         using var left = Fixtures.FreshServer(definition: definition);
         using var right = Fixtures.FreshServer(definition: definition);
 
-        Assert.IsType<WorldFieldLattice>(@object: right.Server.Population.Fields).Restore(
-            checkpoint: new WorldFieldLattice.WorldFieldCheckpoint(Raw: [[FixedQ4816.One.Value]])
+        Assert.IsType<FieldLattice>(@object: right.Server.Population.Fields).Restore(
+            checkpoint: new FieldLattice.Checkpoint(Raw: [[FixedQ4816.One.Value]])
         );
 
         Assert.NotEqual(

@@ -1,11 +1,12 @@
 using Puck.Networking;
+using Puck.Physics.Fields;
 
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
     // ---- fields section: a presence byte, then one raw Q48.16 array per declared field ----
 
-    private static byte[] EncodeFields(WorldFieldLattice.WorldFieldCheckpoint? section) {
+    private static byte[] EncodeFields(FieldLattice.Checkpoint? section) {
         var writer = new WireWriter();
 
         writer.WriteBoolean(value: (section is not null));
@@ -23,7 +24,7 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return writer.ToArray();
     }
-    private static bool TryDecodeFields(byte[] bytes, out string reason, out WorldFieldLattice.WorldFieldCheckpoint? section) {
+    private static bool TryDecodeFields(byte[] bytes, out string reason, out FieldLattice.Checkpoint? section) {
         var reader = new WireReader(bytes: bytes);
         var present = reader.ReadBoolean();
         long[][] raw = [];
@@ -55,7 +56,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
 
         section = (present
-            ? new WorldFieldLattice.WorldFieldCheckpoint(Raw: raw)
+            ? new FieldLattice.Checkpoint(Raw: raw)
             : null
         );
         reason = string.Empty;

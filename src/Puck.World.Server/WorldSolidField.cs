@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.World.Authoring;
 using Puck.Maths;
 using Puck.Physics;
+using Puck.Physics.Fields;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
 
@@ -60,7 +61,7 @@ public sealed class WorldSolidField : IContactField {
     private readonly IFieldEvaluator m_field;
     private readonly SdfFieldEvaluator m_evaluator;
     private readonly SdfBandedFieldEvaluator? m_banded;
-    private readonly WorldFieldLattice? m_lattice;
+    private readonly FieldLattice? m_lattice;
     private readonly SdfProgram m_program;
     private readonly IWorldQuery m_query;
     private readonly FixedFieldContactSolver m_solver;
@@ -79,7 +80,7 @@ public sealed class WorldSolidField : IContactField {
     private readonly bool[] m_holdableGrantedByOverride;
     private readonly bool m_defaultGrip;
 
-    private WorldSolidField(SdfProgram program, SdfFieldEvaluator evaluator, SdfDistanceGrid? grid, FixedQ4816 kitReach, WorldFieldLattice? lattice, long placementShapeCount, WorldContactCensus census, FixedWorldCollision tuning, bool[] holdableMaterials, bool[] holdableGrantedByOverride, bool defaultGrip) {
+    private WorldSolidField(SdfProgram program, SdfFieldEvaluator evaluator, SdfDistanceGrid? grid, FixedQ4816 kitReach, FieldLattice? lattice, long placementShapeCount, WorldContactCensus census, FixedWorldCollision tuning, bool[] holdableMaterials, bool[] holdableGrantedByOverride, bool defaultGrip) {
         m_program = program;
         m_evaluator = evaluator;
         m_kitReach = kitReach;
@@ -114,9 +115,9 @@ public sealed class WorldSolidField : IContactField {
         // still march the authored program alone.
         m_contactField = ((lattice is null)
             ? m_field
-            : new WorldUnionField(
+            : new UnionField(
                 a: m_field,
-                b: new WorldFieldLatticeSolid(lattice: lattice)
+                b: new FieldLatticeSolid(lattice: lattice)
             ));
         m_solver = new FixedFieldContactSolver(
             contactSkin: tuning.ContactSkin,
@@ -201,7 +202,7 @@ public sealed class WorldSolidField : IContactField {
     /// warp-free evaluator cannot interpret; empty on success.</param>
     /// <param name="lattice">The field lattice whose height columns union with the solids for contact, or <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when the field compiled, <see langword="false"/> with a named reason otherwise.</returns>
-    public static bool TryBuild(WorldDefinition definition, out WorldSolidField? built, out string reason, WorldFieldLattice? lattice = null) {
+    public static bool TryBuild(WorldDefinition definition, out WorldSolidField? built, out string reason, FieldLattice? lattice = null) {
         built = null;
         reason = string.Empty;
 

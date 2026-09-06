@@ -8,7 +8,7 @@ namespace Puck.World.Tests;
 /// <summary>
 /// THE LAW: a placement's Noise/Scatter distribution resolves the same instance offsets from the same document and
 /// world seed, on every construction — bit-for-bit, Q48.16 throughout — and a rerolled seed moves the pattern. The
-/// placement twin of <see cref="WorldFieldLatticeLawTests"/>'s field-fill laws.
+/// placement twin of <c>Puck.Physics.Tests.FieldLatticeLawTests</c>'s field-fill laws.
 /// </summary>
 public sealed class WorldPlacementSamplingLawTests {
     private static WorldPlacement Placement(WorldDistributionRegion region) => new(

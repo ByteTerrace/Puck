@@ -20,7 +20,7 @@ namespace Puck.World;
 /// Transform/Expose condition already uses — field name, comparison, literal-or-state-row value — tested at the cell
 /// the placement's own authored <see cref="WorldPlacement.Position"/> couples to, the identical body-coupling
 /// resolve <see cref="WorldReaction.Emit"/>/<see cref="WorldReaction.Expose"/> already use for a population body
-/// (<c>Server.WorldFieldLattice.TryBodyCellOf</c>).</para>
+/// (<c>Puck.Physics.Fields.FieldLattice.TryBodyCellOf</c>).</para>
 /// <para>A matching swap lands as an ordinary <c>WorldMutation.UpsertPlacement</c> under
 /// <c>WorldPrincipal.World</c>, so it revalidates, rebuilds derived state (colliders included), and journals through
 /// the one mutation pipeline like any other engine-driven placement write — <c>world.undo</c> puts a swap back, and

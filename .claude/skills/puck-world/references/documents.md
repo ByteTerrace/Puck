@@ -872,7 +872,7 @@ each cell donates an equal share of its previous-step value to each of the
 lattice's active-axis directions; an optional `spillRow` catches an edge
 cell's outward share — without one, edges are walls). A row with `heightScale` IS geometry: its value
 raises a solid column above the origin that bodies stand on
-(`WorldFieldLatticeSolid`, unioned with the authored solids for contact) and
+(`Puck.Physics.Fields.FieldLatticeSolid`, unioned with the authored solids for contact) and
 the renderer shows (`WorldFieldEmitter`: one CPU-baked distance brick per
 height field, coloured by `color`, uploaded through the engine's brick pool).
 `WorldFieldProgram.Compile` is the typed reaction compiler view over that same
@@ -886,9 +886,12 @@ remains the one authoring home. `WorldDefinition.FieldProgram` is the cached,
 non-serialized door. It retains compatible handles across unrelated definition
 edits and value-only state updates, and replaces them when field or reaction
 program inputs change.
-The authoritative `WorldFieldLattice` executes this program directly beside
-the complete companion composite; it never lowers the authored reaction rows
-again. Compatible live reaction edits replace the program while preserving
+The authoritative `Puck.Physics.Fields.FieldLattice` executes a
+`FieldLatticeInput` `WorldPopulation.CompileFieldLatticeInput` flattens from
+this program — field handles become ordinals, `WorldFieldWriteOp` maps onto
+the kernel's own enum — so the kernel itself parses no document; it never
+lowers the authored reaction rows again. Compatible live reaction edits
+replace the input while preserving
 cell values, deltas, revision, and checkpoint shape. A lattice presence,
 topology, cadence, or field-envelope change is an allocation change and
 refuses live with restart guidance. `world.fields` reports the installed node
@@ -2045,7 +2048,7 @@ current model.
   list, each `when` the SAME `WorldFieldCondition` grammar a
   `fields.reactions` Transform/Expose condition uses, tested at the
   placement's own coupled lattice cell
-  (`Server/WorldFieldLattice.TryBodyCellOf`) by the per-tick
+  (`Puck.Physics.Fields.FieldLattice.TryBodyCellOf`) by the per-tick
   `SweepPlacementResponses` pass — run right after the field lattice steps,
   so it reads THIS tick's own writes. Entries try in authored order; the
   FIRST whose condition holds wins, through an ordinary `UpsertPlacement`

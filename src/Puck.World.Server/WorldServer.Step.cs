@@ -568,7 +568,11 @@ public sealed partial class WorldServer {
             centerY: paint.Y,
             centerZ: paint.Z,
             radius: paint.Radius,
-            operation: paint.Operation,
+            operation: (paint.Operation switch {
+                WorldFieldWriteOp.Set => Puck.Physics.Fields.FieldWriteOp.Set,
+                WorldFieldWriteOp.Add => Puck.Physics.Fields.FieldWriteOp.Add,
+                _ => throw new ArgumentOutOfRangeException(paramName: nameof(paint.Operation), actualValue: paint.Operation, message: null),
+            }),
             value: paint.Value
         );
 

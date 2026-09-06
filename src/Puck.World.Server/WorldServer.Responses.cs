@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Physics.Fields;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -109,8 +110,10 @@ public sealed partial class WorldServer {
         }
     }
     // The first authored entry whose condition holds at the placement's coupled cell, or -1 when none do (or the
-    // placement's authored, static position never couples to the lattice at all).
-    private int ResolveMatchingResponse(WorldFieldLattice lattice, WorldPlacement placement, IReadOnlyList<WorldPlacementResponse> responses, ulong tick) {
+    // placement's authored, static position never couples to the lattice at all). The condition scalar is resolved
+    // here rather than inside the kernel: a response's WorldLatticeScalar is document vocabulary the kernel does not
+    // carry, unlike a reaction's scalar, which is compiled to a StateHandle ahead of time.
+    private int ResolveMatchingResponse(FieldLattice lattice, WorldPlacement placement, IReadOnlyList<WorldPlacementResponse> responses, ulong tick) {
         if (!lattice.TryBodyCellOf(
             position: FixedVector3.FromVector3(value: WorldDefinitionRows.ResolvedPosition(definition: m_definition, placement: placement)),
             cell: out var cell
@@ -121,19 +124,19 @@ public sealed partial class WorldServer {
         for (var index = 0; (index < responses.Count); index++) {
             var condition = responses[index].When;
 
-            if (
-                !lattice.TryFieldIndex(name: condition.Field, field: out var field) ||
-                !lattice.Holds(
-                field: field,
-                cell: cell,
-                comparison: condition.Comparison,
-                expected: condition.Value,
-                readScalar: row => ReadScalarSlot(
-                    row: row,
-                    tick: tick
-                )
-            )
-            ) {
+            if (!lattice.TryFieldIndex(name: condition.Field, field: out var field)) {
+                continue;
+            }
+
+            var expected = ((condition.Value.Row is { } row)
+                ? ReadScalarSlot(row: row, tick: tick)
+                : FixedQ4816.FromDouble(value: (condition.Value.Literal ?? 0f))
+            );
+
+            if (!condition.Comparison.Holds(
+                value: lattice.Value(field: field, cell: cell),
+                expected: expected
+            )) {
                 continue;
             }
 

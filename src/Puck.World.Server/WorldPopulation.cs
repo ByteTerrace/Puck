@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Maths;
 using Puck.World.Protocol;
 using Puck.Physics;
+using Puck.Physics.Fields;
 using Puck.Physics.Motion;
 using Puck.Physics.Navigation;
 
@@ -143,7 +144,7 @@ public sealed partial class WorldPopulation {
     /// contact surface it sleeps against could now answer a query differently — an install (a document rebuild or an
     /// adjacency source (re)configured), an attached solid row RefreshAttached found at a new pose
     /// (<see cref="WorldColliderSet.AttachedRevision"/>), or a field-lattice repaint/medium step
-    /// (<see cref="WorldFieldLattice.Revision"/>). Every term only increases, so an unchanged sum proves none of them
+    /// (<see cref="FieldLattice.Revision"/>). Every term only increases, so an unchanged sum proves none of them
     /// changed since the value was last observed.</summary>
     public ulong ContactFieldVersion => unchecked(
         m_contactFieldInstallVersion +
@@ -237,11 +238,11 @@ public sealed partial class WorldPopulation {
     private FixedSpawnPoint[] m_seatSpawns;
     private int m_simulatedCount;
     private WorldSolidField? m_targetField;
-    private WorldFieldLattice? m_fields;
+    private FieldLattice? m_fields;
     private bool m_fieldsCompiled;
 
     /// <summary>Gets the field lattice, when the world declares a <c>fields</c> section.</summary>
-    public WorldFieldLattice? Fields => m_fields;
+    public FieldLattice? Fields => m_fields;
     /// <summary>Gets the compiled gravity declaration for read-back.</summary>
     public FixedWorldGravity CompiledGravity => (m_gravityField?.Compiled ?? FixedWorldGravity.Inert);
     /// <summary>Gets the last gravity solve's deterministic structural work counters.</summary>

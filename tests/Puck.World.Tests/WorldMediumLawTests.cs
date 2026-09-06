@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Numerics;
+using Puck.Physics.Fields;
 using Puck.Maths;
 using System.Text;
 using System.Text.Json;
@@ -17,9 +18,10 @@ namespace Puck.World.Tests;
 /// <summary>
 /// The lattice-row MEDIUM primitive that replaced the global <c>water</c> section: a lattice field carrying
 /// <c>lattice.medium</c> is a fluid free surface (value times heightScale, over the lattice origin) every active
-/// body samples at its coupled cell each tick — the same coupling <see cref="WorldFieldLattice.TryBodyCellOf"/>
-/// resolves for <c>emit</c>/<c>expose</c>. See <see cref="WorldFieldLatticeLawTests"/> for the coupling/surface-math
-/// laws at the lattice level; this suite proves the validator's refusals and the full server-tier wiring
+/// body samples at its coupled cell each tick — the same coupling <see cref="FieldLattice.TryBodyCellOf"/>
+/// resolves for <c>emit</c>/<c>expose</c>. See <c>Puck.Physics.Tests.FieldLatticeLawTests</c> for the
+/// coupling/surface-math laws at the lattice level; this suite proves the validator's refusals and the full
+/// server-tier wiring
 /// (<see cref="WorldPopulation.SampleMediumSurfaces"/> → <c>WorldBody.SetMediumSurface</c> → the medium
 /// hold's <c>InMedium</c> fact).
 /// </summary>

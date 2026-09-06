@@ -1,5 +1,6 @@
 using Puck.Maths;
 using Puck.Physics;
+using Puck.Physics.Fields;
 using Puck.Physics.Motion;
 using Puck.Physics.Navigation;
 
@@ -179,9 +180,8 @@ public sealed partial class WorldPopulation {
             return true;
         }
 
-        return m_fields.CanInstallProgram(
-            document: document!,
-            program: program!,
+        return m_fields.CanInstallInput(
+            input: CompileFieldLatticeInput(document: document!, program: program!),
             reason: out reason
         );
     }
@@ -199,21 +199,111 @@ public sealed partial class WorldPopulation {
 
         if (!m_fieldsCompiled) {
             m_fields = ((definition.Fields is { } document)
-                ? new WorldFieldLattice(
-                    document: document,
-                    program: (definition.FieldProgram ?? throw new InvalidOperationException(message: "The field composite has no compiled program.")),
+                ? new FieldLattice(
+                    input: CompileFieldLatticeInput(
+                        document: document,
+                        program: (definition.FieldProgram ?? throw new InvalidOperationException(message: "The field composite has no compiled program."))
+                    ),
                     worldSeed: (definition.Generation?.WorldSeed ?? 0UL)
                 )
                 : null
             );
             m_fieldsCompiled = true;
         } else if (m_fields is { } fields) {
-            fields.InstallProgram(
+            fields.InstallInput(input: CompileFieldLatticeInput(
                 document: definition.Fields!,
                 program: definition.FieldProgram!
-            );
+            ));
         }
     }
+    /// <summary>Flattens a compiled field program into the plain input the Physics kernel reads — the same seam
+    /// <c>CompileNavigationDomains</c> crosses for the navigation kernel: the kernel holds no Schema type, so every
+    /// authoring-side handle and enum is mapped by hand here rather than trusted to a numeric cast. Public so a
+    /// caller (a test fixture, a tool) can build a <see cref="FieldLattice"/> directly from a document without a
+    /// live <see cref="WorldPopulation"/>.</summary>
+    /// <param name="document">The lattice composite.</param>
+    /// <param name="program">The document's own compiled reaction program.</param>
+    public static FieldLatticeInput CompileFieldLatticeInput(WorldFieldsSection document, WorldFieldProgram program) {
+        var fields = new FieldDescriptorInput[program.Fields.Count];
+
+        for (var index = 0; (index < fields.Length); index++) {
+            var descriptor = program.Fields[index];
+
+            fields[index] = new FieldDescriptorInput(
+                Name: descriptor.Name,
+                Initial: descriptor.Initial,
+                Minimum: descriptor.Minimum,
+                Maximum: descriptor.Maximum,
+                HeightScale: descriptor.HeightScale,
+                IsMedium: descriptor.IsMedium,
+                Color: document.Fields[index].Color
+            );
+        }
+
+        var fieldsByName = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+
+        for (var index = 0; (index < fields.Length); index++) {
+            fieldsByName[fields[index].Name] = index;
+        }
+
+        static FieldScalarInput Scalar(WorldFieldScalarInput input) => new(Literal: input.Literal, State: input.State);
+
+        var reactions = new FieldReactionInput[program.Nodes.Count];
+
+        for (var index = 0; (index < reactions.Length); index++) {
+            reactions[index] = program.Nodes[index] switch {
+                WorldFieldNode.Diffuse diffuse => new FieldReactionInput.Diffuse(diffuse.Field.Ordinal, Scalar(diffuse.Rate)),
+                WorldFieldNode.Decay decay => new FieldReactionInput.Decay(decay.Field.Ordinal, Scalar(decay.Rate)),
+                WorldFieldNode.Transform transform => new FieldReactionInput.Transform(
+                    When: [.. transform.When.Select(selector: condition => new FieldConditionInput(condition.Field.Ordinal, condition.Comparison, Scalar(condition.Value)))],
+                    Then: [.. transform.Then.Select(selector: write => new FieldWriteInput(write.Field.Ordinal, MapWriteOp(op: write.Op), Scalar(write.Value)))]
+                ),
+                WorldFieldNode.Emit emit => new FieldReactionInput.Emit(emit.Tag, emit.Field.Ordinal, Scalar(emit.Amount)),
+                WorldFieldNode.Expose expose => new FieldReactionInput.Expose(expose.Field.Ordinal, expose.Comparison, Scalar(expose.Value), expose.Row),
+                WorldFieldNode.Flow flow => new FieldReactionInput.Flow(flow.Field.Ordinal, Scalar(flow.Rate), [.. flow.Over.Select(selector: static over => over.Ordinal)], flow.SpillRow),
+                _ => throw new InvalidOperationException(message: "fields.reactions carries an unknown reaction kind."),
+            };
+        }
+
+        var paint = new List<FieldFillInput>();
+
+        foreach (var fill in (document.Paint ?? [])) {
+            if (!fieldsByName.TryGetValue(key: fill.Field, value: out var field)) {
+                throw new InvalidOperationException(message: $"fields: '{fill.Field}' is not a declared field.");
+            }
+
+            paint.Add(item: fill switch {
+                WorldLatticeFill.Rect rect => new FieldFillInput.Rect(field, FixedQ4816.FromDouble(value: rect.Value), FixedQ4816.FromDouble(value: rect.MinX), FixedQ4816.FromDouble(value: rect.MinZ), FixedQ4816.FromDouble(value: rect.MaxX), FixedQ4816.FromDouble(value: rect.MaxZ)),
+                WorldLatticeFill.Noise noise => new FieldFillInput.Noise(field, FixedQ4816.FromDouble(value: noise.Value), noise.Frequency, FixedQ4816.FromDouble(value: noise.Threshold), noise.Octaves, noise.Seed),
+                WorldLatticeFill.Scatter scatter => new FieldFillInput.Scatter(field, FixedQ4816.FromDouble(value: scatter.Value), scatter.Spacing, scatter.Radius, scatter.Seed),
+                WorldLatticeFill.Draw => new FieldFillInput.DrawMarker(field),
+                _ => throw new InvalidOperationException(message: "fields.paint carries an unknown fill kind."),
+            });
+        }
+
+        return new FieldLatticeInput(
+            Lattice: new FieldLatticeTopology(
+                Origin: new FixedVector3(
+                    X: FixedQ4816.FromDouble(value: document.Lattice.Origin.X),
+                    Y: FixedQ4816.FromDouble(value: document.Lattice.Origin.Y),
+                    Z: FixedQ4816.FromDouble(value: document.Lattice.Origin.Z)
+                ),
+                CellSize: FixedQ4816.FromDouble(value: document.Lattice.CellSize),
+                Width: document.Lattice.Width,
+                Depth: document.Lattice.Depth,
+                Layers: document.Lattice.Layers,
+                StepEveryTicks: document.Lattice.StepEveryTicks
+            ),
+            Fields: fields,
+            Reactions: reactions,
+            Paint: paint
+        );
+    }
+    private static FieldWriteOp MapWriteOp(WorldFieldWriteOp op) => op switch {
+        WorldFieldWriteOp.Set => FieldWriteOp.Set,
+        WorldFieldWriteOp.Add => FieldWriteOp.Add,
+        _ => throw new ArgumentOutOfRangeException(paramName: nameof(op), actualValue: op, message: null),
+    };
 
     private static FixedSpawnPoint[] CompileSeatSpawns(IReadOnlyList<WorldSpawnPoint> spawnPoints, IReadOnlyList<string> seatSpawns) {
         var compiled = new FixedSpawnPoint[seatSpawns.Count];
