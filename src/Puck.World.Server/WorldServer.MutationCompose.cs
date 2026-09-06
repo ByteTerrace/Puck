@@ -66,14 +66,17 @@ public sealed partial class WorldServer {
         // mutations already ride the envelope gate so the loud capacity rejection will fire at apply time, not at a later
         // GPU allocation, the moment creation stamps render.
         WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment);
-    // Whether a mutation can change the SDF contact field: the collision tuning and every solid-bearing section
-    // (screens, creations that reshape a stamp, placements). Coarse by section,
-    // matching AffectsPopulation/AffectsRenderEnvelope.
+    // Whether a mutation can change the SDF contact field: the collision tuning, every solid-bearing section
+    // (screens, creations that reshape a stamp, placements), and the inputs of the field's contact band — the kit
+    // colliders and the bodies row naming the scale row. Coarse by section, matching AffectsPopulation/
+    // AffectsRenderEnvelope; a whole-row upsert of the scale row itself is not listed, since every state-row edit
+    // would then rebuild the population.
     private static bool AffectsSolidField(WorldMutation mutation) => AnyMember(mutation, AffectsSolidField) || (mutation is
         WorldMutation.SetCollision or
         WorldMutation.UpsertScreen or WorldMutation.RemoveScreen or
         WorldMutation.UpsertCreation or WorldMutation.RemoveCreation or
-        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement);
+        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement or
+        WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetPopulationDefaults);
     private static bool ContainsMember(IReadOnlyList<WorldPrincipal> members, WorldPrincipal member) {
         foreach (var existing in members) {
             if (existing == member) {

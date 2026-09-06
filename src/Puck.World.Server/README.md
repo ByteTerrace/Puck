@@ -216,8 +216,10 @@ of wrapping, and a later Replace remains an ordinary assignment.
 
 `WorldNavigationRuntime` compiles each authored domain once at boot/rebuild.
 Surface cells use `TryGroundHeight`, lower/head clearance, slope and step
-limits; every admitted edge is proven with swept spheres and stored in one
-26-bit mask per cell. Free-volume and medium domains use the same swept-sphere
+limits; every admitted edge is proven with swept spheres from `maxStepHeight`
+above the foot up to the head (the step rule already admits anything lower,
+and a sphere sweeping the floor it stands on advances one contact skin per
+march step) and stored in one 26-bit mask per cell. Free-volume and medium domains use the same swept-sphere
 edge proof in three dimensions. A medium additionally resolves its field name
 to an ordinal once and checks the agent clearance volume at each live node plus
 half-cell-or-shorter swept boxes on search and before following the next cached
@@ -442,7 +444,19 @@ shared unscaled copy. Bodies advance against the one contact-resolution seam
 (document-derived convex colliders) and the SDF-backed `WorldSolidField.cs`.
 Both include solid scene rows, screen frames, and the shapes emitted by solid
 creation placements. The field compiles those surfaces into one fixed-point
-signed-distance program. The analytic provider emits exact isotropically
+signed-distance program. A world authoring `collision.gridCellSize` reads that
+program through `SdfBandedFieldEvaluator` over an `SdfDistanceGrid`
+(`Puck.SignedDistance.Queries`): exact inside the contact band — the largest
+kit collider extent at the scale row's ceiling, plus the contact skin, plus the
+grid's slack — and the grid's corner bound beyond it, so a contact sample,
+sphere cast, ground probe, or sight line in open air reads one corner instead
+of marching every solid. The grid covers every finite instance bound padded by
+`WorldSolidField.GridPadding`; the census's `SolidBakeHash` folds the program's
+packed words, the cell size, and the contact reach, a `SetCollision` edit that
+keeps the cell size keeps the grid, and kit and bodies-row edits rebuild the
+field because the band derives from them (a whole-row upsert of the scale row
+itself takes effect at the next solid rebuild). `world.collision.status` echoes the
+cell size, corner extent, baked corner count, band, and hash. The analytic provider emits exact isotropically
 scaled spheres and world-axis bounds for other finite placement primitives;
 rotated, rounded, non-box, smoothed, and boolean-carved geometry is therefore
 conservative there. A solid row participates in simulation, which is why

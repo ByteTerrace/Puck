@@ -776,7 +776,8 @@ and checkpoints byte-for-byte.
 ### `navigation` — bounded surface, flight, and medium routes
 
 `WorldNavigation.cs` owns named finite domains. `surface` samples SDF ground,
-step/slope limits, a vertical capsule, and swept neighbour edges; `volume`
+step/slope limits, a vertical capsule, and swept neighbour edges from
+`maxStepHeight` above the foot to the head; `volume`
 uses swept-sphere cells and edges in three dimensions; `medium` adds a named
 `state.world` lattice row carrying `lattice.medium`, checked live at nodes and
 half-cell-or-shorter swept boxes so field evolution can invalidate a cached edge.

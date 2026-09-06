@@ -350,28 +350,41 @@ internal sealed partial class WorldNavigationRuntime {
             }
             return HasClearTransition(current: current, next: next);
         }
+        // A surface edge sweeps the agent's clearance spheres between the two route points from the step height up
+        // to the head: the lowest sweep's underside sits maxStepHeight above the foot, because the step rule already
+        // admits everything lower, and a sphere sweeping along the floor it stands on can only advance by its own
+        // clearance to that floor per march step. A volume or medium edge sweeps once, at the route points.
         private bool HasClearTransition(int current, int next) {
             var source = Position(node: current);
             var destination = Position(node: next);
             var delta = (destination - source);
             var distance = delta.Length;
             var sweeps = 1;
+            var lift = FixedQ4816.Zero;
             var verticalCore = FixedQ4816.Zero;
             if (Tuning.Kind == WorldNavigationKind.Surface) {
                 verticalCore = FixedQ4816.Max(
                     x: FixedQ4816.Zero,
                     y: (Tuning.AgentHeight - (Tuning.AgentRadius * FixedQ4816.FromInteger(value: 2)) - (ClearanceEpsilon * FixedQ4816.FromInteger(value: 2)))
                 );
+                lift = FixedQ4816.Min(
+                    x: verticalCore,
+                    y: FixedQ4816.Max(
+                        x: FixedQ4816.Zero,
+                        y: Tuning.MaxStepHeight
+                    )
+                );
+                var span = (verticalCore - lift);
                 var diameter = (Tuning.AgentRadius * FixedQ4816.FromInteger(value: 2));
                 sweeps = Math.Min(
                     val1: WorldNavigationCapacity.MaxSurfaceClearanceSweeps,
-                    val2: checked((int)((verticalCore.Value + diameter.Value - 1L) / diameter.Value) + 1)
+                    val2: checked((int)((span.Value + diameter.Value - 1L) / diameter.Value) + 1)
                 );
             }
             for (var sweep = 0; sweep < sweeps; sweep++) {
                 var offset = (sweeps == 1
-                    ? FixedQ4816.Zero
-                    : (verticalCore * FixedQ4816.FromInteger(value: sweep) / FixedQ4816.FromInteger(value: sweeps - 1))
+                    ? verticalCore
+                    : (lift + ((verticalCore - lift) * FixedQ4816.FromInteger(value: sweep) / FixedQ4816.FromInteger(value: sweeps - 1)))
                 );
                 var origin = source with { Y = (source.Y + offset) };
                 if (m_query.SphereCast(

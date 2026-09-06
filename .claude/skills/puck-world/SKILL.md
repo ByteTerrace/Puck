@@ -130,7 +130,10 @@ feeds back into the tick.
 `surface`, collision-free `volume`, and live-field-constrained `medium` grids.
 A `BodyTargetSource.Navigated` producer points at one domain and one ordinary
 authority-checked target register. Keep A* fixed-point, budgeted, stable-tied,
-checkpointed, and hashed; bake static solid clearance once, but recheck a
+checkpointed, and hashed; bake static solid clearance once (a surface edge's
+sweeps run from `maxStepHeight` above the foot to the head — a sweep skimming
+the floor advances one contact skin per march step and exhausts on a
+diagonal), but recheck a
 medium field before traversing its cached edge — a medium's free surface
 (value × heightScale) is bounded by the shared lattice's body-coupling
 ceiling, not by its topology's own layer count, so a shallow `layers: 1`

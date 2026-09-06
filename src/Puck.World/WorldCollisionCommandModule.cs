@@ -173,10 +173,17 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
         );
         var census = server.Population.ContactCensus;
         var placementFieldShapes = (server.SolidField?.PlacementShapeCount ?? 0L);
+        var grid = ((server.SolidField?.Grid is { } baked)
+            ? string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{((double)baked.CellSize):0.###}x({baked.CornerCountX}x{baked.CornerCountY}x{baked.CornerCountZ}) baked={baked.BakedCornerCount} band={((double)server.SolidField.ContactBand):0.###} bakeHash={server.SolidField.Census.SolidBakeHash:x16}"
+            )
+            : "none"
+        );
 
         return new CommandResult(Output: string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[world.collision.status: selectedProvider={provider} forcedBy={forcedBy} instructions={instructions} placementFieldShapes={placementFieldShapes} placementColliders={census.PlacementColliderCount} placementColliderLimit={WorldPlacementPolicy.MaxSolidPlacementColliders} revision={server.SolidRevision} skin={collision.ContactSkin:0.###} slope={collision.MaxSlopeDegrees:0.#}° colliders=[{kitTable}]]"
+            handler: $"[world.collision.status: selectedProvider={provider} forcedBy={forcedBy} instructions={instructions} placementFieldShapes={placementFieldShapes} placementColliders={census.PlacementColliderCount} placementColliderLimit={WorldPlacementPolicy.MaxSolidPlacementColliders} revision={server.SolidRevision} skin={collision.ContactSkin:0.###} slope={collision.MaxSlopeDegrees:0.#}° grid={grid} colliders=[{kitTable}]]"
         ));
     }
 

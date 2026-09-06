@@ -63,14 +63,6 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // derived. Consumers authoring much smaller or larger geometry may need a different probe — this is a tuning
     // constant, not a physical law.
     private static readonly FixedQ4816 GradientEpsilon = FixedQ4816.FromDouble(value: 0.01);
-    // The march accept threshold (Raycast/SphereCast/TryGroundHeight/LineOfSight): a sample within this of the
-    // surface counts as a hit rather than one more step. Matches the scale of GradientEpsilon (both are "close
-    // enough" tolerances against the same fixed-point field) — tighten per-consumer by wrapping this provider, not by
-    // editing the shared constant.
-    private static readonly FixedQ4816 HitEpsilon = FixedQ4816.FromDouble(value: 0.001);
-    // The skin distance LineOfSight shrinks its probe by, so a target sitting exactly on a surface (the common "is
-    // there a clear line to that wall" query) never reads as self-obstructing.
-    private static readonly FixedQ4816 LineOfSightSkin = FixedQ4816.FromDouble(value: 0.05);
 
     // The same float-safety padding SdfProgram bakes into every GPU cull bound (its BoundRadiusScale/
     // BoundRadiusPadding, applied at ClassifyInstances/CompileRigidPlan/PackInstances — KEEP IN SYNC) — widening an
@@ -167,6 +159,25 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
     /// <inheritdoc/>
     public FieldEvaluatorCapabilities Capabilities => new(WarpFree: true);
+    // Whether the compiled stream declares any shape — the march's "nothing to answer" branch.
+    internal bool HasShape => m_hasShape;
+    // The exact march's sample budget, the budget a banded march spends on its exact samples.
+    internal int MarchIterations => m_marchIterations;
+    // The program's step scale (1/L) in fixed point, floored so it stays a lower-bound multiplier.
+    internal FixedQ4816 StepScale => m_stepScale;
+    // The program's Lipschitz bound L in fixed point, rounded up from the floored step scale so L * StepScale never
+    // reads below one; the largest representable value when the step scale floored to zero.
+    internal FixedQ4816 LipschitzBound {
+        get {
+            if (m_stepScale.Value <= 0L) {
+                return FixedQ4816.MaxValue;
+            }
+
+            const long RawOneSquared = (1L << (2 * FixedQ4816.FractionBitCount));
+
+            return FixedQ4816.FromRawBits(value: ((RawOneSquared + (m_stepScale.Value - 1L)) / m_stepScale.Value));
+        }
+    }
 
     private static FixedVector3 Abs(FixedVector3 value) =>
         new(
@@ -578,123 +589,22 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             _ => false,
         };
     }
-    // A single stepped sphere-trace march shared by Raycast (radius == 0) and SphereCast (radius > 0). Two asymmetric
-    // uses of the field value, and they are NOT interchangeable:
-    //   accept  — the RAW clearance (fieldDistance - radius) against HitEpsilon. The field is an OVERestimate of true
-    //             distance, so a raw clearance inside the epsilon proves the surface is too.
-    //   advance — the SCALED lower bound (fieldDistance * stepScale), floored at one fixed-point tick, minus the
-    //             radius. Scaling the clearance instead ((f - r) * s) is anti-conservative for r > 0: it shrinks the
-    //             radius by s as well, leaving f/L - r/L, which exceeds the true safe advance f/L - r whenever L > 1.
-    //             A radius cast whose scaled bound cannot clear its radius resolves conservatively instead of
-    //             advancing through an unproven gap; see the tick floor at the advance for why a point cast cannot
-    //             reach that branch.
-    // Mirrors BakedWorldQuery.March's shape so the two providers read as the same family of verb despite one walking a
-    // baked grid and the other a live field.
-    //
-    // Returns THREE outcomes, not a Boolean, because the third is not a miss: see MarchOutcome. On Exhausted the hit is
-    // filled at the last marched point, so a caller that treats non-convergence as an obstruction has the position and
-    // travel it needs without re-marching.
+    // The shared sphere-trace march over this evaluator's own exact samples — see SdfFieldMarch for the accept and
+    // advance rules. Every sample is exact, so the bound budget is never spent.
     private MarchOutcome March(FixedPosition origin, FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 radius, out RayHit hit) {
-        hit = default;
+        var sampler = new ExactSampler(evaluator: this);
 
-        var unit = direction.Normalize();
-
-        if (
-            (unit == FixedVector3.Zero) ||
-            (maxDistance <= FixedQ4816.Zero)
-        ) {
-            return MarchOutcome.Miss;
-        }
-
-        var position = origin;
-        var traveled = FixedQ4816.Zero;
-        var lastMaterial = 0;
-
-        for (var iteration = 0; (iteration < m_marchIterations); iteration++) {
-            if (!TryDistance(
-                distance: out var fieldDistance,
-                material: out var material,
-                position: position
-            )) {
-                // A shape-free program genuinely has nothing on the ray; anything else is a point the program's frame
-                // cannot express, which proves neither hit nor miss.
-                return (m_hasShape
-                    ? Exhaust(
-                    hit: out hit,
-                    material: lastMaterial,
-                    position: position,
-                    traveled: traveled
-                )
-                    : MarchOutcome.Miss
-                );
-            }
-
-            lastMaterial = material;
-
-            var clearance = (fieldDistance - radius);
-
-            if (clearance <= HitEpsilon) {
-                // Normal is deliberately NOT computed here — see RayHit.Normal's remarks. Call TryFieldGradient at
-                // hit.Point if a future consumer needs it.
-                hit = new RayHit(
-                    Confidence: WorldQueryConfidence.Exact,
-                    Distance: traveled,
-                    Material: material,
-                    Normal: FixedVector3.Zero,
-                    Point: position
-                );
-
-                return MarchOutcome.Hit;
-            }
-
-            if (traveled >= maxDistance) {
-                return MarchOutcome.Miss;
-            }
-
-            // The tick floor sits on the field, before the radius comes off, and it is what makes this stop condition
-            // subordinate to the accept arm for a point cast. The two are otherwise in different units — accept tests
-            // the raw field against HitEpsilon (raw 66), this tests the scaled field against zero — and they cross at
-            // stepScale 978/65536 (~0.0149): below it a descent stops one raw tick short of a surface the accept arm's
-            // own premise places within HitEpsilon + 1 tick, and TryGroundHeight folds that to "no ground" over every
-            // column of such a program. Floored, a point advance is at least one tick at every representable step
-            // scale, so the only non-accepting end to a point march is the iteration budget MarchIterationsFor sizes.
-            // Overstep bound: the floor bites only where the proof-backed advance is already under one tick, and one
-            // tick (2^-16 world units) is both the smallest step the format expresses and 1/66 of the band the accept
-            // arm already calls contact, so a point march passes the true surface by less than one tick and the next
-            // iteration accepts on the negative field inside. Geometry thinner than one tick is under the format.
-            // Radius casts are bit-identical: for radius >= one tick, max(floor(f*s), tick) - radius <= 0 exactly when
-            // floor(f*s) - radius <= 0, so a sweep still stops before advancing into the contact envelope.
-            var safeAdvance = (FixedQ4816.Max(
-                x: ScaleDistanceDown(
-                    distance: fieldDistance,
-                    scale: m_stepScale
-                ),
-                y: FixedQ4816.Epsilon
-            ) - radius);
-
-            if (safeAdvance <= FixedQ4816.Zero) {
-                return Exhaust(
-                    hit: out hit,
-                    material: material,
-                    position: position,
-                    traveled: traveled
-                );
-            }
-
-            var step = FixedQ4816.Min(
-                x: safeAdvance,
-                y: (maxDistance - traveled)
-            );
-
-            traveled += step;
-            position += (unit * step);
-        }
-
-        return Exhaust(
+        return SdfFieldMarch.Run(
+            boundBudget: 0,
+            direction: direction,
+            exactBudget: m_marchIterations,
+            hasShape: m_hasShape,
             hit: out hit,
-            material: lastMaterial,
-            position: position,
-            traveled: traveled
+            maxDistance: maxDistance,
+            origin: origin,
+            radius: radius,
+            sampler: ref sampler,
+            stepScale: m_stepScale
         );
     }
     // The iteration budget that keeps a point cast's guaranteed pre-exhaustion reach at BaseMarchIterations *
@@ -708,35 +618,16 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // nothing at all. Across both, an exhausted answer has exactly three causes: that vanished radius clearance, this
     // budget running out, and a marched point the program's frame cannot express.
     private static int MarchIterationsFor(FixedQ4816 stepScale) {
-        var reach = (HitEpsilon * FixedQ4816.FromInteger(value: BaseMarchIterations));
+        var reach = (SdfFieldMarch.HitEpsilon * FixedQ4816.FromInteger(value: BaseMarchIterations));
         var floor = FixedQ4816.Max(
-            x: ScaleDistanceDown(
-                distance: HitEpsilon,
+            x: SdfFieldMarch.ScaleDistanceDown(
+                distance: SdfFieldMarch.HitEpsilon,
                 scale: stepScale
             ),
             y: FixedQ4816.Epsilon
         );
 
         return ((int)(((reach.Value + floor.Value) - 1L) / floor.Value));
-    }
-    // Both operands are non-negative on every call. FixedQ4816 multiplication rounds to nearest, which can round a
-    // Lipschitz lower bound UP by half a tick and thereby authorize an unproved advance. This directed product floors
-    // the widened raw value so the fixed result remains a lower bound. Scale is in [0,1], so the narrowed quotient
-    // cannot overflow long.
-    private static FixedQ4816 ScaleDistanceDown(FixedQ4816 distance, FixedQ4816 scale) =>
-        FixedQ4816.FromRawBits(value: ((long)((((Int128)distance.Value) * scale.Value) >> FixedQ4816.FractionBitCount)));
-    // Fills the non-convergence hit: the last point the march reached, carrying WorldQueryConfidence.Bounded because
-    // the answer is a conservative stand-in for a surface never proven, not a measured one.
-    private static MarchOutcome Exhaust(FixedPosition position, FixedQ4816 traveled, int material, out RayHit hit) {
-        hit = new RayHit(
-            Confidence: WorldQueryConfidence.Bounded,
-            Distance: traveled,
-            Material: material,
-            Normal: FixedVector3.Zero,
-            Point: position
-        );
-
-        return MarchOutcome.Exhausted;
     }
     private static FixedQ4816 MaxComponent(FixedVector3 value) =>
         FixedQ4816.Max(
@@ -1168,7 +1059,7 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             return true;
         }
 
-        var probeDistance = (distance - LineOfSightSkin);
+        var probeDistance = (distance - SdfFieldMarch.LineOfSightSkin);
 
         if (probeDistance <= FixedQ4816.Zero) {
             return true;
@@ -1196,7 +1087,7 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             return m_hasShape;
         }
 
-        return (ScaleDistanceDown(
+        return (SdfFieldMarch.ScaleDistanceDown(
             distance: distance,
             scale: m_stepScale
         ) <= FixedQ4816.Max(
@@ -1552,15 +1443,17 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         return true;
     }
 
-    // What a March call proved. Miss and Hit are assertions about the ray; Exhausted is the absence of one — a radius
-    // cast lost its scaled clearance, the iteration budget ran out, or the march reached a point the frame cannot express,
-    // with the field neither accepted nor cleared, so it proves NEITHER. Every consumer folds it into whichever of the two its own contract can survive being wrong
-    // about: Hit for an obstruction/contact question (Raycast/SphereCast/LineOfSight), Miss for TryGroundHeight, whose
-    // true half asserts a SURFACE.
-    private enum MarchOutcome {
-        Miss = 0,
-        Hit = 1,
-        Exhausted = 2,
+    // The march sampler over this evaluator's own field: every sample exact, the radius unread.
+    private readonly struct ExactSampler(SdfFieldEvaluator evaluator) : ISdfMarchSampler {
+        public bool TrySample(FixedPosition position, FixedQ4816 radius, out FixedQ4816 distance, out int material, out bool exact) {
+            exact = true;
+
+            return evaluator.TryDistance(
+                distance: out distance,
+                material: out material,
+                position: position
+            );
+        }
     }
     // One hard-union instance's conservative world-space bound, converted to FixedQ4816 ONCE at construction (see
     // BuildCullBounds) — the fixed-point, safety-padded twin of SdfInstanceRange's float Center/Radius.

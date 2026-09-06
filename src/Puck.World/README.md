@@ -404,8 +404,9 @@ reference those names and carry no nested state declarations.
 Solid creation placements use the renderer's canonical shape emission under
 both contact providers. `world.contacts` reports the analytic collider census
 and its placement-derived share; `world.collision.status` also reports the
-compact field placement-shape count and the analytic placement-collider
-ceiling. Each kit independently authors `bodyContact: "Overlap" | "Solid"`
+compact field placement-shape count, the analytic placement-collider
+ceiling, and the solid field's distance grid (cell size, corner extent, baked
+corners, contact band, bake hash). Each kit independently authors `bodyContact: "Overlap" | "Solid"`
 (default `Overlap`). Two dynamic bodies depenetrate only when both choose
 `Solid`; collision geometry, observation, targeting, and interactions do not
 silently change with that choice. The deterministic sweep-and-prune

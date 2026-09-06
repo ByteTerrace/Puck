@@ -28,6 +28,9 @@ internal interface IEntityContactField : IContactField {
 /// <param name="PlacementBoxCount">Box colliders derived from creation placements.</param>
 /// <param name="PlacementPlaneCount">Half-space colliders derived from creation placements.</param>
 /// <param name="UnsupportedPlacementCount">Placement primitive copies with no analytic representation.</param>
+/// <param name="SolidBakeHash">The hash of everything the solid field's distance grid is baked from — the compiled
+/// program's packed words, the grid cell size, and the contact reach the band derives from — so two fields with the
+/// same hash carry the same bake; 0 under the analytic provider or when no grid is authored.</param>
 public readonly record struct WorldContactCensus(
     long SphereCount,
     long BoxCount,
@@ -35,7 +38,8 @@ public readonly record struct WorldContactCensus(
     long PlacementSphereCount,
     long PlacementBoxCount,
     long PlacementPlaneCount,
-    long UnsupportedPlacementCount
+    long UnsupportedPlacementCount,
+    ulong SolidBakeHash = 0UL
 ) {
     /// <summary>Gets all analytic colliders derived from placements.</summary>
     public long PlacementColliderCount => ((PlacementSphereCount + PlacementBoxCount) + PlacementPlaneCount);

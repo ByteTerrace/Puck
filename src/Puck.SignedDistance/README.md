@@ -83,6 +83,24 @@ quadratic in the radius with no occupancy hierarchy behind it. `WorldQueryBaker`
 also refuses a grid above `DefaultMaxCellCount` before allocating either layer;
 callers with a measured larger budget can pass it explicitly.
 
+`SdfDistanceGrid` is the third reading of the same field: a lattice of the
+exact evaluator's values at the corners of world-space cells of one authored
+size, held in 8×8×8 blocks that fill on first touch, so a corner is evaluated
+once and never again. Because the field is `LipschitzBound`-Lipschitz, the
+nearest corner's value less the grid's `Slack` (the half-diagonal reach of a
+cell at that bound, plus the rounding an evaluation carries) is a sound lower
+bound anywhere in the cell. `SdfBandedFieldEvaluator` reads the exact evaluator
+through that grid: `TryDistance` answers the exact field wherever the bound
+falls below its `Band` (a contact reach the consumer supplies plus the slack)
+and the bound above it, both gradient overloads always read the exact
+evaluator, `Overlap` decides identically everywhere, and the cast, ground, and
+visibility verbs run the one march loop (`SdfFieldMarch`) over samples that
+are exact wherever the exact march could accept or stop and bounds elsewhere,
+so a march that stays inside the band is bit-identical and one that crosses
+the bound region differs only in its steps. `SdfDistanceGrid.TryCover` sizes a
+grid from a program's finite static instance bounds plus a padding; a
+plane-only or shape-free program has nothing to cover and gets none.
+
 The live evaluator applies `SdfProgram.StepScale` before subtracting a swept
 sphere's radius. If that lower bound becomes too small to prove another
 fixed-point step is safe before the raw field converges, the cast reports a
@@ -151,8 +169,9 @@ if (evaluator.TryDistance(position: query, distance: out var distance, material:
 
 `WorldSolidField` (`Puck.World.Server`) is the production shape this mirrors:
 it compiles a world's authored solids into one `SdfProgram` and reads it
-through `SdfFieldEvaluator`, so the contact surface a body solves against is
-the same field the renderer draws.
+through `SdfFieldEvaluator` — banded over an `SdfDistanceGrid` when the world
+authors `collision.gridCellSize` — so the contact surface a body solves
+against is the same field the renderer draws.
 
 ## 📐 Determinism
 
@@ -181,8 +200,9 @@ still has no live automated gate.
 - **Bricks** — `SdfBrickBake`, `SdfBrickPoolLayout`.
 - **Screens** — `SdfScreenDecalLayout`.
 - **Query providers** (the seams themselves are `Puck.Maths`) — `SdfFieldEvaluator`,
-  `BakedWorldQuery`, `WorldQueryArtifact`, `WorldQueryBaker`,
-  `WorldQueryProviders`, `WorldQueryConfidence`, `RayHit`.
+  `SdfDistanceGrid`, `SdfBandedFieldEvaluator`, `BakedWorldQuery`,
+  `WorldQueryArtifact`, `WorldQueryBaker`, `WorldQueryProviders`,
+  `WorldQueryConfidence`, `RayHit`.
 
 ## 🧪 Verification
 

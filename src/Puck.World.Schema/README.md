@@ -2210,6 +2210,13 @@ spatial rate, like a hold's own travel speed); its ANGULAR threshold does not
 (a rotational rate carries no length dimension). `body.where` echoes a rigid
 body's centre of mass as `com=` — see `Rigid` below.
 
+`collision.gridCellSize` (default 0, else within
+`[WorldCollision.MinGridCellSize, WorldCollision.MaxGridCellSize]`) is the
+world-space cell edge of the distance grid the solid field bakes its program
+into, so a query far from every surface reads a corner bound instead of
+marching the program; 0 bakes no grid. Meaningful only when a requirement
+selects field contact.
+
 `collision.events` bounds overlap-event sensing without changing physical world
 contact. `candidateBudget` limits inspected broadphase candidates per body,
 `maxPairsPerBody` limits retained degree, and `beginBudget` limits new pairs per
@@ -2413,7 +2420,7 @@ program whose target source is `{ "$type": "navigated", "domain": "…",
 navigation only replaces the direct bearing with deterministic intermediate
 waypoints. `surface` domains sample ground from the world's SDF, enforce step
 and slope limits, and bake both vertical capsule clearance and swept clearance
-between adjacent cells. `volume` domains are collision-free 3D grids for
+between adjacent cells from `maxStepHeight` above the foot up to the head. `volume` domains are collision-free 3D grids for
 airborne or otherwise unconstrained actors. `medium` domains are 3D grids that
 also name a `state.world` lattice row carrying `lattice.medium`; their solid
 edges are baked, while whole-agent node and edge containment are re-read from

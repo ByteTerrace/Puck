@@ -55,6 +55,10 @@ public abstract record WorldCollider {
 /// <param name="DefaultHold">Whether a body's surface hold may take any solid surface by default. A placement's own
 /// <see cref="WorldPlacementGrip"/> overrides this for the colliders it compiles; the field lattice's own terrain,
 /// which no placement row owns, has only this. <see langword="false"/> (the default) holds nothing.</param>
+/// <param name="GridCellSize">The world-space cell edge of the distance grid the solid field bakes its program into,
+/// so a query far from every surface reads a corner bound instead of marching the program; 0 (the default) bakes no
+/// grid and every query reads the exact program. A smaller cell tightens the bound and enlarges the grid. Meaningful
+/// only when a requirement selects field contact.</param>
 /// <param name="EventsRaw">The bounded body-overlap event policy. ABSENT takes
 /// <see cref="WorldCollisionEvents.Default"/>; author <c>maxPairsPerBody: 0</c> to disable body-pair events while
 /// retaining ordinary world contact.</param>
@@ -63,7 +67,12 @@ public abstract record WorldCollider {
 public sealed record WorldCollision(IReadOnlyList<WorldContactRequirement> Requirements, float ContactSkin,
     int MaxIterations, float MaxSlopeDegrees, float GradientProbe, bool DefaultHold = false,
     [property: JsonPropertyName("events"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollisionEvents? EventsRaw = null,
-    [property: JsonPropertyName("bodyContacts"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBodyContactPolicy? BodyContactsRaw = null) {
+    [property: JsonPropertyName("bodyContacts"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBodyContactPolicy? BodyContactsRaw = null,
+    float GridCellSize = 0f) {
+    /// <summary>The smallest accepted non-zero <see cref="GridCellSize"/>, in world units.</summary>
+    public const float MinGridCellSize = 0.05f;
+    /// <summary>The largest accepted <see cref="GridCellSize"/>, in world units.</summary>
+    public const float MaxGridCellSize = 64f;
     /// <summary>Gets the effective bounded body-overlap event policy.</summary>
     [JsonIgnore]
     public WorldCollisionEvents Events => (EventsRaw ?? WorldCollisionEvents.Default);
@@ -80,6 +89,7 @@ public sealed record WorldCollision(IReadOnlyList<WorldContactRequirement> Requi
         DefaultHold: false,
         EventsRaw: null,
         GradientProbe: 0f,
+        GridCellSize: 0f,
         MaxIterations: 0,
         MaxSlopeDegrees: 0f,
         Requirements: []
@@ -332,14 +342,15 @@ public readonly record struct FixedWorldCollider(FixedBodyColliderVolume[] Volum
 /// normal's up-alignment must clear to ground a body (the same test both providers use). <see cref="GradientUp"/> is
 /// the compiled <see cref="WorldContactRequirement.GradientDerivedUp"/> requirement: it lets field gradients and
 /// measured support normals supply surface-relative up; without it, the caller's ambient up owns the walkable
-/// contact test.</summary>
+/// contact test. <see cref="GridCellSize"/> is the solid field's distance-grid cell edge; zero bakes no grid.</summary>
 public readonly record struct FixedWorldCollision(
     FixedQ4816 ContactSkin,
     int MaxIterations,
     FixedQ4816 GroundedThreshold,
     FixedQ4816 GradientProbe,
     bool GradientUp,
-    bool DefaultHold
+    bool DefaultHold,
+    FixedQ4816 GridCellSize
 ) {
     /// <summary>Compiles the authored contact tuning to fixed point.</summary>
     public static FixedWorldCollision Compile(WorldCollision collision) => new(
@@ -348,6 +359,7 @@ public readonly record struct FixedWorldCollision(
         GroundedThreshold: FixedQ4816.Cos(angle: FixedQ4816.FromDouble(value: (collision.MaxSlopeDegrees * (Math.PI / 180.0)))),
         GradientProbe: FixedQ4816.FromDouble(value: collision.GradientProbe),
         GradientUp: ((collision.Requirements?.Contains(value: WorldContactRequirement.GradientDerivedUp)) ?? false),
-        DefaultHold: collision.DefaultHold
+        DefaultHold: collision.DefaultHold,
+        GridCellSize: FixedQ4816.FromDouble(value: collision.GridCellSize)
     );
 }

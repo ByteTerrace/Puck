@@ -369,7 +369,19 @@ magnetism/wind/contact consumer binds instead of the five-verb `IWorldQuery`.
 It sits in the numerics layer so a field's producer and its consumers can be
 sibling libraries that never reference each other;
 `BakedWorldQuery` does NOT implement it (capability checked via
-`FieldEvaluatorCapabilities`, never stubbed). **`Puck.SignedDistance.Queries.Debug`:**
+`FieldEvaluatorCapabilities`, never stubbed). `SdfDistanceGrid` holds the exact
+evaluator's values at the corners of authored-size cells (8×8×8 blocks filled
+on first touch) and proves `nearest corner − Slack` as a lower bound anywhere,
+Slack = L·cell·√3/2 plus rounding; `SdfBandedFieldEvaluator` reads the exact
+evaluator through it — exact below its `Band` (contact reach + slack), the
+bound above; gradients always exact; `Overlap` identical everywhere; the
+verbs march `SdfFieldMarch`, the one sphere-trace loop both evaluators run,
+over samples that are exact wherever the exact march could accept or stop.
+A march that stays in the band is bit-identical; one that crosses the bound
+region differs only in its steps, so its converged hit lands elsewhere
+within the accept threshold. `WorldSolidField` bakes it when
+`collision.gridCellSize` is authored; the band is the largest kit collider
+extent at the scale row's ceiling plus the skin. **`Puck.SignedDistance.Queries.Debug`:**
 `WorldQueryDriftInstrument` measures the evaluator's answers against two
 INDEPENDENT channels outside an epsilon-shell exclusion around its own zero
 set (a near-surface point is not a fair sign test for any coarser

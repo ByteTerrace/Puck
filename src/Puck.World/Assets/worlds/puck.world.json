@@ -249,6 +249,7 @@
   "collision": {
     "contactSkin": 0.02,
     "gradientProbe": 0.0,
+    "gridCellSize": 0.5,
     "maxIterations": 4,
     "maxSlopeDegrees": 60.0,
     "requirements": [

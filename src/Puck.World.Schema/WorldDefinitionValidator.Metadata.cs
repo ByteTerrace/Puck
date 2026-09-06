@@ -379,6 +379,17 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"collision.gradientProbe must be exactly 0 (take the evaluator default) or >= 0.001 (was {collision.GradientProbe}).");
         }
 
+        // 0 bakes no grid; a non-zero cell must sit inside the addressable range — below the floor a grid over a room
+        // outgrows memory, above the ceiling its bound is looser than any query can use.
+        if (
+            !float.IsFinite(f: collision.GridCellSize) ||
+            (collision.GridCellSize < 0f) ||
+            ((collision.GridCellSize != 0f) && (collision.GridCellSize < WorldCollision.MinGridCellSize)) ||
+            (collision.GridCellSize > WorldCollision.MaxGridCellSize)
+        ) {
+            errors.Add(item: $"collision.gridCellSize must be exactly 0 (bake no grid) or within [{WorldCollision.MinGridCellSize}, {WorldCollision.MaxGridCellSize}] (was {collision.GridCellSize}).");
+        }
+
         if (
             (collision.Requirements is { Count: 0 }) &&
             float.IsFinite(f: collision.GradientProbe) &&

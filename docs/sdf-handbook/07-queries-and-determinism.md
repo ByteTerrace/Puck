@@ -158,6 +158,15 @@ its wrong answers would look exactly like right ones.
 provider; a sim binds only `IWorldQuery` itself; nothing downstream needs to
 know or care which provider answered.
 
+A third reading sits between the two. `SdfDistanceGrid` keeps the live
+evaluator's exact values at the corners of world-space cells, and because the
+field cannot change faster than its Lipschitz bound, the nearest corner's value
+less a slack is a lower bound anywhere in the cell. `SdfBandedFieldEvaluator`
+answers the exact evaluator wherever that bound falls inside a band a body can
+touch, and the bound everywhere else — so a sample in open air costs one corner
+read instead of a walk over every solid, while a contact, a hit, or an overlap
+is decided on the exact field.
+
 One subtlety matters for sphere queries against a live program. `StepScale`
 turns the field into a lower bound on Euclidean separation, so the safe sphere
 advance is `field * StepScale - radius`, not `(field - radius) * StepScale`.

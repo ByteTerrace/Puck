@@ -17,6 +17,14 @@ namespace Puck.World.Server;
 /// <remarks>
 /// <para>This type owns the document half: which rows are solid, how they compile, and the read-backs
 /// <c>world.collision.status</c> reports. Contact resolution itself belongs to the solver.</para>
+/// <para>A world authoring <c>collision.gridCellSize</c> reads the program through an
+/// <see cref="SdfBandedFieldEvaluator"/> over an <see cref="SdfDistanceGrid"/>: exact within the band a body's
+/// contact can reach — the largest kit collider extent at the world's largest body scale, plus the contact skin,
+/// plus the grid's own slack — and the grid's corner bound beyond it. The grid covers every finite instance bound in
+/// the program padded by <see cref="GridPadding"/>; a query outside it reads the exact program. The band is read
+/// from the kits and the scale row at build; a live whole-row upsert raising the scale row's ceiling past the band
+/// takes effect at the next solid rebuild, and until then a body scaled beyond the old ceiling can be pushed out of
+/// a surface by up to the grid's slack more than its exact penetration, never less.</para>
 /// <para>A solid screen's contact box is axis-aligned because the renderer only ever <c>Translate</c>s a screen slab —
 /// a screen's right/up is a UV frame only, never a geometry rotation (see <see cref="SdfProgramBuilder"/>'s
 /// <c>ScreenSlab</c> overload doc). Orienting a screen volume for real is a two-surface arc — render and contact must
@@ -37,6 +45,9 @@ namespace Puck.World.Server;
 public sealed class WorldSolidField : IContactField {
     // The same float-safety margin the client stamper adds around a placement's render reach, in world units.
     private const float InstanceBoundMargin = 0.4f;
+    /// <summary>How far the distance grid extends past the outermost finite instance bound, in world units — the open
+    /// air around the solids where a body or a sight line is far from every surface and a corner bound answers.</summary>
+    public const float GridPadding = 32f;
 
     private static readonly FixedVector3 UnitY = new(
         X: FixedQ4816.Zero,
@@ -45,8 +56,17 @@ public sealed class WorldSolidField : IContactField {
     );
 
     private readonly IFieldEvaluator m_contactField;
+    // The field every query reads: the banded evaluator when a grid is authored, the exact program otherwise.
+    private readonly IFieldEvaluator m_field;
     private readonly SdfFieldEvaluator m_evaluator;
+    private readonly SdfBandedFieldEvaluator? m_banded;
+    private readonly WorldFieldLattice? m_lattice;
+    private readonly SdfProgram m_program;
+    private readonly IWorldQuery m_query;
     private readonly FixedFieldContactSolver m_solver;
+    // The largest extent any kit collider volume reaches from its own sample point, at the world's largest body
+    // scale, in world units; the contact skin is added per tuning.
+    private readonly FixedQ4816 m_kitReach;
     // The hold policy per compiled material id — TryBuild adds exactly one material per solid screen and per solid
     // placement, so a probe's reported material id IS the row that composed it. A material id outside these (the
     // field lattice's own terrain, which no placement row owns) falls back to the world's collision.defaultHold.
@@ -59,34 +79,71 @@ public sealed class WorldSolidField : IContactField {
     private readonly bool[] m_holdableGrantedByOverride;
     private readonly bool m_defaultGrip;
 
-    private WorldSolidField(SdfFieldEvaluator evaluator, IFieldEvaluator contactField, int instructionCount, long placementShapeCount, WorldContactCensus census, FixedWorldCollision tuning, bool[] holdableMaterials, bool[] holdableGrantedByOverride, bool defaultGrip) {
+    private WorldSolidField(SdfProgram program, SdfFieldEvaluator evaluator, SdfDistanceGrid? grid, FixedQ4816 kitReach, WorldFieldLattice? lattice, long placementShapeCount, WorldContactCensus census, FixedWorldCollision tuning, bool[] holdableMaterials, bool[] holdableGrantedByOverride, bool defaultGrip) {
+        m_program = program;
         m_evaluator = evaluator;
-        m_contactField = contactField;
+        m_kitReach = kitReach;
+        m_lattice = lattice;
         m_holdableMaterials = holdableMaterials;
         m_holdableGrantedByOverride = holdableGrantedByOverride;
         m_defaultGrip = defaultGrip;
-        InstructionCount = instructionCount;
+        InstructionCount = program.Instructions.Count;
         PlacementShapeCount = placementShapeCount;
-        Census = census;
+
+        if (grid is null) {
+            m_field = evaluator;
+            m_query = evaluator;
+        } else {
+            m_banded = new SdfBandedFieldEvaluator(
+                contactReach: (kitReach + tuning.ContactSkin),
+                exact: evaluator,
+                grid: grid
+            );
+            m_field = m_banded;
+            m_query = m_banded;
+        }
+
+        Census = (census with {
+            SolidBakeHash = BakeHash(
+                cellSize: tuning.GridCellSize,
+                contactReach: (kitReach + tuning.ContactSkin),
+                program: program
+            ),
+        });
+        // A field lattice's height columns union with the authored solids for contact; sweeps and line of sight
+        // still march the authored program alone.
+        m_contactField = ((lattice is null)
+            ? m_field
+            : new WorldUnionField(
+                a: m_field,
+                b: new WorldFieldLatticeSolid(lattice: lattice)
+            ));
         m_solver = new FixedFieldContactSolver(
             contactSkin: tuning.ContactSkin,
-            field: contactField,
+            field: m_contactField,
             gradientProbe: tuning.GradientProbe,
             gradientUp: tuning.GradientUp,
             groundedThreshold: tuning.GroundedThreshold,
             maxIterations: tuning.MaxIterations,
-            query: evaluator
+            query: m_query
         );
     }
 
     /// <summary>Gets the analytic collider census measured from the same definition, so the read-back is comparable
-    /// whichever provider the world selected.</summary>
+    /// whichever provider the world selected, carrying this field's <see cref="WorldContactCensus.SolidBakeHash"/>.</summary>
     public WorldContactCensus Census { get; }
+    /// <summary>Gets the field value below which every query reads the exact program: the contact band when a grid is
+    /// authored, zero otherwise.</summary>
+    public FixedQ4816 ContactBand => (m_banded?.Band ?? FixedQ4816.Zero);
     /// <summary>Gets the field evaluator the <c>world.collision.probe</c> verb reads distance/material/gradient from, so the
-    /// surface the simulation itself solves against is directly observable.</summary>
-    public IFieldEvaluator Evaluator => m_evaluator;
+    /// surface the simulation itself solves against is directly observable — beyond <see cref="ContactBand"/> it
+    /// reads the grid's corner bound, as the simulation does.</summary>
+    public IFieldEvaluator Evaluator => m_field;
+    /// <summary>Gets the baked distance grid, or <see langword="null"/> when the world authors no cell size or the
+    /// program has nothing finite to cover.</summary>
+    public SdfDistanceGrid? Grid => m_banded?.Grid;
     /// <summary>Gets the deterministic gameplay-query view over the same compiled solid program.</summary>
-    public IWorldQuery Query => m_evaluator;
+    public IWorldQuery Query => m_query;
     /// <summary>Gets a value indicating whether this field's collision tuning authors <see cref="WorldContactRequirement.GradientDerivedUp"/>.</summary>
     public bool GradientUp => m_solver.GradientUp;
     /// <summary>Gets the compiled program's instruction count — the <c>world.collision.status</c> read-back (a rough size of
@@ -292,18 +349,17 @@ public sealed class WorldSolidField : IContactField {
             return false;
         }
 
-        // A field lattice's height columns union with the authored solids for contact; sweeps and line of sight
-        // still march the authored program alone.
         built = new WorldSolidField(
             evaluator: evaluator,
-            contactField: ((lattice is null)
-                ? evaluator
-                : new WorldUnionField(
-                    a: evaluator,
-                    b: new WorldFieldLatticeSolid(lattice: lattice)
-                )),
-            instructionCount: program.Instructions.Count,
+            grid: CoverGrid(
+                cellSize: tuning.GridCellSize,
+                evaluator: evaluator,
+                program: program
+            ),
+            kitReach: KitReach(definition: definition),
+            lattice: lattice,
             placementShapeCount: placementShapeCount,
+            program: program,
             census: WorldColliderSet.Measure(definition: definition),
             holdableGrantedByOverride: [.. holdableGrantedByOverride],
             holdableMaterials: [.. holdableMaterials],
@@ -312,26 +368,106 @@ public sealed class WorldSolidField : IContactField {
         );
 
         return true;
-    }    /// <inheritdoc/>
+    }
+    // The bake's inputs, folded so two fields with equal hashes carry equal grids: the packed program, the cell size,
+    // and the contact reach the band starts from. Zero when no grid is authored.
+    private static ulong BakeHash(SdfProgram program, FixedQ4816 cellSize, FixedQ4816 contactReach) {
+        if (cellSize <= FixedQ4816.Zero) {
+            return 0UL;
+        }
+
+        var hash = Fnv1aHash.Create();
+
+        foreach (var word in program.Words) {
+            hash.Add(value: word);
+        }
+
+        hash.Add(value: cellSize.Value);
+        hash.Add(value: contactReach.Value);
+
+        return hash.Value;
+    }
+    private static SdfDistanceGrid? CoverGrid(SdfFieldEvaluator evaluator, SdfProgram program, FixedQ4816 cellSize) =>
+        ((cellSize > FixedQ4816.Zero)
+            ? SdfDistanceGrid.TryCover(
+                cellSize: cellSize,
+                exact: evaluator,
+                padding: FixedQ4816.FromDouble(value: GridPadding),
+                program: program
+            )
+            : null
+        );
+    // The farthest any kit's contact sample compares the field against, at the largest scale a body can wear: a
+    // sphere's or capsule's radius, a box's half-extent length. A body absent from the scale row reads scale 1, so
+    // the row's ceiling never shrinks the reach below the unscaled collider.
+    private static FixedQ4816 KitReach(WorldDefinition definition) {
+        var reach = FixedQ4816.Zero;
+
+        foreach (var kit in definition.Kits) {
+            if (FixedWorldCollider.Compile(
+                collider: kit.Collider,
+                creations: definition.Creations
+            ) is not { } collider) {
+                continue;
+            }
+
+            foreach (var volume in collider.Volumes) {
+                reach = FixedQ4816.Max(
+                    x: reach,
+                    y: ((volume.Kind == FixedBodyColliderKind.Box)
+                        ? volume.HalfExtents.Length
+                        : volume.Radius
+                    )
+                );
+            }
+        }
+
+        var scale = FixedQ4816.One;
+
+        if (
+            (definition.Population.ScaleRow is { } scaleRow) &&
+            (WorldDefinitionRows.FindStateRow(
+                rows: definition.State,
+                name: scaleRow
+            ) is { Max: { } scaleMax })
+        ) {
+            scale = FixedQ4816.Max(
+                x: scale,
+                y: FixedQ4816.FromRawBits(value: scaleMax)
+            );
+        }
+
+        return (reach * scale);
+    }
+    /// <inheritdoc/>
     public bool TryUp(in FixedVector3 position, out FixedVector3 up) =>
         m_solver.TryUp(
             position: in position,
             up: out up
         );
     /// <summary>Re-wraps this field's already-compiled program with fresh solver scalars, reusing the wrapped
-    /// <see cref="SdfFieldEvaluator"/> (safe to share by reference — it holds only an immutable instruction array). A
-    /// <c>SetCollision</c> edit touches only the collision tuning row, never the geometry the program bakes (screens and
-    /// placements), so a slope/skin/probe/iteration tweak reuses the program instead of
-    /// recompiling it. The result is a distinct instance (per-revision immutability) so the install-time reference swap
-    /// still bumps the revision.</summary>
+    /// <see cref="SdfFieldEvaluator"/> (safe to share by reference — it holds only an immutable instruction array) and
+    /// the distance grid when the cell size is unchanged. A <c>SetCollision</c> edit touches only the collision tuning
+    /// row, never the geometry the program bakes (screens and placements), so a slope/skin/probe/iteration tweak
+    /// reuses the program instead of recompiling it; a new cell size bakes a new grid over the same program. The
+    /// result is a distinct instance (per-revision immutability) so the install-time reference swap still bumps the
+    /// revision.</summary>
     /// <param name="tuning">The recompiled collision tuning to adopt.</param>
     /// <returns>A new field over the same evaluator with the new scalars.</returns>
     public WorldSolidField WithTuning(FixedWorldCollision tuning) =>
         new(
             evaluator: m_evaluator,
-            contactField: m_contactField,
-            instructionCount: InstructionCount,
+            grid: (((m_banded is { } banded) && (banded.Grid.CellSize == tuning.GridCellSize))
+                ? banded.Grid
+                : CoverGrid(
+                    cellSize: tuning.GridCellSize,
+                    evaluator: m_evaluator,
+                    program: m_program
+                )),
+            kitReach: m_kitReach,
+            lattice: m_lattice,
             placementShapeCount: PlacementShapeCount,
+            program: m_program,
             census: Census,
             holdableGrantedByOverride: m_holdableGrantedByOverride,
             holdableMaterials: m_holdableMaterials,
@@ -357,7 +493,7 @@ public sealed class WorldSolidField : IContactField {
     private bool TryCast(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate) {
         candidate = default;
 
-        if (!m_evaluator.Raycast(
+        if (!m_query.Raycast(
             dir: direction,
             hit: out var hit,
             maxDist: maxDistance,
