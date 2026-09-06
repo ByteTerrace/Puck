@@ -216,7 +216,12 @@ public sealed partial class WorldServer {
 
         var placements = m_definition.Placements;
 
-        foreach (var placement in placements) {
+        // Indexed, not foreach: Placements is declared IReadOnlyList, and its backing row array's own
+        // IEnumerable<T>.GetEnumerator boxes on every call — indexing is the zero-allocation walk of an interface-
+        // typed list regardless of what concrete type backs it.
+        for (var index = 0; (index < placements.Count); index++) {
+            var placement = placements[index];
+
             if (
                 (placement.Contribution is not { Tenure: WorldContributionTenure.Presence } contribution) ||
                 (contribution.Contributor is null) ||

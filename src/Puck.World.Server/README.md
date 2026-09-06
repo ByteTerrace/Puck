@@ -315,18 +315,31 @@ Rule/interaction installation is also guarded by a static aggregate work budget,
 reported beside evaluation slots in `world.budget`; dynamic body-index keys use
 a prebuilt string cache on the evaluation path.
 
-**Lifetime sweeps.** Three per-tick passes run side by side at the end of
+**Lifetime sweeps.** Four per-tick passes run side by side at the end of
 `WorldServer.StepCore`, each firing ORDINARY mutations under
 `WorldPrincipal.World`'s structural exemption so recovery is journalled rather
 than a bespoke erase: `ReclaimExpiredEscrows` (an unaccepted ownership offer),
+`WorldTransferEscrow.ReclaimExpired` (an unclaimed destination reservation),
 `SweepContributionTenure` (`WorldServer.Contributions.cs` — a presence-tenure
 contribution slot whose watched `adjacencies` row has read dropped past the
-slot's own `graceSeconds`), and `SweepPlacementResponses`
+slot's own `graceSeconds`), and `WorldPopulation.ReclaimExpiredParks` (a
+disconnected seat or peer past its reconnect grace). `SweepDeadlines`
+(`WorldDeadlineTable.cs`) runs the first three as one step beside rules; parks
+stays a separate call after `SweepPlacementResponses`
 (`WorldServer.Responses.cs` — right after `StepFields`, so it reads this
 tick's own lattice writes: the first `WorldPlacementResponse` entry whose
-condition holds at a placement's coupled cell becomes its prototype). The
-contribution sweep reads link liveness through `WorldServer.TryLinkLiveness`,
-which pairs `WorldEventFeed.LinkStalenessTicks` with the row's compiled
+condition holds at a placement's coupled cell becomes its prototype). Escrow
+reclaim, transfer expiry, and park teardown are all driven by a
+`WorldDeadlineTable<TToken>` — entries sorted by due tick, drained from the
+front, so a tick with nothing due pays for one comparison rather than a walk
+of every row, lease, or population entry the owner holds; ownership and parks
+rebuild their table only when the document (ownership) or `WorldPopulation`'s
+own revision (parks) has moved since the last rebuild, and the transfer
+table is kept incrementally in sync with `WorldTransferEscrow`'s own lease
+table. The contribution sweep still walks every placement each tick — it has
+to observe a live adjacency link dropping, which the document cannot reflect
+— and reads link liveness through `WorldServer.TryLinkLiveness`, which pairs
+`WorldEventFeed.LinkStalenessTicks` with the row's compiled
 `livenessGraceSeconds`; its retraction defers, rather than proceeding, while
 the slot's inhabitant is drive-possessed. Every recovery mutation remains undoable.
 

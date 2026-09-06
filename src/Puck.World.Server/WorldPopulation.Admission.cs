@@ -566,6 +566,12 @@ public sealed partial class WorldPopulation {
         index: index,
         generation: m_entries[index].Generation
     );
+    // Mirrors what a full Capacity scan would find, as of the last m_revision it was rebuilt from. Every site that
+    // touches Entry.Parked or Entry.ParkedUntilTick (including Rebuild, on a document reload) bumps m_revision, so
+    // an unmoved revision is a sound proof nothing here needs rescanning.
+    private readonly WorldDeadlineTable<int> m_parkDeadlines = new();
+    private int m_parkDeadlineRevision = -1;
+
     /// <summary>Tears down every entry parked past its grace deadline — the deferred half of
     /// <see cref="DeactivateSeat"/>/<see cref="ApplyPeerDisconnected"/>'s teardown (see <see cref="Entry.Parked"/>'s
     /// own remarks): drops the body, clears <see cref="Entry.Active"/> and (for a peer) <see cref="Entry.IsRemoteHuman"/>,
@@ -577,69 +583,90 @@ public sealed partial class WorldPopulation {
     /// nothing. Driven purely by <paramref name="tick"/> — no wall clock, no
     /// randomness — so it is exactly as replay-deterministic as <c>Server.WorldServer.ReclaimExpiredEscrows</c>,
     /// which this mirrors and is swept beside every tick.
+    /// <para><b>Deadline table.</b> <see cref="m_parkDeadlines"/> holds one entry per finite deadline the last
+    /// rescan found; a tick whose <see cref="m_revision"/> has not moved since then only drains whatever the table
+    /// now shows as due, in place of the rescan below.</para>
     /// <para><b>Revival re-stamp.</b> This method is per-tick and so never runs for a rate-0 world (the step loop
     /// that calls it is itself skipped — see <c>WorldInstanceHost</c>'s stepping gate); a seat that parked with
     /// <see cref="Entry.ParkedUntilTick"/> <see langword="null"/> (a positive reconnect grace compiled against rate
     /// 0 — <see cref="CompiledTickDuration.IsNever"/>) therefore stays exactly as parked, untouched, until the world
     /// steps again. <see cref="Rebuild"/> recompiles <see cref="m_reconnectGraceTicks"/> against whatever rate a
-    /// reload delivers, but it only ever touches the compiled tables — it does not walk live entries — so the first
-    /// sweep after a revival to a positive rate is exactly the moment a null-forever deadline is resolved against
-    /// the now-finite grace: it is dropped and re-derived, never left stranded. A null deadline with a still-never
-    /// compiled grace (the world reloaded but is still rate 0, or reloaded at a positive rate with the grace itself
-    /// re-authored as never — not possible today, since never only arises at rate 0, but the branch reads correctly
-    /// either way) is left null, exactly as before. A freshly-stamped entry is deliberately not evaluated for
-    /// teardown in the same pass — the visitor's window restarts at the revival tick, so it must survive at least
-    /// one full sweep before it can expire.</para></summary>
+    /// reload delivers and bumps <see cref="m_revision"/> itself, so the rescan that triggers is exactly the moment
+    /// a null-forever deadline is resolved against the now-finite grace: it is dropped and re-derived, never left
+    /// stranded. A null deadline with a still-never compiled grace (the world reloaded but is still rate 0, or
+    /// reloaded at a positive rate with the grace itself re-authored as never — not possible today, since never
+    /// only arises at rate 0, but the branch reads correctly either way) is left null, exactly as before. A
+    /// freshly-stamped entry is deliberately not evaluated for teardown in the same rescan — the visitor's window
+    /// restarts at the revival tick, so it must survive at least one full sweep before it can expire.</para></summary>
     /// <param name="tick">The current (just-completed) simulation tick.</param>
     public void ReclaimExpiredParks(ulong tick) {
         var signedTick = unchecked((long)tick);
         var changed = false;
 
-        for (var index = 0; (index < Capacity); index++) {
-            var entry = m_entries[index];
+        if (m_parkDeadlineRevision != m_revision) {
+            m_parkDeadlines.Clear();
 
-            if (!(entry is { Active: true, Parked: true })) {
-                continue;
-            }
+            for (var index = 0; (index < Capacity); index++) {
+                var entry = m_entries[index];
 
-            if (entry.ParkedUntilTick is not { } deadline) {
-                // A NEVER park (see this method's own "Revival re-stamp" remarks). Only re-derivable once the
-                // compiled grace itself is no longer NEVER — a rate-0 world never reaches this method at all, so
-                // reading m_reconnectGraceTicks.IsNever here is exactly "has this world been revived to a positive
-                // rate since the park happened".
-                if (m_reconnectGraceTicks.IsNever) {
+                if (!(entry is { Active: true, Parked: true })) {
                     continue;
                 }
 
-                entry.ParkedUntilTick = (signedTick + m_reconnectGraceTicks.Ticks);
-                changed = true;
+                if (entry.ParkedUntilTick is not { } deadline) {
+                    // A NEVER park (see this method's own "Revival re-stamp" remarks). Only re-derivable once the
+                    // compiled grace itself is no longer NEVER — a rate-0 world never reaches this method at all, so
+                    // reading m_reconnectGraceTicks.IsNever here is exactly "has this world been revived to a positive
+                    // rate since the park happened".
+                    if (m_reconnectGraceTicks.IsNever) {
+                        continue;
+                    }
 
-                continue;
-            }
+                    entry.ParkedUntilTick = (signedTick + m_reconnectGraceTicks.Ticks);
+                    changed = true;
+                    m_parkDeadlines.Add(dueTick: entry.ParkedUntilTick.Value, token: index);
 
-            if (signedTick >= deadline) {
-                entry.Body = null;
-                entry.Active = false;
-                entry.Parked = false;
-                entry.ParkedUntilTick = null;
-                entry.IsAuthorityTransferred = false;
-                entry.PlacementId = null;
-
-                if (entry.IsRemoteHuman) {
-                    entry.IsRemoteHuman = false;
-                    entry.AdmissionInstalledGrantTemplates = [];
-                    entry.AdmissionRevokedKeys.Clear();
-                    entry.IdentityDomain = string.Empty;
-                    entry.IdentitySubject = string.Empty;
+                    continue;
                 }
 
-                changed = true;
+                if (signedTick >= deadline) {
+                    RetireParkedEntry(entry: entry);
+                    changed = true;
+
+                    continue;
+                }
+
+                m_parkDeadlines.Add(dueTick: deadline, token: index);
             }
+        }
+
+        while (m_parkDeadlines.TryDequeueDue(tick: signedTick, out var slot)) {
+            RetireParkedEntry(entry: m_entries[slot]);
+            changed = true;
         }
 
         if (changed) {
             m_simulatedCount = CountActiveCensus();
             m_revision++;
+        }
+
+        m_parkDeadlineRevision = m_revision;
+    }
+    // The full-teardown half of an expired park, shared by both the rescan and the plain table drain below it.
+    private static void RetireParkedEntry(Entry entry) {
+        entry.Body = null;
+        entry.Active = false;
+        entry.Parked = false;
+        entry.ParkedUntilTick = null;
+        entry.IsAuthorityTransferred = false;
+        entry.PlacementId = null;
+
+        if (entry.IsRemoteHuman) {
+            entry.IsRemoteHuman = false;
+            entry.AdmissionInstalledGrantTemplates = [];
+            entry.AdmissionRevokedKeys.Clear();
+            entry.IdentityDomain = string.Empty;
+            entry.IdentitySubject = string.Empty;
         }
     }
     /// <summary>Reconciles the inhabited-body registrations against the delivered definition (called from the server's

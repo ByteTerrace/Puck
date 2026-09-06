@@ -998,12 +998,9 @@ public sealed partial class WorldServer {
         StepBoardEnforcement(tick: tick);
         StepSearch(tick: tick);
         StepFields(tick: tick);
-        // Escrow recovery evaluates on the SAME terms, right beside rules — see ReclaimExpiredEscrows' own remarks.
-        ReclaimExpiredEscrows(tick: tick);
-        m_transferEscrow.ReclaimExpired(tick: tick);
-        // Contribution tenure recovery — the same shape again, for a presence-tenure slot whose contributor's link
-        // went unreachable past its authored grace.
-        SweepContributionTenure(tick: tick);
+        // Escrow, transfer, and contribution deadline recovery evaluate on the SAME terms, right beside rules — see
+        // SweepDeadlines' own remarks.
+        SweepDeadlines(tick: tick);
         // Placement response sweep — AFTER StepFields, so a response condition reads this tick's own lattice writes;
         // a state-driven prototype swap for a placement carrying a Respond trait (see WorldPlacementResponse).
         SweepPlacementResponses(tick: tick);

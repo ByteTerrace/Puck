@@ -125,6 +125,11 @@ public sealed partial class WorldTransferEscrow {
 
     private readonly WorldServer m_server;
 
+    // Sorted by DeadlineTick so ReclaimExpired sweeps only what has actually arrived; every m_leases entry has
+    // exactly one live row here, added alongside the lease and removed by ReleaseLease, whether that release is
+    // driven by the sweep itself or by an explicit Abort/Commit ahead of the deadline.
+    private readonly WorldDeadlineTable<WorldTransferKey> m_deadlines = new();
+    private readonly List<int> m_staleBorderSlots = [];
     private readonly Dictionary<WorldTransferKey, Lease> m_leases = new();
     private readonly HashSet<WorldTransferKey> m_committed = new();
     private readonly Dictionary<WorldTransferKey, WorldTransferCommitMember[]> m_committedMembers = new();
@@ -214,6 +219,7 @@ public sealed partial class WorldTransferEscrow {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
 
         m_leases.Clear();
+        m_deadlines.Clear();
         m_committed.Clear();
         m_committedMembers.Clear();
         m_committedPrincipals.Clear();
@@ -251,6 +257,7 @@ public sealed partial class WorldTransferEscrow {
                 DestinationDefinition: destinationDefinition,
                 Arrival: lease.Arrival
             );
+            m_deadlines.Add(dueTick: unchecked((long)lease.DeadlineTick), token: lease.Key);
         }
 
         foreach (var row in checkpoint.Committed) {
@@ -399,9 +406,17 @@ public sealed partial class WorldTransferEscrow {
         return -1;
     }
     private void PruneDepartedAdmissions() {
-        foreach (var slot in m_borderAdmissions.Keys.Where(predicate: slot => !m_server.Population.IsActive(index: slot)).ToArray()) {
+        foreach (var slot in m_borderAdmissions.Keys) {
+            if (!m_server.Population.IsActive(index: slot)) {
+                m_staleBorderSlots.Add(item: slot);
+            }
+        }
+
+        foreach (var slot in m_staleBorderSlots) {
             _ = m_borderAdmissions.Remove(key: slot);
         }
+
+        m_staleBorderSlots.Clear();
     }
     private void ReleaseLease(WorldTransferKey key) {
         if (!m_leases.Remove(
@@ -410,6 +425,7 @@ public sealed partial class WorldTransferEscrow {
         )) {
             return;
         }
+        _ = m_deadlines.Remove(token: key);
         foreach (var member in lease.Request.Members) {
             var mobility = member.Mobility!.Value;
 
@@ -822,8 +838,10 @@ public sealed partial class WorldTransferEscrow {
     public void ReclaimExpired(ulong tick) {
         PruneDepartedAdmissions();
 
-        foreach (var transferId in m_leases.Where(predicate: pair => (tick >= pair.Value.DeadlineTick)).Select(selector: pair => pair.Key).ToArray()) {
-            ReleaseLease(key: transferId);
+        var signedTick = unchecked((long)tick);
+
+        while (m_deadlines.TryDequeueDue(tick: signedTick, out var key)) {
+            ReleaseLease(key: key);
         }
     }
     public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request) {
@@ -1032,6 +1050,7 @@ public sealed partial class WorldTransferEscrow {
                 Slots: slots
             )
         );
+        m_deadlines.Add(dueTick: unchecked((long)deadline), token: key);
         foreach (var member in request.Members) {
             var mobility = member.Mobility!.Value;
 

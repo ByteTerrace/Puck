@@ -85,7 +85,10 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         output.WriteLine($"dense flock: {expected} coincident creatures, 24 ticks in {watch.Elapsed.TotalMilliseconds:F1} ms ({watch.Elapsed.TotalMilliseconds / 24:F2} ms/tick), median {median} thread bytes/tick, widest {ordered[^1]}");
         Assert.InRange(candidates, 0, updates * 32);
         Assert.InRange(retained, 0, updates * 16);
-        Assert.InRange(median, 0, 512);
+        // WorldDeadlineTable sweeps escrow, transfer, and park expiry from the front instead of walking every
+        // population entry and LINQ-allocating the transfer sweep every tick, so a steady-state population with
+        // nothing expiring costs a handful of bytes, not hundreds.
+        Assert.InRange(median, 0, 64);
         Assert.InRange(fixture.Server.Population.AutonomyStatistics.MotionUpdates, 1023, 1024);
         Assert.InRange(fixture.Server.Population.AutonomyStatistics.SteeringUpdates, 170, 172);
 
