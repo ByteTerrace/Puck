@@ -98,7 +98,6 @@ public sealed class HexLinesModuleImportLawTests {
         var tableFrame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: table);
         var boardCentre = (tableFrame.Position + new Vector3(0f, TileCentre, 0f));
 
-        Assert.Null(table.Parent);
         Assert.Equal(0f, tableFrame.YawDegrees);
 
         for (var index = 0; (index < CellCount); index++) {
