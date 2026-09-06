@@ -22,7 +22,7 @@
         SCOPE — a stated predicate, not an incidental path filter.
 
         A QUARANTINED TREE IS OUTSIDE THE GATE, because quarantine means ungated. This has to be said out
-        loud: the repository root's Directory.Build.props reaches experimental/Puck.Demo (nothing stops
+        loud: the repository root's Directory.Build.props reaches experimental/Puck.Post (nothing stops
         MSBuild's upward walk there), so without this the gate would run on a project deliberately removed
         from the graph and fail it against a ledger that cannot describe it. Puck.BareMetal is already immune
         for a different and better reason — it carries its own Directory.Build.props/.targets firewall pair
@@ -31,7 +31,7 @@
         src/Web.Functions carries a second, unrelated exclusion below it: a separately built platform app that
         shares this tree, not part of the graph — never quarantined code awaiting retirement. It is gitignored
         and untracked, so it can carry no tracked Directory.Build.props/.targets firewall pair of its own the
-        way Puck.BareMetal does, and the same upward walk that reaches experimental/Puck.Demo reaches it too.
+        way Puck.BareMetal does, and the same upward walk that reaches experimental/Puck.Post reaches it too.
         Puck.slnx never lists it, for the same reason.
 
         A filter that happens to exclude the right directories reads identically to one that excludes the

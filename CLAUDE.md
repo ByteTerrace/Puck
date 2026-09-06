@@ -87,9 +87,9 @@ quarantine governs *work*, not *reading*. Under `experimental/` you are
 expected to READ the source and CITE it as prior art, and to DELETE code there
 once live code has eclipsed it. You may NOT improve it, fix it, build it, run
 it, or run its tests. Expect its builds to break as deletions land — that is
-the intended outcome, not a regression to repair. The trees hold `Puck.Demo`,
-`Puck.Post`, `tools/`, both `scripts/` trees, and `Puck.BareMetal`; each
-carries a firewall pair so the root build cannot reach it either. See
+the intended outcome, not a regression to repair. The trees hold `Puck.Post`,
+`Puck.Bench`, both `scripts/` trees, `Puck.BareMetal`, and `Puck.Platform.Switch`;
+each carries a firewall pair so the root build cannot reach it either. See
 [experimental/README.md](experimental/README.md).
 
 Read it the way you read git history: evidence of how a problem was solved

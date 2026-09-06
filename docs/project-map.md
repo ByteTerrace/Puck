@@ -214,8 +214,8 @@ Cross-backend parity has one on-demand check: `puck parity` boots the real windo
 
 `experimental/` holds `Puck.BareMetal` (freestanding Native AOT runtime, UEFI
 kernels, direct hardware bring-up), `Puck.Platform.Switch` (moved from
-`src/Puck.Platform/Switch/`), and the quarantined `Puck.Demo`, `Puck.Post`,
-`Puck.Bench`, and both `scripts/` trees (`scripts/world`, `scripts/recording`).
+`src/Puck.Platform/Switch/`), and the quarantined `Puck.Post`, `Puck.Bench`,
+and both `scripts/` trees (`scripts/world`, `scripts/recording`).
 The quarantine rules — read as prior art, never build, run, fix, or revive —
 live in
 [CLAUDE.md](../CLAUDE.md) and

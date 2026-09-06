@@ -97,13 +97,13 @@ Run greenfield composition roots instead of adding engine gates:
 dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2
 ```
 
-`Puck.World` is the only composition root that runs. `Puck.Demo` is a library
-with no entry point, quarantined at `experimental/Puck.Demo` and OUT of the
-solution and root build (owner ruling, 2026-08-01) — every `dotnet run` against
-it, including the former `--validate-overworld` check, is void. Nothing plans
-bringing its capabilities across: the port plan that used to sequence that work
-was deleted with the quarantine. Do not add a `--validate-*` mode or a
-`Puck.Post` stage for game-specific behavior unless explicitly requested.
+`Puck.World` is the only composition root that runs. `Puck.Demo`, the
+composition-root-less library that once sat quarantined at
+`experimental/Puck.Demo`, is deleted — each folder's capability either has a
+live successor in `Puck.World` (see `experimental/README.md`) or is simply
+absent from it, with no plan bringing it over. Do not add a `--validate-*`
+mode or a `Puck.Post` stage for game-specific behavior unless explicitly
+requested.
 
 The console is the scriptable control plane. On-screen input and process stdin
 use the same registry; an ACCEPTED result echoes to stdout and a REFUSED one to

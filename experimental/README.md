@@ -11,7 +11,6 @@ regression to repair.
 
 | Tree | Was | Quarantined |
 |---|---|---|
-| `Puck.Demo` | `src/Puck.Demo` | 2026-08-01 |
 | `Puck.Post` | `src/Puck.Post` | 2026-08-02 |
 | `scripts/world` | `src/Puck.World/scripts/` | 2026-08-02 |
 | `scripts/recording` | `src/Puck.Recording/scripts/` | 2026-08-02 |
@@ -25,12 +24,30 @@ with a door in it. That is what makes the quarantine structural rather than a
 path filter someone has to maintain: a filter that happens to exclude the right
 directories reads identically to one that excludes the wrong ones.
 
-Do not trust a green restore in `Puck.Demo`: its `ProjectReference`s are
-relative paths written when it lived under `src/`, and they all dangle here.
-`dotnet restore` exits 0 while silently discarding every one of them
-(warning-level "Skipping project ... because it was not found"), and a build
-then fails as a flood of `CS0234` errors pointing at source files rather than
-at the dangling edges.
+## Retired: `Puck.Demo`
+
+Deleted whole: every folder listed below had a live eclipsing home, so nothing
+was left here to read. Each row names the symbol or document that carries the
+capability today, so the claim is mechanical rather than an impression:
+
+| Folder | Eclipsed by |
+|---|---|
+| `Overworld/` | The authoritative fold and its tape: `Puck.World.Server.WorldServer`, `Puck.World.Server.WorldReplayTape`. |
+| `Forge/` | The shared cartridge/audio document model and the two brick compilers: `Puck.GamingBricks.Forge.CartridgeDocument`, `Puck.HumbleGamingBrick.Forge.HgbCartridgeCompiler`, `Puck.AdvancedGamingBrick.Forge.AgbCartridgeCompiler`. |
+| `Town/` | The shipped world document itself, authored rather than built in code: `src/Puck.World/Assets/worlds/puck.world.json`. |
+| `Camera/` | `Puck.Platform.Probes.ProbeKernel` (`src/Puck.Platform/Probes/ProbeKernel.cs`). |
+| `Audio/` | `Puck.Audio` (`Puck.Audio.Mixing.AudioMixer` and the rest of `Mixing/`/`Simulation/`). |
+| `BindingBar/`, `DevConsole/` | `Puck.Overlays` — `Puck.Overlays.BindingBarLayout` and `Puck.Overlays.ConsolePanelWriter`. |
+| `Garden/` | The garden district's creature steering, `Puck.Physics.FixedFlockSteering`, proven by the `flock-local` canary against the shipped world. |
+| `Rts/` | A placement dealt from a state row (`WorldPlacementDeal` on `Puck.World.Schema.WorldPlacement`) generalizes spawning many instances from an authored region — the scenario's one consumer. |
+| `Gravity/` | `Puck.World.Schema.WorldGravity` / `Puck.World.Server.WorldGravityField` — authored gravity areas a body walks under, already live on every shipped world. |
+| `Museum/` | The screen source kinds `Puck.World.Schema.WorldScreenSource.View`/`.Session` and the recursion bound `Puck.World.Server.WorldForwardingScope`. |
+
+`AgbDebug/`, `Bench/`, `BindingBar/`'s glyph atlas, `Camera/`'s webcam sensor,
+`Configuration/`, `Creator/`, `Editing/`, `SdfDebug/`, `Text/`, `Tracker/`,
+`Ui/`, `World/`, and `scenarios/` named no capability with a live successor:
+they retire with nothing eclipsing them — a capability that lived only there
+is simply absent from `Puck.World`, with no plan bringing it over.
 
 ## Nothing here is deleted, and nothing here is alive
 

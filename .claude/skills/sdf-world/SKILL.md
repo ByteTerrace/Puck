@@ -27,14 +27,14 @@ headless admission has no GPU capacity lease.
 > through a CLI flag. `Puck.World` has no content-authoring flags at all.
 
 > **`Puck.Demo.*` symbols below are recorded history.** `Puck.Demo` is
-> quarantined under `experimental/`: read it as prior art, but it may not be
-> built, run, or revived in place. The contracts stated
-> here were accurate when written and are kept because they explain why the
-> engine seams have the shape they do. They are not live collaborators, they are
-> not available to call, and **nothing plans re-homing them into `Puck.World`** —
-> the port plan that would have was deleted. Where this file names a
-> `Puck.Demo.*` type as the only implementation of something, read that as: the
-> capability is absent from the running product.
+> deleted; its tree is readable only from git history, never from a live
+> checkout. The contracts stated here were accurate when written and are kept
+> because they explain why the engine seams have the shape they do. They are
+> not live collaborators, they are not available to call, and **nothing plans
+> re-homing them into `Puck.World`** — the port plan that would have was
+> deleted. Where this file names a `Puck.Demo.*` type as the only
+> implementation of something, read that as: the capability is absent from
+> the running product.
 
 > **ISA admission rule (owner-ratified 2026-07-12).** An op or shape earns a
 > switch case ONLY if it cannot be composed EXACTLY from existing vocabulary —
