@@ -396,11 +396,13 @@ public sealed class WorldRuleExtensionLawTests {
         var evolvingTraces = Snapshot(definition: evolving).DriveTraces(
             profiles: fixture.Server.Profiles,
             engines: [],
+            machineHostFactory: Fixtures.MachineHostFactory,
             addonHostFactory: static (_, _) => new NullAddonHost()
         );
         var inertTraces = Snapshot(definition: inert).DriveTraces(
             profiles: fixture.Server.Profiles,
             engines: [],
+            machineHostFactory: Fixtures.MachineHostFactory,
             addonHostFactory: static (_, _) => new NullAddonHost()
         );
 

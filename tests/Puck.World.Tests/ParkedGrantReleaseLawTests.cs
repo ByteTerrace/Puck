@@ -455,6 +455,7 @@ public sealed class ParkedGrantReleaseLawTests {
             profiles: fixture.Server.Profiles,
             transport: transport,
             engines: [],
+            machineHostFactory: Fixtures.MachineHostFactory,
             addonHostFactory: static (_, _) => new NullAddonHost()
         );
         var name = $"parked-grant-release-{Guid.NewGuid():N}";

@@ -36,6 +36,10 @@
         <!-- The `puck bench world` lane boots a real WorldServer over the shipped world and a checked-in Klondike
              fixture document. -->
         <ProjectReference Include="..\Puck.World.Server\Puck.World.Server.csproj" />
+        <!-- The screen-machine host (WorldMachineHost) and its shipped engines moved here from Puck.World.Server —
+             WorldBenchServer constructs the real host, with no registered engines, exactly like
+             tests/Puck.World.Tests/Fixtures.cs's FreshServer does. -->
+        <ProjectReference Include="..\Puck.World.Addons\Puck.World.Addons.csproj" />
         <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
     </ItemGroup>
     <Target Name="PublishPuckLauncher" AfterTargets="Publish">

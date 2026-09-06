@@ -4,8 +4,8 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 /// <summary>Defines the memory-peek seam that <c>WorldAddonRuntime</c> reads through, mirroring
-/// <c>Puck.Abstractions.Machines.IMachineMemoryPeek</c>'s contract. <see cref="WorldMachineHost"/>, reached via
-/// <see cref="WorldServer.Machines"/>, is the only implementation; callers should not reach past this interface into
+/// <c>Puck.Abstractions.Machines.IMachineMemoryPeek</c>'s contract. <see cref="IWorldMachineHost"/>, reached via
+/// <see cref="WorldServer.Machines"/>, is the only implementor; callers should not reach past this interface into
 /// the concrete host.</summary>
 public interface IWorldMachineMemoryPeek {
     /// <summary>Reads one byte from a screen's booted machine, or fails when the screen has no machine or the
@@ -337,8 +337,8 @@ public sealed partial class WorldServer : IWorldServerHost {
     private readonly WorldGrants m_grants;
     private readonly WorldInputHoldRuntime m_inputHold;
     // The authoritative screen-machine host — a PEER singleton
-    // assigned in the constructor, never owned/disposed here (see WorldMachineHost's own remarks).
-    private readonly WorldMachineHost m_machines;
+    // assigned in the constructor, never owned/disposed here (see IWorldMachineHost's own remarks).
+    private readonly IWorldMachineHost m_machines;
     private readonly WorldPopulation m_population;
     private readonly WorldOwnedWorlds m_profiles;
     private readonly EntitySnapshot[] m_snapshotEntries;
@@ -400,7 +400,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     public bool AnyAddonEverPumped => (m_addons?.AnyEverPumped ?? false);
     /// <summary>Gets a value indicating whether any booted screen machine has ever had a step/segment actually submitted — the identical
     /// boot-anchored replay arm predicate <see cref="AnyAddonEverPumped"/> applies to addons: offline replay
-    /// rehydrates a fresh <see cref="WorldMachineHost"/> from the tape's embedded
+    /// rehydrates a fresh <see cref="IWorldMachineHost"/> from the tape's embedded
     /// definition, which can reconstruct a machine's boot image but never its accumulated core state (WRAM, CPU
     /// registers) once real ticks have run it. A world with a boot-declared cartridge means recording must arm
     /// before its first step, same as a world that mounts an addon must arm before its first tick.</summary>
@@ -411,12 +411,12 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// synchronously, between fixed steps, not inside <see cref="Step"/> — so a
     /// <c>screen.insert</c>/<c>.eject</c>/<c>.select</c>/<c>.options</c>/<c>.link</c>/<c>.unlink</c> that lands
     /// before <c>replay.record</c> arms (even with zero steps run since) changes live host state
-    /// (<see cref="WorldMachineHost"/>'s slots/links) that the tape's record-start definition snapshot never
+    /// (<see cref="IWorldMachineHost"/>'s slots/links) that the tape's record-start definition snapshot never
     /// reflects — these ops are not document mutations, so nothing about them exists in
     /// <see cref="WorldDefinition"/> for the snapshot to capture, and they are only ever added to the tape's own
     /// authority list from the moment <see cref="ScreenOpTap"/> attaches (recording-arm time onward) — never
     /// retroactively. Left ungated, offline replay reconstruction (a fresh
-    /// <see cref="WorldMachineHost"/> booted from that snapshot alone) would simply lack the machine/link/eject
+    /// <see cref="IWorldMachineHost"/> booted from that snapshot alone) would simply lack the machine/link/eject
     /// entirely, a divergence the population hash cannot see. Latched the instant any op applies and never cleared,
     /// mirroring <see cref="AnyMachineEverPumped"/>'s own shape exactly. Only ever added to a recording's own
     /// authority list from the moment <see cref="ScreenOpTap"/> attaches (recording-arm time) onward — never
@@ -487,10 +487,10 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <summary>Gets the width of the latest authoritative step, or zero before the first step.</summary>
     public ulong LastStepTicks => m_lastStepTicks;
     /// <summary>Gets the authoritative screen-machine host — owns every booted <c>IScreenMachine</c>, its memory-peek
-    /// surface (<see cref="WorldMachineHost"/> implements <see cref="IWorldMachineMemoryPeek"/> directly), and the
+    /// surface (<see cref="IWorldMachineHost"/> extends <see cref="IWorldMachineMemoryPeek"/> directly), and the
     /// screen-op verb surface's runtime target. Always present (never null): machines are booted and stepped in
     /// every boot shape.</summary>
-    public WorldMachineHost Machines => m_machines;
+    public IWorldMachineHost Machines => m_machines;
     /// <summary>Gets or sets an optional durable-journal tap fired with a mutation's own tick right after it is
     /// applied and folded into the in-memory undo journal — the same call site, so an entry this tap sees is exactly
     /// the entry a restart's journal-tail replay reapplies. Fires synchronously on the tick thread; the
@@ -628,7 +628,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <param name="envelope">The render-capacity oracle a scene/screen mutation is checked against at apply time.</param>
     /// <param name="machines">The authoritative screen-machine host (owns every booted <c>IScreenMachine</c>) — a
     /// peer singleton, not a private field this constructor builds, so the composition root disposes it (see
-    /// <see cref="WorldMachineHost"/>'s own remarks on why).</param>
+    /// <see cref="IWorldMachineHost"/>'s own remarks on why).</param>
     /// <param name="instanceIdentity">This server's own running-instance identity — the draw seed ladder's instance
     /// rung (see <c>GeneratorEngine.ComputeSeedState</c> in <c>Puck.World.Schema</c>). Defaults to the boot
     /// instance's own constant name (<c>Puck.World.WorldInstanceHost.BootInstanceName</c>, not referenced directly —
@@ -638,7 +638,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// construction returns would miss every line construction itself writes.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="instanceIdentity"/> is empty.</exception>
-    public WorldServer(WorldDefinition definition, WorldPopulation population, WorldOwnedWorlds profiles, WorldRenderEnvelope envelope, WorldMachineHost machines, string instanceIdentity = "boot", IWorldNarrationSink? narrationSink = null) {
+    public WorldServer(WorldDefinition definition, WorldPopulation population, WorldOwnedWorlds profiles, WorldRenderEnvelope envelope, IWorldMachineHost machines, string instanceIdentity = "boot", IWorldNarrationSink? narrationSink = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: population);
         ArgumentNullException.ThrowIfNull(argument: profiles);

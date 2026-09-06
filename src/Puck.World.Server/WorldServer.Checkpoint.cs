@@ -414,7 +414,7 @@ public sealed partial class WorldServer {
     /// proven never stepped one.</param>
     /// <param name="instanceIdentity">This row's own running-instance identity.</param>
     /// <returns>The restored server and the population it owns.</returns>
-    public static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, WorldMachineHost machines, string instanceIdentity) {
+    public static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: machines);

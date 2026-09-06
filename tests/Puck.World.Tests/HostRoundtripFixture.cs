@@ -15,6 +15,7 @@ internal static class HostRoundtripFixture {
     private static WorldInstanceHost BuildHost(Guid machineId, string tempPrefix) => new(
         applicationStopping: CancellationToken.None,
         admitsSpawn: true,
+        machineHostFactory: Fixtures.MachineHostFactory,
         machineId: machineId,
         resolver: new WorldSessionResolver(),
         seats: WorldEmbodiedSeats.None,

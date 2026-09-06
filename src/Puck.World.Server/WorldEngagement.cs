@@ -9,7 +9,7 @@ namespace Puck.World.Server;
 /// currently standing on <see cref="ScreenIndex"/> translates to (the multiplayer-cabinet shape:
 /// <see cref="WorldEngagement.FoldTick"/> is the writer). Sparse: a screen nobody applies to carries no entry at
 /// all rather than an explicit neutral one, so the common (nobody-engaged) tick costs nothing to encode.
-/// Server-internal: <see cref="WorldMachineHost.Advance"/> reads <see cref="WorldEngagement.BuildPadSnapshot"/>
+/// Server-internal: <see cref="IWorldMachineHost.Advance"/> reads <see cref="WorldEngagement.BuildPadSnapshot"/>
 /// directly, in-process, so this never crosses the loopback.</summary>
 /// <param name="ScreenIndex">The engine screen-surface index.</param>
 /// <param name="Pad">The merged controller image for this tick's machine step.</param>
@@ -21,7 +21,7 @@ public readonly record struct ScreenPadSnapshot(int ScreenIndex, MachinePadState
 /// engagement: the own-body member is the avatar driving itself, a screen member is a channel-masked tap onto a
 /// booted machine's pad through a kit's <see cref="WorldKit.Pad"/> map, and a body member is possession. Capturing
 /// is the own-body member's ABSENCE; mirroring is both members present. Screen members publish on
-/// <see cref="BuildPadSnapshot"/> for <see cref="WorldMachineHost.Advance"/> to read, in-process, inside
+/// <see cref="BuildPadSnapshot"/> for <see cref="IWorldMachineHost.Advance"/> to read, in-process, inside
 /// <see cref="WorldServer.Step"/>; body members become co-drive contributions queued for the target's next tick,
 /// through the exact same Drive-gated contribution path an addon or a co-driving seat already uses
 /// (<see cref="WorldServer.StageContribution"/>) — no second write path.
@@ -285,7 +285,7 @@ public sealed class WorldEngagement {
     )));
 
     /// <summary>Returns this tick's per-screen merged pad lane, sliced from a reused backing array — read directly by
-    /// <see cref="WorldMachineHost.Advance"/> from inside <see cref="WorldServer.Step"/>, in-process. Must be read
+    /// <see cref="IWorldMachineHost.Advance"/> from inside <see cref="WorldServer.Step"/>, in-process. Must be read
     /// (or copied) before the next <see cref="FoldTick"/> call, exactly like <c>WorldServer.BuildSnapshot</c>'s own
     /// reused entity array.</summary>
     /// <returns>This tick's engaged-pad entries.</returns>

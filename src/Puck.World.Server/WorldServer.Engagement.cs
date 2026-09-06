@@ -159,7 +159,7 @@ public sealed partial class WorldServer {
     /// <summary>Returns the context-sensitive-button interception's eligibility pass (the RPG A-button, <c>CLAUDE.md</c>'s
     /// overworld intent) — for each active, un-routed local seat, the first (document order) screen that is
     /// engageable and backed by a live booted machine (the real gate is <see cref="CheckScreenEngagePolicy"/>'s
-    /// <see cref="WorldMachineHost.HasMachine"/> check — the authoritative server-side boot signal; the host boots and
+    /// <see cref="IWorldMachineHost.HasMachine"/> check — the authoritative server-side boot signal; the host boots and
     /// steps the machine in-process, so this project sees the real boot directly rather than a document-declared
     /// proxy), names an <see cref="WorldScreenRoute.EngageChannel"/> this world's channel table resolves, carries no live occupant
     /// (<see cref="WorldEngagement.PlayersOn"/> empty), sits within <see cref="WorldScreenRoute.EngageRadius"/> of the

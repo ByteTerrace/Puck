@@ -29,6 +29,9 @@
              Schema's ceilings, and the lease table it builds must fit the overlay's backstops — a property neither
              assembly can state alone. -->
         <ProjectReference Include="..\..\src\Puck.Overlays\Puck.Overlays.csproj" />
+        <!-- The screen-machine host (WorldMachineHost) and its shipped engines moved here from Puck.World.Server —
+             Fixtures.FreshServer and the instrument-clock law construct the real host over the real engines. -->
+        <ProjectReference Include="..\..\src\Puck.World.Addons\Puck.World.Addons.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Client\Puck.World.Client.csproj" />
         <!-- The generic world.row.step field walker (public, no InternalsVisibleTo needed) — see
              WorldRowFieldStepperLawTests. -->

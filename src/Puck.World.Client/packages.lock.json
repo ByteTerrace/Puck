@@ -377,6 +377,14 @@
           "Wasmtime": "[44.0.0, 44.0.0]"
         }
       },
+      "ByteTerrace.Puck.Shaders": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )"
+        }
+      },
       "ByteTerrace.Puck.SignedDistance": {
         "type": "Project",
         "dependencies": {

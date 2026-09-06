@@ -109,7 +109,7 @@ public sealed class ReplayInspectLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"inspect-authority-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");

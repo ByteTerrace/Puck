@@ -26,7 +26,7 @@ public sealed class ReplayAddonHostAttachLawTests {
         fixture.Server.AttachAddons(runtime: new NullAddonHost());
 
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
 
         Assert.True(condition: tape.TryBeginRecording(name: $"g-addon-attach-{Guid.NewGuid():N}", refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
 
@@ -53,6 +53,7 @@ public sealed class ReplayAddonHostAttachLawTests {
         _ = persisted.Drive(
             profiles: fixture.Server.Profiles,
             engines: [],
+            machineHostFactory: Fixtures.MachineHostFactory,
             addonHostFactory: (_, _) => capturedHost
         );
 

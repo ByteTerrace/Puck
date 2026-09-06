@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 
 using Xunit;
 
+using Puck.Abstractions.Machines;
 using Puck.Assets.Documents;
 using Puck.World.Authoring;
 using Puck.Hosting;
@@ -589,6 +590,12 @@ internal static class Fixtures {
     }
 
     private static byte[] ToJsonBytes(this JsonNode node) => Encoding.UTF8.GetBytes(s: node.ToJsonString());
+
+    /// <summary>The <c>machineHostFactory</c> every <see cref="WorldReplayTape"/>/<see cref="WorldReplaySnapshot"/>/
+    /// <see cref="WorldInstanceHost"/> construction here wires — the real <see cref="WorldMachineHost"/>
+    /// (<c>Puck.World.Addons.Machines</c>), the same type <see cref="FreshServer"/> constructs directly.</summary>
+    public static readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> MachineHostFactory =
+        static (screens, engines, documentPath, narrationHub) => new WorldMachineHost(screens: screens, engines: engines, documentPath: documentPath, narrationHub: narrationHub);
 
     /// <summary>Builds a FRESH, isolated, in-process <see cref="WorldServer"/> over <paramref name="definition"/>
     /// (<see cref="BuildDocument"/>'s own output when omitted) — the same construction shape

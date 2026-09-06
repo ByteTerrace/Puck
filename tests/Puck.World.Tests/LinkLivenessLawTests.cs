@@ -165,6 +165,7 @@ public sealed class LinkLivenessLawTests {
             profiles: fixture.Server.Profiles,
             transport: transport,
             engines: [],
+            machineHostFactory: Fixtures.MachineHostFactory,
             addonHostFactory: static (_, _) => new NullAddonHost()
         );
         var name = $"link-delivery-capture-{Guid.NewGuid():N}";

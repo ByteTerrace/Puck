@@ -2030,8 +2030,8 @@ public sealed partial class WorldServer {
     /// <param name="principal">The acting identity the op is checked against.</param>
     /// <param name="expectedContentHash">Replay only: the CAS pin a recorded <see cref="WorldScreenOp.Insert"/> or
     /// machine-booting <see cref="WorldScreenOp.Select"/> entry carries (a real <c>sha256-64</c> hash, or
-    /// <see cref="WorldMachineHost"/>'s "content absent" sentinel when the recording itself never read the file) —
-    /// see <see cref="WorldMachineHost.TryInsert"/>'s own remarks. <see langword="null"/> for every other op kind
+    /// the concrete host's "content absent" sentinel when the recording itself never read the file) —
+    /// see <see cref="IWorldMachineHost.TryInsert"/>'s own remarks. <see langword="null"/> for every other op kind
     /// and for the live path.</param>
     public void ApplyScreenOp(WorldScreenOp op, WorldPrincipal principal, string? expectedContentHash = null) =>
         TryApplyScreenOp(

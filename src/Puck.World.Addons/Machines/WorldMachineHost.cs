@@ -4,24 +4,6 @@ using Puck.Audio.Mixing;
 
 namespace Puck.World.Server;
 
-/// <summary>One declared screen's machine-side live state for the <c>screen.state</c> verb — whether a machine is
-/// assigned, the engine that hosts it, the stepped-frame count, and the boot fault (a declared machine whose content
-/// file was missing, an unresolved engine, rejected options), if any. Carries no GPU-facing fields (no image-view
-/// handle, no light) — those are presentation reads over <see cref="WorldMachineHost.Handle"/>/
-/// <see cref="WorldMachineHost.Light"/>, which <c>Puck.World.WorldScreenBinder</c> (a pure reader) composes into the
-/// same console line.</summary>
-/// <param name="Assigned">Whether a machine is booted on the screen.</param>
-/// <param name="Engine">The screen-machine engine id hosting the machine (meaningful only when <paramref name="Assigned"/>).</param>
-/// <param name="FramesStepped">How many frames the machine has stepped since it booted.</param>
-/// <param name="PendingSteps">Accepted queued-machine steps not yet completed; zero for synchronous machines.</param>
-/// <param name="MaximumPendingSteps">The queued machine's finite pending-segment capacity; zero for synchronous
-/// machines.</param>
-/// <param name="BackpressureEvents">How many queued submissions waited for capacity since the current content was
-/// loaded; zero for synchronous machines.</param>
-/// <param name="Fault">A slot's live fault (a missing content file, an unresolved engine, rejected options), or
-/// <see langword="null"/>.</param>
-public readonly record struct WorldMachineState(bool Assigned, string? Engine, long FramesStepped,
-    long PendingSteps, int MaximumPendingSteps, long BackpressureEvents, string? Fault);
 /// <summary>
 /// Owns every declared screen's live machine: booting, stepping, cable-linking, memory-peeking, and reconfiguring a
 /// deterministic <see cref="IScreenMachine"/> are all server-side, so ROM state is sim state and a headless boot's
@@ -29,7 +11,10 @@ public readonly record struct WorldMachineState(bool Assigned, string? Engine, l
 /// sources are deliberately outside this type's concern — they stay genuinely presentation, composed by
 /// <c>Puck.World.WorldScreenBinder</c>, which reads this type's machine outputs (framebuffer handle, light, audio)
 /// as a pure reader, not an owner of machine state. Screen index is machine identity for screen-hosted machines,
-/// matching the document convention (<c>docs</c>'s "screens are position-addressed").
+/// matching the document convention (<c>docs</c>'s "screens are position-addressed"). The concrete engines (the
+/// emulator cores, the Tune instrument) are named only here and in <see cref="Puck.World.WorldScreenMachineEngines"/>
+/// — <see cref="WorldServer"/> and every other <c>Puck.World.Server</c> type reach a booted machine only through
+/// <see cref="IWorldMachineHost"/>.
 /// </summary>
 /// <remarks>Single-threaded, like every other simulation type here: constructed once at boot (or replay
 /// rehydration), then only ever touched from <see cref="WorldServer.Step"/>'s tick thread (<see cref="Advance"/>) or
@@ -38,7 +23,7 @@ public readonly record struct WorldMachineState(bool Assigned, string? Engine, l
 /// memory) — <see cref="Dispose"/> tears every booted machine and live link down; the composition root registers
 /// this type as its own DI singleton (not a private field of <see cref="WorldServer"/>) precisely so the container
 /// disposes it.</remarks>
-public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
+public sealed class WorldMachineHost : IWorldMachineHost {
     /// <summary>The CAS signature <see cref="TryBootMachine"/> records when it could not read the content file at
     /// all (missing, unreadable) — distinct from any real <c>sha256-64/…</c> hash so it can never collide with one.
     /// A recorded op pinning this sentinel demands the same absence on replay; a file that has since appeared (or
@@ -513,15 +498,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
         return false;
     }
 
-    /// <summary>Advances every booted machine by one host-owned fixed simulation step, fed by
-    /// <paramref name="pads"/> — <see cref="WorldEngagement.BuildPadSnapshot"/>'s result, read directly in-process
-    /// (no client/wire round-trip; see <see cref="WorldServer.Step"/>'s call site, right after
-    /// <see cref="WorldEngagement.FoldTick"/>). A live cable link steps as one unit with its members' merged pads in
-    /// cable order; its member slots are then skipped below. The exact-rational T-cycle bridge (a machine's own
-    /// internal tick-to-cycle conversion) is preserved verbatim: <paramref name="stepTicks"/> is forwarded to the
-    /// machine exactly as received — cart RTC still derives from this tick budget, never wall clock.</summary>
-    /// <param name="stepTicks">The exact engine-tick budget of one fixed simulation step.</param>
-    /// <param name="pads">This tick's per-screen merged engagement pad lane.</param>
+    /// <inheritdoc/>
     public void Advance(ulong stepTicks, ReadOnlyMemory<ScreenPadSnapshot> pads) {
         if (m_disposed) {
             return;
@@ -580,9 +557,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
             }
         }
     }
-    /// <summary>Returns the live machine on a screen slot as its audio drain seam, or <see langword="null"/> when the slot
-    /// carries no machine (or one without the capability).</summary>
-    /// <param name="index">The engine screen-surface index.</param>
+    /// <inheritdoc/>
     public IAudioMachine? AudioMachine(int index) =>
         ((m_slots.TryGetValue(
             key: index,
@@ -591,10 +566,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
             ? audio
             : null
         );
-    /// <summary>Returns the live machine's authored tempo, in engine ticks per beat, when the screen slot carries a
-    /// booted machine with the <see cref="IInstrumentClockSource"/> capability — <see langword="null"/> for an empty
-    /// slot, a machine without the capability, or a capability reporting zero (no content loaded).</summary>
-    /// <param name="index">The engine screen-surface index.</param>
+    /// <inheritdoc/>
     public long? InstrumentTicksPerBeat(int index) =>
         ((m_slots.TryGetValue(
             key: index,
@@ -603,9 +575,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
             ? instrument.TicksPerBeat
             : null
         );
-    /// <summary>Returns the live cable-link set as derived groups (cable order preserved) — the <c>world.save</c>
-    /// fold source: each group folds back into its member screens rows' machine-source cable ports (see
-    /// <c>Puck.World.WorldSessionCapture</c>).</summary>
+    /// <inheritdoc/>
     public IReadOnlyList<WorldMachineCableGroup> CaptureLinks() {
         if (m_links.Count == 0) {
             return [];
@@ -622,7 +592,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
 
         return captured;
     }
-    /// <summary>Describes every live cable link in one line (the <c>screen.links</c> query), or <c>none</c>.</summary>
+    /// <inheritdoc/>
     public string DescribeLinks() {
         if (m_links.Count == 0) {
             return "none";
@@ -651,9 +621,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
             slot.Machine?.Dispose();
         }
     }
-    /// <summary>Returns the current same-device framebuffer image-view handle bound to a screen index, or 0 when unbound, not
-    /// declared, or the machine has not published a frame yet — the presentation read.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
+    /// <inheritdoc/>
     public nint Handle(int index) => ((m_slots.TryGetValue(
         key: index,
         value: out var slot
@@ -661,18 +629,14 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
         ? machine.NativeImageViewHandle
         : 0
     );
-    /// <summary>Determines whether a screen-machine engine is registered under <paramref name="engineId"/>.</summary>
-    /// <param name="engineId">The candidate engine id.</param>
+    /// <inheritdoc/>
     public bool HasEngine(string engineId) => m_engines.IsRegistered(key: engineId);
-    /// <summary>Determines whether a machine is currently booted on the screen index.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
+    /// <inheritdoc/>
     public bool HasMachine(int index) => (m_slots.TryGetValue(
         key: index,
         value: out var slot
     ) && (slot.Machine is not null));
-    /// <summary>Returns the room light a booted machine emits (its framebuffer average), or zero for no machine — the
-    /// presentation read.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
+    /// <inheritdoc/>
     public Vector3 Light(int index) => ((m_slots.TryGetValue(
         key: index,
         value: out var slot
@@ -680,8 +644,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
         ? machine.EmittedLight
         : Vector3.Zero
     );
-    /// <summary>Returns the cable link a screen currently belongs to (by name), or <see langword="null"/>.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
+    /// <inheritdoc/>
     public string? LinkOf(int index) => (m_slots.TryGetValue(
         key: index,
         value: out var slot
@@ -689,9 +652,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
         ? slot.LinkName
         : null
     );
-    /// <summary>Returns the live machine on a screen index, for presentation's own frame-publish loop
-    /// (<c>IScreenMachine.PublishFrame</c> is a GPU call this project never makes itself), or <see langword="null"/>.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
+    /// <inheritdoc/>
     public IScreenMachine? MachineAt(int index) => (m_slots.TryGetValue(
         key: index,
         value: out var slot
@@ -706,8 +667,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
     /// non-conflicting move) always succeeds; two declared links that genuinely both claim the same screen within
     /// the same reconcile is a real document error and fails loudly (see below) rather than resolving unpredictably
     /// by document order.</summary>
-    /// <param name="links">The declared cable groups, derived from the live definition's machine sources
-    /// (<c>WorldDefinition.MachineCableGroups()</c>).</param>
+    /// <inheritdoc/>
     public void ReconcileLinks(IReadOnlyList<WorldMachineCableGroup> links) {
         if (m_disposed) {
             return;
@@ -799,8 +759,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
     /// (<see cref="WorldEngagement.DissolveScreen"/>) over the returned indices, since this type holds no grant-table
     /// reference by design. Then, for a declared index whose source changed, machine boots/ejects; a non-machine
     /// source change is a no-op here (presentation applies it).</summary>
-    /// <param name="screens">The mutated screen list (the live definition's screens).</param>
-    /// <returns>The screen indices removed this call — feed each to <see cref="WorldEngagement.DissolveScreen"/>.</returns>
+    /// <inheritdoc/>
     public IReadOnlyList<int> ReconcileScreens(IReadOnlyList<WorldScreen> screens) {
         if (m_disposed) {
             return [];
@@ -921,8 +880,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
 
         return [.. m_reconcileRemovals];
     }
-    /// <summary>Moves declared relative machine content resolution to a new world document.</summary>
-    /// <param name="documentPath">The installed world document path.</param>
+    /// <inheritdoc/>
     public void SetDocumentPath(string? documentPath) {
         var directory = DocumentDirectory(documentPath: documentPath);
 
@@ -935,9 +893,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
             m_documentDirectoryChanged = true;
         }
     }
-    /// <summary>Returns the live state of a declared screen's machine for <c>screen.state</c>, or <see langword="null"/> when
-    /// the index is not a declared screen.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
+    /// <inheritdoc/>
     public WorldMachineState? State(int index) {
         if (m_slots.TryGetValue(
             key: index,
@@ -958,9 +914,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
             Fault: (queued?.QueueFault ?? slot.DeclaredFault)
         );
     }
-    /// <summary>Ejects a screen's live machine. Fails for an undeclared screen or a slot with no machine to eject.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
-    /// <returns>Whether the eject succeeded, and a message describing the outcome.</returns>
+    /// <inheritdoc/>
     public (bool Ok, string Message) TryEject(int index) {
         if (m_slots.TryGetValue(
             key: index,
@@ -979,23 +933,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
 
         return (Ok: true, Message: $"screen {index} ejected");
     }
-    /// <summary>Boots (or live-swaps) a machine onto a declared screen from a content file path. Any existing machine
-    /// on the slot is cleared and replaced. Fails loudly (a message, no crash) for an undeclared screen, an
-    /// unresolved engine, an unreadable content file, or an options string the engine rejects.</summary>
-    /// <param name="index">The engine screen-surface index (must be a declared screen).</param>
-    /// <param name="contentPath">The content file (a cartridge ROM) to boot.</param>
-    /// <param name="engineId">The screen-machine engine id, or <see langword="null"/> for the sole-registered default.</param>
-    /// <param name="options">The engine-specific options string, or <see langword="null"/> for the engine's defaults.</param>
-    /// <param name="expectedContentHash">Replay only: the CAS pin (a real <c>sha256-64</c> hash, or
-    /// <see cref="ContentAbsentSignature"/>) a recorded tape entry carries. When set, a fresh resolution of
-    /// <paramref name="contentPath"/> that disagrees with it refuses by name (<c>ScreenOpContentMismatch</c>) before
-    /// anything else applies — the negative control a moved/edited/appeared/vanished ROM exercises.
-    /// <see langword="null"/> (the default) is the live path.</param>
-    /// <returns>Whether the insert succeeded, a message describing the outcome, and the content signature actually
-    /// observed (a real hash, <see cref="ContentAbsentSignature"/>, or <see langword="null"/> when content
-    /// resolution was never attempted — an unresolved engine, which is not a file-state risk) — a live caller pins
-    /// this onto the replay tape regardless of <c>Ok</c>, so a failed insert reproduces (or refuses by name) rather
-    /// than silently retrying unpinned.</returns>
+    /// <inheritdoc/>
     public (bool Ok, string Message, string? ContentHash) TryInsert(int index, string contentPath, string? engineId, string? options, string? expectedContentHash = null) {
         if (m_disposed) {
             return (Ok: false, Message: "machine host disposed", ContentHash: null);
@@ -1018,14 +956,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
             slot: slot
         );
     }
-    /// <summary>Establishes (or reports dormant) a runtime cable link over two or more declared screens. Every member
-    /// must be a declared screen carrying a machine from the same engine, and that engine must implement
-    /// <c>IMachineLinkingEngine</c>; a set that cannot be linked is recorded dormant with a reason (never a throw), so
-    /// a later insert can re-establish it. Fails outright only for an undeclared screen, a member named twice, a member
-    /// already in another link, or fewer than two members.</summary>
-    /// <param name="name">The link's stable name.</param>
-    /// <param name="members">The engine screen indices in cable order.</param>
-    /// <returns>Whether the link row was recorded, and a message describing live/dormant state.</returns>
+    /// <inheritdoc/>
     public (bool Ok, string Message) TryLink(string name, IReadOnlyList<int> members) {
         if (m_disposed) {
             return (Ok: false, Message: "machine host disposed");
@@ -1077,11 +1008,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
 
         return (Ok: true, Message: DescribeLink(entry: entry));
     }
-    /// <summary>Returns the screen's live magazine and 0-based selector, or <see langword="false"/> when the screen declares
-    /// no magazine.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
-    /// <param name="selected">The live 0-based selector.</param>
-    /// <param name="magazine">The screen's magazine.</param>
+    /// <inheritdoc/>
     public bool TryMagazine(int index, out int selected, out WorldScreenMagazine magazine) {
         if (
             m_slots.TryGetValue(
@@ -1111,13 +1038,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
 
         return ok;
     }
-    /// <summary>Reads one memory byte from a screen's machine (the <c>screen.peek</c> read) — a side-effect-free host
-    /// poll through the machine's optional <see cref="IMachineMemoryPeek"/> capability. Reports (loudly) whether a
-    /// machine was present and whether it supports the peek.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
-    /// <param name="address">A machine-defined memory address.</param>
-    /// <param name="value">The byte read, or 0 on failure.</param>
-    /// <returns>A success flag and, on failure, a message.</returns>
+    /// <inheritdoc/>
     public (bool Ok, string Message) TryPeekMessage(int index, int address, out byte value) {
         value = 0;
 
@@ -1140,10 +1061,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
 
         return (Ok: true, Message: "");
     }
-    /// <summary>Reads a live link's member screens by name.</summary>
-    /// <param name="name">The link name.</param>
-    /// <param name="members">The member screen indices in cable order, on success.</param>
-    /// <returns>Whether a link of that name is live.</returns>
+    /// <inheritdoc/>
     public bool TryReadLinkMembers(string name, out IReadOnlyList<int> members) {
         if (m_links.TryGetValue(
             key: name,
@@ -1158,13 +1076,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
 
         return false;
     }
-    /// <summary>Reads back the live machine insert on a screen index — its engine id, content path, and options — so
-    /// <c>world.save</c> can fold a runtime <c>screen.insert</c> into that screen row's
-    /// <see cref="WorldScreenSource.Machine"/> source.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
-    /// <param name="engine">The engine id that booted the live machine.</param>
-    /// <param name="contentPath">The content file (a cartridge ROM) the live machine booted.</param>
-    /// <param name="options">The options string the live machine booted with, or <see langword="null"/>.</param>
+    /// <inheritdoc/>
     public bool TryReadMachineInsert(int index, out string engine, out string contentPath, out string? options) {
         if (
             m_slots.TryGetValue(
@@ -1188,10 +1100,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
 
         return false;
     }
-    /// <summary>Reads a screen's machine's current options string, or <see langword="false"/> when the screen has no
-    /// reconfigurable machine.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
-    /// <param name="options">The current options string.</param>
+    /// <inheritdoc/>
     public bool TryReadOptions(int index, out string options) {
         if (
             m_slots.TryGetValue(
@@ -1209,12 +1118,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
 
         return false;
     }
-    /// <summary>Reconfigures a screen's live machine across the engine's options vocabulary (dmg↔cgb↔agb with no
-    /// reboot). Fails for an undeclared screen, a slot with no machine, a machine without the reconfigure capability,
-    /// or an options string the engine rejects.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
-    /// <param name="options">The engine-specific options string to retarget to.</param>
-    /// <returns>Whether the reconfigure succeeded, and a message describing the outcome.</returns>
+    /// <inheritdoc/>
     public (bool Ok, string Message) TryReconfigure(int index, string? options) {
         if (m_slots.TryGetValue(
             key: index,
@@ -1255,14 +1159,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
     /// itself). Fails for an undeclared screen, a screen with no magazine, an
     /// out-of-range entry, or — for a machine entry — whatever <see cref="TryBootMachine"/> refuses for; a failed
     /// boot always reports <c>Ok: false</c>, never a disguised success.</summary>
-    /// <param name="index">The engine screen-surface index.</param>
-    /// <param name="entry">The 0-based magazine entry to select.</param>
-    /// <param name="expectedContentHash">Replay only: the CAS pin a recorded tape entry carries, threaded to
-    /// <see cref="TryBootMachine"/> when <paramref name="entry"/> resolves to a Machine row. Ignored for any other
-    /// entry kind (nothing there reads a file). <see langword="null"/> for the live path.</param>
-    /// <returns>Whether the selection (and, for a machine entry, the boot) succeeded, a message, and — for a machine
-    /// entry — the observed content signature (<see langword="null"/> for a non-machine entry, since nothing was
-    /// read).</returns>
+    /// <inheritdoc/>
     public (bool Ok, string Message, string? ContentHash) TrySelect(int index, int entry, string? expectedContentHash = null) {
         if (m_disposed) {
             return (Ok: false, Message: "machine host disposed", ContentHash: null);
@@ -1318,9 +1215,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
 
         return (Ok: true, Message: $"{index} entry {entry}/{magazine.Entries.Count} selected (no machine — presentation applies its own source)", ContentHash: null);
     }
-    /// <summary>Severs a runtime cable link by name. Fails when no link of that name is live.</summary>
-    /// <param name="name">The link name.</param>
-    /// <returns>Whether the link existed, and a message.</returns>
+    /// <inheritdoc/>
     public (bool Ok, string Message) TryUnlink(string name) {
         if (!m_links.ContainsKey(key: name)) {
             return (Ok: false, Message: $"no link '{name}'");
@@ -1331,18 +1226,11 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
         return (Ok: true, Message: $"link '{name}' severed");
     }
 
-    /// <summary>Gets a value indicating whether any booted machine has ever had a step/segment actually submitted to it — set the instant
-    /// <see cref="Advance"/> steps a machine (individually or through a live cable link), never cleared. The
-    /// boot-anchored replay arm predicate <see cref="WorldServer.AnyMachineEverPumped"/> reads (mirroring
-    /// <c>WorldAddonRuntime.AnyEverPumped</c>'s identical shape): offline replay reconstructs a machine's boot
-    /// image, never its accumulated core state once real ticks have run it.</summary>
+    /// <inheritdoc/>
     public bool AnyEverPumped { get; private set; }
-    /// <summary>Gets the machine-lifecycle tap: invoked with <c>(index, faulted)</c> on every runtime machine boot outcome
-    /// — <see langword="false"/> when a machine boots onto a slot, <see langword="true"/> when a boot attempt faults
-    /// (missing content, unresolved engine, rejected options). Constructor-time declared boots precede any wiring and
-    /// do not fire.</summary>
+    /// <inheritdoc/>
     public Action<int, bool>? MachineLifecycleTap { get; set; }
-    /// <summary>Gets every screen index currently carrying a booted machine — presentation's publish-loop enumeration.</summary>
+    /// <inheritdoc/>
     public IEnumerable<int> MachineScreenIndices {
         get {
             foreach (var (index, slot) in m_slots) {

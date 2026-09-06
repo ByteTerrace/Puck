@@ -40,23 +40,28 @@ public sealed class WorldReplayInspector {
 
     private readonly Func<WorldDefinition, WorldServer, IWorldAddonHost> m_addonHostFactory;
     private readonly IReadOnlyList<IScreenMachineEngine> m_engines;
+    private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
     private readonly WorldOwnedWorlds m_profiles;
 
-    /// <summary>Initializes the inspector over the same three things a re-drive needs — the profile catalog seats
-    /// re-resolve against, the screen-machine engine set, and the shadow addon-host factory — so <c>--poses</c>
-    /// drives a tape exactly the way <c>replay.verify</c> does.</summary>
+    /// <summary>Initializes the inspector over the same things a re-drive needs — the profile catalog seats
+    /// re-resolve against, the screen-machine engine set and host factory, and the shadow addon-host factory — so
+    /// <c>--poses</c> drives a tape exactly the way <c>replay.verify</c> does.</summary>
     /// <param name="profiles">The profile catalog (handed to <see cref="WorldReplaySnapshot.Drive"/>).</param>
     /// <param name="engines">The registered screen-machine engines (handed to <see cref="WorldReplaySnapshot.Drive"/>).</param>
+    /// <param name="machineHostFactory">Builds the shadow machine host over a re-deserialized definition's screens
+    /// and <paramref name="engines"/> — handed to <see cref="WorldReplaySnapshot.Drive"/>.</param>
     /// <param name="addonHostFactory">Builds the shadow addon host over a re-deserialized definition and its shadow
     /// server — wrapped here in the per-tick observer, never replaced.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldReplayInspector(WorldOwnedWorlds profiles, IEnumerable<IScreenMachineEngine> engines, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) {
+    public WorldReplayInspector(WorldOwnedWorlds profiles, IEnumerable<IScreenMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) {
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: engines);
+        ArgumentNullException.ThrowIfNull(argument: machineHostFactory);
         ArgumentNullException.ThrowIfNull(argument: addonHostFactory);
 
         m_profiles = profiles;
         m_engines = [.. engines];
+        m_machineHostFactory = machineHostFactory;
         m_addonHostFactory = addonHostFactory;
     }
 
@@ -371,6 +376,7 @@ public sealed class WorldReplayInspector {
                 );
             },
             engines: m_engines,
+            machineHostFactory: m_machineHostFactory,
             profiles: m_profiles
         );
 

@@ -238,9 +238,11 @@ public sealed partial class WorldReplayTape {
     // This resets clocks, memory, decisions, latches, grants, and held input as well as the population image.
     private string? ResetLiveWorldToBootImage(WorldReplaySnapshot source, WorldDefinition definition, string? documentPath) {
         var population = new WorldPopulation(definition: definition);
-        using var machines = new WorldMachineHost(
-            screens: definition.Screens,
-            engines: m_engines
+        using var machines = m_machineHostFactory(
+            definition.Screens,
+            m_engines,
+            null,
+            null
         );
         var shadow = new WorldServer(
             definition: definition,

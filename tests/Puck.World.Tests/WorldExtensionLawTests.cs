@@ -182,6 +182,7 @@ public sealed class WorldExtensionLawTests {
         using var fixture = Fixtures.FreshServer();
         using var extension = Extension(fixture.Server);
         var tape = new WorldReplayTape(fixture.Server, fixture.Server.Profiles, new LoopbackTransport(fixture.Server), [],
+            Fixtures.MachineHostFactory,
             static (_, server) => {
                 Assert.Throws<InvalidOperationException>(() => Extension(server));
                 Assert.Throws<InvalidOperationException>(server.StartRecordedExtensionEpoch);

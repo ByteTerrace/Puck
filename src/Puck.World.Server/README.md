@@ -1021,10 +1021,11 @@ hold that implementation itself (`build/Architecture.props` denies it a
 `System.Console` reference). A server's own
 narration must be attached from its constructor's `narrationSink` parameter,
 not after — the document's own authored grants narrate during construction,
-before any post-build wiring step could reach them. `WorldMachineHost` takes
-an optional `WorldOutputHub`/narration sink because it owns no single server
-of its own to share (a peer singleton to `WorldServer`, constructed first;
-`WorldOwnedWorlds`,
+before any post-build wiring step could reach them. The machine host
+(`Puck.World.Addons.Machines.WorldMachineHost`, reached here through
+`IWorldMachineHost`) takes an optional `WorldOutputHub`/narration sink
+because it owns no single server of its own to share (a peer singleton to
+`WorldServer`, constructed first; `WorldOwnedWorlds`,
 `WorldRemoteAuthority`, and `WorldFederatedServerLink` carry the same shape
 for the identical reason). A narration site inside a loop that assigns any of
 the format closure's captured locals before a possible early exit must gate
@@ -1262,32 +1263,45 @@ occupancy included — do not invent a parallel ownership mechanism), and the
 authority decision is deliberately not modeled as a lattice or quotient
 (see the state document's "What is NOT algebra" entry).
 
-## Screen machines (`WorldMachineHost.cs`)
+## Screen machines (`IWorldMachineHost.cs`)
 
-Owner ruling, 2026-08-03: a booted `IScreenMachine` (a diegetic screen's
-cartridge/cabinet — `Puck.Abstractions.Machines`) is CORE state, not
-presentation-fed. `WorldMachineHost` — a peer DI singleton `WorldServer`
-takes as a constructor parameter, never a private field it builds, so the
-container disposes the machines it holds — owns boot, per-tick stepping,
-cable-linking, live reconfiguration, and memory-peek for every declared
-screen's machine, in EVERY boot shape including headless. Stepping runs
-inside `WorldServer.Step`, immediately after `WorldEngagement.FoldTick`, fed
-that tick's per-screen pads directly (`WorldEngagement.BuildPadSnapshot()`,
-in-process — no client/wire round-trip). `screen.insert`/`.eject`/`.select`/
-`.options`/`.link`/`.unlink` (`Puck.World.ScreenCommandModule`) submit a
-`WorldScreenOp` (`Puck.World.Protocol`) through the ordered submission domain
+A booted `IScreenMachine` (a diegetic screen's cartridge/cabinet —
+`Puck.Abstractions.Machines`) is CORE state, not presentation-fed, but this
+project carries no reference to the emulator cores or `Puck.SdfVm` — a
+machine is a mounted guest, like a WASM addon. `IWorldMachineHost`, defined
+here, is every member `WorldServer` and every offline re-drive (the replay
+tape/inspector, a spawned `WorldInstanceHost` row) reach a booted machine
+through; the concrete `WorldMachineHost` — the emulator cores, the Tune
+instrument engine, and the boot/step/cable-link/reconfigure/memory-peek
+machinery — lives in `Puck.World.Addons.Machines` (which references this
+project, never the reverse) and is constructed by the composition root, a
+peer DI singleton `WorldServer` takes as a constructor parameter typed
+`IWorldMachineHost`, never a private field it builds, so the container
+disposes the machines it holds. A caller inside this project that needs to
+build one (a spawned instance's empty host, an offline re-drive's shadow
+host) is handed a `Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>,
+string?, WorldOutputHub?, IWorldMachineHost>` factory by the composition
+root — the same "the server calls out, the composition root supplies the
+capability" shape `IWorldAddonHost`'s `addonHostFactory` uses.
+
+Stepping runs inside `WorldServer.Step`, immediately after
+`WorldEngagement.FoldTick`, fed that tick's per-screen pads directly
+(`WorldEngagement.BuildPadSnapshot()`, in-process — no client/wire
+round-trip). `screen.insert`/`.eject`/`.select`/`.options`/`.link`/`.unlink`
+(`Puck.World.ScreenCommandModule`) submit a `WorldScreenOp`
+(`Puck.World.Protocol`) through the ordered submission domain
 (`IServerLink.SubmitScreenOp`), applied SYNCHRONOUSLY like `Command`/`Grant`/
 `Revoke` and checked against the ordinary grant table (`Control` over
-`screen:<n>`) before `WorldMachineHost` is touched; `Insert` and a
-Machine-magazine `Select` share one boot path (`TryBootMachine`) and are BOTH
-CAS-pinned (`sha256-64` of the exact bytes read, or the `"absent"` sentinel
-when the file could not be read at all) — a failed boot is reported as a
-failure, never a disguised success, and the pinned signature rides the tape
-REGARDLESS of whether the op succeeded (INCLUDING an unresolved engine —
-content is read/signed before engine resolution is even attempted, never
-left unpinned on that path), so a replay re-drive refuses by name if the
-file's on-disk state no longer matches what was recorded. Declared cable
-links (`WorldMachineHost.ReconcileLinks`) are established/torn down at
+`screen:<n>`) before the host is touched; `Insert` and a Machine-magazine
+`Select` share one boot path (`TryBootMachine`) and are BOTH CAS-pinned
+(`sha256-64` of the exact bytes read, or an `"absent"` sentinel when the file
+could not be read at all) — a failed boot is reported as a failure, never a
+disguised success, and the pinned signature rides the tape REGARDLESS of
+whether the op succeeded (INCLUDING an unresolved engine — content is
+read/signed before engine resolution is even attempted, never left unpinned
+on that path), so a replay re-drive refuses by name if the file's on-disk
+state no longer matches what was recorded. Declared cable links
+(`IWorldMachineHost.ReconcileLinks`) are established/torn down at
 construction (for a link declared in the boot document itself) AND on every
 `WorldServer.Install` (every live mutation and every whole-document
 rebuild) — never only once; the reconcile itself is two-phase and atomic
@@ -1302,16 +1316,16 @@ has stepped), and `AnyScreenOpEverApplied` (once any screen op has applied
 AT ALL, independent of stepping — screen ops apply synchronously, between
 fixed steps, so an insert/eject/select/options/link/unlink can change live
 host state before a single tick has run, which the other two latches would
-miss) — offline replay reconstructs a FRESH `WorldMachineHost` from the
-tape's embedded definition, so a machine's accumulated core state (or a
-screen op's effect) from before recording began can never be re-established,
-and the population hash covers no machine state to catch the divergence.
-`Puck.World.WorldScreenBinder` is a
-pure reader of this type's outputs for presentation (framebuffer
+miss) — offline replay reconstructs a FRESH host from the tape's embedded
+definition, so a machine's accumulated core state (or a screen op's effect)
+from before recording began can never be re-established, and the population
+hash covers no machine state to catch the divergence. `Puck.World.WorldScreenBinder`
+is a pure reader of this type's outputs for presentation (framebuffer
 handle/light, `PublishFrame`) and still owns the genuinely presentation
 screen sources (test pattern, authored QR, webcam, compositor capture,
-jumbotron view) that are not this type's concern. The list above is the
-current set.
+jumbotron view) that are not this type's concern. See
+`Puck.World.Addons/README.md` for the concrete host's own shipped-engine
+list and boot/link mechanics.
 
 ## The addon host seam (`IWorldAddonHost.cs`, `WorldAddonReceipt.cs`)
 

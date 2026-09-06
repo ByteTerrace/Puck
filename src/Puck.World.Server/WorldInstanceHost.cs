@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Puck.Abstractions.Machines;
 using Puck.Hosting;
 using Puck.World.Client;
 using Puck.World.Protocol;
@@ -86,6 +87,11 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // Every instance shares the host's own persisted id — it identifies the MACHINE/PROCESS, not a world, so minting
     // a fresh one per instance would both misreport the host and put a Guid.NewGuid() on an admission path.
     private readonly Guid m_machineId;
+    // The screen-machine host builder, supplied by the composition root: Puck.World.Server carries no reference to
+    // the emulator cores or the Tune instrument engine, so it cannot construct Puck.World.Addons.Machines'
+    // WorldMachineHost itself — the same "the server calls out, the composition root supplies the capability" shape
+    // as m_addonHostFactory (WorldReplaySnapshot).
+    private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
     // The transport-neutral local resolver ResolveAndEnqueueCoalescedTransfers consumes to turn a
     // destinations row plus a traveling cohort into a scoped generation/instance name — see
     // WorldSessionResolver. TryStop notifies it so a reaped/stopped instance's cache entry does not
@@ -852,8 +858,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     }
     /// <summary>Starts a new instance from a world document and admits it under <paramref name="name"/>. Constructs a
     /// fresh <see cref="WorldPopulation"/>, <see cref="WorldRenderEnvelope"/>, <see cref="WorldOwnedWorlds"/> (its own
-    /// directory, never shared) and an empty <see cref="WorldMachineHost"/> — nothing shared with any other
-    /// instance.</summary>
+    /// directory, never shared) and an empty <see cref="IWorldMachineHost"/> (via <c>m_machineHostFactory</c>) —
+    /// nothing shared with any other instance.</summary>
     /// <param name="name">The console-facing name, which is also the directory segment this instance's owned worlds
     /// live in; refused if empty, reserved, not a single safe path segment, already running, or resolving its store
     /// outside the instances root.</param>
@@ -955,10 +961,11 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             return false;
         }
 
-        var machines = new WorldMachineHost(
-            screens: [],
-            engines: [],
-            narrationHub: m_narration
+        var machines = m_machineHostFactory(
+            [],
+            [],
+            null,
+            m_narration
         );
         WorldInstance started;
 
@@ -1111,20 +1118,24 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <param name="stateRoot">The root every non-boot instance's owned-world store resolves its own directory under.</param>
     /// <param name="applicationStopping">Cancelled on host shutdown — closes every persistent federation lane before a
     /// companion authority observes an ordinary shutdown as a live-path outage.</param>
+    /// <param name="machineHostFactory">Builds a fresh <see cref="IWorldMachineHost"/> over a spawned instance's own
+    /// declared screens and the composition root's registered engines — see <see cref="TryStart"/>.</param>
     /// <param name="admitsSpawn">Whether <see cref="TryStart"/> may mint a brand-new row from a document path — a
     /// desktop's own spawn/resolve arms need this; a hosted silo refuses it by name, since a row there exists only
     /// through the activation door.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, string stateRoot, CancellationToken applicationStopping, bool admitsSpawn = true) {
+    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, string stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true) {
         ArgumentNullException.ThrowIfNull(argument: seats);
         ArgumentNullException.ThrowIfNull(argument: resolver);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: stateRoot);
+        ArgumentNullException.ThrowIfNull(argument: machineHostFactory);
 
         m_seats = seats;
         m_resolver = resolver;
         m_machineId = machineId;
         m_stateRoot = stateRoot;
         m_applicationStopping = applicationStopping;
+        m_machineHostFactory = machineHostFactory;
         m_admitsSpawn = admitsSpawn;
     }
 

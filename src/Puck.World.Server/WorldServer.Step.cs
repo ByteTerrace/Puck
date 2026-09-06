@@ -8,7 +8,7 @@ namespace Puck.World.Server;
 public sealed partial class WorldServer {
     /// <summary>Observes a music segment transition the instant it commits (the same tick <c>MusicDirector</c>
     /// records it, from the music-step call site in <see cref="StepCore"/>) — mirroring
-    /// <see cref="SaveEffectTap"/>/<see cref="WorldMachineHost.MachineLifecycleTap"/>'s "the server calls out, the
+    /// <see cref="SaveEffectTap"/>/<see cref="IWorldMachineHost.MachineLifecycleTap"/>'s "the server calls out, the
     /// composition root supplies the capability" shape: this project references no audio director, so it cannot fire
     /// the <c>music.transition</c> cue itself. Carries nothing but the tick — the committed segment ids are already
     /// re-derivable from <c>MusicDirector.LastTransitionFromSegmentId</c>/<c>LastTransitionToSegmentId</c>, so no

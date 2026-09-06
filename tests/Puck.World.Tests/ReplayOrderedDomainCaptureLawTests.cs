@@ -27,6 +27,7 @@ public sealed class ReplayOrderedDomainCaptureLawTests {
             profiles: fixture.Server.Profiles,
             transport: transport,
             engines: [],
+            machineHostFactory: Fixtures.MachineHostFactory,
             addonHostFactory: static (_, _) => new NullAddonHost()
         );
         var name = $"ordered-domain-capture-{Guid.NewGuid():N}";

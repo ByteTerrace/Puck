@@ -66,7 +66,7 @@ public sealed class ReplayRateStampLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"f8-rate-change-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
@@ -122,7 +122,7 @@ public sealed class ReplayRateStampLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"f8-rate-same-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
@@ -187,7 +187,7 @@ public sealed class ReplayPendingLeverFlushLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"f9-pause-stop-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
@@ -223,7 +223,7 @@ public sealed class ReplayPendingLeverFlushLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"f9-no-pause-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
@@ -253,7 +253,7 @@ public sealed class ReplayPendingLeverFlushLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"g5-discard-non-lever-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
@@ -295,7 +295,7 @@ public sealed class ReplayPendingLeverFlushLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"g5-zero-tick-lever-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
@@ -342,7 +342,7 @@ public sealed class ReplayStopFailureLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"g6-unwritable-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");

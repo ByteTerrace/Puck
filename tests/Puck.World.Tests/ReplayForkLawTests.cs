@@ -103,7 +103,7 @@ public sealed class ReplayForkLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
         var parent = $"fork-parent-{Guid.NewGuid():N}";
         var child = $"fork-child-{Guid.NewGuid():N}";
 
@@ -202,7 +202,7 @@ public sealed class ReplayForkLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
         var parent = $"drive-cancel-{Guid.NewGuid():N}";
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(Principal: WorldPrincipal.Seat(slot: 0), Slot: 0, IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);

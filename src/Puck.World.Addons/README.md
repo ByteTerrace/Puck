@@ -1,4 +1,4 @@
-# Puck.World.Addons — the addon guest host
+# Puck.World.Addons — the addon guest host and the screen-machine host
 
 This project owns the mounted addon guest runtime: `WorldAddonRuntime` (the
 `IWorldAddonHost` implementation), `WorldAddonMutationDecoder` (the addon
@@ -6,15 +6,37 @@ mutation seam's stage 6 hand-walked JSON decode), `WorldAddonWire` (the
 World-side ABI vocabulary mappings — capability bits, grant-rule-to-verdict),
 `AddonMutateRefusal` (the `addon.mutate` door's cataloged refusal reasons),
 and `AddonSimulationPump` (the crossing from a guest's decoded output cells
-to typed, vocabulary-validated submissions). It references
-[`Puck.World.Server`](../Puck.World.Server/README.md) directly — the seam
-interface (`IWorldAddonHost`) and the wire-format record it persists
-(`WorldAddonReceipt`) live there instead, so `WorldServer` never names this
-project's concrete types.
+to typed, vocabulary-validated submissions). It also owns the screen-machine
+host under `Machines/` (below) — a second, unrelated mounted-guest kind that
+shares the same "references Server, never the reverse" shape. It references
+[`Puck.World.Server`](../Puck.World.Server/README.md) directly — the two
+seam interfaces (`IWorldAddonHost`, `IWorldMachineHost`) and the wire-format
+records they persist (`WorldAddonReceipt`) live there instead, so
+`WorldServer` never names this project's concrete types.
 
 Project references: `Puck.World.Server`, `Puck.Scripting` (the WASM guest
-ABI `AddonSimulationPump` validates against), `Puck.Maths`, and
-`Puck.Assets` (the module bytes a mount reads).
+ABI `AddonSimulationPump` validates against), `Puck.Maths`, `Puck.Assets`
+(the module bytes a mount reads), and the screen-machine engines'
+own projects — `Puck.AdvancedGamingBrick`, `Puck.HumbleGamingBrick`,
+`Puck.HumbleGamingBrick.Forge` (the Tune instrument's compile chain).
+
+## Screen machines (`Machines/WorldMachineHost.cs`, `Machines/WorldScreenMachineEngines.cs`)
+
+`WorldMachineHost` — namespaced `Puck.World.Server` (it implements that
+project's `IWorldMachineHost` seam and is constructed only from a
+composition root, never named directly by another Server file) — owns
+boot, per-tick stepping, cable-linking, live reconfiguration, and
+memory-peek for every declared screen's machine. `WorldScreenMachineEngines.All`
+is the single source of truth for which `IScreenMachineEngine`s this build
+ships (the emulator cores, the Tune instrument), read by both composition
+roots' pre-container `WorldExtensionVocabularyHook` wiring so a
+document-declared engine key validates identically on the desktop and the
+silo. This is the fold that keeps the emulator cores and `Puck.SdfVm` out of
+`Puck.World.Server`'s own references — a machine is a mounted guest, like a
+WASM addon, and a browser or silo build of Server needs neither. See
+[`Puck.World.Server`'s README](../Puck.World.Server/README.md#screen-machines-iworldmachinehostcs)
+for the seam contract, the CAS-pinned boot/select path, and the replay-arm
+latches this host participates in.
 
 `IWorldAddonHost` implements the shared `IWorldExtensionRuntime` contract with
 recomputed contributions. Capability-manifest matching is shared with recorded

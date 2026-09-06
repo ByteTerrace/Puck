@@ -17,6 +17,7 @@ public sealed class WorldInstanceHostTwoRowTransferLawTests {
     private static WorldInstanceHost BuildHost(Guid machineId, bool admitsSpawn = true) => new(
         applicationStopping: CancellationToken.None,
         admitsSpawn: admitsSpawn,
+        machineHostFactory: Fixtures.MachineHostFactory,
         machineId: machineId,
         resolver: new WorldSessionResolver(),
         seats: WorldEmbodiedSeats.None,

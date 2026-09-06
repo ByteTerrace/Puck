@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using Puck.Abstractions.Machines;
 using Puck.Attestation;
 using Puck.Storage;
 using Puck.World.Protocol;
@@ -83,12 +84,23 @@ public sealed class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateResolver 
         Instances = new WorldInstanceHost(
             admitsSpawn: false,
             applicationStopping: CancellationToken.None,
+            machineHostFactory: MachineHostFactory,
             machineId: m_machineId,
             resolver: new WorldSessionResolver(),
             seats: WorldEmbodiedSeats.None,
             stateRoot: definition.StateDir
         );
     }
+
+    // The silo builds the real WorldMachineHost (Puck.World.Addons.Machines) exactly like the desktop, so a hosted
+    // row's document-declared engine ids validate and read back identically — the silo simply never wires a real
+    // engine set into it, so a Machine-source screen always reports "no screen-machine engine" rather than booting.
+    private static IWorldMachineHost MachineHostFactory(IReadOnlyList<WorldScreen> screens, IEnumerable<IScreenMachineEngine> engines, string? documentPath, WorldOutputHub? narrationHub) => new WorldMachineHost(
+        screens: screens,
+        engines: engines,
+        documentPath: documentPath,
+        narrationHub: narrationHub
+    );
 
     /// <summary>Gets the silo document this host was built from.</summary>
     public WorldSiloDefinition Definition => m_definition;
@@ -642,6 +654,7 @@ public sealed class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateResolver 
             addonHostFactory: static (_, _) => new WorldNoAddonHost(),
             engines: [],
             liveServer: server,
+            machineHostFactory: MachineHostFactory,
             profiles: profiles,
             transport: link
         );

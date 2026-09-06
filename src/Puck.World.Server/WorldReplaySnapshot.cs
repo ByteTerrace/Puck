@@ -106,8 +106,8 @@ public abstract record WorldReplayEntry {
     /// authority entry kind, applying synchronously on re-drive exactly as they do live (see
     /// <see cref="Server.WorldServer.ApplyScreenOp"/>).</summary>
     /// <param name="Value">The screen op.</param>
-    /// <param name="ContentHash">The CAS pin (a real <c>sha256-64</c> hash, or
-    /// <see cref="Server.WorldMachineHost.ContentAbsentSignature"/>) a recorded <see cref="WorldScreenOp.Insert"/> or
+    /// <param name="ContentHash">The CAS pin (a real <c>sha256-64</c> hash, or the concrete host's
+    /// content-absent sentinel) a recorded <see cref="WorldScreenOp.Insert"/> or
     /// machine-booting <see cref="WorldScreenOp.Select"/> entry carries (Select shares Insert's own CAS pin — a
     /// magazine entry's document-declared path is not immune to on-disk drift either) — <see langword="null"/> for
     /// every other op kind, and this rides the tape regardless of whether the op succeeded (a failed insert/select
@@ -1319,10 +1319,14 @@ public sealed class WorldReplaySnapshot {
     /// current rates from (read-only here — the re-drive seats bodies on detached pinned handles instead of mutating
     /// this catalog's shared ones).</param>
     /// <param name="engines">The registered screen-machine engines (the same DI-collected set the live session ran
-    /// under) — the shadow world's own <see cref="WorldMachineHost"/> boots and steps machines off this exactly like
-    /// the live one did, so a tape spanning a CAS-pinned <c>screen.insert</c> re-proves the pinned content still
-    /// matches. Disposed at the end of this drive — the shadow
+    /// under) — handed to <paramref name="machineHostFactory"/> so the shadow world's own machine host boots and
+    /// steps machines off this exactly like the live one did, so a tape spanning a CAS-pinned <c>screen.insert</c>
+    /// re-proves the pinned content still matches. Disposed at the end of this drive — the shadow
     /// machines exist only for the duration of the re-drive.</param>
+    /// <param name="machineHostFactory">Builds a fresh <see cref="IWorldMachineHost"/> over the re-deserialized
+    /// definition's screens and <paramref name="engines"/> — <c>Puck.World.Server</c> carries no reference to the
+    /// concrete host, so it cannot build one itself (the same "the server calls out, the composition root supplies
+    /// the capability" shape as <paramref name="addonHostFactory"/>).</param>
     /// <param name="addonHostFactory">Builds a fresh <see cref="IWorldAddonHost"/> over the re-deserialized
     /// definition and the shadow server — a fresh guest set must mount per drive, so this is a factory rather than a
     /// shared instance. Disposed at the end of this drive. The factory must return a host already attached to the
@@ -1331,22 +1335,24 @@ public sealed class WorldReplaySnapshot {
     /// nothing.</param>
     /// <returns>The per-tick population-hash trace, one entry per recorded tick. <see cref="DriveTraces"/> exposes both
     /// traces and is what verdicts use.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="profiles"/>, <paramref name="engines"/>, or
-    /// <paramref name="addonHostFactory"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="profiles"/>, <paramref name="engines"/>,
+    /// <paramref name="machineHostFactory"/>, or <paramref name="addonHostFactory"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidDataException">The guests this recording pins are not the guests the fresh world would
     /// re-run.</exception>
     /// <exception cref="WorldReplayCodecException">A host-side codec bug: an authority-entry kind the re-drive switch
     /// below does not handle, which would silently drop a recorded input from the re-drive.</exception>
-    public ulong[] Drive(WorldOwnedWorlds profiles, IEnumerable<IScreenMachineEngine> engines, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) => DriveTraces(
+    public ulong[] Drive(WorldOwnedWorlds profiles, IEnumerable<IScreenMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) => DriveTraces(
         profiles: profiles,
         engines: engines,
+        machineHostFactory: machineHostFactory,
         addonHostFactory: addonHostFactory
     ).Pose;
 
     /// <summary>Re-drives once and returns both the pose inspection trace and authoritative state-system trace.</summary>
-    public WorldReplayHashTraces DriveTraces(WorldOwnedWorlds profiles, IEnumerable<IScreenMachineEngine> engines, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) {
+    public WorldReplayHashTraces DriveTraces(WorldOwnedWorlds profiles, IEnumerable<IScreenMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) {
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: engines);
+        ArgumentNullException.ThrowIfNull(argument: machineHostFactory);
         ArgumentNullException.ThrowIfNull(argument: addonHostFactory);
 
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: DefinitionJson);
@@ -1359,9 +1365,11 @@ public sealed class WorldReplaySnapshot {
         }
 
         var population = new WorldPopulation(definition: definition);
-        using var machines = new WorldMachineHost(
-            screens: definition.Screens,
-            engines: engines
+        using var machines = machineHostFactory(
+            definition.Screens,
+            engines,
+            null,
+            null
         );
         // A fresh, unconfigured render envelope reads as "fits" — the replay applies no render-growing edits, and the
         // authoritative simulation never consults GPU capacity, so no probe is needed offline.

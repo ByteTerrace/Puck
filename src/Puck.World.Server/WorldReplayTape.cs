@@ -76,6 +76,7 @@ public sealed partial class WorldReplayTape {
 
     private readonly Func<WorldDefinition, WorldServer, IWorldAddonHost> m_addonHostFactory;
     private readonly IReadOnlyList<IScreenMachineEngine> m_engines;
+    private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
     private readonly WorldServer m_liveServer;
     private readonly WorldOwnedWorlds m_profiles;
     private readonly LoopbackTransport m_transport;
@@ -123,8 +124,12 @@ public sealed partial class WorldReplayTape {
     /// <param name="profiles">The profile catalog (handed to a replay's fresh world for seat re-resolution).</param>
     /// <param name="transport">The client→server loopback whose intent/command submissions the tape captures.</param>
     /// <param name="engines">The registered screen-machine engines (DI-collected) — handed to
-    /// <see cref="WorldReplaySnapshot.Drive"/> so the offline re-drive's own <see cref="Server.WorldMachineHost"/>
+    /// <see cref="WorldReplaySnapshot.Drive"/> so the offline re-drive's own machine host
     /// boots against the same engine set the live session ran under.</param>
+    /// <param name="machineHostFactory">Builds a fresh <see cref="IWorldMachineHost"/> over a re-deserialized
+    /// definition's screens and <paramref name="engines"/> — handed to <see cref="WorldReplaySnapshot.Drive"/> and to
+    /// <see cref="ResetLiveWorldToBootImage"/>'s own boot-image reset, since <c>Puck.World.Server</c> carries no
+    /// reference to the concrete host and cannot build one itself.</param>
     /// <param name="addonHostFactory">Builds a fresh <see cref="IWorldAddonHost"/> over a re-deserialized definition
     /// and its shadow server — handed to <see cref="WorldReplaySnapshot.Drive"/> so each re-drive mounts its own
     /// guest set rather than reusing the live session's. The factory must return a host already attached to the
@@ -132,17 +137,19 @@ public sealed partial class WorldReplayTape {
     /// host that never reaches <see cref="WorldServer.AttachAddons"/> re-drives with no guests and produces a MATCH
     /// that proves nothing.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldReplayTape(WorldServer liveServer, WorldOwnedWorlds profiles, LoopbackTransport transport, IEnumerable<IScreenMachineEngine> engines, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) {
+    public WorldReplayTape(WorldServer liveServer, WorldOwnedWorlds profiles, LoopbackTransport transport, IEnumerable<IScreenMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) {
         ArgumentNullException.ThrowIfNull(argument: liveServer);
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: transport);
         ArgumentNullException.ThrowIfNull(argument: engines);
+        ArgumentNullException.ThrowIfNull(argument: machineHostFactory);
         ArgumentNullException.ThrowIfNull(argument: addonHostFactory);
 
         m_liveServer = liveServer;
         m_profiles = profiles;
         m_transport = transport;
         m_engines = [.. engines];
+        m_machineHostFactory = machineHostFactory;
         m_addonHostFactory = addonHostFactory;
     }
 
@@ -179,6 +186,7 @@ public sealed partial class WorldReplayTape {
         var replayedTrace = recording.DriveTraces(
             addonHostFactory: m_addonHostFactory,
             engines: m_engines,
+            machineHostFactory: m_machineHostFactory,
             profiles: m_profiles
         );
 
@@ -575,7 +583,7 @@ public sealed partial class WorldReplayTape {
     /// <see cref="Protocol.WorldGrant.KindMask"/> (and its <see cref="Protocol.WorldGrant.WriteMask"/> sibling) now
     /// ride the shared grant/revoke leaf on tape.
     /// <see cref="Server.WorldServer.AnyMachineEverPumped"/> refuses for the identical reason: offline replay rehydrates a fresh
-    /// <see cref="Server.WorldMachineHost"/> from the tape's embedded definition — it can reconstruct a
+    /// <see cref="Server.IWorldMachineHost"/> from the tape's embedded definition — it can reconstruct a
     /// boot-declared cartridge's boot image (and CAS-verify a later <c>screen.insert</c>/<c>.select</c>'s content),
     /// but never a machine's accumulated core state (WRAM, CPU registers) once real ticks have run it, and the pose
     /// hash covers no machine state at all to catch the divergence after the fact — see this file's own remarks on
@@ -584,7 +592,7 @@ public sealed partial class WorldReplayTape {
     /// <see cref="Server.WorldServer.AnyScreenOpEverApplied"/> refuses for a related but distinct reason: screen ops
     /// apply synchronously, between fixed steps — a <c>screen.insert</c> immediately
     /// followed by <c>replay.record</c>, with no step run in between, still arms clean under the first two checks
-    /// (nothing has stepped), yet the insert already changed live <see cref="Server.WorldMachineHost"/> state that
+    /// (nothing has stepped), yet the insert already changed live <see cref="Server.IWorldMachineHost"/> state that
     /// the record-start definition snapshot below never reflects (a screen op is not a document mutation, and only
     /// ever joins the tape's own authority list from the moment this method's own <c>ScreenOpTap</c> attaches
     /// onward — never retroactively for an op that already landed). Left ungated, offline replay would reconstruct a

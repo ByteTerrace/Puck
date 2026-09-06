@@ -2,13 +2,14 @@ using Puck.Abstractions.Machines;
 using Puck.AdvancedGamingBrick;
 using Puck.HumbleGamingBrick.Forge.Tune;
 using Puck.HumbleGamingBrick;
+using Puck.World.Server;
 
 namespace Puck.World;
 
 /// <summary>
 /// The single source of truth for which <see cref="IScreenMachineEngine"/>s this build ships — read by
-/// <c>Puck.World</c>'s <c>WorldBootComposition</c> (the DI registration <see cref="Server.WorldMachineHost"/>
-/// resolves against on the desktop) and by both composition roots' pre-container
+/// <c>Puck.World</c>'s <c>WorldBootComposition</c> (the DI registration <see cref="IWorldMachineHost"/> callers
+/// resolve against on the desktop) and by both composition roots' pre-container
 /// <see cref="WorldExtensionVocabularyHook"/> wiring, so a document-declared engine key validates identically in
 /// <c>Puck.World</c> and <c>Puck.World.Silo</c> — an engine missing from this list is missing everywhere, rather
 /// than registered for DI while unrecognized at load, or recognized at load and then unresolvable.

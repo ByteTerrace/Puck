@@ -36,7 +36,7 @@ public sealed class WorldInstance : IDisposable {
     /// <param name="ownedNetwork">The peer network this row owns, or null when shared and externally owned.</param>
     /// <exception cref="ArgumentException"><paramref name="name"/> is null or whitespace.</exception>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldInstance(string name, Func<string> origin, WorldServer server, WorldMachineHost? ownedMachines, IServerLink link, WorldFederationIdentity federation, WorldDocumentOrigin documentOrigin, IDisposable? ownedAdjacencies = null, WorldPeerNetwork? ownedNetwork = null) {
+    public WorldInstance(string name, Func<string> origin, WorldServer server, IWorldMachineHost? ownedMachines, IServerLink link, WorldFederationIdentity federation, WorldDocumentOrigin documentOrigin, IDisposable? ownedAdjacencies = null, WorldPeerNetwork? ownedNetwork = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
         ArgumentNullException.ThrowIfNull(argument: origin);
         ArgumentNullException.ThrowIfNull(argument: server);
@@ -102,7 +102,7 @@ public sealed class WorldInstance : IDisposable {
     public WorldDocumentOrigin Origin { get; set; }
     /// <summary>The machine host this instance owns and disposes, or <see langword="null"/> when the container
     /// owns it.</summary>
-    public WorldMachineHost? OwnedMachines { get; }
+    public IWorldMachineHost? OwnedMachines { get; }
 
     /// <summary>This instance's portal-crossing edge state, read and written by <see cref="WorldInstanceHost"/>'s
     /// diegetic boundary scan. Scoped to this instance object — a name reused after

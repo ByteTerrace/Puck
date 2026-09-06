@@ -295,6 +295,20 @@ internal static class WorldBootComposition {
             documentPath: sp.GetRequiredService<WorldDefinitionSource>().SourcePath,
             narrationHub: sp.GetRequiredService<WorldOutputHub>()
         ));
+        // WorldServer's own constructor asks the container for IWorldMachineHost (its parameter type — Server
+        // carries no reference to the concrete host); this shares the SAME peer singleton the line above registers,
+        // never a second instance.
+        services.AddSingleton<IWorldMachineHost>(implementationFactory: static sp => sp.GetRequiredService<WorldMachineHost>());
+        // The screen-machine host builder every offline re-drive (WorldReplayTape/WorldReplayInspector/
+        // WorldReplaySnapshot) and a spawned instance's own empty host (WorldInstanceHost) construct through —
+        // Puck.World.Server carries no reference to Puck.World.Addons.Machines' WorldMachineHost, so it cannot build
+        // one itself. Mirrors the addon seam's identical factory shape (below).
+        services.AddSingleton<Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(implementationInstance: static (screens, engines, documentPath, narrationHub) => new WorldMachineHost(
+            screens: screens,
+            engines: engines,
+            documentPath: documentPath,
+            narrationHub: narrationHub
+        ));
 
         // The screen binder — owns the declared screens' CPU-fed GPU sources (test patterns, the shared webcam,
         // window captures) and READS Server.WorldMachineHost's outputs for a machine-owning index (it no longer
@@ -421,6 +435,7 @@ internal static class WorldBootComposition {
             profiles: sp.GetRequiredService<WorldOwnedWorlds>(),
             transport: sp.GetRequiredService<LoopbackTransport>(),
             engines: sp.GetServices<IScreenMachineEngine>(),
+            machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
             addonHostFactory: sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>()
         ));
         // The tape's read-back (replay.inspect) — walks a saved tape and, with --poses, re-drives it through the
@@ -428,6 +443,7 @@ internal static class WorldBootComposition {
         services.AddSingleton(implementationFactory: static sp => new WorldReplayInspector(
             profiles: sp.GetRequiredService<WorldOwnedWorlds>(),
             engines: sp.GetServices<IScreenMachineEngine>(),
+            machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
             addonHostFactory: sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>()
         ));
         services.AddSingleton<ICommandModule, WorldReplayCommandModule>();
@@ -526,6 +542,7 @@ internal static class WorldBootComposition {
                 machineId: sp.GetRequiredService<WorldOwnedWorlds>().MachineId,
                 stateRoot: WorldStateRoot.Resolve(),
                 applicationStopping: sp.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping,
+                machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
                 admitsSpawn: true
             );
             var bootOrigin = sp.GetRequiredService<WorldDefinitionSource>();
