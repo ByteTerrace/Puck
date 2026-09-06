@@ -181,16 +181,24 @@ Nothing here carries a `World` name — a state library names no world.
   the cells it reads and writes (`CollectReads`/`CollectWrites` into
   `RuleAccess` lists). `CompiledCellRef` is the one key-indirection carrier
   (`$cell:`, a bound key, an `$expr:` key that compiles to an implicit binding
-  read back through `BindingKeyFact`, a `$zone:` endpoint, or a document project's `KeyFact`).
+  read back through `BindingKeyFact`, a `$bind:` binding, a `$zone:` endpoint,
+  or a document project's `KeyFact`). `LiveZone` is its row-side mirror: a
+  rule declares a `zones` table (ordered zones over one token domain and kind,
+  in index order, an empty entry a gap), and any row position in the rule — a
+  `compareState` `state`, a `$reduce:`/`$match:` row, a `$zone:` endpoint's
+  zone, a transfer end, an expression's row — may spell `$zones[<index>]`,
+  the index an infix key (`game[from]`, `$each`, `$bind:<name>`, or any
+  expression), so one rule serves every pile of a game; `forEach: "$zones"`
+  iterates the table's own non-empty indices. Every channel splits through
+  `RuleFacts.SplitChannel`, which keeps a bracketed index whole, and the
+  infix lexer keeps `$zones[...]` inside a reserved name.
   `$zone:<ordered-zone>:first|last` preserves the member's original string key
-  and reads the active store, including uncommitted frame transfers. A
-  transfer's `from` and `to` take the same dynamic spellings, each resolving
-  to an integer index into the transfer's `zones` table (ordered zones over
-  one token domain; an empty entry answers no index), so one rule moves
-  between any two of a game's piles. An empty
-  zone's endpoint names no cell: a read of it is an absent fact (`RuleFact.IsAbsent`)
-  that no comparison holds against — not even `NotEqual` — an expression over
-  it refuses, a copy from it does not fire, and a write addressed by it refuses.
+  and reads the active store, including uncommitted frame transfers. An index
+  selecting no zone, or an empty zone's endpoint, names no cell: a read of it
+  is an absent fact (`RuleFact.IsAbsent`) that no comparison holds against —
+  not even `NotEqual` — an expression over it refuses, a copy from it does not
+  fire, a write addressed by it refuses, and a transfer end through it refuses
+  by name.
 - *Evaluation:* `RuleEvaluator` runs a compiled family over an `IRuleHost` —
   gates in array order, bindings before the gate, Edge/Level latching per
   binding in a `RuleLatch` (simulation state: it hashes, flattens to a

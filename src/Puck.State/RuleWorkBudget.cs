@@ -214,6 +214,24 @@ public static class RuleWorkBudget {
     }
 
     /// <summary>Returns the work units a gate costs: each operand and expression read.</summary>
+    /// <summary>Returns how many evaluations a rule's <see cref="Rule.ForEach"/> multiplies one tick's cost by: the
+    /// iterated row's cell capacity, the zone table's entry count over <c>$zones</c>, or 1 for a rule evaluated once.</summary>
+    /// <param name="rule">The compiled rule.</param>
+    /// <param name="context">The compile context the rule was resolved against.</param>
+    public static long ForEachCount(CompiledRule rule, RuleCompileContext context) {
+        ArgumentNullException.ThrowIfNull(argument: rule);
+        ArgumentNullException.ThrowIfNull(argument: context);
+
+        if (rule.ForEach is not { } forEach) {
+            return 1L;
+        }
+        if ((rule.Zones is { } zones) && string.Equals(a: forEach, b: RuleFacts.ForEachZones, comparisonType: StringComparison.Ordinal)) {
+            return zones.Indices.Length;
+        }
+
+        return context.RowCapacity(name: forEach);
+    }
+
     public static long GateCost(GateToken[] tokens, RuleCompileContext context) {
         ArgumentNullException.ThrowIfNull(argument: tokens);
 

@@ -130,6 +130,12 @@ public enum RuleRefusal : byte {
     [Refusal(door: "world.rule.compile", condition: "a '$reduce:' channel does not spell '$reduce:<max|min|sum|count>:<row>' against a declared, non-text row", kind: RefusalKind.Verdict)]
     ReduceChannelMalformed,
 
+    /// <summary>A rule's <c>zones</c> table is empty, names an undeclared row, a row that is not an ordered token
+    /// zone, zones over different token domains or of different kinds, or one zone twice — or <c>forEach: "$zones"</c>
+    /// iterates a table the rule does not declare.</summary>
+    [Refusal(door: "world.rule.compile", condition: "a rule's 'zones' table is empty, names something other than distinct ordered zones over one token domain and kind, or is iterated by a rule that declares none", kind: RefusalKind.Verdict)]
+    ZoneTableMalformed,
+
     /// <summary>A <c>$symmetry:</c> channel does not spell <c>$symmetry:&lt;function&gt;[:&lt;argument&gt;]:&lt;row&gt;</c>
     /// — an unknown function, a function given an argument it does not take (or missing one it needs), an argument
     /// that is neither a node literal nor <c>cell:&lt;row&gt;[.&lt;key&gt;]</c>, or a source row that is not a declared

@@ -4663,18 +4663,6 @@
       ],
       "additionalProperties": false
     },
-    "StringListNullable": {
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "type": [
-          "string",
-          "null"
-        ]
-      }
-    },
     "StateTransformTransfer": {
       "description": "Moves selected tokens, preserving identity. A random draw advances only when the whole transfer commits.",
       "properties": {
@@ -4682,7 +4670,7 @@
           "const": "transfer"
         },
         "from": {
-          "description": "The source zone \u2014 a zone name, or in an authored rule a dynamic key spelling ($cell:, $expr:, a bound token) whose integer resolves, before each firing, to an index into Zones.",
+          "description": "The source zone \u2014 a zone name, or in an authored rule a live zone ($zones[\u003Cindex\u003E], an entry of the rule\u0027s Zones table selected before each firing; an index selecting none refuses the transfer by name).",
           "type": "string"
         },
         "to": {
@@ -4725,11 +4713,6 @@
           "description": "How many tokens move in this one transfer, 1..MaxTransferCount, each selected afresh from what remains (a five-card deal is one mutation); a key selection moves exactly one, and a slice selection moves the keyed token\u0027s whole tail (its count is 1).",
           "type": "integer",
           "default": 1
-        },
-        "zones": {
-          "$ref": "#/$defs/StringListNullable",
-          "description": "The zone table a dynamic From or To indexes: ordered zones over one token domain, in index order; an empty entry holds an index no zone answers, so a request naming it refuses rather than moving anything. Absent when both ends are literal.",
-          "default": null
         }
       },
       "required": [

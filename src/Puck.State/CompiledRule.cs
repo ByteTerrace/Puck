@@ -59,7 +59,8 @@ public readonly record struct CompiledExpressionToken(ExpressionOp Operation, lo
 /// <param name="Effects">The compiled effects, in authored order.</param>
 /// <param name="ForEach">The keyed row a rule iterates (<see cref="Rule.ForEach"/>), or <see langword="null"/>.</param>
 /// <param name="Bindings">The compiled per-evaluation bindings, in declared order.</param>
-public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate, EffectFact[] Effects, string? ForEach = null, CompiledRuleBinding[]? Bindings = null) {
+/// <param name="Zones">The compiled <see cref="Rule.Zones"/> table, or <see langword="null"/>.</param>
+public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate, EffectFact[] Effects, string? ForEach = null, CompiledRuleBinding[]? Bindings = null, ZoneTable? Zones = null) {
     /// <summary>Appends every state cell one evaluation reads: the gate, the bindings, and the effects. A document
     /// project's rule appends the branches it alone carries.</summary>
     /// <param name="into">The read set being collected.</param>

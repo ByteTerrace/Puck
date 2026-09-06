@@ -37,13 +37,21 @@ namespace Puck.State;
 /// <param name="Mode">Whether the rule fires every tick the gate holds (<see cref="ActionTriggerMode.Level"/>, the
 /// default) or once per crossing (<see cref="ActionTriggerMode.Edge"/>). A rule that writes a row almost always wants
 /// <see cref="ActionTriggerMode.Edge"/>: level-firing an <c>addState</c> writes one journal entry per tick.</param>
-/// <param name="ForEach">A keyed state row to iterate, or <see langword="null"/> for one evaluation per tick. With
-/// a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with
+/// <param name="ForEach">A keyed state row to iterate, <c>$zones</c> to iterate the rule's own
+/// <paramref name="Zones"/> table (its non-empty indices, each bound to <c>$each</c>), or <see langword="null"/> for
+/// one evaluation per tick. With a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with
 /// <c>$each</c> bound to that cell's key — the quantifier that lets one rule tick a status for every participant
 /// carrying it, or one rule judge every piece or card of a keyed row. An integer key also binds the <c>each</c>
 /// participant reference; a non-integer key binds <c>$each</c> alone. The latch is kept per key, by the key's value
 /// when it is an integer and by its position in the row otherwise.</param>
 /// <param name="Bindings">The values bound once per evaluation, in declared order, read as <c>$bind:&lt;name&gt;</c>.</param>
+/// <param name="Zones">The rule's zone table, or <see langword="null"/>: ordered zones over one token domain, in
+/// index order, an empty entry holding an index no zone answers. Every row position in the rule — a
+/// <c>compareState</c>'s <c>state</c>, a <c>$reduce:</c>/<c>$match:</c> row, a <c>$zone:</c> endpoint's zone, a
+/// transfer's <c>from</c>/<c>to</c>, an expression's row — may spell <c>$zones[&lt;index&gt;]</c> to select an entry
+/// live, the index being an infix cell key (<c>game[from]</c>, <c>$each</c>, <c>$bind:&lt;name&gt;</c>, or any
+/// expression), so one rule serves every pile of a game. <c>forEach: "$zones"</c> iterates the table's own
+/// non-empty indices with <c>$each</c> bound to each.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record Rule(
     [property: JsonPropertyOrder(0)] CellName Name,
@@ -51,7 +59,8 @@ public record Rule(
     [property: JsonPropertyOrder(2)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionPredicate? Gate = null,
     [property: JsonPropertyOrder(3)] ActionTriggerMode Mode = ActionTriggerMode.Level,
     [property: JsonPropertyOrder(4)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ForEach = null,
-    [property: JsonPropertyOrder(6)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<RuleBinding>? Bindings = null
+    [property: JsonPropertyOrder(6)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<RuleBinding>? Bindings = null,
+    [property: JsonPropertyOrder(7)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Zones = null
 );
 /// <summary>A value bound once per evaluation of the rule that declares it, after the forEach key and before the
 /// gate, in declared order — a later binding, the gate, and every effect read it as

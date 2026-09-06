@@ -66,6 +66,9 @@ public class RuleCompileContext {
     /// <summary>Gets or sets the enclosing rule's declared <see cref="Rule.ForEach"/> row name, for the duration of
     /// one compile.</summary>
     public string? ForEachRow { get; set; }
+    /// <summary>Gets or sets the enclosing rule's compiled <see cref="Rule.Zones"/> table, which every
+    /// <c>$zones[&lt;index&gt;]</c> spelling in the rule indexes, for the duration of one compile.</summary>
+    public ZoneTable? Zones { get; set; }
     /// <summary>Gets the per-compile scratch a family may cache into (keyed by the family's own name), cleared with
     /// the rest of the scope when the compile ends.</summary>
     public IDictionary<string, object> Scope => m_scope;
@@ -137,6 +140,7 @@ public class RuleCompileContext {
         BindingScope = null;
         RuleBindings = null;
         ForEachRow = null;
+        Zones = null;
         m_scope.Clear();
     }
 }

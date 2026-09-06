@@ -428,30 +428,22 @@ public static partial class RuleCompiler {
 
                 break;
             case StateTransform.Transfer transfer:
-                var fromLive = TryResolveDynamicKey(transfer.From, ruleName, context, "transfer", "from", out var fromRef);
-                var toLive = TryResolveDynamicKey(transfer.To, ruleName, context, "transfer", "to", out var toRef);
-                CellName? tokenDomain = null;
+                // A live end indexes the rule's zone table; a literal end must be an ordered zone over the same
+                // token domain as the other end (the table's, when that end is live).
+                _ = TryResolveLiveZone(name: transfer.From, ruleName: ruleName, context: context, where: "transfer 'from'", zone: out var fromZone);
+                _ = TryResolveLiveZone(name: transfer.To, ruleName: ruleName, context: context, where: "transfer 'to'", zone: out var toZone);
+                var tokenDomain = (fromZone ?? toZone)?.Table.TokenDomain;
                 void RequireZone(string name, string label) {
                     if (Row(name).EffectiveDomain is not StateDomain.KeysOf { Ordered: true } zone) {
                         throw Invalid($"transfer {label} '{name}' is not an ordered token zone");
                     }
-                    if (tokenDomain is { } domain && domain != zone.Row) {
-                        throw Invalid($"transfer {label} '{name}' is a zone over '{zone.Row}', not the token domain '{domain}' the transfer's other zones share");
+                    if ((tokenDomain is { } domain) && !string.Equals(a: domain, b: zone.Row.Value, comparisonType: StringComparison.Ordinal)) {
+                        throw Invalid($"transfer {label} '{name}' is a zone over '{zone.Row}', not the token domain '{domain}' the transfer's other end shares");
                     }
-                    tokenDomain = zone.Row;
+                    tokenDomain = zone.Row.Value;
                 }
-                if (!fromLive) { RequireZone(transfer.From, "'from'"); }
-                if (!toLive) { RequireZone(transfer.To, "'to'"); }
-                if (fromLive || toLive) {
-                    if (transfer.Zones is not { Count: > 0 } zones) {
-                        throw Invalid("a transfer whose 'from' or 'to' resolves live indexes a 'zones' table, which must list at least one zone");
-                    }
-                    foreach (var entry in zones) {
-                        if (entry.Length != 0) { RequireZone(entry, "'zones' entry"); }
-                    }
-                } else if (transfer.Zones is not null) {
-                    throw Invalid("a transfer with a literal 'from' and 'to' carries no 'zones' table");
-                }
+                if (fromZone is null) { RequireZone(transfer.From, "'from'"); }
+                if (toZone is null) { RequireZone(transfer.To, "'to'"); }
                 if (!Enum.IsDefined(transfer.Selector) || (transfer.Selector is ZoneSelector.Key or ZoneSelector.Slice) != (transfer.Key is not null) ||
                     (transfer.Selector == ZoneSelector.Random) != (transfer.Draw is not null) ||
                     transfer.Count < 1 || transfer.Count > StateTransferCapacity.MaxTransferCount || (transfer.Selector is ZoneSelector.Key or ZoneSelector.Slice && transfer.Count != 1)) {
@@ -472,9 +464,9 @@ public static partial class RuleCompiler {
                         throw Invalid($"transfer 'key' '{key}' spells neither a token name nor a dynamic key");
                     }
                 }
-                if (keyRef is not null || fromLive || toLive) {
+                if (keyRef is not null || fromZone is not null || toZone is not null) {
                     var spelledKey = ((keyRef is not null) ? $" key {transfer.Key}" : string.Empty);
-                    return new TransformStateEffect(transform, $"transformState Transfer {transfer.From} to {transfer.To} {transfer.Selector}{spelledKey}", keyRef: keyRef, fromRef: (fromLive ? fromRef : null), toRef: (toLive ? toRef : null));
+                    return new TransformStateEffect(transform, $"transformState Transfer {transfer.From} to {transfer.To} {transfer.Selector}{spelledKey}", keyRef: keyRef, fromZone: fromZone, toZone: toZone);
                 }
                 break;
             case StateTransform.SetRay ray:

@@ -105,33 +105,13 @@ public sealed class ZoneEndKeyLawTests {
     }
 
     [Theory]
-    [InlineData(0, 1, true)]
-    [InlineData(1, 0, false)]
-    [InlineData(0, 2, false)]
-    [InlineData(0, 7, false)]
-    public void LiveZoneEndsIndexTheTableAndRefuseOutsideIt(long from, long to, bool moves) {
-        var (host, context, rows) = Build();
-        var zones = new[] { "deck", "hand", "" };
-        var transfer = new StateTransform.Transfer("$cell:cards:beta", "$cell:cards:gamma", ZoneSelector.First, Zones: zones);
-        var rules = RuleCompiler.CompileAll([new Rule(Name("move"), [new ActionEffect.TransformState(transfer)])], context);
-        var effect = Assert.IsType<TransformStateEffect>(rules[0].Effects[0]);
-        Assert.NotNull(effect.FromRef);
-        Assert.NotNull(effect.ToRef);
-        Assert.Equal(["deck", "hand"], RuleDataflow.Writes(rules[0]).Select(access => access.Row).Distinct().Order());
-        Assert.True(host.TryApply(new StateMutation.UpsertCell("cards", "beta", from, StateWriteKind.Set), 1, false, out var seedFrom), seedFrom);
-        Assert.True(host.TryApply(new StateMutation.UpsertCell("cards", "gamma", to, StateWriteKind.Set), 1, false, out var seedTo), seedTo);
-        Assert.Equal(moves, host.Judge(rules, 1));
-        Assert.Equal(moves ? "gamma" : "", Resolve(host, Key(context, "$zone:hand:last")));
-    }
-
-    [Theory]
-    [InlineData("$cell:cards:beta", "hand", null)]
-    [InlineData("deck", "hand", new[] { "deck", "hand" })]
-    [InlineData("$cell:cards:beta", "hand", new[] { "cards" })]
-    public void LiveZoneEndsNeedAZoneTableAndLiteralEndsRefuseOne(string from, string to, string[]? zones) {
+    [InlineData("$zones[cards[beta]]", "hand", null)]
+    [InlineData("deck", "$zones[cards[beta]]", new[] { "cards" })]
+    [InlineData("$zones[cards[beta]]", "$zones[cards[beta]]", new[] { "deck", "hand", "deck" })]
+    public void LiveZoneEndsNeedAWellFormedZoneTable(string from, string to, string[]? zones) {
         var (_, context, _) = Build();
-        var transfer = new StateTransform.Transfer(from, to, ZoneSelector.First, Zones: zones);
-        Assert.Throws<RuleException>(() => RuleCompiler.CompileAll([new Rule(Name("move"), [new ActionEffect.TransformState(transfer)])], context));
+        var transfer = new StateTransform.Transfer(from, to, ZoneSelector.First);
+        Assert.Throws<RuleException>(() => RuleCompiler.CompileAll([new Rule(Name("move"), [new ActionEffect.TransformState(transfer)], Zones: zones)], context));
     }
 
     [Fact]

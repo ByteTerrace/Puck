@@ -15,6 +15,8 @@ namespace Puck.World;
 /// <param name="ForEach">A keyed state row to iterate with <c>$each</c> bound to each key, or <see langword="null"/>.</param>
 /// <param name="Decision">The optional choice policy; common effects run only when entering a selected option.</param>
 /// <param name="Bindings">The values bound once per evaluation, in declared order, read as <c>$bind:&lt;name&gt;</c>.</param>
+/// <param name="Zones">The rule's zone table (<see cref="Rule.Zones"/>), which every <c>$zones[&lt;index&gt;]</c> in
+/// the rule selects from, or <see langword="null"/>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldRule(
     CellName Name,
@@ -23,8 +25,9 @@ public sealed record WorldRule(
     ActionTriggerMode Mode = ActionTriggerMode.Level,
     string? ForEach = null,
     [property: JsonPropertyOrder(5)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDecision? Decision = null,
-    IReadOnlyList<RuleBinding>? Bindings = null
-) : Rule(Name: Name, Effects: Effects, Gate: Gate, Mode: Mode, ForEach: ForEach, Bindings: Bindings);
+    IReadOnlyList<RuleBinding>? Bindings = null,
+    IReadOnlyList<string>? Zones = null
+) : Rule(Name: Name, Effects: Effects, Gate: Gate, Mode: Mode, ForEach: ForEach, Bindings: Bindings, Zones: Zones);
 
 /// <summary>How a body reference token resolved at compile time.</summary>
 public enum CompiledBodyRefKind : byte {
@@ -85,6 +88,7 @@ public readonly record struct CompiledWorldPose(FixedVector3 Position, FixedQ481
 /// <param name="Interaction">The co-occurrence an interaction evaluates, or <see langword="null"/> for a rule.</param>
 /// <param name="Decision">The compiled choice policy, or <see langword="null"/>.</param>
 /// <param name="Bindings">The compiled per-evaluation bindings, in declared order.</param>
+/// <param name="Zones">The compiled zone table, or <see langword="null"/>.</param>
 public sealed record CompiledWorldRule(
     string Name,
     ActionTriggerMode Mode,
@@ -93,8 +97,9 @@ public sealed record CompiledWorldRule(
     string? ForEach = null,
     CompiledInteraction? Interaction = null,
     CompiledWorldDecision? Decision = null,
-    CompiledRuleBinding[]? Bindings = null
-) : CompiledRule(Name: Name, Mode: Mode, Gate: Gate, Effects: Effects, ForEach: ForEach, Bindings: Bindings) {
+    CompiledRuleBinding[]? Bindings = null,
+    ZoneTable? Zones = null
+) : CompiledRule(Name: Name, Mode: Mode, Gate: Gate, Effects: Effects, ForEach: ForEach, Bindings: Bindings, Zones: Zones) {
     /// <inheritdoc/>
     public override void CollectReads(List<RuleAccess> into) {
         base.CollectReads(into: into);

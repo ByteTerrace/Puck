@@ -20,6 +20,7 @@ public static partial class WorldRuleCompiler {
         RuleException Refuse(string detail) => new(refusal: RuleRefusal.EffectKindInadmissible, ruleName: rule.Name, detail: $"decision {detail}");
 
         if (rule.Mode != ActionTriggerMode.Level) { throw Refuse("requires Level rule mode"); }
+        if (string.Equals(a: rule.ForEach, b: RuleFacts.ForEachZones, comparisonType: StringComparison.Ordinal)) { throw Refuse("iterates bodies, never a zone table — forEach names a keyed row"); }
         if (!Enum.IsDefined(value: decision.Mode) || decision.ScoreKind is not (CellKind.Int or CellKind.Fixed)) {
             throw Refuse("requires a defined mode and an Int or Fixed scoreKind");
         }

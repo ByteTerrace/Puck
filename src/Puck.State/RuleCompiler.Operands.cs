@@ -61,6 +61,10 @@ public static partial class RuleCompiler {
             return ResolveSymmetryOperand(name: name, key: key, site: in site, context: context, describe: describe);
         }
 
+        if (TryResolveLiveZone(name: name, ruleName: ruleName, context: context, where: $"'{site.Verb}' {site.FieldLabel}", zone: out var live)) {
+            return ResolveLiveZoneCell(live: live!, key: key, site: in site, context: context, describe: describe);
+        }
+
         if (name.StartsWith(value: StateRow.ReservedNamePrefix, comparisonType: StringComparison.Ordinal)) {
             throw new RuleException(
                 refusal: RuleRefusal.StateRowUnknown,
@@ -132,6 +136,34 @@ public static partial class RuleCompiler {
 
     private static string Describe(string name, string? key) => $"{name}{((key is { } spelledKey) ? $".{spelledKey}" : string.Empty)}";
 
+    // A live zone's cell: the key resolves exactly as a fixed zone's would, but no cell can be proven declared at
+    // compile — a zone's members come and go — so a literal key is only proven well-formed.
+    private static ResolvedOperand ResolveLiveZoneCell(LiveZone live, string? key, in OperandSite site, RuleCompileContext context, string describe) {
+        var ruleName = site.RuleName;
+
+        if (TryResolveDynamicKey(cell: out var dynamicKey, context: context, key: key, keyFieldLabel: site.KeyFieldLabel, ruleName: ruleName, verb: site.Verb)) {
+            return new ResolvedOperand(
+                operand: new StateCellOperand(row: live.Spelling, key: null, keyFrom: dynamicKey, stateHandle: default, valueKind: live.Table.Kind, rowFrom: live),
+                describe: describe
+            );
+        }
+        if (key is null) {
+            throw new RuleException(
+                refusal: RuleRefusal.StateCellUnaddressable,
+                ruleName: ruleName,
+                detail: $"'{site.Verb}' names live zone '{live.Spelling}' without a '{site.KeyFieldLabel}' — a zone is keyed by its tokens, so name the one you mean"
+            );
+        }
+        if (!CellName.TryParse(candidate: key, name: out var parsed, reason: out var reason)) {
+            throw new RuleException(refusal: RuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"'{site.Verb}' {site.KeyFieldLabel} '{key}' {reason}");
+        }
+
+        return new ResolvedOperand(
+            operand: new StateCellOperand(row: live.Spelling, key: parsed.Value, keyFrom: null, stateHandle: default, valueKind: live.Table.Kind, rowFrom: live),
+            describe: describe
+        );
+    }
+
     private static string ReservedChannels(RuleCompileContext context) {
         var spellings = new List<string>(s_coreSpellings);
 
@@ -156,7 +188,7 @@ public static partial class RuleCompiler {
             );
         }
 
-        var parts = suffix[(separator + 1)..].Split(':');
+        var parts = RuleFacts.SplitChannel(name: suffix[(separator + 1)..]);
         var rowName = parts[0];
         string? filterRowName = null;
         (decimal Lower, decimal Upper)? bounds = null;
@@ -173,23 +205,35 @@ public static partial class RuleCompiler {
                 throw new RuleException(refusal: RuleRefusal.ReduceChannelMalformed, ruleName: ruleName, detail: $"'{name}' takes optional ':where:<filterRow>' and ':between:<lower>:<upper>' filters once each, with lower <= upper");
             }
         }
-        var reduceRow = ResolveNumericRow(channel: name, context: context, malformed: RuleRefusal.ReduceChannelMalformed, name: rowName, requireKeyed: false, ruleName: ruleName);
-        if (op == StateReduceOp.ArrangementRank && (reduceRow.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } || filterRowName is not null || bounds is not null)) {
+        // A live zone is an ordered keyed zone by construction, in the table's one kind.
+        var rowKind = CellKind.Int;
+        var ordered = true;
+        var keyed = true;
+        if (!TryResolveLiveZone(name: rowName, ruleName: ruleName, context: context, where: $"'{name}' row", zone: out var live)) {
+            var reduceRow = ResolveNumericRow(channel: name, context: context, malformed: RuleRefusal.ReduceChannelMalformed, name: rowName, requireKeyed: false, ruleName: ruleName);
+            rowKind = reduceRow.Kind;
+            ordered = (reduceRow.EffectiveDomain is StateDomain.KeysOf { Ordered: true });
+            keyed = reduceRow.IsKeyed;
+        } else {
+            rowKind = live!.Table.Kind;
+        }
+        if (op == StateReduceOp.ArrangementRank && (!ordered || filterRowName is not null || bounds is not null)) {
             throw new RuleException(refusal: RuleRefusal.ReduceChannelMalformed, ruleName: ruleName, detail: $"'{name}' ranks an ordered zone's arrangement and takes no filters");
         }
         StateHandle filterHandle = default;
         if (filterRowName is not null) {
             _ = ResolveNumericRow(channel: name, context: context, malformed: RuleRefusal.ReduceChannelMalformed, name: filterRowName, requireKeyed: true, ruleName: ruleName);
-            if (!reduceRow.IsKeyed) {
+            if (!keyed) {
                 throw new RuleException(refusal: RuleRefusal.ReduceChannelMalformed, ruleName: ruleName, detail: $"'{name}' applies a keyed filter to non-keyed row '{rowName}'");
             }
             filterHandle = ResolveHandle(context: context, name: filterRowName);
         }
-        var reduceValueKind = ((op is StateReduceOp.Count or StateReduceOp.ArrangementRank) ? CellKind.Int : reduceRow.Kind);
+        var reduceValueKind = ((op is StateReduceOp.Count or StateReduceOp.ArrangementRank) ? CellKind.Int : rowKind);
 
         return new ResolvedOperand(
-            operand: new ReductionOperand(row: rowName, stateHandle: ResolveHandle(context: context, name: rowName), reduce: op, filterRow: filterRowName, filterHandle: filterHandle, valueKind: reduceValueKind,
-                range: bounds is { } range ? (LiteralToRaw(reduceRow.Kind, range.Lower, ruleName, "reduce"), LiteralToRaw(reduceRow.Kind, range.Upper, ruleName, "reduce")) : null),
+            operand: new ReductionOperand(row: rowName, stateHandle: ((live is null) ? ResolveHandle(context: context, name: rowName) : default), reduce: op, filterRow: filterRowName, filterHandle: filterHandle, valueKind: reduceValueKind,
+                range: bounds is { } range ? (LiteralToRaw(rowKind, range.Lower, ruleName, "reduce"), LiteralToRaw(rowKind, range.Upper, ruleName, "reduce")) : null,
+                rowFrom: live),
             describe: describe
         );
     }
@@ -215,7 +259,7 @@ public static partial class RuleCompiler {
     // through the ordinary row/key walk, so every key rule holds for it unchanged; a cell argument resolves the same way.
     private static ResolvedOperand ResolveSymmetryOperand(string name, string? key, in OperandSite site, RuleCompileContext context, string describe) {
         var ruleName = site.RuleName;
-        var tokens = name[RuleFacts.SymmetryPrefix.Length..].Split(separator: ':');
+        var tokens = RuleFacts.SplitChannel(name: name[RuleFacts.SymmetryPrefix.Length..]);
 
         static RuleException Malformed(string ruleName, string name, string detail) => new(
             refusal: RuleRefusal.SymmetryChannelMalformed,
@@ -249,8 +293,8 @@ public static partial class RuleCompiler {
 
         var source = ResolveOperand(name: rowName, key: key, site: site with { AllowText = false }, context: context);
 
-        if (source.Operand is not StateCellOperand sourceCell) {
-            throw Malformed(ruleName: ruleName, name: name, detail: $"names '{rowName}', which is not a state row — the source of a symmetry read is a declared row's cell");
+        if (source.Operand is not StateCellOperand { RowFrom: null } sourceCell) {
+            throw Malformed(ruleName: ruleName, name: name, detail: $"names '{rowName}', which is not a fixed state row — the source of a symmetry read is a declared row's cell");
         }
 
         var literal = 0L;
@@ -288,7 +332,7 @@ public static partial class RuleCompiler {
 
     // $table:<name>:<key> for a single-value table, $table:<name>:<column>:<key> for a column table — the table is
     // resolved and compiled here so a literal key is proven present and the value kind is the table's own; a
-    // dynamic key ($cell:<row>:<key>, $each, or $bind:<name>) is read at evaluation.
+    // dynamic key ($cell:<row>:<key>, $each, $bind:<name>, or an expression) is read at evaluation.
     private static ResolvedOperand ResolveTableOperand(string name, string? key, string ruleName, RuleCompileContext context, string keyFieldLabel) {
         RefuseKeyOnReservedChannel(key: key, keyFieldLabel: keyFieldLabel, name: name, ruleName: ruleName);
         var rest = name[RuleFacts.TablePrefix.Length..];
@@ -315,23 +359,16 @@ public static partial class RuleCompiler {
             spelledKey = spelledKey[(columnColon + 1)..];
         }
         CompiledCellRef? keyFrom = null;
-        var keyBinding = -1;
         var literal = 0L;
-        if (spelledKey.StartsWith(RuleFacts.BindPrefix, StringComparison.Ordinal)) {
-            var bound = ResolveBindingOperand(name: spelledKey, key: null, ruleName: ruleName, keyFieldLabel: keyFieldLabel, context: context);
-            if (bound.ValueKind != CellKind.Int) {
-                throw new RuleException(refusal: RuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"'{name}' key '{spelledKey}' is a fixed binding — a table key is an int binding");
-            }
-            keyBinding = ((BindingOperand)bound.Operand).Ordinal;
-        } else if (TryResolveDynamicKey(key: spelledKey, ruleName: ruleName, context: context, verb: name, keyFieldLabel: "key", cell: out var dynamic)) {
+        if (TryResolveDynamicKey(key: spelledKey, ruleName: ruleName, context: context, verb: name, keyFieldLabel: "key", cell: out var dynamic)) {
             keyFrom = dynamic;
         } else if (!long.TryParse(s: spelledKey, style: NumberStyles.AllowLeadingSign, provider: CultureInfo.InvariantCulture, result: out literal)) {
-            throw new RuleException(refusal: RuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"'{name}' key '{spelledKey}' is not an integer, a '{RuleFacts.CellKeyPrefix}<row>:<key>' indirection, a '{RuleFacts.BindPrefix}<name>' binding, or a bound key token");
+            throw new RuleException(refusal: RuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"'{name}' key '{spelledKey}' is not an integer, a '{RuleFacts.CellKeyPrefix}<row>:<key>' indirection, a '{RuleFacts.BindPrefix}<name>' binding, an '{RuleFacts.ExpressionKeyPrefix}' expression, or a bound key token");
         } else if (!table.TryLookup(key: literal, column: column, raw: out _)) {
             throw new RuleException(refusal: RuleRefusal.StateCellUndeclared, ruleName: ruleName, detail: $"'{name}' names key {literal}, which table '{tokens[0]}' does not carry");
         }
         return new ResolvedOperand(
-            operand: new TableOperand(tableOrdinal: ordinal, table: tokens[0], key: literal, keyFrom: keyFrom, keyBinding: keyBinding, column: column, entryCount: table.Count, valueKind: table.Kind),
+            operand: new TableOperand(tableOrdinal: ordinal, table: tokens[0], key: literal, keyFrom: keyFrom, column: column, entryCount: table.Count, valueKind: table.Kind),
             describe: name
         );
     }
@@ -398,18 +435,25 @@ public static partial class RuleCompiler {
     // `mask`/`count`. Absent, the operand answers acceptance.
     private static ResolvedOperand ResolvePatternOperand(string name, string? key, string ruleName, RuleCompileContext context) {
         RuleException Invalid(string detail) => new(RuleRefusal.StateCellUnaddressable, ruleName, detail);
-        var tokens = name.Split(':');
+        var tokens = RuleFacts.SplitChannel(name: name);
         if (tokens.Length is < 3 or > 5) {
             throw Invalid("pattern match requires $match:<pattern>:<row>[:<direction>|:any][:prefix|:cell|:distance|:mask|:count]");
         }
         var facet = MatchFacet.Accept;
         var pattern = FindPattern(context: context, name: tokens[1]) ?? throw Invalid($"'{tokens[1]}' names no pattern");
-        var row = context.FindRow(name: tokens[2]) ?? throw Invalid($"'{tokens[2]}' names no state row");
+        // A live zone reads as the ordered zone its table declares, in the table's one kind.
+        StateRow? row = null;
+        if (!TryResolveLiveZone(name: tokens[2], ruleName: ruleName, context: context, where: $"'{name}' row", zone: out var live)) {
+            row = (context.FindRow(name: tokens[2]) ?? throw Invalid($"'{tokens[2]}' names no state row"));
+        }
+        var domain = ((live is null) ? row!.EffectiveDomain : new StateDomain.KeysOf(Row: CellName.Parse(candidate: live!.Table.TokenDomain), Ordered: true));
+        var rowKind = ((live is null) ? row!.Kind : live!.Table.Kind);
+        var handle = ((live is null) ? ResolveHandle(context: context, name: tokens[2]) : default);
         BoardNeighbourQuery? board = null;
         CompiledCellRef? keyFrom = null;
         string? attribute = null;
         CellKind kind;
-        if (row.EffectiveDomain is StateDomain.CellsOf declaredBoard) {
+        if (domain is StateDomain.CellsOf declaredBoard) {
             if (tokens.Length < 4) {
                 throw Invalid("a board source requires a direction or any");
             }
@@ -445,7 +489,7 @@ public static partial class RuleCompiler {
             }
             // A zone or keyed word may start at a token: the key names it (a literal token key, or a live indirection),
             // and the word is that token and every token after it in row order. A history ring reads whole.
-            if (key is not null && row.EffectiveDomain is StateDomain.Ring) {
+            if (key is not null && domain is StateDomain.Ring) {
                 throw Invalid("a history source takes no key");
             }
             if (TryResolveDynamicKey(context: context, key: key, ruleName: ruleName, verb: "match", keyFieldLabel: "key", cell: out var startKey)) {
@@ -453,13 +497,13 @@ public static partial class RuleCompiler {
             } else if (key is not null && !CellName.TryParse(candidate: key, name: out _, reason: out _)) {
                 throw Invalid("a word source's key must name the token the word starts at, or use a validated dynamic key");
             }
-            if (row.EffectiveDomain is StateDomain.KeysOf { Ordered: true } zone) {
+            if (domain is StateDomain.KeysOf { Ordered: true } zone) {
                 if (pattern.Value is not null) {
                     if (!TryCompilePatternValue(context: context, pattern: pattern, tokenDomain: zone.Row.Value, ruleName: ruleName, tokens: out var tokenExpression, reason: out var valueReason)) {
                         throw Invalid(valueReason);
                     }
                     return new ResolvedOperand(
-                        operand: new PatternOperand(row: tokens[2], key: key, keyFrom: keyFrom, stateHandle: ResolveHandle(context: context, name: tokens[2]), pattern: tokens[1], board: null, filterRow: null, filterHandle: default, matchFacet: facet, tokenExpression: tokenExpression),
+                        operand: new PatternOperand(row: tokens[2], key: key, keyFrom: keyFrom, stateHandle: handle, pattern: tokens[1], board: null, filterRow: null, filterHandle: default, matchFacet: facet, tokenExpression: tokenExpression, rowFrom: live),
                         describe: name
                     );
                 }
@@ -470,10 +514,10 @@ public static partial class RuleCompiler {
                 }
                 kind = attributeRow.Kind;
             } else {
-                if ((!row.IsKeyed && row.EffectiveDomain is not StateDomain.Ring) || pattern.Attribute is not null) {
-                    throw Invalid($"'{row.Name}' must be a keyed or history row read without an attribute");
+                if ((!row!.IsKeyed && domain is not StateDomain.Ring) || pattern.Attribute is not null) {
+                    throw Invalid($"'{tokens[2]}' must be a keyed or history row read without an attribute");
                 }
-                kind = row.Kind == CellKind.Bool ? CellKind.Int : row.Kind;
+                kind = rowKind == CellKind.Bool ? CellKind.Int : rowKind;
             }
         }
         if (kind != pattern.Kind) {
@@ -484,13 +528,14 @@ public static partial class RuleCompiler {
                 row: tokens[2],
                 key: key,
                 keyFrom: keyFrom,
-                stateHandle: ResolveHandle(context: context, name: tokens[2]),
+                stateHandle: handle,
                 pattern: tokens[1],
                 board: board,
                 filterRow: attribute,
                 filterHandle: (attribute is null) ? default : ResolveHandle(context: context, name: attribute),
                 matchFacet: facet,
-                tokenExpression: null
+                tokenExpression: null,
+                rowFrom: live
             ),
             describe: name
         );

@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Puck.State;
 
 /// <summary>One resolved read operand of a rule — the base every case type derives from, whether declared here or by
@@ -51,6 +53,12 @@ public abstract class KeyFact {
     /// cached by the family's own reader.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     public abstract string Resolve(IRuleReader reader);
+    /// <summary>Resolves the key as an integer index for the evaluation in flight — a live zone's table index, a
+    /// table's key. A key that spells no integer (an empty zone's endpoint) answers none.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="index">The index, on success.</param>
+    public virtual bool TryResolveIndex(IRuleReader reader, out long index) =>
+        long.TryParse(s: Resolve(reader: reader), style: NumberStyles.Integer, provider: CultureInfo.InvariantCulture, result: out index);
     /// <summary>Appends every state cell the resolution reads through.</summary>
     /// <param name="into">The read set being collected.</param>
     public virtual void CollectReads(List<RuleAccess> into) { }
@@ -69,6 +77,12 @@ public sealed class BindingKeyFact : KeyFact {
     public int Ordinal { get; }
     /// <inheritdoc/>
     public override string Resolve(IRuleReader reader) => IndexKeyCache.Get(index: reader.BindingValue(ordinal: Ordinal));
+    /// <inheritdoc/>
+    public override bool TryResolveIndex(IRuleReader reader, out long index) {
+        index = reader.BindingValue(ordinal: Ordinal);
+
+        return true;
+    }
 }
 
 /// <summary>A state cell address whose integer value is read as a cell key at evaluation time

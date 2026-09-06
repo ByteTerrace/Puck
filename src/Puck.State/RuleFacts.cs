@@ -27,8 +27,19 @@ public static class RuleFacts {
     public const string CellKeyPrefix = "$cell:";
     /// <summary>The dynamic key prefix; <c>$zone:&lt;row&gt;:first|last</c> returns the endpoint member's
     /// original string key from an ordered zone in the active store. An empty zone resolves to the empty key,
-    /// which reads absent and cannot address a write.</summary>
+    /// which reads absent and cannot address a write. The zone may be a live <c>$zones[&lt;index&gt;]</c>.</summary>
     public const string ZoneKeyPrefix = "$zone:";
+    /// <summary>The prefix a row position may carry in place of a literal row name: <c>$zones[&lt;index&gt;]</c>
+    /// selects, before each read or firing, the entry of the enclosing rule's <see cref="Rule.Zones"/> table the
+    /// index names. The index is an infix cell key — <c>game[from]</c>, <c>$each</c>, <c>$bind:&lt;name&gt;</c>, or
+    /// any expression — never a literal number, which would only name a row the long way. Admitted wherever a row is
+    /// named: a <c>compareState</c> <c>state</c>/<c>comparandState</c>, a <c>$reduce:</c> or <c>$match:</c> row, a
+    /// <c>$zone:</c> endpoint's zone, a transfer's <c>from</c>/<c>to</c>, and an expression's row. An index outside
+    /// the table or at an empty entry selects no zone: the read is the absent fact, the transfer refuses by name.</summary>
+    public const string LiveZonePrefix = "$zones[";
+    /// <summary>The <see cref="Rule.ForEach"/> spelling that iterates the rule's own zone table rather than a row:
+    /// each non-empty index in turn, bound to <c>$each</c>, so <c>$zones[$each]</c> visits every zone.</summary>
+    public const string ForEachZones = "$zones";
     /// <summary>The prefix of a key computed by an expression — <c>row[from + 1]</c> in the infix spelling — which
     /// compiles to an implicit rule binding evaluated before the gate and read back as the cell key; the text after
     /// the prefix is the expression's canonical infix spelling.</summary>
@@ -72,4 +83,39 @@ public static class RuleFacts {
     /// <summary>Compares the server's own completed-tick counter — <c>compareState("$tick", greaterOrEqual, 600)</c>
     /// is "at 2.5 seconds", with no clock read anywhere.</summary>
     public const string Tick = "$tick";
+
+    /// <summary>Splits a reserved channel on its colons, keeping a bracketed live-zone index
+    /// (<see cref="LiveZonePrefix"/>) whole — <c>$match:run:$zones[game[from]]:prefix</c> is four tokens, however
+    /// many colons the index carries.</summary>
+    /// <param name="name">The channel spelling.</param>
+    public static string[] SplitChannel(string name) {
+        ArgumentNullException.ThrowIfNull(argument: name);
+
+        if (!name.Contains(value: '[')) {
+            return name.Split(separator: ':');
+        }
+
+        var parts = new List<string>();
+        var depth = 0;
+        var start = 0;
+
+        for (var index = 0; index < name.Length; index++) {
+            switch (name[index]) {
+                case '[':
+                    depth++;
+                    break;
+                case ']':
+                    depth--;
+                    break;
+                case ':' when (depth == 0):
+                    parts.Add(item: name[start..index]);
+                    start = (index + 1);
+                    break;
+            }
+        }
+
+        parts.Add(item: name[start..]);
+
+        return [.. parts];
+    }
 }

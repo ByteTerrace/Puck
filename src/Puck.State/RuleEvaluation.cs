@@ -57,6 +57,52 @@ public static class RuleEvaluation {
         return IndexKeyCache.Get(index: IntegerOf(value: ReadFixed(reader: reader, handle: indirection.Handle, key: innerKey)));
     }
 
+    /// <summary>Resolves a key indirection as an integer index for the evaluation in flight — what a live zone's
+    /// table index and a table's key read through. A <c>$cell:</c> indirection answers its cell's integer, a bound
+    /// participant its index, a binding its value, and any other key the integer it spells; a key that spells none
+    /// (an empty zone's endpoint, a non-integer <c>$each</c>) answers no index.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="reference">The indirection.</param>
+    /// <param name="index">The index, on success.</param>
+    public static bool TryResolveIndex(IRuleReader reader, in CompiledCellRef reference, out long index) {
+        if (reference.Custom is { } custom) {
+            return custom.TryResolveIndex(reader: reader, index: out index);
+        }
+        if (reference.Binding is BoundKey.Token or BoundKey.Previous) {
+            return long.TryParse(s: ResolveKey(reader: reader, key: null, keyFrom: reference), style: System.Globalization.NumberStyles.Integer, provider: System.Globalization.CultureInfo.InvariantCulture, result: out index);
+        }
+        if (reference.Binding != BoundKey.None) {
+            index = reader.BoundIndex(key: reference.Binding);
+
+            return (index >= 0L);
+        }
+
+        var innerKey = (((reference.InnerKeyBinding == BoundKey.Each) && (reader.BoundEachKey is { } eachInnerKey))
+            ? eachInnerKey
+            : reference.Key
+        );
+
+        index = IntegerOf(value: ReadFixed(reader: reader, handle: reference.Handle, key: innerKey));
+
+        return true;
+    }
+
+    /// <summary>Resolves an operand's row for the evaluation in flight: a fixed row passes its compiled handle
+    /// through; a live zone (<see cref="LiveZone"/>) selects its table entry, or none.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="handle">The compiled handle of a fixed row.</param>
+    /// <param name="rowFrom">The live zone, or <see langword="null"/> for a fixed row.</param>
+    /// <param name="resolved">The row's handle, on success.</param>
+    public static bool TryResolveRow(IRuleReader reader, StateHandle handle, LiveZone? rowFrom, out StateHandle resolved) {
+        if (rowFrom is null) {
+            resolved = handle;
+
+            return true;
+        }
+
+        return rowFrom.TryResolve(reader: reader, handle: out resolved);
+    }
+
     /// <summary>Returns the integer part of a Q48.16 value — the key or index a cell's value names.</summary>
     /// <param name="value">The fixed-point value.</param>
     public static long IntegerOf(FixedQ4816 value) => (value.Value >> FixedQ4816.FractionBitCount);

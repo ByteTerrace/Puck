@@ -34,7 +34,8 @@ public static partial class RuleCompiler {
                 Gate: gate,
                 Effects: effects,
                 ForEach: rule.ForEach,
-                Bindings: AllBindings(declared: bindings, context: context)
+                Bindings: AllBindings(declared: bindings, context: context),
+                Zones: context.Zones
             );
         } finally {
             context.ClearScope();
@@ -51,30 +52,149 @@ public static partial class RuleCompiler {
         return ((context.RuleBindings is { } all && (all.Count != declared.Length)) ? [.. all] : declared);
     }
 
-    /// <summary>Opens a rule's per-compile scope on the context: the <c>$each</c> binding when the rule declares
-    /// <see cref="Rule.ForEach"/> (proven to name a keyed numeric row), and the forEach row name. A document
-    /// project's compile surface calls this before composing the pieces itself and <see cref="RuleCompileContext.ClearScope"/>
-    /// after.</summary>
+    /// <summary>Opens a rule's per-compile scope on the context: the compiled <see cref="Rule.Zones"/> table, the
+    /// <c>$each</c> binding when the rule declares <see cref="Rule.ForEach"/> (proven to name a keyed numeric row, or
+    /// <c>$zones</c> over a declared table), and the forEach row name. A document project's compile surface calls
+    /// this before composing the pieces itself and <see cref="RuleCompileContext.ClearScope"/> after.</summary>
     /// <param name="rule">The authored rule.</param>
     /// <param name="context">The compile context.</param>
     public static void BeginScope(Rule rule, RuleCompileContext context) {
         ArgumentNullException.ThrowIfNull(argument: rule);
         ArgumentNullException.ThrowIfNull(argument: context);
 
+        var zones = CompileZones(rule: rule, context: context);
+
         if (rule.ForEach is { } forEach) {
-            _ = ResolveNumericRow(
-                channel: "forEach",
-                context: context,
-                malformed: RuleRefusal.StateRowUnknown,
-                name: forEach,
-                requireKeyed: true,
-                ruleName: rule.Name
-            );
+            if (string.Equals(a: forEach, b: RuleFacts.ForEachZones, comparisonType: StringComparison.Ordinal)) {
+                if (zones is null) {
+                    throw new RuleException(refusal: RuleRefusal.ZoneTableMalformed, ruleName: rule.Name, detail: $"iterates 'forEach' over '{RuleFacts.ForEachZones}' but declares no 'zones' table");
+                }
+            } else {
+                _ = ResolveNumericRow(
+                    channel: "forEach",
+                    context: context,
+                    malformed: RuleRefusal.StateRowUnknown,
+                    name: forEach,
+                    requireKeyed: true,
+                    ruleName: rule.Name
+                );
+            }
         }
 
         context.ClearScope();
         context.BindingScope = ((rule.ForEach is null) ? [] : [BoundKey.Each]);
         context.ForEachRow = rule.ForEach;
+        context.Zones = zones;
+    }
+
+    /// <summary>Compiles a rule's <see cref="Rule.Zones"/> table: every non-empty entry a declared ordered zone, all
+    /// over one token domain and of one kind, none twice; an empty entry a gap. Refuses an empty table, or one that
+    /// is all gaps.</summary>
+    /// <param name="rule">The authored rule.</param>
+    /// <param name="context">The compile context.</param>
+    /// <returns>The compiled table, or <see langword="null"/> when the rule declares none.</returns>
+    public static ZoneTable? CompileZones(Rule rule, RuleCompileContext context) {
+        ArgumentNullException.ThrowIfNull(argument: rule);
+        ArgumentNullException.ThrowIfNull(argument: context);
+
+        if (rule.Zones is not { } authored) {
+            return null;
+        }
+
+        RuleException Malformed(string detail) => new(refusal: RuleRefusal.ZoneTableMalformed, ruleName: rule.Name, detail: detail);
+
+        if (authored.Count == 0) {
+            throw Malformed("declares an empty 'zones' table — list at least one ordered zone, or drop the table");
+        }
+
+        var names = new string[authored.Count];
+        var handles = new StateHandle[authored.Count];
+        var indices = new List<CellName>(capacity: authored.Count);
+        var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
+        string? tokenDomain = null;
+        var kind = CellKind.Int;
+        var capacity = 0;
+
+        for (var index = 0; index < authored.Count; index++) {
+            var name = (authored[index] ?? string.Empty);
+
+            names[index] = name;
+            if (name.Length == 0) {
+                continue;
+            }
+
+            var row = (context.FindRow(name: name) ?? throw Malformed($"'zones' entry {index} names row '{name}', which the document does not declare"));
+
+            if (row.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } zone) {
+                throw Malformed($"'zones' entry {index} '{name}' is not an ordered token zone");
+            }
+            if (tokenDomain is null) {
+                tokenDomain = zone.Row.Value;
+                kind = row.Kind;
+            } else if (!string.Equals(a: tokenDomain, b: zone.Row.Value, comparisonType: StringComparison.Ordinal)) {
+                throw Malformed($"'zones' entry {index} '{name}' is a zone over '{zone.Row}', not the token domain '{tokenDomain}' the table's other zones share");
+            } else if (kind != row.Kind) {
+                throw Malformed($"'zones' entry {index} '{name}' is kind={DescribeCellKind(kind: row.Kind)}, not the kind={DescribeCellKind(kind: kind)} the table's other zones share");
+            }
+            if (!seen.Add(item: name)) {
+                throw Malformed($"'zones' names '{name}' twice");
+            }
+
+            handles[index] = ResolveHandle(context: context, name: name);
+            capacity = Math.Max(val1: capacity, val2: context.RowCapacity(name: name));
+            indices.Add(item: CellName.Parse(candidate: IndexKeyCache.Get(index: index)));
+        }
+
+        if (tokenDomain is null) {
+            throw Malformed("declares a 'zones' table with no zone in it — every entry is empty");
+        }
+
+        return new ZoneTable(names: names, handles: handles, tokenDomain: tokenDomain, kind: kind, capacity: capacity, indices: [.. indices]);
+    }
+
+    /// <summary>Resolves a live zone spelling (<see cref="RuleFacts.LiveZonePrefix"/>) against the enclosing rule's
+    /// <see cref="RuleCompileContext.Zones"/> table: the bracketed index is an infix cell key, compiled through
+    /// <see cref="TryResolveDynamicKey"/> like any other. A literal row name returns <see langword="false"/>.</summary>
+    /// <param name="name">The authored row position.</param>
+    /// <param name="ruleName">The rule being compiled.</param>
+    /// <param name="context">The compile context.</param>
+    /// <param name="where">Where the row is spelled, for refusal text.</param>
+    /// <param name="zone">The live zone, when the spelling is one.</param>
+    /// <exception cref="RuleException">The spelling is malformed, the index is not live, or the rule declares no
+    /// zone table.</exception>
+    public static bool TryResolveLiveZone(string name, string ruleName, RuleCompileContext context, string where, out LiveZone? zone) {
+        ArgumentNullException.ThrowIfNull(argument: name);
+        ArgumentNullException.ThrowIfNull(argument: context);
+
+        zone = null;
+        if (!name.StartsWith(value: RuleFacts.LiveZonePrefix, comparisonType: StringComparison.Ordinal)) {
+            return false;
+        }
+
+        RuleException Malformed(string detail) => new(refusal: RuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"{where} '{name}' {detail}");
+
+        if ((name.Length <= (RuleFacts.LiveZonePrefix.Length + 1)) || (name[^1] != ']')) {
+            throw Malformed($"does not spell '{RuleFacts.LiveZonePrefix}<index>]'");
+        }
+
+        var inner = name[RuleFacts.LiveZonePrefix.Length..^1];
+
+        if (inner.StartsWith(value: RuleFacts.ExpressionKeyPrefix, comparisonType: StringComparison.Ordinal)) {
+            throw Malformed($"spells its index with '{RuleFacts.ExpressionKeyPrefix}' — the brackets already hold an expression, so write it bare");
+        }
+        if (!ExpressionSpelling.TryParseKey(text: inner, key: out var key, error: out var error)) {
+            throw Malformed($"index '{inner}' does not parse: {error}");
+        }
+
+        var table = (context.Zones ?? throw Malformed("selects a zone live, but the rule declares no 'zones' table"));
+
+        if (!TryResolveDynamicKey(key: key, ruleName: ruleName, context: context, verb: where, keyFieldLabel: "index", cell: out var index)) {
+            throw Malformed($"index '{inner}' is not live — a live zone is chosen by a cell, a bound token, a binding, or an expression; a fixed zone is named by its row");
+        }
+
+        zone = new LiveZone(table: table, index: index, spelling: name);
+
+        return true;
     }
 
     /// <summary>Compiles every rule in the list, in document order, checking that each carries a unique, unreserved
@@ -506,8 +626,9 @@ public static partial class RuleCompiler {
         return new CompiledCellRef(Key: resolvedKey, Row: row, Handle: ResolveHandle(context: context, name: row));
     }
 
-    /// <summary>Resolves a dynamic key spelling — a binding token, a registered key family's spelling, or a
-    /// <c>$cell:</c> indirection or <c>$zone:</c> endpoint. A literal key returns <see langword="false"/>.</summary>
+    /// <summary>Resolves a dynamic key spelling — a binding token, a registered key family's spelling, a
+    /// <c>$zone:</c> endpoint (of a fixed or live zone), an <c>$expr:</c> expression, a <c>$bind:</c> binding, or a
+    /// <c>$cell:</c> indirection. A literal key returns <see langword="false"/>.</summary>
     /// <param name="key">The authored key.</param>
     /// <param name="ruleName">The rule being compiled.</param>
     /// <param name="context">The compile context.</param>
@@ -531,14 +652,31 @@ public static partial class RuleCompiler {
                 }
             }
             if (key.StartsWith(RuleFacts.ZoneKeyPrefix, StringComparison.Ordinal)) {
-                var parts = key.Split(':');
-                if (parts.Length != 3 || parts[2] is not ("first" or "last") ||
-                    context.FindRow(parts[1])?.EffectiveDomain is not StateDomain.KeysOf { Ordered: true }) {
+                var parts = RuleFacts.SplitChannel(name: key);
+                if ((parts.Length != 3) || (parts[2] is not ("first" or "last"))) {
+                    throw new RuleException(RuleRefusal.StateCellUnaddressable, ruleName,
+                        $"'{verb}' {keyFieldLabel} '{key}' must spell '$zone:<ordered-zone>:<first|last>'");
+                }
+                var last = (parts[2] == "last");
+                if (TryResolveLiveZone(name: parts[1], ruleName: ruleName, context: context, where: $"'{verb}' {keyFieldLabel} '{key}' zone", zone: out var live)) {
+                    cell = new CompiledCellRef(string.Empty, string.Empty, Custom: new ZoneEndKey(row: parts[1], handle: default, rowFrom: live, last: last));
+                    return true;
+                }
+                if (context.FindRow(parts[1])?.EffectiveDomain is not StateDomain.KeysOf { Ordered: true }) {
                     throw new RuleException(RuleRefusal.StateCellUnaddressable, ruleName,
                         $"'{verb}' {keyFieldLabel} '{key}' must spell '$zone:<ordered-zone>:<first|last>'");
                 }
                 cell = new CompiledCellRef(string.Empty, string.Empty,
-                    Custom: new ZoneEndKey(parts[1], ResolveHandle(context: context, name: parts[1]), parts[2] == "last"));
+                    Custom: new ZoneEndKey(row: parts[1], handle: ResolveHandle(context: context, name: parts[1]), rowFrom: null, last: last));
+                return true;
+            }
+            // A rule's own binding as a key — the same implicit-binding carrier an expression key reads back through.
+            if (key.StartsWith(value: RuleFacts.BindPrefix, comparisonType: StringComparison.Ordinal)) {
+                var binding = ResolveBindingOperand(name: key, key: null, ruleName: ruleName, keyFieldLabel: keyFieldLabel, context: context);
+                if (binding.ValueKind != CellKind.Int) {
+                    throw new RuleException(RuleRefusal.StateCellUnaddressable, ruleName, $"'{verb}' {keyFieldLabel} '{key}' is a fixed binding — a key binding is int");
+                }
+                cell = new CompiledCellRef(Row: string.Empty, Key: string.Empty, Custom: new BindingKeyFact(ordinal: ((BindingOperand)binding.Operand).Ordinal));
                 return true;
             }
         }

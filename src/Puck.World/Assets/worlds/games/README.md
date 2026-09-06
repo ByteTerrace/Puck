@@ -123,9 +123,17 @@ identities. Patterns judge a selected suffix and the destination's top card;
 accepted moves transfer the suffix in one transaction with their counters and
 request acknowledgement. Endpoint keys use the generic
 [`$zone:` spelling](../../../../Puck.State/README.md), so a top-card lookup
-needs no per-card rule loop, and each game's one `move` rule resolves its
-`from`/`to` piles live through the transfer's `zones` table (pile id = table
-index), as its `deal` rule does for the column a step lands in. Deals,
+needs no per-card rule loop, and every rule that judges or moves a pile
+selects it live through its own `zones` table (`$zones[<index>]`): `move`,
+`source`, and `target` index by the request's `from`/`to` (pile id = table
+index, a gap where the pile is not a legal end), `gather` and Spider's
+`complete` by their step counter in table order, `deal` by the column a step
+lands in, and `reveal` sweeps the table with `forEach: "$zones"`. A pile family
+that judges by a different pattern (the waste, the foundations, the cells) is
+its own rule over its own table, and a rule whose effect reads a live zone
+gates on it first (`$reduce:count:$zones[...] >= 0` never holds for a pile
+outside the table), so a request naming another family's pile closes the gate
+rather than refusing the expression. Deals,
 recycling, and Spider cleanup use bounded phases to share Nexus's existing
 per-tick budget. A table switch suspends those
 phases and resumes them on return.

@@ -43,7 +43,8 @@ public static partial class WorldRuleCompiler {
                 Effects: effects,
                 ForEach: rule.ForEach,
                 Decision: CompileDecision(rule: rule, context: context),
-                Bindings: RuleCompiler.AllBindings(declared: bindings, context: context)
+                Bindings: RuleCompiler.AllBindings(declared: bindings, context: context),
+                Zones: context.Zones
             );
         } finally {
             context.ClearScope();

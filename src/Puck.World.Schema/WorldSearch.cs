@@ -264,7 +264,7 @@ public static class WorldSearchCompilation {
         var cost = 0L;
 
         foreach (var rule in judge) {
-            var multiplier = ((rule.ForEach is { } rowName) ? context.RowCapacity(name: rowName) : 1L);
+            var multiplier = RuleWorkBudget.ForEachCount(rule: rule, context: context);
 
             cost = RuleWorkBudget.SaturatingAdd(left: cost, right: RuleWorkBudget.Contributor(rule: rule, multiplier: multiplier, isInteraction: false, context: context).WorkUnits);
         }

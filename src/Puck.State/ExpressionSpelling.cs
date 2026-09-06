@@ -202,6 +202,35 @@ public static class ExpressionSpelling {
             : throw new ArgumentException(message: "the token list is not a well-formed postfix expression", paramName: nameof(tokens))
         );
 
+    /// <summary>Parses the text between a name's brackets as a cell key, on the same terms as a key inside
+    /// <see cref="TryParse"/>: <c>row[key]</c> spells a <c>$cell:</c> indirection, a bare name or reserved token
+    /// (<c>$each</c>, <c>$bind:&lt;name&gt;</c>, <c>$cell:&lt;row&gt;:&lt;key&gt;</c>) passes through, and any other
+    /// expression becomes an <c>$expr:</c> key.</summary>
+    /// <param name="text">The bracket contents.</param>
+    /// <param name="key">The key spelling, when the text parses.</param>
+    /// <param name="error">Why it did not, naming the character position, or empty.</param>
+    public static bool TryParseKey(string? text, out string key, out string error) {
+        key = string.Empty;
+        if (string.IsNullOrWhiteSpace(value: text)) {
+            error = "is empty";
+            return false;
+        }
+        if (text.Length > MaxLength) {
+            error = $"is {text.Length} characters long; at most {MaxLength} are admitted";
+            return false;
+        }
+        var parser = new Parser(text: text);
+        try {
+            key = parser.ParseKey();
+            parser.ExpectEnd();
+            error = string.Empty;
+            return true;
+        } catch (SyntaxException failure) {
+            error = failure.Message;
+            return false;
+        }
+    }
+
     /// <summary>Whether a name prints bare, without backquotes.</summary>
     /// <param name="name">The name.</param>
     /// <returns><see langword="true"/> when the name lexes as one bare identifier.</returns>
@@ -221,9 +250,35 @@ public static class ExpressionSpelling {
             if (reserved && character == '-' && index > 0 && name[index - 1] == ':' && index + 1 < name.Length && char.IsAsciiDigit(name[index + 1])) {
                 continue;
             }
+            if (reserved && LiveZoneIndexEnd(text: name, start: 0, bracket: index) is var close && close > 0) {
+                index = close;
+                continue;
+            }
             return false;
         }
         return !Calls.ContainsKey(key: name);
+    }
+
+    // A "$zones[" segment inside a reserved name carries its whole bracketed index — colons, nested brackets and all —
+    // so "$match:run:$zones[game[from]]:prefix" lexes as one name. Answers the index of the closing bracket, or -1
+    // when the bracket at `bracket` does not open a live-zone index or never closes.
+    private static int LiveZoneIndexEnd(string text, int start, int bracket) {
+        var prefix = RuleFacts.LiveZonePrefix.Length - 1;
+        if ((text[bracket] != '[') || ((bracket - start) < prefix) || (string.CompareOrdinal(strA: text, indexA: (bracket - prefix), strB: RuleFacts.LiveZonePrefix, indexB: 0, length: prefix) != 0)) {
+            return -1;
+        }
+        if (((bracket - prefix) != start) && (text[bracket - prefix - 1] != ':')) {
+            return -1;
+        }
+        var depth = 0;
+        for (var index = bracket; index < text.Length; index++) {
+            if (text[index] == '[') {
+                depth++;
+            } else if ((text[index] == ']') && (--depth == 0)) {
+                return index;
+            }
+        }
+        return -1;
     }
 
     // ":-6" inside a reserved name is a signed offset segment, never a subtraction: a name cannot end in a colon.
@@ -567,6 +622,10 @@ public static class ExpressionSpelling {
                         end += 2;
                         continue;
                     }
+                    if (reserved && LiveZoneIndexEnd(text: text, start: m_position, bracket: end) is var close && close > 0) {
+                        end = close + 1;
+                        continue;
+                    }
                     break;
                 }
                 m_kind = Lexeme.Name;
@@ -707,7 +766,7 @@ public static class ExpressionSpelling {
         // indirection read live from another cell — or any other expression, which becomes an "$expr:" key the
         // compiler turns into an implicit binding. The simple forms are recognised by lookahead and the lexer rewound
         // when the key turns out to be an expression after all (row[other[k] + 1]).
-        private string ParseKey() {
+        public string ParseKey() {
             Prime();
             var saved = (m_position, m_kind, m_value, m_quoted, m_start, m_primed);
             if (m_kind is Lexeme.Name or Lexeme.Number) {
@@ -715,14 +774,15 @@ public static class ExpressionSpelling {
                 var indexable = ((m_kind == Lexeme.Name) && !m_quoted);
                 Advance();
                 Prime();
-                if ((m_kind == Lexeme.Punctuation) && (m_value == "]")) {
+                // The key ends at the closing bracket — or at the end of the text, when the key is parsed alone.
+                if (KeyEnds()) {
                     return key;
                 }
                 if (indexable && Accept(punctuation: "[")) {
                     var inner = ParseKey();
                     Expect(punctuation: "]");
                     Prime();
-                    if ((m_kind == Lexeme.Punctuation) && (m_value == "]") && !inner.StartsWith(value: RuleFacts.ExpressionKeyPrefix, comparisonType: StringComparison.Ordinal)) {
+                    if (KeyEnds() && !inner.StartsWith(value: RuleFacts.ExpressionKeyPrefix, comparisonType: StringComparison.Ordinal)) {
                         return $"{RuleFacts.CellKeyPrefix}{key}:{inner}";
                     }
                 }
@@ -733,6 +793,7 @@ public static class ExpressionSpelling {
             node.Emit(into: tokens);
             return $"{RuleFacts.ExpressionKeyPrefix}{Print(tokens: tokens)}";
         }
+        private bool KeyEnds() => ((m_kind == Lexeme.End) || ((m_kind == Lexeme.Punctuation) && (m_value == "]")));
         private Node ParseCall(string name, int arity, int names) {
             Expect(punctuation: "(");
             var arguments = new Node[arity];

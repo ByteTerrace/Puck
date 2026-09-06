@@ -98,7 +98,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                 : definition.Population.Capacity);
         }
 
-        return ((rule.ForEach is { } rowName) ? context.RowCapacity(name: rowName) : 1L);
+        return RuleWorkBudget.ForEachCount(rule: rule, context: context);
     }
 
     private static List<(CompiledRule Rule, long Multiplier)> Multiplied(WorldDefinition definition, WorldRuleCompileContext context, CompiledWorldRule[] rules, CompiledWorldRule[] interactions) {

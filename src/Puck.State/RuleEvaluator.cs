@@ -154,7 +154,13 @@ public sealed partial class RuleEvaluator {
             var bindings = latch.Bindings(name: rule.Name);
 
             if (rule.ForEach is { } forEach) {
-                EachKeys(row: forEach, into: m_eachKeyScratch);
+                // Over "$zones" the keys are the table's own non-empty indices, in index order.
+                if (rule.Zones is { } zones && string.Equals(a: forEach, b: RuleFacts.ForEachZones, comparisonType: StringComparison.Ordinal)) {
+                    m_eachKeyScratch.Clear();
+                    m_eachKeyScratch.AddRange(collection: zones.Indices);
+                } else {
+                    EachKeys(row: forEach, into: m_eachKeyScratch);
+                }
                 latch.BeginSweep();
 
                 for (var position = 0; position < m_eachKeyScratch.Count; position++) {

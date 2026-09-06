@@ -28,19 +28,6 @@ public sealed partial class RuleEvaluator {
         return applied;
     }
 
-    // A live zone index outside the table, or landing on an empty entry, resolves to a spelling no row carries, so
-    // the mutation door refuses the transfer by name instead of moving anything.
-    private string ResolveZone(string name, CompiledCellRef? reference, IReadOnlyList<string> zones, ulong tick) {
-        if (reference is not { } indirection) {
-            return name;
-        }
-        var index = ResolveKey(key: null, keyFrom: indirection, tick: tick);
-        return ((long.TryParse(s: index, style: System.Globalization.NumberStyles.Integer, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var ordinal) && (ordinal >= 0) && (ordinal < zones.Count) && (zones[(int)ordinal].Length != 0))
-            ? zones[(int)ordinal]
-            : $"{name}[{index}]"
-        );
-    }
-
     // A write that cannot move the destination is skipped before submission — either the resolved value already
     // matches the cell, or the row's declared envelope pins the cell where it is: a level-triggered gate re-fires
     // every tick it holds, and without this a standing rule would append an identical journal entry forever, or draw
@@ -59,10 +46,13 @@ public sealed partial class RuleEvaluator {
                         _ => transform,
                     };
                 }
-                if (transform is StateTransform.Transfer liveEnds && ((transformState.FromRef is not null) || (transformState.ToRef is not null))) {
+                // A live end resolves to its zone's name fresh every firing; an index selecting none resolves to the
+                // authored spelling, which no row carries, so the door refuses the transfer by name.
+                if (transform is StateTransform.Transfer liveEnds && ((transformState.FromZone is not null) || (transformState.ToZone is not null))) {
+                    Tick = tick;
                     transform = liveEnds with {
-                        From = ResolveZone(name: liveEnds.From, reference: transformState.FromRef, zones: liveEnds.Zones!, tick: tick),
-                        To = ResolveZone(name: liveEnds.To, reference: transformState.ToRef, zones: liveEnds.Zones!, tick: tick),
+                        From = (transformState.FromZone?.ResolveName(reader: m_host) ?? liveEnds.From),
+                        To = (transformState.ToZone?.ResolveName(reader: m_host) ?? liveEnds.To),
                     };
                 }
                 return Apply(effect: effect, ruleName: ruleName, mutation: new StateMutation.Apply(Transform: transform), tick: tick, preflight: preflight);

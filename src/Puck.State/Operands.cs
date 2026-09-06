@@ -2,20 +2,23 @@ using Puck.Maths;
 
 namespace Puck.State;
 
-/// <summary>A declared <see cref="StateRow"/>'s named cell.</summary>
+/// <summary>A declared <see cref="StateRow"/>'s named cell — or, through a live zone, the named cell of whichever
+/// zone the index selects this evaluation (the absent fact when it selects none).</summary>
 public sealed class StateCellOperand : OperandFact, IStateAddressedOperand {
     /// <summary>Addresses a state cell, literally or by indirection.</summary>
-    /// <param name="row">The state row name.</param>
+    /// <param name="row">The state row name, or the live zone's spelling.</param>
     /// <param name="key">The literal cell key, or <see langword="null"/> when <paramref name="keyFrom"/> applies.</param>
     /// <param name="keyFrom">The live key indirection, or <see langword="null"/> for a literal <paramref name="key"/>.</param>
-    /// <param name="stateHandle">The compiled row handle.</param>
+    /// <param name="stateHandle">The compiled row handle, for a fixed row.</param>
     /// <param name="valueKind">The row's own cell kind.</param>
-    public StateCellOperand(string row, string? key, CompiledCellRef? keyFrom, StateHandle stateHandle, CellKind valueKind)
+    /// <param name="rowFrom">The live zone, or <see langword="null"/> for a fixed row.</param>
+    public StateCellOperand(string row, string? key, CompiledCellRef? keyFrom, StateHandle stateHandle, CellKind valueKind, LiveZone? rowFrom = null)
         : base(valueKind) {
         Row = row;
         Key = key;
         KeyFrom = keyFrom;
         StateHandle = stateHandle;
+        RowFrom = rowFrom;
     }
 
     /// <inheritdoc/>
@@ -24,22 +27,29 @@ public sealed class StateCellOperand : OperandFact, IStateAddressedOperand {
     public string? Key { get; }
     /// <inheritdoc/>
     public CompiledCellRef? KeyFrom { get; }
-    /// <summary>Gets the compiled row handle.</summary>
+    /// <summary>Gets the compiled row handle, for a fixed row.</summary>
     public StateHandle StateHandle { get; }
+    /// <summary>Gets the live zone, or <see langword="null"/> for a fixed row.</summary>
+    public LiveZone? RowFrom { get; }
 
     /// <inheritdoc/>
-    public override RuleFact Read(IRuleReader reader) => RuleEvaluation.ReadStateFact(
-        reader: reader,
-        handle: StateHandle,
-        key: RuleEvaluation.ResolveKey(reader: reader, key: Key, keyFrom: KeyFrom)
-    );
+    public override RuleFact Read(IRuleReader reader) =>
+        (RuleEvaluation.TryResolveRow(reader: reader, handle: StateHandle, rowFrom: RowFrom, resolved: out var handle)
+            ? RuleEvaluation.ReadStateFact(reader: reader, handle: handle, key: RuleEvaluation.ResolveKey(reader: reader, key: Key, keyFrom: KeyFrom))
+            : RuleFact.Absent(kind: ValueKind));
     /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) => 1L;
     /// <inheritdoc/>
     public override void CollectReads(List<RuleAccess> into) {
-        into.Add(item: new RuleAccess(Row: Row, Key: ((KeyFrom is null) ? Key : null)));
+        if (RowFrom is { } live) {
+            live.CollectReads(into: into);
+        } else {
+            into.Add(item: new RuleAccess(Row: Row, Key: ((KeyFrom is null) ? Key : null)));
+        }
         RuleAccess.CollectReference(reference: KeyFrom, into: into);
     }
+    /// <inheritdoc/>
+    public override bool HostOnly => (RowFrom is { HostOnly: true }) || (KeyFrom is { Custom.HostOnly: true });
 }
 
 /// <summary>A value the enclosing rule bound for this evaluation (<see cref="RuleFacts.BindPrefix"/>).</summary>
@@ -69,24 +79,21 @@ public sealed class TableOperand : OperandFact {
     /// <summary>Reads one entry of a static table.</summary>
     /// <param name="tableOrdinal">The table's index in the section's <c>tables</c> rows.</param>
     /// <param name="table">The table's authored name.</param>
-    /// <param name="key">The literal key, or 0 when <paramref name="keyFrom"/> or <paramref name="keyBinding"/> applies.</param>
-    /// <param name="keyFrom">The live key indirection, or <see langword="null"/> for a literal or bound key.</param>
-    /// <param name="keyBinding">The ordinal of the enclosing rule's binding the key reads, or -1.</param>
+    /// <param name="key">The literal key, or 0 when <paramref name="keyFrom"/> applies.</param>
+    /// <param name="keyFrom">The live key indirection — a <c>$cell:</c> read, a bound token, a <c>$bind:</c> binding,
+    /// an expression — or <see langword="null"/> for a literal key.</param>
     /// <param name="column">The column index; 0 for a single-value table.</param>
     /// <param name="entryCount">The table's entry count, for pricing the lookup.</param>
     /// <param name="valueKind">The table's value kind.</param>
-    public TableOperand(int tableOrdinal, string table, long key, CompiledCellRef? keyFrom, int keyBinding, int column, int entryCount, CellKind valueKind)
+    public TableOperand(int tableOrdinal, string table, long key, CompiledCellRef? keyFrom, int column, int entryCount, CellKind valueKind)
         : base(valueKind) {
         TableOrdinal = tableOrdinal;
         Table = table;
         Key = key;
         KeyFrom = keyFrom;
-        KeyBinding = keyBinding;
         Column = column;
         EntryCount = entryCount;
     }
-    /// <summary>Gets the ordinal of the enclosing rule's binding the key reads, or -1.</summary>
-    public int KeyBinding { get; }
     /// <summary>Gets the column index.</summary>
     public int Column { get; }
     /// <summary>Gets the table's index in the section's <c>tables</c> rows.</summary>
@@ -103,12 +110,10 @@ public sealed class TableOperand : OperandFact {
     /// <inheritdoc/>
     public override RuleFact Read(IRuleReader reader) {
         var key = Key;
-        if (KeyBinding >= 0) {
-            key = reader.BindingValue(ordinal: KeyBinding);
-        } else if (KeyFrom is { } indirection) {
-            key = ((indirection.Binding != BoundKey.None)
-                ? reader.BoundIndex(key: indirection.Binding)
-                : RuleEvaluation.IntegerOf(value: RuleEvaluation.ReadFixed(reader: reader, handle: indirection.Handle, key: indirection.Key)));
+        // A live key that spells no integer (an empty zone's endpoint) names no entry: the absent fact, not a
+        // missing-key report, since no key was ever looked up.
+        if ((KeyFrom is { } indirection) && !RuleEvaluation.TryResolveIndex(reader: reader, reference: in indirection, index: out key)) {
+            return RuleFact.Absent(kind: ValueKind);
         }
         if (reader.Table(ordinal: TableOrdinal).TryLookup(key: key, column: Column, raw: out var raw)) {
             return RuleFact.Finite(value: raw, kind: ValueKind);
@@ -120,6 +125,8 @@ public sealed class TableOperand : OperandFact {
     public override long Cost(RuleCompileContext context) => (2L + System.Numerics.BitOperations.Log2((uint)Math.Max(EntryCount, 1)));
     /// <inheritdoc/>
     public override void CollectReads(List<RuleAccess> into) => RuleAccess.CollectReference(reference: KeyFrom, into: into);
+    /// <inheritdoc/>
+    public override bool HostOnly => (KeyFrom is { Custom.HostOnly: true });
 }
 
 /// <summary>The completed-tick counter (<see cref="RuleFacts.Tick"/>). Stateless: every read shares
@@ -146,7 +153,8 @@ public sealed class ReductionOperand : OperandFact {
     /// <param name="filterHandle">The compiled handle for <paramref name="filterRow"/>.</param>
     /// <param name="valueKind">Int for <see cref="StateReduceOp.Count"/>, else the aggregated row's own kind.</param>
     /// <param name="range">Optional inclusive bounds in the source row's raw numeric encoding.</param>
-    public ReductionOperand(string row, StateHandle stateHandle, StateReduceOp reduce, string? filterRow, StateHandle filterHandle, CellKind valueKind, (long Lower, long Upper)? range = null)
+    /// <param name="rowFrom">The live zone aggregated, or <see langword="null"/> for a fixed row.</param>
+    public ReductionOperand(string row, StateHandle stateHandle, StateReduceOp reduce, string? filterRow, StateHandle filterHandle, CellKind valueKind, (long Lower, long Upper)? range = null, LiveZone? rowFrom = null)
         : base(valueKind) {
         Row = row;
         StateHandle = stateHandle;
@@ -154,12 +162,15 @@ public sealed class ReductionOperand : OperandFact {
         FilterRow = filterRow;
         FilterHandle = filterHandle;
         Range = range;
+        RowFrom = rowFrom;
     }
 
-    /// <summary>Gets the aggregated row.</summary>
+    /// <summary>Gets the aggregated row, or the live zone's spelling.</summary>
     public string Row { get; }
-    /// <summary>Gets the compiled row handle.</summary>
+    /// <summary>Gets the compiled row handle, for a fixed row.</summary>
     public StateHandle StateHandle { get; }
+    /// <summary>Gets the live zone aggregated, or <see langword="null"/> for a fixed row.</summary>
+    public LiveZone? RowFrom { get; }
     /// <summary>Gets the aggregate.</summary>
     public StateReduceOp Reduce { get; }
     /// <summary>Gets the optional keyed row whose nonzero cells admit candidates.</summary>
@@ -171,7 +182,10 @@ public sealed class ReductionOperand : OperandFact {
 
     /// <inheritdoc/>
     public override RuleFact Read(IRuleReader reader) {
-        if (!StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: StateHandle, key: null, tick: reader.Tick, row: out var declared, rawValue: out _, text: out _)) {
+        if (!RuleEvaluation.TryResolveRow(reader: reader, handle: StateHandle, rowFrom: RowFrom, resolved: out var handle)) {
+            return RuleFact.Absent(kind: ValueKind);
+        }
+        if (!StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: handle, key: null, tick: reader.Tick, row: out var declared, rawValue: out _, text: out _)) {
             return RuleFact.Finite(value: 0L, kind: ValueKind);
         }
         if (Reduce == StateReduceOp.ArrangementRank) {
@@ -216,12 +230,18 @@ public sealed class ReductionOperand : OperandFact {
         return RuleFact.Finite(value: accumulator, kind: ValueKind);
     }
     /// <inheritdoc/>
-    public override long Cost(RuleCompileContext context) => context.RowCapacity(name: Row) * (Range is null ? 1L : 3L);
+    public override long Cost(RuleCompileContext context) => (RowFrom?.Table.Capacity ?? context.RowCapacity(name: Row)) * (Range is null ? 1L : 3L);
     /// <inheritdoc/>
     public override void CollectReads(List<RuleAccess> into) {
-        into.Add(item: new RuleAccess(Row: Row, Key: null));
+        if (RowFrom is { } live) {
+            live.CollectReads(into: into);
+        } else {
+            into.Add(item: new RuleAccess(Row: Row, Key: null));
+        }
         if (FilterRow is not null) { into.Add(item: new RuleAccess(Row: FilterRow, Key: null)); }
     }
+    /// <inheritdoc/>
+    public override bool HostOnly => (RowFrom is { HostOnly: true });
 }
 
 /// <summary>A <see cref="RuleFacts.SymmetryPrefix"/> read: a cell's node through one symmetry-lattice map. The source
@@ -437,7 +457,8 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
     /// <param name="filterHandle">The compiled handle for <paramref name="filterRow"/>.</param>
     /// <param name="matchFacet">What this operand answers about its word.</param>
     /// <param name="tokenExpression">The zone's per-token value expression, when the pattern carries one.</param>
-    public PatternOperand(string row, string? key, CompiledCellRef? keyFrom, StateHandle stateHandle, string pattern, BoardNeighbourQuery? board, string? filterRow, StateHandle filterHandle, MatchFacet matchFacet, CompiledExpressionToken[]? tokenExpression)
+    /// <param name="rowFrom">The live zone read, or <see langword="null"/> for a fixed row.</param>
+    public PatternOperand(string row, string? key, CompiledCellRef? keyFrom, StateHandle stateHandle, string pattern, BoardNeighbourQuery? board, string? filterRow, StateHandle filterHandle, MatchFacet matchFacet, CompiledExpressionToken[]? tokenExpression, LiveZone? rowFrom = null)
         : base(CellKind.Int) {
         Row = row;
         Key = key;
@@ -449,10 +470,13 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
         FilterHandle = filterHandle;
         MatchFacet = matchFacet;
         TokenExpression = tokenExpression;
+        RowFrom = rowFrom;
     }
 
     /// <inheritdoc/>
     public string Row { get; }
+    /// <summary>Gets the live zone read, or <see langword="null"/> for a fixed row.</summary>
+    public LiveZone? RowFrom { get; }
     /// <summary>Gets the literal board-origin cell key, or the token a zone or keyed word starts at; <see langword="null"/>
     /// when <see cref="KeyFrom"/> applies or the word reads whole.</summary>
     public string? Key { get; }
@@ -475,25 +499,34 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
     public CompiledExpressionToken[]? TokenExpression { get; }
 
     /// <inheritdoc/>
-    public override RuleFact Read(IRuleReader reader) => RuleFact.Finite(value: ReadMatch(reader: reader), kind: CellKind.Int);
+    public override RuleFact Read(IRuleReader reader) =>
+        (RuleEvaluation.TryResolveRow(reader: reader, handle: StateHandle, rowFrom: RowFrom, resolved: out var handle)
+            ? RuleFact.Finite(value: ReadMatch(reader: reader, handle: handle), kind: CellKind.Int)
+            : RuleFact.Absent(kind: CellKind.Int));
     /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) => ((Board is { } board)
         ? (board.Topology.CellCount + board.Visits)
-        : RuleWorkBudget.SaturatingMultiply(context.RowCapacity(Row),
+        : RuleWorkBudget.SaturatingMultiply((RowFrom?.Table.Capacity ?? context.RowCapacity(Row)),
             RuleWorkBudget.SaturatingAdd(1L, RuleWorkBudget.ExpressionCost(TokenExpression ?? [], context))));
     /// <inheritdoc/>
     public override void CollectReads(List<RuleAccess> into) {
-        into.Add(item: new RuleAccess(Row: Row, Key: null));
+        if (RowFrom is { } live) {
+            live.CollectReads(into: into);
+        } else {
+            into.Add(item: new RuleAccess(Row: Row, Key: null));
+        }
         RuleAccess.CollectReference(reference: KeyFrom, into: into);
         if (FilterRow is not null) { into.Add(new RuleAccess(FilterRow, null)); }
         if (TokenExpression is { } expression) { RuleDataflow.CollectExpression(expression, into); }
     }
+    /// <inheritdoc/>
+    public override bool HostOnly => (RowFrom is { HostOnly: true }) || (KeyFrom is { Custom.HostOnly: true }) || RuleDataflow.ExpressionReadsHost(tokens: TokenExpression);
 
-    private long ReadMatch(IRuleReader reader) {
+    private long ReadMatch(IRuleReader reader, StateHandle handle) {
         if (!reader.Patterns.TryGet(name: Pattern, pattern: out var pattern)) {
             throw new InvalidOperationException($"pattern operand '{Pattern}' outlived the compiled rules");
         }
-        if (!StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: StateHandle, key: null, tick: reader.Tick, row: out var row, rawValue: out _, text: out _)) {
+        if (!StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: handle, key: null, tick: reader.Tick, row: out var row, rawValue: out _, text: out _)) {
             throw new InvalidOperationException($"pattern operand over '{Row}' outlived its compiled row handle");
         }
 

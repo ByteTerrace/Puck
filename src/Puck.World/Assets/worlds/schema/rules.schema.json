@@ -35,7 +35,7 @@
         "default": "Level"
       },
       "forEach": {
-        "description": "A keyed state row to iterate, or null for one evaluation per tick. With a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with $each bound to that cell\u0027s key \u2014 the quantifier that lets one rule tick a status for every participant carrying it, or one rule judge every piece or card of a keyed row. An integer key also binds the each participant reference; a non-integer key binds $each alone. The latch is kept per key, by the key\u0027s value when it is an integer and by its position in the row otherwise.",
+        "description": "A keyed state row to iterate, $zones to iterate the rule\u0027s own Zones table (its non-empty indices, each bound to $each), or null for one evaluation per tick. With a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with $each bound to that cell\u0027s key \u2014 the quantifier that lets one rule tick a status for every participant carrying it, or one rule judge every piece or card of a keyed row. An integer key also binds the each participant reference; a non-integer key binds $each alone. The latch is kept per key, by the key\u0027s value when it is an integer and by its position in the row otherwise.",
         "type": [
           "string",
           "null"
@@ -229,6 +229,20 @@
             "expression"
           ],
           "additionalProperties": false
+        },
+        "default": null
+      },
+      "zones": {
+        "description": "The rule\u0027s zone table, or null: ordered zones over one token domain, in index order, an empty entry holding an index no zone answers. Every row position in the rule \u2014 a compareState\u0027s state, a $reduce:/$match: row, a $zone: endpoint\u0027s zone, a transfer\u0027s from/to, an expression\u0027s row \u2014 may spell $zones[\u003Cindex\u003E] to select an entry live, the index being an infix cell key (game[from], $each, $bind:\u003Cname\u003E, or any expression), so one rule serves every pile of a game. forEach: \u0022$zones\u0022 iterates the table\u0027s own non-empty indices with $each bound to each.",
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "default": null
       }

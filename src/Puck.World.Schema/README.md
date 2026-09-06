@@ -226,12 +226,17 @@ one journal entry; `Slice` moves the keyed token and every token after it as
 one run, in order (a solitaire column from a card to its top), and onto the
 same zone rotates that run to the other end. In rules, a transfer's `key` accepts
 the same dynamic spellings as a state write, resolved before each transaction
-step, and so do its `from` and `to`: each resolves to an integer indexing the
-transfer's `zones` table (ordered zones over one token domain, in index order;
-an empty entry answers no index), so one authored move rule serves every pair
-of a game's piles. `$zone:<ordered-zone>:first|last` selects an endpoint's original string
-key from the active store; an empty zone's endpoint names no cell — no comparison
-holds against it and a write it addresses refuses by name. Direct transform mutations carry literal keys. A cursor
+step, and its `from` and `to` may be live zones: a rule declares a `zones`
+table (ordered zones over one token domain, in index order; an empty entry
+answers no index) and any row position in it — a `compareState` `state`, a
+`$reduce:`/`$match:` row, a `$zone:` endpoint's zone, a transfer end, an
+expression's row — spells `$zones[<index>]` with an infix key as the index
+(`game[from]`, `$each`, `$bind:<name>`, an expression), so one authored rule
+serves every pile of a game; `forEach: "$zones"` visits the table's own
+indices. `$zone:<ordered-zone>:first|last` selects an endpoint's original string
+key from the active store; an empty zone's endpoint, or an index selecting no
+zone, names no cell — no comparison holds against it, a write it addresses
+refuses by name, and a transfer end through it refuses. Direct transform mutations carry literal keys. A cursor
 advances only with the committed transfer. `setRay` (`row`, `from`, `direction`, `pattern`, `value`) walks a ray from
 its origin and writes the longest run its named `patterns` row accepts — the
 same compiled machine and prefix semantics `$match` reads, landed back on the
