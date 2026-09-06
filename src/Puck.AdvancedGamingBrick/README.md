@@ -18,8 +18,8 @@ project supplies only the AGB hardware itself.
   `AdvancedGamingBrickMachine.CartridgeEntryPoint` (0x08000000) with the CPU's
   registers seeded to their post-BIOS state, or execute the real boot
   sequence against a caller-supplied `IBios` image through the lower-level
-  machine API. The screen-machine host always direct-boots; its default BIOS
-  is a zeroed stub.
+  machine API. The screen-machine host always direct-boots and requires an
+  explicit BIOS configuration.
 - *Cartridge detection with a documented override table:*
   `AgbCartridge` scans the ROM for save-type strings; `AgbGameOverrides`
   corrects the known-broken minority (anti-piracy decoy strings,
@@ -28,7 +28,7 @@ project supplies only the AGB hardware itself.
   code.
 - *A deterministic, instruction-atomic link cable:* `AgbLinkSession` connects
   two to four machines and steps whichever is furthest behind its own
-  cumulative target, one instruction at a time, ties to the lowest index — a
+  cumulative target, one instruction or halted idle cycle at a time, ties to the lowest index — a
   state-free rule, so a linked run replays identically. `Suspend`/`Resume`
   give a credit-preserving reconnect that requires every console to be
   transfer-idle first.
@@ -48,10 +48,23 @@ flowchart LR
 
 `AdvancedGamingBrickEngine` (`Id = "advanced-gaming-brick"`) is the
 `IScreenMachineEngine` implementation a host resolves by id. Its options
-string selects the BIOS: no option or `direct` boots against a zeroed
-replacement image at the cartridge entry point, and `bios=<path>` loads an
-exact `ReplacementBios.ImageSize`-byte (16 KiB) image from disk for BIOS calls
-during cartridge execution. Both host options direct-boot the cartridge.
+string must select `bios=<path>`, loading a 16 KiB image from disk for BIOS
+calls and IRQ dispatch during cartridge execution. Missing options, `direct`,
+and zero-filled BIOS files are rejected. Direct boot skips the startup
+sequence; the cartridge still needs BIOS services at runtime.
+
+`stub` explicitly selects a zero-filled image for BIOS-independent diagnostics
+and polling cartridges. It implements no BIOS services or IRQ handler. Both
+options direct-boot the cartridge. Callers constructing `AdvancedMachineHost`
+directly must supply `biosImage`; an explicit zero-filled array has the same
+limitations as `stub`. Nonzero replacement BIOS images are accepted, but
+their service completeness is the caller's responsibility.
+
+Battery saves use a flushed temporary file beside the destination followed
+by replacement, so a failed write preserves the previous save and remains
+pending for retry. Restoring or rewinding requests a flush independently of
+the snapshot's dirty flag: the disk does not rewind with emulated memory.
+A forced flush persists the current save even when its emulated flag is clean.
 
 ## 🚀 Quick start
 
@@ -62,7 +75,7 @@ using Puck.AdvancedGamingBrick;
 IScreenMachineEngine engine = new AdvancedGamingBrickEngine();
 
 IScreenMachine machine = engine.Create(
-    options: "direct",              // or "bios=<path>" for a real dumped BIOS
+    options: "bios=GBA_bios.rom",    // caller-supplied 16 KiB BIOS image
     contentBytes: cartridgeRom,      // the cartridge ROM image
     savePath: "save.sav",            // battery-save path, or null for in-memory only
     audioSampleRate: 48_000
@@ -122,6 +135,13 @@ IRQ transitions, and restore update readiness at their source; the bus keeps
 the existing per-cycle path for unsettled state and custom controllers.
 No charge crosses a scheduled event, including an event at its final cycle.
 The readiness cache adds no snapshot fields.
+
+A halted CPU step checks for a wake interrupt, then advances one idle cycle
+and pending DMA if it remains asleep. It returns control so the next host
+input or linked peer can produce the wake interrupt. `RunCycles` counts these
+idle steps alongside instruction and exception steps; a sleeping CPU does
+not wait indefinitely inside a call. STOP still uses the modeled restricted
+wake sources while peripheral clocks continue advancing.
 
 Text backgrounds without horizontal mosaic resolve one tile-map entry and
 read one packed tile row for up to eight pixels. These bytes are used only

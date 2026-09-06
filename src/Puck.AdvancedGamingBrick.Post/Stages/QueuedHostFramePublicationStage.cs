@@ -27,7 +27,7 @@ internal sealed class QueuedHostFramePublicationStage : IPostStage<PostContext> 
                 cartridgeRom: SyntheticRom.Create(),
                 biosImage: bios
             ),
-            empty: () => new AdvancedMachineHost()
+            empty: () => new AdvancedMachineHost(biosImage: bios)
         );
 
         return (result.Passed

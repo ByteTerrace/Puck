@@ -9,8 +9,8 @@ namespace Puck.AdvancedGamingBrick;
 /// </summary>
 public sealed class AgbMachineConfiguration {
     /// <summary>Creates a configuration.</summary>
-    /// <param name="bios">The 16&#160;KiB BIOS image (a zeroed stub is valid; only the callers that need a real BIOS
-    /// check for one).</param>
+    /// <param name="bios">The 16&#160;KiB BIOS image. A zeroed stub supports only BIOS-independent direct-boot
+    /// cartridges; it provides no SWI services or IRQ dispatch.</param>
     /// <param name="rom">The cartridge ROM image.</param>
     /// <exception cref="ArgumentNullException"><paramref name="rom"/> is <see langword="null"/>.</exception>
     public AgbMachineConfiguration(ReadOnlyMemory<byte> bios, byte[] rom) {

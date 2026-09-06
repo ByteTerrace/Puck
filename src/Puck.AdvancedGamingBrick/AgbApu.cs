@@ -45,6 +45,8 @@ public sealed partial class AgbApu : IAgbApu {
             m_outputRing = Array.Empty<short>();
             m_sampleRate = 0;
             m_samplePhase = 0L;
+            m_outputWrite = 0;
+            m_outputRead = 0;
 
             return;
         }

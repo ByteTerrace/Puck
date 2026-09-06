@@ -148,7 +148,10 @@ public sealed partial class Arm7Tdmi : IArmCpu {
         m_bus.ProcessEvents();
 
         if (m_bus.Halted) {
-            m_bus.RunUntilInterrupt();
+            m_bus.StepHalted();
+            if (m_bus.Halted) {
+                return;
+            }
         }
 
         // ARM7TDMI instruction step: refill the pipeline if a branch/exception left it

@@ -240,9 +240,11 @@ public sealed partial class AgbDmaController : IAgbDmaController {
             ? 0x10000u
             : 0x4000u);
 
-        m_remaining[channel] = ((m_count[channel] == 0u)
+        // Channels 0–2 implement only fourteen count bits; mask before interpreting zero as the maximum.
+        var count = m_count[channel] & (maximum - 1u);
+        m_remaining[channel] = ((count == 0u)
             ? maximum
-            : m_count[channel]);
+            : count);
     }
     private void RunDmaLoop(IAgbBus bus) {
         if (m_running) {

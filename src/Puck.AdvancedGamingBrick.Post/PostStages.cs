@@ -9,6 +9,8 @@ internal static class PostStages {
         [
             // Tier A — core and queued-host self-tests (hand-assembled vectors + a synthetic cartridge; run anywhere).
             new SmokeStage(),
+            new LifecycleStage(),
+            new HostPersistenceStage(),
             new PpuCompositionStage(),
             new PpuTextRowStage(),
             new CartridgeFetchStage(),

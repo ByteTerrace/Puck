@@ -8,7 +8,8 @@ public sealed partial class AgbCartridge : ISnapshotable {
     // BCD time registers, the rumble motor's latched on/off bool, and the solar sensor's counter/edge/threshold. The
     // ROM image and the cycle-provider delegate are immutable wiring, not state, so they are not serialized (the
     // snapshot restores into the same cartridge, keeping both). SaveDirty rides along so a restore reflects the
-    // recorded persistence state.
+    // recorded persistence state. The host separately requests a disk flush on restore, because disk contents do
+    // not rewind with this flag.
     public void SaveState(StateWriter writer) {
         ArgumentNullException.ThrowIfNull(argument: writer);
 

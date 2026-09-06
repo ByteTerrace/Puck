@@ -117,24 +117,24 @@ public sealed class AdvancedGamingBrickMachine : ISnapshotableMachine {
     public void SetKeyInput(ushort keys) {
         m_concreteBus?.SetKeyInput(keys: keys);
     }
-    /// <summary>Executes one instruction (or a pending exception entry).</summary>
+    /// <summary>Executes one instruction or exception entry, or advances a halted idle cycle and pending DMA.</summary>
     public void Step() {
         m_cpu.Step();
     }
     /// <summary>Runs the machine for one full frame (~280,896 master cycles). Returns the number of
-    /// instructions executed.</summary>
+    /// CPU steps, including halted idle steps.</summary>
     public int RunFrame() {
         return RunCycles(cycles: CyclesPerFrame);
     }
     /// <summary>Advances the machine by an exact master-cycle budget — the seam a host engine drives, handing in the
     /// precise cycle count its frame's tick budget bought so emulated time tracks the deterministic tick accumulator
     /// rather than the produced-frame cadence (the Advanced GamingBrick analogue of HumbleGamingBrick's
-    /// <c>Machine.Run</c>). Steps whole instructions until the master clock has advanced at least
-    /// <paramref name="cycles"/> further; the final instruction's small overshoot is itself deterministic — identical
+    /// <c>Machine.Run</c>). Steps whole instructions or halted idle cycles until the master clock has advanced at least
+    /// <paramref name="cycles"/> further; the final instruction or DMA burst's overshoot is itself deterministic — identical
     /// on every replay of the same budget sequence — so it drifts no state between runs. A non-positive budget, or a
     /// bare test bus with no master clock, steps nothing.</summary>
     /// <param name="cycles">The master-cycle budget to advance this call.</param>
-    /// <returns>The number of instructions executed.</returns>
+    /// <returns>The number of CPU steps, including halted idle steps.</returns>
     public int RunCycles(long cycles) {
         if (
             (m_concreteBus is null) ||

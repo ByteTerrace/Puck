@@ -137,7 +137,7 @@ internal sealed class TracingAgbBus : IAgbBus {
     public bool Halted => m_inner.Halted;
 
     public void Halt(bool stop) => m_inner.Halt(stop: stop);
-    public void RunUntilInterrupt() => m_inner.RunUntilInterrupt();
+    public void StepHalted() => m_inner.StepHalted();
 
     private void Watch(uint address, uint value) {
         if ((address & ~0x3u) == (m_watchAddress & ~0x3u)) {

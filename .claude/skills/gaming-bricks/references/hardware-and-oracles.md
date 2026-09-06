@@ -143,6 +143,21 @@ alias in that project's `GlobalUsings.cs` — searching for a declared
   Attaching a sink may gate presentation work, never emulated audio advance.
 - Convert host delta time to cycles with exact rational arithmetic and carry
   the remainder between updates.
+- Native AGB `StepHalted` yields after one idle cycle and pending DMA when no
+  wake interrupt is committed. CPU steps include these idle advances; never
+  wait indefinitely inside a step, because queued input and linked peers
+  must run to produce keypad or serial wake requests. Wake latency stays on
+  the bus, and snapshots preserve the halted pipeline.
+- The AGB screen engine requires `bios=<path>`; `stub` is an explicit opt-in
+  for BIOS-independent diagnostics, not a BIOS implementation. Direct boot
+  alone does not provide SWI services or IRQ dispatch. The host constructor
+  likewise requires an explicit BIOS image.
+- AGB save restoration requests a host-side flush independently of the
+  serialized dirty flag. Disk writes flush a same-directory temporary before
+  replacement and retain pending state on failure. Keep this persistence
+  bookkeeping outside snapshot bytes. `host-persistence` gates restore,
+  forced flush and replacement retry; `lifecycle` gates halted steps, DMA
+  count widths and audio reconfiguration.
 
 ## 4. GB PPU timing
 

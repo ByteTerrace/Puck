@@ -46,6 +46,15 @@ except the throughput and zero-alloc measurements, which run alone.
 | B | conformance CPU/save/misc suites; ARM fuzz corpus; render hashes; accuracy suite; AGS aging cartridge | assets listed below; stages skip when absent |
 | C | deterministic multiplayer cable replay and a commercial link-game replay | synthetic replay needs none; commercial replay needs a retail BIOS and `--link-game` |
 
+The asset-free `lifecycle` stage checks HALT/STOP cycle budgets, keypad wake
+and snapshot replay, DMA during HALT, the fourteen-bit DMA0–2 and sixteen-bit
+DMA3 count boundaries, and audio disable/drain/re-enable. `host-persistence`
+checks BIOS option validation, clean-snapshot save restoration, forced flush,
+and disposal. On Windows it also holds a destination open without delete
+sharing to prove a failed replacement preserves the old save and retries
+without another emulated write. These stages use explicit zero-filled BIOS
+images only with BIOS-independent cartridges.
+
 ## External assets
 
 None of these ship with the repository; each stage skips cleanly when its asset

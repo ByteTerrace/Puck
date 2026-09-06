@@ -8,7 +8,8 @@ public enum AgbBiosKind {
     /// cycle-parity / co-simulation work.</summary>
     RealVerified,
 
-    /// <summary>The zeroed replacement stub (all bytes zero) — valid under direct boot, useless for cycle parity.</summary>
+    /// <summary>The zeroed replacement stub (all bytes zero): suitable only for BIOS-independent direct-boot
+    /// cartridges, with no SWI services or IRQ dispatch; unsuitable for cycle parity.</summary>
     ReplacementStub,
 
     /// <summary>A non-zero image that is not the verified retail BIOS (an open-source replacement, a wrong dump, or a

@@ -740,45 +740,15 @@ public sealed partial class AgbBus : IAgbBus {
     private bool StopWakeRequested() => ((m_interrupts.ReadRegister(offset: 0x200u) & m_interrupts.ReadRegister(offset: 0x202u) & StopWakeMask) != 0);
 
     /// <inheritdoc/>
-    public void RunUntilInterrupt() {
-        // Hardware steps the halted CPU one cycle at a time, waking on enable[0] & flag[0]. We do the
-        // same per-cycle stepping whenever something can change the IRQ state on the next cycle (a pending timer
-        // latch or IRQ delay, or an un-propagated pipeline shift), but jump straight to the next scheduled event
-        // over genuinely idle spans — the VBlank-wait case, and now also a plain running timer whose overflow is
-        // the scheduled wake event. StepClocks collapses the span and fires that overflow on its exact cycle.
-        while (true) {
-            if (m_stopped
-                ? StopWakeRequested()
-                : m_interrupts.HasPendingInterrupt) {
-                break;
-            }
-
-            if (
-                m_timers.HasPendingLatch ||
-                !m_interrupts.PipelineQuiescent
-            ) {
-                StepClocks(n: 1);
-            } else {
-                // Nothing per-cycle can change the IRQ state; jump to the next scheduled event (the wake source for a
-                // V-blank-style wait). Cap to a frame so a pathological no-event halt still re-checks periodically.
-                var next = (m_scheduler.NextWhen - m_scheduler.Now);
-
-                StepClocks(n: ((next <= 0L)
-                    ? 1
-                    : (int)Math.Min(
-                    val1: next,
-                    val2: 280_896L
-                )));
-            }
-
+    public void StepHalted() {
+        if (!(m_stopped ? StopWakeRequested() : m_interrupts.HasPendingInterrupt)) {
+            // A sleeping CPU still yields to its caller. In particular, keypad input must be deliverable on the
+            // next queued host segment, and a link peer must get its turn to produce a serial wake interrupt.
+            StepClocks(n: 1);
             ProcessEvents();
-
-            // Hardware runs pending DMA during halt too. A timed DMA queued by a PPU event
-            // while the CPU is halted (e.g. a VBlank copy during a VBlank-wait) must still run, since there are no
-            // CPU bus accesses to drive RunPendingDma here.
             RunPendingDma();
+            return;
         }
-
         // Hardware wakes a halted CPU with two extra cycles before resuming — charged after the wake condition is
         // met and before the first post-halt instruction. Without this every IntrWait leaves the clock two cycles
         // ahead of the reference, which accumulates and breaks timing-paced boot loops (some commercial games).
