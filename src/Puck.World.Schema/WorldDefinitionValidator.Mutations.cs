@@ -4,7 +4,10 @@ public static partial class WorldDefinitionValidator {
     /// <summary>Validates every row a state transform names on its own terms — the same per-row and cross-row
     /// checks the whole-document walk applies to those rows today, with no rule, interaction, pattern, table,
     /// search plan, or flock affinity compiled. The containing definition has already composed the mutation; this
-    /// checks only what that mutation could have changed.</summary>
+    /// checks only what that mutation could have changed. A row keyed over one of the named rows (a <c>keysOf</c>
+    /// zone whose domain is a row this call was given) is queued alongside it: a domain row losing a key leaves such
+    /// a zone holding a key outside its own domain, a shape only a walk over the ZONE's own cells — never the
+    /// domain's — catches (see <see cref="ValidateTokenAndPhaseRow"/>'s domain-membership check).</summary>
     /// <param name="definition">The composed candidate document.</param>
     /// <param name="rowNames">The row names the mutation touched; duplicates are checked once.</param>
     /// <param name="reason">The first refusal, or empty on success.</param>
@@ -24,11 +27,16 @@ public static partial class WorldDefinitionValidator {
 
         var errors = new List<string>();
         var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var queue = new Queue<string>();
 
         foreach (var rowName in rowNames) {
-            if (!seen.Add(item: rowName)) {
-                continue;
+            if (seen.Add(item: rowName)) {
+                queue.Enqueue(item: rowName);
             }
+        }
+
+        while (queue.Count > 0) {
+            var rowName = queue.Dequeue();
 
             if (WorldDefinitionRows.FindStateRow(rows: definition.State, name: rowName) is not { } row) {
                 errors.Add(item: $"state row '{rowName}' does not exist in the composed candidate.");
@@ -63,6 +71,17 @@ public static partial class WorldDefinitionValidator {
                     errors: errors,
                     row: row
                 );
+            }
+
+            foreach (var dependent in definition.State ?? []) {
+                if (
+                    (dependent is not null) &&
+                    (dependent.EffectiveDomain is StateDomain.KeysOf keysOf) &&
+                    (keysOf.Row.Value == rowName) &&
+                    seen.Add(item: dependent.Name.Value)
+                ) {
+                    queue.Enqueue(item: dependent.Name.Value);
+                }
             }
         }
 

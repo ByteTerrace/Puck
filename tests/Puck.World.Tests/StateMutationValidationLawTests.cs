@@ -29,6 +29,24 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
         Assert.Equal(expected: before, actual: fixture.DefinitionBytes());
     }
     [Fact]
+    public void RemovingATokenStillReferencedByAKeysOfZoneIsRefused() {
+        // The zone is never named by the mutation — only its domain row 'cards' is — so the touched-row walk must
+        // queue 'zone' itself once it sees 'cards' is touched, or the removal leaves 'zone' holding a key outside
+        // its own domain, a shape the whole-document walk would have refused.
+        var domain = new WorldStateRow(Name("cards"), CellKind.Int, Capacity: 2, Cells: [Cell("c1"), Cell("c2")]);
+        var zone = new WorldStateRow(Name("zone"), CellKind.Bool, Domain: new StateDomain.KeysOf(Name("cards"), Ordered: true), Cells: [Cell("c1", 1)]);
+        using var fixture = Fixtures.FreshServer(definition: Document([domain, zone]));
+        var before = fixture.DefinitionBytes();
+        var refusals = new List<string>();
+        fixture.Server.EchoTap = echo => { if (echo.Rejected) { refusals.Add(item: echo.Message); } };
+
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.RemoveStateCell(Principal: WorldPrincipal.Console, Row: "cards", Key: "c1"));
+        fixture.Step();
+
+        Assert.Contains(collection: refusals, filter: reason => reason.Contains(value: "outside token domain", comparisonType: StringComparison.Ordinal));
+        Assert.Equal(expected: before, actual: fixture.DefinitionBytes());
+    }
+    [Fact]
     public void ABoolCellRefusesAValueOtherThanZeroOrOne() {
         var flag = new WorldStateRow(Name("flag"), CellKind.Bool, Cells: [new StateCell(WorldStateRow.SlotKey, 0)]);
         using var fixture = Fixtures.FreshServer(definition: Document([flag]));
