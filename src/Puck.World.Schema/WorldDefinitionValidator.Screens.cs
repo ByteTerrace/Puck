@@ -819,10 +819,18 @@ public static partial class WorldDefinitionValidator {
                     // reported the fault, but boot itself succeeded regardless). The hook is REQUIRED, never skipped
                     // when absent: an unchecked key is the one outcome this refusal exists to prevent.
                     errors.Add(item: $"{path}.machine.engine '{machine.Engine}' names no registered screen-machine engine.");
+                } else if (
+                    machine.NamesCartridgeDocument &&
+                    !WorldExtensionVocabularyHook.IsCartridgeCompilingScreenMachineEngine(engineId: machine.Engine)
+                ) {
+                    // A cartridge document is compiled at bind through the engine's own forge; an engine with no forge
+                    // would boot the JSON bytes as a ROM. Refused here, by name, like an unregistered engine key.
+                    errors.Add(item: $"{path}.machine.contentPath '{machine.ContentPath}' names a cartridge document ({WorldScreenSource.Machine.CartridgeDocumentSuffix}), but engine '{machine.Engine}' compiles none.");
                 }
 
                 // An empty contentPath is a valid "unconfigured" screen; the binder faults the slot gracefully at boot.
-                // A present-but-missing file is a runtime fact, not a structural authoring error.
+                // A present-but-missing file is a runtime fact, not a structural authoring error, and so is a cartridge
+                // document the forge refuses — the bind faults with the forge's own message.
                 return false;
             case WorldScreenSource.TestPattern pattern:
                 if (

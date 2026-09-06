@@ -1301,7 +1301,13 @@ disguised success, and the pinned signature rides the tape REGARDLESS of
 whether the op succeeded (INCLUDING an unresolved engine — content is
 read/signed before engine resolution is even attempted, never left unpinned
 on that path), so a replay re-drive refuses by name if the file's on-disk
-state no longer matches what was recorded. Declared cable links
+state no longer matches what was recorded. A content path ending in
+`.cartridge.json` names an authored `puck.cartridge.v1` document: the host
+compiles it through the engine's own forge once the engine resolves (the
+signature still covers the bytes read off disk), boots the compiled image,
+and records a `WorldMachineCartridge` (the source's canonical hash and the
+image's hash) on `WorldMachineState.Cartridge` for `screen.state`; a forge
+refusal is the bind's fault, verbatim. Declared cable links
 (`IWorldMachineHost.ReconcileLinks`) are established/torn down at
 construction (for a link declared in the boot document itself) AND on every
 `WorldServer.Install` (every live mutation and every whole-document

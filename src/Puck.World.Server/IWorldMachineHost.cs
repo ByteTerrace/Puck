@@ -19,8 +19,20 @@ namespace Puck.World.Server;
 /// loaded; zero for synchronous machines.</param>
 /// <param name="Fault">A slot's live fault (a missing content file, an unresolved engine, rejected options), or
 /// <see langword="null"/>.</param>
+/// <param name="Cartridge">The cartridge document the live machine's content was compiled from, or
+/// <see langword="null"/> when the content booted as read (a ROM image) or no machine is assigned.</param>
 public readonly record struct WorldMachineState(bool Assigned, string? Engine, long FramesStepped,
-    long PendingSteps, int MaximumPendingSteps, long BackpressureEvents, string? Fault);
+    long PendingSteps, int MaximumPendingSteps, long BackpressureEvents, string? Fault, WorldMachineCartridge? Cartridge = null);
+
+/// <summary>A compiled cartridge document behind a booted machine — the source the host compiled at bind and the
+/// two hashes that pin it, echoed by <c>screen.state</c> as <c>cartridge &lt;path&gt; hash &lt;source&gt; rom
+/// &lt;rom&gt;</c>. The file's own content pin (the replay CAS signature) is separate: it covers the bytes read
+/// off disk, while <see cref="SourceHash"/> is the document's canonical identity and <see cref="RomHash"/> the
+/// compiled image's, so two spellings of one canonical document boot one ROM and say so.</summary>
+/// <param name="Path">The content path as declared or inserted.</param>
+/// <param name="SourceHash">The canonical source hash the forge computed.</param>
+/// <param name="RomHash">The compiled image's content hash, in the same <c>sha256-64/</c> form as the file pin.</param>
+public readonly record struct WorldMachineCartridge(string Path, string SourceHash, string RomHash);
 
 /// <summary>
 /// The seam <see cref="WorldServer"/> — and every replay/instance-host caller that boots a shadow world of its own —

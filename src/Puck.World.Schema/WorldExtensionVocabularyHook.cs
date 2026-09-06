@@ -37,6 +37,11 @@ public static class WorldExtensionVocabularyHook {
     /// (<see cref="Abstractions.Machines.IScreenMachineEngine"/>). Installed once by the composition root's module
     /// initializer; read through <see cref="IsRegisteredScreenMachineEngine"/>, never directly.</summary>
     public static Func<string, bool>? ScreenMachineEngineCheck { get; set; }
+    /// <summary>Answers whether a registered screen-machine engine compiles an authored <c>puck.cartridge.v1</c>
+    /// document at bind (<c>Puck.World.WorldScreenMachineEngines.CompilesCartridges</c> in a real root). Installed
+    /// beside <see cref="ScreenMachineEngineCheck"/>, the same required shape; read through
+    /// <see cref="IsCartridgeCompilingScreenMachineEngine"/>, never directly.</summary>
+    public static Func<string, bool>? ScreenMachineCartridgeCheck { get; set; }
 
     /// <summary>Determines whether <paramref name="extensionId"/> names a registered post-render extension.</summary>
     /// <param name="extensionId">The candidate extension id.</param>
@@ -47,6 +52,18 @@ public static class WorldExtensionVocabularyHook {
         return ((PostRenderExtensionCheck is { } check)
             ? check(extensionId)
             : throw new InvalidOperationException(message: "WorldExtensionVocabularyHook.PostRenderExtensionCheck was never installed — Puck.World's module initializer should have wired it before any validator ran; a post-render extension key cannot be checked here, and is never assumed valid.")
+        );
+    }
+    /// <summary>Determines whether <paramref name="engineId"/> names a registered screen-machine engine that
+    /// compiles cartridge documents (<see cref="WorldScreenSource.Machine.CartridgeDocumentSuffix"/>).</summary>
+    /// <param name="engineId">The candidate engine id.</param>
+    /// <returns><see langword="true"/> when the engine compiles a cartridge document at bind.</returns>
+    /// <exception cref="InvalidOperationException"><see cref="ScreenMachineCartridgeCheck"/> was never installed.
+    /// The check is never skipped: skipping it would pass a document no host can boot.</exception>
+    public static bool IsCartridgeCompilingScreenMachineEngine(string engineId) {
+        return ((ScreenMachineCartridgeCheck is { } check)
+            ? check(engineId)
+            : throw new InvalidOperationException(message: "WorldExtensionVocabularyHook.ScreenMachineCartridgeCheck was never installed — Puck.World's module initializer should have wired it before any validator ran; a cartridge document path cannot be checked here, and is never assumed valid.")
         );
     }
     /// <summary>Determines whether <paramref name="engineId"/> names a registered screen-machine engine.</summary>

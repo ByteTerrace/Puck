@@ -42,8 +42,15 @@ public abstract record WorldScreenSource {
     /// names a concrete machine: the engine owns its <paramref name="Options"/> vocabulary (a GamingBrick reads a
     /// dmg/cgb/agb model + a dmgspeed pin).</summary>
     /// <param name="Engine">The screen-machine engine id (e.g. <c>gaming-brick</c>).</param>
-    /// <param name="ContentPath">The content file (a cartridge ROM) the machine boots, or empty when the screen is
-    /// unconfigured — the binder faults the slot gracefully (no crash, no-signal card) rather than booting.</param>
+    /// <param name="ContentPath">The content the machine boots, resolved against the document's own directory: a
+    /// ROM image, or — when the path ends in <see cref="CartridgeDocumentSuffix"/> — an authored
+    /// <c>puck.cartridge.v1</c> document the host compiles through the engine's own forge at bind
+    /// (<c>Puck.World.WorldScreenMachineEngines.CartridgeCompilers</c>), booting the compiled bytes exactly as it
+    /// boots a ROM file; the source's canonical hash and the compiled image's hash ride the slot beside the file's
+    /// own content pin, and <c>screen.state</c> echoes them. A cartridge path on an engine that compiles none
+    /// refuses at validation by name; a document the forge refuses faults the bind with the forge's own message.
+    /// Empty when the screen is unconfigured — the binder faults the slot gracefully (no crash, no-signal card)
+    /// rather than booting.</param>
     /// <param name="Options">The engine-specific options string, or <see langword="null"/> for the engine's defaults.</param>
     /// <param name="Cable">This machine's cable port (see <see cref="WorldMachineCable"/>), or <see langword="null"/>
     /// for an unlinked machine. Legal only on a declared <c>screens</c> row's own source — a magazine entry or a
@@ -55,7 +62,26 @@ public abstract record WorldScreenSource {
         string ContentPath,
         string? Options,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMachineCable? Cable = null
-    ) : WorldScreenSource;
+    ) : WorldScreenSource {
+        /// <summary>The content-path suffix that names an authored <c>puck.cartridge.v1</c> document rather than a
+        /// ROM image — the one spelling the host compiles at bind.</summary>
+        public const string CartridgeDocumentSuffix = ".cartridge.json";
+
+        /// <summary>Gets whether <see cref="ContentPath"/> names a cartridge document to compile rather than a ROM
+        /// image to boot as read.</summary>
+        [JsonIgnore]
+        public bool NamesCartridgeDocument => IsCartridgeDocumentPath(contentPath: ContentPath);
+
+        /// <summary>Determines whether a content path names a cartridge document — it ends in
+        /// <see cref="CartridgeDocumentSuffix"/>, compared ordinally without regard to case, so a spelling that
+        /// merely contains the suffix elsewhere boots as a ROM.</summary>
+        /// <param name="contentPath">The content path, or <see langword="null"/>.</param>
+        /// <returns><see langword="true"/> when the path names a cartridge document.</returns>
+        public static bool IsCartridgeDocumentPath(string? contentPath) => (contentPath is { } path) && path.EndsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: CartridgeDocumentSuffix
+        );
+    }
     /// <summary>The platform's default live camera feed. The platform may negotiate a nearby extent; every screen
     /// and probe socket naming the same sensor shares one feed, opened at the richest profile any screen row
     /// requests.</summary>

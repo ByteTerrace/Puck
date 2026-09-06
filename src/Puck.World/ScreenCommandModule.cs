@@ -62,7 +62,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.insert",
-            description: "Boots content onto a declared screen, live: screen.insert <index> <contentPath> [engine] [options…] — <index> the engine screen index, <contentPath> a content file (a cartridge ROM), the optional [engine] a registered screen-machine engine id (omit it when one is registered — the mechanical default), and the trailing tokens the engine's own options string (the gaming-brick engine reads a family token dmg|cgb|agb or a revision token such as dmg0, sgb2 or cgb0, plus dmgspeed). Submits a WorldScreenOp.Insert through the ordered submission domain — Server.WorldMachineHost applies it synchronously and authoritatively, CAS-pinning the exact bytes read (the replay tape's negative control refuses a re-drive whose re-read disagrees); an existing machine on the slot is live-swapped. The server's own loud accept/reject line prints when it applies. Errors on an undeclared screen, an unresolved engine, an unreadable file, or rejected options.",
+            description: "Boots content onto a declared screen, live: screen.insert <index> <contentPath> [engine] [options…] — <index> the engine screen index, <contentPath> a content file (a cartridge ROM, or a puck.cartridge.v1 document whose path ends in .cartridge.json, compiled through the engine's forge at bind), the optional [engine] a registered screen-machine engine id (omit it when one is registered — the mechanical default), and the trailing tokens the engine's own options string (the gaming-brick engine reads a family token dmg|cgb|agb or a revision token such as dmg0, sgb2 or cgb0, plus dmgspeed). Submits a WorldScreenOp.Insert through the ordered submission domain — Server.WorldMachineHost applies it synchronously and authoritatively, CAS-pinning the exact bytes read (the replay tape's negative control refuses a re-drive whose re-read disagrees); an existing machine on the slot is live-swapped. The server's own loud accept/reject line prints when it applies. Errors on an undeclared screen, an unresolved engine, an unreadable file, or rejected options.",
             handler: InsertHandler
         );
         yield return CommandDefinition.WithWireArgs(
@@ -117,7 +117,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.state",
-            description: "Echoes a screen's live machine state: screen.state <index> — assigned/empty, the hosting engine id, bound/unbound (a nonzero source handle this frame), the stepped-frame count, and the engaged players. A query (always echoes, even under wire.ack quiet) — the pipe-assertable machine state.",
+            description: "Echoes a screen's live machine state: screen.state <index> — assigned/empty, the hosting engine id, bound/unbound (a nonzero source handle this frame), the stepped-frame count, the engaged players, and, for content compiled from a cartridge document, cartridge <path> hash <source hash> rom <rom hash>. A query (always echoes, even under wire.ack quiet) — the pipe-assertable machine state.",
             handler: StateHandler
         );
         yield return CommandDefinition.WithWireArgs(
@@ -875,6 +875,13 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
                 handler: $"empty {((state.Handle != 0)
                 ? "bound"
                 : "unbound")} engaged={engagedText}"
+            );
+        }
+
+        if (state.Cartridge is { } cartridge) {
+            _ = builder.Append(
+                provider: CultureInfo.InvariantCulture,
+                handler: $" cartridge {cartridge.Path} hash {cartridge.SourceHash} rom {cartridge.RomHash}"
             );
         }
 

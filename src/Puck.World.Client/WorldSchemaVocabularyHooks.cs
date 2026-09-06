@@ -21,14 +21,18 @@ public static class WorldSchemaVocabularyHooks {
     /// <summary>Installs every Schema vocabulary hook.</summary>
     /// <param name="screenMachineEngineCheck">Answers whether a document-declared <c>screens[]</c> engine key names an
     /// engine the caller's build ships (<c>Puck.World.WorldScreenMachineEngines.IsRegistered</c> in a real root).</param>
+    /// <param name="screenMachineCartridgeCheck">Answers whether a registered engine compiles a
+    /// <c>puck.cartridge.v1</c> document a machine source's content path names
+    /// (<c>Puck.World.WorldScreenMachineEngines.CompilesCartridges</c> in a real root).</param>
     /// <param name="postRenderExtensionCheck">Answers whether a document-declared post-render extension key is
     /// shipped (<c>Puck.World.WorldPostRenderExtensions.IsShipped</c> in a real root).</param>
     /// <param name="probeKindCheck">Answers whether a document-declared <c>probes[].kind</c> key is
     /// shipped (<c>Puck.World.WorldProbeKinds.IsShipped</c> in a real root).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public static void Install(Func<string, bool> screenMachineEngineCheck, Func<string, bool> postRenderExtensionCheck, Func<string, bool> probeKindCheck) {
+    public static void Install(Func<string, bool> screenMachineEngineCheck, Func<string, bool> screenMachineCartridgeCheck, Func<string, bool> postRenderExtensionCheck, Func<string, bool> probeKindCheck) {
         ArgumentNullException.ThrowIfNull(argument: postRenderExtensionCheck);
         ArgumentNullException.ThrowIfNull(argument: screenMachineEngineCheck);
+        ArgumentNullException.ThrowIfNull(argument: screenMachineCartridgeCheck);
         ArgumentNullException.ThrowIfNull(argument: probeKindCheck);
 
         BindingVocabularyHook.VocabularyCheck = WorldAffordances.Validate;
@@ -38,6 +42,7 @@ public static class WorldSchemaVocabularyHooks {
         Protocol.MutationKindVocabularyHook.Describe = Protocol.WorldMutationKindCatalog.DescribeMask;
         Protocol.MutationKindVocabularyHook.TryParse = Protocol.WorldMutationKindCatalog.TryParseMask;
         WorldExtensionVocabularyHook.PostRenderExtensionCheck = postRenderExtensionCheck;
+        WorldExtensionVocabularyHook.ScreenMachineCartridgeCheck = screenMachineCartridgeCheck;
         WorldExtensionVocabularyHook.ScreenMachineEngineCheck = screenMachineEngineCheck;
         WorldProbeVocabularyHook.ProbeKindCheck = probeKindCheck;
     }

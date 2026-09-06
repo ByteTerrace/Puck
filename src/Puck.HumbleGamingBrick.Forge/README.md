@@ -7,7 +7,9 @@ commands, schema, limits and the host-independent compiler/editor APIs.
 The compiler emits a frame loop, SM83 rules, 2bpp tiles, a background map,
 RGB555 palettes and shadow-OAM sprites. Variables occupy bytes from
 `0xC200`; the returned compilation names their addresses. It does not emit
-the old games' save, state-machine or victory behavior.
+the old games' save, state-machine or victory behavior. A world screen whose
+`contentPath` ends in `.cartridge.json` is compiled through this compiler at
+bind by `Puck.World.Addons`; the guide above describes the read-back.
 
 The package remains `ByteTerrace.Puck.HumbleGamingBrick.Forge`. It depends
 on the shared cartridge document package, Assets and the HGB emulator;

@@ -53,11 +53,9 @@ public readonly record struct FixedWorldTether(
     FixedQ4816 MinLength,
     FixedQ4816 ReleaseVelocityScale,
     int AttachChannelOrdinal,
-    // The attach/detach channels' own declared binary threshold — captured at compile time because WorldBody never
-    // resolves these two ordinals through a kit's action table, so it never otherwise learns the world's own
-    // per-ordinal threshold the way a kit-bound channel does (FixedWorldKit.ActionThresholds, populated only for
-    // ordinals a kit's Actions map or a held-read facet like Speed.Held actually claims). Reel needs no threshold —
-    // it is read continuously, never edge-tested.
+    // The attach/detach channels' own declared binary threshold, captured at compile time so the facet reads its
+    // two ordinals without consulting the kit's per-ordinal array. Reel needs no threshold — it is read
+    // continuously, never edge-tested.
     FixedQ4816 AttachThreshold,
     int DetachChannelOrdinal,
     FixedQ4816 DetachThreshold,

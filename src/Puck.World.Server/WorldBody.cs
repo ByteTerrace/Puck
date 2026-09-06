@@ -300,10 +300,11 @@ public sealed partial class WorldBody {
     private ulong[] m_durableInputTimers = [];
     private string[] m_durableInputWriters = [];
     private int m_affectingSubject = -1;
-    // The binary crossing threshold per ordinal (meaningful only where m_laneBindings is non-null) — resolved once
-    // from the world's channel table at construction/recompile.
+    // The world's declared binary crossing threshold per ordinal, bound or not — resolved once from the world's
+    // channel table at construction/recompile; the engage-channel probe and the previous-bit image read unbound
+    // ordinals too.
     private readonly FixedQ4816[] m_channelThresholds = new FixedQ4816[ActionLaneCount];
-    // The declared shape per ordinal — EVERY ordinal, not just bound ones (unlike m_channelThresholds): the
+    // The declared shape per ordinal — EVERY ordinal, not just bound ones: the
     // held-image overlay below composes a channel whether or not a kit binds an action to it. Resolved once from the
     // world's channel table at construction/recompile; an unpopulated slot defaults to Bipolar (ChannelShape's zero
     // value), the same fallback WorldServer uses for an undeclared ordinal.

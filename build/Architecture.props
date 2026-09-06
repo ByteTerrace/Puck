@@ -238,12 +238,13 @@
              Server directly), plus Puck.Scripting itself (the guest ABI AddonSimulationPump, hosted directly in
              this project, validates against) and Puck.Assets (the module bytes a mount reads). The screen-machine
              host also lives here (Machines/WorldMachineHost, Machines/WorldScreenMachineEngines), which is why the
-             emulator cores (Puck.AdvancedGamingBrick, Puck.HumbleGamingBrick, Puck.HumbleGamingBrick.Forge, and
+             emulator cores (Puck.AdvancedGamingBrick, Puck.AdvancedGamingBrick.Forge, Puck.HumbleGamingBrick,
+             Puck.HumbleGamingBrick.Forge, and
              their own Puck.GamingBricks/Puck.GamingBricks.Forge transitive edges) arrive here rather than Server —
              a machine is a mounted guest, like a WASM addon. No Puck.SdfVm (the machine host never touches the
              renderer) and no Puck.Input: the source-id vocabulary AddonSimulationPump's predecessor once read moved
              to Puck.World, not here. Same absence enforced: no Backends row, no Presentation row, no Puck.Overlays. -->
-        <PuckArchitectureProfile Include="Puck.World.Addons" Closure="Puck.Abstractions;Puck.AdvancedGamingBrick;Puck.Assets;Puck.Attestation;Puck.Audio;Puck.Commands;Puck.GamingBricks;Puck.Hosting;Puck.HumbleGamingBrick;Puck.HumbleGamingBrick.Forge;Puck.GamingBricks.Forge;Puck.Maths;Puck.Networking;Puck.Physics;Puck.Scripting;Puck.Shaders;Puck.SignedDistance;Puck.State;Puck.Storage;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema;Puck.World.Server" />
+        <PuckArchitectureProfile Include="Puck.World.Addons" Closure="Puck.Abstractions;Puck.AdvancedGamingBrick.Forge;Puck.AdvancedGamingBrick;Puck.Assets;Puck.Attestation;Puck.Audio;Puck.Commands;Puck.GamingBricks;Puck.Hosting;Puck.HumbleGamingBrick;Puck.HumbleGamingBrick.Forge;Puck.GamingBricks.Forge;Puck.Maths;Puck.Networking;Puck.Physics;Puck.Scripting;Puck.Shaders;Puck.SignedDistance;Puck.State;Puck.Storage;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema;Puck.World.Server" />
         <!-- The control plane that follows the authority (docs/project-map.md's Puck.World.Console row):
              IWorldConsoleAuthority and the server-only console modules moved out of Puck.World (world.grant/
              .revoke/.grants/.why, world.groups/.ownership, world.looks/.population.spawn, world.market, world.peers,

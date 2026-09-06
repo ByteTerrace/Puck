@@ -173,7 +173,10 @@ only at parse time; `WorldDefinitionValidator.ValidateRoute` holds it to the sam
 "must resolve against a declared channel" bar `channels` rows carry, since a dead
 name would otherwise be a silent, permanent no-op) whose RISING EDGE, on a body
 within `EngageRadius` of THIS screen, is intercepted server-side into a
-`ComposeControl` instead of reaching the body's own action track.
+`ComposeControl` instead of reaching the body's own action track. The edge
+compares against the channel's own declared threshold whether or not the seat's
+kit binds an action to it (`FixedWorldKit.ActionThresholds` carries every
+declared ordinal's threshold).
 
 `WorldServer.ResolveEngageProbes` runs every `Step`, BEFORE the population
 advances (so it reads PRE-MOVE positions), over every active local seat that has
@@ -304,7 +307,9 @@ machine through a `WorldScreenOp.Eject` submission first, then call
 `WorldScreenBinder` directly.
 
 Exact machine-op grammars: `screen.insert <index> <contentPath> [engine]
-[options…]`; `screen.eject <index>`; `screen.select <index>
+[options…]` (a `<contentPath>` ending in `.cartridge.json` is compiled through
+the engine's forge at bind, and `screen.state` echoes `cartridge <path> hash
+<source> rom <image>`); `screen.eject <index>`; `screen.select <index>
 [next|prev|<entry>]` (index alone reads the current selection); `screen.options
 <index> [options…]` (index alone reads current options); `screen.link <name>
 <index> <index> [index…]`; `screen.unlink <name>`. `ScreenCommandModule` routes

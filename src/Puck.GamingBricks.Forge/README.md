@@ -65,6 +65,19 @@ JSON strings keep their quotes, for example `forge.set /title "MY GAME"`.
 Array indices must exist unless appending; unknown fields and references are
 refused at validation. Source files are bounded to 1 MiB and nesting to 32.
 
+## Boot a document from a world screen
+
+A world's `screens[].source` of `$type: machine` may name a source document
+directly: a `contentPath` ending in `.cartridge.json` is parsed and compiled at
+bind through the engine's own compiler (`gaming-brick` uses
+`HgbCartridgeCompiler`, `advanced-gaming-brick` uses `AgbCartridgeCompiler`)
+and the compiled bytes boot exactly as an exported ROM does. `screen.state
+<index>` echoes `cartridge <path> hash <canonical source hash> rom <image
+hash>`. A document this package's validator or a compiler refuses faults the
+slot with the same message `forge.check` would print; an engine with no
+compiler refuses the path when the world document validates. The shipped
+cartridges under `src/Puck.World/Assets/cartridges/` are the worked examples.
+
 ## Source contract
 
 All top-level fields are required. `forge.show` prints a complete starting

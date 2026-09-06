@@ -38,6 +38,21 @@ WASM addon, and a browser or silo build of Server needs neither. See
 for the seam contract, the CAS-pinned boot/select path, and the replay-arm
 latches this host participates in.
 
+A machine source whose `contentPath` ends in `.cartridge.json` names an
+authored `puck.cartridge.v1` document rather than a ROM image.
+`WorldScreenMachineEngines.CartridgeCompilers` pairs each engine that
+compiles one with its own forge (`gaming-brick` with `HgbCartridgeCompiler`,
+`advanced-gaming-brick` with `AgbCartridgeCompiler`), and `WorldMachineHost`
+parses and compiles the document after the engine resolves and boots the
+compiled bytes exactly as it boots a file — the CAS signature still covers the
+bytes read off disk, and the slot records a `WorldMachineCartridge` (the
+source's canonical hash and the image's hash) that `WorldMachineState.Cartridge`
+carries to `screen.state`. A document the forge refuses faults the bind with
+the forge's own message; a cartridge path on an engine with no forge refuses at
+document validation through `WorldExtensionVocabularyHook.ScreenMachineCartridgeCheck`,
+which `WorldScreenMachineEngines.CompilesCartridges` answers. The two shipped
+cartridges live under `src/Puck.World/Assets/cartridges/`.
+
 `IWorldAddonHost` implements the shared `IWorldExtensionRuntime` contract with
 recomputed contributions. Capability-manifest matching is shared with recorded
 providers through `WorldCapabilityRequests.Contains`. Service calls belong at

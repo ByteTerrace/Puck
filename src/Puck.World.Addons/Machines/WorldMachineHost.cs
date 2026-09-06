@@ -1,6 +1,9 @@
 using System.Numerics;
+using System.Text.Json;
 using Puck.Abstractions.Machines;
+using Puck.Assets.Documents;
 using Puck.Audio.Mixing;
+using Puck.GamingBricks.Forge;
 
 namespace Puck.World.Server;
 
@@ -114,10 +117,29 @@ public sealed class WorldMachineHost : IWorldMachineHost {
             return;
         }
 
+        if (!TryResolveContent(
+            engine: engine,
+            contentPath: machine.ContentPath,
+            content: content,
+            bytes: out var bytes,
+            cartridge: out var cartridge,
+            fault: out var resolveFault
+        )) {
+            slot.DeclaredFault = resolveFault;
+            if (m_narrationHub is { HasNarrationSink: true }) {
+                m_narrationHub?.Narrate(
+                    channel: "world.screen",
+                    text: $"[world.screen: {slot.Index} {slot.DeclaredFault}]"
+                );
+            }
+
+            return;
+        }
+
         try {
             slot.Machine = engine.Create(
                 options: machine.Options,
-                contentBytes: content,
+                contentBytes: bytes,
                 savePath: null,
                 audioSampleRate: MachineAudioRate.SampleRate
             );
@@ -126,6 +148,7 @@ public sealed class WorldMachineHost : IWorldMachineHost {
             slot.MachineSourceEngine = machine.Engine;
             slot.MachineOptions = machine.Options;
             slot.MachineContentHash = WorldDefinitionFileSource.ComputeContentHash(content: content);
+            slot.Cartridge = cartridge;
         } catch (ArgumentException exception) {
             slot.DeclaredFault = exception.Message;
             if (m_narrationHub is { HasNarrationSink: true }) {
@@ -325,12 +348,30 @@ public sealed class WorldMachineHost : IWorldMachineHost {
             return (Ok: false, Message: engineError, ContentHash: contentHash);
         }
 
+        // The content is signed above as read off disk; a cartridge document compiles here, after the engine is
+        // known (the forge is the engine's own), so a forge refusal still pins the source file's signature.
+        if (!TryResolveContent(
+            engine: engine,
+            contentPath: contentPath,
+            content: content,
+            bytes: out var bytes,
+            cartridge: out var cartridge,
+            fault: out var resolveFault
+        )) {
+            MachineLifecycleTap?.Invoke(
+                arg1: index,
+                arg2: true
+            );
+
+            return (Ok: false, Message: resolveFault!, ContentHash: contentHash);
+        }
+
         IScreenMachine created;
 
         try {
             created = engine.Create(
                 audioSampleRate: MachineAudioRate.SampleRate,
-                contentBytes: content,
+                contentBytes: bytes,
                 options: options,
                 savePath: null
             );
@@ -356,6 +397,7 @@ public sealed class WorldMachineHost : IWorldMachineHost {
         );
         slot.MachineOptions = options;
         slot.MachineContentHash = contentHash;
+        slot.Cartridge = cartridge;
         slot.DeclaredFault = null;
         slot.FramesStepped = 0;
         MachineLifecycleTap?.Invoke(
@@ -365,7 +407,54 @@ public sealed class WorldMachineHost : IWorldMachineHost {
 
         return (Ok: true, Message: $"screen {index} booted {engine.Id} '{Path.GetFileName(path: contentPath)}'{(string.IsNullOrWhiteSpace(value: options)
             ? ""
-            : $" ({options})")}", ContentHash: contentHash);
+            : $" ({options})")}{((cartridge is { } compiled)
+            ? $" cartridge hash {compiled.SourceHash} rom {compiled.RomHash}"
+            : "")}", ContentHash: contentHash);
+    }
+    // The bytes a machine boots, from the bytes read off disk: a content path naming a cartridge document
+    // (WorldScreenSource.Machine.IsCartridgeDocumentPath) parses and compiles through the engine's own forge
+    // (WorldScreenMachineEngines.CartridgeCompilers) — the same compiler forge.export writes with, so a cabinet runs
+    // exactly the image the document would export — and any other content is the image itself. A forge refusal is
+    // the fault, verbatim, so an author reads the forge's own message from screen.state.
+    private static bool TryResolveContent(IScreenMachineEngine engine, string contentPath, byte[] content, out byte[] bytes, out WorldMachineCartridge? cartridge, out string? fault) {
+        if (!WorldScreenSource.Machine.IsCartridgeDocumentPath(contentPath: contentPath)) {
+            bytes = content;
+            cartridge = null;
+            fault = null;
+
+            return true;
+        }
+
+        if (!WorldScreenMachineEngines.TryCartridgeCompiler(
+            engineId: engine.Id,
+            compiler: out var compiler
+        )) {
+            bytes = [];
+            cartridge = null;
+            fault = $"cartridge '{contentPath}' needs a forge, and engine '{engine.Id}' compiles none";
+
+            return false;
+        }
+
+        try {
+            var compilation = compiler.Compile(document: CartridgeDocuments.Parse(utf8: content));
+
+            bytes = compilation.Rom;
+            cartridge = new WorldMachineCartridge(
+                Path: contentPath,
+                SourceHash: compilation.SourceHash,
+                RomHash: WorldDefinitionFileSource.ComputeContentHash(content: compilation.Rom)
+            );
+            fault = null;
+
+            return true;
+        } catch (Exception exception) when ((exception is JsonException or DocumentValidationException or ArgumentException or InvalidOperationException)) {
+            bytes = [];
+            cartridge = null;
+            fault = $"cartridge '{contentPath}' refused: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+
+            return false;
+        }
     }
     private (IMachineLink? Link, string? Reason) TryEstablishLink(IReadOnlyList<int> members) {
         var machines = new List<IScreenMachine>(capacity: members.Count);
@@ -911,7 +1000,8 @@ public sealed class WorldMachineHost : IWorldMachineHost {
             PendingSteps: (queued?.PendingSteps ?? 0L),
             MaximumPendingSteps: (queued?.MaximumPendingSteps ?? 0),
             BackpressureEvents: (queued?.BackpressureEvents ?? 0L),
-            Fault: (queued?.QueueFault ?? slot.DeclaredFault)
+            Fault: (queued?.QueueFault ?? slot.DeclaredFault),
+            Cartridge: slot.Cartridge
         );
     }
     /// <inheritdoc/>
@@ -1253,6 +1343,7 @@ public sealed class WorldMachineHost : IWorldMachineHost {
     // One declared screen's machine slot: the persistent declared source (so ReconcileScreens can diff it), the
     // magazine + live selector, and at most one booted machine plus the bookkeeping world.save/screen.state need.
     private sealed class MachineSlot {
+        public WorldMachineCartridge? Cartridge { get; set; }
         public string? DeclaredFault { get; set; }
         public WorldScreenSource? DeclaredSource { get; set; }
         public long FramesStepped { get; set; }
@@ -1275,6 +1366,7 @@ public sealed class WorldMachineHost : IWorldMachineHost {
             MachineSourceEngine = null;
             MachineOptions = null;
             MachineContentHash = null;
+            Cartridge = null;
             DeclaredFault = null;
         }
     }

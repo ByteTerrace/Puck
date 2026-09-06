@@ -2,7 +2,9 @@
 
 `AgbCartridgeCompiler` compiles `puck.cartridge.v1` data into a native AGB ROM.
 Players author that data in Puck's console with `forge.new`, `forge.set`,
-`forge.check`, `forge.build`, and `forge.play`. See the shared
+`forge.check`, `forge.build`, and `forge.play`, or point a world screen's
+`contentPath` at a `.cartridge.json` document, which `Puck.World.Addons`
+compiles through this compiler at bind. See the shared
 [cartridge authoring guide](../Puck.GamingBricks.Forge/README.md) for the
 complete schema, command walkthrough, limits, and embedding contract.
 

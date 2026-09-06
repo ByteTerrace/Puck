@@ -97,8 +97,9 @@ public enum WorldBodyContactMode : byte {
 /// <param name="Actions">The kit's compiled composition bindings, indexed by channel ordinal
 /// (<see cref="ChannelLimits.MaxChannels"/> slots; unbound ordinals are <see langword="null"/>) — the channel-name map
 /// resolved once against the world's <see cref="WorldChannelTable"/>.</param>
-/// <param name="ActionThresholds">The binary crossing threshold for each ordinal in <paramref name="Actions"/>
-/// (meaningful only where a binding exists).</param>
+/// <param name="ActionThresholds">The world's declared binary crossing threshold for every ordinal (not just where
+/// a binding exists) — the one array every held read, action edge, engage-channel probe, and previous-bit image
+/// compares against.</param>
 /// <param name="ActionShapes">The world's declared channel shape for every ordinal (not just where a binding
 /// exists) — the held-image composition (<c>Puck.World.Server.WorldBody.NextIntent</c>) needs a composition
 /// ordinal's shape whether or not this kit binds an action to it.</param>
@@ -244,9 +245,13 @@ public readonly record struct FixedWorldKit(
             identityState: identityState
         );
 
+        // Every ordinal carries the world's own declared threshold, bound or not: the held reads (a speed modifier,
+        // a shaping gate), the engage-channel probe, and the previous-bit image all compare against this array, and
+        // an unbound ordinal left at zero would read as held, and as crossed, whenever the channel rests at zero.
         for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
             shapes[ordinal] = channels.Shape(ordinal: ordinal);
             roleMask[ordinal] = channels.IsRole(ordinal: ordinal);
+            thresholds[ordinal] = channels.Threshold(ordinal: ordinal);
         }
 
         foreach (var (name, spec) in kit.Actions) {
@@ -263,7 +268,6 @@ public readonly record struct FixedWorldKit(
                 program: program,
                 actionName: $"{kit.Name}.{name}"
             );
-            thresholds[ordinal] = channels.Threshold(ordinal: ordinal);
         }
 
         var roleOrdinals = channels.RoleOrdinals;
@@ -321,29 +325,6 @@ public readonly record struct FixedWorldKit(
             simulationRateHz: simulationRateHz,
             tuning: kit.Motion
         );
-
-        // The speed-held channel is a HELD read, not an Actions binding — it needs its threshold in ActionThresholds
-        // regardless of whether kit.Actions also binds a press/release effect there (the loop above only writes a
-        // threshold where an ActionSpec exists), so WorldBody's held-channel test compares against the channel's
-        // OWN declared threshold rather than the array's zero default.
-        if (tuning.Speed.HeldOrdinal >= 0) {
-            thresholds[tuning.Speed.HeldOrdinal] = channels.Threshold(ordinal: tuning.Speed.HeldOrdinal);
-        }
-
-        // Every shaping row's flattened gate may test a `held` channel the kit binds no action to (a drift row).
-        // MotionGateOpen compares the SAME channelThresholds array every other held read uses, so each one needs
-        // its own declared threshold here too — never the array's zero default, which a channel at rest (raw 0)
-        // would then read as held.
-        foreach (var row in tuning.Shaping) {
-            foreach (var predicate in row.When) {
-                if (
-                    (predicate.Kind == CompiledPredicateKind.Held) &&
-                    (predicate.ChannelOrdinal >= 0)
-                ) {
-                    thresholds[predicate.ChannelOrdinal] = channels.Threshold(ordinal: predicate.ChannelOrdinal);
-                }
-            }
-        }
 
         return new FixedWorldKit(
             BodyMotionProgram: program,

@@ -4,6 +4,7 @@
         <PuckLayer>Engine services</PuckLayer>
     </PropertyGroup>
     <ItemGroup>
+        <ProjectReference Include="..\Puck.AdvancedGamingBrick.Forge\Puck.AdvancedGamingBrick.Forge.csproj" />
         <ProjectReference Include="..\Puck.AdvancedGamingBrick\Puck.AdvancedGamingBrick.csproj" />
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\Puck.HumbleGamingBrick.Forge\Puck.HumbleGamingBrick.Forge.csproj" />

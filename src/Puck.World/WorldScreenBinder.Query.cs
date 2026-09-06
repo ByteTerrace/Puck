@@ -15,8 +15,10 @@ namespace Puck.World;
 /// <param name="BackpressureEvents">How many queued submissions waited for capacity since the current content was
 /// loaded; zero for synchronous machines.</param>
 /// <param name="Fault">A slot's live fault (a missing content file, no camera device, a window not found), or <see langword="null"/>.</param>
+/// <param name="Cartridge">The cartridge document the machine's content was compiled from, or <see langword="null"/>
+/// for content booted as read.</param>
 internal readonly record struct WorldScreenState(bool Assigned, string? Engine, nint Handle, long FramesStepped,
-    long PendingSteps, int MaximumPendingSteps, long BackpressureEvents, string? Fault);
+    long PendingSteps, int MaximumPendingSteps, long BackpressureEvents, string? Fault, Server.WorldMachineCartridge? Cartridge = null);
 internal sealed partial class WorldScreenBinder {
     /// <summary>Returns the live machine on a screen slot as its audio drain seam, or <see langword="null"/> — a facade over
     /// <see cref="Server.WorldMachineHost.AudioMachine"/>.</summary>
@@ -73,7 +75,8 @@ internal sealed partial class WorldScreenBinder {
                 PendingSteps: machineState.PendingSteps,
                 MaximumPendingSteps: machineState.MaximumPendingSteps,
                 BackpressureEvents: machineState.BackpressureEvents,
-                Fault: machineState.Fault
+                Fault: machineState.Fault,
+                Cartridge: machineState.Cartridge
             );
         }
 

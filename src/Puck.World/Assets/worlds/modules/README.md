@@ -338,3 +338,103 @@ island already does) and a `placements.policy.derivedFaceScreens` reservation of
 least 1 for the mirror's face to bind; a host authoring neither still boots the rest
 of the district, but the counter never advances and the mirror shows the no-signal
 card.
+# The arcade
+
+`modules/arcade.world.json` is the arcade district: two cabinets and a handheld
+on a stand, each booting an authored `puck.cartridge.v1` document from
+`src/Puck.World/Assets/cartridges/` rather than a ROM file. The game is the
+same on both bricks: a pip walks a room whose four walls are the district
+colors — dive `#2E6FD9` to the north, kart `#D9552E` east, jump `#3FB950`
+south, studio `#C9A227` west. The CGB target's palette holds four entries and
+the floor takes one, so its west wall is a checker of the kart and jump
+entries; the AGB cartridge paints all four. The d-pad walks the pip, the walls
+stop it, and `a` counts a step into the `steps` variable (`0xC202` on the CGB
+brick), so a piped run can read the cabinet's game state through `screen.peek`.
+
+Import it under the alias `arcade`:
+
+```json
+{ "document": "modules/arcade.world.json", "as": "arcade" }
+```
+
+## What it declares
+
+| Row | Bare name | Notes |
+|---|---|---|
+| `placements` | `arcadeCourt` | The court: a floor and a back wall with a lit strip, at local origin; every other row is its child. |
+| `placements` | `cabinetCgb`, `cabinetAgb` | The two cabinets, solid, facing +Z toward the court. |
+| `placements` | `handheldStand`, `handheld` | The stand and the handheld cradled on it. |
+| `screens` | indices 8, 9, 10 | The CGB cabinet's face, the AGB cabinet's face, the handheld's face. |
+| `kits` | `arcadePad` | A pad map over the island's channels: forward and strafe to the left stick, turn to the right stick, jump to South, rise to East. Never worn by a body. |
+| `bodyMotionPrograms` | `arcadePad` | The kit's required program. |
+| `state.world` | `cgbScreen`, `agbScreen`, `handheldScreen` | Int slots holding the three screen indices; exported as reads and bindings. |
+| `spawnPoints` | `arcade-arrival` | Court-local `(0, 0, 2)`, facing the cabinets. |
+| `navigation.domains` | `arcadeFloor` | A `Surface` domain over the court floor. |
+
+Placement ids, kit names, spawn points, screens, and domains keep their bare
+spellings under the alias; only the state rows compose as `arcade_<name>`.
+
+## How a cabinet is engaged
+
+Each `screens` row is engageable with `engageChannel: "jump"` — the island's
+own channel — and `kit: "arcadePad"`. A seat standing within `engageRadius`
+(2.2 m in the slab's XZ plane) whose jump channel rises is composed onto the
+cabinet captured, so its pad drives the game instead of the avatar; the seat
+leaves with `body.engage off`. `body.engage screen:8` composes the same
+application from the console.
+
+## Where the screens sit
+
+A `screens` row is a world-space slab, not a placement: the row's `origin`
+is the cabinet's screen face, authored to sit in the cabinet prototype's bezel
+with the court at the origin. The island restates the three rows' `origin`s
+beside `arcadeCourt`'s `position` and `yawDegrees` whenever it moves the court.
+The cabinet prototypes declare no creation face, since a face's own source would
+boot a second machine at a derived index with no engage route. The arcade takes
+indices 8 through 10; the island's own screens stay below 8, and every index
+stays below the derived-face band.
+
+Content paths inside the module are spelled relative to the importing
+document's directory (`../cartridges/pip.cgb.cartridge.json` from
+`Assets/worlds`), as every asset row's path is; a host elsewhere mirrors that
+layout.
+
+## The handheld
+
+`handheld` is a chassis with a d-pad, two buttons, start and select, and the
+screen at index 10 as its face, cradled on `handheldStand` until a body holds
+it. The primitive a held handheld rides is a placement's `attach` facet
+(`{"bodyIndex", "localOffset", "localYawDegrees"}`): the row's pose follows the
+named body's root pose, colliders and regions included. What a handheld in the
+wren's hands still lacks: an attach target on a rig joint (`handRight`) so the
+offset follows the hand rather than the root, a body named through the seat
+that holds it rather than a fixed index, and a `screens` row that rides the
+placement — the slab is world-space today, so the picture would stay on the
+stand while the chassis left with the body.
+
+## Verify
+
+Boot a host that imports the module and pipe:
+
+```text
+world.imports
+screen.state 8
+body.pose spawn:arcade-arrival
+world.wait 30
+body.where 0
+body.pose -1.5 0 -1.4 0 0 0 0
+world.wait 5
+body.press jump
+world.wait 5
+screen.state 8
+screen.peek 8 0xC200
+body.press strafe 1 1
+world.wait 40
+screen.peek 8 0xC200
+```
+
+`world.imports` names the module `as arcade` with its exports; each
+`screen.state` reads `assigned` with `cartridge <path> hash <source> rom
+<image>`; `body.where` reads `grounded` at the arrival; stderr carries
+`[world.engage: seat1 auto-engaged screen:8 — context button]` after the
+press, and the second `screen.peek` reads a larger `x` than the first.

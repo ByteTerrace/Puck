@@ -1,0 +1,1017 @@
+{
+  "bodyMotionPrograms": [
+    {
+      "kind": "Motion",
+      "name": "arcadePad",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
+        "ComputePlanarTargetVelocity",
+        "ShapeVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyHold",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ],
+      "version": "puck.body-motion.v1"
+    }
+  ],
+  "exports": {
+    "reads": [
+      "cgbScreen",
+      "agbScreen",
+      "handheldScreen"
+    ],
+    "actions": [],
+    "bindings": [
+      "cgbScreen",
+      "agbScreen",
+      "handheldScreen"
+    ]
+  },
+  "kits": {
+    "rows": [
+      {
+        "name": "arcadePad",
+        "bodyMotionProgram": "arcadePad",
+        "motion": {
+          "holds": [
+            {
+              "bond": "Free",
+              "envelope": {
+                "sinkSpeed": 20
+              },
+              "gravity": {
+                "fall": 23,
+                "rise": 14
+              },
+              "hold": "Gravity",
+              "name": "air"
+            }
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 4
+          },
+          "turn": {
+            "rate": 2.5
+          }
+        },
+        "pad": {
+          "forward": "LeftStickY",
+          "strafe": "LeftStickX",
+          "turn": "RightStickX",
+          "jump": "South",
+          "rise": "East"
+        }
+      }
+    ]
+  },
+  "navigation": {
+    "domains": [
+      {
+        "agentHeight": 0.5,
+        "agentRadius": 0.2,
+        "arrivalDistance": 0.45,
+        "cellSize": 0.5,
+        "depth": 20,
+        "kind": "Surface",
+        "layers": 1,
+        "maxExpandedNodes": 480,
+        "maxPathNodes": 64,
+        "maxSlopeDegrees": 60,
+        "maxStepHeight": 0.5,
+        "name": "arcadeFloor",
+        "origin": [
+          -6,
+          -1,
+          -5
+        ],
+        "probeDown": 2.5,
+        "probeUp": 2,
+        "width": 24
+      }
+    ]
+  },
+  "placements": {
+    "rows": [
+      {
+        "id": "arcadeCourt",
+        "prototypeId": "arcadeCourt",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "cabinetCgb",
+        "parent": "arcadeCourt",
+        "prototypeId": "cabinetCgb",
+        "position": [
+          -1.5,
+          0,
+          -3
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "cabinetAgb",
+        "parent": "arcadeCourt",
+        "prototypeId": "cabinetAgb",
+        "position": [
+          1.5,
+          0,
+          -3
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "handheldStand",
+        "parent": "arcadeCourt",
+        "prototypeId": "handheldStand",
+        "position": [
+          4,
+          0,
+          -2
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "handheld",
+        "parent": "handheldStand",
+        "prototypeId": "handheld",
+        "position": [
+          0,
+          1.08,
+          0.03
+        ],
+        "yawDegrees": 0,
+        "scale": 1
+      }
+    ]
+  },
+  "prototypes": [
+    {
+      "id": "arcadeCourt",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "arcadeCourt",
+        "palette": [
+          {
+            "color": "#2A2631",
+            "specular": 0.08,
+            "shininess": 6
+          },
+          {
+            "color": "#17141C"
+          },
+          {
+            "color": "#C9A227",
+            "emissive": 0.35
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "floor",
+            "type": "Box",
+            "position": [
+              0,
+              -0.1,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              6,
+              0.1,
+              5
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 1,
+            "name": "backwall",
+            "type": "Box",
+            "position": [
+              0,
+              1.2,
+              -5
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              6,
+              1.2,
+              0.12
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 2,
+            "name": "strip",
+            "type": "Box",
+            "position": [
+              0,
+              2.45,
+              -4.9
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              6,
+              0.05,
+              0.03
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "cabinetCgb",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "cabinetCgb",
+        "palette": [
+          {
+            "color": "#1A1417",
+            "specular": 0.15,
+            "shininess": 10
+          },
+          {
+            "color": "#0B0A0D"
+          },
+          {
+            "color": "#2E6FD9",
+            "emissive": 0.8
+          },
+          {
+            "color": "#4A4650",
+            "specular": 0.3,
+            "shininess": 14
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "body",
+            "type": "Box",
+            "position": [
+              0,
+              0.9,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.45,
+              0.9,
+              0.4
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 1,
+            "name": "bezel",
+            "type": "Box",
+            "position": [
+              0,
+              1.25,
+              0.42
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.42,
+              0.34,
+              0.05
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 2,
+            "name": "deck",
+            "type": "Box",
+            "position": [
+              0,
+              0.98,
+              0.47
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.42,
+              0.04,
+              0.12
+            ],
+            "material": 3,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 3,
+            "name": "marquee",
+            "type": "Box",
+            "position": [
+              0,
+              1.95,
+              0.2
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.47,
+              0.13,
+              0.28
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 4,
+            "name": "kick",
+            "type": "Box",
+            "position": [
+              0,
+              0.06,
+              0.42
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.42,
+              0.06,
+              0.04
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "cabinetAgb",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "cabinetAgb",
+        "palette": [
+          {
+            "color": "#1A1417",
+            "specular": 0.15,
+            "shininess": 10
+          },
+          {
+            "color": "#0B0A0D"
+          },
+          {
+            "color": "#D9552E",
+            "emissive": 0.8
+          },
+          {
+            "color": "#4A4650",
+            "specular": 0.3,
+            "shininess": 14
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "body",
+            "type": "Box",
+            "position": [
+              0,
+              0.9,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.45,
+              0.9,
+              0.4
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 1,
+            "name": "bezel",
+            "type": "Box",
+            "position": [
+              0,
+              1.25,
+              0.42
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.42,
+              0.34,
+              0.05
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 2,
+            "name": "deck",
+            "type": "Box",
+            "position": [
+              0,
+              0.98,
+              0.47
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.42,
+              0.04,
+              0.12
+            ],
+            "material": 3,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 3,
+            "name": "marquee",
+            "type": "Box",
+            "position": [
+              0,
+              1.95,
+              0.2
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.47,
+              0.13,
+              0.28
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 4,
+            "name": "kick",
+            "type": "Box",
+            "position": [
+              0,
+              0.06,
+              0.42
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.42,
+              0.06,
+              0.04
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "handheldStand",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "handheldStand",
+        "palette": [
+          {
+            "color": "#3B3540",
+            "specular": 0.2,
+            "shininess": 10
+          },
+          {
+            "color": "#6E6878"
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "base",
+            "type": "Box",
+            "position": [
+              0,
+              0.03,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.22,
+              0.03,
+              0.18
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 1,
+            "name": "post",
+            "type": "Box",
+            "position": [
+              0,
+              0.5,
+              -0.04
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.03,
+              0.47,
+              0.03
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 2,
+            "name": "cradle",
+            "type": "Box",
+            "position": [
+              0,
+              0.9,
+              0.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.12,
+              0.02,
+              0.06
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 3,
+            "name": "lip",
+            "type": "Box",
+            "position": [
+              0,
+              0.95,
+              0.05
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.12,
+              0.04,
+              0.01
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "handheld",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "handheld",
+        "palette": [
+          {
+            "color": "#B9B4C4",
+            "specular": 0.25,
+            "shininess": 12
+          },
+          {
+            "color": "#1A1417"
+          },
+          {
+            "color": "#C63A3A"
+          },
+          {
+            "color": "#2E6FD9"
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "chassis",
+            "type": "Box",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.09,
+              0.15,
+              0.02
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 1,
+            "name": "dpad-bar",
+            "type": "Box",
+            "position": [
+              -0.05,
+              -0.06,
+              0.024
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.026,
+              0.008,
+              0.006
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 2,
+            "name": "dpad-post",
+            "type": "Box",
+            "position": [
+              -0.05,
+              -0.06,
+              0.024
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.008,
+              0.026,
+              0.006
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 3,
+            "name": "button-a",
+            "type": "Sphere",
+            "position": [
+              0.062,
+              -0.052,
+              0.024
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.011,
+              0.011,
+              0.011
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 4,
+            "name": "button-b",
+            "type": "Sphere",
+            "position": [
+              0.038,
+              -0.066,
+              0.024
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.011,
+              0.011,
+              0.011
+            ],
+            "material": 3,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 5,
+            "name": "start",
+            "type": "Box",
+            "position": [
+              0.0,
+              -0.115,
+              0.023
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.012,
+              0.004,
+              0.004
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 6,
+            "name": "select",
+            "type": "Box",
+            "position": [
+              -0.03,
+              -0.115,
+              0.023
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.012,
+              0.004,
+              0.004
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    }
+  ],
+  "screens": [
+    {
+      "index": 8,
+      "origin": [
+        -1.5,
+        1.25,
+        -2.52
+      ],
+      "right": [
+        1,
+        0,
+        0
+      ],
+      "up": [
+        0,
+        1,
+        0
+      ],
+      "halfWidth": 0.3,
+      "halfHeight": 0.27,
+      "halfDepth": 0.03,
+      "round": 0.005,
+      "source": {
+        "$type": "machine",
+        "engine": "gaming-brick",
+        "contentPath": "../cartridges/pip.cgb.cartridge.json",
+        "options": "cgb"
+      },
+      "route": {
+        "engageable": true,
+        "engageRadius": 2.2,
+        "engageChannel": "jump",
+        "kit": "arcadePad"
+      }
+    },
+    {
+      "index": 9,
+      "origin": [
+        1.5,
+        1.25,
+        -2.52
+      ],
+      "right": [
+        1,
+        0,
+        0
+      ],
+      "up": [
+        0,
+        1,
+        0
+      ],
+      "halfWidth": 0.33,
+      "halfHeight": 0.22,
+      "halfDepth": 0.03,
+      "round": 0.005,
+      "source": {
+        "$type": "machine",
+        "engine": "advanced-gaming-brick",
+        "contentPath": "../cartridges/pip.agb.cartridge.json",
+        "options": "stub"
+      },
+      "route": {
+        "engageable": true,
+        "engageRadius": 2.2,
+        "engageChannel": "jump",
+        "kit": "arcadePad"
+      }
+    },
+    {
+      "index": 10,
+      "origin": [
+        4,
+        1.13,
+        -1.949
+      ],
+      "right": [
+        1,
+        0,
+        0
+      ],
+      "up": [
+        0,
+        1,
+        0
+      ],
+      "halfWidth": 0.06,
+      "halfHeight": 0.054,
+      "halfDepth": 0.03,
+      "round": 0.005,
+      "source": {
+        "$type": "machine",
+        "engine": "gaming-brick",
+        "contentPath": "../cartridges/pip.cgb.cartridge.json",
+        "options": "cgb"
+      },
+      "route": {
+        "engageable": true,
+        "engageRadius": 2.2,
+        "engageChannel": "jump",
+        "kit": "arcadePad"
+      }
+    }
+  ],
+  "spawnPoints": [
+    {
+      "id": "arcade-arrival",
+      "position": [
+        0,
+        0,
+        2
+      ],
+      "yawDegrees": 0
+    }
+  ],
+  "state": {
+    "world": [
+      {
+        "kind": "int",
+        "max": 63,
+        "min": 0,
+        "name": "cgbScreen",
+        "value": 8
+      },
+      {
+        "kind": "int",
+        "max": 63,
+        "min": 0,
+        "name": "agbScreen",
+        "value": 9
+      },
+      {
+        "kind": "int",
+        "max": 63,
+        "min": 0,
+        "name": "handheldScreen",
+        "value": 10
+      }
+    ]
+  }
+}
