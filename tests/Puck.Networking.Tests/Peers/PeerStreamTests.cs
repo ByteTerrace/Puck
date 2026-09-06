@@ -4,6 +4,30 @@ using Xunit;
 namespace Puck.Networking.Tests.Peers;
 
 public sealed class PeerStreamTests {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TerminalDrainWaitsPastHalfCloseForTheFinalReply(bool cancelDrain) {
+        using var deadline = Laws.SocketDeadline();
+        var (a, b, ab, ba) = await PeerTestSupport.ConnectAsync(deadline.Token);
+        await using var ownerA = a; await using var ownerB = b;
+        await using var client = new PeerStream(ab); await using var server = new PeerStream(ba);
+        await client.CompleteWritesAsync(deadline.Token);
+        Assert.Equal(0, await server.ReadAsync(new byte[1], deadline.Token));
+
+        await server.WriteAsync(new byte[] { 42 }, deadline.Token);
+        using var drainLifetime = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
+        var draining = StreamDrain.UntilClosedAsync(server, drainLifetime.Token);
+        Assert.False(draining.IsCompleted, "A sending-direction EOF must not close the reply's delivery window.");
+        var reply = new byte[1];
+        await client.ReadExactlyAsync(reply, deadline.Token);
+        Assert.Equal(42, reply[0]);
+
+        if (cancelDrain) { drainLifetime.Cancel(); }
+        else { await client.DisposeAsync(); }
+        await draining.WaitAsync(deadline.Token);
+    }
+
     [Fact]
     public async Task ConcurrentWritesKeepEverySegmentOfEachWriteTogether() {
         using var deadline = Laws.SocketDeadline();

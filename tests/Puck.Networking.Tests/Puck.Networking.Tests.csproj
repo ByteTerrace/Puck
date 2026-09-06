@@ -16,4 +16,7 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.Networking\Puck.Networking.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <Compile Include="..\Shared\DeadlineClock.cs" Link="DeadlineClock.cs" />
+    </ItemGroup>
 </Project>

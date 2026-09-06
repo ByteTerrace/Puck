@@ -294,6 +294,11 @@ link.
   is local narration for logs and events, never written to the peer; only
   the `PeerRefusal` byte crosses the wire, in a `HelloRefused` frame.
 
+`Peer` accepts an optional `TimeProvider` for control-stream, handshake, and
+send deadlines. It defaults to system time. Tests can expire those timers
+without shortening production timeouts; the separate `now` callback still
+controls attestation validity checks.
+
 Two peers' clocks must agree to within `PeerWireProtocol.ClockSkewTolerance`
 (15 s) for messages and identity proofs to verify; the exact windows are
 under [Message attestation](#message-attestation).
@@ -338,6 +343,10 @@ detail stays on the refusing side. `StreamDrain.UntilClosedAsync` consumes
 and discards bytes without disposing the caller-owned stream; its caller
 supplies a bounded cancellation deadline. It checks cancellation between
 reads even when a stream keeps returning buffered bytes synchronously.
+For an authenticated `PeerStream`, a half-close ends only the peer's sending
+direction. The drain waits for the link to close, even after a previously read
+EOF, so the peer can still receive the final reply through its open receiving
+direction.
 The refusing side uses it to drain the stream
 until the peer closes or `PeerWireProtocol.RefusalDrainTimeout` (500 ms)
 elapses, so two sides refusing each other do not both sit until the handshake

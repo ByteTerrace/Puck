@@ -28,48 +28,50 @@ public sealed class LinkedMachineGroupConcurrentDisposeTests {
         );
 
         Assert.NotNull(@object: groupCore);
-        Assert.Equal(
-            actual: link.Submit(
-                deltaTicks: 1UL,
-                inputs: [default, default]
-            ),
-            expected: QueuedMachineSubmission.Accepted
-        );
-        Assert.True(condition: groupCore!.WaitUntilEnteredRunCycles(millisecondsTimeout: GateTimeoutMilliseconds));
-
-        var firstDispose = new Thread(start: () => firstHost.Dispose()) { IsBackground = true };
-        var secondDispose = new Thread(start: () => secondHost.Dispose()) { IsBackground = true };
-
-        firstDispose.Start();
-        secondDispose.Start();
-
+        Exception? firstFault = null;
+        Exception? secondFault = null;
+        var firstDispose = new Thread(start: () => {
+            try { firstHost.Dispose(); } catch (Exception exception) { firstFault = exception; }
+        }) { IsBackground = true };
+        var secondDispose = new Thread(start: () => {
+            try { secondHost.Dispose(); } catch (Exception exception) { secondFault = exception; }
+        }) { IsBackground = true };
         var observedDisposeWhileMidStep = false;
-        var deadline = Environment.TickCount64 + PollWindowMilliseconds;
 
-        while (Environment.TickCount64 < deadline) {
-            if (
-                firstCore.Disposed ||
-                secondCore.Disposed
-            ) {
-                observedDisposeWhileMidStep = true;
+        try {
+            Assert.Equal(
+                actual: link.Submit(deltaTicks: 1UL, inputs: [default, default]),
+                expected: QueuedMachineSubmission.Accepted
+            );
+            Assert.True(condition: groupCore!.WaitUntilEnteredRunCycles(millisecondsTimeout: GateTimeoutMilliseconds));
+            firstDispose.Start();
+            secondDispose.Start();
 
-                break;
+            var deadline = Environment.TickCount64 + PollWindowMilliseconds;
+            while (Environment.TickCount64 < deadline) {
+                if (firstCore.Disposed || secondCore.Disposed) {
+                    observedDisposeWhileMidStep = true;
+                    break;
+                }
+                Thread.Sleep(millisecondsTimeout: 5);
             }
-
-            Thread.Sleep(millisecondsTimeout: 5);
+        } finally {
+            // An assertion can fail after Submit but before the worker reaches its gate. Release it even then,
+            // or the enclosing link/host disposal waits forever and hides the original test failure.
+            groupCore!.Release();
         }
 
-        groupCore.Release();
-
-        var bothDisposed = (
-            firstDispose.Join(millisecondsTimeout: GateTimeoutMilliseconds) &&
-            secondDispose.Join(millisecondsTimeout: GateTimeoutMilliseconds)
-        );
+        var firstJoined = firstDispose.Join(millisecondsTimeout: GateTimeoutMilliseconds);
+        var secondJoined = secondDispose.Join(millisecondsTimeout: GateTimeoutMilliseconds);
+        var bothDisposed = firstJoined && secondJoined;
 
         Assert.True(
             condition: bothDisposed,
             userMessage: "disposing both members concurrently did not complete; a lost wait left one disposer stuck"
         );
+        // Worker-thread exceptions must become test failures rather than unhandled exceptions that kill xUnit.
+        Assert.Null(@object: firstFault);
+        Assert.Null(@object: secondFault);
         Assert.False(
             condition: observedDisposeWhileMidStep,
             userMessage: "a member's core was disposed while the group's execution thread was still inside the step it was already running"
@@ -149,7 +151,8 @@ public sealed class LinkedMachineGroupConcurrentDisposeTests {
 
         public long CycleCount => 0L;
         public ulong CyclesPerSecond => 1UL;
-        public bool Disposed { get; private set; }
+        private int m_disposed;
+        public bool Disposed => Volatile.Read(ref m_disposed) != 0;
         public ReadOnlySpan<uint> Framebuffer => m_framebuffer;
         public long NativeFrameIndex => 0L;
 
@@ -157,7 +160,7 @@ public sealed class LinkedMachineGroupConcurrentDisposeTests {
         public int CaptureState(ref byte[] buffer) => 0;
         public void ConfigureAudio(int sampleRate) { }
         public ITimeTravelLookahead<MachinePadState> CreateLookahead() => throw new NotSupportedException();
-        public void Dispose() => Disposed = true;
+        public void Dispose() => Interlocked.Exchange(ref m_disposed, 1);
         public int DrainAudioSamples(Span<short> destination) => 0;
         public void FlushSave(bool force) { }
         public void RestoreState(byte[] buffer, int length) { }

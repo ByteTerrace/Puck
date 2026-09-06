@@ -24,8 +24,11 @@ internal static class AuthoredGameFixtures {
 
     public static Puck.World.Server.WorldPopulation PopulationForIdentityChecks(WorldDefinition definition) {
         // Identity and seating depend on the full placement order, kits, and population policy. Navigation's
-        // expensive static collision probes are unrelated to these checks; no simulation tick is run here.
-        var population = new Puck.World.Server.WorldPopulation(definition with { NavigationRaw = null });
+        // large static collision grids are unrelated to these checks. Retain each named domain for kit
+        // compilation, with one cell; no simulation tick is run here.
+        var population = new Puck.World.Server.WorldPopulation(definition with {
+            NavigationRaw = new WorldNavigationSection([.. definition.Navigation.Rows.Select(domain => domain with { Width = 1, Depth = 1, Layers = 1 })]),
+        });
         population.ReconcileInhabitants(definition);
         return population;
     }

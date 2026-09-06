@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -17,10 +18,15 @@ namespace Puck.World;
 /// indistinguishable from a file-loaded one. A document leaving for a boundary that does not carry the state table
 /// itself runs <see cref="TryFlatten"/> instead, since a reference the receiver cannot answer is a dangling
 /// pointer.</para>
+/// <para>Traversal metadata is shared by runtime type. Branches whose sealed types cannot carry a bound value
+/// are omitted; document contents are always read afresh, including polymorphic and mutable collections.</para>
 /// </remarks>
 public static class WorldStateDocumentValues {
-    private static readonly Dictionary<Type, PropertyInfo[]> PropertyCache = [];
-    private static readonly Lock PropertyCacheLock = new();
+    private const int MaxShapeDepth = 64;
+    private static readonly ConcurrentDictionary<Type, PropertyInfo[]> PropertyCache = new();
+    private static readonly ConcurrentDictionary<Type, Traversal> TraversalCache = new();
+
+    private sealed record Traversal(bool Skip, PropertyInfo[] Properties);
 
     // What the one walk does when it reaches a bound value.
     private enum Walk {
@@ -58,22 +64,59 @@ public static class WorldStateDocumentValues {
         (type == typeof(DateTimeOffset)) ||
         (type == typeof(Guid)) ||
         (type == typeof(JsonElement)));
-    private static PropertyInfo[] Properties(Type type) {
-        lock (PropertyCacheLock) {
-            if (!PropertyCache.TryGetValue(
-                key: type,
-                value: out var properties
-            )) {
-                properties = [.. type.GetProperties(bindingAttr: BindingFlags.Instance | BindingFlags.Public)
-                    .Where(predicate: static property => ((property.CanRead && (property.GetIndexParameters().Length == 0)) && !IsDerived(property: property)))];
-                PropertyCache.Add(
-                    key: type,
-                    value: properties
-                );
+    private static PropertyInfo[] Properties(Type type) => PropertyCache.GetOrAdd(key: type, valueFactory: static type =>
+        [.. type.GetProperties(bindingAttr: BindingFlags.Instance | BindingFlags.Public)
+            .Where(predicate: static property => (property.CanRead && (property.GetIndexParameters().Length == 0) && !IsDerived(property: property)))]);
+
+    // Cache type shapes, never the contents of a document: mutable collections and value holders may acquire a
+    // reference between walks. A sealed property's shape can prove an entire literal branch irrelevant. Open
+    // types and recursive shapes stay conservative, since a subtype or a later link may contain a bound value.
+    private static bool CanContainValue(Type type, HashSet<Type> path, bool exactType = false) {
+        if (typeof(IDocumentStateValue).IsAssignableFrom(c: type)) {
+            return true;
+        }
+        if (IsLeaf(type: type)) {
+            return false;
+        }
+        if (!exactType && !type.IsSealed && !type.IsValueType) {
+            return true;
+        }
+        // Recursive generic properties can expand into a new closed type at every level, so type identity alone
+        // does not bound shape discovery. Beyond this depth keep walking actual values conservatively.
+        if ((path.Count >= MaxShapeDepth) || !path.Add(item: type)) {
+            return true;
+        }
+
+        try {
+            if (type.IsArray) {
+                return CanContainValue(type: type.GetElementType()!, path: path);
             }
-            return properties;
+            if (typeof(IEnumerable).IsAssignableFrom(c: type)) {
+                // These exact BCL implementations enumerate their declared element types through IEnumerable.
+                // An arbitrary generic enumerable may implement its non-generic enumeration differently.
+                if (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(List<>))) {
+                    return CanContainValue(type: type.GenericTypeArguments[0], path: path);
+                }
+                if (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(Dictionary<,>))) {
+                    return CanContainValue(type: type.GenericTypeArguments[0], path: path) ||
+                        CanContainValue(type: type.GenericTypeArguments[1], path: path);
+                }
+                return true;
+            }
+            return Properties(type: type).Any(predicate: property => CanContainValue(type: property.PropertyType, path: path));
+        } finally {
+            path.Remove(item: type);
         }
     }
+
+    private static Traversal Plan(Type type) => TraversalCache.GetOrAdd(key: type, valueFactory: static type => {
+        if (!CanContainValue(type: type, path: [], exactType: true)) {
+            return new Traversal(Skip: true, Properties: []);
+        }
+        return new Traversal(Skip: false, Properties: typeof(IEnumerable).IsAssignableFrom(c: type)
+            ? []
+            : [.. Properties(type: type).Where(predicate: static property => CanContainValue(type: property.PropertyType, path: []))]);
+    });
     private static bool TryVisit(object? value, string path, WorldDefinition definition, Walk walk, string? soughtRow, HashSet<object> seen, bool deferDrawSites, out bool found, out string reason) {
         found = false;
         reason = string.Empty;
@@ -165,7 +208,9 @@ public static class WorldStateDocumentValues {
 
         var type = value.GetType();
 
-        if (IsLeaf(type: type)) {
+        var traversal = Plan(type: type);
+
+        if (traversal.Skip) {
             return true;
         }
 
@@ -183,10 +228,10 @@ public static class WorldStateDocumentValues {
                 if (!TryVisit(
                     definition: definition,
                     found: out var itemFound,
-                    path: $"{path}[{index}]",
+                    path: walk == Walk.Find ? string.Empty : $"{path}[{index}]",
                     reason: out reason,
                     seen: seen,
-                deferDrawSites: deferDrawSites,
+                    deferDrawSites: deferDrawSites,
                     soughtRow: soughtRow,
                     value: item,
                     walk: walk
@@ -203,10 +248,14 @@ public static class WorldStateDocumentValues {
             return true;
         }
 
-        foreach (var property in Properties(type: type)) {
+        foreach (var property in traversal.Properties) {
+            var child = property.GetValue(obj: value);
+            if (child is null) {
+                continue;
+            }
             if (!TryVisit(
-                value: property.GetValue(obj: value),
-                path: $"{path}.{char.ToLowerInvariant(c: property.Name[0])}{property.Name[1..]}",
+                value: child,
+                path: walk == Walk.Find ? string.Empty : $"{path}.{char.ToLowerInvariant(c: property.Name[0])}{property.Name[1..]}",
                 definition: definition,
                 soughtRow: soughtRow,
                 seen: seen,

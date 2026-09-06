@@ -26,6 +26,11 @@ single-tier run therefore leaves every other record exactly as its own last run 
 never executed. The frontier carries a second gate on top of that one: it is **green-gated** as well, and advances only
 when every law the session ran passed.
 
+Artifact replacement remains atomic when another Windows process briefly holds a
+report open without delete sharing: the writer makes at most seven brief retries, then
+reports a persistent failure. Failed writes remove their sibling staging file;
+they never fall back to rewriting the live report in place.
+
 ## Tiers and how to run them
 
 Tier selection is fully declarative — no environment variables anywhere. The project binds

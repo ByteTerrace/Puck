@@ -87,9 +87,33 @@ internal static class ArtifactJson {
         // process id and a fresh guid keep concurrent writers from colliding on the staging name.
         var temporaryPath = $"{path}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
 
-        File.WriteAllText(contents: normalized, path: temporaryPath);
-        File.Move(destFileName: path, overwrite: true, sourceFileName: temporaryPath);
+        try {
+            File.WriteAllText(contents: normalized, path: temporaryPath);
+            WithSharingRetries(() => File.Move(destFileName: path, overwrite: true, sourceFileName: temporaryPath));
+        } finally {
+            // A failed replacement must not leave a staged artifact beside the source-controlled report.
+            WithSharingRetries(() => File.Delete(path: temporaryPath));
+        }
 
         return true;
+    }
+
+    // Windows readers which omit FileShare.Delete briefly prevent an otherwise authorized atomic rename.
+    // Retry only those native sharing/access errors, with seven brief waits; persistent permission failures still
+    // fail the run. The successful path never sleeps, and no fallback exposes a partially rewritten artifact.
+    private static void WithSharingRetries(Action operation) {
+        for (var attempt = 0; ; attempt++) {
+            try {
+                operation();
+                return;
+            } catch (Exception exception) when (
+                OperatingSystem.IsWindows() &&
+                (attempt < 7) &&
+                (exception is IOException or UnauthorizedAccessException) &&
+                ((exception.HResult & 0xFFFF) is 5 or 32 or 33)
+            ) {
+                Thread.Sleep(millisecondsTimeout: 25);
+            }
+        }
     }
 }

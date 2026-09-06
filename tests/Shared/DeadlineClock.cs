@@ -1,7 +1,7 @@
 using System.Threading.Channels;
 using Xunit;
 
-namespace Puck.Networking.Tests.Peers;
+namespace Puck.Testing;
 
 /// <summary>Exposes one-shot deadline timers to a test without waiting for wall time. Disposed handshake timers
 /// are ignored when a later send deadline is selected; the requested production duration is still checked.</summary>
@@ -15,11 +15,14 @@ internal sealed class DeadlineClock : TimeProvider {
         return timer;
     }
 
-    public async Task ExpireAsync(TimeSpan expected, CancellationToken cancellationToken) {
+    public void DiscardPendingTimers() { while (m_timers.Reader.TryRead(out _)) { } }
+
+    public async Task ExpireAsync(TimeSpan? expected, CancellationToken cancellationToken) {
         while (true) {
             var timer = await m_timers.Reader.ReadAsync(cancellationToken);
             if (timer.IsDisposed) { continue; }
-            Assert.Equal(expected, timer.DueTime);
+            if (expected is { } duration) { Assert.Equal(duration, timer.DueTime); }
+            Assert.True(timer.DueTime > TimeSpan.Zero);
             timer.Fire();
             return;
         }

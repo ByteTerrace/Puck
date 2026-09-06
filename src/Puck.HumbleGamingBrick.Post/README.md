@@ -15,6 +15,18 @@ The first command fills the local corpus cache from the archives pinned in
 is the developer loop and the pull-request gate. A plain run with no `--lane`
 measures every row.
 
+The xUnit gate launches the already-built battery directly from the test output
+directory and drains both output streams while it runs. Cancelling that test
+terminates and reaps the child process, so an interrupted run cannot leave an
+orphaned battery consuming CPU. A two-minute outer failure deadline also bounds
+a deadlocked self-contained stage; ordinary successful gate runs take seconds.
+
+The queued-memory probe preserves both full-frame replay schedules and all 400
+concurrent poke/peek round-trips. Its concurrency-only producer uses exact 480 Hz
+segments to avoid making every memory barrier wait behind full video frames.
+Both concurrent workers must start participating, and their faults are reported
+by the stage rather than escaping from a background thread.
+
 | Argument | Purpose |
 |---|---|
 | `--lane gate|frontier|all` | Which ledger rows to measure; see [Lanes](#lanes). Default `all`. |

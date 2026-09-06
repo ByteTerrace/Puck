@@ -137,14 +137,8 @@ public sealed class SearchLawTests {
 
         var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint);
         Assert.True(WorldAuthorityCheckpointCodec.TryDecode(bytes, out var decoded, out var decodeReason), decodeReason);
-        Assert.Equal(checkpoint.Search.Jobs[0], decoded!.Search!.Jobs[0] with {
-            Legal = checkpoint.Search.Jobs[0].Legal,
-            Counts = checkpoint.Search.Jobs[0].Counts,
-            Wide = checkpoint.Search.Jobs[0].Wide,
-        });
-        Assert.Equal(checkpoint.Search.Jobs[0].Legal, decoded.Search.Jobs[0].Legal);
-        Assert.Equal(checkpoint.Search.Jobs[0].Counts, decoded.Search.Jobs[0].Counts);
-        Assert.Equal(checkpoint.Search.Jobs[0].Wide, decoded.Search.Jobs[0].Wide);
+        // This live search carries stack and transposition-table arrays as well as the root move masks.
+        Assert.Equal(bytes, WorldAuthorityCheckpointCodec.Encode(decoded!));
     }
 
     // A hand-built, non-chess fixture: a 1x4 grid, two tokens ("a"/"b"), and a rule that accepts every relocation

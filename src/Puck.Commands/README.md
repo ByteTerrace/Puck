@@ -673,6 +673,11 @@ dotnet test tests/Puck.Commands.Tests
 
 Each file pins one area, so a failure names the contract that moved.
 
+Concurrent producer tests await worker failures on the test thread and perform
+one final drain after every producer finishes. A missing signal fails the
+exactly-once assertions immediately; it does not trigger a long empty drain loop.
+Their deadlines are failure bounds, with cancellation shared by the producers.
+
 - **Dispatch and text.** `CommandRegistryTests` covers the text-dispatch
   surface, the wire-native fast path, and its rejection wording;
   `CommandRegistryBoundaryTests` covers the per-entry exception boundary

@@ -99,6 +99,8 @@ public static class QueuedHostContractProbe {
 
         using var host = withContent();
         using var stop = new ManualResetEventSlim(initialState: false);
+        using var started = new ManualResetEventSlim(initialState: false);
+        var submitted = 0L;
         Exception? producerFault = null;
         var producer = new Thread(start: () => {
             try {
@@ -107,17 +109,25 @@ public static class QueuedHostContractProbe {
                         deltaTicks: budget,
                         input: in padState
                     ) == QueuedMachineSubmission.Rejected) {
-                        break;
+                        throw new InvalidOperationException(message: "the concurrent step producer was rejected by an assigned host");
+                    }
+                    if (Interlocked.Increment(location: ref submitted) == 1L) {
+                        started.Set();
                     }
                 }
             } catch (Exception exception) {
                 producerFault = exception;
+            } finally {
+                started.Set();
             }
         });
 
         producer.Start();
 
         try {
+            if (!started.Wait(timeout: OperationTimeout) || (Volatile.Read(location: ref submitted) == 0L)) {
+                return QueuedHostProbeResult.Fail(detail: $"the concurrent step producer never submitted work: {producerFault}");
+            }
             for (var hammer = 0; (hammer < hammers); ++hammer) {
                 var value = ((byte)(hammer & 0xFF));
 
@@ -371,25 +381,45 @@ public static class QueuedHostContractProbe {
 
         using (var hammered = withContent()) {
             using var stop = new ManualResetEventSlim(initialState: false);
+            using var started = new ManualResetEventSlim(initialState: false);
+            Exception? peekFault = null;
             var peekThread = new Thread(start: () => {
-                while (!stop.IsSet) {
-                    for (var address = 0; (address <= 0xFFFF); address += 0x40) {
-                        _ = hammered.PeekByte(address: address);
+                try {
+                    _ = hammered.PeekByte(address: 0);
+                    started.Set();
+                    while (!stop.IsSet) {
+                        for (var address = 0; (address <= 0xFFFF); address += 0x40) {
+                            _ = hammered.PeekByte(address: address);
+                        }
                     }
+                } catch (Exception exception) {
+                    peekFault = exception;
+                } finally {
+                    started.Set();
                 }
             });
 
             peekThread.Start();
 
-            for (var step = 0; (step < steps); ++step) {
-                _ = hammered.Step(
-                    deltaTicks: budget,
-                    input: in padState
-                );
+            try {
+                if (!started.Wait(timeout: OperationTimeout)) {
+                    return QueuedHostProbeResult.Fail(detail: "the concurrent peek worker never began reading");
+                }
+                for (var step = 0; (step < steps); ++step) {
+                    _ = hammered.Step(
+                        deltaTicks: budget,
+                        input: in padState
+                    );
+                }
+            } finally {
+                // A step failure must release the peek worker before the host and its queue are disposed.
+                stop.Set();
+                peekThread.Join();
             }
 
-            stop.Set();
-            peekThread.Join();
+            if (peekFault is not null) {
+                return QueuedHostProbeResult.Fail(detail: $"the concurrent peek worker faulted: {peekFault}");
+            }
             hammeredRegion = SnapshotRegion(
                 host: hammered,
                 length: regionLength,
@@ -999,7 +1029,10 @@ public static class QueuedHostContractProbe {
     /// identical ordered step/poke schedules reach a byte-identical image), cross-thread peek hammering leaves state
     /// replay-identical to an unhammered run (peek is side-effect-free even under concurrency), and, while a producer
     /// thread streams exact step segments, poke/peek round-trips to an address the streaming ROM never writes stay
-    /// coherent and never fault the queue. Only a host that advertises <see cref="IMachineMemoryPeek"/> runs this.</summary>
+    /// coherent and never fault the queue. The replay legs use full 60 Hz steps; the concurrent round-trips use
+    /// shorter 480 Hz steps so each memory barrier does not wait behind a queue of complete frames. Producer
+    /// participation is required before the first round-trip. Only a host that advertises
+    /// <see cref="IMachineMemoryPeek"/> runs this.</summary>
     /// <typeparam name="THost">The queued host under test.</typeparam>
     /// <param name="withContent">Builds a fresh assigned host (with the core's synthetic content).</param>
     /// <param name="scratchAddress">A writable bus address the synthetic content's ROM never writes, used for the
@@ -1080,8 +1113,10 @@ public static class QueuedHostContractProbe {
         }
 
         // Check 3 — concurrent poke/peek coherence and fault-freedom while a producer thread streams exact step segments.
+        // Memory marshaling needs running core work, not a complete video frame before every memory request.
+        // Keep all 400 round-trips; the two replay legs above still exercise their full frame schedules.
         var stress = VerifyConcurrentPokeStress(
-            budget: budget,
+            budget: EngineTicks.PerRate(ratePerSecond: 480),
             hammers: Hammers,
             input: in input,
             scratchAddress: scratchAddress,

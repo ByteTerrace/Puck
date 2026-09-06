@@ -22,11 +22,8 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <!-- Puck.World (the composition root — client, presentation, the eight shipped worlds' RUNTIME asset
-             pipeline) is deliberately NOT referenced: it is the greenfield game, out of scope per
-             tests/Puck.World.Tests/README.md. This project's base document is COMPILER-MAINTAINED
-             (Fixtures.BuildDocument constructs a WorldDefinition directly in code) rather than read from any
-             shipped world file — no src/Puck.World/Assets path is read here at all. -->
+        <!-- Reference the engine seams directly. Authored-game fixtures read JSON modules without bringing
+             the presentation composition root into the test executable. -->
         <ProjectReference Include="..\..\src\Puck.Networking\Puck.Networking.csproj" />
         <!-- The Schema-to-presentation capacity seam: Puck.World.Client's bridge derives Puck.Overlays' capacity from
              Schema's ceilings, and the lease table it builds must fit the overlay's backstops — a property neither
@@ -46,5 +43,8 @@
     <ItemGroup>
         <!-- Allocation laws measure optimized code directly; JIT promotion must not require thousands of warmup ticks. -->
         <RuntimeHostConfigurationOption Include="System.Runtime.TieredCompilation" Value="false" />
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="..\Shared\DeadlineClock.cs" Link="DeadlineClock.cs" />
     </ItemGroup>
 </Project>

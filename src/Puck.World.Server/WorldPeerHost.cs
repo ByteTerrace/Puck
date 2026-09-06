@@ -61,6 +61,7 @@ public sealed class WorldPeerHost : IDisposable {
     /// bounding the worst case to a small, fixed number of seconds rather than never.</summary>
     private static readonly TimeSpan HandshakeDeadline = TimeSpan.FromSeconds(value: 10);
 
+    private readonly TimeProvider m_timeProvider;
     private readonly IAuthenticator m_authenticator;
     private readonly WorldServer m_server;
 
@@ -84,16 +85,20 @@ public sealed class WorldPeerHost : IDisposable {
 
     /// <summary>Initializes a new instance of the <see cref="WorldPeerHost"/> class over the server it admits into.</summary>
     /// <param name="server">The authoritative server.</param>
-    public WorldPeerHost(WorldServer server) : this(
+    /// <param name="timeProvider">The admission deadline clock; defaults to system time.</param>
+    public WorldPeerHost(WorldServer server, TimeProvider? timeProvider = null) : this(
         server: server,
-        authenticator: new WorldAttestedAuthenticator()
+        authenticator: new WorldAttestedAuthenticator(),
+        timeProvider: timeProvider
     ) { }
     /// <summary>Initializes a host with an explicit federation authentication policy.</summary>
     /// <param name="server">The authoritative server.</param>
     /// <param name="authenticator">The process-scoped federation authenticator; an unconfigured instance denies federation.</param>
     /// <param name="network">The externally owned shared peer network, or null to own an ephemeral one.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="server"/> is <see langword="null"/>.</exception>
-    public WorldPeerHost(WorldServer server, IAuthenticator authenticator, WorldPeerNetwork? network = null) {
+    /// <param name="timeProvider">The admission deadline clock; defaults to system time.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="server"/> or <paramref name="authenticator"/> is <see langword="null"/>.</exception>
+    public WorldPeerHost(WorldServer server, IAuthenticator authenticator, WorldPeerNetwork? network = null, TimeProvider? timeProvider = null) {
+        m_timeProvider = timeProvider ?? TimeProvider.System;
         ArgumentNullException.ThrowIfNull(argument: server);
         ArgumentNullException.ThrowIfNull(argument: authenticator);
 
@@ -314,9 +319,8 @@ public sealed class WorldPeerHost : IDisposable {
         var handshakeSlotHeld = true;
 
         // The wall-clock deadline, linked to the accept loop's own cancellation so shutdown still wins.
-        using var deadlineCts = CancellationTokenSource.CreateLinkedTokenSource(token: ct);
-
-        deadlineCts.CancelAfter(delay: HandshakeDeadline);
+        using var timer = new CancellationTokenSource(HandshakeDeadline, m_timeProvider);
+        using var deadlineCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timer.Token);
 
         var handshakeCt = deadlineCts.Token;
 
@@ -1489,6 +1493,9 @@ public sealed class WorldPeerHost : IDisposable {
 
         m_cts?.Dispose();
     }
+    /// <summary>Gets the queued tick-thread work count, including admission waiting for a paused host to drain.</summary>
+    public int PendingWorkCount => m_pending.Count;
+
     /// <summary>Drains every tick-thread work item enqueued by a connection since the last drain — admissions,
     /// submissions, and disconnects alike. MUST run on the tick thread, before <c>WorldServer.Step</c>, so it never
     /// races the single-threaded server/population/grant state.</summary>

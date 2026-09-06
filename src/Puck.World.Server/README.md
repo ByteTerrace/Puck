@@ -827,6 +827,15 @@ does not guarantee that immediate connection disposal preserves the final refusa
 the drain gives the reader time to consume it. An unadmitted connection retains
 its handshake slot during this wait.
 
+For the authenticated peer stream, this drain waits for the link to close, even
+if the peer already ended its sending direction. A half-close after a truncated
+identity frame must still leave the receiving direction open for its named refusal.
+
+The host accepts an optional `TimeProvider` for its admission deadline; production
+uses `TimeProvider.System`. Tests advance that clock after observing the actual
+challenge or queued admission, so timeout coverage does not wait ten wall-clock
+seconds. `PendingWorkCount` reports queued work awaiting the tick-thread drain.
+
 World admission remains an application policy, separate from proving possession
 of a peer key. After the networking handshake, two World checks run off the tick thread before any body is
 admitted — neither touches server state beyond a read-only document snapshot:

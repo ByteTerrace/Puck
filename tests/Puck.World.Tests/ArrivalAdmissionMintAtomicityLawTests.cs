@@ -29,7 +29,7 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
     private static readonly TimeSpan DrainHold = TimeSpan.FromMilliseconds(value: 250);
 
     [Fact]
-    public void AConcurrentCommitPublishesNoTravelerBeforeItsVerdictGrantsAreInstalled() {
+    public async Task AConcurrentCommitPublishesNoTravelerBeforeItsVerdictGrantsAreInstalled() {
         using var fixture = Fixtures.FreshServer(definition: TransferPopulationDocument());
         var reservation = fixture.Server.ReserveTransfer(request: ArrivalReservation());
 
@@ -52,7 +52,9 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
 
         // The socket-worker role: an authenticated authority's commit, which runs under the authority gate and never
         // waits for this host's next tick.
-        var committer = new Thread(start: () => {
+        // A task captures even a cleanup fault if the test times out and releases its events. An unhandled
+        // exception on a raw background thread would terminate the entire test process instead of naming a law.
+        var committer = Task.Factory.StartNew(action: () => {
             try {
                 Assert.True(condition: drainOpen.Wait(timeout: DrainOpenBudget), userMessage: "the ordered-domain drain never opened");
 
@@ -70,12 +72,7 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
             } finally {
                 committerDone.Set();
             }
-        }) {
-            IsBackground = true,
-            Name = "arrival-commit",
-        };
-
-        committer.Start();
+        }, cancellationToken: CancellationToken.None, creationOptions: TaskCreationOptions.LongRunning, scheduler: TaskScheduler.Default);
 
         // The tick-thread role: one ordinary submission whose completion runs inside the ordered drain, holding it
         // open across the committer's whole operation.
@@ -93,7 +90,7 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
             });
 
         Assert.True(condition: committerDone.Wait(timeout: DrainOpenBudget, cancellationToken: TestContext.Current.CancellationToken), userMessage: "the committing authority never finished");
-        committer.Join();
+        await committer.WaitAsync(timeout: DrainOpenBudget, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Null(@object: committerFault);
         Assert.True(condition: accepted, userMessage: commitReason);

@@ -25,8 +25,7 @@ namespace Puck.World.Tests;
 /// parse of a JSON fixture nobody is watching — the whole point of the shape.
 /// </summary>
 internal static class Fixtures {
-    /// <summary>The repository's fixed simulation rate (CLAUDE.md, the puck-world skill: "the fixed simulation rate
-    /// is 240 Hz").</summary>
+    /// <summary>The default fixture simulation rate; individual documents may author another rate.</summary>
     private const uint SimulationRateHz = 240U;
 
     /// <summary>The engine screen-surface index the code-built test-pattern screen occupies — the ENGAGE target

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 
 using Xunit;
 
@@ -137,7 +136,7 @@ public sealed class TextCommandSourceTests {
         Assert.Equal(actual: submitted, expected: ["sim.defer payload", "probe after"]);
     }
     [Fact]
-    public void BackgroundProducersEnqueueWhileTheFrameThreadCollects() {
+    public async Task BackgroundProducersEnqueueWhileTheFrameThreadCollects() {
         const int LinesPerProducer = 250;
         const int Producers = 4;
 
@@ -158,31 +157,32 @@ public sealed class TextCommandSourceTests {
             );
         }
 
-        var threads = new Thread[Producers];
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        var producers = new Task[Producers];
 
         for (var producer = 0; (producer < Producers); producer++) {
             var index = producer;
 
-            threads[producer] = new Thread(start: () => {
+            producers[producer] = Task.Factory.StartNew(action: () => {
                 for (var line = 0; (line < LinesPerProducer); line++) {
+                    deadline.Token.ThrowIfCancellationRequested();
                     sessions[index].Enqueue(line: $"probe {index} {line}");
                 }
-            });
-            threads[producer].Start();
+            }, cancellationToken: CancellationToken.None, creationOptions: TaskCreationOptions.LongRunning, scheduler: TaskScheduler.Default);
         }
 
-        var deadline = Stopwatch.StartNew();
-
-        while (collected.Sum(selector: static lines => lines.Count) < (Producers * LinesPerProducer)) {
-            Assert.True(condition: (deadline.Elapsed < TimeSpan.FromSeconds(value: 30)), userMessage: "the drain did not keep up with its producers");
+        try {
+            while (!producers.All(static producer => producer.IsCompleted)) {
+                deadline.Token.ThrowIfCancellationRequested();
+                source.Collect();
+                Thread.Yield();
+            }
+            await Task.WhenAll(producers).WaitAsync(deadline.Token);
             source.Collect();
+        } finally {
+            deadline.Cancel();
         }
-
-        foreach (var thread in threads) {
-            thread.Join();
-        }
-
-        source.Collect();
 
         for (var producer = 0; (producer < Producers); producer++) {
             // Exactly once, and in the order that producer wrote them: a session's queue is its own FIFO, and the

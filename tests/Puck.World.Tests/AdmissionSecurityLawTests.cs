@@ -1,3 +1,4 @@
+using Puck.Testing;
 using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
@@ -74,11 +75,10 @@ public sealed class AdmissionSecurityLawTests {
     /// frame entirely must be closed by the server's OWN handshake deadline — never held open indefinitely. The
     /// control, run first against the SAME host, is an ordinary connection that completes the whole handshake
     /// promptly and is admitted — proving the deadline machinery does not interfere with a legitimate peer. The
-    /// deadline's exact value is a private implementation constant (<c>WorldPeerHost.HandshakeDeadline</c>, 10s at
-    /// the time of writing); this law waits generously past it (20s) rather than pinning the number, per this
-    /// suite's own red-line against asserting internal structure.</summary>
+    /// deadline uses a controlled timer, so the law observes expiry without waiting through the production timeout.</summary>
     [Fact]
     public async Task StalledPreAdmissionHandshake_ClosesAfterDeadline_ControlPromptHandshakeAdmits() {
+        var clock = new DeadlineClock();
         var identity = GenerateIdentity(subject: "deadline-peer");
 
         try {
@@ -86,7 +86,7 @@ public sealed class AdmissionSecurityLawTests {
             var document = BuildAdmissionDocument(entry: entry);
 
             using var fixture = Fixtures.FreshServer(definition: document);
-            using var host = new WorldPeerHost(server: fixture.Server);
+            using var host = new WorldPeerHost(server: fixture.Server, timeProvider: clock);
 
             host.Start(listen: "127.0.0.1:0");
 
@@ -120,11 +120,12 @@ public sealed class AdmissionSecurityLawTests {
                 Assert.NotNull(@object: challenge);
                 Assert.Equal(expected: WorldPeerWireFormat.DownstreamKind.HelloChallenge, actual: challenge!.Value.Kind);
 
+                await clock.ExpireAsync(TimeSpan.FromSeconds(10), testCt);
                 var closed = false;
                 var probe = new byte[1];
 
                 try {
-                    // Longer than WorldPeerHost.HandshakeDeadline: this read is waiting for that deadline to fire.
+                    // Runner cancellation only bounds a broken close path; the admission clock was explicitly expired.
                     using var waitCts = Laws.SocketDeadline();
 
                     var read = await stallingStream.ReadAsync(buffer: probe, cancellationToken: waitCts.Token);
@@ -138,7 +139,7 @@ public sealed class AdmissionSecurityLawTests {
                     closed = false;
                 }
 
-                Assert.True(condition: closed, userMessage: "a connection that never sent its identity frame was expected to be closed by the handshake deadline within 20s, but it was still open");
+                Assert.True(condition: closed, userMessage: "a connection that never sent its identity frame was expected to be closed by the handshake deadline when its deadline expired, but it was still open");
             } finally {
                 pumpCts.Cancel();
                 await pumpTask;
@@ -152,18 +153,19 @@ public sealed class AdmissionSecurityLawTests {
     /// later drain must skip the orphaned work rather than admitting a body with no socket.</summary>
     [Fact]
     public async Task VerifiedIdentityQueuedWithoutTickDrain_ExpiresAndCannotAdmitLater() {
+        var clock = new DeadlineClock();
         var identity = GenerateIdentity(subject: "queued-deadline-peer");
 
         try {
             var document = BuildAdmissionDocument(entry: BuildEntry(grants: [], identity: identity));
 
             using var fixture = Fixtures.FreshServer(definition: document);
-            using var host = new WorldPeerHost(server: fixture.Server);
+            using var host = new WorldPeerHost(server: fixture.Server, timeProvider: clock);
 
             host.Start(listen: "127.0.0.1:0");
 
             using var client = new PeerTestClient();
-            // Longer than WorldPeerHost.HandshakeDeadline: the close this law waits for is that deadline firing.
+            // Runner cancellation bounds failure; the admission clock is controlled separately.
             using var testCts = Laws.SocketDeadline();
             var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
 
@@ -180,7 +182,9 @@ public sealed class AdmissionSecurityLawTests {
 
             await WriteIdentityResponseAsync(stream: stream, identity: identity, challenge: challenge.Body, ct: testCts.Token);
 
-            // No DrainPending call occurs before this read. The queue hop itself must therefore expire and close.
+            // Wait for verified admission to reach the queue, then expire its own clock without draining.
+            while (host.PendingWorkCount == 0) { await Task.Delay(1, testCts.Token); }
+            await clock.ExpireAsync(TimeSpan.FromSeconds(10), testCts.Token);
             var closed = await WaitForCloseAsync(stream: stream, ct: testCts.Token);
 
             Assert.True(condition: closed, userMessage: "a fully verified identity remained connected indefinitely while tick-thread admission was not draining");

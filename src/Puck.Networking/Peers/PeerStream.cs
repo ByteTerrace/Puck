@@ -113,6 +113,20 @@ public sealed class PeerStream : Stream {
         } finally { m_writeGate.Release(); }
     }
 
+    // Terminal cleanup owns the event reader just like ReadAsync. An authenticated empty message only ends the
+    // remote's sending direction; it says nothing about whether that peer has received our final reply. Discard
+    // events until the LINK closes (or the caller's deadline expires), including after a previously read EOF.
+    internal async Task DrainUntilClosedAsync(CancellationToken ct) {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref m_disposed) != 0, this);
+        m_pending = default;
+        m_readCompleted = true;
+        while (!ct.IsCancellationRequested && await m_link.Events.WaitToReadAsync(ct).ConfigureAwait(false)) {
+            while (!ct.IsCancellationRequested && m_link.Events.TryRead(out var next)) {
+                if (next is PeerEvent.Closed) { return; }
+            }
+        }
+    }
+
     /// <inheritdoc/>
     public override async ValueTask DisposeAsync() {
         if (Interlocked.Exchange(ref m_disposed, 1) == 0) {

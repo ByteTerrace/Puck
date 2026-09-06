@@ -12,25 +12,27 @@ public sealed class InputRouterConcurrencyTests {
     private const string ProbeCommand = "test.probe";
 
     [Fact]
-    public void EveryConcurrentlyCapturedSignalIsSnapshotOnceInItsProducersOrder() {
+    public async Task EveryConcurrentlyCapturedSignalIsSnapshotOnceInItsProducersOrder() {
         const int perProducer = 250;
         const int producerCount = 4;
-        const ulong tickCeiling = 1_000_000UL;
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
 
         var router = new InputRouter(
             registry: new CommandRegistry(modules: [new ProbeModule()]),
             bindings: new AnySourceBindings(),
             principalResolver: new ConsolePrincipal()
         );
-        var start = new Barrier(participantCount: (producerCount + 1));
-        var producers = new Thread[producerCount];
+        using var start = new Barrier(participantCount: (producerCount + 1));
+        var producers = new Task[producerCount];
 
         for (var producerIndex = 0; (producerIndex < producerCount); producerIndex++) {
             var producer = producerIndex;
-            var thread = new Thread(start: () => {
-                start.SignalAndWait();
+            producers[producer] = Task.Factory.StartNew(action: () => {
+                start.SignalAndWait(cancellationToken: deadline.Token);
 
                 for (var index = 0; (index < perProducer); index++) {
+                    deadline.Token.ThrowIfCancellationRequested();
                     // A TEXT signal folds into exactly one entry and leaves no held state behind, so the lane carries
                     // the capture stream itself rather than a re-assertion of it.
                     router.Capture(signal: InputSignal.Typed(
@@ -38,37 +40,33 @@ public sealed class InputRouterConcurrencyTests {
                         text: "x"
                     ));
                 }
-            }) {
-                IsBackground = true,
-            };
-
-            producers[producer] = thread;
-            thread.Start();
+            }, cancellationToken: CancellationToken.None, creationOptions: TaskCreationOptions.LongRunning, scheduler: TaskScheduler.Default);
         }
 
         var expected = (producerCount * perProducer);
         var observed = new List<string>(capacity: expected);
         var tick = 0UL;
 
-        start.SignalAndWait(cancellationToken: TestContext.Current.CancellationToken);
-
-        while (observed.Count < expected) {
-            tick++;
-
-            Assert.True(
-                condition: (tick < tickCeiling),
-                userMessage: $"The pump produced {tickCeiling} snapshots and saw only {observed.Count} of {expected} captured signals."
-            );
-
-            foreach (var lane in router.SnapshotForTick(tick: tick, windowEndTick: ulong.MaxValue).Lanes) {
+        void Drain() {
+            foreach (var lane in router.SnapshotForTick(tick: ++tick, windowEndTick: ulong.MaxValue).Lanes) {
                 foreach (var entry in lane.Entries) {
                     observed.Add(item: entry.Source!);
                 }
             }
         }
-
-        foreach (var thread in producers) {
-            thread.Join();
+        try {
+            start.SignalAndWait(cancellationToken: deadline.Token);
+            while (!producers.All(static producer => producer.IsCompleted)) {
+                deadline.Token.ThrowIfCancellationRequested();
+                Drain();
+                Thread.Yield();
+            }
+            // Await faults on the test thread. Once every producer has finished, one final drain must contain
+            // all remaining signals; missing data should fail immediately, not spin through a million ticks.
+            await Task.WhenAll(producers).WaitAsync(deadline.Token);
+            Drain();
+        } finally {
+            deadline.Cancel();
         }
 
         Assert.Equal(actual: observed.Count, expected: expected);
