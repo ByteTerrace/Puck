@@ -94,7 +94,9 @@ public sealed partial class WorldServer {
                 handler: $"body:{sourceIndex} {designation.Register}=at:{((double)point.X):0.###},{((double)point.Y):0.###},{((double)point.Z):0.###}"
             );
 
-            Console.Error.WriteLine(value: $"[world.designation: {pointMessage}]");
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: "world.designation", text: $"[world.designation: {pointMessage}]");
+            }
             EchoTap?.Invoke(obj: new WorldEditEcho(
                 Message: pointMessage,
                 Rejected: false,
@@ -173,7 +175,9 @@ public sealed partial class WorldServer {
         );
         var message = $"body:{sourceIndex} {designation.Register}={targetSubject.Describe()}";
 
-        Console.Error.WriteLine(value: $"[world.designation: {message}]");
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(channel: "world.designation", text: $"[world.designation: {message}]");
+        }
         EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: message,
             Rejected: false,
@@ -188,7 +192,9 @@ public sealed partial class WorldServer {
                 bodyIndex: sourceIndex,
                 reason: reason
             );
-            Console.Error.WriteLine(value: $"[world.designation refused: {reason}]");
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: "world.designation refused", text: $"[world.designation refused: {reason}]");
+            }
             EchoTap?.Invoke(obj: new WorldEditEcho(
                 Message: reason,
                 Rejected: true,
@@ -436,7 +442,9 @@ public sealed partial class WorldServer {
         ) {
             var denial = $"{m_journal.Count} unsaved mutation(s) would be discarded — world.save first, world.reset to discard them without loading a new document, or world.load {request.PathHint} force to discard them and load anyway";
 
-            Console.Error.WriteLine(value: $"[world.load rejected: {denial}]");
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: "world.load rejected", text: $"[world.load rejected: {denial}]");
+            }
             EchoTap?.Invoke(obj: new WorldEditEcho(
                 Message: $"{verb} rejected: {denial}",
                 Rejected: true,
@@ -717,7 +725,9 @@ public sealed partial class WorldServer {
 
         var message = $"{verb} applied — base is {origin}, journal cleared";
 
-        Console.Error.WriteLine(value: $"[world.definition: {message}]");
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(channel: "world.definition", text: $"[world.definition: {message}]");
+        }
         EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: message,
             Rejected: false,
@@ -810,7 +820,9 @@ public sealed partial class WorldServer {
     // reporting a DIFFERENT verb's authority denial (Mutation, Rebuild) names that verb's own kind instead, so the
     // echo still routes to the operation the caller actually attempted.
     private void DenyGrantTable(string denial, int connectionId, long correlationId, WorldEditEchoKind echoKind = WorldEditEchoKind.GrantTable) {
-        Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(channel: "world.grant denied", text: $"[world.grant denied: {denial}]");
+        }
         EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: denial,
             Rejected: true,
@@ -824,7 +836,22 @@ public sealed partial class WorldServer {
     // assignment, motion, producer, seat kit, spawns) recompile the population's fixed tables and live bodies; the
     // scene/screens rebuild on the client through the delivered definition, and cameras/render/population defaults are
     // document-only.
+    // What the tick has installed and not yet delivered: a shape change carries the definition, a value change
+    // carries state; the step delivers whichever is pending, once, through DeliverPending.
+    private bool m_pendingDefinitionDelivery;
+    private bool m_pendingStateDelivery;
+    private void DeliverPending() {
+        if (m_pendingDefinitionDelivery) {
+            m_output.DeliverDefinition(definition: m_definition);
+        } else if (m_pendingStateDelivery) {
+            m_output.DeliverState(definition: m_definition);
+        }
+
+        m_pendingDefinitionDelivery = false;
+        m_pendingStateDelivery = false;
+    }
     private void Install(WorldDefinition definition, bool rebuildPopulation, WorldRuleCompilation? compilation = null) {
+        m_pendingDefinitionDelivery = true;
         m_definition = definition;
         m_inputHold.Reconfigure(settings: definition.CompiledInputHold);
         definition = RecompileRules(definition: definition, compilation: compilation);
@@ -896,6 +923,7 @@ public sealed partial class WorldServer {
     // drive-gate rescan runs only when a touched row gates drive.
     private void InstallRuntimeStateValue(WorldDefinition definition, WorldMutation mutation) {
         m_definition = definition;
+        m_pendingStateDelivery = true;
 
         if (TouchesDriveGate(definition: definition, mutation: mutation)) {
             m_grants.SyncState(definition: definition);
@@ -1000,7 +1028,9 @@ public sealed partial class WorldServer {
         }
     }
     private void Reject(WorldMutation mutation, string reason, int connectionId, long correlationId) {
-        Console.Error.WriteLine(value: $"[world.mutation rejected: {Describe(mutation: mutation)} — {reason}]");
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(channel: "world.mutation rejected", text: $"[world.mutation rejected: {Describe(mutation: mutation)} — {reason}]");
+        }
         EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: $"{Describe(mutation: mutation)} rejected: {reason}",
             Rejected: true,
@@ -1013,7 +1043,9 @@ public sealed partial class WorldServer {
     // A refused whole-document rebuild: loud, and echoed so the same tap that counts a refused mutation counts this
     // too.
     private void RejectRebuild(string verb, string reason, int connectionId, long correlationId) {
-        Console.Error.WriteLine(value: $"[world.definition rejected: {verb} — {reason}]");
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(channel: "world.definition rejected", text: $"[world.definition rejected: {verb} — {reason}]");
+        }
         EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: $"{verb} rejected: {reason}",
             Rejected: true,
@@ -1089,7 +1121,9 @@ public sealed partial class WorldServer {
         if (!TryAdmitCompleteMutation(mutation, preMetered, out var admission)) {
             var denial = admission.Describe();
 
-            Console.Error.WriteLine(value: $"[world.grant denied: {mutation.Principal.Describe()} {denial} — {Describe(mutation: mutation)} dropped]");
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: "world.grant denied", text: $"[world.grant denied: {mutation.Principal.Describe()} {denial} — {Describe(mutation: mutation)} dropped]");
+            }
             EchoTap?.Invoke(obj: new WorldEditEcho(
                 Message: $"{Describe(mutation: mutation)} denied: {denial}",
                 Rejected: true,
@@ -1413,7 +1447,9 @@ public sealed partial class WorldServer {
             message = $"{message} (evicted '{evicted}')";
         }
 
-        Console.Error.WriteLine(value: $"[world.mutation: {message}]");
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(channel: "world.mutation", text: $"[world.mutation: {message}]");
+        }
         EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: message,
             Rejected: false,
@@ -1454,7 +1490,9 @@ public sealed partial class WorldServer {
         )) {
             var denial = $"{principal.Describe()} lacks Control over screen {deniedIndex} — {verb} dropped";
 
-            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: "world.grant denied", text: $"[world.grant denied: {denial}]");
+            }
             EchoTap?.Invoke(obj: new WorldEditEcho(
                 Message: denial,
                 Rejected: true,
@@ -1513,7 +1551,9 @@ public sealed partial class WorldServer {
         ),
         };
 
-        Console.Error.WriteLine(value: $"[{verb}: {message}]");
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(channel: "{verb}", text: $"[{verb}: {message}]");
+        }
         EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: message,
             Rejected: !ok,
@@ -1608,7 +1648,9 @@ public sealed partial class WorldServer {
                     target: compose.Target,
                     reason: out var reason
                 )) {
-                    Console.Error.WriteLine(value: $"[world.engage denied: {reason}]");
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(channel: "world.engage denied", text: $"[world.engage denied: {reason}]");
+                    }
 
                     return;
                 }
@@ -1657,7 +1699,9 @@ public sealed partial class WorldServer {
                 verb: "drive"
             );
 
-            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: "world.grant denied", text: $"[world.grant denied: {denial}]");
+            }
             EchoTap?.Invoke(obj: new WorldEditEcho(
                 Message: denial,
                 Rejected: true,
@@ -1705,7 +1749,9 @@ public sealed partial class WorldServer {
                 if (!body.IsRigid) {
                     var notRigidDenial = $"body:{command.EntityIndex} carries no rigid kit facet";
 
-                    Console.Error.WriteLine(value: $"[body.impulse denied: {notRigidDenial}]");
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(channel: "body.impulse denied", text: $"[body.impulse denied: {notRigidDenial}]");
+                    }
                     NoteDriveRefusalIfTracked(
                         command: command,
                         reason: notRigidDenial
@@ -1725,7 +1771,9 @@ public sealed partial class WorldServer {
                 ) {
                     var overflowDenial = $"body:{command.EntityIndex} impulse is not representable or would exceed the world's declared speed ceiling ({(double)m_population.RigidVelocityCeiling:0.###})";
 
-                    Console.Error.WriteLine(value: $"[body.impulse denied: {overflowDenial}]");
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(channel: "body.impulse denied", text: $"[body.impulse denied: {overflowDenial}]");
+                    }
                     NoteDriveRefusalIfTracked(
                         command: command,
                         reason: overflowDenial
@@ -1739,7 +1787,9 @@ public sealed partial class WorldServer {
                     targetIndex: carry.TargetIndex,
                     reason: out var carryDenial
                 )) {
-                    Console.Error.WriteLine(value: $"[body.carry denied: body:{command.EntityIndex} {carryDenial}]");
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(channel: "body.carry denied", text: $"[body.carry denied: body:{command.EntityIndex} {carryDenial}]");
+                    }
                     NoteDriveRefusalIfTracked(
                         command: command,
                         reason: carryDenial
@@ -1752,7 +1802,9 @@ public sealed partial class WorldServer {
                     carrierIndex: command.EntityIndex,
                     reason: out var releaseDenial
                 )) {
-                    Console.Error.WriteLine(value: $"[body.release denied: body:{command.EntityIndex} {releaseDenial}]");
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(channel: "body.release denied", text: $"[body.release denied: body:{command.EntityIndex} {releaseDenial}]");
+                    }
                     NoteDriveRefusalIfTracked(
                         command: command,
                         reason: releaseDenial
@@ -1817,7 +1869,9 @@ public sealed partial class WorldServer {
                         bodyIndex: motion.EntityIndex,
                         reason: reason
                     );
-                    Console.Error.WriteLine(value: $"[body.motion refused: {reason}]");
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(channel: "body.motion refused", text: $"[body.motion refused: {reason}]");
+                    }
                     EchoTap?.Invoke(obj: new WorldEditEcho(
                         Message: reason,
                         Rejected: true,
@@ -1834,7 +1888,9 @@ public sealed partial class WorldServer {
                         bodyIndex: motion.EntityIndex,
                         reason: coherenceReason
                     );
-                    Console.Error.WriteLine(value: $"[body.motion refused: {coherenceReason}]");
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(channel: "body.motion refused", text: $"[body.motion refused: {coherenceReason}]");
+                    }
                     EchoTap?.Invoke(obj: new WorldEditEcho(
                         Message: coherenceReason,
                         Rejected: true,
@@ -1866,7 +1922,9 @@ public sealed partial class WorldServer {
                 )) {
                     body.SetIntentSource(source: control.Source);
                 } else {
-                    Console.Error.WriteLine(value: $"[body.control refused: {sourceRefusal}]");
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(channel: "body.control refused", text: $"[body.control refused: {sourceRefusal}]");
+                    }
                 }
 
                 break;
@@ -1877,7 +1935,9 @@ public sealed partial class WorldServer {
                     yawRadians: reconcile.YawRadians,
                     seconds: reconcile.Seconds
                 );
-                Console.Error.WriteLine(value: $"[body.reconcile: body:{reconcile.EntityIndex} continuity={continuity.ToString().ToLowerInvariant()} maxSmoothError={m_definition.Motion.MaxSmoothError:0.###}]");
+                if (m_output.HasNarrationSink) {
+                    m_output.Narrate(channel: "body.reconcile", text: $"[body.reconcile: body:{reconcile.EntityIndex} continuity={continuity.ToString().ToLowerInvariant()} maxSmoothError={m_definition.Motion.MaxSmoothError:0.###}]");
+                }
 
                 break;
             case WorldCommand.Stop:
@@ -1892,7 +1952,9 @@ public sealed partial class WorldServer {
                 break;
             case WorldCommand.LoadDurableState load:
                 if (load.Tick != NextInputTick) {
-                    Console.Error.WriteLine(value: $"[body.state-load refused: tick {load.Tick} is not next tick {NextInputTick}]");
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(channel: "body.state-load refused", text: $"[body.state-load refused: tick {load.Tick} is not next tick {NextInputTick}]");
+                    }
                 } else if (!body.TryStageDurableState(
                     tick: load.Tick,
                     values: load.Values,
@@ -1900,7 +1962,9 @@ public sealed partial class WorldServer {
                     writer: load.Principal.Describe(),
                     reason: out var stateReason
                 )) {
-                    Console.Error.WriteLine(value: $"[body.state-load refused: {stateReason}]");
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(channel: "body.state-load refused", text: $"[body.state-load refused: {stateReason}]");
+                    }
                 }
 
                 break;
@@ -1931,7 +1995,9 @@ public sealed partial class WorldServer {
                 verb: "control"
             );
 
-            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: "world.grant denied", text: $"[world.grant denied: {denial}]");
+            }
             EchoTap?.Invoke(obj: new WorldEditEcho(
                 Message: denial,
                 Rejected: true,
@@ -2082,7 +2148,9 @@ public sealed partial class WorldServer {
                 sink.DeliverSnapshot(snapshot: in redacted);
             }
         } catch (Exception exception) {
-            Console.Error.WriteLine(value: $"[world.output: {sink.GetType().Name} threw during its own attach primer — detached] {exception}");
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: "world.output", text: $"[world.output: {sink.GetType().Name} threw during its own attach primer — detached] {exception}");
+            }
             lease.Dispose();
         }
 

@@ -150,7 +150,7 @@ public sealed partial class WorldServer {
         }
 
         if (applied) {
-            m_output.DeliverDefinition(definition: m_definition);
+            DeliverPending();
         }
 
         return applied;
@@ -403,7 +403,7 @@ public sealed partial class WorldServer {
         m_ruleFrameActive = false;
 
         if (applied) {
-            m_output.DeliverDefinition(definition: m_definition);
+            DeliverPending();
         }
     }
     // The effect arms only the world can fire, on the evaluator's terms. A non-mutating arm (cue, body, field, save,
@@ -479,7 +479,9 @@ public sealed partial class WorldServer {
 
         var cue = new WorldGameplayCue(Name: cueEffect.Cue, Payload: cueEffect.Payload, Body: body, Tick: tick);
         GameplayCueTap?.Invoke(obj: cue);
-        Console.Error.WriteLine(value: $"[world.cue: {cue.Name} tick={tick}{(body is { } index ? $" body:{index}" : string.Empty)}]");
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(channel: "world.cue", text: $"[world.cue: {cue.Name} tick={tick}{(body is { } index ? $" body:{index}" : string.Empty)}]");
+        }
     }
     private bool FireBodyEffect(BodyEffect effect, string ruleName, ulong tick, bool preflight) {
         var bodyEffect = effect;
@@ -686,7 +688,9 @@ public sealed partial class WorldServer {
                 RollRadians: FixedQ4816.Zero
             );
         } else {
-            Console.Error.WriteLine(value: $"[world.rule: pose skipped — spawnPoint '{poseEffect.SpawnPoint}' is no longer declared]");
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: "world.rule", text: $"[world.rule: pose skipped — spawnPoint '{poseEffect.SpawnPoint}' is no longer declared]");
+            }
 
             return false;
         }
@@ -700,7 +704,9 @@ public sealed partial class WorldServer {
             pitchRadians: pose.PitchRadians,
             rollRadians: pose.RollRadians
         );
-        Console.Error.WriteLine(value: $"[world.rule: pose body:{bodyIndex} -> ({pose.Position.X}, {pose.Position.Y}, {pose.Position.Z})]");
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(channel: "world.rule", text: $"[world.rule: pose body:{bodyIndex} -> ({pose.Position.X}, {pose.Position.Y}, {pose.Position.Z})]");
+        }
 
         return false;
     }
@@ -738,7 +744,7 @@ public sealed partial class WorldServer {
         m_searchTick = tick;
 
         if (m_search.Step(tick: tick, apply: m_searchApply)) {
-            m_output.DeliverDefinition(definition: m_definition);
+            DeliverPending();
         }
     }
     /// <summary>Lists every search job's progress.</summary>
@@ -920,7 +926,9 @@ public sealed partial class WorldServer {
                 target: target,
                 targetPrincipal: principal
             )) {
-                Console.Error.WriteLine(value: $"[world.engage: {principal.Describe()} auto-engaged {target.Describe()} — context button]");
+                if (m_output.HasNarrationSink) {
+                    m_output.Narrate(channel: "world.engage", text: $"[world.engage: {principal.Describe()} auto-engaged {target.Describe()} — context button]");
+                }
             }
         }
 
@@ -1082,12 +1090,17 @@ public sealed partial class WorldServer {
 
         if (!verdict.IsAllowed) {
             if (!m_driveDenied[submission.EntityIndex]) {
-                Console.Error.WriteLine(value: $"[world.grant denied: {verdict.DescribeRefusal(
-                    actor: submission.Principal,
-                    dropped: "intent dropped, body idle",
-                    subject: $"body:{submission.EntityIndex}",
-                    verb: "drive"
-                )}]");
+                var actor = submission.Principal;
+                var entityIndex = submission.EntityIndex;
+
+                if (m_output.HasNarrationSink) {
+                    m_output.Narrate(channel: "world.grant denied", text: $"[world.grant denied: {verdict.DescribeRefusal(
+                        actor: actor,
+                        dropped: "intent dropped, body idle",
+                        subject: $"body:{entityIndex}",
+                        verb: "drive"
+                    )}]");
+                }
                 m_driveDenied[submission.EntityIndex] = true;
             }
 
@@ -1221,7 +1234,9 @@ public sealed partial class WorldServer {
 
                 break;
             default:
-                Console.Error.WriteLine(value: $"[world.server-event refused: {serverEvent.GetType().Name} is not declared]");
+                if (m_output.HasNarrationSink) {
+                    m_output.Narrate(channel: "world.server-event refused", text: $"[world.server-event refused: {serverEvent.GetType().Name} is not declared]");
+                }
                 return;
         }
 

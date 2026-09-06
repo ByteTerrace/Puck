@@ -263,10 +263,12 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             ),
             completion: reply => {
                 if (!reply.Accepted) {
-                    m_narration.Narrate(
-                        channel: "player.leave denied",
-                        format: () => $"[player.leave denied: '{locationEndpoint.Identity}' seat {(locationEntity.Index + 1)} — {reply.Reason}]"
-                    );
+                    if (m_narration.HasNarrationSink) {
+                        m_narration.Narrate(
+                            channel: "player.leave denied",
+                            text: $"[player.leave denied: '{locationEndpoint.Identity}' seat {(locationEntity.Index + 1)} — {reply.Reason}]"
+                        );
+                    }
 
                     return;
                 }

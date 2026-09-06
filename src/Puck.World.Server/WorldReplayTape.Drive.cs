@@ -86,12 +86,14 @@ public sealed partial class WorldReplayTape {
             : $"first divergence at tick {drive.DivergedAt}"
         );
 
-        m_liveServer.Output.Narrate(
-            channel: "replay.drive",
-            format: () => $"[replay.drive: '{drive.SourceName}' {(completed
-                ? "reached"
-                : "cancelled at")} tick {drive.Cursor} of {drive.Target} — {verdict}; local seats returned to live input]"
-        );
+        if (m_liveServer.Output.HasNarrationSink) {
+            m_liveServer.Output.Narrate(
+                channel: "replay.drive",
+                text: $"[replay.drive: '{drive.SourceName}' {(completed
+                    ? "reached"
+                    : "cancelled at")} tick {drive.Cursor} of {drive.Target} — {verdict}; local seats returned to live input]"
+            );
+        }
 
         if (
             !completed ||
@@ -127,10 +129,12 @@ public sealed partial class WorldReplayTape {
         );
         AttachTaps();
         m_mode = WorldReplayMode.Recording;
-        m_liveServer.Output.Narrate(
-            channel: "replay.fork",
-            format: () => $"[replay.fork: recording '{forkName}' from tick {drive.Target} — ticks 0..{(drive.Target - 1)} copied from '{drive.SourceName}'; replay.stop persists it, replay.cancel drops it]"
-        );
+        if (m_liveServer.Output.HasNarrationSink) {
+            m_liveServer.Output.Narrate(
+                channel: "replay.fork",
+                text: $"[replay.fork: recording '{forkName}' from tick {drive.Target} — ticks 0..{(drive.Target - 1)} copied from '{drive.SourceName}'; replay.stop persists it, replay.cancel drops it]"
+            );
+        }
     }
     // Narrates a recorded Load/Reload whose pinned file no longer reads to the recorded bytes, then lets the live
     // rebuild apply whatever the file now holds: a pin that refused from inside the live step would throw out of the
@@ -146,19 +150,23 @@ public sealed partial class WorldReplayTape {
                 path: path,
                 reason: out var reason
             )) {
-                m_liveServer.Output.Narrate(
-                    channel: "replay.drive",
-                    format: () => $"[replay.drive: tick {drive.Cursor} — the recorded rebuild's pinned file '{path}' cannot be re-read ({reason}); the live rebuild will refuse it]"
-                );
+                if (m_liveServer.Output.HasNarrationSink) {
+                    m_liveServer.Output.Narrate(
+                        channel: "replay.drive",
+                        text: $"[replay.drive: tick {drive.Cursor} — the recorded rebuild's pinned file '{path}' cannot be re-read ({reason}); the live rebuild will refuse it]"
+                    );
+                }
             } else if (!string.Equals(
                 a: contentHash,
                 b: rebuild.ContentHash,
                 comparisonType: StringComparison.Ordinal
             )) {
-                m_liveServer.Output.Narrate(
-                    channel: "replay.drive",
-                    format: () => $"[replay.drive: tick {drive.Cursor} — '{path}' now reads {contentHash}, the recording pinned {rebuild.ContentHash}; driving the file as it stands]"
-                );
+                if (m_liveServer.Output.HasNarrationSink) {
+                    m_liveServer.Output.Narrate(
+                        channel: "replay.drive",
+                        text: $"[replay.drive: tick {drive.Cursor} — '{path}' now reads {contentHash}, the recording pinned {rebuild.ContentHash}; driving the file as it stands]"
+                    );
+                }
             }
         }
 
@@ -191,10 +199,12 @@ public sealed partial class WorldReplayTape {
             );
         } catch (InvalidDataException exception) {
             drive.ReplayedMutationOutcomes.Clear();
-            m_liveServer.Output.Narrate(
-                channel: "replay.drive",
-                format: () => $"[replay.drive: {exception.Message}]"
-            );
+            if (m_liveServer.Output.HasNarrationSink) {
+                m_liveServer.Output.Narrate(
+                    channel: "replay.drive",
+                    text: $"[replay.drive: {exception.Message}]"
+                );
+            }
 
             if (drive.DivergedAt < 0) {
                 drive.DivergedAt = tick;
@@ -208,10 +218,12 @@ public sealed partial class WorldReplayTape {
             (drive.DivergedAt < 0)
         ) {
             drive.DivergedAt = tick;
-            m_liveServer.Output.Narrate(
-                channel: "replay.drive",
-                format: () => $"[replay.drive: divergence at tick {tick} of {drive.Target} — live authoritative hash 0x{liveAuthoritativeHash:X16}, recorded 0x{recordedHash:X16}; the drive continues]"
-            );
+            if (m_liveServer.Output.HasNarrationSink) {
+                m_liveServer.Output.Narrate(
+                    channel: "replay.drive",
+                    text: $"[replay.drive: divergence at tick {tick} of {drive.Target} — live authoritative hash 0x{liveAuthoritativeHash:X16}, recorded 0x{recordedHash:X16}; the drive continues]"
+                );
+            }
         }
 
         drive.Cursor = (tick + 1);

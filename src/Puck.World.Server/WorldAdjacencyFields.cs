@@ -531,10 +531,12 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                     );
 
                     if (selection.Truncated) {
-                        narrationHub.Narrate(
-                            channel: "world.adjacency",
-                            format: () => $"[world.adjacency: '{sourceDescription}' neighbour geometry truncated identically for collision and rendering at {WorldAdjacencyGeometry.MaximumPlacementsPerBand} solid placements]"
-                        );
+                        if (narrationHub.HasNarrationSink) {
+                            narrationHub.Narrate(
+                                channel: "world.adjacency",
+                                text: $"[world.adjacency: '{sourceDescription}' neighbour geometry truncated identically for collision and rendering at {WorldAdjacencyGeometry.MaximumPlacementsPerBand} solid placements]"
+                            );
+                        }
                     }
                 } else {
                     m_frameResolved = false;

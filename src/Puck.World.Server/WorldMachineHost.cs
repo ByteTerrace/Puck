@@ -102,10 +102,12 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
             extension: out var engine
         )) {
             slot.DeclaredFault = $"no screen-machine engine '{machine.Engine}'";
-            m_narrationHub?.Narrate(
-                channel: "world.screen",
-                format: () => $"[world.screen: {slot.Index} {slot.DeclaredFault}]"
-            );
+            if (m_narrationHub is { HasNarrationSink: true }) {
+                m_narrationHub?.Narrate(
+                    channel: "world.screen",
+                    text: $"[world.screen: {slot.Index} {slot.DeclaredFault}]"
+                );
+            }
 
             return;
         }
@@ -117,10 +119,12 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
             fault: out var fault
         )) {
             slot.DeclaredFault = fault;
-            m_narrationHub?.Narrate(
-                channel: "world.screen",
-                format: () => $"[world.screen: {slot.Index} {slot.DeclaredFault}]"
-            );
+            if (m_narrationHub is { HasNarrationSink: true }) {
+                m_narrationHub?.Narrate(
+                    channel: "world.screen",
+                    text: $"[world.screen: {slot.Index} {slot.DeclaredFault}]"
+                );
+            }
 
             return;
         }
@@ -139,10 +143,12 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
             slot.MachineContentHash = WorldDefinitionFileSource.ComputeContentHash(content: content);
         } catch (ArgumentException exception) {
             slot.DeclaredFault = exception.Message;
-            m_narrationHub?.Narrate(
-                channel: "world.screen",
-                format: () => $"[world.screen: {slot.Index} {slot.DeclaredFault}]"
-            );
+            if (m_narrationHub is { HasNarrationSink: true }) {
+                m_narrationHub?.Narrate(
+                    channel: "world.screen",
+                    text: $"[world.screen: {slot.Index} {slot.DeclaredFault}]"
+                );
+            }
         }
     }
     private static bool DeclaresIndex(IReadOnlyList<WorldScreen> screens, int index) {
@@ -777,10 +783,12 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
             // outcome never reaches m_links, so screen.links would otherwise show nothing for a link the document
             // still declares, with no sign anything went wrong.
             if (!ok) {
-                m_narrationHub?.Narrate(
-                    channel: "world.link",
-                    format: () => $"[world.link: '{link.Name}' failed to establish — {message}]"
-                );
+                if (m_narrationHub is { HasNarrationSink: true }) {
+                    m_narrationHub?.Narrate(
+                        channel: "world.link",
+                        text: $"[world.link: '{link.Name}' failed to establish — {message}]"
+                    );
+                }
             }
         }
     }
@@ -875,12 +883,14 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
                         documentRelative: true
                     );
 
-                    m_narrationHub?.Narrate(
-                        channel: "world.screen",
-                        format: () => $"[world.screen: {(ok
-                            ? message
-                            : $"{screen.Index} {message}")}]"
-                    );
+                    if (m_narrationHub is { HasNarrationSink: true }) {
+                        m_narrationHub?.Narrate(
+                            channel: "world.screen",
+                            text: $"[world.screen: {(ok
+                                ? message
+                                : $"{screen.Index} {message}")}]"
+                        );
+                    }
 
                     break;
                 case WorldScreenSource.Machine:
@@ -893,12 +903,14 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
                     if (slot.Machine is not null) {
                         var (ejectOk, ejectMessage) = TryEject(index: screen.Index);
 
-                        m_narrationHub?.Narrate(
-                            channel: "world.screen",
-                            format: () => $"[world.screen: {(ejectOk
-                                ? ejectMessage
-                                : $"{screen.Index} {ejectMessage}")}]"
-                        );
+                        if (m_narrationHub is { HasNarrationSink: true }) {
+                            m_narrationHub?.Narrate(
+                                channel: "world.screen",
+                                text: $"[world.screen: {(ejectOk
+                                    ? ejectMessage
+                                    : $"{screen.Index} {ejectMessage}")}]"
+                            );
+                        }
                     }
 
                     break;

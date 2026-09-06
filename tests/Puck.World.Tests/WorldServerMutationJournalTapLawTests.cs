@@ -81,6 +81,7 @@ public sealed class WorldServerMutationJournalTapLawTests {
             envelope: new WorldRenderEnvelope(),
             instanceIdentity: "restored",
             machines: restoredMachines,
+            narrationSink: new WorldConsoleNarrationSink(),
             population: new WorldPopulation(definition: definition),
             profiles: FreshProfiles(definition: definition)
         );

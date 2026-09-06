@@ -5,6 +5,7 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
+[Collection(AllocationCollection.Name)]
 public sealed class DiscreteStateLawTests {
     [Fact]
     public void HexAndRingAddressingAreBoundedAndReciprocal() {

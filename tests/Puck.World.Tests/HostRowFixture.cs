@@ -52,7 +52,7 @@ internal sealed class HostRow : IDisposable {
         var machines = new WorldMachineHost(screens: doc.Screens, engines: []);
         var stateDirectory = Directory.CreateTempSubdirectory(prefix: $"puck-host-row-tests-{name}-").FullName;
         var profiles = new WorldOwnedWorlds(template: doc, directory: stateDirectory, machineId: Guid.NewGuid());
-        var server = new WorldServer(definition: doc, population: population, profiles: profiles, envelope: new WorldRenderEnvelope(), machines: machines, instanceIdentity: name);
+        var server = new WorldServer(definition: doc, population: population, profiles: profiles, envelope: new WorldRenderEnvelope(), machines: machines, instanceIdentity: name, narrationSink: new WorldConsoleNarrationSink());
         var link = new LoopbackTransport(server: server);
         var instance = new WorldInstance(
             name: name,

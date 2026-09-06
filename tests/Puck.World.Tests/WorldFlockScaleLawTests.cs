@@ -9,6 +9,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Whole-population acceptance evidence for the dense few-thousand-creature representation.</summary>
+[Collection(AllocationCollection.Name)]
 public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
     private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
         AnnouncedCrossingHolds: [], AppliedTransferHighWater: null, AppliedTransferIds: [], ElapsedEngineTicks: 0,

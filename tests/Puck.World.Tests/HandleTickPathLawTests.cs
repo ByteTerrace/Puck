@@ -11,6 +11,7 @@ namespace Puck.World.Tests;
 /// move it. A tick in which a rule writes a cell composes a document and is measured but not bounded here: the
 /// bound holds the quiet tick, so the median across the window is the claim, and the widest tick is reported
 /// beside it.</summary>
+[Collection(AllocationCollection.Name)]
 public sealed class HandleTickPathLawTests(ITestOutputHelper output) {
     [Fact]
     public void ShippedWorldIdleTicksStaySteadyStateAllocation() {

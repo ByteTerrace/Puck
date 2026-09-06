@@ -135,6 +135,9 @@ public sealed partial class WorldPopulation {
     /// without a second boot build. A live rebuild instead receives the server's field back through
     /// <see cref="Rebuild(WorldDefinition, WorldSolidField?)"/>.</summary>
     public WorldSolidField? SolidField => (m_contactField as WorldSolidField);
+    /// <summary>Gets or sets the hub this population narrates through, the owning server's own; <see langword="null"/>
+    /// narrates nothing.</summary>
+    public WorldOutputHub? NarrationHub { get; set; }
     /// <summary>Gets a counter a sleeping body compares against the value it last observed to decide whether the
     /// contact surface it sleeps against could now answer a query differently — an install (a document rebuild or an
     /// adjacency source (re)configured), an attached solid row RefreshAttached found at a new pose

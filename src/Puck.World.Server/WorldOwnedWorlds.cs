@@ -132,10 +132,12 @@ public sealed class WorldOwnedWorlds {
                 );
 
                 if (File.Exists(path: occupied) || Directory.Exists(path: occupied)) {
-                    m_narrationHub?.Narrate(
-                        channel: "identity",
-                        format: () => $"[identity] seed '{seed.Id}' skipped: the catalog path '{Path.GetFileName(path: occupied)}' is already occupied, and a seed never writes over an entry that is already there"
-                    );
+                    if (m_narrationHub is { HasNarrationSink: true }) {
+                        m_narrationHub?.Narrate(
+                            channel: "identity",
+                            text: $"[identity] seed '{seed.Id}' skipped: the catalog path '{Path.GetFileName(path: occupied)}' is already occupied, and a seed never writes over an entry that is already there"
+                        );
+                    }
 
                     continue;
                 }
@@ -521,20 +523,24 @@ public sealed class WorldOwnedWorlds {
         }
 
         if (retained.Count > 0) {
-            m_narrationHub?.Narrate(
-                channel: "identity",
-                format: () => $"[identity] refused {retained.Count} owned world(s) this boot could not read, left where they are for the next one: {Narrate(
-                    entries: retained
-                )}"
-            );
+            if (m_narrationHub is { HasNarrationSink: true }) {
+                m_narrationHub?.Narrate(
+                    channel: "identity",
+                    text: $"[identity] refused {retained.Count} owned world(s) this boot could not read, left where they are for the next one: {Narrate(
+                        entries: retained
+                    )}"
+                );
+            }
         }
         if (m_discarded.Count > 0) {
-            m_narrationHub?.Narrate(
-                channel: "identity",
-                format: () => $"[identity] discarded {m_discarded.Count} unloadable owned world(s) into '{quarantine}' — a document shape this catalog no longer reads is disposed of, never migrated: {Narrate(
-                    entries: [.. m_discarded.Select(selector: entry => (entry.FileName, entry.Reason))]
-                )}"
-            );
+            if (m_narrationHub is { HasNarrationSink: true }) {
+                m_narrationHub?.Narrate(
+                    channel: "identity",
+                    text: $"[identity] discarded {m_discarded.Count} unloadable owned world(s) into '{quarantine}' — a document shape this catalog no longer reads is disposed of, never migrated: {Narrate(
+                        entries: [.. m_discarded.Select(selector: entry => (entry.FileName, entry.Reason))]
+                    )}"
+                );
+            }
         }
     }
     // Every shipped world is a full arena, so the booted world's own template is the only base and this always
@@ -605,10 +611,12 @@ public sealed class WorldOwnedWorlds {
             FileName: fileName,
             Reason: reason
         ));
-        m_narrationHub?.Narrate(
-            channel: "identity",
-            format: () => $"[identity] owned world refused: '{fileName}' {reason}"
-        );
+        if (m_narrationHub is { HasNarrationSink: true }) {
+            m_narrationHub?.Narrate(
+                channel: "identity",
+                text: $"[identity] owned world refused: '{fileName}' {reason}"
+            );
+        }
     }
     // A fresh identity claims NO locomotion rates: the two rate slots are named but their rows are absent, so the
     // kit's own authored rate drives the seat until identity.motion mints an override row deliberately.
@@ -899,10 +907,12 @@ public sealed class WorldOwnedWorlds {
         );
 
         if (note.Length > 0) {
-            m_narrationHub?.Narrate(
-                channel: "identity",
-                format: () => $"[identity] {note}"
-            );
+            if (m_narrationHub is { HasNarrationSink: true }) {
+                m_narrationHub?.Narrate(
+                    channel: "identity",
+                    text: $"[identity] {note}"
+                );
+            }
         }
         if (
             (before is null) ||

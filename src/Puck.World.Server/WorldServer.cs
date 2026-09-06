@@ -694,6 +694,7 @@ public sealed partial class WorldServer : IWorldServerHost {
         m_definition = definition;
         m_base = definition;
         m_population = population;
+        population.NarrationHub = m_output;
         m_inputHold = new WorldInputHoldRuntime(
             settings: definition.CompiledInputHold,
             capacity: population.Capacity

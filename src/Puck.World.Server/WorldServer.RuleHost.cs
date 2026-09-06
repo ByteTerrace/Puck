@@ -17,6 +17,25 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
     // tick's own fold has not yet installed.
     StateStore IRuleReader.Store => (m_ruleFrameActive ? EnsureRuleFrame() : (m_ruleFrameFallbackStore ??= new RowStore(rows: () => m_definition.State)));
     StateCatalog IRuleReader.Catalog => m_definition.StateCatalog;
+    // The frame's row ordinals are the document lane's ordinals: its layout is built from m_definition.State in
+    // order. Outside the tick's own rule evaluation the host cannot say, so the evaluator evaluates in full.
+    bool IRuleReader.TryRowVersion(StateHandle row, out ulong version) {
+        if (
+            m_ruleFrameActive &&
+            (m_ruleFrame is { } frame) &&
+            m_definition.StateCatalog.TryGetDescriptor(handle: row, descriptor: out var descriptor) &&
+            (descriptor.Ownership == StateLane.Document) &&
+            (((uint)descriptor.LaneOrdinal) < ((uint)frame.Layout.RowCount))
+        ) {
+            version = frame.RowVersion(rowOrdinal: descriptor.LaneOrdinal);
+
+            return true;
+        }
+
+        version = 0UL;
+
+        return false;
+    }
     CompiledPatterns IRuleReader.Patterns => m_patterns;
     string? IRuleReader.BoundEachKey => m_evaluator.BoundEachKey;
     string? IRuleReader.BoundTokenKey {
@@ -193,8 +212,13 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
         return false;
     }
     // One line per category per server lifetime; the ledger keeps the exact count.
-    void IRuleHost.RefusalRecorded(in RuleRuntimeDiagnostic diagnostic) =>
-        Console.Error.WriteLine(value: $"[world.rule: effect refused ({diagnostic.Refusal}) — rule '{diagnostic.Rule}', '{diagnostic.Effect}': {diagnostic.Detail}; world.rule.failures carries the running count]");
+    void IRuleHost.RefusalRecorded(in RuleRuntimeDiagnostic diagnostic) {
+        var recorded = diagnostic;
+
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(channel: "world.rule", text: $"[world.rule: effect refused ({recorded.Refusal}) — rule '{recorded.Rule}', '{recorded.Effect}': {recorded.Detail}; world.rule.failures carries the running count]");
+        }
+    }
 
     RuleFact IWorldRuleReader.Read(PopulationOperand operand) => RuleFact.Finite(value: m_population.ActiveCount(), kind: CellKind.Int);
     RuleFact IWorldRuleReader.Read(PhysicsQuiescentOperand operand) => RuleFact.Finite(value: (m_population.RigidBodiesQuiescent() ? 1L : 0L), kind: CellKind.Bool);

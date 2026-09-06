@@ -71,10 +71,12 @@ public sealed partial class WorldServer {
             holder: out var possessor,
             placementId: placement.Id
         )) {
-            m_output.Narrate(
-                channel: "world.contribution",
-                format: () => $"[world.contribution: retraction deferred ({WorldRuleEffectRefusal.CarrierPossessed}) — slot '{placement.Id}' carries inhabitant body:{possessedBody}, possessed by {possessor.Describe()}; the deadline stands and the sweep retries next tick]"
-            );
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(
+                    channel: "world.contribution",
+                    text: $"[world.contribution: retraction deferred ({WorldRuleEffectRefusal.CarrierPossessed}) — slot '{placement.Id}' carries inhabitant body:{possessedBody}, possessed by {possessor.Describe()}; the deadline stands and the sweep retries next tick]"
+                );
+            }
 
             return;
         }
@@ -98,10 +100,12 @@ public sealed partial class WorldServer {
             return;
         }
 
-        m_output.Narrate(
-            channel: "world.contribution",
-            format: () => $"[world.contribution: retracted '{placement.Id}' — tenure=presence link={(contribution.Link?.Value ?? "(none)")} contributor={(contributor?.Describe() ?? "(none)")} creation '{retired}' released, slot shows '{contribution.SlotCreationId}']"
-        );
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(
+                channel: "world.contribution",
+                text: $"[world.contribution: retracted '{placement.Id}' — tenure=presence link={(contribution.Link?.Value ?? "(none)")} contributor={(contributor?.Describe() ?? "(none)")} creation '{retired}' released, slot shows '{contribution.SlotCreationId}']"
+            );
+        }
 
         if (
             string.Equals(

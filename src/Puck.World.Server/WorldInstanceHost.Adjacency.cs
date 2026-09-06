@@ -100,10 +100,12 @@ public sealed partial class WorldInstanceHost {
             );
             binding = $"channel:{channel}";
         }
-        instance.Server.Output.Narrate(
-            channel: "world.adjacency",
-            format: () => $"[world.adjacency: '{instance.Name}/{adjacencyName}' seat {(seat + 1)} CLOSED ({reason}); response={binding}]"
-        );
+        if (instance.Server.Output.HasNarrationSink) {
+            instance.Server.Output.Narrate(
+                channel: "world.adjacency",
+                text: $"[world.adjacency: '{instance.Name}/{adjacencyName}' seat {(seat + 1)} CLOSED ({reason}); response={binding}]"
+            );
+        }
     }
     private WorldAuthorityEndpoint EndpointFor(WorldInstance instance) {
         if (m_authorityEndpoints.TryGetValue(
@@ -204,10 +206,12 @@ public sealed partial class WorldInstanceHost {
                 (announcedTransferId != heldTransferId)
             ) {
                 m_announcedCrossingHolds[(instance.Name, seat)] = heldTransferId;
-                instance.Server.Output.Narrate(
-                    channel: "world.adjacency",
-                    format: () => $"[world.adjacency: '{instance.Name}' seat {(seat + 1)} crossing HELD (transfer={heldTransferId} is queued or in flight); no further crossing is minted until it resolves]"
-                );
+                if (instance.Server.Output.HasNarrationSink) {
+                    instance.Server.Output.Narrate(
+                        channel: "world.adjacency",
+                        text: $"[world.adjacency: '{instance.Name}' seat {(seat + 1)} crossing HELD (transfer={heldTransferId} is queued or in flight); no further crossing is minted until it resolves]"
+                    );
+                }
             }
         }
 
@@ -349,10 +353,12 @@ public sealed partial class WorldInstanceHost {
                     seamU: winner.SeamU,
                     seamV: winner.SeamV
                 );
-                instance.Server.Output.Narrate(
-                    channel: "world.adjacency",
-                    format: () => $"[world.adjacency: '{instance.Name}/{winner.Adjacency.Name}' body:{seat} continuum safety-clamped after {pending.BoundaryEvents} boundary events]"
-                );
+                if (instance.Server.Output.HasNarrationSink) {
+                    instance.Server.Output.Narrate(
+                        channel: "world.adjacency",
+                        text: $"[world.adjacency: '{instance.Name}/{winner.Adjacency.Name}' body:{seat} continuum safety-clamped after {pending.BoundaryEvents} boundary events]"
+                    );
+                }
                 continue;
             }
 

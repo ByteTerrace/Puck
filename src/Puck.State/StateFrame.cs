@@ -355,6 +355,9 @@ public sealed class StateFrame : StateStore {
             var layout = Layout[ordinal];
             var row = Rows[ordinal];
             var values = m_values.AsSpan(start: layout.Offset, length: layout.Length);
+            // The version proves stored content unchanged, so a load that rewrites a row with the same values leaves
+            // its version alone; a reader comparing versions across the load then keeps what it memoized.
+            var before = Snapshot(values);
 
             switch (layout.Kind) {
                 case FrameRowKind.Slot:
@@ -398,7 +401,9 @@ public sealed class StateFrame : StateStore {
                     break;
             }
 
-            m_rowVersions[ordinal]++;
+            if (!before.SequenceEqual(other: values)) {
+                m_rowVersions[ordinal]++;
+            }
         }
     }
     /// <summary>Copies another frame on the same layout.</summary>

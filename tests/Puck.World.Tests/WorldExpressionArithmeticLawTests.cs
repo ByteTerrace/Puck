@@ -3,6 +3,7 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
+[Collection(AllocationCollection.Name)]
 public sealed class WorldExpressionArithmeticLawTests {
     private static readonly CellKind[] s_kinds = [CellKind.Int, CellKind.Fixed];
     private static readonly long[] s_values = [long.MinValue, long.MinValue + 1, long.MinValue / 2,

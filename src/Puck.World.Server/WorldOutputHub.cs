@@ -116,7 +116,7 @@ public sealed partial class WorldOutputHub {
     private void Detach(Subscription subscription, string callSite, Exception exception) {
         Narrate(
             channel: "world.output",
-            format: () => $"[world.output: {subscription.Sink.GetType().Name} threw in {callSite} — detached] {exception}"
+            text: $"[world.output: {subscription.Sink.GetType().Name} threw in {callSite} — detached] {exception}"
         );
 
         if (subscription.Active) {

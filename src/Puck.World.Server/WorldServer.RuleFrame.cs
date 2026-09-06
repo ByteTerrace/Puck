@@ -172,7 +172,9 @@ public sealed partial class WorldServer {
         );
 
         if (!TryApplyMutation(mutation: mutation, tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false)) {
-            Console.Error.WriteLine(value: $"[world.rule: this tick's {m_ruleFrameMutations.Count} rule-written state mutations were refused as one; the document stays at its prior tick]");
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: "world.rule", text: $"[world.rule: this tick's {m_ruleFrameMutations.Count} rule-written state mutations were refused as one; the document stays at its prior tick]");
+            }
         }
 
         m_ruleFrameMutations = [];

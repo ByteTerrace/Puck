@@ -809,10 +809,12 @@ public sealed class WorldReplaySnapshot {
         if (profiles.Find(name: pin.Name) is not { } live) {
             // Drift all the way to absent. The re-drive is unaffected — the pinned handle needs no catalog entry — but
             // an operator reading a MATCH for a profile that no longer exists deserves to be told why it still ran.
-            profiles.NarrationHub?.Narrate(
-                channel: "replay.profile",
-                format: () => $"[replay.profile: '{pin.Name}' is pinned by this recording but is no longer in the live catalog; the replay used the pinned rates (move {Describe(rate: pin.MoveSpeed)}, turn {Describe(rate: pin.TurnSpeed)})]"
-            );
+            if (profiles.NarrationHub is { HasNarrationSink: true }) {
+                profiles.NarrationHub?.Narrate(
+                    channel: "replay.profile",
+                    text: $"[replay.profile: '{pin.Name}' is pinned by this recording but is no longer in the live catalog; the replay used the pinned rates (move {Describe(rate: pin.MoveSpeed)}, turn {Describe(rate: pin.TurnSpeed)})]"
+                );
+            }
 
             return;
         }
@@ -839,10 +841,12 @@ public sealed class WorldReplaySnapshot {
             return;
         }
 
-        narrationHub?.Narrate(
-            channel: "replay.profile",
-            format: () => $"[replay.profile: '{name}' {field} drifted since record-start — pinned {Describe(rate: pinned)}, live {Describe(rate: live)}; the replay used the PINNED value, so this verdict reports the recording, not the edit]"
-        );
+        if (narrationHub is { HasNarrationSink: true }) {
+            narrationHub?.Narrate(
+                channel: "replay.profile",
+                text: $"[replay.profile: '{name}' {field} drifted since record-start — pinned {Describe(rate: pinned)}, live {Describe(rate: live)}; the replay used the PINNED value, so this verdict reports the recording, not the edit]"
+            );
+        }
     }
     // The mount pin compares index-by-index: mount order is document order, and the recording pins the whole receipt
     // sequence — name, hash, and fuel, at each position — never merely the set of names. Position is load-bearing
@@ -1379,7 +1383,7 @@ public sealed class WorldReplaySnapshot {
         _ = server.AttachNarrationSink(sink: new WorldConsoleNarrationSink());
         server.SaveEffectTap = tick => server.Output.Narrate(
             channel: "replay",
-            format: () => $"[replay: save effect suppressed (tick {tick}) — replay verification is side-effect-free]"
+            text: $"[replay: save effect suppressed (tick {tick}) — replay verification is side-effect-free]"
         );
 
         SeatRecordedSeats(

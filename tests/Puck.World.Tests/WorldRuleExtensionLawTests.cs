@@ -8,6 +8,7 @@ namespace Puck.World.Tests;
 
 /// <summary>Pins the compositional rule extensions at their authoring, deterministic execution, and atomicity
 /// boundaries.</summary>
+[Collection(AllocationCollection.Name)]
 public sealed class WorldRuleExtensionLawTests {
     // A rule count large enough to saturate the work budget and to exercise per-rule key resolution at scale.
     private const int ManyRules = 128;

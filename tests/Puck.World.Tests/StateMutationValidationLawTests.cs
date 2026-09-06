@@ -9,6 +9,7 @@ namespace Puck.World.Tests;
 /// for exactly the row-local and cross-row reasons the whole-document walk would refuse it for, checking only the
 /// rows it touched, and a real deal allocates a small, bounded amount per rule-written cell rather than the whole
 /// document's worth.</summary>
+[Collection(AllocationCollection.Name)]
 public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
     [Fact]
     public void AKeysOfZoneRefusesAKeyOutsideItsTokenDomain() {

@@ -732,7 +732,9 @@ public sealed partial class WorldPopulation {
                 var slot = HighestFreeSlot();
 
                 if (slot < 0) {
-                    Console.Error.WriteLine(value: $"[world.placement: inhabited '{placement.Id}' has no free entity slot — the {Capacity}-slot table is full]");
+                    if (NarrationHub is { HasNarrationSink: true }) {
+                        NarrationHub?.Narrate(channel: "world.placement", text: $"[world.placement: inhabited '{placement.Id}' has no free entity slot — the {Capacity}-slot table is full]");
+                    }
 
                     break;
                 }

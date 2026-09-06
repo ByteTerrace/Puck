@@ -612,7 +612,7 @@ internal static class Fixtures {
         var machines = new WorldMachineHost(screens: definition.Screens, engines: (engines ?? []));
         var stateDirectory = Directory.CreateTempSubdirectory(prefix: "puck-world-tests-").FullName;
         var profiles = new WorldOwnedWorlds(template: definition, directory: stateDirectory, machineId: Guid.NewGuid());
-        var server = new WorldServer(definition: definition, population: population, profiles: profiles, envelope: new WorldRenderEnvelope(), machines: machines);
+        var server = new WorldServer(definition: definition, population: population, profiles: profiles, envelope: new WorldRenderEnvelope(), machines: machines, narrationSink: new WorldConsoleNarrationSink());
 
         return new WorldFixture(machines: machines, server: server, stateDirectory: stateDirectory);
     }

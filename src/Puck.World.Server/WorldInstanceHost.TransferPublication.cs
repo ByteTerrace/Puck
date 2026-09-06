@@ -20,10 +20,12 @@ public sealed partial class WorldInstanceHost {
         } catch (Exception exception) when (exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException) {
             if (!pending.PublicationFailureReported) {
                 pending.PublicationFailureReported = true;
-                m_narration.Narrate(
-                    channel: "world.transfer",
-                    format: () => $"[world.transfer: transfer={pending.Transfer.TransferId} PUBLICATION-PENDING — commit confirmed; source completion retained ({exception.GetType().Name}: {exception.Message})]"
-                );
+                if (m_narration.HasNarrationSink) {
+                    m_narration.Narrate(
+                        channel: "world.transfer",
+                        text: $"[world.transfer: transfer={pending.Transfer.TransferId} PUBLICATION-PENDING — commit confirmed; source completion retained ({exception.GetType().Name}: {exception.Message})]"
+                    );
+                }
             }
             return false;
         }

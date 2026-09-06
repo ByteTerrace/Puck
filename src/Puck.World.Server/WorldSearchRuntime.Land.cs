@@ -53,10 +53,12 @@ internal sealed partial class WorldSearchRuntime {
             return true;
         }
 
-        m_narrationHub?.Narrate(
-            channel: "world.search",
-            format: () => $"[world.search: job '{plan.Row.Name}' finished but its outputs were refused by the mutation door; world.search shows the count it found]"
-        );
+        if (m_narrationHub is { HasNarrationSink: true }) {
+            m_narrationHub?.Narrate(
+                channel: "world.search",
+                text: $"[world.search: job '{plan.Row.Name}' finished but its outputs were refused by the mutation door; world.search shows the count it found]"
+            );
+        }
 
         return false;
     }

@@ -103,7 +103,7 @@ public sealed partial class WorldServer {
 
                 m_output.Narrate(
                     channel: "world.respond",
-                    format: () => $"[world.respond: '{respondId}' {respondPrevious} -> {respondTarget} (entry {respondEntry}: {respondField} {respondComparison})]"
+                    text: $"[world.respond: '{respondId}' {respondPrevious} -> {respondTarget} (entry {respondEntry}: {respondField} {respondComparison})]"
                 );
             }
         }

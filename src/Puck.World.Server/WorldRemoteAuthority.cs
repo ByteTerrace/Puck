@@ -583,10 +583,12 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
             location1: ref m_unconfiguredNoted,
             value: 1
         ) == 0) {
-            m_narrationHub?.Narrate(
-                channel: "world.authority unavailable",
-                format: () => $"[world.authority unavailable: federation to '{Endpoint}' is refused ({UnconfiguredDetail})]"
-            );
+            if (m_narrationHub is { HasNarrationSink: true }) {
+                m_narrationHub?.Narrate(
+                    channel: "world.authority unavailable",
+                    text: $"[world.authority unavailable: federation to '{Endpoint}' is refused ({UnconfiguredDetail})]"
+                );
+            }
         }
 
         return true;
@@ -600,7 +602,7 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
                 lifetime: m_lifetime.Token,
                 onUnavailable: exception => m_narrationHub?.Narrate(
                     channel: "world.authority unavailable",
-                    format: () => $"[world.authority unavailable: federation lane to '{Endpoint}' is reconnecting ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")})]"
+                    text: $"[world.authority unavailable: federation lane to '{Endpoint}' is reconnecting ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")})]"
                 ),
                 protocol: new WorldFederationLaneProtocol(owner: this),
                 requestTimeout: LaneRequestTimeout,
@@ -657,10 +659,12 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
                     if (m_narrationHub is { } hub) {
                         var refusalReason = Encoding.UTF8.GetString(frame.Body.Span);
 
-                        hub.Narrate(
-                            channel: "world.projection",
-                            format: () => $"[world.projection: remote observer '{Endpoint}' refused ({refusalReason})]"
-                        );
+                        if (hub.HasNarrationSink) {
+                            hub.Narrate(
+                                channel: "world.projection",
+                                text: $"[world.projection: remote observer '{Endpoint}' refused ({refusalReason})]"
+                            );
+                        }
                     }
                     return false;
                 case WorldFederationResponse.Route:
@@ -679,20 +683,24 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
                         ) ||
                             (definition is null)
                         ) {
-                            m_narrationHub?.Narrate(
-                                channel: "world.projection",
-                                format: () => $"[world.projection: remote observer '{Endpoint}' refused a definition record ({definitionFailure})]"
-                            );
+                            if (m_narrationHub is { HasNarrationSink: true }) {
+                                m_narrationHub?.Narrate(
+                                    channel: "world.projection",
+                                    text: $"[world.projection: remote observer '{Endpoint}' refused a definition record ({definitionFailure})]"
+                                );
+                            }
 
                             return false;
                         }
 
                         if (definitionTier != m_observedTier) {
                             m_observedTier = definitionTier;
-                            m_narrationHub?.Narrate(
-                                channel: "world.projection",
-                                format: () => $"[world.projection: remote observer '{Endpoint}' receives documents at tier {definitionTier}]"
-                            );
+                            if (m_narrationHub is { HasNarrationSink: true }) {
+                                m_narrationHub?.Narrate(
+                                    channel: "world.projection",
+                                    text: $"[world.projection: remote observer '{Endpoint}' receives documents at tier {definitionTier}]"
+                                );
+                            }
                         }
 
                         Volatile.Write(
@@ -708,10 +716,12 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
                             snapshot: out var snapshot,
                             failure: out var snapshotFailure
                         )) {
-                            m_narrationHub?.Narrate(
-                                channel: "world.projection",
-                                format: () => $"[world.projection: remote observer '{Endpoint}' refused a snapshot record ({snapshotFailure})]"
-                            );
+                            if (m_narrationHub is { HasNarrationSink: true }) {
+                                m_narrationHub?.Narrate(
+                                    channel: "world.projection",
+                                    text: $"[world.projection: remote observer '{Endpoint}' refused a snapshot record ({snapshotFailure})]"
+                                );
+                            }
 
                             return false;
                         }
@@ -755,10 +765,12 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
             } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
                 return;
             } catch (Exception exception) when ((exception is IOException or SocketException or OperationCanceledException)) {
-                m_narrationHub?.Narrate(
-                    channel: "world.projection",
-                    format: () => $"[world.projection: remote observer '{Endpoint}' unavailable ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")}); retrying]"
-                );
+                if (m_narrationHub is { HasNarrationSink: true }) {
+                    m_narrationHub?.Narrate(
+                        channel: "world.projection",
+                        text: $"[world.projection: remote observer '{Endpoint}' unavailable ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")}); retrying]"
+                    );
+                }
             }
 
             try {
@@ -1249,10 +1261,12 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
                         value: 1
                     ) == 0)
                     ) {
-                        m_owner.m_narrationHub?.Narrate(
-                            channel: "world.authority unavailable",
-                            format: () => $"[world.authority unavailable: intent stream to '{m_owner.Endpoint}' is reconnecting ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")})]"
-                        );
+                        if (m_owner.m_narrationHub is { HasNarrationSink: true }) {
+                            m_owner.m_narrationHub?.Narrate(
+                                channel: "world.authority unavailable",
+                                text: $"[world.authority unavailable: intent stream to '{m_owner.Endpoint}' is reconnecting ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")})]"
+                            );
+                        }
                     }
 
                     try {

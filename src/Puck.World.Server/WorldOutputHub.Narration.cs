@@ -32,13 +32,7 @@ public sealed partial class WorldOutputHub {
 
     /// <summary>Gets a value indicating whether at least one narration sink is attached — lets a caller skip
     /// formatting a line nobody would receive. Reflects only active subscribers.</summary>
-    public bool HasNarrationSink {
-        get {
-            lock (m_narrationLock) {
-                return (m_activeNarrationCount > 0);
-            }
-        }
-    }
+    public bool HasNarrationSink => (Volatile.Read(location: ref m_activeNarrationCount) > 0);
 
     /// <summary>Adds a narration sink, delivered every subsequent <see cref="Narrate"/> call until either the
     /// process ends or the returned lease is disposed.</summary>
@@ -74,15 +68,18 @@ public sealed partial class WorldOutputHub {
     /// exception again); it simply stops receiving further lines. Safe to call from any thread — a peer host's own
     /// connection-handling tasks narrate without hopping to the tick thread first.</summary>
     /// <param name="channel">The narration's channel tag.</param>
-    /// <param name="format">Produces the line's text. Invoked at most once, and only while a sink is attached.</param>
-    public void Narrate(string channel, Func<string> format) {
+    /// <param name="text">The line's text. A caller on a hot path formats it under <see cref="HasNarrationSink"/>,
+    /// so nothing is formatted, and no closure allocated, while no sink is attached.</param>
+    /// <param name="stream">The console stream the line belongs on.</param>
+    public void Narrate(string channel, string text, WorldNarrationStream stream = WorldNarrationStream.Error) {
         if (!HasNarrationSink) {
             return;
         }
 
         var narration = new WorldNarration(
             Channel: channel,
-            Text: format()
+            Text: text,
+            Stream: stream
         );
 
         lock (m_narrationLock) {

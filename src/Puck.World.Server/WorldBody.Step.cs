@@ -186,6 +186,9 @@ public sealed partial class WorldBody {
             return;
         }
 
+        // A peer pushed this body: its program must run again to carry the push.
+        WakeUp();
+
         m_position += correction;
         var normal = correction.Normalize();
         var velocity = (m_planarVelocity + (UnitY * m_verticalVelocity));

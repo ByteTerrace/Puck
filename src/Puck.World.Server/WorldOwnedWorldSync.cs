@@ -298,10 +298,12 @@ public sealed class WorldOwnedWorldSync {
                 }
             }
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException)) {
-            m_worlds.NarrationHub?.Narrate(
-                channel: "storage",
-                format: () => $"[storage] sync state unreadable, starting untracked ({exception.Message})"
-            );
+            if (m_worlds.NarrationHub is { HasNarrationSink: true }) {
+                m_worlds.NarrationHub?.Narrate(
+                    channel: "storage",
+                    text: $"[storage] sync state unreadable, starting untracked ({exception.Message})"
+                );
+            }
             m_basisTokens.Clear();
             m_tokens.Clear();
             m_lastSyncedRevision = 0;
@@ -825,10 +827,12 @@ public sealed class WorldOwnedWorldSync {
                 sourceFileName: swapPath
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            m_worlds.NarrationHub?.Narrate(
-                channel: "storage",
-                format: () => $"[storage] sync state not persisted ({exception.Message})"
-            );
+            if (m_worlds.NarrationHub is { HasNarrationSink: true }) {
+                m_worlds.NarrationHub?.Narrate(
+                    channel: "storage",
+                    text: $"[storage] sync state not persisted ({exception.Message})"
+                );
+            }
         }
     }
     private List<WorldIdentity> SelectIdentities(string? id) {

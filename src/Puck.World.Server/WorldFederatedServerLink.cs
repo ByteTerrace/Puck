@@ -10,10 +10,12 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
 
     private void NoteUnavailable(int bodyIndex, string reason) {
         if (m_unavailableBodies.Add(item: bodyIndex)) {
-            m_authority.NarrationHub?.Narrate(
-                channel: "world.authority unavailable",
-                format: () => $"[world.authority unavailable: body:{bodyIndex} input/submission held ({reason})]"
-            );
+            if (m_authority.NarrationHub is { HasNarrationSink: true }) {
+                m_authority.NarrationHub?.Narrate(
+                    channel: "world.authority unavailable",
+                    text: $"[world.authority unavailable: body:{bodyIndex} input/submission held ({reason})]"
+                );
+            }
         }
     }
     private (WorldPeerWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)? Submit(int bodyIndex, WorldSubmissionPayload payload) {

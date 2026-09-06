@@ -54,12 +54,14 @@ public sealed partial class WorldServer {
             grant: grant,
             reason: out var reason
         )) {
-            m_output.Narrate(
-                channel: "world.grant",
-                format: () => $"[world.grant: {label}{(grant.Exclusive
-                    ? " exclusive"
-                    : string.Empty)}]"
-            );
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(
+                    channel: "world.grant",
+                    text: $"[world.grant: {label}{(grant.Exclusive
+                        ? " exclusive"
+                        : string.Empty)}]"
+                );
+            }
 
             // THE JOIN: the grant's channel mask was validated against the WORLD's channel table, and the guest's own
             // channel names were resolved against that same table at its handshake — and until now nothing compared the
@@ -72,10 +74,12 @@ public sealed partial class WorldServer {
                 reach: grant.Reach,
                 channels: m_population.Channels
             ) is { } undeclared) {
-                m_output.Narrate(
-                    channel: "world.grant",
-                    format: () => $"[world.grant: {grant.Principal.Describe()} is granted channel(s) it never declares — inert until it does: {undeclared}]"
-                );
+                if (m_output.HasNarrationSink) {
+                    m_output.Narrate(
+                        channel: "world.grant",
+                        text: $"[world.grant: {grant.Principal.Describe()} is granted channel(s) it never declares — inert until it does: {undeclared}]"
+                    );
+                }
             }
 
             EchoTap?.Invoke(obj: new WorldEditEcho(
@@ -90,10 +94,12 @@ public sealed partial class WorldServer {
 
             return true;
         } else {
-            m_output.Narrate(
-                channel: "world.grant rejected",
-                format: () => $"[world.grant rejected: {label} — {reason}]"
-            );
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(
+                    channel: "world.grant rejected",
+                    text: $"[world.grant rejected: {label} — {reason}]"
+                );
+            }
             EchoTap?.Invoke(obj: new WorldEditEcho(
                 Message: $"grant {label} rejected: {reason}",
                 Rejected: true,
@@ -125,10 +131,12 @@ public sealed partial class WorldServer {
             return grant;
         }
 
-        m_output.Narrate(
-            channel: "world.grant",
-            format: () => $"[world.grant: {grant.Principal.Describe()} drive {grant.Subject.Describe()} — the document's ceiling is WITHHELD (a pooled ceiling is consent, and consent is authored live by the seated human on its own body, never shipped in a world document); the row applies with no pool]"
-        );
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(
+                channel: "world.grant",
+                text: $"[world.grant: {grant.Principal.Describe()} drive {grant.Subject.Describe()} — the document's ceiling is WITHHELD (a pooled ceiling is consent, and consent is authored live by the seated human on its own body, never shipped in a world document); the row applies with no pool]"
+            );
+        }
 
         // The mask travels with the ceiling on a seat's own gesture and means nothing without it, so both go.
         return (grant with { Reach = null, Consent = null, Ceiling = null });
@@ -199,12 +207,14 @@ public sealed partial class WorldServer {
             subject: grant.Subject
         );
 
-        m_output.Narrate(
-            channel: "world.revoke",
-            format: () => (removed
-                ? $"[world.revoke: {label}]"
-                : $"[world.revoke: {grant.Principal.Describe()} held no {grant.Capability.ToString().ToLowerInvariant()} over {grant.Subject.Describe()}]")
-        );
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(
+                channel: "world.revoke",
+                text: (removed
+                    ? $"[world.revoke: {label}]"
+                    : $"[world.revoke: {grant.Principal.Describe()} held no {grant.Capability.ToString().ToLowerInvariant()} over {grant.Subject.Describe()}]")
+            );
+        }
         EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: (removed
             ? $"revoke {label}"
