@@ -18,7 +18,7 @@ public interface IClientSink {
     /// <param name="definition">The world definition now live on the server.</param>
     void DeliverDefinition(WorldDefinition definition);
     /// <summary>Delivers the server's live world definition after an applied mutation batch that changed only cell
-    /// VALUES — a cell write, removal, transform, or draw-site fire, never a row/channel/register/HUD shape (the
+    /// values — a cell write, removal, transform, or draw-site fire, never a row/channel/register/HUD shape (the
     /// same state-mutation test the server's own installer used to decide the mutation touched values only). The
     /// client stores the fresh definition so state-value reads (cell contents, HUD bindings) see it, without
     /// bumping the definition-delivery revision or recompiling anything <see cref="DeliverDefinition"/>
