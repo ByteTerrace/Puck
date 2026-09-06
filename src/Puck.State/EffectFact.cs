@@ -326,17 +326,17 @@ public sealed class TransactionEffect : EffectFact {
 public sealed class TransformStateEffect : EffectFact {
     /// <param name="transform">The discrete state transform.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    /// <param name="fromRef">The live key indirection a <see cref="StateTransform.ClearEnclosed"/>'s <c>from</c> spelled,
-    /// or <see langword="null"/> for a literal cell.</param>
-    public TransformStateEffect(StateTransform transform, string describe, CompiledCellRef? fromRef = null) : base(describe) {
+    /// <param name="keyRef">The live key indirection a <see cref="StateTransform.ClearEnclosed"/>'s <c>from</c> or a
+    /// <see cref="StateTransform.WriteSet"/>'s <c>setKey</c> spelled, or <see langword="null"/> for a literal cell.</param>
+    public TransformStateEffect(StateTransform transform, string describe, CompiledCellRef? keyRef = null) : base(describe) {
         Transform = transform;
-        FromRef = fromRef;
+        KeyRef = keyRef;
     }
 
     /// <summary>Gets the discrete state transform.</summary>
     public StateTransform Transform { get; }
-    /// <summary>Gets the live key indirection the transform's origin cell resolves through, or <see langword="null"/>.</summary>
-    public CompiledCellRef? FromRef { get; }
+    /// <summary>Gets the live key indirection the transform's one dynamic key resolves through, or <see langword="null"/>.</summary>
+    public CompiledCellRef? KeyRef { get; }
 
     /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) {
@@ -398,8 +398,11 @@ public sealed class TransformStateEffect : EffectFact {
         }
         if (Transform is StateTransform.ClearEnclosed enclosed) {
             into.Add(item: new RuleAccess(Row: enclosed.Row, Key: null, IsSet: false));
-            RuleAccess.CollectReference(reference: FromRef, into: into);
         }
+        if (Transform is StateTransform.WriteSet writeSet) {
+            into.Add(item: new RuleAccess(Row: writeSet.Set, Key: null, IsSet: false));
+        }
+        RuleAccess.CollectReference(reference: KeyRef, into: into);
     }
     public override void CollectWrites(List<RuleAccess> into) {
         foreach (var row in Rows(transform: Transform)) {
@@ -427,7 +430,7 @@ public sealed class TransformStateEffect : EffectFact {
         _ => [],
     };
     /// <inheritdoc/>
-    public override bool ReadsHost => ReferenceReadsHost(reference: FromRef);
+    public override bool ReadsHost => ReferenceReadsHost(reference: KeyRef);
 }
 
 /// <summary>Pushes one evaluated value into a history row's ring.</summary>

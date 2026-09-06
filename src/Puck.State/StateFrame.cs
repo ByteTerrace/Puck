@@ -407,6 +407,56 @@ public sealed class StateFrame : StateStore {
 
         return true;
     }
+    /// <summary>Writes one value into every cell of the frame's dense board whose bit is set in a cell-set mask read
+    /// through the frame's own store, on the same terms the installed section's transform holds.</summary>
+    /// <param name="writeSet">The transform, its set key already resolved to a literal cell key.</param>
+    /// <param name="reason">Why the transform refused, or empty.</param>
+    public bool TryWriteSet(StateTransform.WriteSet writeSet, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: writeSet);
+
+        if (!Layout.TryOrdinal(name: writeSet.Row, ordinal: out var ordinal) || (Layout[ordinal] is not { Kind: FrameRowKind.Board } layout)) {
+            reason = $"writeSet row '{writeSet.Row}' is not a board in the frame";
+
+            return false;
+        }
+
+        var row = Rows[ordinal];
+
+        if ((row.ClampToEnvelope(value: writeSet.Value) != writeSet.Value) || ((row.Kind == CellKind.Bool) && (writeSet.Value is not (0L or 1L)))) {
+            reason = "writeSet writes a value the board row does not admit";
+
+            return false;
+        }
+        if (Find(name: writeSet.Set) is not { } setRow) {
+            reason = $"writeSet set row '{writeSet.Set}' is not in the frame";
+
+            return false;
+        }
+
+        var setKey = CellName.Parse(candidate: writeSet.SetKey ?? StateRow.SlotKey.Value);
+
+        if (!TryStored(row: setRow, key: setKey, value: out var bits, text: out _)) {
+            reason = $"writeSet found no cell '{setKey}' on set row '{writeSet.Set}'";
+
+            return false;
+        }
+
+        var mask = unchecked((ulong)bits);
+        var target = m_values.AsSpan(start: layout.Offset, length: layout.Length);
+
+        while (mask != 0UL) {
+            var cell = System.Numerics.BitOperations.TrailingZeroCount(value: mask);
+
+            mask &= (mask - 1UL);
+
+            if (cell < target.Length) {
+                target[cell] = writeSet.Value;
+            }
+        }
+        reason = string.Empty;
+
+        return true;
+    }
     /// <summary>Applies a board combine on the frame's dense boards, on the same terms the installed section's transform holds.</summary>
     /// <param name="combine">The transform.</param>
     /// <param name="reason">Why the transform refused, or empty.</param>

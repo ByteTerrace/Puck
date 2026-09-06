@@ -473,16 +473,25 @@ public static partial class RuleCompiler {
                     throw Invalid("shuffle requires a keyed row, and a redrawable integer streamDraw site");
                 }
                 break;
-            case StateTransform.WriteSet writeSet:
+            case StateTransform.WriteSet writeSet: {
                 var written = Row(writeSet.Row);
                 var setSource = Row(writeSet.Set);
                 if (written.EffectiveDomain is not StateDomain.CellsOf writtenBoard || context.FindTopology(name: writtenBoard.Topology) is not { } writtenTopology ||
                     writtenTopology.CellCount > BoardMask.MaxCells || setSource.Kind != CellKind.Int ||
-                    (writeSet.SetKey is null ? !setSource.IsSlot : (!setSource.IsKeyed || !CellName.TryParse(writeSet.SetKey, out _, out _))) ||
                     written.ClampToEnvelope(writeSet.Value) != writeSet.Value || (written.Kind == CellKind.Bool && writeSet.Value is not (0 or 1))) {
-                    throw Invalid($"writeSet requires a board of at most {BoardMask.MaxCells} cells, an integer set cell, and an admitted value");
+                    throw Invalid($"writeSet requires a board of at most {BoardMask.MaxCells} cells, an integer set row, and an admitted value");
+                }
+                if (RuleCompiler.TryResolveDynamicKey(key: writeSet.SetKey, ruleName: ruleName, context: context, verb: "writeSet", keyFieldLabel: "setKey", cell: out var setKeyRef)) {
+                    if (!setSource.IsKeyed) {
+                        throw Invalid("writeSet 'setKey' addresses a cell by indirection, but the set row is not keyed");
+                    }
+                    return new TransformStateEffect(transform: transform, describe: $"transformState WriteSet {writeSet.Row} from {writeSet.Set}[{writeSet.SetKey}]", keyRef: setKeyRef);
+                }
+                if (writeSet.SetKey is null ? !setSource.IsSlot : (!setSource.IsKeyed || !CellName.TryParse(writeSet.SetKey, out _, out _))) {
+                    throw Invalid($"writeSet reads its cell set from an integer cell '{writeSet.SetKey ?? StateRow.SlotKey.Value}' of '{writeSet.Set}'");
                 }
                 break;
+            }
             case StateTransform.BoardCombine combine: {
                 var target = Row(combine.Row);
                 if (target.EffectiveDomain is not StateDomain.CellsOf targetBoard || context.FindTopology(name: targetBoard.Topology) is not { } targetTopology) {
@@ -529,7 +538,7 @@ public static partial class RuleCompiler {
                     throw Invalid("clearEnclosed requires an integer board and an enclosed range that excludes the board's empty value");
                 }
                 if (RuleCompiler.TryResolveDynamicKey(key: enclosed.From, ruleName: ruleName, context: context, verb: "clearEnclosed", keyFieldLabel: "from", cell: out var origin)) {
-                    return new TransformStateEffect(transform: transform, describe: $"transformState ClearEnclosed {enclosed.Row} from {enclosed.From}", fromRef: origin);
+                    return new TransformStateEffect(transform: transform, describe: $"transformState ClearEnclosed {enclosed.Row} from {enclosed.From}", keyRef: origin);
                 }
                 if (!enclosedTopology.TryCell(enclosed.From, out _)) {
                     throw Invalid($"clearEnclosed 'from' names no cell of '{enclosedBoard.Topology}' and spells no dynamic key");

@@ -4815,7 +4815,7 @@
           "type": "string"
         },
         "setKey": {
-          "description": "The cell of that row, or null for its slot cell.",
+          "description": "The cell of that row, or null for its slot cell: a literal cell key, or any dynamic key spelling a write accepts (a binding token, a registered key family, an expression key, or a $cell:\u003Crow\u003E:\u003Ckey\u003E indirection).",
           "type": [
             "string",
             "null"

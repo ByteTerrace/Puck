@@ -38,8 +38,12 @@ public sealed partial class RuleEvaluator {
         switch (effect) {
             case TransformStateEffect transformState:
                 var transform = transformState.Transform;
-                if ((transformState.FromRef is { } fromRef) && (transform is StateTransform.ClearEnclosed enclosed)) {
-                    transform = enclosed with { From = ResolveKey(key: enclosed.From, keyFrom: fromRef, tick: tick) };
+                if (transformState.KeyRef is { } keyRef) {
+                    transform = transform switch {
+                        StateTransform.ClearEnclosed enclosed => enclosed with { From = ResolveKey(key: enclosed.From, keyFrom: keyRef, tick: tick) },
+                        StateTransform.WriteSet writeSet => writeSet with { SetKey = ResolveKey(key: writeSet.SetKey, keyFrom: keyRef, tick: tick) },
+                        _ => transform,
+                    };
                 }
                 return Apply(effect: effect, ruleName: ruleName, mutation: new StateMutation.Apply(Transform: transform), tick: tick, preflight: preflight);
             case TransactionEffect transaction:

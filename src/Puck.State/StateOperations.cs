@@ -112,7 +112,9 @@ public abstract record StateTransform {
     /// transform of its own and composes through per-cell rules instead.</summary>
     /// <param name="Row">The board row, over a topology of at most 64 cells.</param>
     /// <param name="Set">The integer row the cell-set mask is read from.</param>
-    /// <param name="SetKey">The cell of that row, or null for its slot cell.</param>
+    /// <param name="SetKey">The cell of that row, or null for its slot cell: a literal cell key, or any dynamic
+    /// key spelling a write accepts (a binding token, a registered key family, an expression key, or a
+    /// <c>$cell:&lt;row&gt;:&lt;key&gt;</c> indirection).</param>
     /// <param name="Value">The value written to every masked cell.</param>
     public sealed record WriteSet(string Row, string Set, string? SetKey = null, long Value = 0) : StateTransform;
 

@@ -190,6 +190,11 @@ form for a set built from `$board:mask`, `boardShift`/`boardImage`, and the
 plain bit operators (`bitAnd`/`bitOr`/`bitXor`/`bitNot` compose two boards'
 masks the way a dedicated set-algebra transform once did): populate a scratch
 integer row with the composed expression, then `writeSet` it onto the board.
+`setKey` may be a literal, or any dynamic key spelling a write accepts (a
+binding token, a registered key family, an expression key, or a `$cell:` cell
+indirection), resolved live before the write submits — a rule gated on the
+held token paints `plan` from `legal[$cell:held:token]` after a `boardCombine
+clear`, with no per-game code.
 `boardCombine` (`row`, `operation`, `left`, `right`, `direction`, `element`,
 `value`) is the same set algebra over boards of any size, one journaled
 mutation per operation: `copy`, `fill`, `clear`, `and`, `or`, `xor`, `andNot`,

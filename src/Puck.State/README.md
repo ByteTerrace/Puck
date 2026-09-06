@@ -183,7 +183,7 @@ Nothing here carries a `World` name — a state library names no world.
   laid out once by a `FrameLayout` (slot, keyed, board by cell ordinal, ring
   with its cursor; text and field rows read through to their cells). A frame
   copies as one span copy, refuses a key its row lacks, and applies `boardCombine`,
-  `push`, and `clearEnclosed` densely. `FrameHost` is an `IRuleHost` over a
+  `writeSet`, `push`, and `clearEnclosed` densely. `FrameHost` is an `IRuleHost` over a
   frame with its own evaluator and latch: a preflight scope is a frame copy,
   an effect arm the library does not own is skipped, and `Judge` evaluates a
   rule array as one tick with every edge closed. `OperandFact.HostOnly`,
@@ -201,7 +201,11 @@ Nothing here carries a `World` name — a state library names no world.
 - *State transforms:* the `StateTransform` union (`transfer`, `setRay`,
   `shuffle`, `sortZone`, `sortKeyed`, `writeSet`, `boardCombine`, `arrange`,
   `push`, `clearEnclosed`, `observe`),
-  `ZoneSelector`, and `SortKey`.
+  `ZoneSelector`, and `SortKey`. `clearEnclosed`'s `from` and `writeSet`'s
+  `setKey` each accept a dynamic key (`TransformStateEffect.KeyRef`,
+  resolved live in `RuleEvaluator.Effects.Fire` before the mutation
+  submits) alongside a literal cell: a rule gated on the held token paints
+  `plan` from `legal[$cell:held:token]` after a `boardCombine clear`.
 - *Identifiers:* `SafeName` and `CellName` (validated at construction,
   refusing by name; `SafeName.MaxSuffixLength` reserves the file suffix a
   document project may append), their JSON converters, and the
