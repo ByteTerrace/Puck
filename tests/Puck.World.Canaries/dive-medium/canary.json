@@ -1,0 +1,50 @@
+{
+  "id": "dive-medium",
+  "title": "The dive district's pool: a diver posed into the medium reads inMedium, and the region-derived depth/dived rows track it — the successor of frozen-fish-medium-buoyancy",
+  "binding": "The positive leg boots a minimal host that imports modules/dive.world.json under alias 'dive' (with a one-seat 'diver' kit, no other content), waits 200 ticks (the pool's own fish settle dry, untouched by the seat), reads world.state.hash, poses the seat body into the basin near its floor, waits 200 more ticks, and reads body.where (facts include inmedium), world.state dive_depth (positive, near the basin's authored maximum) and dive_dived (latched to 1 once depth crossed the authored threshold). The discriminating leg boots the SAME host with the 'dive_dive-depth-deep' rule's settled value authored 2.9 instead of 2.4 (a basis delta over the positive fixture) and runs the IDENTICAL script: the pre-pose hash still matches the positive leg exactly, proving the delta touches nothing the fish's own dry convergence reads; the posed leg's depth value diverges from the positive leg's, proving the pool's own region-derived depth row -- not a hardcoded number -- is what the seat's body.where/world.state read. The exact settled hash after posing is not asserted: the pool's fish keep circling indefinitely under their own flock producer, so the real-time gap a script's intervening commands (body.pose, body.where, two world.state reads) leave before a later hash read lands on a slightly different tick run to run, and a still-circling fish's phase at that tick is part of the hashed state -- the read-back VALUES stay bit-identical regardless (asserted here), only a hash taken after that gap does not.",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 8,
+  "timeoutSeconds": 20,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/dive-medium/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state.hash", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.pose", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "body.where", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 2, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "dry-hash-before-the-pool", "stream": "stdout", "match": "contains", "text": "hash=310f68292ebf0dab", "present": true },
+      { "type": "line", "name": "seat-reads-inmedium-once-posed-into-the-basin", "stream": "stdout", "match": "contains", "text": "facts=grounded|inmedium", "present": true },
+      { "type": "line", "name": "depth-row-reads-positive-near-the-basin-floor", "stream": "stdout", "match": "contains", "text": "'dive_depth' kind=fixed value=2.399993896484375", "present": true },
+      { "type": "line", "name": "dived-row-latches-once-the-threshold-crossed", "stream": "stdout", "match": "contains", "text": "'dive_dived' kind=int value=1", "present": true },
+      { "type": "line", "name": "no-mutation-rejected", "stream": "stderr", "match": "contains", "text": "world.mutation rejected", "present": false },
+      { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/dive-medium/discriminating.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state.hash", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.pose", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "body.where", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 2, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "dry-hash-still-agrees-before-the-pool", "stream": "stdout", "match": "contains", "text": "hash=310f68292ebf0dab", "present": true },
+      { "type": "line", "name": "depth-row-reads-the-perturbed-settled-value", "stream": "stdout", "match": "contains", "text": "'dive_depth' kind=fixed value=2.899993896484375", "present": true },
+      { "type": "line", "name": "not-the-positive-legs-depth-value", "stream": "stdout", "match": "contains", "text": "'dive_depth' kind=fixed value=2.399993896484375", "present": false },
+      { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  }
+}

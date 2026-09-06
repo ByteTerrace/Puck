@@ -438,3 +438,59 @@ screen.peek 8 0xC200
 <image>`; `body.where` reads `grounded` at the arrival; stderr carries
 `[world.engage: seat1 auto-engaged screen:8 — context button]` after the
 press, and the second `screen.peek` reads a larger `x` than the first.
+## Dive
+
+`modules/dive.world.json` is the pool: a `diveCourt` root placement (a small wooden
+dock, itself the district's whole moveable frame — every other row below carries
+`parent: "diveCourt"` and moves with it), a `diveBasin` placement (one floor-plus-walls
+creation, open at the top) holding a dedicated `pool` field lattice whose `water` row
+carries the `medium` trait, a `diver` kit (grounded: a `ground` Surface/Gravity hold for
+the dock, a `water` Medium hold with `idleDrift`/`equilibriumOffset`/`settleRate` and
+`thrust: 1` so the world's own `MoveUp`-role channel — whatever a host names it — drives
+vertical swimming, and an `air` Free/Gravity fallback; no jump hold, no `jump`-channel
+release), and four fish (`fishKit`, `bodyContact: Overlap`, the same `water`/`air` hold
+pair as the diver) inhabiting the pool on a flock producer. A `pool` `Medium` navigation
+domain anchors the fish's `movementDomain`. `dive-arrival` stands on the dock.
+
+**Depth has no direct primitive to read from — this module derives it geometrically.**
+No reserved rule channel today reads a body's raw world position, or the medium hold's
+own per-tick displacement error, so `depth` cannot be computed by comparing a body's
+height against the water surface directly. `depth` (a Fixed slot row) is instead driven
+by three concentric `region` placements (`diveDepth1`/`2`/`3`, radii 0.8/1.6/2.4, all
+centered on the basin floor) whose live `$region:<id>` occupant counts four mutually
+exclusive `Level` rules sum into a 0/0.8/1.6/2.4 staircase — closer to the floor trips
+more of the nested spheres, which reads as "deeper". `dived` (an Int slot row) latches to
+1 the first tick `depth` reaches 1.6 and never resets — a reveal-ladder fact for whatever
+reads identity-carried facts. Because `$region:` counts every active body inside the
+sphere, not one seat's own, `depth` genuinely answers "how deep is whatever is nearest
+the floor" rather than "how deep is the diving seat" specifically; the fish spawn off to
+one side of the probes precisely so they do not corrupt the seat's own reading in the
+ordinary case. A per-body position or per-body medium-displacement rule fact would let a
+future module drop this geometric workaround; it does not exist today.
+
+**Body motion program names are not alias-scoped.** Kit names, body-motion-program
+names, and placement ids are excluded from `WorldNameRegistry` (only state rows, rules,
+tables, patterns, topologies, generators, fields, and dynamics rows are prefixed under
+an import's alias — see `WorldNameKind`). The island's own `puck.world.json` already
+declares generic `walk`/`fishMotion`/`school` programs for its own creatures, so this
+module deliberately spells its own `diveDiverMotion`/`diveFishMotion`/`diveSchool`
+rather than the shorter generic names, to never collide with a host's own programs of
+the same shape. A future module should do the same rather than assume programs are
+namespaced the way state rows are.
+
+**The pool's field lattice and navigation domain do not ride `diveCourt`'s frame.**
+`WorldPlacement.Parent` composes a placement's transform over another placement's, but
+`state.lattices` topologies and `navigation.domains` carry their own absolute `origin`
+with no parent concept — this module authors them assuming `diveCourt` sits at the
+module's own local origin `(0, 0, 0)`. An importer that restates `diveCourt`'s position
+to move the whole district (the convention every module here follows) must also
+translate the `pool` lattice's and navigation domain's own `origin` by the same offset;
+nothing does this automatically today.
+
+Prove the pool in isolation: a minimal host importing `modules/dive.world.json` under
+alias `dive`, with a one-seat `diver` kit, boots headless, waits, and poses the seat body
+into the basin (`body.pose 0 -2.6 5 0 0 0` for the shipped basin's own coordinates).
+`body.where` reports `facts=grounded|inmedium`; `world.state dive_depth` reads positive
+(2.399993896484375 at the floor); `world.state dive_dived` reads 1 once depth crosses
+1.6. See `tests/Puck.World.Canaries/dive-medium/` for the full two-leg proof — the
+successor of the retired `frozen-fish-medium-buoyancy` canary.

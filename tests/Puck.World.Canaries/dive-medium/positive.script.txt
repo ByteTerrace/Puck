@@ -1,0 +1,7 @@
+world.wait 200
+world.state.hash
+body.pose 0 -2.6 5 0 0 0
+world.wait 200
+body.where 0
+world.state dive_depth
+world.state dive_dived
