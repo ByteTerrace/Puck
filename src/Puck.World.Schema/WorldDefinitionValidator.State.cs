@@ -4,86 +4,23 @@ using Puck.Maths;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
-    /// <summary>Validates the bounded value surface affected by one scalar state-cell mutation. The containing
-    /// definition has already passed full validation; this check is therefore intentionally limited to properties
-    /// an <c>UpsertStateCell</c> mutation can change.</summary>
+    /// <summary>Validates the one row an <c>UpsertStateCell</c>/<c>RemoveStateCell</c> mutation touched — the same
+    /// per-row and cross-row checks <see cref="TryValidateTouchedStateRows"/> runs for any state mutation, with no
+    /// rule, interaction, pattern, table, search plan, or flock affinity compiled.</summary>
     public static bool TryValidateRuntimeStateCell(WorldDefinition definition, string rowName, string key, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: definition);
-        reason = string.Empty;
 
         if (
             WorldDefinitionRows.FindStateRow(rows: definition.State, name: rowName) is not { } row ||
             !CellName.TryParse(candidate: key, name: out var cellKey, reason: out _) ||
-            StateRows.FindCell(cells: row.Cells, key: cellKey) is not { } cell
+            StateRows.FindCell(cells: row.Cells, key: cellKey) is null
         ) {
             reason = $"state row '{rowName}' cell '{key}' did not resolve after composition";
+
             return false;
         }
 
-        if (row.EffectiveDomain is StateDomain.KeysOf || row.Phase is not null || row.Knowledge is not null || cell.Visibility is not null || cell.Observation is not null) {
-            return TryValidateLocally(definition, out reason);
-        }
-        var capacity = Math.Clamp(value: (row.Capacity ?? row.CellCeiling), min: 1, max: row.CellCeiling);
-
-        if ((row.Cells?.Count ?? 0) > capacity) {
-            reason = $"state row '{rowName}' cell count exceeds its capacity of {capacity}";
-            return false;
-        }
-
-        if (row.EffectiveDomain is StateDomain.CellsOf board && (WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology || !topology.TryCell(key, out _))) {
-            reason = $"state row '{rowName}' cell '{key}' is outside its topology";
-            return false;
-        }
-        if (row.Kind == CellKind.Text) {
-            if (cell.Text is null || cell.Text.Length > StateCapacity.MaxTextValueLength) {
-                reason = $"state row '{rowName}' cell '{key}' text is missing or exceeds {StateCapacity.MaxTextValueLength} characters";
-                return false;
-            }
-
-            return true;
-        }
-
-        if ((row.Kind == CellKind.Bool) && (cell.Value is not (0 or 1))) {
-            reason = $"state row '{rowName}' cell '{key}' value {cell.Value} must be 0 or 1";
-            return false;
-        }
-
-        if (row.NonNegative && (cell.Value < 0L)) {
-            reason = $"state row '{rowName}' cell '{key}' value is negative";
-            return false;
-        }
-
-        if ((row.Min is { } min) && (row.Max is { } max) && ((cell.Value < min) || (cell.Value > max))) {
-            reason = $"state row '{rowName}' cell '{key}' value {DescribeValue(kind: row.Kind, raw: cell.Value)} is outside its declared range {DescribeValue(kind: row.Kind, raw: min)}..{DescribeValue(kind: row.Kind, raw: max)}";
-            return false;
-        }
-
-        // The value checks above are the cheap prefix; the state section's own walk is what refuses the shapes a
-        // cell write can still produce — a keyed cell minted beside a row-level advance, dynamics or cycle, the
-        // reserved slot key on a keyed row, cells on a lattice row, a lattice-node phase out of range — so a write the
-        // live door admits is never one the next boot refuses.
-        var errors = new List<string>();
-        var dynamicsNames = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-        foreach (var dynamics in (definition.DynamicsRaw ?? [])) {
-            if (dynamics?.Name is { } dynamicsName) {
-                dynamicsNames.Add(item: dynamicsName);
-            }
-        }
-
-        _ = ValidateState(
-            rows: definition.State,
-            generators: definition.Generators,
-            dynamicsNames: dynamicsNames,
-            errors: errors
-        );
-
-        if (errors.Count > 0) {
-            reason = errors[0];
-            return false;
-        }
-
-        return true;
+        return TryValidateTouchedStateRows(definition: definition, rowNames: [rowName], reason: out reason);
     }
 
     // Fixed-kind values speak DECIMAL in refusal text — never the raw Q48.16 bit pattern — matching the document
@@ -967,306 +904,323 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.name '{row.Name}' is duplicated.");
             }
 
-            // A field-shaped row is per-cell fixed-point substrate: its cells live in the lattice (checkpointed,
-            // snapshot-delivered), never as authored slot/keyed cells, and every keyed-row trait is refused at this
-            // door so the shape cannot be held by convention.
-            if (row.Field is not null) {
-                if (row.EffectiveDomain is not StateDomain.CellsOf) {
-                    errors.Add(item: $"{path} ('{row.Name}') declares a field trait without a cellsOf domain — a field row's domain names the topology it lies over.");
-                }
-                if (row.Kind != CellKind.Fixed) {
-                    errors.Add(item: $"{path} ('{row.Name}') declares a field trait with kind '{row.Kind}' — a field row is kind 'fixed'.");
-                }
-                if (row.Cells is { Count: > 0 }) {
-                    errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and cells — a field row's cells are the lattice's.");
-                }
-                if (row.Capacity is not null) {
-                    errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and capacity — the topology sizes a field row.");
-                }
-                if (row.Advance is not null) {
-                    errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and advance.");
-                }
-                if (row.Dynamics is not null) {
-                    errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and dynamics.");
-                }
-                if (row.Cycle is not null) {
-                    errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and cycle.");
-                }
-                if (row.Draw is not null) {
-                    errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and a draw facet — a field row draws per cell through a 'draw' entry in its paint, never through the slot-row facet.");
-                }
-            }
-
-            // The reserved prefix is ENGINE-MINTED ONLY, and the rule lives HERE — in the validator every ingress
-            // passes (boot, live mutation, undo replay), never in one door a hand-authored file walks around.
-            // Nothing mints a state ROW, so the prefix is refused outright on a row name; that is also what keeps a
-            // reserved rule channel ($tick/$population/$region:) from ever being shadowed by a real row.
-            if (row.Name.Value.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: WorldStateRow.ReservedNamePrefix
-            )) {
-                errors.Add(item: $"{path}.name '{row.Name}' starts with the reserved prefix '{WorldStateRow.ReservedNamePrefix}' — reserved for engine-minted names and the rules section's own channels ({RuleFacts.Tick}, {WorldRuleFacts.Population}, {WorldRuleFacts.RegionPrefix}<placementId>).");
-            }
-
-            if (!Enum.IsDefined(value: row.Kind)) {
-                errors.Add(item: $"{path}.kind '{row.Kind}' is not a defined CellKind.");
-
-                continue;
-            }
-
-            var numeric = ((row.Kind == CellKind.Int) || (row.Kind == CellKind.Fixed));
-
-            // Min/Max/NonNegative are envelope traits over a NUMBER — legitimate only for Int/Fixed, the same rule a
-            // scalar row's range always followed, now stated once instead of per case.
-            if (
-                !numeric &&
-                ((row.Min is not null) || (row.Max is not null))
-            ) {
-                errors.Add(item: $"{path} ('{row.Name}') declares min/max on a {StateSpelling.Kind(kind: row.Kind)} row — only int/fixed rows carry a range.");
-            } else if ((row.Min is null) != (row.Max is null)) {
-                errors.Add(item: $"{path} declares only one of min/max — a range is authored as a pair or not at all.");
-            } else if (
-                (row.Min is { } lo) &&
-                (row.Max is { } hi) &&
-                (lo >= hi)
-            ) {
-                errors.Add(item: $"{path} min {DescribeValue(
-                    kind: row.Kind,
-                    raw: lo
-                )} must be less than max {DescribeValue(
-                    kind: row.Kind,
-                    raw: hi
-                )}.");
-            }
-
-            if (
-                !numeric &&
-                row.NonNegative
-            ) {
-                errors.Add(item: $"{path} ('{row.Name}') declares nonNegative on a {StateSpelling.Kind(kind: row.Kind)} row — only int/fixed rows carry a floor.");
-            }
-
-            // GatesDrive is the composition-lane's drive-admission gate (WorldGrants.TryGetDriveGate) — a nonzero
-            // per-body cell there refuses that body's drive/action intents regardless of any grant held. It reads a
-            // cell as zero/nonzero, so a text row has no honest reading for it, and it is read per BODY (one cell
-            // per entity index), so only a keyed (table) row — one declaring Capacity — has a body to address; a
-            // slot has exactly one value shared by every body, which is not what a per-body gate means.
-            if (
-                (row.Kind == CellKind.Text) &&
-                row.GatesDrive
-            ) {
-                errors.Add(item: $"{path} ('{row.Name}') declares gatesDrive on a text row — a drive gate reads a cell as zero/nonzero, which a text cell has no honest reading for.");
-            }
-
-            if (
-                row.GatesDrive &&
-                (row.Capacity is null)
-            ) {
-                errors.Add(item: $"{path} ('{row.Name}') declares gatesDrive without a capacity — a drive gate is read per body (one cell keyed by the body's entity index), which only a keyed (table) row can carry; a slot has no ONE body to gate.");
-            }
-
-            // Evicts is the row's own overflow policy: drop-oldest instead of refuse. It reads exactly one bound —
-            // Capacity — so the only shape it can legitimately name is a keyed row that declares one; a slot never
-            // declares Capacity (WorldStateRow.IsSlot), so this one check refuses both "no capacity at all" and "on a
-            // slot row" by the same name, with the remedy spelled out.
-            if (
-                row.Evicts &&
-                (row.Capacity is null)
-            ) {
-                errors.Add(item: $"{path} ('{row.Name}') declares evicts without a capacity — eviction drops the oldest cell once a write would exceed the declared bound, which only a keyed (table) row declaring capacity can carry; a slot has no bound to evict against. Declare a capacity, or drop evicts.");
-            }
-
-            if (
-                (row.Capacity is { } declaredCapacity) &&
-                ((declaredCapacity < 1) || (declaredCapacity > row.CellCeiling))
-            ) {
-                errors.Add(item: $"{path}.capacity {declaredCapacity} must be between 1 and {row.CellCeiling}.");
-            }
-
-            ValidateDraw(
+            ValidateStateRow(
+                dynamicsNames: dynamicsNames,
                 errors: errors,
                 generators: generators,
                 path: path,
                 row: row
             );
-            ValidateHistory(
-                errors: errors,
-                path: path,
-                row: row
-            );
-            ValidateAdvance(
-                errors: errors,
-                numeric: numeric,
-                path: path,
-                row: row
-            );
-            ValidateDynamicsTrait(
-                dynamicsNames: dynamicsNames,
-                errors: errors,
-                numeric: numeric,
-                path: path,
-                row: row
-            );
-            ValidateCycle(
-                errors: errors,
-                numeric: numeric,
-                path: path,
-                row: row
-            );
-            var effectiveCapacity = Math.Clamp(
-                value: (row.Capacity ?? row.CellCeiling),
-                min: 1,
-                max: row.CellCeiling
-            );
-            var cells = (row.Cells ?? []);
-
-            if (cells.Count > effectiveCapacity) {
-                errors.Add(item: $"{path} ('{row.Name}') cell count {cells.Count} exceeds its capacity of {effectiveCapacity}.");
-            }
-
-            // The reserved slot key is the `value` sugar's own address — a keyed row (a declared Capacity, or more
-            // than one cell) may never use it as one of its own keys, or the sugar and an authored key could address
-            // the same cell two ways and disagree about which shape they named.
-            var reservesSlotKey = ((row.Capacity is not null) || (cells.Count != 1));
-
-            var keys = new HashSet<string>(comparer: StringComparer.Ordinal);
-            var rangeDeclared = (numeric && (row.Min is { } rangeLo) && (row.Max is { } rangeHi) && (rangeLo < rangeHi));
-
-            for (var cellIndex = 0; (cellIndex < cells.Count); cellIndex++) {
-                var cell = cells[cellIndex];
-                var cellPath = $"{path}.cells[{cellIndex}]";
-
-                if (cell is null) {
-                    errors.Add(item: $"{cellPath} is required.");
-
-                    continue;
-                }
-
-                // A cell key can no longer be empty, dotted, or otherwise unsafe — CellName refuses that at JSON
-                // parse, before this method ever sees the cell — so this checks only uniqueness and the reserved key.
-                if (!keys.Add(item: cell.Key)) {
-                    errors.Add(item: $"{path} ('{row.Name}') key '{cell.Key}' is duplicated.");
-                } else if (
-                    reservesSlotKey &&
-                    (cell.Key == WorldStateRow.SlotKey)
-                ) {
-                    errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' uses the reserved slot key '{WorldStateRow.SlotKey}' as an authored cell key.");
-                } else if (!StateReservedCells.TryValidateReservedCell(
-                    row: row,
-                    key: cell.Key,
-                    reason: out var reservedReason
-                )) {
-                    // Any reserved-prefix key but the slot key itself is refused: draw and generator bookkeeping
-                    // (the cursor, the drawn masks) lives in the row's own typed fields, never a cell. The rule lives
-                    // in StateReservedCells so UpsertStateCell's compose arm refuses the identical shape from
-                    // the identical code.
-                    errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' {reservedReason}.");
-                }
-
-                if (
-                    (cell.Advance is not null) &&
-                    (cell.Dynamics is not null)
-                ) {
-                    errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares both advance and dynamics — a cell is a linear accumulator or a second-order easing cell, never both.");
-                }
-
-                if ((cell.Cycle is not null) && ((cell.Advance is not null) || (cell.Dynamics is not null))) {
-                    errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares cycle beside advance or dynamics — a cell is a linear accumulator, a second-order easing cell or a tick-indexed rotation, never two of them.");
-                }
-
-                if (cell.Cycle is { } cellCycle) {
-                    ValidateCellCycle(
-                        cell: cell,
-                        cellPath: cellPath,
-                        cycle: cellCycle,
-                        errors: errors,
-                        numeric: numeric,
-                        row: row
-                    );
-                }
-
-                if (cell.Advance is { } cellAdvance) {
-                    ValidateCellAdvance(
-                        advance: cellAdvance,
-                        cell: cell,
-                        cellPath: cellPath,
-                        errors: errors,
-                        numeric: numeric,
-                        row: row
-                    );
-                }
-
-                if (cell.Dynamics is { } cellDynamics) {
-                    ValidateCellDynamics(
-                        cell: cell,
-                        cellPath: cellPath,
-                        dynamics: cellDynamics,
-                        dynamicsNames: dynamicsNames,
-                        errors: errors,
-                        numeric: numeric,
-                        row: row
-                    );
-                }
-
-                if (
-                    (cell.Provenance is { } provenance) &&
-                    (provenance.Length > StateCapacity.MaxProvenanceLength)
-                ) {
-                    errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' provenance length {provenance.Length} exceeds the maximum of {StateCapacity.MaxProvenanceLength}.");
-                }
-
-                if (row.Kind == CellKind.Text) {
-                    if (cell.Text is null) {
-                        errors.Add(item: $"{cellPath}.text is required.");
-                    } else if (cell.Text.Length > StateCapacity.MaxTextValueLength) {
-                        errors.Add(item: $"{path} ('{row.Name}') text value length {cell.Text.Length} exceeds the maximum of {StateCapacity.MaxTextValueLength}.");
-                    }
-
-                    continue;
-                }
-
-                if (row.Kind == CellKind.Bool) {
-                    if (cell.Value is not (0 or 1)) {
-                        errors.Add(item: $"{cellPath}.value {cell.Value} must be 0 or 1 for a bool row.");
-                    }
-
-                    continue;
-                }
-
-                // Int/Fixed: the row's DECLARED non-negative floor (enforced regardless of any authored Min — this is
-                // what "timer" meant before the kind vocabularies reconciled), then the declared range. This walk is
-                // the floor's authority; the cross-document write-back channel (Server.WorldOwnedWorlds.Decide) reads
-                // the SAME row trait at its own door precisely so it can never admit a value this walk would refuse
-                // at the owned world's next boot.
-                if (
-                    row.NonNegative &&
-                    (cell.Value < 0)
-                ) {
-                    errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' value {DescribeValue(
-                        kind: row.Kind,
-                        raw: cell.Value
-                    )} is negative — this row's floor is non-negative.");
-                }
-
-                if (
-                    rangeDeclared &&
-                    ((cell.Value < row.Min) || (cell.Value > row.Max))
-                ) {
-                    errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' value {DescribeValue(
-                        kind: row.Kind,
-                        raw: cell.Value
-                    )} is outside its declared range {DescribeValue(
-                        kind: row.Kind,
-                        raw: row.Min!.Value
-                    )}..{DescribeValue(
-                        kind: row.Kind,
-                        raw: row.Max!.Value
-                    )}.");
-                }
-
-            }
         }
 
         return byName;
+    }
+    // Every check a single state row (and its own cells) can fail on its own terms — the field trait shape, the
+    // reserved-name prefix, the range/nonNegative/gatesDrive/evicts/capacity envelope, the draw/history/advance/
+    // dynamics/cycle traits, and each cell's own key uniqueness, reserved-key rule, per-trait checks, and value. The
+    // whole-document walk (<see cref="ValidateState"/>, one row per authored index) and a state mutation's touched-
+    // row walk (<see cref="TryValidateTouchedStateRows"/>, one row by name) both call this — the same failure
+    // either door reaches, in exactly one place. Cross-row invariants (a keysOf zone's domain, a cellsOf board's
+    // topology, a knowledge board's source/mask, an inverse board's derivation) are NOT here — see
+    // <see cref="ValidateTokenAndPhaseRow"/>, <see cref="ValidateBoardRow"/> and <see cref="ValidateDisclosureRow"/>.
+    private static void ValidateStateRow(WorldStateRow row, IReadOnlyList<GeneratorRow>? generators, ISet<string> dynamicsNames, string path, List<string> errors) {
+        // A field-shaped row is per-cell fixed-point substrate: its cells live in the lattice (checkpointed,
+        // snapshot-delivered), never as authored slot/keyed cells, and every keyed-row trait is refused at this
+        // door so the shape cannot be held by convention.
+        if (row.Field is not null) {
+            if (row.EffectiveDomain is not StateDomain.CellsOf) {
+                errors.Add(item: $"{path} ('{row.Name}') declares a field trait without a cellsOf domain — a field row's domain names the topology it lies over.");
+            }
+            if (row.Kind != CellKind.Fixed) {
+                errors.Add(item: $"{path} ('{row.Name}') declares a field trait with kind '{row.Kind}' — a field row is kind 'fixed'.");
+            }
+            if (row.Cells is { Count: > 0 }) {
+                errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and cells — a field row's cells are the lattice's.");
+            }
+            if (row.Capacity is not null) {
+                errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and capacity — the topology sizes a field row.");
+            }
+            if (row.Advance is not null) {
+                errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and advance.");
+            }
+            if (row.Dynamics is not null) {
+                errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and dynamics.");
+            }
+            if (row.Cycle is not null) {
+                errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and cycle.");
+            }
+            if (row.Draw is not null) {
+                errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and a draw facet — a field row draws per cell through a 'draw' entry in its paint, never through the slot-row facet.");
+            }
+        }
+
+        // The reserved prefix is ENGINE-MINTED ONLY, and the rule lives HERE — in the validator every ingress
+        // passes (boot, live mutation, undo replay), never in one door a hand-authored file walks around.
+        // Nothing mints a state ROW, so the prefix is refused outright on a row name; that is also what keeps a
+        // reserved rule channel ($tick/$population/$region:) from ever being shadowed by a real row.
+        if (row.Name.Value.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: WorldStateRow.ReservedNamePrefix
+        )) {
+            errors.Add(item: $"{path}.name '{row.Name}' starts with the reserved prefix '{WorldStateRow.ReservedNamePrefix}' — reserved for engine-minted names and the rules section's own channels ({RuleFacts.Tick}, {WorldRuleFacts.Population}, {WorldRuleFacts.RegionPrefix}<placementId>).");
+        }
+
+        if (!Enum.IsDefined(value: row.Kind)) {
+            errors.Add(item: $"{path}.kind '{row.Kind}' is not a defined CellKind.");
+
+            return;
+        }
+
+        var numeric = ((row.Kind == CellKind.Int) || (row.Kind == CellKind.Fixed));
+
+        // Min/Max/NonNegative are envelope traits over a NUMBER — legitimate only for Int/Fixed, the same rule a
+        // scalar row's range always followed, now stated once instead of per case.
+        if (
+            !numeric &&
+            ((row.Min is not null) || (row.Max is not null))
+        ) {
+            errors.Add(item: $"{path} ('{row.Name}') declares min/max on a {StateSpelling.Kind(kind: row.Kind)} row — only int/fixed rows carry a range.");
+        } else if ((row.Min is null) != (row.Max is null)) {
+            errors.Add(item: $"{path} declares only one of min/max — a range is authored as a pair or not at all.");
+        } else if (
+            (row.Min is { } lo) &&
+            (row.Max is { } hi) &&
+            (lo >= hi)
+        ) {
+            errors.Add(item: $"{path} min {DescribeValue(
+                kind: row.Kind,
+                raw: lo
+            )} must be less than max {DescribeValue(
+                kind: row.Kind,
+                raw: hi
+            )}.");
+        }
+
+        if (
+            !numeric &&
+            row.NonNegative
+        ) {
+            errors.Add(item: $"{path} ('{row.Name}') declares nonNegative on a {StateSpelling.Kind(kind: row.Kind)} row — only int/fixed rows carry a floor.");
+        }
+
+        // GatesDrive is the composition-lane's drive-admission gate (WorldGrants.TryGetDriveGate) — a nonzero
+        // per-body cell there refuses that body's drive/action intents regardless of any grant held. It reads a
+        // cell as zero/nonzero, so a text row has no honest reading for it, and it is read per BODY (one cell
+        // per entity index), so only a keyed (table) row — one declaring Capacity — has a body to address; a
+        // slot has exactly one value shared by every body, which is not what a per-body gate means.
+        if (
+            (row.Kind == CellKind.Text) &&
+            row.GatesDrive
+        ) {
+            errors.Add(item: $"{path} ('{row.Name}') declares gatesDrive on a text row — a drive gate reads a cell as zero/nonzero, which a text cell has no honest reading for.");
+        }
+
+        if (
+            row.GatesDrive &&
+            (row.Capacity is null)
+        ) {
+            errors.Add(item: $"{path} ('{row.Name}') declares gatesDrive without a capacity — a drive gate is read per body (one cell keyed by the body's entity index), which only a keyed (table) row can carry; a slot has no ONE body to gate.");
+        }
+
+        // Evicts is the row's own overflow policy: drop-oldest instead of refuse. It reads exactly one bound —
+        // Capacity — so the only shape it can legitimately name is a keyed row that declares one; a slot never
+        // declares Capacity (WorldStateRow.IsSlot), so this one check refuses both "no capacity at all" and "on a
+        // slot row" by the same name, with the remedy spelled out.
+        if (
+            row.Evicts &&
+            (row.Capacity is null)
+        ) {
+            errors.Add(item: $"{path} ('{row.Name}') declares evicts without a capacity — eviction drops the oldest cell once a write would exceed the declared bound, which only a keyed (table) row declaring capacity can carry; a slot has no bound to evict against. Declare a capacity, or drop evicts.");
+        }
+
+        if (
+            (row.Capacity is { } declaredCapacity) &&
+            ((declaredCapacity < 1) || (declaredCapacity > row.CellCeiling))
+        ) {
+            errors.Add(item: $"{path}.capacity {declaredCapacity} must be between 1 and {row.CellCeiling}.");
+        }
+
+        ValidateDraw(
+            errors: errors,
+            generators: generators,
+            path: path,
+            row: row
+        );
+        ValidateHistory(
+            errors: errors,
+            path: path,
+            row: row
+        );
+        ValidateAdvance(
+            errors: errors,
+            numeric: numeric,
+            path: path,
+            row: row
+        );
+        ValidateDynamicsTrait(
+            dynamicsNames: dynamicsNames,
+            errors: errors,
+            numeric: numeric,
+            path: path,
+            row: row
+        );
+        ValidateCycle(
+            errors: errors,
+            numeric: numeric,
+            path: path,
+            row: row
+        );
+        var effectiveCapacity = Math.Clamp(
+            value: (row.Capacity ?? row.CellCeiling),
+            min: 1,
+            max: row.CellCeiling
+        );
+        var cells = (row.Cells ?? []);
+
+        if (cells.Count > effectiveCapacity) {
+            errors.Add(item: $"{path} ('{row.Name}') cell count {cells.Count} exceeds its capacity of {effectiveCapacity}.");
+        }
+
+        // The reserved slot key is the `value` sugar's own address — a keyed row (a declared Capacity, or more
+        // than one cell) may never use it as one of its own keys, or the sugar and an authored key could address
+        // the same cell two ways and disagree about which shape they named.
+        var reservesSlotKey = ((row.Capacity is not null) || (cells.Count != 1));
+
+        var keys = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var rangeDeclared = (numeric && (row.Min is { } rangeLo) && (row.Max is { } rangeHi) && (rangeLo < rangeHi));
+
+        for (var cellIndex = 0; (cellIndex < cells.Count); cellIndex++) {
+            var cell = cells[cellIndex];
+            var cellPath = $"{path}.cells[{cellIndex}]";
+
+            if (cell is null) {
+                errors.Add(item: $"{cellPath} is required.");
+
+                continue;
+            }
+
+            // A cell key can no longer be empty, dotted, or otherwise unsafe — CellName refuses that at JSON
+            // parse, before this method ever sees the cell — so this checks only uniqueness and the reserved key.
+            if (!keys.Add(item: cell.Key)) {
+                errors.Add(item: $"{path} ('{row.Name}') key '{cell.Key}' is duplicated.");
+            } else if (
+                reservesSlotKey &&
+                (cell.Key == WorldStateRow.SlotKey)
+            ) {
+                errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' uses the reserved slot key '{WorldStateRow.SlotKey}' as an authored cell key.");
+            } else if (!StateReservedCells.TryValidateReservedCell(
+                row: row,
+                key: cell.Key,
+                reason: out var reservedReason
+            )) {
+                // Any reserved-prefix key but the slot key itself is refused: draw and generator bookkeeping
+                // (the cursor, the drawn masks) lives in the row's own typed fields, never a cell. The rule lives
+                // in StateReservedCells so UpsertStateCell's compose arm refuses the identical shape from
+                // the identical code.
+                errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' {reservedReason}.");
+            }
+
+            if (
+                (cell.Advance is not null) &&
+                (cell.Dynamics is not null)
+            ) {
+                errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares both advance and dynamics — a cell is a linear accumulator or a second-order easing cell, never both.");
+            }
+
+            if ((cell.Cycle is not null) && ((cell.Advance is not null) || (cell.Dynamics is not null))) {
+                errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares cycle beside advance or dynamics — a cell is a linear accumulator, a second-order easing cell or a tick-indexed rotation, never two of them.");
+            }
+
+            if (cell.Cycle is { } cellCycle) {
+                ValidateCellCycle(
+                    cell: cell,
+                    cellPath: cellPath,
+                    cycle: cellCycle,
+                    errors: errors,
+                    numeric: numeric,
+                    row: row
+                );
+            }
+
+            if (cell.Advance is { } cellAdvance) {
+                ValidateCellAdvance(
+                    advance: cellAdvance,
+                    cell: cell,
+                    cellPath: cellPath,
+                    errors: errors,
+                    numeric: numeric,
+                    row: row
+                );
+            }
+
+            if (cell.Dynamics is { } cellDynamics) {
+                ValidateCellDynamics(
+                    cell: cell,
+                    cellPath: cellPath,
+                    dynamics: cellDynamics,
+                    dynamicsNames: dynamicsNames,
+                    errors: errors,
+                    numeric: numeric,
+                    row: row
+                );
+            }
+
+            if (
+                (cell.Provenance is { } provenance) &&
+                (provenance.Length > StateCapacity.MaxProvenanceLength)
+            ) {
+                errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' provenance length {provenance.Length} exceeds the maximum of {StateCapacity.MaxProvenanceLength}.");
+            }
+
+            if (row.Kind == CellKind.Text) {
+                if (cell.Text is null) {
+                    errors.Add(item: $"{cellPath}.text is required.");
+                } else if (cell.Text.Length > StateCapacity.MaxTextValueLength) {
+                    errors.Add(item: $"{path} ('{row.Name}') text value length {cell.Text.Length} exceeds the maximum of {StateCapacity.MaxTextValueLength}.");
+                }
+
+                continue;
+            }
+
+            if (row.Kind == CellKind.Bool) {
+                if (cell.Value is not (0 or 1)) {
+                    errors.Add(item: $"{cellPath}.value {cell.Value} must be 0 or 1 for a bool row.");
+                }
+
+                continue;
+            }
+
+            // Int/Fixed: the row's DECLARED non-negative floor (enforced regardless of any authored Min — this is
+            // what "timer" meant before the kind vocabularies reconciled), then the declared range. This walk is
+            // the floor's authority; the cross-document write-back channel (Server.WorldOwnedWorlds.Decide) reads
+            // the SAME row trait at its own door precisely so it can never admit a value this walk would refuse
+            // at the owned world's next boot.
+            if (
+                row.NonNegative &&
+                (cell.Value < 0)
+            ) {
+                errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' value {DescribeValue(
+                    kind: row.Kind,
+                    raw: cell.Value
+                )} is negative — this row's floor is non-negative.");
+            }
+
+            if (
+                rangeDeclared &&
+                ((cell.Value < row.Min) || (cell.Value > row.Max))
+            ) {
+                errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' value {DescribeValue(
+                    kind: row.Kind,
+                    raw: cell.Value
+                )} is outside its declared range {DescribeValue(
+                    kind: row.Kind,
+                    raw: row.Min!.Value
+                )}..{DescribeValue(
+                    kind: row.Kind,
+                    raw: row.Max!.Value
+                )}.");
+            }
+
+        }
     }
 }

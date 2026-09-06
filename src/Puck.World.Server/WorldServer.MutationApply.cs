@@ -904,10 +904,59 @@ public sealed partial class WorldServer {
 
     private static bool TryValidateMutationCandidate(WorldDefinition candidate, WorldMutation mutation, out string reason, out WorldRuleCompilation? compilation, bool retainCompilation = true) {
         compilation = null;
-        return mutation is WorldMutation.UpsertStateCell state
-            ? WorldDefinitionValidator.TryValidateRuntimeStateCell(candidate, state.Row, state.Key, out reason)
-            : retainCompilation ? WorldDefinitionValidator.TryValidateLocally(candidate, out reason, out compilation)
-            : WorldDefinitionValidator.TryValidateLocally(candidate, out reason);
+
+        switch (mutation) {
+            case WorldMutation.UpsertStateCell or WorldMutation.RemoveStateCell or WorldMutation.TransformState or WorldMutation.Generate or WorldMutation.Batch:
+                return TryValidateStateMutation(candidate: candidate, mutation: mutation, reason: out reason);
+            default:
+                return (retainCompilation
+                    ? WorldDefinitionValidator.TryValidateLocally(candidate, out reason, out compilation)
+                    : WorldDefinitionValidator.TryValidateLocally(candidate, out reason));
+        }
+    }
+    // A state mutation — a scalar cell write, a bounded transform, a draw-site fire, or a batch of only those — never
+    // needs the rest of the document compiled: it can only have changed the rows it names. A batch carrying a
+    // non-state member falls back to whole-document validation for the whole batch, since a member outside `state`
+    // can violate an invariant the touched-row walk never looks at.
+    private static bool TryValidateStateMutation(WorldDefinition candidate, WorldMutation mutation, out string reason) {
+        var touched = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        return (TryCollectStateMutationRowNames(mutation: mutation, names: touched, reason: out reason)
+            ? WorldDefinitionValidator.TryValidateTouchedStateRows(definition: candidate, rowNames: touched, reason: out reason)
+            : WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out reason));
+    }
+    // Collects the row names a state mutation touches; false (with an empty reason) when the mutation — or, for a
+    // Batch, any one of its members — is not one of the state kinds TryValidateStateMutation covers, which the
+    // caller reads as "fall back to whole-document validation" rather than a refusal.
+    private static bool TryCollectStateMutationRowNames(WorldMutation mutation, ISet<string> names, out string reason) {
+        reason = string.Empty;
+
+        switch (mutation) {
+            case WorldMutation.UpsertStateCell upsertCell:
+                names.Add(item: upsertCell.Row);
+
+                return true;
+            case WorldMutation.RemoveStateCell removeCell:
+                names.Add(item: removeCell.Row);
+
+                return true;
+            case WorldMutation.Generate generate:
+                names.Add(item: generate.Row);
+
+                return true;
+            case WorldMutation.TransformState transform:
+                return WorldDefinitionValidator.TryCollectTransformRowNames(transform: transform.Transform, names: names, reason: out reason);
+            case WorldMutation.Batch batch:
+                foreach (var member in batch.Mutations) {
+                    if (!TryCollectStateMutationRowNames(mutation: member, names: names, reason: out reason)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            default:
+                return false;
+        }
     }
     private void Reject(WorldMutation mutation, string reason, int connectionId, long correlationId) {
         Console.Error.WriteLine(value: $"[world.mutation rejected: {Describe(mutation: mutation)} — {reason}]");
