@@ -124,35 +124,31 @@ service result cannot accidentally become another request body.
 ## Observe a collection
 
 An `observations` entry reads an approved external collection and maps selected
-fields into existing text tables. It can also instantiate authored static
-placements. The [granaries example](../Puck.World/Assets/worlds/modules/README.md)
-uses this path to represent storage accounts without configuring any cloud
-mutation operations.
+fields into existing state rows of any cell kind, and nothing else. The
+[granaries example](../Puck.World/Assets/worlds/modules/README.md) uses this
+path to represent storage accounts without configuring any cloud mutation
+operations; the [Azure hosting example](../Puck.World/Assets/hosting/azure.extensions.example.json)
+also shows a `Fixed` row fed by a metrics observation. An observation writes
+rows only; a district that wants one placement per observed row reads the
+target row from an ordinary authored rule or placement facet.
 
 Each entry names a provider, configured client, provider-specific `settings`,
-and `fields` mapping provider field names to world table names. Tables need
+and `fields` mapping provider field names to world row names. Rows need
 explicit `observe state:<name>` requests, visibility for that principal, and
-ordinary mutation authority. Each output table belongs exclusively to one
+ordinary mutation authority. Each output row belongs exclusively to one
 projection, has capacity at least `maximumItems`, and cannot double as an
-operation request table. Rules consume these ordinary keyed cells; a text world
-can omit placement projection entirely.
+operation request table. A field's value string parses by its row's own cell
+kind: `Int` as an invariant integer, `Fixed` as an invariant decimal to Q48.16,
+`Bool` as `true`/`false` or `1`/`0`, `Text` as authored. A value that does not
+parse refuses the whole projection this cycle by field name — never a partial
+collection — and the previous projection stands; `world.extensions` echoes the
+refused field until a later cycle parses clean. Rules consume these ordinary
+keyed cells.
 
-Optional `placements` names a static unit-scale `template` placement, an exclusive
-generated-ID `prefix`, grid `columns`, and positive `spacingX`/`spacingZ`.
-The template remains visible. Copies inherit its facets, become its children,
-and occupy `(column * spacingX, 0, (row + 1) * spacingZ)` in its placement frame.
-`prototype` overrides the default appearance; `variantField` and `variants` map
-exact field values to other authored prototypes. Nothing here creates gameplay
-bodies or interprets provider-specific health. Keys are sorted ordinally, so
-identities remain stable while positions can shift when collection membership
-changes. Reserve the prefix for this projection, including during live editing.
-
-Only a complete snapshot can replace the previous collection. Changed tables
-and placements enter one recorded mutation batch; absence removes only generated
-representations, never external resources. Unchanged snapshots submit nothing.
+Only a complete snapshot can replace the previous collection. Changed rows
+enter one recorded mutation batch; unchanged snapshots submit nothing.
 Failed, partial, or oversized reads retain the last complete collection. Normal
 admission can still refuse a projection; read-back retries it until it is applied.
-Reserve render headroom in the importing world's `placements.policy` before boot.
 
 `refreshTicks` paces attempts, including failures, using simulation time; a stopped
 world starts no new reads. `scanEveryTicks` also bounds when results are collected.
@@ -184,8 +180,9 @@ make service calls. A visible request is what authorizes the already-granted
 operation to enter durable history.
 
 `world.extensions` reports the host console's operation names, connection wiring,
-observation item counts, freshness ticks, read-back `applied` flags, submissions, and failures;
-other callers see only their granted operations. Status tables reflect ordinary
+each observation's provider-declared kind, item counts, freshness ticks, read-back
+`applied` flags, submissions, failures, and the field name a value last refused to
+parse under; other callers see only their granted operations. Status tables reflect ordinary
 authority admission: an external success can coexist with a refused gameplay
 write. The connection checks read-back and retries an unapplied projection while
 its request remains present. The ordinary mutation outcome stream explains

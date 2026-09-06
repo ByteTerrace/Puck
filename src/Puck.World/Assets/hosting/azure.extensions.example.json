@@ -29,7 +29,10 @@
       "requests": [
         { "capability": "observe", "subject": "state:cloud-requests" },
         { "capability": "observe", "subject": "state:cloud-status" },
-        { "capability": "mutate", "subject": "state:cloud-status" }
+        { "capability": "mutate", "subject": "state:cloud-status" },
+        { "capability": "observe", "subject": "state:cloud-inventory-names" },
+        { "capability": "observe", "subject": "state:cloud-cpu-percent" },
+        { "capability": "mutate", "subject": "section:state" }
       ]
     }
   ],
@@ -40,6 +43,38 @@
       "operation": "creature.delete",
       "requests": "cloud-requests",
       "status": "cloud-status"
+    }
+  ],
+  "observations": [
+    {
+      "name": "widget-inventory",
+      "provider": "azure",
+      "client": "console",
+      "maximumItems": 16,
+      "refreshTicks": 1800,
+      "settings": {
+        "resourceGroup": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/example",
+        "apiVersion": "2021-04-01",
+        "resourceType": "Microsoft.Example/widgets",
+        "fields": { "name": "/name" }
+      },
+      "fields": { "name": "cloud-inventory-names" }
+    },
+    {
+      "name": "widget-cpu",
+      "provider": "azure",
+      "client": "console",
+      "maximumItems": 1,
+      "refreshTicks": 600,
+      "settings": {
+        "kind": "metrics",
+        "resourceId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/example/providers/Microsoft.Example/widgets/creature",
+        "apiVersion": "2018-01-01",
+        "metricNames": ["Percentage CPU"],
+        "aggregation": "Average",
+        "interval": "PT5M"
+      },
+      "fields": { "value": "cloud-cpu-percent" }
     }
   ],
   "scanEveryTicks": 240,

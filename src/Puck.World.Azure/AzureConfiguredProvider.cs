@@ -62,9 +62,16 @@ public sealed class AzureConfiguredProvider : IWorldConfiguredProvider, IWorldCo
     }
 
     /// <inheritdoc/>
+    /// <remarks>An absent <c>kind</c> selects the resource-group inventory read, today's default; <c>"metrics"</c>
+    /// selects the single-resource Azure Monitor read.</remarks>
     public IWorldExtensionObservationSource BindObservation(JsonElement settings, int maximumItems) {
         ObjectDisposedException.ThrowIf(m_disposed, this);
-        return new AzureResourceInventory(m_credential, m_environment, settings, maximumItems);
+        var kind = settings.TryGetProperty("kind", out var element) && element.ValueKind == JsonValueKind.String ? element.GetString() : "inventory";
+        return kind switch {
+            "inventory" or null => new AzureResourceInventory(m_credential, m_environment, settings, maximumItems),
+            "metrics" => new AzureResourceMetrics(m_credential, m_environment, settings, maximumItems),
+            _ => throw new ArgumentException("Azure observation kind must be inventory or metrics."),
+        };
     }
 }
 

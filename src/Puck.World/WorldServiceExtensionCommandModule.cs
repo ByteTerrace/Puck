@@ -22,7 +22,7 @@ internal sealed class WorldServiceExtensionCommandModule(Func<WorldServiceExtens
                     return new CommandResult(Output: "[world.extensions: operations=" + string.Join(", ", runtime.OperationNames) + "; connections=" + string.Join("; ", runtime.Connections.Select(connection =>
                         $"{connection.Name}: {connection.Client} {connection.Requests} -> {connection.Operation} -> {connection.Status}")) +
                         "; observations=" + string.Join("; ", runtime.Observations.Select(source =>
-                            $"{source.Name}: items={source.Items} tick={source.ObservedTick?.ToString() ?? "never"} reading={source.Reading} applied={source.Applied} submissions={source.Submissions} failure={source.Failure ?? "none"}")) +
+                            $"{source.Name}: kind={source.Kind} items={source.Items} tick={source.ObservedTick?.ToString() ?? "never"} reading={source.Reading} applied={source.Applied} submissions={source.Submissions} failure={source.Failure ?? "none"} lastRefusedField={source.LastRefusedField ?? "none"}")) +
                         $"; failure={runtime.LastFailure ?? "none"}]");
                 }
                 try { return new CommandResult(Output: "[world.extensions: " + string.Join(", ", runtime.Client(principal).Discover().Select(operation => operation.Name)) + "]"); }

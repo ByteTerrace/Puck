@@ -146,11 +146,17 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
         return new(capability, subject);
     }
 
-    private void RequireTable(string name, CellKind kind) {
+    /// <summary>Requires an ordinary table of any cell kind and returns which kind it declares.</summary>
+    private CellKind RequireTable(string name) {
         var row = m_server.Definition.State.FirstOrDefault(row => row.Name.Value == name);
-        if (row is null || row.Kind != kind || row.IsSlot || row.PhaseOf is not null || row.Advance is not null || row.Dynamics is not null || row.Cycle is not null) {
-            throw new InvalidOperationException($"Extension state '{name}' must be an ordinary {kind} table.");
+        if (row is null || row.IsSlot || row.PhaseOf is not null || row.Advance is not null || row.Dynamics is not null || row.Cycle is not null) {
+            throw new InvalidOperationException($"Extension state '{name}' must be an ordinary table.");
         }
+        return row.Kind;
+    }
+
+    private void RequireTable(string name, CellKind kind) {
+        if (RequireTable(name) != kind) { throw new InvalidOperationException($"Extension state '{name}' must be an ordinary {kind} table."); }
     }
 
     private IReadOnlyList<WorldObservedCell> ReadRequests(WorldExtensionClient client, WorldExtensionConnection connection) {

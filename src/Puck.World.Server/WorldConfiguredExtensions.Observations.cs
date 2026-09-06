@@ -1,4 +1,4 @@
-using System.Numerics;
+using System.Globalization;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -14,6 +14,7 @@ public sealed partial class WorldConfiguredExtensions {
         public ulong? Started;
         public ulong? Observed;
         public string? Failure;
+        public string? LastRefusedField;
         public long Submissions;
         public bool NeedsProjection;
     }
@@ -21,12 +22,12 @@ public sealed partial class WorldConfiguredExtensions {
 
     /// <summary>Gets detached host-only source diagnostics, including last successful observation tick and failures.</summary>
     public IReadOnlyList<WorldExtensionObservationStatus> Observations => m_observations.Select(source =>
-        new WorldExtensionObservationStatus(source.Settings.Name, source.Items?.Count ?? 0, source.Observed,
-            source.Pending is { IsCompleted: false }, source.Submissions, source.Failure, source.Items is not null && !source.NeedsProjection)).ToArray();
+        new WorldExtensionObservationStatus(source.Settings.Name, source.Source.Kind, source.Items?.Count ?? 0, source.Observed,
+            source.Pending is { IsCompleted: false }, source.Submissions, source.Failure, source.LastRefusedField,
+            source.Items is not null && !source.NeedsProjection)).ToArray();
 
     private void ConfigureObservations(Dictionary<string, IWorldConfiguredProvider> providers, HashSet<string> outputs) {
         var names = new HashSet<string>(StringComparer.Ordinal);
-        var prefixes = new List<string>();
         if (m_configuration.Observations?.Count > 16) { throw new ArgumentException("At most sixteen observation sources are allowed."); }
         foreach (var settings in m_configuration.Observations ?? []) {
             ValidateName(settings.Name);
@@ -35,49 +36,16 @@ public sealed partial class WorldConfiguredExtensions {
             var client = Client(ParsePrincipal(settings.Client));
             foreach (var field in settings.Fields) {
                 ValidateName(field.Key);
-                RequireTable(field.Value, CellKind.Text);
-                _ = ReadTable(client, field.Value, CellKind.Text);
+                var kind = RequireTable(field.Value);
+                _ = ReadTable(client, field.Value, kind);
                 var row = m_server.Definition.State.First(row => row.Name.Value == field.Value);
                 if (!outputs.Add(field.Value) || row.Capacity < settings.MaximumItems) { throw new ArgumentException("Observation tables need exclusive ownership and sufficient capacity."); }
-            }
-            if (settings.Placements is { } placement) {
-                ValidateName(placement.Prefix);
-                if (placement.VariantField is { } variantField) { ValidateName(variantField); }
-                if (placement.Variants is { } variants && (variants.Count > 128 || placement.VariantField is null)) {
-                    throw new ArgumentException("Observation variants need a selector field and at most 128 choices.");
-                }
-                if (prefixes.Any(prefix => prefix.StartsWith(placement.Prefix, StringComparison.Ordinal) || placement.Prefix.StartsWith(prefix, StringComparison.Ordinal)) ||
-                    placement.Columns is < 1 or > 128 || !float.IsFinite(placement.SpacingX) || !float.IsFinite(placement.SpacingZ) ||
-                    placement.SpacingX <= 0 || placement.SpacingZ <= 0) { throw new ArgumentException("Invalid observation placement layout or overlapping prefix."); }
-                prefixes.Add(placement.Prefix);
-                _ = ObservationTemplate(placement);
-                foreach (var prototype in (placement.Variants?.Values ?? []).Append(placement.Prototype).Where(id => id is not null)) {
-                    if (!m_server.Definition.Creations.Any(row => row.Id.Value == prototype)) { throw new ArgumentException("Observation variant must name an authored prototype."); }
-                }
-                // Prefix ownership is explicit deployment authority. Never adopt unrelated authored placements.
-                if (m_server.Definition.Placements.Any(row => row.Id.StartsWith(placement.Prefix, StringComparison.Ordinal))) {
-                    var keys = ReadTable(client, settings.Fields.First().Value, CellKind.Text).Select(cell => placement.Prefix + cell.Key).ToHashSet(StringComparer.Ordinal);
-                    if (m_server.Definition.Placements.Any(row => row.Id.StartsWith(placement.Prefix, StringComparison.Ordinal) && !keys.Contains(row.Id))) {
-                        throw new ArgumentException("Observation prefix collides with an existing placement.");
-                    }
-                }
             }
             if (!providers.TryGetValue(settings.Provider, out var provider) || provider is not IWorldConfiguredObservationProvider factory) {
                 throw new ArgumentException("Selected provider does not support collection observations.");
             }
             m_observations.Add(new(settings, client, factory.BindObservation(settings.Settings, settings.MaximumItems)));
         }
-    }
-
-    private WorldPlacement ObservationTemplate(WorldExtensionObservationPlacements settings) {
-        var template = m_server.Definition.Placements.SingleOrDefault(row => row.Id == settings.Template)
-            ?? throw new InvalidOperationException("Observation placement template is missing.");
-        if (template.Scale != 1 || template.Attach is not null || template.Inhabit is not null ||
-            template.Distribution is not null || template.Mirror is not null || template.Board is not null || template.FaceSources is not null ||
-            template.Contribution is not null || template.Respond is not null || template.Emission is not null) {
-            throw new InvalidOperationException("Observation template must be an ordinary static placement at unit scale.");
-        }
-        return template;
     }
 
     private void PumpObservations(ulong tick) {
@@ -123,39 +91,42 @@ public sealed partial class WorldConfiguredExtensions {
         var principal = observation.Client.Principal;
         var mutations = new List<WorldMutation>();
         foreach (var field in observation.Settings.Fields) {
-            RequireTable(field.Value, CellKind.Text);
-            var actual = ReadTable(observation.Client, field.Value, CellKind.Text);
-            var cells = items.Select(item => new StateCell(CellName.Parse(item.Key), Text: item.Fields.TryGetValue(field.Key, out var text)
-                ? text : throw new InvalidOperationException("Observation omitted a required field."))).ToArray();
-            if (actual.Count == cells.Length && actual.Zip(cells).All(pair => pair.First.Key == pair.Second.Key.Value && pair.First.Text == pair.Second.Text)) { continue; }
             var row = m_server.Definition.State.First(row => row.Name.Value == field.Value);
+            var actual = ReadTable(observation.Client, field.Value, row.Kind);
+            StateCell[] cells;
+            try {
+                cells = items.Select(item => ParseObservedCell(row.Kind, CellName.Parse(item.Key), item.Fields.TryGetValue(field.Key, out var text)
+                    ? text : throw new InvalidOperationException($"Observation '{observation.Settings.Name}' item '{item.Key}' omitted field '{field.Key}'."))).ToArray();
+            } catch {
+                observation.LastRefusedField = field.Key;
+                throw;
+            }
+            if (actual.Count == cells.Length && actual.Zip(cells).All(pair => pair.First.Key == pair.Second.Key.Value && ObservedCellMatches(row.Kind, pair.First, pair.Second))) { continue; }
             mutations.Add(new WorldMutation.UpsertStateRow(principal, row with { Cells = cells }));
         }
-        if (observation.Settings.Placements is { } settings) {
-            var template = ObservationTemplate(settings);
-            var desired = new HashSet<string>(StringComparer.Ordinal);
-            var actual = m_server.Definition.Placements.ToDictionary(row => row.Id, StringComparer.Ordinal);
-            for (var index = 0; index < items.Count; index++) {
-                var item = items[index];
-                var prototype = settings.Prototype ?? template.PrototypeId;
-                if (settings.VariantField is { } variant && item.Fields.TryGetValue(variant, out var value) && settings.Variants?.TryGetValue(value, out var selected) == true) { prototype = selected; }
-                var id = settings.Prefix + item.Key;
-                desired.Add(id);
-                var placement = template with { Id = id, Parent = template.Id, PrototypeId = prototype,
-                    Position = new Vector3((index % settings.Columns) * settings.SpacingX, 0, (index / settings.Columns + 1) * settings.SpacingZ), YawDegrees = 0 };
-                if (!actual.TryGetValue(id, out var existing) || existing != placement) { mutations.Add(new WorldMutation.UpsertPlacement(principal, placement)); }
-            }
-            foreach (var existing in actual.Values) {
-                if (existing.Id.StartsWith(settings.Prefix, StringComparison.Ordinal) && !desired.Contains(existing.Id)) {
-                    mutations.Add(new WorldMutation.RemovePlacement(principal, existing.Id));
-                }
-            }
-        }
+        observation.LastRefusedField = null;
         if (mutations.Count == 0) { observation.NeedsProjection = false; return; }
         observation.Client.Submit(new WorldMutation.Batch(principal, mutations));
         observation.Submissions++;
         // Read-back on the next scan proves admission. Refused contributions must not poison the change cache.
     }
+
+    /// <summary>Parses one observed field value by its target row's cell kind, refusing rather than truncating or
+    /// silently defaulting on a value the kind cannot represent.</summary>
+    private static StateCell ParseObservedCell(CellKind kind, CellName key, string text) => kind switch {
+        CellKind.Int => new(key, Value: long.Parse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture)),
+        CellKind.Fixed => new(key, Value: NumericLiteral.ToFixed(decimal.Parse(text,
+            NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture)).Value),
+        CellKind.Bool => new(key, Value: text switch {
+            "true" or "1" => 1L,
+            "false" or "0" => 0L,
+            _ => throw new FormatException($"'{text}' is not a valid Bool observation value."),
+        }),
+        _ => new(key, Text: text),
+    };
+
+    private static bool ObservedCellMatches(CellKind kind, WorldObservedCell actual, StateCell desired) =>
+        kind == CellKind.Text ? actual.Text == desired.Text : actual.Value == desired.Value;
 
     /// <summary>Waits for current read-only source calls. Call Pump afterwards to admit their results.</summary>
     /// <param name="cancellationToken">Cancels this wait only.</param>

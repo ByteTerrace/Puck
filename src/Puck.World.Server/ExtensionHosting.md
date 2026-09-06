@@ -59,7 +59,7 @@ settings without I/O and returns an owned `IWorldExtensionObservationSource`.
 explicitly disclosed scalar fields, and cooperates with cancellation. Throw on
 incomplete results; returning an empty collection means authoritative absence.
 The [configuration layer](ExtensionConfiguration.md#observe-a-collection) owns
-bounded scheduling, table/static-placement projection, and source disposal.
+bounded scheduling, state-row projection, and source disposal.
 Custom hosts call `WorldConfiguredExtensions.Pump` at closed boundaries;
 observation-only configurations do not need `Host.Start` or effect checkpoints.
 This optional collection adapter does not constrain richer SDK integrations to

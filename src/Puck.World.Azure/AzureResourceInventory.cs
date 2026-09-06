@@ -17,6 +17,9 @@ public sealed class AzureResourceInventory : IWorldExtensionObservationSource {
     private readonly HttpClient? m_httpClient;
     private readonly Uri m_uri;
 
+    /// <inheritdoc/>
+    public string Kind => "inventory";
+
     /// <summary>Binds a host-authorized resource-group query without making service calls.</summary>
     /// <param name="credential">Host-owned credential.</param>
     /// <param name="environment">Explicit ARM cloud.</param>

@@ -62,9 +62,10 @@ and `IWorldExtensionObservationSource`, scheduled by `WorldConfiguredExtensions`
 Sources return complete detached snapshots, disclose only approved fields, and
 cooperate with deadline/lifetime cancellation. Failures and overflow retain the
 last collection; never return a truncated set as complete. Projection uses one
-recorded mutation batch for existing text tables and optional authored static
-placements. It checks admission read-back before suppressing retries. Replay
-revokes reads and blocks late projection. Keep provider concepts out of Server.
+recorded mutation batch over existing state rows of any cell kind, parsed by
+each row's own kind, and nothing else. It checks admission read-back before
+suppressing retries. Replay revokes reads and blocks late projection. Keep
+provider concepts out of Server.
 Run `WorldObservationLawTests`; Azure pagination/confinement tests use fake HTTP.
 Live read-only discovery needs task authorization and must not gain mutation
 bindings. Check render admission too: a headless run cannot prove the boot

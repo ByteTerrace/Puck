@@ -116,6 +116,27 @@ the mutation adapter's no-resend policy is unchanged. Resource Graph and telemet
 queries can be added as distinct Azure source capabilities; this implementation
 does not yet execute those queries.
 
+## Read resource metrics
+
+`AzureResourceMetrics` reads the latest complete `Microsoft.Insights/metrics`
+bucket for an authored list of metric names over one resource. Source settings
+pin `resourceId` (an absolute ARM resource ID, not a resource group), `apiVersion`,
+`metricNames`, `aggregation` (`Average`, `Total`, `Count`, `Minimum`, or `Maximum`),
+and `interval` (one of the closed Azure Monitor grains, `PT1M` through `P1D`).
+Each item is keyed by metric name with one `value` field: the aggregated value as
+an invariant decimal string, read from the newest bucket that still carries the
+requested aggregation — a still-filling trailing bucket is skipped rather than
+read as zero. A response missing a requested metric, carrying more than one
+timeseries for it, or never completing a bucket refuses the whole read.
+
+`AzureConfiguredProvider.BindObservation` dispatches on the settings' own `kind`
+field: absent or `"inventory"` selects the resource-group inventory above,
+`"metrics"` selects this reader. The
+[Azure hosting example](../Puck.World/Assets/hosting/azure.extensions.example.json)
+shows one of each. No credentials ever appear in either kind's settings; both
+share the provider's own credential and the same bounded, complete-or-refused
+snapshot contract.
+
 ## Completion and recovery
 
 The shared host runs service work on workers. The dispatcher claims each operation durably
@@ -169,7 +190,10 @@ The Azure suite exercises declarative provider setup and the real SDK authentica
 a scripted in-memory service: generic verbs, unchanged JSON, pinned identities,
 preconditions, pending operations, restart polling, ambiguous failures, URL
 containment, and byte limits. Inventory tests cover pagination, field disclosure,
-scope confinement, duplicate IDs, and refusal of truncated collections.
+scope confinement, duplicate IDs, and refusal of truncated collections. Metrics
+tests cover resource-ID validation, aggregation/interval selection, the latest-
+complete-bucket scan against a recorded response shape, refusal of an omitted or
+still-filling metric, and the provider's kind dispatch.
 The server suite exercises durable dispatch,
 continuation preservation, authority, and replay. These tests require no Azure
 account and perform no live resource changes.
