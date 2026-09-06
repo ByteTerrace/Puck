@@ -10,6 +10,8 @@ public enum ExpressionFault : byte {
     TableKeyMissing,
     /// <summary>An operand read a fact with no number.</summary>
     Forever,
+    /// <summary>An operand's dynamic key named no cell (an empty zone's endpoint).</summary>
+    Absent,
     /// <summary>Overflow, a divide by zero, a function argument outside its domain, or an invalid stack result.</summary>
     Domain,
 }
@@ -78,11 +80,17 @@ public static class RuleEvaluation {
         );
     }
 
-    /// <summary>Reads a declared cell as a fact in the row's own encoding; an absent cell reads as integer zero.</summary>
+    /// <summary>Reads a declared cell as a fact in the row's own encoding. A declared cell the row does not hold reads
+    /// as integer zero; a key no cell can carry — the empty key a <see cref="KeyFact"/> resolves for an empty zone's
+    /// endpoint, which no literal, bound, or indirected spelling ever produces — reads as
+    /// <see cref="RuleFact.Absent"/>.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="handle">The compiled row handle.</param>
     /// <param name="key">The cell key.</param>
     public static RuleFact ReadStateFact(IRuleReader reader, StateHandle handle, string key) {
+        if (key.Length == 0) {
+            return RuleFact.Absent(kind: CellKind.Int);
+        }
         if (
             !StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: handle, key: key, tick: reader.Tick, row: out var declared, rawValue: out var rawValue, text: out _) ||
             (rawValue is not { } raw)
@@ -136,8 +144,8 @@ public static class RuleEvaluation {
                         value = 0L;
                         return false;
                     }
-                    if (fact.IsForever) {
-                        fault = ExpressionFault.Forever;
+                    if (fact.IsForever || fact.IsAbsent) {
+                        fault = (fact.IsForever ? ExpressionFault.Forever : ExpressionFault.Absent);
                         value = 0L;
                         return false;
                     }
@@ -242,8 +250,9 @@ public static class RuleEvaluation {
     /// caller can report it rather than let the gate silently stop holding. A gate with no tokens always holds.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="gate">The compiled gate.</param>
-    /// <param name="faulted">Whether a conjunct's expression overflowed, left a function's domain, or read a fact
-    /// with no number; a missing table key is reported by the read itself and does not set this.</param>
+    /// <param name="faulted">Whether a conjunct's expression overflowed, left a function's domain, read a fact with
+    /// no number, or read through a dynamic key that named no cell; a missing table key is reported by the read
+    /// itself and does not set this.</param>
     /// <param name="trace">An optional per-conjunct narration sink.</param>
     public static bool GateHolds(IRuleReader reader, GateToken[] gate, out bool faulted, List<string>? trace = null) {
         faulted = false;
@@ -282,7 +291,7 @@ public static class RuleEvaluation {
                 var rightFault = ExpressionFault.None;
                 var leftOk = TryEvaluateExpression(reader: reader, program: leftExpression, kind: predicate.ValueKind, value: out var leftValue, fault: out var leftFault);
                 var rightOk = leftOk && TryEvaluateExpression(reader: reader, program: predicate.RightExpression!, kind: predicate.ValueKind, value: out rightValue, fault: out rightFault);
-                faulted |= ((leftFault is ExpressionFault.Domain or ExpressionFault.Forever) || (rightFault is ExpressionFault.Domain or ExpressionFault.Forever));
+                faulted |= ((leftFault is ExpressionFault.Domain or ExpressionFault.Forever or ExpressionFault.Absent) || (rightFault is ExpressionFault.Domain or ExpressionFault.Forever or ExpressionFault.Absent));
                 var holds = rightOk && predicate.Comparison.Holds(value: FixedQ4816.FromRawBits(value: leftValue), valueIsForever: false, expected: FixedQ4816.FromRawBits(value: rightValue), expectedIsForever: false);
                 stack[top++] = holds;
                 if (trace is not null) {
@@ -302,25 +311,30 @@ public static class RuleEvaluation {
                 ? comparand.Read(reader: reader)
                 : RuleFact.Finite(value: predicate.Value, kind: predicate.ValueKind)
             );
-            var holdsHere = predicate.Comparison.Holds(
+            // An absent side names no cell, so no comparison holds against it — not even NotEqual: "the top card is
+            // not a king" must not read as true of an empty pile.
+            var holdsHere = !value.IsAbsent && !expected.IsAbsent && predicate.Comparison.Holds(
                 value: FixedQ4816.FromRawBits(value: value.Value),
                 valueIsForever: value.IsForever,
                 expected: FixedQ4816.FromRawBits(value: expected.Value),
                 expectedIsForever: expected.IsForever
             );
             stack[top++] = holdsHere;
-            trace?.Add(item: $"{predicate.Describe}: {DescribeFact(value: value.Value, kind: value.Kind, isForever: value.IsForever)} {DescribeComparison(comparison: predicate.Comparison)} {DescribeFact(value: expected.Value, kind: expected.Kind, isForever: expected.IsForever)} -> {(holdsHere ? "true" : "false")}");
+            trace?.Add(item: $"{predicate.Describe}: {DescribeFact(value: value.Value, kind: value.Kind, isForever: value.IsForever, isAbsent: value.IsAbsent)} {DescribeComparison(comparison: predicate.Comparison)} {DescribeFact(value: expected.Value, kind: expected.Kind, isForever: expected.IsForever, isAbsent: expected.IsAbsent)} -> {(holdsHere ? "true" : "false")}");
         }
 
         return ((top == 1) && stack[0]);
     }
 
-    /// <summary>Formats a raw fact for a trace: <c>forever</c>, a fixed-point value, or an integer.</summary>
+    /// <summary>Formats a raw fact for a trace: <c>absent</c>, <c>forever</c>, a fixed-point value, or an integer.</summary>
     /// <param name="value">The raw value.</param>
     /// <param name="kind">Its encoding.</param>
     /// <param name="isForever">Whether the fact is positive infinity.</param>
-    public static string DescribeFact(long value, CellKind kind, bool isForever) =>
-        (isForever
+    /// <param name="isAbsent">Whether the operand named no cell.</param>
+    public static string DescribeFact(long value, CellKind kind, bool isForever, bool isAbsent = false) =>
+        (isAbsent
+            ? "absent"
+            : isForever
             ? "forever"
             : ((kind == CellKind.Fixed)
                 ? FixedQ4816.FromRawBits(value: value).ToString()

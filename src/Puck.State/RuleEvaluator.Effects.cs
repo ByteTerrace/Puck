@@ -28,6 +28,19 @@ public sealed partial class RuleEvaluator {
         return applied;
     }
 
+    // A live zone index outside the table, or landing on an empty entry, resolves to a spelling no row carries, so
+    // the mutation door refuses the transfer by name instead of moving anything.
+    private string ResolveZone(string name, CompiledCellRef? reference, IReadOnlyList<string> zones, ulong tick) {
+        if (reference is not { } indirection) {
+            return name;
+        }
+        var index = ResolveKey(key: null, keyFrom: indirection, tick: tick);
+        return ((long.TryParse(s: index, style: System.Globalization.NumberStyles.Integer, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var ordinal) && (ordinal >= 0) && (ordinal < zones.Count) && (zones[(int)ordinal].Length != 0))
+            ? zones[(int)ordinal]
+            : $"{name}[{index}]"
+        );
+    }
+
     // A write that cannot move the destination is skipped before submission — either the resolved value already
     // matches the cell, or the row's declared envelope pins the cell where it is: a level-triggered gate re-fires
     // every tick it holds, and without this a standing rule would append an identical journal entry forever, or draw
@@ -44,6 +57,12 @@ public sealed partial class RuleEvaluator {
                         StateTransform.ClearEnclosed enclosed => enclosed with { From = ResolveKey(key: enclosed.From, keyFrom: keyRef, tick: tick) },
                         StateTransform.WriteSet writeSet => writeSet with { SetKey = ResolveKey(key: writeSet.SetKey, keyFrom: keyRef, tick: tick) },
                         _ => transform,
+                    };
+                }
+                if (transform is StateTransform.Transfer liveEnds && ((transformState.FromRef is not null) || (transformState.ToRef is not null))) {
+                    transform = liveEnds with {
+                        From = ResolveZone(name: liveEnds.From, reference: transformState.FromRef, zones: liveEnds.Zones!, tick: tick),
+                        To = ResolveZone(name: liveEnds.To, reference: transformState.ToRef, zones: liveEnds.Zones!, tick: tick),
                     };
                 }
                 return Apply(effect: effect, ruleName: ruleName, mutation: new StateMutation.Apply(Transform: transform), tick: tick, preflight: preflight);
@@ -152,9 +171,10 @@ public sealed partial class RuleEvaluator {
         }
 
         // A live 'from' operand is read fresh every firing and converted to the destination row's own encoding; a
-        // literal keeps the value the compiler already converted once. A forever fact has no number to store — the
-        // copy silently does not fire, the same no-narration shape a level gate's own not-holding takes.
-        if ((write is WriteEffect { From: { } foreverProbe }) && Read(operand: foreverProbe, tick: tick).IsForever) {
+        // literal keeps the value the compiler already converted once. A forever fact has no number to store, and an
+        // absent one names no cell — the copy silently does not fire, the same no-narration shape a level gate's own
+        // not-holding takes.
+        if ((write is WriteEffect { From: { } probe }) && (Read(operand: probe, tick: tick) is { IsForever: true } or { IsAbsent: true })) {
             return false;
         }
 
@@ -232,7 +252,7 @@ public sealed partial class RuleEvaluator {
         } else if (effect.From is { } from) {
             var fact = Read(operand: from, tick: tick);
 
-            if (fact.IsForever) {
+            if (fact.IsForever || fact.IsAbsent) {
                 return false;
             }
 

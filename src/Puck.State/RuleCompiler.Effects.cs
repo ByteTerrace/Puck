@@ -428,11 +428,34 @@ public static partial class RuleCompiler {
 
                 break;
             case StateTransform.Transfer transfer:
-                if (Row(transfer.From).EffectiveDomain is not StateDomain.KeysOf { Ordered: true } source || Row(transfer.To).EffectiveDomain is not StateDomain.KeysOf { Ordered: true } destination || source.Row != destination.Row ||
-                    !Enum.IsDefined(transfer.Selector) || (transfer.Selector is ZoneSelector.Key or ZoneSelector.Slice) != (transfer.Key is not null) ||
+                var fromLive = TryResolveDynamicKey(transfer.From, ruleName, context, "transfer", "from", out var fromRef);
+                var toLive = TryResolveDynamicKey(transfer.To, ruleName, context, "transfer", "to", out var toRef);
+                CellName? tokenDomain = null;
+                void RequireZone(string name, string label) {
+                    if (Row(name).EffectiveDomain is not StateDomain.KeysOf { Ordered: true } zone) {
+                        throw Invalid($"transfer {label} '{name}' is not an ordered token zone");
+                    }
+                    if (tokenDomain is { } domain && domain != zone.Row) {
+                        throw Invalid($"transfer {label} '{name}' is a zone over '{zone.Row}', not the token domain '{domain}' the transfer's other zones share");
+                    }
+                    tokenDomain = zone.Row;
+                }
+                if (!fromLive) { RequireZone(transfer.From, "'from'"); }
+                if (!toLive) { RequireZone(transfer.To, "'to'"); }
+                if (fromLive || toLive) {
+                    if (transfer.Zones is not { Count: > 0 } zones) {
+                        throw Invalid("a transfer whose 'from' or 'to' resolves live indexes a 'zones' table, which must list at least one zone");
+                    }
+                    foreach (var entry in zones) {
+                        if (entry.Length != 0) { RequireZone(entry, "'zones' entry"); }
+                    }
+                } else if (transfer.Zones is not null) {
+                    throw Invalid("a transfer with a literal 'from' and 'to' carries no 'zones' table");
+                }
+                if (!Enum.IsDefined(transfer.Selector) || (transfer.Selector is ZoneSelector.Key or ZoneSelector.Slice) != (transfer.Key is not null) ||
                     (transfer.Selector == ZoneSelector.Random) != (transfer.Draw is not null) ||
                     transfer.Count < 1 || transfer.Count > StateTransferCapacity.MaxTransferCount || (transfer.Selector is ZoneSelector.Key or ZoneSelector.Slice && transfer.Count != 1)) {
-                    throw Invalid($"transfer requires compatible ordered token zones, selector arguments, and a count of 1..{StateTransferCapacity.MaxTransferCount} (exactly 1 by key or slice)");
+                    throw Invalid($"transfer requires selector arguments matching the selector and a count of 1..{StateTransferCapacity.MaxTransferCount} (exactly 1 by key or slice)");
                 }
                 if (transfer.Draw is { } drawName) {
                     var drawRow = Row(drawName);
@@ -441,11 +464,17 @@ public static partial class RuleCompiler {
                         throw Invalid("random transfer requires a redrawable integer streamDraw site");
                     }
                 }
-                if (transfer.Key is { } key && TryResolveDynamicKey(key, ruleName, context, "transfer", "key", out var selectedKey)) {
-                    return new TransformStateEffect(transform, $"transformState Transfer {transfer.From} to {transfer.To} {transfer.Selector} key {key}", selectedKey);
+                CompiledCellRef? keyRef = null;
+                if (transfer.Key is { } key) {
+                    if (TryResolveDynamicKey(key, ruleName, context, "transfer", "key", out var selectedKey)) {
+                        keyRef = selectedKey;
+                    } else if (!CellName.TryParse(key, out _, out _)) {
+                        throw Invalid($"transfer 'key' '{key}' spells neither a token name nor a dynamic key");
+                    }
                 }
-                if (transfer.Key is { } literalKey && !CellName.TryParse(literalKey, out _, out _)) {
-                    throw Invalid($"transfer 'key' '{literalKey}' spells neither a token name nor a dynamic key");
+                if (keyRef is not null || fromLive || toLive) {
+                    var spelledKey = ((keyRef is not null) ? $" key {transfer.Key}" : string.Empty);
+                    return new TransformStateEffect(transform, $"transformState Transfer {transfer.From} to {transfer.To} {transfer.Selector}{spelledKey}", keyRef: keyRef, fromRef: (fromLive ? fromRef : null), toRef: (toLive ? toRef : null));
                 }
                 break;
             case StateTransform.SetRay ray:

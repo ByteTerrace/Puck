@@ -56,6 +56,27 @@ public sealed class ZoneEndKeyLawTests {
     }
 
     [Theory]
+    [InlineData("Equal")]
+    [InlineData("NotEqual")]
+    [InlineData("LessOrEqual")]
+    public void AnEmptyZoneEndpointHoldsNoComparisonAndCopiesNothing(string comparison) {
+        var (host, context, rows) = Build();
+        var gate = new ActionPredicate.CompareState("cards", Enum.Parse<ActionStateComparison>(comparison), 0, Key: "$zone:hand:last");
+        var rules = RuleCompiler.CompileAll([
+            new Rule(Name("gated"), [new ActionEffect.SetState("cards", Value: 9, Key: "beta")], Gate: gate),
+            new Rule(Name("copy"), [new ActionEffect.SetState("cards", Key: "beta", FromState: "cards", FromKey: "$zone:hand:last")]),
+        ], context);
+        Assert.False(host.Judge(rules, 1));
+        Assert.True(host.Frame.TryStored(rows[0], Name("beta"), out var beta, out _));
+        Assert.Equal(6, beta);
+        Assert.True(host.Frame.TryTransfer(new StateTransform.Transfer("deck", "hand", ZoneSelector.First), out var reason), reason);
+        Assert.Equal(comparison != "NotEqual" ? false : true, host.Judge([rules[0]], 2));
+        Assert.True(host.Judge([rules[1]], 3));
+        Assert.True(host.Frame.TryStored(rows[0], Name("beta"), out beta, out _));
+        Assert.Equal(7, beta);
+    }
+
+    [Theory]
     [InlineData("$zone:cards:first")]
     [InlineData("$zone:missing:first")]
     [InlineData("$zone:deck:middle")]
@@ -81,6 +102,36 @@ public sealed class ZoneEndKeyLawTests {
         Assert.Equal(fail ? "gamma" : "beta", Resolve(host, Key(context, "$zone:deck:first")));
         Assert.Equal(fail ? "" : "alpha", Resolve(host, Key(context, "$zone:hand:last")));
         Assert.Contains(new RuleAccess("deck", null), RuleDataflow.Reads(rules[0]));
+    }
+
+    [Theory]
+    [InlineData(0, 1, true)]
+    [InlineData(1, 0, false)]
+    [InlineData(0, 2, false)]
+    [InlineData(0, 7, false)]
+    public void LiveZoneEndsIndexTheTableAndRefuseOutsideIt(long from, long to, bool moves) {
+        var (host, context, rows) = Build();
+        var zones = new[] { "deck", "hand", "" };
+        var transfer = new StateTransform.Transfer("$cell:cards:beta", "$cell:cards:gamma", ZoneSelector.First, Zones: zones);
+        var rules = RuleCompiler.CompileAll([new Rule(Name("move"), [new ActionEffect.TransformState(transfer)])], context);
+        var effect = Assert.IsType<TransformStateEffect>(rules[0].Effects[0]);
+        Assert.NotNull(effect.FromRef);
+        Assert.NotNull(effect.ToRef);
+        Assert.Equal(["deck", "hand"], RuleDataflow.Writes(rules[0]).Select(access => access.Row).Distinct().Order());
+        Assert.True(host.TryApply(new StateMutation.UpsertCell("cards", "beta", from, StateWriteKind.Set), 1, false, out var seedFrom), seedFrom);
+        Assert.True(host.TryApply(new StateMutation.UpsertCell("cards", "gamma", to, StateWriteKind.Set), 1, false, out var seedTo), seedTo);
+        Assert.Equal(moves, host.Judge(rules, 1));
+        Assert.Equal(moves ? "gamma" : "", Resolve(host, Key(context, "$zone:hand:last")));
+    }
+
+    [Theory]
+    [InlineData("$cell:cards:beta", "hand", null)]
+    [InlineData("deck", "hand", new[] { "deck", "hand" })]
+    [InlineData("$cell:cards:beta", "hand", new[] { "cards" })]
+    public void LiveZoneEndsNeedAZoneTableAndLiteralEndsRefuseOne(string from, string to, string[]? zones) {
+        var (_, context, _) = Build();
+        var transfer = new StateTransform.Transfer(from, to, ZoneSelector.First, Zones: zones);
+        Assert.Throws<RuleException>(() => RuleCompiler.CompileAll([new Rule(Name("move"), [new ActionEffect.TransformState(transfer)])], context));
     }
 
     [Fact]

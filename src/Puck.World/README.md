@@ -240,20 +240,21 @@ Facts a script needs:
   `Puck.Platform.Windows.AddWindowsPrecisionWaiter`. The two boot shapes are
   never composed together.
 - `WorldSimulation.cs` / `HeadlessWorldSimulation.cs` — the two boot shapes'
-  `IFixedStepSimulation`s. Windowed: per exact tick, the client submits seat
-  intents, the boot stepper runs, then the client post-step (screens).
-  Headless: the boot stepper alone — no `WorldClient`, no screens.
-- `WorldBootStepper.cs` — the boot instance's step and host clock both shapes
-  hold: when boot is due it runs
+  `IFixedStepSimulation`s, each a thin holder of one `WorldHostStep`. Windowed
+  contributes a post-step (seat-binding sync and seat-context publish);
+  headless contributes none — no `WorldClient`, no screens.
+- `WorldHostStep.cs` — the one fixed step every boot shape runs, in one order:
+  decide whether boot is due, submit its seats' intents, drain the host's
+  pending transfers, step boot through
   `Puck.World.Server.WorldServerStepShell.Step` (not in this project) —
-  `WorldServer.Step`, then the replay tape's `NoteTick` and a caller-supplied
-  `Action<ulong>`, here the console wait gate's and capture scheduler's
-  `PublishTick` — and counts the host work a `world.wait` is clocked by; when
-  it is not (paused, rate 0) it drains an administrative mutation and releases
-  a stalled wait. One stepper, so a boot-shape swap can never fork tape/
-  wait-gate/capture semantics. It is also the `IWorldSimulationClock` the
-  frame producer reads. `Puck.Launcher.FixedStepPump` (not in this project)
-  owns the accumulator both boot shapes' hosted services drive it through.
+  `WorldServer.Step`, then the replay tape's `NoteTick` and the console wait
+  gate's and capture scheduler's `PublishTick` — or, while boot is paused,
+  drain an administrative mutation and release a stalled `world.wait`; step
+  every other instance; run the shell's post-step; finish the seat intents.
+  It counts the host work a `world.wait` is clocked by, carries the per-phase
+  timing `world.timing` arms, and is the `IWorldSimulationClock` the frame
+  producer reads. `Puck.Launcher.FixedStepPump` (not in this project) owns the
+  accumulator both boot shapes' hosted services drive it through.
 - `WorldInstanceHost.cs` / `WorldInstance.cs` — the process's running world
   instances. The boot world is one entry (name `boot`) beside every instance
   `world.instance.start` adds; each non-boot instance holds its own

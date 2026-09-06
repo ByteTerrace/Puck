@@ -251,6 +251,7 @@ public sealed partial class RuleEvaluator {
 
     private static string DescribeFault(ExpressionFault fault) => fault switch {
         ExpressionFault.Forever => "the expression read a fact with no number (a forever fact)",
+        ExpressionFault.Absent => "the expression read through a dynamic key that named no cell (an empty zone's endpoint)",
         _ => "the expression overflowed, divided by zero, left a function's domain, or produced an invalid stack result",
     };
 }

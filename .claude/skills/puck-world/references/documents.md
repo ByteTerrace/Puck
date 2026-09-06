@@ -244,11 +244,13 @@ body-reference token `cell:<row>:<key>` does the same inside
 `$distance:`/`$los:`/`$nearest:`; `placement:<id>` and (over a forEach row
 keyed by placement ids) `placement:$each` name the body inhabiting a
 placement. `$zone:<ordered-zone>:first|last` resolves an endpoint's original
-string key from the active store, including a scratch frame. Empty zones
-resolve an absent read and cannot address a write: guard endpoint writes with
-a positive count. Rule-authored transfers resolve their `key` through the same
-dynamic-key compiler before each transaction step; direct mutations use literal
-keys. Pattern costs use the declared source capacity and actual token-expression
+string key from the active store, including a scratch frame. An empty zone's
+endpoint names no cell: a `compareState` over it never holds (not even
+`NotEqual`), an expression over it refuses, and a write it addresses refuses by
+name. Rule-authored transfers resolve their `key`, `from`, and `to` through the same
+dynamic-key compiler before each transaction step — `from`/`to` resolve to an
+index into the transfer's `zones` table; direct mutations use literal keys and
+zone names. Pattern costs use the declared source capacity and actual token-expression
 cost, and pattern read sets include attribute and expression dependencies.
 The [Solitaire guide](../../../../src/Puck.World/Assets/worlds/games/README.md)
 owns the collection's table selector, pile IDs, and request protocol.

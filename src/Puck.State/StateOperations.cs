@@ -65,8 +65,13 @@ public abstract record StateTransform {
     /// <summary>Refreshes a knowledge board from its declared source and visibility mask; authority only.</summary>
     public sealed record Observe(string Row) : StateTransform;
     /// <summary>Moves selected tokens, preserving identity. A random draw advances only when the whole transfer commits.</summary>
-    /// <param name="From">The source zone.</param>
-    /// <param name="To">The destination zone.</param>
+    /// <param name="From">The source zone — a zone name, or in an authored rule a dynamic key spelling
+    /// (<c>$cell:</c>, <c>$expr:</c>, a bound token) whose integer resolves, before each firing, to an index into
+    /// <paramref name="Zones"/>.</param>
+    /// <param name="To">The destination zone, on the same terms as <paramref name="From"/>.</param>
+    /// <param name="Zones">The zone table a dynamic <paramref name="From"/> or <paramref name="To"/> indexes: ordered
+    /// zones over one token domain, in index order; an empty entry holds an index no zone answers, so a request
+    /// naming it refuses rather than moving anything. Absent when both ends are literal.</param>
     /// <param name="Selector">The source selector.</param>
     /// <param name="Key">The token key for key or slice selection. In an authored rule this may be a dynamic
     /// key, resolved from the active store before each transfer; direct mutations carry the resolved literal.</param>
@@ -76,7 +81,8 @@ public abstract record StateTransform {
     /// each selected afresh from what remains (a five-card deal is one mutation); a key selection moves exactly one,
     /// and a slice selection moves the keyed token's whole tail (its count is 1).</param>
     public sealed record Transfer(string From, string To, ZoneSelector Selector = ZoneSelector.Key,
-        string? Key = null, bool InsertFirst = false, string? Draw = null, int Count = 1) : StateTransform;
+        string? Key = null, bool InsertFirst = false, string? Draw = null, int Count = 1,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Zones = null) : StateTransform;
 
     /// <summary>Writes the longest run a <c>patterns</c> row accepts, walked from the origin outward: the same
     /// prefix semantics as the <c>$match</c> operand's <c>prefix</c> facet, landed back on the board instead of

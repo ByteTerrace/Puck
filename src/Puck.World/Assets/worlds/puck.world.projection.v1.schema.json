@@ -12520,11 +12520,11 @@
                                   "const": "transfer"
                                 },
                                 "from": {
-                                  "description": "The source zone.",
+                                  "description": "The source zone \u2014 a zone name, or in an authored rule a dynamic key spelling ($cell:, $expr:, a bound token) whose integer resolves, before each firing, to an index into Zones.",
                                   "type": "string"
                                 },
                                 "to": {
-                                  "description": "The destination zone.",
+                                  "description": "The destination zone, on the same terms as From.",
                                   "type": "string"
                                 },
                                 "selector": {
@@ -12563,6 +12563,20 @@
                                   "description": "How many tokens move in this one transfer, 1..MaxTransferCount, each selected afresh from what remains (a five-card deal is one mutation); a key selection moves exactly one, and a slice selection moves the keyed token\u0027s whole tail (its count is 1).",
                                   "type": "integer",
                                   "default": 1
+                                },
+                                "zones": {
+                                  "description": "The zone table a dynamic From or To indexes: ordered zones over one token domain, in index order; an empty entry holds an index no zone answers, so a request naming it refuses rather than moving anything. Absent when both ends are literal.",
+                                  "type": [
+                                    "array",
+                                    "null"
+                                  ],
+                                  "items": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "default": null
                                 }
                               },
                               "required": [
@@ -13031,11 +13045,11 @@
                                             "const": "transfer"
                                           },
                                           "from": {
-                                            "description": "The source zone.",
+                                            "description": "The source zone \u2014 a zone name, or in an authored rule a dynamic key spelling ($cell:, $expr:, a bound token) whose integer resolves, before each firing, to an index into Zones.",
                                             "type": "string"
                                           },
                                           "to": {
-                                            "description": "The destination zone.",
+                                            "description": "The destination zone, on the same terms as From.",
                                             "type": "string"
                                           },
                                           "selector": {
@@ -13074,6 +13088,10 @@
                                             "description": "How many tokens move in this one transfer, 1..MaxTransferCount, each selected afresh from what remains (a five-card deal is one mutation); a key selection moves exactly one, and a slice selection moves the keyed token\u0027s whole tail (its count is 1).",
                                             "type": "integer",
                                             "default": 1
+                                          },
+                                          "zones": {
+                                            "$ref": "#/properties/interactions/properties/interactions/items/properties/effects/items/anyOf/3/properties/transform/anyOf/0/properties/zones",
+                                            "default": null
                                           }
                                         },
                                         "required": [

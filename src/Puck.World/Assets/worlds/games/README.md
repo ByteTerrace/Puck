@@ -123,8 +123,11 @@ identities. Patterns judge a selected suffix and the destination's top card;
 accepted moves transfer the suffix in one transaction with their counters and
 request acknowledgement. Endpoint keys use the generic
 [`$zone:` spelling](../../../../Puck.State/README.md), so a top-card lookup
-needs no per-card rule loop. Deals, recycling, and Spider cleanup use bounded
-phases to share Nexus's existing per-tick budget. A table switch suspends those
+needs no per-card rule loop, and each game's one `move` rule resolves its
+`from`/`to` piles live through the transfer's `zones` table (pile id = table
+index), as its `deal` rule does for the column a step lands in. Deals,
+recycling, and Spider cleanup use bounded phases to share Nexus's existing
+per-tick budget. A table switch suspends those
 phases and resumes them on return.
 
 The executable rules are exercised by

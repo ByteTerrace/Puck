@@ -226,9 +226,12 @@ one journal entry; `Slice` moves the keyed token and every token after it as
 one run, in order (a solitaire column from a card to its top), and onto the
 same zone rotates that run to the other end. In rules, a transfer's `key` accepts
 the same dynamic spellings as a state write, resolved before each transaction
-step. `$zone:<ordered-zone>:first|last` selects an endpoint's original string
-key from the active store; an empty zone resolves absent for reads and cannot
-address a write. Direct transform mutations carry literal keys. A cursor
+step, and so do its `from` and `to`: each resolves to an integer indexing the
+transfer's `zones` table (ordered zones over one token domain, in index order;
+an empty entry answers no index), so one authored move rule serves every pair
+of a game's piles. `$zone:<ordered-zone>:first|last` selects an endpoint's original string
+key from the active store; an empty zone's endpoint names no cell — no comparison
+holds against it and a write it addresses refuses by name. Direct transform mutations carry literal keys. A cursor
 advances only with the committed transfer. `setRay` (`row`, `from`, `direction`, `pattern`, `value`) walks a ray from
 its origin and writes the longest run its named `patterns` row accepts — the
 same compiled machine and prefix semantics `$match` reads, landed back on the
@@ -1394,6 +1397,13 @@ state and dropped (`WorldStateDocumentValues.TryFlatten`, run on a rehydrated co
 so the live document keeps its authored reference) — and a peer whose projection
 still names a cell is refused by name at the decode door. Law suite:
 `tests/Puck.World.Tests/DeliveredDocumentIdentifierLawTests.cs`.
+
+The resolver caches traversal metadata by runtime type and omits branches whose
+sealed types cannot contain bound values. It still reads current document contents
+on every walk, including mutable collections and polymorphic members. Reference
+searches do not construct diagnostic paths; resolution and flattening retain their
+named error paths. The traversal cases live in
+`tests/Puck.World.Schema.Tests/WorldStateDocumentValuesLawTests.cs`.
 
 **Reserved `$` names are ENGINE-MINTED ONLY.** A `$`-prefixed ROW name is refused
 outright (nothing mints a row), and a `$`-prefixed CELL key is refused unless it

@@ -314,15 +314,25 @@ public sealed class TransformStateEffect : EffectFact {
     /// <param name="keyRef">The live key indirection a <see cref="StateTransform.ClearEnclosed"/>'s <c>from</c> or a
     /// <see cref="StateTransform.WriteSet"/>'s <c>setKey</c> or a <see cref="StateTransform.Transfer"/>'s <c>key</c>
     /// spelled, or <see langword="null"/> for a literal cell.</param>
-    public TransformStateEffect(StateTransform transform, string describe, CompiledCellRef? keyRef = null) : base(describe) {
+    /// <param name="fromRef">The live indirection a <see cref="StateTransform.Transfer"/>'s <c>from</c> spelled — its
+    /// integer indexes the transfer's zone table — or <see langword="null"/> for a literal zone.</param>
+    /// <param name="toRef">The live indirection a <see cref="StateTransform.Transfer"/>'s <c>to</c> spelled, on the
+    /// same terms as <paramref name="fromRef"/>.</param>
+    public TransformStateEffect(StateTransform transform, string describe, CompiledCellRef? keyRef = null, CompiledCellRef? fromRef = null, CompiledCellRef? toRef = null) : base(describe) {
         Transform = transform;
         KeyRef = keyRef;
+        FromRef = fromRef;
+        ToRef = toRef;
     }
 
     /// <summary>Gets the discrete state transform.</summary>
     public StateTransform Transform { get; }
     /// <summary>Gets the live key indirection the transform's one dynamic key resolves through, or <see langword="null"/>.</summary>
     public CompiledCellRef? KeyRef { get; }
+    /// <summary>Gets the live indirection a transfer's source zone index resolves through, or <see langword="null"/>.</summary>
+    public CompiledCellRef? FromRef { get; }
+    /// <summary>Gets the live indirection a transfer's destination zone index resolves through, or <see langword="null"/>.</summary>
+    public CompiledCellRef? ToRef { get; }
 
     /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) {
@@ -337,7 +347,12 @@ public sealed class TransformStateEffect : EffectFact {
                 cost += (long)count * (count + 2);
                 break;
             case StateTransform.Transfer transfer:
-                cost += ((transfer.Selector == ZoneSelector.Slice) ? 2L : (long)transfer.Count) * context.RowCapacity(name: transfer.From);
+                // A live source is priced at the widest zone it can name.
+                var sourceCapacity = 0L;
+                foreach (var zone in SourceZones(transfer: transfer, fromRef: FromRef)) {
+                    sourceCapacity = Math.Max(val1: sourceCapacity, val2: context.RowCapacity(name: zone));
+                }
+                cost += ((transfer.Selector == ZoneSelector.Slice) ? 2L : (long)transfer.Count) * sourceCapacity;
                 break;
             case StateTransform.BoardCombine combine:
                 cost += 3L * BoardCells(context: context, row: combine.Row);
@@ -389,10 +404,25 @@ public sealed class TransformStateEffect : EffectFact {
             into.Add(item: new RuleAccess(Row: writeSet.Set, Key: null, IsSet: false));
         }
         RuleAccess.CollectReference(reference: KeyRef, into: into);
+        RuleAccess.CollectReference(reference: FromRef, into: into);
+        RuleAccess.CollectReference(reference: ToRef, into: into);
     }
     public override void CollectWrites(List<RuleAccess> into) {
         foreach (var row in Rows(transform: Transform)) {
             into.Add(item: new RuleAccess(Row: row, Key: null, IsSet: true));
+        }
+    }
+    // The zones a transfer's source can name: the literal source, or every table entry a live index can reach.
+    private static IEnumerable<string> SourceZones(StateTransform.Transfer transfer, CompiledCellRef? fromRef) =>
+        ((fromRef is null) ? [transfer.From] : (transfer.Zones ?? []).Where(predicate: static zone => zone.Length != 0));
+    // The zones a transfer can write: both literal ends, plus every table entry when either end resolves live.
+    private IEnumerable<string> TransferZones(StateTransform.Transfer transfer) {
+        if (FromRef is null) { yield return transfer.From; }
+        if (ToRef is null) { yield return transfer.To; }
+        if ((FromRef is not null) || (ToRef is not null)) {
+            foreach (var zone in (transfer.Zones ?? [])) {
+                if (zone.Length != 0) { yield return zone; }
+            }
         }
     }
 
@@ -401,8 +431,8 @@ public sealed class TransformStateEffect : EffectFact {
             ? topology.CellCount
             : 0;
 
-    private static IEnumerable<string> Rows(StateTransform transform) => transform switch {
-        StateTransform.Transfer transfer => [transfer.From, transfer.To],
+    private IEnumerable<string> Rows(StateTransform transform) => transform switch {
+        StateTransform.Transfer transfer => TransferZones(transfer: transfer),
         StateTransform.SetRay ray => [ray.Row],
         StateTransform.Shuffle shuffle => [shuffle.Row],
         StateTransform.SortZone zone => [zone.Row],
@@ -416,7 +446,7 @@ public sealed class TransformStateEffect : EffectFact {
         _ => [],
     };
     /// <inheritdoc/>
-    public override bool ReadsHost => ReferenceReadsHost(reference: KeyRef);
+    public override bool ReadsHost => (ReferenceReadsHost(reference: KeyRef) || ReferenceReadsHost(reference: FromRef) || ReferenceReadsHost(reference: ToRef));
 }
 
 /// <summary>Pushes one evaluated value into a history row's ring.</summary>
