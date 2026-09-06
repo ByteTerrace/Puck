@@ -1,19 +1,18 @@
 using System.Text;
 using Puck.Networking;
-using Puck.World.Protocol;
 
-namespace Puck.World.Server;
+namespace Puck.World.Protocol;
 
 /// <summary>
-/// The remote socket's downstream reply grammar — shared by <see cref="WorldPeerHost"/> (the server door) and the
-/// <c>--connect</c> peer clients, so both sides frame bytes identically without a second definition drifting from
-/// the first. Upstream (client → server, after Hello) rides the existing <see cref="WorldFrameCodec"/> grammar over
-/// <see cref="HandshakeWireFormat.TryReadLengthPrefixedFrameAsync"/>'s raw read; Hello and identity ride
-/// <see cref="HandshakeWireFormat"/> directly. Downstream (server → client) is this type's own, deliberately small
-/// v1 grammar: a Hello verdict once, then one completion per submitted frame (this v1 socket is strictly
-/// request-then-response per connection, so no correlation id travels on the wire; see <see cref="WorldPeerHost"/>'s
-/// own remarks) — not one of <see cref="WorldSubmissionCodec"/>'s twelve leaf kinds, since v1 carries only the
-/// Completion lane (streamed snapshots/definitions/compositions/levers are not carried here).
+/// The remote socket's downstream reply grammar — shared by <c>Puck.World.Server.WorldPeerHost</c> (the server
+/// door) and the <c>--connect</c> peer clients, so both sides frame bytes identically without a second definition
+/// drifting from the first. Upstream (client → server, after Hello) rides the existing <see cref="WorldFrameCodec"/>
+/// grammar over <see cref="HandshakeWireFormat.TryReadLengthPrefixedFrameAsync"/>'s raw read; Hello and identity
+/// ride <see cref="HandshakeWireFormat"/> directly. Downstream (server → client) is this type's own, deliberately
+/// small v1 grammar: a Hello verdict once, then one completion per submitted frame (this v1 socket is strictly
+/// request-then-response per connection, so no correlation id travels on the wire) — not one of
+/// <see cref="WorldSubmissionCodec"/>'s twelve leaf kinds, since v1 carries only the Completion lane (streamed
+/// snapshots/definitions/compositions/levers are not carried here).
 /// </summary>
 public static class WorldPeerWireFormat {
     /// <summary>The hard cap on a downstream frame's total bytes — every v1 downstream case is a short status/text
@@ -33,7 +32,7 @@ public static class WorldPeerWireFormat {
         HelloRefused,
 
         /// <summary>The protocol-version check passed; this is the admission door's fresh challenge nonce (see
-        /// <see cref="Protocol.WorldAdmissionDoor.NewChallenge"/>). The peer answers with a HelloIdentity frame
+        /// <see cref="WorldAdmissionDoor.NewChallenge"/>). The peer answers with a HelloIdentity frame
         /// (<see cref="HandshakeWireFormat.WriteHelloIdentityAsync"/>/<see cref="HandshakeWireFormat.TryReadHelloIdentityAsync"/>)
         /// before either <see cref="HelloAccepted"/> or <see cref="HelloRefused"/> follows.</summary>
         HelloChallenge,
@@ -136,7 +135,7 @@ public static class WorldPeerWireFormat {
         );
     }
     /// <summary>Writes the downstream Hello-challenge frame: a fresh admission nonce
-    /// (<see cref="Protocol.WorldAdmissionDoor.NewChallenge"/>). Sent once the protocol-version check passes and
+    /// (<see cref="WorldAdmissionDoor.NewChallenge"/>). Sent once the protocol-version check passes and
     /// before any identity is asked for.</summary>
     public static Task WriteHelloChallengeAsync(Stream stream, byte[] challenge, CancellationToken ct) =>
         WriteDownstreamAsync(

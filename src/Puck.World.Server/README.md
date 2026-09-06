@@ -911,7 +911,7 @@ through the ordinary `PeerAdmitted` event.
 See [references/session-lifecycle.md](../../.claude/skills/puck-world/references/session-lifecycle.md)
 for the full contract.
 
-## Network transport (`WorldPeerHost.cs`, `WorldPeerWireFormat.cs`)
+## Network transport (`WorldPeerHost.cs`)
 
 `WorldPeerHost` binds the networking library's QUIC peer listener from `host.listen`
 (a document field the composition root also lets `--listen` reflect for one
@@ -972,16 +972,17 @@ the door resolved, never the one the client's bytes claimed.
 
 v1 is strictly request-then-response per connection, so no correlation id
 travels on the wire; the downstream reply is a small NEW grammar
-(`WorldPeerWireFormat`) carrying exactly the Completion lane
+(`Puck.World.Protocol.WorldPeerWireFormat`) carrying exactly the Completion lane
 (`WorldSubmissionResult`, i.e. Ack/Session/Query) — never a streamed
 snapshot/definition/composition/lever (`WorldOutputHub`'s encoded lane stays
 a scaffold beyond this one lane). `--connect` does not speak this door as a
 client at all: `Puck.World.Program` enqueues a federation transfer
 (`WorldInstanceHost.EnqueueTransfer` with `TransferDestination.Remote`),
 which authenticates the resulting `WorldRemoteAuthority` purely over
-`Puck.Networking.IAuthenticator` (`WorldAttestedAuthenticator`, a signed claim
-over the challenge — never a shared secret) — the interactive attestation
-identity door above is server-side only today; no production client crosses it.
+`Puck.Networking.IAuthenticator` (`Puck.World.Protocol.WorldAttestedAuthenticator`,
+a signed claim over the challenge — never a shared secret) — the interactive
+attestation identity door above is server-side only today; no production
+client crosses it.
 `Puck.World.Console`'s `WorldNetworkCommandModule`'s `world.peers` echoes the
 connection table this class owns — each connection's verified admission
 identity (domain/subject) — plus an `arrivals:` group naming every body
@@ -1068,7 +1069,7 @@ carried profile — `world.peers`'s `arrivals:` group echoes them.
 
 An `admission` row in `federatedAuthority` mode carries no key: its `domain` is
 the authenticated authority namespace, or `*` for any authority that completes
-the handshake. That namespace is `WorldAttestedAuthenticator`'s own verified
+the handshake. That namespace is `Puck.World.Protocol.WorldAttestedAuthenticator`'s own verified
 claim subject — `host.authority` when the document authors one, else the
 boot instance identity (`Puck.World.WorldDefinitionLoader.BootInstanceName`)
 — never a label the connecting peer merely asserted, so `*` is what a
@@ -1511,8 +1512,8 @@ disagreement — the live tree moved past the recording — refuses loudly with
 no verdict; a recorded mutation's accept/refuse outcome disagreeing with what
 the replay's own apply pipeline produces refuses loudly by name too
 (`MutationOutcomeMismatch` — see [addons.md](../../.claude/skills/puck-world/references/addons.md)'s prepare/commit
-transaction); a codec defect (`WorldReplayCodecException.cs`) reports as a
-host bug, never folded into either refusal. `replay.inspect <name>
+transaction); a codec defect (`Puck.World.Protocol.WorldReplayCodecException`)
+reports as a host bug, never folded into either refusal. `replay.inspect <name>
 [<from>-<to>] [--all] [--poses]` (`WorldReplayInspector.cs`,
 `WorldReplayEntryDescriber.cs`) is the tape's read-back: the header facts,
 then one line per tick carrying the recorded hash beside what changed that

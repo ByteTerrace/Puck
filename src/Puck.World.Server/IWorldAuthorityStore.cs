@@ -1,3 +1,5 @@
+using Puck.World.Protocol;
+
 namespace Puck.World.Server;
 
 /// <summary>One checkpoint blob's raw encoded bytes plus the pointer facts that named it — the hash-verified answer
@@ -8,11 +10,6 @@ namespace Puck.World.Server;
 /// <param name="Ordinal">The checkpoint's own ordinal.</param>
 /// <param name="Tick">The engine tick the checkpoint was captured at.</param>
 public readonly record struct WorldAuthorityCheckpointBlob(ReadOnlyMemory<byte> Encoded, long Ordinal, ulong Tick);
-/// <summary>One mutation journal entry — opaque encoded bytes (a mutation-codec leaf, opaque to the store) plus the
-/// engine tick it was recorded at.</summary>
-/// <param name="Tick">The engine tick the mutation was recorded at.</param>
-/// <param name="Encoded">The mutation's own encoded bytes.</param>
-public readonly record struct WorldMutationJournalEntry(ulong Tick, ReadOnlyMemory<byte> Encoded);
 /// <summary>The mutation journal tail for one checkpoint ordinal — every entry recorded since that checkpoint, in
 /// append order.</summary>
 /// <param name="CheckpointOrdinal">The checkpoint ordinal this tail is relative to.</param>

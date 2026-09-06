@@ -1,9 +1,8 @@
 using System.Security.Cryptography;
 using Puck.Attestation;
 using Puck.Networking;
-using Puck.World.Protocol;
 
-namespace Puck.World.Server;
+namespace Puck.World.Protocol;
 
 /// <summary>
 /// The federation identity door's <see cref="IAuthenticator"/>: a challenge proof is a signed claim over the
@@ -59,7 +58,7 @@ public sealed class WorldAttestedAuthenticator : IAuthenticator {
 
     /// <inheritdoc/>
     /// <remarks>Configured to prove OR to verify — a host's door needs only the latter. A client that needs a proof
-    /// from a verify-only instance learns so from <see cref="Prove"/>'s own refusal (<see cref="WorldRemoteAuthority"/>
+    /// from a verify-only instance learns so from <see cref="Prove"/>'s own refusal (<c>Puck.World.Server.WorldRemoteAuthority</c>
     /// records that and closes its signing gate on it).</remarks>
     public bool IsConfigured => ((m_oracle is not null) || (m_trustEntries is not null));
 

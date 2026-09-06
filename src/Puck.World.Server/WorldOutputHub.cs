@@ -26,7 +26,7 @@ public readonly record struct WorldSinkDisclosure(WorldObserverDisclosure Policy
 /// <see cref="IClientSink.DeliverSnapshot"/> call returns, because the next tick's snapshot overwrites the same
 /// backing array. <see cref="WorldServer.EmitSnapshot"/> only returns once every typed subscriber has done exactly
 /// that. Interactive QUIC traffic uses a request-then-response wire
-/// (<see cref="Server.WorldPeerWireFormat"/>); continuous federation projections subscribe here and copy each
+/// (<see cref="WorldPeerWireFormat"/>); continuous federation projections subscribe here and copy each
 /// borrowed snapshot into a bounded wire queue before returning.
 /// </summary>
 /// <remarks><para>Play-and-host (a local sink plus N future connections, plus the tape) is first-class here: every

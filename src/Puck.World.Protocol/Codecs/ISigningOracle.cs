@@ -1,8 +1,7 @@
 using System.Security.Cryptography;
 using Puck.Attestation;
-using Puck.World.Protocol;
 
-namespace Puck.World.Server;
+namespace Puck.World.Protocol;
 
 /// <summary>
 /// Signs a federation-identity claim over a challenge nonce. <see cref="WorldAttestedAuthenticator"/> never

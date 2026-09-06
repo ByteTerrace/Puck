@@ -200,7 +200,7 @@ if (!WorldDefinitionLoader.TryResolve(
 // SignsDirectly claims under this run's own pinned key, naming this document's host.authority as the subject a
 // peer's own admission entries pin against; verification reads the CURRENT document's admission rows fresh on
 // every attempt, so a live world.reload/edit is honored the same way the interactive door already is.
-Puck.Networking.IAuthenticator authenticator = new Puck.World.Server.WorldAttestedAuthenticator();
+Puck.Networking.IAuthenticator authenticator = new Puck.World.Protocol.WorldAttestedAuthenticator();
 if (parseResult.GetValue(option: federationKeyFileOption) is { } federationKeyFile) {
     // The exact fallback WorldServer.AuthorityIdentity itself applies for the boot instance (host.authority absent
     // means "colocated with the resolver", per its own doc comment) — reusing it here means authoring a signing key
@@ -219,11 +219,11 @@ if (parseResult.GetValue(option: federationKeyFileOption) is { } federationKeyFi
             pkcs8: pkcs8
         );
 
-        authenticator = new Puck.World.Server.WorldAttestedAuthenticator(
-            oracle: new Puck.World.Server.LocalKeySigningOracle(
+        authenticator = new Puck.World.Protocol.WorldAttestedAuthenticator(
+            oracle: new Puck.World.Protocol.LocalKeySigningOracle(
                 key: key,
                 subject: federationSubject,
-                validity: Puck.World.Server.WorldAttestedAuthenticator.MaximumClaimAge
+                validity: Puck.World.Protocol.WorldAttestedAuthenticator.MaximumClaimAge
             ),
             trustEntries: () => worldSource.Definition.Admission
         );

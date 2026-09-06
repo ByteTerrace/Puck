@@ -1,13 +1,18 @@
 using Puck.Networking;
 
-namespace Puck.World.Server;
+namespace Puck.World.Protocol;
 
-/// <summary>Encodes and decodes the two small wire shapes <see cref="WorldAuthorityBlobStore"/> owns beside the
-/// checkpoint blob itself: the <c>checkpoints/latest</c> pointer, and one journal page's sequence of entries. Both
-/// use the same bounded <see cref="WireWriter"/>/<see cref="WireReader"/> discipline every peer decoder in this
-/// engine follows; a magic-and-version pair per shape refuses a foreign or future blob by name rather than
-/// misreading it.</summary>
-internal static class WorldAuthorityStoreWireCodec {
+/// <summary>One mutation journal entry — opaque encoded bytes (a mutation-codec leaf, opaque to the store) plus the
+/// engine tick it was recorded at.</summary>
+/// <param name="Tick">The engine tick the mutation was recorded at.</param>
+/// <param name="Encoded">The mutation's own encoded bytes.</param>
+public readonly record struct WorldMutationJournalEntry(ulong Tick, ReadOnlyMemory<byte> Encoded);
+/// <summary>Encodes and decodes the two small wire shapes <c>Puck.World.Server.WorldAuthorityBlobStore</c> owns
+/// beside the checkpoint blob itself: the <c>checkpoints/latest</c> pointer, and one journal page's sequence of
+/// entries. Both use the same bounded <see cref="WireWriter"/>/<see cref="WireReader"/> discipline every peer
+/// decoder in this engine follows; a magic-and-version pair per shape refuses a foreign or future blob by name
+/// rather than misreading it.</summary>
+public static class WorldAuthorityStoreWireCodec {
     // "PLTP" — Puck Latest Pointer.
     private const uint LatestPointerMagic = 0x50544C50U;
     private const ushort LatestPointerVersion = 1;

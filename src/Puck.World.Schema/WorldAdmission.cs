@@ -20,7 +20,7 @@ public enum WorldAdmissionTrustMode : byte {
     /// <summary><see cref="WorldAdmissionEntry.Domain"/> names an authenticated federation authority namespace (or
     /// <see cref="WorldAdmissionEntry.AnyAuthority"/>), and the row says what a traveler that authority hands over is
     /// minted. The proof behind it is <c>Puck.Networking.IAuthenticator</c>'s signed-claim challenge/proof handshake
-    /// (<c>Puck.World.Server.WorldAttestedAuthenticator</c>) rather than an admission-door
+    /// (<c>Puck.World.Protocol.WorldAttestedAuthenticator</c>) rather than an admission-door
     /// attestation claim, so such a row carries no <see cref="WorldAdmissionEntry.Algorithm"/> and no
     /// <see cref="WorldAdmissionEntry.PublicKey"/>, and <see cref="WorldAdmissionDoor"/> skips it when building its
     /// trust list. An arriving traveler's body index, profile id, and display name are all supplied by the handing

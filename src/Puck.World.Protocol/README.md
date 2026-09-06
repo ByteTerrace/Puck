@@ -127,6 +127,45 @@ as different DATA through the existing messages, never as a new message kind.
 If a proposed feature needs a genre-specific message, the surface is wrong:
 generalize it or move the specificity into a document row.
 
+## Codecs (`Codecs/`)
+
+Four small, server-free wire pieces live here because nothing about them needs
+a live `WorldServer`, `WorldPopulation`, or the like — each already worked
+over a plain record or a parameter the caller supplies:
+
+- `WorldPeerWireFormat.cs` — the v1 downstream reply grammar
+  (`Puck.World.Server`'s `WorldPeerHost` and the `--connect` peer client both
+  frame bytes through it): Hello outcomes, then one `WorldSubmissionResult`
+  case per completion.
+- `WorldAttestedAuthenticator.cs`/`ISigningOracle.cs` — the federation
+  identity door's `Puck.Networking.IAuthenticator`: a challenge/proof
+  handshake verified against a document's own `admission` trust list
+  (`WorldAdmissionEntry`, in `Puck.World.Schema`), never a shared secret.
+  `LocalKeySigningOracle` is the offline, locally-held-key oracle shape.
+- `WorldAuthorityStoreWireCodec.cs` — the two small shapes
+  `Puck.World.Server.WorldAuthorityBlobStore` frames beside the checkpoint
+  blob itself: the `checkpoints/latest` pointer, and one journal page's
+  `WorldMutationJournalEntry` sequence.
+- `WorldReplayCodecException.cs` — the tape codec's own host-bug exception
+  type, deliberately not derived from `InvalidOperationException` so no
+  existing broad catch absorbs it by accident.
+
+`WorldFederationCodec.cs`, `WorldWireLeaves.cs`, and
+`WorldAuthorityCheckpointCodec.cs` (and its partial-class siblings) stay in
+`Puck.World.Server` — every one of them encodes a plain record type
+(`WorldMobilityIdentity`, `WorldTransferReservationRequest`, and the several
+`World*Checkpoint` shapes) that is itself declared nested inside a `Server`
+runtime class or beside one (`WorldTransferEscrow.cs`, `WorldServer.cs`,
+`WorldPopulation.cs`, `WorldGrants.cs`, `WorldFieldLattice.cs`,
+`WorldOwnedWorlds.cs`, `WorldInputHoldRuntime.cs`, `WorldEventFeed.cs`,
+`WorldSearchRuntime.cs`). Moving one of those codecs here without first
+un-nesting the record types it encodes would need this project to reference
+`Puck.World.Server`, which the architecture gate denies for good reason: a
+codec that reaches back into the runtime it serializes is no longer just
+"what a world says". Un-nesting the record types is itself a real fold, just
+one that reads and writes several `Server` files this project's own codecs
+never touch.
+
 ## Verifying a change here
 
 There is no engine gate over this project. Verify by building
