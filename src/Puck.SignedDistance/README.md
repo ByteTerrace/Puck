@@ -104,6 +104,19 @@ to the headless evaluator). `RoundedRectangle`, `Repeat`/`RepeatLimited`/
 `SymmetryPlane`/`Elongate`/`Onion`/`Dilate` and isotropic `Scale` interpret
 directly as 1-Lipschitz operations.
 
+`TryDistance` culls an instance (`SdfProgram.Instances`) whose whole compose
+chain is a plain `SdfBlendOp.Union`: its authored world-space bound proves the
+instance cannot lower the running best-so-far distance, so its instruction
+slice is skipped entirely — bit-identical to evaluating it, never an
+approximation. Smooth/chamfer/subtraction/intersection/Xor blends, and any
+instance holding `PushField`/`PopField` or a bare `Onion`/`Dilate`, are never
+culled, since their compose can depend on a candidate farther than the current
+best. The cull needs no opt-in: it inspects whatever instances the caller
+declared, and does nothing when there are none — `WorldSolidField`, below, does
+not currently call `BeginInstance`/`Instance` for its placements, so today it
+declares zero instances and this cull has no effect on the shipped world's
+contact field until a caller wraps its per-object content in instance bounds.
+
 ## 🚀 Basic use
 
 ```csharp

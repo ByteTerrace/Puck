@@ -28,6 +28,15 @@ namespace Puck.SignedDistance.Queries;
 // throws <see cref="ArgumentException"/> naming the FIRST
 // disqualifying instruction's op or shape, rather than silently constructing an evaluator that would answer wrong
 // for part of the program.
+//
+// THE INSTANCE CULL (TryDistance, BuildCullBounds/IsPureUnionInstance/CanCullInstance): a program instance whose
+// whole compose chain is a plain SdfBlendOp.Union carries a conservative world-space sphere bound (SdfInstanceRange,
+// the same bound the GPU beam prepass tile-culls with); TryDistance skips such an instance's instruction slice
+// whenever that bound proves it cannot beat the running best-so-far distance. Exact-by-construction — the skip
+// changes no returned distance, material, or gradient — because a hard union can only ever lower the accumulator,
+// never raise it. Smooth/chamfer/subtraction/intersection/Xor blends, and any instance containing a PushField/
+// PopField or a bare Onion/Dilate, are never culled: their compose can depend on a candidate farther than the
+// current best, which a bound-only skip cannot reproduce bit-for-bit.
 public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // SDF_FAR_DISTANCE (sdf-vm.hlsli): the accumulator's seed value — "nothing found yet," farther than any real
     // program's geometry, so the first SHAPE candidate always wins the initial compose.
@@ -60,6 +69,13 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // there a clear line to that wall" query) never reads as self-obstructing.
     private static readonly FixedQ4816 LineOfSightSkin = FixedQ4816.FromDouble(value: 0.05);
 
+    // The same float-safety padding SdfProgram bakes into every GPU cull bound (its BoundRadiusScale/
+    // BoundRadiusPadding, applied at ClassifyInstances/CompileRigidPlan/PackInstances — KEEP IN SYNC) — widening an
+    // instance's authored bound before converting it to FixedQ4816 absorbs float and fixed-point rounding, so the
+    // bound this evaluator tests against can only be looser (never tighter) than the geometry it must cover.
+    private const float CullBoundRadiusScale = 1.0001f;
+    private const float CullBoundRadiusPadding = 0.001f;
+
     // The iteration budget at unit step scale. A non-accepted point advance is at least
     // max(floor(HitEpsilon * stepScale), one Q48.16 tick) — the divisor m_marchIterations rescales by — so this budget
     // times HitEpsilon is the distance a point march always covers before it may exhaust, at every step scale.
@@ -84,6 +100,11 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // a chamfer's bevel arm and an eccentric Ellipsoid both make the field OVERESTIMATE, so a march advancing by the
     // raw value steps past thin geometry and tunnels.
     private readonly FixedQ4816 m_stepScale;
+    // One conservative world-space bound per hard-union instance (see BuildCullBounds/IsPureUnionInstance), sorted by
+    // First ascending — the order program.Instances declares them in, since only one instance is open at a time.
+    // Empty when the program declares no cullable instance, so TryDistance's cull check is then a single comparison
+    // that never fires and every existing program's answers are unchanged.
+    private readonly CullBound[] m_cullBounds;
 
     /// <summary>Compiles <paramref name="program"/>'s instruction stream into this evaluator's fixed-point form.</summary>
     /// <param name="program">The program to wrap. Its <see cref="SdfProgram.Instructions"/> are walked ONCE here —
@@ -102,6 +123,7 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         m_instructions = Compile(instructions: program.Instructions);
         m_stepScale = ConservativeStepScale(value: program.StepScale);
         m_marchIterations = MarchIterationsFor(stepScale: m_stepScale);
+        m_cullBounds = BuildCullBounds(program: program);
 
         for (var index = 0; (index < m_instructions.Length); index++) {
             if (m_instructions[index].Op == SdfOp.ShapeBlend) {
@@ -310,6 +332,90 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         }
 
         return compiled;
+    }
+    // Builds this evaluator's exact cull table: one conservative world-space bound per instance whose whole compose
+    // chain is a hard union (IsPureUnionInstance) — the only shape a bound-only skip is provably bit-identical to
+    // full evaluation for (see CanCullInstance's remarks). A program with no such instance yields an empty table.
+    private static CullBound[] BuildCullBounds(SdfProgram program) {
+        var instances = program.Instances;
+        var instructions = program.Instructions;
+        var result = new List<CullBound>(capacity: instances.Count);
+
+        for (var index = 0; (index < instances.Count); index++) {
+            var instance = instances[index];
+
+            if (
+                instance.IsDynamic ||
+                !IsPureUnionInstance(
+                    instance: instance,
+                    instructions: instructions
+                )
+            ) {
+                continue;
+            }
+
+            result.Add(item: new CullBound(
+                CenterX: FixedQ4816.FromDouble(value: instance.Center.X),
+                CenterY: FixedQ4816.FromDouble(value: instance.Center.Y),
+                CenterZ: FixedQ4816.FromDouble(value: instance.Center.Z),
+                End: instance.End,
+                First: instance.First,
+                Radius: FixedQ4816.FromDouble(value: ((instance.Radius * CullBoundRadiusScale) + CullBoundRadiusPadding))
+            ));
+        }
+
+        return result.ToArray();
+    }
+    // The bound test: the true Euclidean distance from worldPosition to any point the instance's geometry can ever
+    // occupy is at least (distance-to-center - radius), the same sphere-containment guarantee the GPU beam prepass
+    // already relies on for its own tile cull (SdfInstanceRange's remarks). A hard-union candidate can therefore win
+    // only when that lower bound still beats the running best; ">=" (not ">") matches ResolveWinner's own strict "<"
+    // for Union, so a tie never wins and skipping it changes nothing.
+    private static bool CanCullInstance(CullBound bound, FixedQ4816 resultDistance, FixedVector3 worldPosition) {
+        var delta = new FixedVector3(
+            X: (worldPosition.X - bound.CenterX),
+            Y: (worldPosition.Y - bound.CenterY),
+            Z: (worldPosition.Z - bound.CenterZ)
+        );
+
+        return ((delta.Length - bound.Radius) >= resultDistance);
+    }
+    // An instance is cullable only when every instruction it owns is either a rigid point transform that never reads
+    // or writes the running accumulator (ResetPoint/Translate/Rotate/Scale/Repeat/RepeatLimited/SymmetryPlane/
+    // Elongate) or a ShapeBlend composing by plain SdfBlendOp.Union. Under that restriction the instance's own bound
+    // (a world-space sphere containing every shape it can ever place, however its local point transforms) proves
+    // every candidate it can produce is at least the bound's own lower-bound distance from the query point — so a
+    // union fold over any number of such candidates cannot lower resultDistance below what CanCullInstance already
+    // tests. PushField/PopField/Onion/Dilate, or any other blend (Subtraction/Intersection/smooth/chamfer/Xor),
+    // disqualifies the instance: each composes into the shared accumulator in a way a bound-only skip does not
+    // reproduce bit-for-bit.
+    private static bool IsPureUnionInstance(SdfInstanceRange instance, IReadOnlyList<SdfInstruction> instructions) {
+        for (var index = instance.First; (index < instance.End); index++) {
+            switch (instructions[index].Op) {
+                case SdfOp.ResetPoint:
+                case SdfOp.Translate:
+                case SdfOp.Rotate:
+                case SdfOp.Scale:
+                case SdfOp.Repeat:
+                case SdfOp.RepeatLimited:
+                case SdfOp.SymmetryPlane:
+                case SdfOp.Elongate: {
+                        continue;
+                    }
+                case SdfOp.ShapeBlend: {
+                        if (instructions[index].Blend != ((uint)SdfBlendOp.Union)) {
+                            return false;
+                        }
+
+                        continue;
+                    }
+                default: {
+                        return false;
+                    }
+            }
+        }
+
+        return true;
     }
     // === The blend accumulator (KEEP IN SYNC with mapCore's shared blend tail + blendShape/blendSmoothUnion) ===========
     // Mirrors the shader's semantics EXACTLY, including op order effects: the material winner is resolved from the
@@ -1138,8 +1244,28 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         var resultMaterial = 0;
         var savedFieldDistance = FarDistance;
         var savedFieldMaterial = 0;
+        var cullIndex = 0;
 
         for (var index = 0; (index < m_instructions.Length); index++) {
+            if (
+                (cullIndex < m_cullBounds.Length) &&
+                (m_cullBounds[cullIndex].First == index)
+            ) {
+                var bound = m_cullBounds[cullIndex];
+
+                cullIndex++;
+
+                if (CanCullInstance(
+                    bound: bound,
+                    resultDistance: resultDistance,
+                    worldPosition: worldPosition
+                )) {
+                    index = (bound.End - 1);
+
+                    continue;
+                }
+            }
+
             var instruction = m_instructions[index];
 
             switch (instruction.Op) {
@@ -1416,6 +1542,16 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         Hit = 1,
         Exhausted = 2,
     }
+    // One hard-union instance's conservative world-space bound, converted to FixedQ4816 ONCE at construction (see
+    // BuildCullBounds) — the fixed-point, safety-padded twin of SdfInstanceRange's float Center/Radius.
+    private readonly record struct CullBound(
+        int First,
+        int End,
+        FixedQ4816 CenterX,
+        FixedQ4816 CenterY,
+        FixedQ4816 CenterZ,
+        FixedQ4816 Radius
+    );
     // The compiled, fixed-point form of one SdfInstruction: every Data0/Data1 float lane converted to FixedQ4816
     // ONCE at construction (see Compile). Field names mirror the shader's data0.x/y/z/w and data1.x/y/z/w swizzles
     // directly so a shape/op body reads as a transcription of its mapCore counterpart, not a re-derivation.
