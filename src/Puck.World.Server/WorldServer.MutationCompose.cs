@@ -710,14 +710,26 @@ public sealed partial class WorldServer {
     // A state write re-resolves every document value bound to its row; when one of those values is a
     // look-assignment row name, the population's look indices are derived from it and must re-resolve too —
     // KEEP IN SYNC with AffectsPopulation, which lists the mutation KINDS that rebuild.
-    private static bool RefreshesLookAssignment(WorldMutation mutation, WorldDefinition candidate) => (
-        (StateRowOf(mutation: mutation) is { } row) &&
-        WorldStateDocumentValues.ReferencesRow(
-            definition: candidate,
-            graph: candidate.LookAssignment,
-            rowName: row
-        )
-    );
+    private bool RefreshesLookAssignment(WorldMutation mutation, WorldDefinition candidate) {
+        if (StateRowOf(mutation: mutation) is { } row) {
+            return WorldStateDocumentValues.ReferencesRow(definition: candidate, graph: candidate.LookAssignment, rowName: row);
+        }
+
+        // A transform, a draw, or a batch touches the rows it names; any one of them bound into the look graph refreshes it.
+        m_touchedRows.Clear();
+
+        if (!TryCollectStateMutationRowNames(mutation: mutation, names: m_touchedRows, reason: out _)) {
+            return false;
+        }
+
+        foreach (var name in m_touchedRows) {
+            if (WorldStateDocumentValues.ReferencesRow(definition: candidate, graph: candidate.LookAssignment, rowName: name)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     private static bool TryComposeCore(WorldDefinition current, WorldMutation mutation, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, CompiledPatterns? patterns = null) {
         reason = string.Empty;
         evictedKey = null;

@@ -890,41 +890,82 @@ public sealed partial class WorldServer {
         // constructed default until the next Install happens to touch state again.
         m_population.SyncBodyScale(definition: definition);
     }
-    // A scalar state write changes runtime values, not declaration shape. Keep the authoritative document as the
+    // A state mutation changes runtime values, not declaration shape. Keep the authoritative document as the
     // journal/save source while retaining the compiled rule/catalog/group/machine products that depend only on
-    // declarations; only state-sensitive grants and field reactions observe the new value immediately. touchedRow
-    // is the one row the write named — SyncState skips its drive-gate rescan entirely when that row is not a
-    // gatesDrive row.
-    private void InstallRuntimeStateValue(WorldDefinition definition, string touchedRow) {
+    // declarations; only state-sensitive grants and field reactions observe the new values immediately. The
+    // drive-gate rescan runs only when a touched row gates drive.
+    private void InstallRuntimeStateValue(WorldDefinition definition, WorldMutation mutation) {
         m_definition = definition;
-        m_grants.SyncState(definition: definition, touchedRow: touchedRow);
+
+        if (TouchesDriveGate(definition: definition, mutation: mutation)) {
+            m_grants.SyncState(definition: definition);
+        }
+
         m_population.InstallFields(definition: definition);
         m_population.SyncBodyScale(definition: definition);
     }
+    private bool TouchesDriveGate(WorldDefinition definition, WorldMutation mutation) {
+        m_touchedRows.Clear();
 
-    private static bool TryValidateMutationCandidate(WorldDefinition candidate, WorldMutation mutation, out string reason, out WorldRuleCompilation? compilation, bool retainCompilation = true) {
-        compilation = null;
+        if (!TryCollectStateMutationRowNames(mutation: mutation, names: m_touchedRows, reason: out _)) {
+            return true;
+        }
 
+        var catalog = definition.StateCatalog;
+
+        foreach (var name in m_touchedRows) {
+            if (
+                catalog.TryResolve(lane: StateLane.Document, name: name, handle: out var handle) &&
+                catalog.TryGetDescriptor(descriptor: out var descriptor, handle: handle) &&
+                definition.State[descriptor.LaneOrdinal].GatesDrive
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    // The mutation kinds that change state values and nothing else: a cell write or removal, a transform, a draw
+    // site fire, or a batch made only of those.
+    private static bool IsStateMutation(WorldMutation mutation) {
         switch (mutation) {
-            case WorldMutation.UpsertStateCell or WorldMutation.RemoveStateCell or WorldMutation.TransformState or WorldMutation.Generate or WorldMutation.Batch:
-                return TryValidateStateMutation(candidate: candidate, mutation: mutation, reason: out reason);
+            case WorldMutation.UpsertStateCell or WorldMutation.RemoveStateCell or WorldMutation.TransformState or WorldMutation.Generate:
+                return true;
+            case WorldMutation.Batch batch:
+                foreach (var member in batch.Mutations) {
+                    if (!IsStateMutation(mutation: member)) {
+                        return false;
+                    }
+                }
+
+                return true;
             default:
-                return (retainCompilation
-                    ? WorldDefinitionValidator.TryValidateLocally(candidate, out reason, out compilation)
-                    : WorldDefinitionValidator.TryValidateLocally(candidate, out reason));
+                return false;
         }
     }
-    // A state mutation — a scalar cell write, a bounded transform, a draw-site fire, or a batch of only those — never
-    // needs the rest of the document compiled: it can only have changed the rows it names. A batch carrying a
-    // non-state member falls back to whole-document validation for the whole batch, since a member outside `state`
-    // can violate an invariant the touched-row walk never looks at.
-    private static bool TryValidateStateMutation(WorldDefinition candidate, WorldMutation mutation, out string reason) {
-        var touched = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        return (TryCollectStateMutationRowNames(mutation: mutation, names: touched, reason: out reason)
-            ? WorldDefinitionValidator.TryValidateTouchedStateRows(definition: candidate, rowNames: touched, reason: out reason)
+    private bool TryValidateMutationCandidate(WorldDefinition candidate, WorldMutation mutation, out string reason, out WorldRuleCompilation? compilation, bool retainCompilation = true) {
+        compilation = null;
+
+        if (IsStateMutation(mutation: mutation)) {
+            return TryValidateStateMutation(candidate: candidate, mutation: mutation, reason: out reason);
+        }
+
+        return (retainCompilation
+            ? WorldDefinitionValidator.TryValidateLocally(candidate, out reason, out compilation)
+            : WorldDefinitionValidator.TryValidateLocally(candidate, out reason));
+    }
+    // A state mutation can only have changed the rows it names, so validation covers those rows and the rows keyed
+    // over them, with nothing compiled.
+    private bool TryValidateStateMutation(WorldDefinition candidate, WorldMutation mutation, out string reason) {
+        m_touchedRows.Clear();
+
+        return (TryCollectStateMutationRowNames(mutation: mutation, names: m_touchedRows, reason: out reason)
+            ? WorldDefinitionValidator.TryValidateTouchedStateRows(definition: candidate, rowNames: m_touchedRows, reason: out reason)
             : WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out reason));
     }
+    // Scratch for the rows one mutation touches; the step is single-threaded, so one set serves every door.
+    private readonly HashSet<string> m_touchedRows = new(comparer: StringComparer.Ordinal);
     // Collects the row names a state mutation touches; false (with an empty reason) when the mutation — or, for a
     // Batch, any one of its members — is not one of the state kinds TryValidateStateMutation covers, which the
     // caller reads as "fall back to whole-document validation" rather than a refusal.
@@ -1297,11 +1338,11 @@ public sealed partial class WorldServer {
             var previous = m_definition;
 
             if (
-                (mutation is WorldMutation.UpsertStateCell upsertStateCell) &&
+                IsStateMutation(mutation: mutation) &&
                 ReferenceEquals(objA: candidate.StateCatalog, objB: previous.StateCatalog) &&
                 !RefreshesLookAssignment(candidate: candidate, mutation: mutation)
             ) {
-                InstallRuntimeStateValue(definition: candidate, touchedRow: upsertStateCell.Row);
+                InstallRuntimeStateValue(definition: candidate, mutation: mutation);
             } else {
                 Install(
                     definition: candidate,

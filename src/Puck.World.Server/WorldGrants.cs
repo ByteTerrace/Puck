@@ -1901,24 +1901,8 @@ public sealed class WorldGrants : IWorldGrantsView {
     /// row can never advance; <c>0</c> reads identically to any other tick. First-in-document-order gate wins a body
     /// (declaration-order tiebreak, the same convention same-tick rule effects resolve by).</summary>
     /// <param name="definition">The live document.</param>
-    /// <param name="touchedRow">The one row name a scalar state mutation wrote, or <see langword="null"/> for a
-    /// caller that cannot narrow the touch set (a whole-document rebuild). A named row that does not itself declare
-    /// <see cref="WorldStateRow.GatesDrive"/> leaves the index untouched — every gatesDrive row's cells are
-    /// unchanged, so the index they produce cannot be either — instead of rescanning the whole document.</param>
-    public void SyncState(WorldDefinition definition, string? touchedRow = null) {
+    public void SyncState(WorldDefinition definition) {
         var catalog = definition.StateCatalog;
-
-        if (
-            (touchedRow is not null) &&
-            (
-                !catalog.TryResolve(lane: StateLane.Document, name: touchedRow, handle: out var touchedHandle) ||
-                !catalog.TryGetDescriptor(handle: touchedHandle, descriptor: out var touchedDescriptor) ||
-                (((uint)touchedDescriptor.LaneOrdinal) >= ((uint)definition.State.Count)) ||
-                !definition.State[touchedDescriptor.LaneOrdinal].GatesDrive
-            )
-        ) {
-            return;
-        }
 
         m_driveGates.Clear();
 

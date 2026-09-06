@@ -116,17 +116,9 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var wholeDocumentReason));
         Assert.Contains(expectedSubstring: "is duplicated", actualString: wholeDocumentReason);
     }
-    // Baseline measured on this same fixture and deal with routing reverted to whole-document validation for every
-    // mutation kind (WorldDefinitionValidator.TryValidateLocally unconditionally): 972,343 bytes/mutation over 140
-    // applied mutations. Touched-row validation drops that to roughly 141,500 bytes/mutation — most of a Klondike
-    // deal's applied mutations are rule-fired StateTransform.Transfer effects, and WorldServer.Install recompiles
-    // the whole rules/interactions/tables/search section on every one of those regardless of mutation kind (only a
-    // value-only UpsertStateCell against an unchanged StateCatalog takes the no-recompile InstallRuntimeStateValue
-    // path) — carrying validated compilation into installation is deferred, so that recompile, not validation, is
-    // what the remaining allocation buys. GC.GetTotalAllocatedBytes is process-wide, so it is unusable under this
-    // suite's parallel test run (a sibling test's concurrent allocation on another thread lands in the same
-    // window); GetAllocatedBytesForCurrentThread charges only the calling thread, which this synchronous body never
-    // leaves.
+    // Charges the calling thread only: the suite runs tests in parallel, so a process-wide counter would fold a
+    // sibling test into this window. The bound sits well under whole-document validation (about 970 KiB per
+    // mutation on this fixture) and above what the compose, journal, and echo of one mutation cost today.
     [Fact]
     public void KlondikeDealAllocatesFarLessThanWholeDocumentValidation() {
         using var fixture = Fixtures.FreshServer(definition: Game(game: "solitaireKlondike"));
@@ -146,9 +138,9 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
         var allocated = (after - before);
         var perMutation = (allocated / (double)applied);
 
-        output.WriteLine(message: $"solitaireKlondike deal: {applied} applied mutations, {allocated} bytes allocated, {perMutation:F0} bytes/mutation (whole-document baseline: 972,343 bytes/mutation)");
+        output.WriteLine(message: $"solitaireKlondike deal: {applied} applied mutations, {allocated} bytes allocated, {perMutation:F0} bytes/mutation");
 
-        Assert.True(condition: (perMutation < (250 * 1024)), userMessage: $"expected well under the 972,343 bytes/mutation whole-document baseline; measured {perMutation:F0} bytes/mutation over {applied} mutations");
+        Assert.True(condition: (perMutation < (128 * 1024)), userMessage: $"expected under 128 KiB per applied mutation; measured {perMutation:F0} bytes/mutation over {applied} mutations");
     }
 
     private static CellName Name(string value) => CellName.Parse(candidate: value);

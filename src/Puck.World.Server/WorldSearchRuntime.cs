@@ -310,7 +310,14 @@ internal sealed partial class WorldSearchRuntime {
             return false;
         }
 
+        var rows = m_store.Rows;
+
+        if (!ReferenceEquals(objA: m_base.Rows, objB: rows)) {
+            RebindLive(rows: rows);
+        }
+
         m_base.Load(source: m_store);
+        ResizeJobs(rows: rows);
         var stamp = Stamp();
         var installed = false;
 
@@ -635,6 +642,44 @@ internal sealed partial class WorldSearchRuntime {
     }
 
     // Every framed value except the jobs' own output rows: an output landing never restarts the job that wrote it.
+    // The live document is a fresh record after every state mutation; the frames and each job's zone rows bind to the
+    // rows the tick reads, not the rows the last rebuild saw.
+    private void RebindLive(IReadOnlyList<StateRow> rows) {
+        m_base!.Rebind(rows: rows);
+        m_host!.Rebind(rows: rows);
+
+        foreach (var job in m_jobs) {
+            job.ZoneRows = Job.ResolveZones(plan: job.Plan, rows: rows);
+
+            foreach (var level in job.Levels) {
+                level.Frame.Rebind(rows: rows);
+            }
+
+            job.UctFrame?.Rebind(rows: rows);
+            job.PlayFrame?.Rebind(rows: rows);
+        }
+    }
+    // A job is sized by its token row's live cell count: a token row filled or emptied by a state mutation since the
+    // last rebuild re-sizes the job here, on the tick, so no install is needed to notice it.
+    private void ResizeJobs(IReadOnlyList<StateRow> rows) {
+        for (var index = 0; index < m_jobs.Length; index++) {
+            var job = m_jobs[index];
+            var tokens = 0;
+
+            if (
+                m_catalog!.TryResolve(lane: StateLane.Document, name: job.Plan.Row.Tokens, handle: out var handle) &&
+                m_catalog.TryGetDescriptor(handle: handle, descriptor: out var descriptor) &&
+                (((uint)descriptor.LaneOrdinal) < ((uint)rows.Count))
+            ) {
+                tokens = (rows[descriptor.LaneOrdinal].Cells?.Count ?? 0);
+            }
+
+            if (job.Legal.Length != tokens) {
+                m_jobs[index] = new Job(plan: job.Plan, tokenCapacity: tokens, layout: m_layout!, rows: rows);
+            }
+        }
+    }
+
     private ulong Stamp() {
         var hash = Fnv1aHash.Create();
         var values = m_base!.Values;

@@ -60,9 +60,11 @@ public static class MusicDirectorFactory {
     /// music vocabulary does not name is skipped, never thrown on. A world-event family added without a music
     /// counterpart must not be able to kill the tick that emits it.</remarks>
     /// <param name="edges">This tick's <see cref="WorldEventFeed.Edges"/>.</param>
-    /// <returns>The projected edges the music vocabulary names, in the same pinned order.</returns>
-    public static List<MusicSenseEdge> ProjectSenseEdges(IReadOnlyList<WorldEventEdge> edges) {
-        var projected = new List<MusicSenseEdge>(capacity: edges.Count);
+    /// <param name="projected">The caller-owned list to fill, cleared first; the projected edges the music
+    /// vocabulary names, in the same pinned order.</param>
+    public static void ProjectSenseEdges(IReadOnlyList<WorldEventEdge> edges, List<MusicSenseEdge> projected) {
+        ArgumentNullException.ThrowIfNull(argument: projected);
+        projected.Clear();
 
         foreach (var edge in edges) {
             if (CompileFamily(family: edge.Family) is not { } family) {
@@ -76,7 +78,6 @@ public static class MusicDirectorFactory {
             ));
         }
 
-        return projected;
     }
 
     private static MusicTransitionBoundary CompileBoundary(Puck.World.Authoring.MusicTransitionBoundary boundary) => (boundary switch {

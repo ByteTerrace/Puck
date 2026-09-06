@@ -33,6 +33,12 @@ public sealed partial class WorldServer {
     // The active-layer set observed as of the end of the PREVIOUS Step call — MusicLayerTap fires only when this
     // tick's set differs, so a level-triggered layer that stays active for many ticks in a row costs one comparison
     // per tick, not one tap invocation per tick.
+    private readonly List<Puck.Audio.Simulation.MusicSenseEdge> m_senseEdgeScratch = [];
+    private IReadOnlyList<Puck.Audio.Simulation.MusicSenseEdge> ProjectSenseEdges() {
+        MusicDirectorFactory.ProjectSenseEdges(edges: m_events.Edges, projected: m_senseEdgeScratch);
+
+        return m_senseEdgeScratch;
+    }
     private IReadOnlyList<string> m_lastTappedActiveLayerTuneIds = [];
 
     // MusicDirector.ActiveLayerTuneIds is recomputed in stable declared order every Step, so an ordinal sequence
@@ -937,7 +943,7 @@ public sealed partial class WorldServer {
 
             musicDirector.Step(
                 boundary: boundary,
-                edges: MusicDirectorFactory.ProjectSenseEdges(edges: m_events.Edges),
+                edges: ProjectSenseEdges(),
                 tick: tick
             );
 

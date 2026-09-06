@@ -159,7 +159,7 @@ public sealed class SearchLawTests {
         var definition = Fixtures.BuildDocument() with {
             StateRaw = state,
             Rules = [
-                new WorldRule(Name: CellName.Parse("accept"), Effects: [
+                new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
                     new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
                 ]),
@@ -350,7 +350,7 @@ public sealed class SearchLawTests {
         var definition = Fixtures.BuildDocument() with {
             StateRaw = state,
             Rules = [
-                new WorldRule(Name: CellName.Parse("accept"), Effects: [
+                new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Expression: ValueExpression.Parse("pieceCode[a] == 3 ? 1 : 0")),
                     new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
                 ]),
@@ -397,7 +397,7 @@ public sealed class SearchLawTests {
         var definition = Fixtures.BuildDocument() with {
             StateRaw = state,
             Rules = [
-                new WorldRule(Name: CellName.Parse("accept"), Effects: [
+                new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
                     new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
                 ]),
@@ -442,7 +442,7 @@ public sealed class SearchLawTests {
         var definition = Fixtures.BuildDocument() with {
             StateRaw = state,
             Rules = [
-                new WorldRule(Name: CellName.Parse("accept"), Effects: [
+                new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
                     new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
                 ]),
@@ -539,7 +539,7 @@ public sealed class SearchLawTests {
         var definition = Fixtures.BuildDocument() with {
             StateRaw = state,
             Rules = [
-                new WorldRule(Name: CellName.Parse("accept"), Effects: [
+                new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
                     new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
                 ]),
@@ -700,7 +700,7 @@ public sealed class SearchLawTests {
         return Fixtures.BuildDocument() with {
             StateRaw = state,
             Rules = [
-                new WorldRule(Name: CellName.Parse("accept"), Effects: [
+                new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
                     new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
                 ]),
@@ -752,7 +752,7 @@ public sealed class SearchLawTests {
         var definition = Fixtures.BuildDocument() with {
             StateRaw = state,
             Rules = [
-                new WorldRule(Name: CellName.Parse("accept"), Effects: [
+                new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
                     new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
                 ]),
@@ -829,7 +829,7 @@ public sealed class SearchLawTests {
         var definition = Fixtures.BuildDocument() with {
             StateRaw = state,
             Rules = [
-                new WorldRule(Name: CellName.Parse("accept"), Effects: [
+                new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "verdict", Value: 1),
                     new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
                 ]),
@@ -906,7 +906,7 @@ public sealed class SearchLawTests {
         var definition = Fixtures.BuildDocument() with {
             StateRaw = state,
             Rules = [
-                new WorldRule(Name: CellName.Parse("accept"), Effects: [
+                new WorldRule(Name: CellName.Parse("accept"), Mode: ActionTriggerMode.Edge, Effects: [
                     new ActionEffect.SetState(State: "handCount", FromState: "$reduce:count:hand"),
                     new ActionEffect.SetState(State: "verdict", Value: 1),
                     new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
