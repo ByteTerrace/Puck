@@ -5054,6 +5054,27 @@
                                             "additionalProperties": false
                                           },
                                           {
+                                            "description": "Consumes one Int mask over the named topology\u0027s cells and pushes the union of that mask and every repeated shift of it in the named direction until no bit has a neighbour that way \u2014 a whole file, rank, or diagonal from one seed bit (boardFill(1, board, N)), so no author hand-writes a wrap constant. Int only.",
+                                            "properties": {
+                                              "$type": {
+                                                "const": "boardFill"
+                                              },
+                                              "topology": {
+                                                "description": "A discrete topology of state.lattices with at most 64 cells.",
+                                                "type": "string"
+                                              },
+                                              "direction": {
+                                                "description": "A direction of that topology.",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "topology",
+                                              "direction"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
                                             "description": "Consumes one Int mask over the named topology\u0027s cells and pushes it carried through a point-group element of that topology (a rotation or mirror of the board), so a rule authored from one side\u0027s view reads the other side\u0027s board through the half turn. Int only.",
                                             "properties": {
                                               "$type": {

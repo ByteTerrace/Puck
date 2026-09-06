@@ -66,6 +66,7 @@ public sealed class ExpressionSpellingLawTests {
         Assert.Equal([S("v"), C(0m), C(10m), new ValueToken.Clamp()], Parse("clamp(v, 0, 10)"));
         Assert.Equal([S("v"), C(8m), C(4m), new ValueToken.BitField()], Parse("bitField(v, 8, 4)"));
         Assert.Equal([S("m"), new ValueToken.BoardShift("board", "north")], Parse("boardShift(m, board, north)"));
+        Assert.Equal([S("m"), new ValueToken.BoardFill("board", "north")], Parse("boardFill(m, board, north)"));
         Assert.Equal([S("m"), new ValueToken.BoardImage("board", "rot180")], Parse("boardImage(m, board, rot180)"));
         Assert.Equal([S("m"), new ValueToken.PopCount()], Parse("popCount(m)"));
         Assert.Equal([S("c"), S("a"), S("b"), new ValueToken.Select()], Parse("select(c, a, b)"));

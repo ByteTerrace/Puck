@@ -642,14 +642,14 @@ public sealed partial class WorldServer {
         // the candidate this call hands back — the one validation checks and the journal records — already carries
         // them; a hypothetical evaluation's own frame recomputes the identical answer incrementally instead (see
         // StateFrame), never through this whole-document pass.
-        candidate = RecomposeDerivedBoards(definition: candidate);
+        candidate = RecomposeDerivedBoards(definition: candidate, previous: current);
 
         return true;
     }
     // The one recompute a document-level derived board gets: for every CellsOf row declaring Inverse, its cells
     // become exactly DerivedBoards.Compose's answer over the candidate's OWN current tokens/codes rows — so a
     // mutation that moves a token, and one that never touches either row, both leave every derived board correct.
-    private static WorldDefinition RecomposeDerivedBoards(WorldDefinition definition) {
+    private static WorldDefinition RecomposeDerivedBoards(WorldDefinition definition, WorldDefinition? previous = null) {
         var rows = definition.State;
         List<WorldStateRow>? recomposed = null;
 
@@ -657,6 +657,11 @@ public sealed partial class WorldServer {
             var row = rows[index];
 
             if ((row.EffectiveDomain is not StateDomain.CellsOf board) || (row.Inverse is not { } inverse)) {
+                continue;
+            }
+            // A compose that left both source rows as the very objects the installed document holds cannot have
+            // changed the derivation; only an install with no prior document recomputes unconditionally.
+            if ((previous is not null) && SameSourceRows(previous: previous.State, current: rows, inverse: inverse)) {
                 continue;
             }
             if (WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology) {
@@ -675,6 +680,9 @@ public sealed partial class WorldServer {
 
         return ((recomposed is null) ? definition : definition.WithWorldState(rows: recomposed));
     }
+    private static bool SameSourceRows(IReadOnlyList<WorldStateRow> previous, IReadOnlyList<WorldStateRow> current, StateInverse inverse) =>
+        ReferenceEquals(objA: WorldDefinitionRows.FindStateRow(rows: previous, name: inverse.Tokens.Value), objB: WorldDefinitionRows.FindStateRow(rows: current, name: inverse.Tokens.Value)) &&
+        ReferenceEquals(objA: WorldDefinitionRows.FindStateRow(rows: previous, name: inverse.Codes.Value), objB: WorldDefinitionRows.FindStateRow(rows: current, name: inverse.Codes.Value));
     private static bool SameCells(IReadOnlyList<StateCell>? left, IReadOnlyList<StateCell> right) {
         var leftCells = (left ?? []);
 

@@ -66,6 +66,7 @@ public sealed record ValueExpression(IReadOnlyList<ValueToken> Tokens) {
 [JsonDerivedType(typeof(ValueToken.BitField), typeDiscriminator: "bitField")]
 [JsonDerivedType(typeof(ValueToken.BitInsert), typeDiscriminator: "bitInsert")]
 [JsonDerivedType(typeof(ValueToken.BoardShift), typeDiscriminator: "boardShift")]
+[JsonDerivedType(typeof(ValueToken.BoardFill), typeDiscriminator: "boardFill")]
 [JsonDerivedType(typeof(ValueToken.BoardImage), typeDiscriminator: "boardImage")]
 [JsonDerivedType(typeof(ValueToken.Pair), typeDiscriminator: "pair")]
 [JsonDerivedType(typeof(ValueToken.PairX), typeDiscriminator: "pairX")]
@@ -252,6 +253,12 @@ public abstract record ValueToken {
     /// <param name="Topology">A discrete topology of <c>state.lattices</c> with at most 64 cells.</param>
     /// <param name="Direction">A direction of that topology.</param>
     public sealed record BoardShift(string Topology, string Direction) : ValueToken;
+    /// <summary>Consumes one Int mask over the named topology's cells and pushes the union of that mask and every
+    /// repeated shift of it in the named direction until no bit has a neighbour that way — a whole file, rank, or
+    /// diagonal from one seed bit (<c>boardFill(1, board, N)</c>), so no author hand-writes a wrap constant. Int only.</summary>
+    /// <param name="Topology">A discrete topology of <c>state.lattices</c> with at most 64 cells.</param>
+    /// <param name="Direction">A direction of that topology.</param>
+    public sealed record BoardFill(string Topology, string Direction) : ValueToken;
     /// <summary>Consumes one Int mask over the named topology's cells and pushes it carried through a point-group
     /// element of that topology (a rotation or mirror of the board), so a rule authored from one side's view reads
     /// the other side's board through the half turn. Int only.</summary>

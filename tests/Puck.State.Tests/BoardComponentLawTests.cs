@@ -113,6 +113,28 @@ public sealed class BoardComponentLawTests {
     }
 
     [Fact]
+    public void AFillIsTheUnionOfRepeatedShiftsToTheEdgeAndAWrappedFillIsTheWholeCycle() {
+        var topology = Board();
+        var north = new BoardNeighbourQuery(topology, topology.Direction("N"));
+        var east = new BoardNeighbourQuery(topology, topology.Direction("E"));
+        // From cell 20 (row 4, column 0) the northward fill is the whole first column; from cell 0 nothing lies north.
+        Assert.Equal(0x108421L, BoardQueries.FillMask(north, 1L << 20));
+        Assert.Equal(1L, BoardQueries.FillMask(north, 1L));
+        // Eastward from cell 5 the fill is row 1; a seed on the far edge fills only itself.
+        Assert.Equal(0x3E0L, BoardQueries.FillMask(east, 1L << 5));
+        Assert.Equal(1L << 9, BoardQueries.FillMask(east, 1L << 9));
+        // Two seeds fill two lines at once; a shift alone moves one step.
+        Assert.Equal(BoardQueries.FillMask(east, 1L) | BoardQueries.FillMask(east, 1L << 10), BoardQueries.FillMask(east, (1L) | (1L << 10)));
+        Assert.Equal(1L << 1, BoardQueries.ShiftMask(east, 1L));
+
+        var wrapped = TopologyCompilation.Compile(
+            topology: new LatticeTopology.Grid(Name: "ring", Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f), CellSize: 1f, Width: 5, Depth: 5, Directions: s_orthogonal, Wrap: TopologyWrap.Both),
+            anchorOffset: Vector3.Zero
+        );
+        Assert.Equal(0x3E0L, BoardQueries.FillMask(new BoardNeighbourQuery(wrapped, wrapped.Direction("E")), 1L << 7));
+    }
+
+    [Fact]
     public void TheBudgetBoundsTheFloodAndReadsMinusTwoWhenItRunsOut() {
         var topology = Board();
         var budgeted = new BoardComponentQuery(topology, lower: 1, upper: 1, maxVisits: 4, boundaryLower: 0, boundaryUpper: 0, boundary: false);

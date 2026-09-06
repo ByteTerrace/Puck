@@ -49,7 +49,7 @@ public readonly record struct GateToken(
 /// <param name="Operation">The stack operation.</param>
 /// <param name="Constant">The raw destination-kind literal for a constant token.</param>
 /// <param name="Operand">The live operand for an operand token.</param>
-/// <param name="Board">The compiled topology and direction of a <see cref="ExpressionOp.BoardShift"/> token.</param>
+/// <param name="Board">The compiled topology and direction of a <see cref="ExpressionOp.BoardShift"/>, <see cref="ExpressionOp.BoardFill"/>, or <see cref="ExpressionOp.BoardImage"/> token.</param>
 public readonly record struct CompiledExpressionToken(ExpressionOp Operation, long Constant = 0L, OperandFact? Operand = null, BoardQuery? Board = null);
 /// <summary>One compiled rule: its name, its mode, the flattened gate, and the compiled effects. A document project
 /// derives its own record to carry what only it compiles beside these.</summary>

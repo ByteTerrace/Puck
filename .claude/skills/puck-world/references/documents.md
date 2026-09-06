@@ -2476,7 +2476,8 @@ rules read it through `$match:<pattern>:<row>[:<direction>|:any][:prefix|:mask|:
 ray, a zone's attribute word or per-token `value` expression (`$token` and `$previous` keys; a word starts at the
 operand's `key` token when one is given, so a cascade's legality from a card is one read),
 a `history` ring (`push`/`pushState`, `$history:<row>:<age>`), or a keyed row;
-`$board:mask`, the `boardShift`/`boardImage` expression ops, and the
+`$board:mask`, the `boardShift`/`boardFill`/`boardImage` expression ops (a fill is the union of
+repeated shifts to the edge: a file or a rank from one seed bit, never a hand-written wrap constant), and the
 `writeSet` transform carry the one cell-set vocabulary up to 64 cells, and the
 `boardCombine` transform carries it over boards of any size; a group and its
 breathing room are `$board:component:<row>:<min>:<max>:<maxVisits>` and

@@ -83,6 +83,9 @@ public enum ExpressionOp : byte {
     /// <summary>Topology-aware mask shift: every set bit moves to its neighbour in the compiled direction, and a bit
     /// with no neighbour that way is dropped rather than wrapped (Int, unary).</summary>
     BoardShift,
+    /// <summary>Topology-aware mask fill: the union of a mask and every repeated shift of it in the compiled direction
+    /// until the edge — a file, a rank, or a diagonal from one seed bit, with no hand-written constant (Int, unary).</summary>
+    BoardFill,
     /// <summary>A mask carried through one point-group element of the compiled topology (Int, unary).</summary>
     BoardImage,
     /// <summary>Sign as Int -1, 0, 1 (unary, either kind).</summary>

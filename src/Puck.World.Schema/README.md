@@ -1844,9 +1844,12 @@ occupied square), the piece walk `lowestSetBit`/`clearLowestSetBit`, and the
 `parallelBitExtract`/`parallelBitDeposit` (pext/pdep: occupancy along a set
 of squares as a dense index and back); `bitField` (value, offset, width) and
 `bitInsert` (value, field, offset, width) for packed fields, refusing a
-field that leaves the 64-bit carrier; and the topology-aware pair `boardShift`
+field that leaves the 64-bit carrier; and the topology-aware trio `boardShift`
 (`topology`, `direction`), which moves every set bit of a cell mask to its
 neighbour in that direction and drops a bit at the edge instead of wrapping,
+`boardFill` (`topology`, `direction`), the union of a mask and every repeated
+shift of it until the edge — a whole file, rank, or diagonal from one seed
+bit, `boardFill(1, board, N)`, so no wrap constant is ever hand-written —
 and `boardImage` (`topology`, `element`), which carries a cell mask through
 one point-group element. Together with `$board:mask` and the plain bit
 operators these are the one cell-set vocabulary: `$board:mask` of one side
