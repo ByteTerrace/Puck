@@ -233,10 +233,12 @@ answers no index) and any row position in it — a `compareState` `state`, a
 expression's row — spells `$zones[<index>]` with an infix key as the index
 (`game[from]`, `$each`, `$bind:<name>`, an expression), so one authored rule
 serves every pile of a game; `forEach: "$zones"` visits the table's own
-indices. `$zone:<ordered-zone>:first|last` selects an endpoint's original string
-key from the active store; an empty zone's endpoint, or an index selecting no
-zone, names no cell — no comparison holds against it, a write it addresses
-refuses by name, and a transfer end through it refuses. Direct transform mutations carry literal keys. A cursor
+indices, and an evaluation whose live index selects no entry reads its gate
+closed (the table's gaps say which piles the rule is for; `world.rule.trace`
+lists what each spelling selected). `$zone:<ordered-zone>:first|last` selects
+an endpoint's original string key from the active store; an empty zone's
+endpoint names no cell — no comparison holds against it and a write it
+addresses refuses by name. Direct transform mutations carry literal keys. A cursor
 advances only with the committed transfer. `setRay` (`row`, `from`, `direction`, `pattern`, `value`) walks a ray from
 its origin and writes the longest run its named `patterns` row accepts — the
 same compiled machine and prefix semantics `$match` reads, landed back on the

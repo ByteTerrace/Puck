@@ -192,7 +192,7 @@ public static partial class RuleCompiler {
             throw Malformed($"index '{inner}' is not live — a live zone is chosen by a cell, a bound token, a binding, or an expression; a fixed zone is named by its row");
         }
 
-        zone = new LiveZone(table: table, index: index, spelling: name);
+        zone = table.Reference(index: index, spelling: name);
 
         return true;
     }

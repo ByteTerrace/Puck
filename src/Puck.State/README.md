@@ -189,16 +189,21 @@ Nothing here carries a `World` name — a state library names no world.
   zone, a transfer end, an expression's row — may spell `$zones[<index>]`,
   the index an infix key (`game[from]`, `$each`, `$bind:<name>`, or any
   expression), so one rule serves every pile of a game; `forEach: "$zones"`
-  iterates the table's own non-empty indices. Every channel splits through
+  iterates the table's own non-empty indices. An evaluation applies only when
+  every live index selects an entry: the evaluator resolves each distinct
+  spelling once before the gate (`ZoneTable.References`), an index outside the
+  table or at a gap reads the gate closed with nothing refused, and the rule
+  trace lists `zones [$zones[game[to]] -> pile3, ...]` — so a table's gaps
+  state which piles a rule is for. Every channel splits through
   `RuleFacts.SplitChannel`, which keeps a bracketed index whole, and the
   infix lexer keeps `$zones[...]` inside a reserved name.
   `$zone:<ordered-zone>:first|last` preserves the member's original string key
-  and reads the active store, including uncommitted frame transfers. An index
-  selecting no zone, or an empty zone's endpoint, names no cell: a read of it
-  is an absent fact (`RuleFact.IsAbsent`) that no comparison holds against —
-  not even `NotEqual` — an expression over it refuses, a copy from it does not
-  fire, a write addressed by it refuses, and a transfer end through it refuses
-  by name.
+  and reads the active store, including uncommitted frame transfers. An empty
+  zone's endpoint names no cell: a read of it is an absent fact
+  (`RuleFact.IsAbsent`) that no comparison holds against — not even
+  `NotEqual` — an expression over it refuses, a copy from it does not fire,
+  and a write addressed by it refuses. Outside a rule evaluation an unselected
+  live zone reads the same way, and a transfer end through it refuses by name.
 - *Evaluation:* `RuleEvaluator` runs a compiled family over an `IRuleHost` —
   gates in array order, bindings before the gate, Edge/Level latching per
   binding in a `RuleLatch` (simulation state: it hashes, flattens to a

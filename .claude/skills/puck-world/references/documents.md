@@ -251,8 +251,9 @@ name. A rule's `zones` table (ordered zones over one token domain, in index
 order, `""` a gap) makes `$zones[<index>]` a row position anywhere in the rule —
 `compareState` `state`, `$reduce:`/`$match:` rows, a `$zone:` endpoint's zone,
 transfer ends, expression rows — with an infix key as the index (`game[from]`,
-`$each`, `$bind:<name>`, an expression); an index selecting no zone reads absent
-and refuses a transfer by name; `forEach: "$zones"` iterates the table. Rule-authored
+`$each`, `$bind:<name>`, an expression); an evaluation whose index selects no zone
+reads its gate closed (`world.rule.trace` shows `zones [<spelling> -> <zone|none>]`);
+`forEach: "$zones"` iterates the table. Rule-authored
 transfers resolve their `key`, `from`, and `to` before each transaction step;
 direct mutations use literal keys and zone names. Pattern costs use the declared source capacity and actual token-expression
 cost, and pattern read sets include attribute and expression dependencies.

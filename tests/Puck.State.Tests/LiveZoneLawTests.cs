@@ -49,7 +49,7 @@ public sealed class LiveZoneLawTests {
     [InlineData(2, false, 0, "", 0)]
     [InlineData(-1, false, 0, "", 0)]
     [InlineData(9, false, 0, "", 0)]
-    public void ALiveIndexSelectsItsZoneForEveryReadAndNoneIsAbsent(long index, bool selects, long count, string first, long firstValue) {
+    public void ALiveIndexSelectsItsZoneForEveryReadAndNoneClosesTheGate(long index, bool selects, long count, string first, long firstValue) {
         var (host, context, rows) = Build();
         var rules = RuleCompiler.CompileAll([
             // The zone's count, its first member's key, and that member's card value, each through the live zone.
@@ -70,6 +70,10 @@ public sealed class LiveZoneLawTests {
         Assert.Contains(new RuleAccess("cards", "beta"), reads);
         Assert.DoesNotContain(new RuleAccess("other", null), reads);
         Assert.False(RuleDataflow.ReadsHost(rules[2]));
+        Assert.Empty(host.Evaluator.Diagnostics());
+        // Read outside an evaluation, an unselected reference is the absent fact.
+        var operand = rules[2].Gate[0].Left!;
+        Assert.Equal(!selects, operand.Read(host).IsAbsent);
     }
 
     [Fact]
@@ -82,10 +86,19 @@ public sealed class LiveZoneLawTests {
         Assert.True(host.Judge(rules, 2));
         // deck reads face values [gamma=1, alpha=1, beta=0]: the accepted prefix is two cards long.
         Assert.Equal(12, Stored(host, rows, "cards", "alpha"));
+        // An index at the table's gap is not an error: the evaluation is not for it, and the trace names the miss.
         Seed(host, "beta", 2);
+        Assert.True(host.Evaluator.ArmTrace("faces", 1));
         Assert.False(host.Judge(rules, 3));
         Assert.Equal(12, Stored(host, rows, "cards", "alpha"));
-        Assert.Contains("named no cell", host.Evaluator.Diagnostics().Single().Detail, StringComparison.Ordinal);
+        Assert.Empty(host.Evaluator.Diagnostics());
+        var trace = host.Evaluator.DescribeTrace("trace")!;
+        Assert.Contains("zones [$zones[cards[beta]] -> none] gate=closed: not for these zones", trace, StringComparison.Ordinal);
+        Seed(host, "beta", 1);
+        Assert.True(host.Evaluator.ArmTrace("faces", 1));
+        Assert.True(host.Judge(rules, 4));
+        Assert.Contains("zones [$zones[cards[beta]] -> hand] gate=open", host.Evaluator.DescribeTrace("trace")!, StringComparison.Ordinal);
+        Assert.Single(rules[0].Zones!.References);
     }
 
     [Theory]

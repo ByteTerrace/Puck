@@ -228,7 +228,9 @@ public sealed partial class RuleEvaluator {
             trace?.Bindings.Add(item: $"{declared.Name}={RuleEvaluation.DescribeFact(value: value, kind: declared.Kind, isForever: false)}");
         }
 
-        var open = GateOpen(gate: rule.Gate, tick: tick, ruleName: rule.Name, trace: trace?.Conjuncts);
+        // Every live zone the rule spells must select an entry, or this evaluation is simply not for these indices —
+        // the gate reads closed, nothing is refused, and the trace names what each spelling selected.
+        var open = (ZonesSelected(rule: rule, tick: tick, trace: trace?.Zones) && GateOpen(gate: rule.Gate, tick: tick, ruleName: rule.Name, trace: trace?.Conjuncts));
         ref var slot = ref CollectionsMarshal.GetValueRefOrAddDefault(dictionary: bindings, key: binding, exists: out _);
         var wasOpen = slot;
 
@@ -253,6 +255,24 @@ public sealed partial class RuleEvaluator {
         EndTrace(entry: trace);
 
         return applied;
+    }
+
+    private bool ZonesSelected(CompiledRule rule, ulong tick, List<string>? trace) {
+        if (rule.Zones is not { References.Count: > 0 } zones) {
+            return true;
+        }
+        Tick = tick;
+        var selected = true;
+        foreach (var reference in zones.References) {
+            var name = reference.ResolveName(reader: m_host);
+            var found = !ReferenceEquals(objA: name, objB: reference.Spelling);
+            selected &= found;
+            trace?.Add(item: $"{reference.Spelling} -> {(found ? name : "none")}");
+            if (!found && (trace is null)) {
+                return false;
+            }
+        }
+        return selected;
     }
 
     private static string DescribeFault(ExpressionFault fault) => fault switch {

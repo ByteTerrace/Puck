@@ -35,7 +35,8 @@ public static class RuleFacts {
     /// any expression — never a literal number, which would only name a row the long way. Admitted wherever a row is
     /// named: a <c>compareState</c> <c>state</c>/<c>comparandState</c>, a <c>$reduce:</c> or <c>$match:</c> row, a
     /// <c>$zone:</c> endpoint's zone, a transfer's <c>from</c>/<c>to</c>, and an expression's row. An index outside
-    /// the table or at an empty entry selects no zone: the read is the absent fact, the transfer refuses by name.</summary>
+    /// the table or at an empty entry selects no zone, and the rule's evaluation is not for it: the gate reads closed
+    /// before any conjunct is consulted, and the rule trace names what each spelling selected.</summary>
     public const string LiveZonePrefix = "$zones[";
     /// <summary>The <see cref="Rule.ForEach"/> spelling that iterates the rule's own zone table rather than a row:
     /// each non-empty index in turn, bound to <c>$each</c>, so <c>$zones[$each]</c> visits every zone.</summary>

@@ -50,8 +50,10 @@ namespace Puck.State;
 /// <c>compareState</c>'s <c>state</c>, a <c>$reduce:</c>/<c>$match:</c> row, a <c>$zone:</c> endpoint's zone, a
 /// transfer's <c>from</c>/<c>to</c>, an expression's row — may spell <c>$zones[&lt;index&gt;]</c> to select an entry
 /// live, the index being an infix cell key (<c>game[from]</c>, <c>$each</c>, <c>$bind:&lt;name&gt;</c>, or any
-/// expression), so one rule serves every pile of a game. <c>forEach: "$zones"</c> iterates the table's own
-/// non-empty indices with <c>$each</c> bound to each.</param>
+/// expression), so one rule serves every pile of a game. An evaluation applies only when every live index selects
+/// an entry — an index outside the table, or at an empty entry, reads the gate closed, so a table's gaps are the
+/// rule's own statement of which piles it is for. <c>forEach: "$zones"</c> iterates the table's own non-empty
+/// indices with <c>$each</c> bound to each.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record Rule(
     [property: JsonPropertyOrder(0)] CellName Name,

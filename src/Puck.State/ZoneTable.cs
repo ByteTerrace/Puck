@@ -2,10 +2,12 @@ namespace Puck.State;
 
 /// <summary>A rule's <see cref="Rule.Zones"/> table as the evaluator indexes it: ordered zones over one token domain,
 /// each entry's compiled handle in index order, with an invalid handle at every gap. Compiled once per rule by
-/// <see cref="RuleCompiler.CompileZones"/>; every <see cref="LiveZone"/> the rule spells indexes this one table, and
-/// a rule iterating <c>forEach: "$zones"</c> visits <see cref="Indices"/> in order.</summary>
+/// <see cref="RuleCompiler.CompileZones"/>; every <see cref="LiveZone"/> the rule spells indexes this one table and
+/// is listed in <see cref="References"/>, and a rule iterating <c>forEach: "$zones"</c> visits <see cref="Indices"/>
+/// in order.</summary>
 public sealed class ZoneTable {
     private readonly StateHandle[] m_handles;
+    private readonly List<LiveZone> m_references = [];
 
     /// <param name="names">The authored entries, in index order; an empty entry is a gap.</param>
     /// <param name="handles">Each entry's compiled handle; invalid at a gap.</param>
@@ -36,6 +38,24 @@ public sealed class ZoneTable {
     public int Capacity { get; }
     /// <summary>Gets the non-gap indices spelled as cell keys, in index order.</summary>
     public CellName[] Indices { get; }
+    /// <summary>Gets every live reference the rule spells against this table, one per distinct spelling, in the
+    /// order they were compiled. An evaluation applies only when every one of them selects a zone.</summary>
+    public IReadOnlyList<LiveZone> References => m_references;
+
+    /// <summary>Returns the live reference a spelling names, minting it on first use — the same spelling in two
+    /// places is one reference, resolved once per evaluation.</summary>
+    /// <param name="index">The compiled index indirection.</param>
+    /// <param name="spelling">The authored spelling.</param>
+    public LiveZone Reference(CompiledCellRef index, string spelling) {
+        foreach (var existing in m_references) {
+            if (string.Equals(a: existing.Spelling, b: spelling, comparisonType: StringComparison.Ordinal)) {
+                return existing;
+            }
+        }
+        var minted = new LiveZone(table: this, index: index, spelling: spelling);
+        m_references.Add(item: minted);
+        return minted;
+    }
 
     /// <summary>Resolves an index to its zone's handle; an index outside the table or at a gap answers none.</summary>
     /// <param name="index">The live index.</param>
@@ -73,7 +93,10 @@ public sealed class ZoneTable {
 /// <summary>A row position chosen live — <c>$zones[&lt;index&gt;]</c>, the row-side mirror of a key indirection: the
 /// bracketed index (a cell read, a bound token, a binding, or an expression) resolves before each read or firing to
 /// an integer that selects a zone from the enclosing rule's <see cref="ZoneTable"/>. An index outside the table or at
-/// a gap selects no zone: a read through it is the absent fact, and a transfer end through it refuses by name.</summary>
+/// a gap selects no zone, and the rule's evaluation does not apply: the evaluator proves every reference selected
+/// before the gate, so an unselected index closes the gate rather than refusing an effect. Outside an evaluation
+/// (a read-back, a search score) a read through an unselected reference is the absent fact and a transfer end
+/// refuses by name.</summary>
 public sealed class LiveZone {
     /// <param name="table">The rule's zone table.</param>
     /// <param name="index">The live index indirection.</param>

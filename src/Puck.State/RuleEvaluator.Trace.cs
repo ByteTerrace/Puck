@@ -12,6 +12,9 @@ public sealed class RuleTraceEvaluation {
     public string? EachKey { get; init; }
     /// <summary>Gets each binding as <c>name=value</c>, or <c>name=refused</c> for one that could not evaluate.</summary>
     public List<string> Bindings { get; } = [];
+    /// <summary>Gets each live zone spelling and the zone it selected, or <c>none</c> — an evaluation with any
+    /// <c>none</c> reads its gate closed without consulting it.</summary>
+    public List<string> Zones { get; } = [];
     /// <summary>Gets each gate conjunct's spelling, the two values it compared, and its verdict, in evaluation
     /// order.</summary>
     public List<string> Conjuncts { get; } = [];
@@ -29,11 +32,12 @@ public sealed class RuleTraceEvaluation {
     public string Describe(string verb, string rule) {
         var each = ((EachKey is { } key) ? $" each={key}" : string.Empty);
         var bindings = ((Bindings.Count > 0) ? $" bind [{string.Join(separator: ", ", values: Bindings)}]" : string.Empty);
-        var gate = ((Conjuncts.Count == 0) ? "always" : string.Join(separator: "; ", values: Conjuncts));
+        var zones = ((Zones.Count > 0) ? $" zones [{string.Join(separator: ", ", values: Zones)}]" : string.Empty);
+        var gate = ((Conjuncts.Count == 0) ? (GateOpen || (Zones.Count == 0) ? "always" : "not for these zones") : string.Join(separator: "; ", values: Conjuncts));
         var verdict = (GateOpen ? (EdgeHeld ? "open (edge already held, not fired)" : "open") : "closed");
         var effects = ((Effects.Count > 0) ? $" -> {string.Join(separator: " | ", values: Effects)}" : string.Empty);
 
-        return $"[{verb} {rule} tick={Tick}{each}{bindings} gate={verdict}: {gate}{effects}]";
+        return $"[{verb} {rule} tick={Tick}{each}{bindings}{zones} gate={verdict}: {gate}{effects}]";
     }
 }
 
