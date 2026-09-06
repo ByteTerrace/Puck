@@ -772,6 +772,7 @@ public sealed partial class WorldServer {
         // addon seam's pre-flight (TickAddons, immediately below) and the drain that applies what it — and every peer
         // submission buffered since the last step — enqueued.
         m_mutationBudget.BeginTick();
+        DrainRecordedExtensions();
         m_addons?.TickAddons(tick: (context.Tick + 1UL));
         _ = DrainPendingOps(tick: context.Tick);
         TransferForwarder?.ResolveContinuations(source: this);
@@ -1243,9 +1244,11 @@ public sealed partial class WorldServer {
     /// method introduces no new tape interaction.</remarks>
     /// <returns><see langword="true"/> when anything applied (a definition delivery occurred).</returns>
     public bool DrainAdministrative() {
-        m_mutationBudget.BeginTick();
-
-        return DrainPendingOps(tick: m_lastCompletedTick);
+        lock (m_authorityGate) {
+            m_mutationBudget.BeginTick();
+            DrainRecordedExtensions();
+            return DrainPendingOps(tick: m_lastCompletedTick);
+        }
     }
     /// <summary>Buffers one entity's submitted intent for the next <see cref="Step"/>.</summary>
     /// <param name="submission">The tick, entity index, and merged intent.</param>

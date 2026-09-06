@@ -21,10 +21,16 @@ the rule kinds only a world evaluates. The addon guest runtime itself is
 [`Puck.World.Addons`](../Puck.World.Addons/README.md), which references this
 project rather than the reverse — see `IWorldAddonHost` below.
 
+Recorded providers and durable external operations share the engine's authority
+and replay paths. See [Extensions and external operations](Extensions.md) for
+the hosting contract, operation recovery, and the distinction between a
+deterministic WASM guest and a provider whose contributions are recorded.
+
 ## The tick (`WorldServer.cs`)
 
 `WorldServer.Step` advances one exact fixed tick, in a pinned order its own
-XML documentation states: tick the mounted addon guests
+XML documentation states: admit queued recorded-extension contributions,
+then tick the mounted addon guests
 (`IWorldAddonHost.TickAddons` — decodes and validates, applies nothing) →
 drain the buffered live edits (mutations and whole-document swaps) → drain the
 buffered intents → apply the guests' contributions

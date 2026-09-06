@@ -11,26 +11,19 @@ import {
   Paper,
 } from "@mantine/core";
 import { RiGridFill, RiCompass3Fill, RiStackLine } from "@remixicon/react";
+import SpatialTopology3D from "./SpatialTopology3D";
+import { TopologyDefinition } from "../../engine/evaluator";
 
-export interface TopologyDefinition {
-  $type: "grid" | "ring" | "hex" | "box" | "lattice";
-  name: string;
-  width?: number;
-  depth?: number;
-  layers?: number;
-  radius?: number;
-  wrap?: "None" | "X" | "Y" | "Both";
-  dimensions?: { x?: number; y?: number; z?: number };
-  coordinates?: Array<{ x: number; y: number; z: number }>;
-  directions?: Array<{ name: string; x: number; y: number; z: number }>;
-}
+export type { TopologyDefinition };
 
 export interface UniversalTopologyViewProps {
   topology: TopologyDefinition;
-  cellValues?: Record<number, number | string>;
+  cellValues?: Record<number, number>;
   selectedCell?: number | null;
   onSelectCell?: (cellIndex: number) => void;
   activeDirection?: { name: string; x: number; y: number; z: number } | null;
+  hoveredMask?: bigint | null;
+  activeWinningRay?: { name: string; cells: number[] } | null;
 }
 
 export const UniversalTopologyView: React.FC<UniversalTopologyViewProps> = ({
@@ -39,7 +32,11 @@ export const UniversalTopologyView: React.FC<UniversalTopologyViewProps> = ({
   selectedCell,
   onSelectCell,
   activeDirection,
+  hoveredMask,
+  activeWinningRay,
 }) => {
+  const is3DTopology = topology.$type === "box" || (topology.layers ?? 1) > 1;
+  const [viewMode, setViewMode] = useState<"3d" | "2d">(is3DTopology ? "3d" : "2d");
   const [activeSlice, setActiveSlice] = useState<number>(0);
 
   // 1. Grid Renderer (2D rectangular)
@@ -80,22 +77,22 @@ export const UniversalTopologyView: React.FC<UniversalTopologyViewProps> = ({
                       cursor: "pointer",
                       borderRadius: 6,
                       background: isSelected
-                        ? "var(--mantine-color-blue-9)"
+                        ? "var(--accent-ink)"
                         : Number(val) > 0
-                        ? "var(--mantine-color-dark-5)"
-                        : "var(--mantine-color-dark-7)",
+                        ? "var(--quote-bg)"
+                        : "var(--paper-2)",
                       border: isSelected
-                        ? "2px solid var(--mantine-color-blue-4)"
-                        : "1px solid var(--mantine-color-dark-4)",
+                        ? "2px solid var(--accent)"
+                        : "1px solid var(--rule)",
                       transition: "all 0.15s ease",
                       userSelect: "none",
                     }}
                   >
-                    <Text size="xs" c="dimmed" style={{ fontSize: 9 }}>
+                    <Text size="xs" style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', color: "var(--ink-faint)" }}>
                       {cellIdx}
                     </Text>
-                    <Text fw={700} size="sm" c={Number(val) > 0 ? "cyan.4" : "gray.6"}>
-                      {val !== 0 ? String(val) : "·"}
+                    <Text fw={700} size="sm" style={{ fontFamily: '"JetBrains Mono", monospace', color: Number(val) === 1 ? "var(--accent)" : Number(val) === 2 ? "var(--accent-2)" : "var(--ink-faint)" }}>
+                      {Number(val) === 1 ? "X" : Number(val) === 2 ? "O" : val !== 0 ? String(val) : "·"}
                     </Text>
                   </Paper>
                 </Tooltip>
@@ -121,7 +118,7 @@ export const UniversalTopologyView: React.FC<UniversalTopologyViewProps> = ({
             cy={center}
             r={radius}
             fill="none"
-            stroke="var(--mantine-color-dark-5)"
+            stroke="var(--rule)"
             strokeWidth="2"
             strokeDasharray="4 4"
           />
@@ -142,17 +139,17 @@ export const UniversalTopologyView: React.FC<UniversalTopologyViewProps> = ({
                   cx={x}
                   cy={y}
                   r={20}
-                  fill={isSelected ? "var(--mantine-color-blue-8)" : "var(--mantine-color-dark-6)"}
-                  stroke={isSelected ? "var(--mantine-color-blue-4)" : "var(--mantine-color-dark-4)"}
+                  fill={isSelected ? "var(--accent-ink)" : Number(val) > 0 ? "var(--quote-bg)" : "var(--paper-2)"}
+                  stroke={isSelected ? "var(--accent)" : "var(--rule)"}
                   strokeWidth={isSelected ? 2 : 1}
                 />
                 <text
                   x={x}
                   y={y - 4}
                   textAnchor="middle"
-                  fill="gray"
+                  fill="var(--ink-faint)"
                   fontSize="9"
-                  fontFamily="monospace"
+                  fontFamily='"JetBrains Mono", monospace'
                 >
                   {i}
                 </text>
@@ -160,11 +157,12 @@ export const UniversalTopologyView: React.FC<UniversalTopologyViewProps> = ({
                   x={x}
                   y={y + 10}
                   textAnchor="middle"
-                  fill={Number(val) > 0 ? "#22d3ee" : "#94a3b8"}
+                  fill={Number(val) === 1 ? "var(--accent)" : Number(val) === 2 ? "var(--accent-2)" : "var(--ink-faint)"}
                   fontSize="12"
                   fontWeight="bold"
+                  fontFamily='"JetBrains Mono", monospace'
                 >
-                  {val !== 0 ? String(val) : "·"}
+                  {Number(val) === 1 ? "X" : Number(val) === 2 ? "O" : val !== 0 ? String(val) : "·"}
                 </text>
               </g>
             );
@@ -218,17 +216,17 @@ export const UniversalTopologyView: React.FC<UniversalTopologyViewProps> = ({
               >
                 <polygon
                   points={points}
-                  fill={isSelected ? "var(--mantine-color-blue-8)" : "var(--mantine-color-dark-6)"}
-                  stroke={isSelected ? "var(--mantine-color-blue-4)" : "var(--mantine-color-dark-4)"}
+                  fill={isSelected ? "var(--accent-ink)" : Number(val) > 0 ? "var(--quote-bg)" : "var(--paper-2)"}
+                  stroke={isSelected ? "var(--accent)" : "var(--rule)"}
                   strokeWidth={isSelected ? 2 : 1}
                 />
                 <text
                   x={x}
                   y={y - 3}
                   textAnchor="middle"
-                  fill="gray"
+                  fill="var(--ink-faint)"
                   fontSize="8"
-                  fontFamily="monospace"
+                  fontFamily='"JetBrains Mono", monospace'
                 >
                   {index}
                 </text>
@@ -236,11 +234,12 @@ export const UniversalTopologyView: React.FC<UniversalTopologyViewProps> = ({
                   x={x}
                   y={y + 8}
                   textAnchor="middle"
-                  fill={Number(val) > 0 ? "#22d3ee" : "#94a3b8"}
+                  fill={Number(val) === 1 ? "var(--accent)" : Number(val) === 2 ? "var(--accent-2)" : "var(--ink-faint)"}
                   fontSize="11"
                   fontWeight="bold"
+                  fontFamily='"JetBrains Mono", monospace'
                 >
-                  {val !== 0 ? String(val) : "·"}
+                  {Number(val) === 1 ? "X" : Number(val) === 2 ? "O" : val !== 0 ? String(val) : "·"}
                 </text>
               </g>
             );
@@ -324,23 +323,23 @@ export const UniversalTopologyView: React.FC<UniversalTopologyViewProps> = ({
                       alignItems: "center",
                       justifyContent: "center",
                       cursor: "pointer",
-                      borderRadius: 8,
+                      borderRadius: 6,
                       background: isSelected
-                        ? "var(--mantine-color-blue-9)"
+                        ? "var(--accent-ink)"
                         : Number(val) > 0
-                        ? "var(--mantine-color-dark-5)"
-                        : "var(--mantine-color-dark-7)",
+                        ? "var(--quote-bg)"
+                        : "var(--paper-2)",
                       border: isSelected
-                        ? "2px solid var(--mantine-color-blue-4)"
-                        : "1px solid var(--mantine-color-dark-4)",
+                        ? "2px solid var(--accent)"
+                        : "1px solid var(--rule)",
                       transition: "all 0.15s ease",
                       userSelect: "none",
                     }}
                   >
-                    <Text size="xs" c="dimmed" style={{ fontSize: 9 }}>
+                    <Text size="xs" style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', color: "var(--ink-faint)" }}>
                       #{cellIdx}
                     </Text>
-                    <Text fw={700} size="md" c={Number(val) === 1 ? "cyan.4" : Number(val) === 2 ? "amber.4" : "gray.6"}>
+                    <Text fw={700} size="md" style={{ fontFamily: '"JetBrains Mono", monospace', color: Number(val) === 1 ? "var(--accent)" : Number(val) === 2 ? "var(--accent-2)" : "var(--ink-faint)" }}>
                       {Number(val) === 1 ? "X" : Number(val) === 2 ? "O" : val !== 0 ? String(val) : "·"}
                     </Text>
                   </Paper>
@@ -354,32 +353,59 @@ export const UniversalTopologyView: React.FC<UniversalTopologyViewProps> = ({
   };
 
   return (
-    <Card withBorder radius="md" p="sm" style={{ background: "var(--mantine-color-dark-8)" }}>
+    <Card withBorder radius="md" p="sm" style={{ background: "var(--paper-2)", borderColor: "var(--rule)" }}>
       <Group justify="space-between" mb="xs">
         <Group gap="xs">
-          <RiGridFill size={18} color="#22d3ee" />
-          <Text fw={700} size="sm">
+          <RiGridFill size={18} color="var(--accent)" />
+          <Text fw={600} size="sm" style={{ fontFamily: '"Lora", Georgia, serif', color: "var(--ink)" }}>
             {topology.name || "Topology"}
           </Text>
-          <Badge variant="outline" color="cyan" size="xs">
-            {topology.$type}
+          <Badge variant="light" color="coral" size="xs" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+            {topology.$type.toUpperCase()}
           </Badge>
         </Group>
 
-        {activeDirection && (
-          <Group gap={4}>
-            <RiCompass3Fill size={14} color="#f59e0b" />
-            <Text size="xs" c="dimmed">
-              Ray: {activeDirection.name} ({activeDirection.x}, {activeDirection.y}, {activeDirection.z})
-            </Text>
-          </Group>
-        )}
+        <Group gap="xs">
+          {is3DTopology && (
+            <SegmentedControl
+              size="xs"
+              value={viewMode}
+              onChange={(val: any) => setViewMode(val)}
+              data={[
+                { label: "3D Spatial Orbit", value: "3d" },
+                { label: "2D Planar Slices", value: "2d" },
+              ]}
+            />
+          )}
+
+          {activeDirection && (
+            <Group gap={4}>
+              <RiCompass3Fill size={14} color="var(--accent-2)" />
+              <Text size="xs" style={{ fontFamily: '"JetBrains Mono", monospace', color: "var(--ink-soft)" }}>
+                Ray: {activeDirection.name} ({activeDirection.x}, {activeDirection.y}, {activeDirection.z})
+              </Text>
+            </Group>
+          )}
+        </Group>
       </Group>
 
-      {topology.$type === "grid" && renderGrid()}
-      {topology.$type === "ring" && renderRing()}
-      {topology.$type === "hex" && renderHex()}
-      {(topology.$type === "lattice" || topology.$type === "box") && renderLatticeOrBox()}
+      {is3DTopology && viewMode === "3d" ? (
+        <SpatialTopology3D
+          topology={topology}
+          cellValues={cellValues}
+          selectedCell={selectedCell}
+          onSelectCell={onSelectCell}
+          hoveredMask={hoveredMask}
+          activeWinningRay={activeWinningRay}
+        />
+      ) : (
+        <>
+          {topology.$type === "grid" && renderGrid()}
+          {topology.$type === "ring" && renderRing()}
+          {topology.$type === "hex" && renderHex()}
+          {(topology.$type === "lattice" || topology.$type === "box") && renderLatticeOrBox()}
+        </>
+      )}
     </Card>
   );
 };

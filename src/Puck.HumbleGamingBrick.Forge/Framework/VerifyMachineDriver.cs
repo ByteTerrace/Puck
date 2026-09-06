@@ -11,6 +11,7 @@ public sealed class VerifyMachineDriver : IDisposable {
     private readonly string m_label;
     private readonly MachineInstance m_machine;
     private readonly ISystemBus m_bus;
+    private readonly IFramebuffer m_framebuffer;
 
     public VerifyMachineDriver(byte[] rom, string label) {
         m_label = label;
@@ -19,11 +20,23 @@ public sealed class VerifyMachineDriver : IDisposable {
             compose: static services => services.AddHumbleGamingBrickComponents()
         );
         m_bus = m_machine.GetRequiredService<ISystemBus>();
+        m_framebuffer = m_machine.GetRequiredService<IFramebuffer>();
         m_cpu = m_machine.GetRequiredService<ICpu>();
         m_joypad = m_machine.GetRequiredService<IJoypad>();
     }
 
     public byte Read(ushort address) => m_bus.ReadByte(address: address);
+    /// <summary>Reads a completed framebuffer pixel without advancing the machine.</summary>
+    /// <param name="x">The pixel column, 0..159.</param>
+    /// <param name="y">The pixel row, 0..143.</param>
+    /// <returns>The packed 0x00RRGGBB pixel.</returns>
+    public uint ReadPixel(int x, int y) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: x);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: x, other: m_framebuffer.Width);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: y);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: y, other: m_framebuffer.Height);
+        return m_framebuffer.Pixels[y * m_framebuffer.Width + x];
+    }
     public int ReadWide(ushort address) => Read(address: address) | (Read(address: ((ushort)(address + 1))) << 8);
     public void RunFrames(JoypadButtons buttons, int frames) {
         for (var frame = 0; (frame < frames); frame++) {

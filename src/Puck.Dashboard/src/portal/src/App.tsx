@@ -8,6 +8,7 @@
 */
 
 import {
+  createTheme,
   localStorageColorSchemeManager,
   Anchor,
   AppShell,
@@ -38,6 +39,57 @@ const DataExplorer = lazy(() => import("./components/DataExplorer"));
 const WorldStudio = lazy(() => import("./components/world/WorldStudio"));
 
 import "@mantine/core/styles.css";
+import "./theme.css";
+
+const puckTheme = createTheme({
+  fontFamily: '"Lora", Georgia, "Iowan Old Style", "Palatino Linotype", serif',
+  fontFamilyMonospace: '"JetBrains Mono", ui-monospace, monospace',
+  headings: {
+    fontFamily: '"Lora", Georgia, "Iowan Old Style", "Palatino Linotype", serif',
+    fontWeight: "600",
+  },
+  colors: {
+    coral: [
+      "#fdf0f3",
+      "#fce1e6",
+      "#f9c1cc",
+      "#f2879a",
+      "#ffa3b3",
+      "#e56784",
+      "#d15d78",
+      "#ad3a53",
+      "#8e2d42",
+      "#2a0d14",
+    ],
+    jade: [
+      "#e6fbf5",
+      "#cbf7ec",
+      "#9bf0dc",
+      "#62e4c8",
+      "#4fd0b4",
+      "#1bc09f",
+      "#0fa185",
+      "#0e7d6b",
+      "#0d6457",
+      "#083b34",
+    ],
+    ground: [
+      "#f6f5f9",
+      "#e7e4ed",
+      "#dbd7e4",
+      "#b5aec3",
+      "#877f99",
+      "#5a5470",
+      "#363145",
+      "#262231",
+      "#1b1924",
+      "#15131c",
+    ],
+  },
+  primaryColor: "coral",
+  primaryShade: { light: 7, dark: 3 },
+  defaultRadius: "sm",
+});
 
 const colorSchemeManager = localStorageColorSchemeManager({
   key: "byteterrace.mantine.theme.colorScheme",
@@ -129,6 +181,7 @@ function App({ context }: { context?: HostContextValue }) {
   return (
     <GraphClientProvider graphClient={graphClient}>
       <MantineProvider
+        theme={puckTheme}
         colorSchemeManager={colorSchemeManager}
         defaultColorScheme={"auto"}
       >

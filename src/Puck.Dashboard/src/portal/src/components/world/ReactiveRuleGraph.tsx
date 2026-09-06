@@ -18,34 +18,13 @@ import {
   RiGitMergeLine,
   RiArrowRightLine,
 } from "@remixicon/react";
+import {
+  ActionPredicate,
+  ActionEffect,
+  WorldRule,
+} from "../../engine/evaluator";
 
-export interface ActionPredicate {
-  $type: string;
-  comparison?: string;
-  state?: string;
-  comparandState?: string;
-  value?: number | string;
-  key?: string;
-  predicates?: ActionPredicate[];
-  predicate?: ActionPredicate;
-}
-
-export interface ActionEffect {
-  $type: string;
-  state: string;
-  fromState?: string;
-  value?: number | string;
-  expression?: string;
-  key?: string;
-}
-
-export interface WorldRule {
-  name: string;
-  mode?: "Level" | "Edge";
-  forEach?: string | null;
-  gate?: ActionPredicate | null;
-  effects?: ActionEffect[];
-}
+export type { ActionPredicate, ActionEffect, WorldRule };
 
 export interface ReactiveRuleGraphProps {
   rules: WorldRule[];
@@ -102,19 +81,19 @@ export const ReactiveRuleGraph: React.FC<ReactiveRuleGraphProps> = ({
 
   // Render a recursive gate predicate tree
   const renderPredicateTree = (pred: ActionPredicate, depth = 0): React.ReactNode => {
-    if (!pred) return <Text size="xs" c="dimmed">Always (No Gate)</Text>;
+    if (!pred) return <Text size="xs" c="var(--ink-faint)">Always (No Gate)</Text>;
 
     const isPass = evaluatePredicate(pred);
 
     if (pred.$type === "all" || pred.$type === "any") {
       const isAll = pred.$type === "all";
       return (
-        <Stack gap={4} ml={depth * 14} style={{ borderLeft: "2px solid var(--mantine-color-dark-4)", paddingLeft: 8 }}>
+        <Stack gap={4} ml={depth * 14} style={{ borderLeft: "2px solid var(--rule)", paddingLeft: 8 }}>
           <Group gap={6}>
-            <Badge size="xs" variant="filled" color={isAll ? "indigo" : "orange"}>
+            <Badge size="xs" variant="filled" color={isAll ? "coral" : "jade"}>
               {isAll ? "ALL (AND)" : "ANY (OR)"}
             </Badge>
-            <ThemeIcon size={16} radius="xl" color={isPass ? "teal" : "red"}>
+            <ThemeIcon size={16} radius="xl" color={isPass ? "jade" : "coral"}>
               {isPass ? <RiCheckboxCircleFill size={12} /> : <RiCloseCircleFill size={12} />}
             </ThemeIcon>
           </Group>
@@ -127,8 +106,8 @@ export const ReactiveRuleGraph: React.FC<ReactiveRuleGraphProps> = ({
 
     if (pred.$type === "not" && pred.predicate) {
       return (
-        <Stack gap={4} ml={depth * 14} style={{ borderLeft: "2px solid var(--mantine-color-dark-4)", paddingLeft: 8 }}>
-          <Badge size="xs" variant="filled" color="pink">
+        <Stack gap={4} ml={depth * 14} style={{ borderLeft: "2px solid var(--rule)", paddingLeft: 8 }}>
+          <Badge size="xs" variant="filled" color="coral">
             NOT
           </Badge>
           {renderPredicateTree(pred.predicate, depth + 1)}
@@ -143,15 +122,15 @@ export const ReactiveRuleGraph: React.FC<ReactiveRuleGraphProps> = ({
         radius="xs"
         ml={depth * 14}
         style={{
-          background: "var(--mantine-color-dark-7)",
-          border: `1px solid ${isPass ? "var(--mantine-color-teal-8)" : "var(--mantine-color-red-9)"}`,
+          background: "var(--quote-bg)",
+          border: `1px solid ${isPass ? "var(--accent-2)" : "var(--accent)"}`,
         }}
       >
         <Group gap={6} wrap="nowrap">
-          <ThemeIcon size={14} radius="xl" color={isPass ? "teal" : "red"}>
+          <ThemeIcon size={14} radius="xl" color={isPass ? "jade" : "coral"}>
             {isPass ? <RiCheckboxCircleFill size={10} /> : <RiCloseCircleFill size={10} />}
           </ThemeIcon>
-          <Text size="xs" ff="monospace">
+          <Text size="xs" ff="monospace" style={{ color: "var(--ink)" }}>
             {pred.state} {pred.comparison} {pred.comparandState ?? String(pred.value)}
             {pred.key ? ` [${pred.key}]` : ""}
           </Text>
@@ -161,14 +140,14 @@ export const ReactiveRuleGraph: React.FC<ReactiveRuleGraphProps> = ({
   };
 
   return (
-    <Card withBorder radius="md" p="sm" style={{ background: "var(--mantine-color-dark-8)" }}>
+    <Card withBorder radius="md" p="sm" style={{ background: "var(--paper-2)", borderColor: "var(--rule)" }}>
       <Group justify="space-between" mb="xs">
         <Group gap="xs">
-          <RiGitMergeLine size={18} color="#a855f7" />
-          <Text fw={700} size="sm">
+          <RiGitMergeLine size={18} color="var(--accent)" />
+          <Text fw={600} size="sm" style={{ fontFamily: '"Lora", Georgia, serif', color: "var(--ink)" }}>
             Reactive Rule Network
           </Text>
-          <Badge variant="outline" color="grape" size="xs">
+          <Badge variant="light" color="coral" size="xs">
             {rules.length} Rules
           </Badge>
         </Group>
@@ -184,25 +163,25 @@ export const ReactiveRuleGraph: React.FC<ReactiveRuleGraphProps> = ({
                 <Accordion.Control>
                   <Group justify="space-between" wrap="nowrap" pr="xs">
                     <Group gap="xs" wrap="nowrap">
-                      <ThemeIcon size={18} radius="xl" color={gatePassed ? "teal" : "gray"}>
+                      <ThemeIcon size={18} radius="xl" color={gatePassed ? "jade" : "gray"}>
                         {gatePassed ? <RiFlashlightFill size={12} /> : <RiCloseCircleFill size={12} />}
                       </ThemeIcon>
-                      <Text fw={600} size="xs" ff="monospace">
+                      <Text fw={600} size="xs" ff="monospace" style={{ color: "var(--ink)" }}>
                         {rule.name}
                       </Text>
                     </Group>
                     <Group gap={4}>
                       {rule.mode && (
-                        <Badge size="xs" variant="light" color={rule.mode === "Edge" ? "cyan" : "violet"}>
+                        <Badge size="xs" variant="light" color={rule.mode === "Edge" ? "jade" : "coral"}>
                           {rule.mode}
                         </Badge>
                       )}
                       {rule.forEach && (
-                        <Badge size="xs" variant="outline" color="yellow">
+                        <Badge size="xs" variant="outline" color="gray">
                           for: {rule.forEach}
                         </Badge>
                       )}
-                      <Badge size="xs" color={gatePassed ? "teal" : "gray"} variant="filled">
+                      <Badge size="xs" color={gatePassed ? "jade" : "gray"} variant={gatePassed ? "filled" : "outline"}>
                         {gatePassed ? "FIRING" : "QUIET"}
                       </Badge>
                     </Group>
@@ -213,15 +192,15 @@ export const ReactiveRuleGraph: React.FC<ReactiveRuleGraphProps> = ({
                   <Stack gap="xs">
                     {/* Gate Evaluation Hierarchy */}
                     <Box>
-                      <Text size="xs" fw={700} c="dimmed" mb={4}>
+                      <Text size="xs" fw={700} c="var(--ink-faint)" mb={4} style={{ fontFamily: '"JetBrains Mono", monospace' }}>
                         GATE LOGIC TREE:
                       </Text>
-                      {rule.gate ? renderPredicateTree(rule.gate) : <Text size="xs" c="dimmed">Unconditional</Text>}
+                      {rule.gate ? renderPredicateTree(rule.gate) : <Text size="xs" c="var(--ink-faint)">Unconditional</Text>}
                     </Box>
 
                     {/* Effects Pipeline */}
                     <Box>
-                      <Text size="xs" fw={700} c="dimmed" mb={4}>
+                      <Text size="xs" fw={700} c="var(--ink-faint)" mb={4} style={{ fontFamily: '"JetBrains Mono", monospace' }}>
                         EFFECT SEQUENCE ({(rule.effects ?? []).length}):
                       </Text>
                       <Stack gap={4}>
@@ -230,14 +209,14 @@ export const ReactiveRuleGraph: React.FC<ReactiveRuleGraphProps> = ({
                             key={i}
                             p={4}
                             radius="xs"
-                            style={{ background: "var(--mantine-color-dark-6)", borderLeft: "3px solid var(--mantine-color-blue-5)" }}
+                            style={{ background: "var(--code-bg)", borderLeft: "3px solid var(--accent-2)" }}
                           >
                             <Group gap={6} wrap="nowrap">
-                              <RiArrowRightLine size={12} color="#38bdf8" />
-                              <Badge size="xs" variant="outline" color="blue">
+                              <RiArrowRightLine size={12} color="var(--accent-2)" />
+                              <Badge size="xs" variant="outline" color="jade">
                                 {eff.$type}
                               </Badge>
-                              <Text size="xs" ff="monospace">
+                              <Text size="xs" ff="monospace" style={{ color: "var(--code-fg)" }}>
                                 {eff.state}
                                 {eff.fromState ? ` = ${eff.fromState}` : ""}
                                 {eff.value !== undefined ? ` = ${eff.value}` : ""}

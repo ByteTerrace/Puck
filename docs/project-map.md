@@ -51,19 +51,21 @@ been quarantined out of the repository.
 
 ```text
 Optional extensions      Puck.World.AgentBridge  Puck.World.AgentHarness
-Composition roots        Puck.Launcher.Stub  Puck.World  Puck.World.Silo
+Composition roots        Puck.Actors  Puck.Azure.Functions  Puck.Launcher.Stub
+                         Puck.World  Puck.World.Silo
 Validation               Puck.AdvancedGamingBrick.Post  Puck.GamingBricks.Post
                          Puck.HumbleGamingBrick.Post
 Engine services          Puck.AdvancedGamingBrick
                          Puck.AdvancedGamingBrick.Forge  Puck.Audio
-                         Puck.GamingBricks  Puck.HumbleGamingBrick
-                         Puck.HumbleGamingBrick.Forge  Puck.Launcher
-                         Puck.Overlays  Puck.Physics  Puck.Recording
-                         Puck.SdfVm  Puck.ShaderVm  Puck.SignedDistance
-                         Puck.State  Puck.Text  Puck.World.Addons
-                         Puck.World.Authoring  Puck.World.Client
-                         Puck.World.Console  Puck.World.Protocol
-                         Puck.World.Schema  Puck.World.Server
+                         Puck.GamingBricks  Puck.GamingBricks.Forge
+                         Puck.HumbleGamingBrick  Puck.HumbleGamingBrick.Forge
+                         Puck.Launcher  Puck.Overlays  Puck.Physics
+                         Puck.Recording  Puck.SdfVm  Puck.ShaderVm
+                         Puck.SignedDistance  Puck.State  Puck.Text
+                         Puck.World.Addons  Puck.World.Authoring
+                         Puck.World.Client  Puck.World.Console
+                         Puck.World.Protocol  Puck.World.Schema
+                         Puck.World.Server
 Presentation             Puck.DirectX.Presentation  Puck.Launcher.Linux
                          Puck.Launcher.Windows  Puck.Vulkan.Presentation
 Backends                 Puck.DirectX  Puck.Vulkan
@@ -78,7 +80,8 @@ Leaf contracts and data  Puck.Abstractions  Puck.Assets  Puck.Attestation
                          Puck.Attestation.Tests  Puck.Audio.Tests
                          Puck.Cli.Tests  Puck.Commands.Tests
                          Puck.GamingBricks.Tests  Puck.Hosting.Tests
-                         Puck.HumbleGamingBrick.Forge.Tests  Puck.Input.Tests
+                         Puck.HumbleGamingBrick.Forge.Tests
+                         Puck.HumbleGamingBrick.Tests  Puck.Input.Tests
                          Puck.Launcher.Tests  Puck.Maths.Tests
                          Puck.Networking.Tests  Puck.Physics.Tests
                          Puck.Platform.Windows.Tests  Puck.Recording.Tests
@@ -182,8 +185,9 @@ Cross-backend parity has one on-demand check: `puck parity` boots the real windo
 | `Puck.GamingBricks` | The substrate both GamingBrick cores build on. State-serialization and forked-instance lifecycle: `StateWriter`/`StateReader` (little-endian widths + `WriteBlock<T>` memcpy + `Reset` reuse), `SnapshotSection`, `ISnapshotable`, the flat `SnapshotImage`, the `SnapshotDivergence` localizer, `MachineInstance<,>`/`MachineFork<,>`/`MachineInstancePool<,>`, `ISnapshotableMachine`. The machine-neutral queued-host substrate: `QueuedMachineWorker` + `IQueuedMachineCore` adapter (worker thread, bounded FIFO with backpressure, triple-buffer publication with the upload lease, native-frame-keyed save-flush debounce, the vectorized framebuffer repack), `MachineTimeTravel<TInput>` (rewind, persistent-fork runahead, capped fast-forward), and `QueuedHostContractProbe`, which proves the queued-host contract for both cores' batteries. Per-core snapshot identity fields, component orders, and fingerprints stay in each core; the fingerprint primitive lives in `Puck.Maths`. References `Puck.Abstractions` and `Puck.Hosting` (`EngineTicks`' tick-to-cycle conversion). |
 | `Puck.HumbleGamingBrick` | Deterministic SM83 machine across its DMG, MGB, SGB, CGB, and AGB-compatibility revisions (snapshots, forks, cartridges, link cable, PPU, APU, peripherals). Its `Hosting/` folder carries the thin adapter from the neutral screen-machine contract to the core over `Puck.GamingBricks`'s `QueuedMachineWorker`: an `IQueuedMachineCore` (pad mapping, KEY1-aware tick conversion, framebuffer, save persistence) plus the host shell and work-RAM peek. Inherits the substrate's queued/backpressure behavior. |
 | `Puck.AdvancedGamingBrick` | Deterministic AGB-native ARM7TDMI machine (cycle-level bus, DMA, timers, PPU, APU, cartridges, snapshots, link cable). Its `Hosting/` folder carries the thin adapter from the neutral screen-machine contract to the core over `Puck.GamingBricks`'s `QueuedMachineWorker`: an `IQueuedMachineCore` (KEYINPUT mapping, exact tick conversion, framebuffer, save persistence, direct boot) plus optional explicit BIOS images and the host shell. |
-| `Puck.HumbleGamingBrick.Forge` | The SM83 ROM forge, packable on its own (`ByteTerrace.Puck.HumbleGamingBrick.Forge`): `Sm83Emitter`, the public game framework (`GameFramework` and its kernel/memory-map/module closure, the `GameManifest`/`AssetLinker` declarative layer, `FrameworkCartridge`), the pure-C# `HgbImage` tile/palette encoders, `AudioDocumentCompiler` (a `puck.audio.v1` document into SM83 sound-driver data), the `Tune` cart builder/verifier (`TuneRom` compiles a tune document into a bootable Humble cart and boots it headlessly), and the worked-example `Games/` carts. Every cart self-verifies by driving a real Humble machine (`VerifyMachineDriver`/`VerifyMachineSettle`) before its bytes are handed out. Depends on `Puck.Assets` (the audio/synth document families) + `Puck.HumbleGamingBrick`. |
-| `Puck.AdvancedGamingBrick.Forge` | The ARM7TDMI ROM forge, packable on its own (`ByteTerrace.Puck.AdvancedGamingBrick.Forge`): Thumb/ARM instruction emitters, the direct-boot cartridge builder (header, complement checksum, code/data windows; the retail logo bitmap is a caller-supplied parameter — direct boot never reads it), a minimal polling kernel (VBlank sync, keypad edges, mode-3 framebuffer, documented EWRAM state map), and a worked-example cart. Same discipline as the Humble forge: a cart self-verifies by driving a real Advanced machine before its bytes are handed out. Depends on `Puck.AdvancedGamingBrick`. |
+| `Puck.GamingBricks.Forge` | Host-independent `puck.cartridge.v1` source model, validation, canonical source identity, JSON Pointer draft editor, graphics encoding and compiler contracts. Depends only on Assets. |
+| `Puck.HumbleGamingBrick.Forge` | Native CGB document compiler (`HgbCartridgeCompiler`), SM83 emitters and framework primitives, tile/audio encoders, Tune audio-document compiler and authored boot-ROM tools. Depends on `Puck.GamingBricks.Forge`, Assets and the HGB emulator; no World dependency. |
+| `Puck.AdvancedGamingBrick.Forge` | Native AGB document compiler (`AgbCartridgeCompiler`), Thumb/ARM emitters, direct-boot cartridge builder and polling kernel. Depends on `Puck.GamingBricks.Forge` and the AGB emulator. No World dependency or BIOS distribution. |
 | `Puck.World.Authoring` | The authored-content document families `Puck.World` embeds inline: the `puck.creation.v1` model (`CreationDocument`/`CreationCanonicalizer`, hold-style timeline frames, IK chains, camera eyes, faces, engraved text runs), `puck.music.v1` (`MusicDocument`) and the judge document, whole-document stamp reach (`CreationGeometry`, over `Puck.SignedDistance`'s primitive table), stamp emission/sampling, and grid-snap math (`GridSnap`). The audio/synth families and the document-neutral canonicalize/hash core live in `Puck.Assets`; this project carries the world-facing families over that same core. Host-side float on purpose — authoring/presentation math, outside the simulation-state determinism contract. Depends on `Puck.Assets` + `Puck.SignedDistance` + `Puck.Text`. |
 | `Puck.World.Schema` | What a world IS: the document model, physically split out of `Puck.World` (headless P1) so the shape the sim runs on cannot itself reach presentation: `WorldDefinition` (every section record, including reciprocal `adjacencies`, `WorldHostDefaults`, the `identity` section an owned world carries, and the admission section's entries/grants/disclosure-tier vocabulary and the channel/intent vector a document's motion/kit rows compile against — both document-embedded, so both live here despite keeping the `Puck.World.Protocol` namespace their move did not rename), `WorldDefinitionValidator`, `WorldDefinitionSerialization`. Authored body colliders compile into the fixed vocabulary owned by `Puck.Physics`; geometry remains outside the document model. The `bodyMotionPrograms`/`kits.motion` authoring vocabulary lives here, and so does its translation into `Puck.Physics.Motion`'s IR (`BodyMotionProgramFactory`, `BodyActionSpecFactory`, `WorldMotionTuningFactory`, `CompiledBodyProducer`) — the instruction set, the compiler over it, and the compiled tuning shapes are the library's. Denied `Puck.Overlays`/`Puck.Input`/every Presentation and Backend project/`Puck.World.Protocol`/`Puck.World.Server` by an exact-equality lane profile — a member that would need one of those (the engine-default binding document, the live vocabulary check, the mutation-kind name catalog) crosses through an injection seam (`BindingVocabularyHook`, `MutationKindVocabularyHook`) the composition root wires with a module initializer, rather than a direct reference. |
 | `Puck.World.Protocol` | What a world SAYS: the wire/tape vocabulary every submission into, and every delivery out of, the authoritative server travels as — `PlayerIntent`/`WorldCommand`/`WorldMutation`/`WorldGrant`/`WorldPrincipal`/`WorldSessionLever`, `WorldEntityAddress`, `SessionRequest`/`WorldSnapshot`/`WorldComposition`, `IServerLink`/`IClientSink`, `LoopbackTransport`, `WorldPrincipalMapping`. References `Puck.World.Schema` (the document shapes a submission carries or a grant addresses) and `Puck.Networking` (the transport-neutral frame/wire grammar its codecs frame payloads through). Same presentation denials as `Puck.World.Schema`, plus no `Puck.World.Server`. |

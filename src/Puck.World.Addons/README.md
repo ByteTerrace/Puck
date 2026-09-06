@@ -16,6 +16,12 @@ Project references: `Puck.World.Server`, `Puck.Scripting` (the WASM guest
 ABI `AddonSimulationPump` validates against), `Puck.Maths`, and
 `Puck.Assets` (the module bytes a mount reads).
 
+`IWorldAddonHost` implements the shared `IWorldExtensionRuntime` contract with
+recomputed contributions. Capability-manifest matching is shared with recorded
+providers through `WorldCapabilityRequests.Contains`. Service calls belong at
+the [external-operation boundary](../Puck.World.Server/Extensions.md), where
+replay consumes recorded contributions without running the provider.
+
 ## Mounting: a prepare/commit transaction
 
 A `WorldAddonRow` in the world document's `addons` section is a data-only

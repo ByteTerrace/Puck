@@ -1981,8 +1981,12 @@ public sealed partial class WorldServer {
     /// writers that now exist beside the seat lanes.</summary>
     /// <param name="runtime">The mounted host.</param>
     /// <exception cref="ArgumentNullException"><paramref name="runtime"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">A tick-pumped host does not implement recomputed contributions.</exception>
     public void AttachAddons(IWorldAddonHost runtime) {
         ArgumentNullException.ThrowIfNull(argument: runtime);
+        if (runtime.ReplayPolicy != WorldExtensionReplayPolicy.Recomputed) {
+            throw new InvalidOperationException("Tick-pumped addon hosts must implement Recomputed contributions; use WorldRecordedExtension for recorded providers.");
+        }
 
         m_addons = runtime;
 

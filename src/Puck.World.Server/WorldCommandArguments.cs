@@ -40,7 +40,8 @@ public static class WorldCommandArguments {
     /// <param name="args">The tokenized arguments, the fallback when no raw line exists (a bound or programmatic call).</param>
     /// <param name="tokens">How many leading tokens to strip, the verb included.</param>
     /// <returns>The text after those tokens, or <see cref="string.Empty"/> when the line carries fewer.</returns>
-    public static string RawAfter(CommandContext context, in WireArgs args, int tokens) {
+    /// <param name="preserveQuotes">Whether a JSON tail keeps its surrounding string quotes.</param>
+    public static string RawAfter(CommandContext context, in WireArgs args, int tokens, bool preserveQuotes = false) {
         if (context.Text is { } text) {
             var span = text.AsSpan().TrimStart();
 
@@ -54,7 +55,7 @@ public static class WorldCommandArguments {
                 span = span[(separator + 1)..].TrimStart();
             }
 
-            return Unwrap(tail: span.Trim());
+            return preserveQuotes ? span.Trim().ToString() : Unwrap(tail: span.Trim());
         }
 
         return args.Tail(start: (tokens - 1));

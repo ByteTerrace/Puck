@@ -1,0 +1,261 @@
+/*
+  bds-theorem Design System Tokens & Typography
+  Theme Palette: Three hue families and nothing else.
+    ground:   H~275 violet neutral (low chroma, never clashes)
+    accent:   H~350 rose-coral warm lead (links, emphasis, lead element, player 1)
+    accent-2: H~168 jade cool complement (~180° apart, paired element, player 2)
+  Typography:
+    Serif: "Lora", Georgia, "Iowan Old Style", "Palatino Linotype", serif
+    Monospace: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace
+*/
+
+:root {
+  --paper:         #e7e4ed;
+  --paper-2:       #dbd7e4;
+  --ink:           #2b2736;
+  --ink-soft:      #5a5470;
+  --ink-faint:     #877f99;
+  --accent:        #ad3a53;
+  --accent-bright: #d15d78;
+  --accent-ink:    #fdf0f3;
+  --accent-2:      #0e7d6b;
+  --rule:          #d0cbdc;
+  --code-bg:       #221f2c;
+  --code-fg:       #e9e5f1;
+  --quote-bg:      #e0dce9;
+
+  /* Mantine CSS variable bindings */
+  --mantine-color-body: var(--paper);
+  --mantine-color-text: var(--ink);
+  --mantine-color-default-border: var(--rule);
+  --mantine-color-default: var(--paper-2);
+  --mantine-color-default-hover: var(--quote-bg);
+  --mantine-color-default-color: var(--ink);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper:         #1b1924;
+    --paper-2:       #262231;
+    --ink:           #ebe7f2;
+    --ink-soft:      #b5aec3;
+    --ink-faint:     #847d93;
+    --accent:        #f2879a;
+    --accent-bright: #ffa3b3;
+    --accent-ink:    #2a0d14;
+    --accent-2:      #4fd0b4;
+    --rule:          #363145;
+    --code-bg:       #15131c;
+    --code-fg:       #e8e3f0;
+    --quote-bg:      #262231;
+
+    --mantine-color-body: var(--paper);
+    --mantine-color-text: var(--ink);
+    --mantine-color-default-border: var(--rule);
+    --mantine-color-default: var(--paper-2);
+    --mantine-color-default-hover: var(--quote-bg);
+    --mantine-color-default-color: var(--ink);
+  }
+}
+
+:root[data-theme="light"],
+:root[data-mantine-color-scheme="light"] {
+  --paper:         #e7e4ed;
+  --paper-2:       #dbd7e4;
+  --ink:           #2b2736;
+  --ink-soft:      #5a5470;
+  --ink-faint:     #877f99;
+  --accent:        #ad3a53;
+  --accent-bright: #d15d78;
+  --accent-ink:    #fdf0f3;
+  --accent-2:      #0e7d6b;
+  --rule:          #d0cbdc;
+  --code-bg:       #221f2c;
+  --code-fg:       #e9e5f1;
+  --quote-bg:      #e0dce9;
+
+  --mantine-color-body: var(--paper);
+  --mantine-color-text: var(--ink);
+  --mantine-color-default-border: var(--rule);
+  --mantine-color-default: var(--paper-2);
+  --mantine-color-default-hover: var(--quote-bg);
+  --mantine-color-default-color: var(--ink);
+}
+
+:root[data-theme="dark"],
+:root[data-mantine-color-scheme="dark"] {
+  --paper:         #1b1924;
+  --paper-2:       #262231;
+  --ink:           #ebe7f2;
+  --ink-soft:      #b5aec3;
+  --ink-faint:     #847d93;
+  --accent:        #f2879a;
+  --accent-bright: #ffa3b3;
+  --accent-ink:    #2a0d14;
+  --accent-2:      #4fd0b4;
+  --rule:          #363145;
+  --code-bg:       #15131c;
+  --code-fg:       #e8e3f0;
+  --quote-bg:      #262231;
+
+  --mantine-color-body: var(--paper);
+  --mantine-color-text: var(--ink);
+  --mantine-color-default-border: var(--rule);
+  --mantine-color-default: var(--paper-2);
+  --mantine-color-default-hover: var(--quote-bg);
+  --mantine-color-default-color: var(--ink);
+}
+
+/* Base typography */
+body {
+  margin: 0;
+  background-color: var(--paper) !important;
+  color: var(--ink) !important;
+  font-family: "Lora", Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Lora", Georgia, serif;
+  color: var(--ink);
+}
+
+code, pre, kbd, samp, .font-mono {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+}
+
+/* bds-theorem kicker */
+.kicker {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* Mantine shell adaptations */
+.mantine-AppShell-header {
+  background-color: var(--paper-2) !important;
+  border-bottom: 1px solid var(--rule) !important;
+}
+
+.mantine-AppShell-navbar {
+  background-color: var(--paper-2) !important;
+  border-right: 1px solid var(--rule) !important;
+}
+
+.mantine-AppShell-main {
+  background-color: var(--paper) !important;
+}
+
+.mantine-Card-root {
+  background-color: var(--paper-2) !important;
+  border-color: var(--rule) !important;
+  color: var(--ink);
+}
+
+.mantine-Paper-root {
+  color: var(--ink);
+}
+
+/* NavLinks */
+.mantine-NavLink-root {
+  border-radius: 8px;
+  font-family: "Lora", Georgia, serif;
+  font-weight: 500;
+  color: var(--ink-soft);
+  transition: all 0.15s ease;
+}
+
+.mantine-NavLink-root:hover {
+  background-color: var(--quote-bg);
+  color: var(--ink);
+}
+
+.mantine-NavLink-root[data-active] {
+  background-color: var(--quote-bg);
+  color: var(--accent);
+  font-weight: 600;
+  border-left: 3px solid var(--accent);
+}
+
+/* Tabs */
+.mantine-Tabs-list {
+  border-color: var(--rule) !important;
+}
+
+.mantine-Tabs-tab {
+  font-family: "Lora", Georgia, serif;
+  font-weight: 500;
+  color: var(--ink-soft);
+  border-color: transparent;
+}
+
+.mantine-Tabs-tab:hover {
+  color: var(--accent);
+  background-color: var(--quote-bg);
+}
+
+.mantine-Tabs-tab[data-active] {
+  color: var(--accent) !important;
+  border-color: var(--accent) !important;
+  font-weight: 600;
+}
+
+/* Tables */
+.mantine-Table-table {
+  color: var(--ink);
+}
+
+.mantine-Table-th {
+  font-family: "JetBrains Mono", ui-monospace, monospace !important;
+  font-size: 0.72rem !important;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-faint) !important;
+  border-bottom: 1px solid var(--rule) !important;
+}
+
+.mantine-Table-td {
+  border-bottom: 1px solid var(--rule) !important;
+  color: var(--ink);
+}
+
+/* Accordion */
+.mantine-Accordion-item {
+  background-color: var(--paper-2) !important;
+  border-color: var(--rule) !important;
+}
+
+.mantine-Accordion-control {
+  background-color: var(--paper-2) !important;
+}
+
+.mantine-Accordion-control:hover {
+  background-color: var(--quote-bg) !important;
+}
+
+.mantine-Accordion-panel {
+  background-color: var(--paper-2) !important;
+}
+
+/* Buttons */
+.mantine-Button-root {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.02em;
+}
+
+/* Badges */
+.mantine-Badge-root {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* Textarea & Inputs */
+.mantine-Textarea-input,
+.mantine-TextInput-input,
+.mantine-NumberInput-input,
+.mantine-Select-input {
+  font-family: "JetBrains Mono", ui-monospace, monospace !important;
+  border-color: var(--rule) !important;
+}

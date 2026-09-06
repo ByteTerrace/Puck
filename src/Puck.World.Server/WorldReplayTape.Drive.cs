@@ -78,6 +78,7 @@ public sealed partial class WorldReplayTape {
         var drive = m_drive!;
 
         m_drive = null;
+        m_liveServer.CompleteExtensionReplay();
         m_transport.InputMasked = false;
 
         var verdict = ((drive.DivergedAt < 0)
@@ -232,6 +233,7 @@ public sealed partial class WorldReplayTape {
         }
         return m_liveServer.ExecuteAuthorityOperation<string?>(() => {
             if (m_liveServer.ReplayTimelineResetRefusal() is { } refusal) { return refusal; }
+            m_liveServer.EnterExtensionReplay();
             m_liveServer.EnqueueRebuild(
                 request: new WorldRebuildRequest(
                     Kind: WorldRebuildKind.Load,
@@ -242,6 +244,7 @@ public sealed partial class WorldReplayTape {
                 principal: WorldPrincipal.Console);
             _ = m_liveServer.DrainAdministrative();
             if (!ReferenceEquals(m_liveServer.Definition, definition)) {
+                m_liveServer.CompleteExtensionReplay();
                 return "the boot-image rebuild of the tape's embedded definition was refused (the [world.definition rejected: …] line above names why)";
             }
             m_liveServer.RestoreCheckpoint(checkpoint!);

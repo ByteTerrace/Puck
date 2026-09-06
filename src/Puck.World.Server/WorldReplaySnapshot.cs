@@ -1361,6 +1361,8 @@ public sealed class WorldReplaySnapshot {
             machines: machines
         );
 
+        server.EnterExtensionReplay();
+
         // Replay verification is side-effect-free: a rule's 'save' effect re-derives deterministically like any
         // other rule effect, but writing the world's own file is engine I/O. Wire an explicit narration-only tap
         // (rather than leaving it null implicitly) so a verify run reports why no file write happened; the population hash

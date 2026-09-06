@@ -9,7 +9,9 @@ namespace Puck.World.Server;
 /// that this project must not name — its caller holds the concrete type as a composition-root DI dependency
 /// instead. <see cref="IDisposable"/> because <see cref="WorldReplaySnapshot"/>'s offline shadow-world re-drive
 /// owns a fresh host per drive (<c>using var addons = addonHostFactory(...)</c>).</summary>
-public interface IWorldAddonHost : IDisposable {
+public interface IWorldAddonHost : IWorldExtensionRuntime {
+    /// <summary>WASM guests are reproduced by executing their pinned modules at the same tick boundaries.</summary>
+    WorldExtensionReplayPolicy IWorldExtensionRuntime.ReplayPolicy => WorldExtensionReplayPolicy.Recomputed;
     /// <summary>Whether any mounted guest has ever had an admitted <c>TickAddons</c> pump — the boot-anchored replay
     /// arm predicate.</summary>
     bool AnyEverPumped { get; }

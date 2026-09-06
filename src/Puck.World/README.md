@@ -352,10 +352,18 @@ Facts a script needs:
   (`recordings/`), two shipped
   WASM addons (`addons/`: `default`, `hudbuilder`; mounted by no shipped world
   today — the `arcade` addon was ported to a world `rules` section and its
-  compiled guest deleted before the addons themselves went unmounted), a
-  hand-authored SM83 cartridge ROM (`roms/`: `arcade-quest.gbc`, also unhosted
-  today — see `src/Puck.HumbleGamingBrick.Forge/Games/README.md`), and an example `puck.sdf.v1`
+  compiled guest deleted before the addons themselves went unmounted), and an example `puck.sdf.v1`
   document (`sdf/`).
+
+## Cartridge authoring
+
+Players create and edit CGB/AGB ROM source directly in the console with the
+`forge.*` commands. Source is a `puck.cartridge.v1` document: tiles, palettes,
+maps, variables, sprites and ordered input rules. `forge.save` persists the
+source, `forge.export` writes native ROM bytes, and `forge.play` submits the
+normal authoritative screen insertion. There are no shipped sample ROMs.
+See the [cartridge authoring guide](../Puck.GamingBricks.Forge/README.md) for
+an executable walkthrough and the explicit first-version limits.
 
 ## The world as data
 

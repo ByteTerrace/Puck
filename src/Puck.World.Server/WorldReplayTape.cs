@@ -493,20 +493,7 @@ public sealed partial class WorldReplayTape {
         // Persist under the LIVE tail hash — the state the running session actually reached at the last recorded tick.
         // The verify side re-drives a fresh world and compares against THIS, so a MATCH is a genuine live-vs-replay
         // fidelity proof, not a fresh-drive compared against another fresh drive of the same stream.
-        var recording = new WorldReplaySnapshot {
-            DefinitionJson = definitionJson,
-            ForkedFrom = m_forkedFrom,
-            MountedAddons = mountedAddons,
-            RecordedHashes = [.. m_liveHashes],
-            RecordedAuthoritativeHashes = [.. m_liveAuthoritativeHashes],
-            Seats = seats,
-            // Stamped from the RECORD-START snapshot (see m_recordRateHz's own remarks) — the rate the recorded span
-            // actually ran at, never the live server's rate as it happens to stand at stop time: a mid-capture
-            // rebuild that changed the rate already force-stopped this recording from NoteTick before this method
-            // could ever see a disagreement between the two.
-            SimulationRate = m_recordRateHz,
-            Ticks = ticks,
-        };
+        var recording = SnapshotRecording();
         string path;
 
         try {

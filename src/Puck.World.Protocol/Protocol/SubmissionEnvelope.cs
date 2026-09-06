@@ -7,7 +7,8 @@ namespace Puck.World.Protocol;
 /// <see cref="IntentSubmission"/> is NOT an envelope payload — intents keep their own separate buffer.
 /// </summary>
 /// <param name="ConnectionId">The originating connection — <c>0</c> is the local stdin/loopback connection, always.
-/// A future socket transport assigns every accepted remote connection a nonzero id at admission.</param>
+/// Positive ids name remote connections. <see cref="RecordedExtensionConnectionId"/> reserves a separate
+/// in-process correlation namespace for recorded extension contributions.</param>
 /// <param name="SessionGeneration">The connection's session generation — bumps on admission/reactivation (peer
 /// identity's stale-generation scrub). Always <c>0</c> for the local connection, which never regenerates.</param>
 /// <param name="Sequence">The PER-CONNECTION monotonic submission counter — the watermark unit a remote
@@ -30,4 +31,6 @@ public readonly record struct SubmissionEnvelope(
 ) {
     /// <summary>The local stdin/loopback connection id — the only connection id that exists before a wire lands.</summary>
     public const int LocalConnectionId = 0;
+    /// <summary>The host-only recorded-extension ingress. Remote transports never mint negative connection ids.</summary>
+    public const int RecordedExtensionConnectionId = -1;
 }

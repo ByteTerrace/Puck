@@ -4,6 +4,9 @@ public sealed partial class WorldServer {
     // The replay tape holds ExecuteAuthorityOperation across this check and the reset. A federation reserve or
     // commit cannot create a new obligation between the check and replacement of the authority checkpoint.
     internal string? ReplayTimelineResetRefusal() {
+        if (m_externalOperationsInFlight != 0) {
+            return "external operations are in flight — wait for dispatch to settle or replay in an isolated session";
+        }
         if (m_transferEscrow.Counts != default) {
             return "transfer transactions or mobility credentials depend on this timeline — replay in an isolated session";
         }

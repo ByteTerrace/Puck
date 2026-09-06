@@ -14,9 +14,8 @@ public enum PrincipalKind : byte {
     /// <c>world.*</c>, and mutation verbs act as.</summary>
     Console,
 
-    /// <summary>A WASM addon — <see cref="WorldPrincipal.Name"/> is its descriptor name. A non-human principal that
-    /// reaches the world through typed capability channels alone (see <c>Server.WorldAddonRuntime</c>), never
-    /// through a seat's input path.</summary>
+    /// <summary>A named extension — <see cref="WorldPrincipal.Name"/> identifies its WASM descriptor or
+    /// host-composed provider. Its typed contributions cross the ordinary capability gates, never a seat's identity.</summary>
     Addon,
 
     /// <summary>A network/population body — <see cref="WorldPrincipal.Index"/> is its 0-based population index.
@@ -47,7 +46,7 @@ public enum PrincipalKind : byte {
 /// <param name="Kind">The kind of actor.</param>
 /// <param name="Index">The 0-based slot/entity index for <see cref="PrincipalKind.Seat"/>/<see cref="PrincipalKind.Peer"/>;
 /// zero otherwise.</param>
-/// <param name="Name">The addon descriptor name for <see cref="PrincipalKind.Addon"/>; <see langword="null"/> otherwise.</param>
+/// <param name="Name">The extension identity name for <see cref="PrincipalKind.Addon"/>; <see langword="null"/> otherwise.</param>
 /// <param name="Generation">The admission generation for <see cref="PrincipalKind.Peer"/>; zero otherwise.</param>
 public readonly record struct WorldPrincipal(PrincipalKind Kind, int Index, string? Name, int Generation) {
     /// <summary>Gets the console/script control surface.</summary>
@@ -91,8 +90,8 @@ public readonly record struct WorldPrincipal(PrincipalKind Kind, int Index, stri
         Name: null
     );
 
-    /// <summary>Returns the addon principal for a descriptor name.</summary>
-    /// <param name="name">The addon descriptor name.</param>
+    /// <summary>Returns the named extension principal used by WASM descriptors and host-composed providers.</summary>
+    /// <param name="name">The extension's identity name.</param>
     public static WorldPrincipal Addon(string name) => new(
         Generation: 0,
         Index: 0,

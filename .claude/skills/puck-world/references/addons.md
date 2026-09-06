@@ -8,6 +8,21 @@ The ABI itself (cell layouts, exports, mount steps, determinism posture) is
 owned by `src/Puck.Scripting/README.md` — read it before touching the guest
 boundary; this file carries the World-relevant surface.
 
+For nondeterministic providers and external side effects, read
+`src/Puck.World.Server/Extensions.md`. `IWorldAddonHost` extends
+`IWorldExtensionRuntime` with `Recomputed` policy; `WorldRecordedExtension`
+uses recorded mutation ingress and the same `WorldCapabilityRequest` matcher.
+Drain provider contributions on the simulation pump, never from a provider
+thread into a tape bucket. External dispatch uses a durable CAS journal and
+authority lifetime leases; replay suppresses it before restoring its timeline.
+Do not confuse a queued contribution, an applied world mutation, and a confirmed
+external operation. Checkpoint capture still refuses pumped WASM/machine state;
+such a host needs complete replay recovery evidence for durable operations.
+`WorldReplayTape.CaptureExternalOperationCause` exports that prefix without
+stopping recording. Keep pinned modules available. After a live replay, only an
+explicit host `StartRecordedExtensionEpoch` admits fresh recorded runtimes;
+it refuses during active replay and never revives old instances.
+
 ## Contents
 
 - The row, mounting, and the prepare/commit transaction
@@ -120,7 +135,8 @@ Guests are pumped ONLY from inside `WorldServer.Step`, at three pinned
 points — which is what keeps guest driving reproducible under replay
 WITHOUT recording it (the tape pins receipts and re-runs the guests):
 
-1. `TickAddons` — first statement of `Step`: compose the input batch (tick
+1. `TickAddons` — first guest pump, after recorded contributions have entered
+   the ordered mutation door but before edits apply: compose the input batch (tick
    cell, then last tick's staged pending), run `puck_on_tick`, decode and
    vocabulary-validate. APPLIES NOTHING.
 2. `ApplyContributions` — after the intent drain: resolve Drive handles,

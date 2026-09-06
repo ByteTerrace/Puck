@@ -92,6 +92,7 @@ internal static class WorldBootComposition {
         services.AddSingleton<ICommandModule, WorldSeatCameraCommandModule>();
         services.AddSingleton<ICommandModule, IdentityCommandModule>();
         services.AddSingleton<ICommandModule, ChatCommandModule>();
+        services.AddSingleton<ICommandModule, ForgeCommandModule>();
 
         // The rebind surface — player.bind (live session remap + chord rows) / player.bindings (echo the composed
         // active mapping) / player.signal (synthesized raw input over the pipe) / identity.bindings.save (fold

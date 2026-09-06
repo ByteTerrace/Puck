@@ -379,7 +379,7 @@ public sealed partial class WorldServer {
 
                 return false;
             }
-            if (m_pending.Count != 0) {
+            if (m_pending.Count != 0 || m_recordedContributions.Count != 0) {
                 checkpoint = null;
                 reason = "a checkpoint cannot capture while a buffered live-edit op is pending drain — retry at the next master boundary";
 

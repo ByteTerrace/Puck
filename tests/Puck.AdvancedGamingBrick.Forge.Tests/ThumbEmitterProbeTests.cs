@@ -4,7 +4,7 @@ namespace Puck.AdvancedGamingBrick.Forge.Tests;
 // on a real machine, and asserts register/memory effects — the emulator core is the encoding oracle: when a probe
 // disagrees with the core, the emitter is wrong.
 public sealed class ThumbEmitterProbeTests {
-    // Game-free EWRAM scratch (above the framework block and the example cart's fields).
+    // EWRAM scratch above the kernel block and document-compiled variable region.
     private const uint ScratchBase = 0x02000200u;
 
     [Fact]

@@ -1,9 +1,18 @@
 # Puck.HumbleGamingBrick.Forge
 
-The SM83 ROM forge: hand-author CGB cartridges in C# and prove them by running
-them. Everything a cart needs — machine-code emission, the game framework, art
-and audio encoding, linking, verification — lives here, beside the machine it
-targets. Packs as `ByteTerrace.Puck.HumbleGamingBrick.Forge`.
+`HgbCartridgeCompiler` compiles `puck.cartridge.v1` data into a native CGB ROM.
+Players edit documents through Puck's in-engine console. The shared
+[cartridge authoring guide](../Puck.GamingBricks.Forge/README.md) documents
+commands, schema, limits and the host-independent compiler/editor APIs.
+The compiler emits a frame loop, SM83 rules, 2bpp tiles, a background map,
+RGB555 palettes and shadow-OAM sprites. Variables occupy bytes from
+`0xC200`; the returned compilation names their addresses. It does not emit
+the old games' save, state-machine or victory behavior.
+
+The package remains `ByteTerrace.Puck.HumbleGamingBrick.Forge`. It depends
+on the shared cartridge document package, Assets and the HGB emulator;
+it has no World dependency. There are no embedded sample games. The
+existing Tune audio compiler and authored boot-ROM tools remain available.
 
 ## The map
 
@@ -29,8 +38,6 @@ targets. Packs as `ByteTerrace.Puck.HumbleGamingBrick.Forge`.
 - `Tune/` — the jukebox cart: `TuneRom.Build(AudioDocument, string)` compiles
   an audio document into a bootable CGB cart (`Puck.World` steps it for world
   audio).
-- `Games/` — worked-example carts; read `ArcadeQuest*` before authoring a new
-  game.
 - `BootRomBuilder` — the boot ROM a revision executes from reset
   (`Build(ConsoleModel)`): 256 bytes for a monochrome revision, 2304 for a
   Color one. `BootRomLayout` carries what differs per revision,
@@ -112,20 +119,24 @@ machine booted through an authored image has a different identity than a seeded
 one and their snapshots do not interchange. That is the intended behaviour; do
 not alias them.
 
-## Doctrine
+## Verification and low-level tooling
 
-- **PRNG seed = input entropy, nothing else.** Seed = FrameCounter16 XOR
-  0xA5C3, sampled at the title-screen START edge. Same press frame →
-  bit-identical game.
-- **Never trust SRAM.** Magic/version/checksum-guarded save block; any
-  mismatch loads ROM defaults; the game only touches the WRAM mirror.
-- **Verify by running.** A cart drives a real Humble machine and asserts
-  observable WRAM/framebuffer behavior before its bytes are handed out
-  (`VerifyMachineDriver`; always settle with
-  `VerifyMachineSettle.SettleOutOfOamDma` after stepping frames — a fixed-size
-  run can phase-lock its boundary inside OAM DMA, where reads are gated).
+The document compiler validates source and emits native bytes; arbitrary
+player cartridges do not run a hidden game verifier during compilation.
+The shared compiler tests execute authored input/rule/graphics behavior on
+both emulators and compare ROM identity after canonical JSON round-trips.
+Boot-ROM tests retain their recorded revision hashes.
 
-Determinism note: forge output holds no wall clock and no RNG hardware. The boot
-images are pinned to recorded per-revision hashes, so a build that produced
-different bytes would be caught; the worked-example carts are compared
-same-process only.
+```powershell
+dotnet test tests/Puck.HumbleGamingBrick.Forge.Tests -c Release
+dotnet test tests/Puck.AdvancedGamingBrick.Forge.Tests -c Release
+```
+
+Native tooling that uses the legacy framework PRNG seeds it from input timing,
+never a wall clock. Its save module checks magic/version/checksum and restores
+ROM defaults on mismatch. These capabilities are not yet exposed by the
+cartridge document schema. Tune keeps its separate audio-document path.
+
+Always settle with `VerifyMachineSettle.SettleOutOfOamDma` after stepping
+CGB frames before reading the bus. A fixed-size run can stop inside OAM DMA,
+where memory reads are gated; `Framework.VerifyMachineDriver` handles this.

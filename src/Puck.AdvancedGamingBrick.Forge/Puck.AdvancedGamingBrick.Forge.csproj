@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <Description>The ARM7TDMI ROM forge for the Advanced GamingBrick: hand-author GBA cartridges in C# through the Thumb/ARM instruction emitters, the direct-boot cartridge builder (header, complement checksum, code/data windows), and a minimal polling kernel (VBlank sync, keypad edges, mode-3 framebuffer, EWRAM state map). Every cart self-verifies by driving a real emulated machine and asserting observable EWRAM/framebuffer behavior before the bytes are written.</Description>
+        <Description>Native AGB cartridge compilation from editable puck.cartridge.v1 data, with Thumb/ARM emitters, direct-boot image building and emulator verification tools.</Description>
         <IsAotCompatible>false</IsAotCompatible>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.AdvancedGamingBrick.Forge</PackageId>
@@ -10,6 +10,7 @@
         <RootNamespace>Puck.AdvancedGamingBrick.Forge</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
+        <ProjectReference Include="..\Puck.GamingBricks.Forge\Puck.GamingBricks.Forge.csproj" />
         <ProjectReference Include="..\Puck.AdvancedGamingBrick\Puck.AdvancedGamingBrick.csproj" />
     </ItemGroup>
 </Project>

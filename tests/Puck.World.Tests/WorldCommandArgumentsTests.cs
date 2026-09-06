@@ -45,6 +45,12 @@ public sealed class WorldCommandArgumentsTests {
         Assert.Equal(expected: "plain tail", actual: registry.Submit(line: "tail.probe plain tail").Output);
     }
     [Fact]
+    public void JsonTailPreservesQuotesAndInteriorWhitespace() {
+        var registry = Registry();
+        Assert.Equal(expected: "\"my   title\"", actual: registry.Submit(line: "tail.json /title \"my   title\"").Output);
+        Assert.Equal(expected: "{\"constant\":42}", actual: registry.Submit(line: "tail.json /value {\"constant\":42}").Output);
+    }
+    [Fact]
     public void AnAddressedTailStripsExactlyTheLeadingTokensItWasToldTo() {
         var registry = Registry();
 
@@ -121,6 +127,12 @@ public sealed class WorldCommandArgumentsTests {
 
     private sealed class TailProbeModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                name: "tail.json",
+                description: "Echoes a JSON tail without stripping quotes.",
+                handler: static (context, args) => new CommandResult(Output: WorldCommandArguments.RawAfter(context: context, args: in args, tokens: 2, preserveQuotes: true)),
+                bindability: CommandBindability.Unbindable
+            );
             yield return CommandDefinition.WithWireArgs(
                 name: "tail.probe",
                 description: "Echoes the raw tail after its verb.",

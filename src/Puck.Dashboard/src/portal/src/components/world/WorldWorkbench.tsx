@@ -124,11 +124,11 @@ export const WorldWorkbench: React.FC<WorldWorkbenchProps> = ({
   };
 
   return (
-    <Card withBorder radius="md" p="sm" style={{ background: "var(--mantine-color-dark-8)" }}>
+    <Card withBorder radius="md" p="sm" style={{ background: "var(--paper-2)", borderColor: "var(--rule)" }}>
       <Group justify="space-between" mb="xs">
         <Group gap="xs">
-          <RiCodeSSlashLine size={18} color="#3b82f6" />
-          <Text fw={700} size="sm">
+          <RiCodeSSlashLine size={18} color="var(--accent)" />
+          <Text fw={600} size="sm" style={{ fontFamily: '"Lora", Georgia, serif', color: "var(--ink)" }}>
             World Definition Workbench & Linter
           </Text>
         </Group>
@@ -136,7 +136,7 @@ export const WorldWorkbench: React.FC<WorldWorkbenchProps> = ({
         <Group gap="xs">
           <FileButton onChange={handleFileUpload} accept=".json">
             {(props) => (
-              <Button {...props} size="xs" variant="light" leftSection={<RiUpload2Line size={14} />}>
+              <Button {...props} size="xs" variant="light" color="coral" leftSection={<RiUpload2Line size={14} />}>
                 Load JSON
               </Button>
             )}
@@ -150,25 +150,43 @@ export const WorldWorkbench: React.FC<WorldWorkbenchProps> = ({
 
       <Stack gap="sm">
         {parseError && (
-          <Alert color="red" title="Parsing Refusal" icon={<RiAlertFill />}>
-            {parseError}
+          <Alert
+            color="coral"
+            title="Parsing Refusal"
+            icon={<RiAlertFill />}
+            style={{
+              background: "var(--quote-bg)",
+              border: "1px solid var(--rule)",
+              borderLeft: "3px solid var(--accent)",
+              color: "var(--ink)",
+            }}
+          >
+            <Text size="xs" ff="monospace">
+              {parseError}
+            </Text>
           </Alert>
         )}
 
         {lintIssues.length > 0 && (
           <Alert
-            color={lintIssues.some((i) => i.severity === "error") ? "red" : "yellow"}
+            color="coral"
             title={`Linter Diagnosed ${lintIssues.length} Issue(s)`}
             icon={<RiAlertFill />}
+            style={{
+              background: "var(--quote-bg)",
+              border: "1px solid var(--rule)",
+              borderLeft: "3px solid var(--accent)",
+              color: "var(--ink)",
+            }}
           >
             <List size="xs" spacing={4}>
               {lintIssues.map((issue, idx) => (
                 <List.Item key={idx}>
-                  <Text span fw={issue.severity === "error" ? 700 : 500}>
+                  <Text span fw={issue.severity === "error" ? 700 : 500} style={{ fontFamily: '"JetBrains Mono", monospace' }}>
                     [{issue.severity.toUpperCase()}] {issue.message}
                   </Text>
                   {issue.context && (
-                    <Text span size="xs" c="dimmed" ml={6}>
+                    <Text span size="xs" c="var(--ink-faint)" ml={6} style={{ fontFamily: '"JetBrains Mono", monospace' }}>
                       ({issue.context})
                     </Text>
                   )}
@@ -179,8 +197,18 @@ export const WorldWorkbench: React.FC<WorldWorkbenchProps> = ({
         )}
 
         {!parseError && lintIssues.length === 0 && (
-          <Alert color="teal" icon={<RiCheckFill />} title="Puck Invariants Verified">
-            <Text size="xs">
+          <Alert
+            color="jade"
+            icon={<RiCheckFill />}
+            title="Puck Invariants Verified"
+            style={{
+              background: "var(--quote-bg)",
+              border: "1px solid var(--rule)",
+              borderLeft: "3px solid var(--accent-2)",
+              color: "var(--ink)",
+            }}
+          >
+            <Text size="xs" style={{ fontFamily: '"Lora", Georgia, serif' }}>
               Lattice opposite directions, domain references, and rule targets satisfy all engine compilation laws.
             </Text>
           </Alert>
@@ -194,10 +222,13 @@ export const WorldWorkbench: React.FC<WorldWorkbenchProps> = ({
           autosize
           styles={{
             input: {
-              fontFamily: "monospace",
+              fontFamily: '"JetBrains Mono", ui-monospace, monospace',
               fontSize: 12,
-              background: "var(--mantine-color-dark-9)",
-              color: "var(--mantine-color-gray-3)",
+              background: "var(--code-bg)",
+              color: "var(--code-fg)",
+              border: "1px solid var(--rule)",
+              borderRadius: 10,
+              lineHeight: 1.55,
             },
           }}
         />

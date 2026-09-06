@@ -16,6 +16,11 @@ namespace: authored social references and wire messages share its original
 authority/index/generation identity. Moving an individual does not turn its
 current destination slot into a new social identity.
 
+`SubmissionEnvelope.RecordedExtensionConnectionId` reserves a host-only
+correlation namespace for recorded provider contributions. Console loopback
+uses zero; remote connections use positive ids. All still enter the same
+ordered authority domain; see [extensions](../Puck.World.Server/Extensions.md).
+
 ## The dependency firewall
 
 Authority persistence uses the explicitly named `TryEncodeCommittedMutation` /
