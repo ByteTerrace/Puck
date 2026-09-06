@@ -2467,24 +2467,24 @@
       "name": "tabletop-settle-hold-reset"
     },
     {
-      "name": "tabletop-board-clear",
       "effects": [
         {
           "$type": "transformState",
           "transform": {
             "$type": "boardCombine",
-            "row": "board",
-            "operation": "clear"
+            "operation": "clear",
+            "row": "board"
           }
         }
       ],
       "gate": {
         "$type": "compareState",
-        "state": "settleHold",
         "comparison": "Equal",
+        "state": "settleHold",
         "value": 60
       },
-      "mode": "Edge"
+      "mode": "Edge",
+      "name": "tabletop-board-clear"
     },
     {
       "effects": [
@@ -2553,9 +2553,9 @@
       "effects": [
         {
           "$type": "setState",
-          "state": "board",
+          "expression": "board[pieceCell[$each]] == 0 ? pieceCode[$each] : 7",
           "key": "$cell:pieceCell:$each",
-          "expression": "board[pieceCell[$each]] == 0 ? pieceCode[$each] : 7"
+          "state": "board"
         }
       ],
       "forEach": "pieceCode",
@@ -2581,32 +2581,31 @@
       "name": "tabletop-write-board"
     },
     {
-      "name": "tabletop-board-collisions",
-      "mode": "Edge",
-      "gate": {
-        "$type": "compareState",
-        "state": "settleHold",
-        "comparison": "Equal",
-        "value": 60
-      },
       "effects": [
         {
           "$type": "setState",
-          "state": "boardCollisions",
-          "expression": "popCount($board:mask:board:7:7)"
+          "expression": "popCount($board:mask:board:7:7)",
+          "state": "boardCollisions"
         }
-      ]
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "settleHold",
+        "value": 60
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-collisions"
     },
     {
-      "name": "tabletop-game-start-snapshot",
       "effects": [
         {
           "$type": "transformState",
           "transform": {
             "$type": "boardCombine",
-            "row": "lastLegal",
+            "left": "board",
             "operation": "copy",
-            "left": "board"
+            "row": "lastLegal"
           }
         }
       ],
@@ -2615,25 +2614,26 @@
         "predicates": [
           {
             "$type": "compareState",
-            "state": "settleHold",
             "comparison": "Equal",
+            "state": "settleHold",
             "value": 60
           },
           {
             "$type": "compareState",
-            "state": "gameStarted",
             "comparison": "Equal",
+            "state": "gameStarted",
             "value": 0
           },
           {
             "$type": "compareState",
-            "state": "boardCollisions",
             "comparison": "Equal",
+            "state": "boardCollisions",
             "value": 0
           }
         ]
       },
-      "mode": "Edge"
+      "mode": "Edge",
+      "name": "tabletop-game-start-snapshot"
     },
     {
       "effects": [
@@ -2660,186 +2660,186 @@
       "name": "tabletop-king-cell"
     },
     {
-      "name": "tabletop-candidate-cells",
+      "bindings": [
+        {
+          "expression": "turn == 0 ? $board:mask:lastLegal:1:6 : $board:mask:lastLegal:-6:-1",
+          "kind": "int",
+          "name": "ownBefore"
+        },
+        {
+          "expression": "turn == 0 ? $board:mask:board:1:6 : $board:mask:board:-6:-1",
+          "kind": "int",
+          "name": "ownAfter"
+        },
+        {
+          "expression": "$bind:ownBefore & ~($board:mask:board:1:6 | $board:mask:board:-6:-1)",
+          "kind": "int",
+          "name": "sources"
+        },
+        {
+          "expression": "$bind:ownAfter & ~$bind:ownBefore",
+          "kind": "int",
+          "name": "destinations"
+        },
+        {
+          "expression": "turn == 0 ? $board:mask:lastLegal:6:6 : $board:mask:lastLegal:-6:-6",
+          "kind": "int",
+          "name": "kingBefore"
+        },
+        {
+          "expression": "turn == 0 ? $board:mask:board:6:6 : $board:mask:board:-6:-6",
+          "kind": "int",
+          "name": "kingAfter"
+        },
+        {
+          "expression": "($bind:sources & $bind:kingBefore) != 0 ? $bind:destinations & $bind:kingAfter : $bind:destinations",
+          "kind": "int",
+          "name": "target"
+        }
+      ],
       "effects": [
         {
           "$type": "setState",
-          "state": "move",
           "expression": "$bind:sources == 0 ? -1 : trailingZeroCount(($bind:sources & $bind:kingBefore) != 0 ? $bind:sources & $bind:kingBefore : $bind:sources)",
-          "key": "from"
+          "key": "from",
+          "state": "move"
         },
         {
           "$type": "setState",
-          "state": "move",
           "expression": "$bind:target == 0 ? -1 : trailingZeroCount($bind:target)",
-          "key": "to"
+          "key": "to",
+          "state": "move"
         },
         {
           "$type": "setState",
-          "state": "moverColor",
-          "expression": "turn"
+          "expression": "turn",
+          "state": "moverColor"
         }
       ],
       "gate": {
         "$type": "compareState",
-        "state": "settleHold",
         "comparison": "Equal",
+        "state": "settleHold",
         "value": 60
       },
       "mode": "Edge",
-      "bindings": [
-        {
-          "name": "ownBefore",
-          "kind": "int",
-          "expression": "turn == 0 ? $board:mask:lastLegal:1:6 : $board:mask:lastLegal:-6:-1"
-        },
-        {
-          "name": "ownAfter",
-          "kind": "int",
-          "expression": "turn == 0 ? $board:mask:board:1:6 : $board:mask:board:-6:-1"
-        },
-        {
-          "name": "sources",
-          "kind": "int",
-          "expression": "$bind:ownBefore & ~($board:mask:board:1:6 | $board:mask:board:-6:-1)"
-        },
-        {
-          "name": "destinations",
-          "kind": "int",
-          "expression": "$bind:ownAfter & ~$bind:ownBefore"
-        },
-        {
-          "name": "kingBefore",
-          "kind": "int",
-          "expression": "turn == 0 ? $board:mask:lastLegal:6:6 : $board:mask:lastLegal:-6:-6"
-        },
-        {
-          "name": "kingAfter",
-          "kind": "int",
-          "expression": "turn == 0 ? $board:mask:board:6:6 : $board:mask:board:-6:-6"
-        },
-        {
-          "name": "target",
-          "kind": "int",
-          "expression": "($bind:sources & $bind:kingBefore) != 0 ? $bind:destinations & $bind:kingAfter : $bind:destinations"
-        }
-      ]
+      "name": "tabletop-candidate-cells"
     },
     {
-      "name": "tabletop-candidate-move",
+      "bindings": [
+        {
+          "expression": "lastLegal[move[from]]",
+          "kind": "int",
+          "name": "mover"
+        },
+        {
+          "expression": "(move[from] < 0) | (move[to] < 0) | (move[to] > 63) ? 0 : (abs($bind:mover) == 6) * (abs(move[to] - move[from]) == 2) ? 4 : (abs($bind:mover) == 1) * (move[from] % 8 != move[to] % 8) * (lastLegal[move[to]] == 0) ? 3 : lastLegal[move[to]] != 0 ? 2 : 1",
+          "kind": "int",
+          "name": "kind"
+        }
+      ],
       "effects": [
         {
           "$type": "setState",
-          "state": "move",
           "expression": "$bind:mover",
-          "key": "mover"
+          "key": "mover",
+          "state": "move"
         },
         {
           "$type": "setState",
-          "state": "move",
           "expression": "$bind:kind",
-          "key": "kind"
+          "key": "kind",
+          "state": "move"
         },
         {
           "$type": "setState",
-          "state": "move",
           "expression": "$bind:kind == 3 ? lastLegal[(move[to] - 8 * (1 - 2 * turn))] : lastLegal[move[to]]",
-          "key": "captured"
+          "key": "captured",
+          "state": "move"
         }
       ],
       "gate": {
         "$type": "compareState",
-        "state": "settleHold",
         "comparison": "Equal",
+        "state": "settleHold",
         "value": 60
       },
       "mode": "Edge",
-      "bindings": [
-        {
-          "name": "mover",
-          "kind": "int",
-          "expression": "lastLegal[move[from]]"
-        },
-        {
-          "name": "kind",
-          "kind": "int",
-          "expression": "(move[from] < 0) | (move[to] < 0) | (move[to] > 63) ? 0 : (abs($bind:mover) == 6) * (abs(move[to] - move[from]) == 2) ? 4 : (abs($bind:mover) == 1) * (move[from] % 8 != move[to] % 8) * (lastLegal[move[to]] == 0) ? 3 : lastLegal[move[to]] != 0 ? 2 : 1"
-        }
-      ]
+      "name": "tabletop-candidate-move"
     },
     {
-      "name": "tabletop-candidate-match",
+      "bindings": [
+        {
+          "expression": "($board:mask:board:-6:-6 ^ $board:mask:lastLegal:-6:-6) | ($board:mask:board:-5:-5 ^ $board:mask:lastLegal:-5:-5) | ($board:mask:board:-4:-4 ^ $board:mask:lastLegal:-4:-4) | ($board:mask:board:-3:-3 ^ $board:mask:lastLegal:-3:-3) | ($board:mask:board:-2:-2 ^ $board:mask:lastLegal:-2:-2) | ($board:mask:board:-1:-1 ^ $board:mask:lastLegal:-1:-1) | ($board:mask:board:1:1 ^ $board:mask:lastLegal:1:1) | ($board:mask:board:2:2 ^ $board:mask:lastLegal:2:2) | ($board:mask:board:3:3 ^ $board:mask:lastLegal:3:3) | ($board:mask:board:4:4 ^ $board:mask:lastLegal:4:4) | ($board:mask:board:5:5 ^ $board:mask:lastLegal:5:5) | ($board:mask:board:6:6 ^ $board:mask:lastLegal:6:6) | $board:mask:board:7:7",
+          "kind": "int",
+          "name": "changed"
+        },
+        {
+          "expression": "move[from]",
+          "kind": "int",
+          "name": "from"
+        },
+        {
+          "expression": "move[to]",
+          "kind": "int",
+          "name": "to"
+        },
+        {
+          "expression": "1 - 2 * turn",
+          "kind": "int",
+          "name": "sign"
+        },
+        {
+          "expression": "move[kind] == 4 ? ($bind:from / 8) * 8 + ($bind:to > $bind:from ? 7 : 0) : move[kind] == 3 ? $bind:to - 8 * $bind:sign : -1",
+          "kind": "int",
+          "name": "clear"
+        },
+        {
+          "expression": "move[kind] == 4 ? ($bind:from + $bind:to) / 2 : -1",
+          "kind": "int",
+          "name": "rook"
+        },
+        {
+          "expression": "($bind:clear >= 0) * ($bind:clear < 64) * ($bind:clear != $bind:from) * ($bind:clear != $bind:to)",
+          "kind": "int",
+          "name": "clearUnique"
+        },
+        {
+          "expression": "($bind:rook >= 0) * ($bind:rook < 64) * ($bind:rook != $bind:from) * ($bind:rook != $bind:to) * ($bind:rook != $bind:clear)",
+          "kind": "int",
+          "name": "rookUnique"
+        },
+        {
+          "expression": "(($bind:from >= 0) * (1 << max($bind:from, 0))) | (($bind:to >= 0) * (1 << max($bind:to, 0))) | ($bind:clearUnique * (1 << clamp($bind:clear, 0, 63))) | ($bind:rookUnique * (1 << clamp($bind:rook, 0, 63)))",
+          "kind": "int",
+          "name": "footprint"
+        },
+        {
+          "expression": "(abs(move[mover]) == 1) * ($bind:to / 8 == (turn == 0 ? 7 : 0)) ? board[move[to]] : move[mover]",
+          "kind": "int",
+          "name": "landed"
+        }
+      ],
       "effects": [
         {
           "$type": "setState",
-          "state": "boardMismatch",
-          "expression": "popCount($bind:changed & ~$bind:footprint) + ($bind:from >= 0) * (board[move[from]] != 0) + ($bind:to >= 0) * (board[move[to]] != $bind:landed) + $bind:clearUnique * (board[($bind:clear)] != 0) + $bind:rookUnique * (board[($bind:rook)] != 4 * $bind:sign)"
+          "expression": "popCount($bind:changed & ~$bind:footprint) + ($bind:from >= 0) * (board[move[from]] != 0) + ($bind:to >= 0) * (board[move[to]] != $bind:landed) + $bind:clearUnique * (board[($bind:clear)] != 0) + $bind:rookUnique * (board[($bind:rook)] != 4 * $bind:sign)",
+          "state": "boardMismatch"
         },
         {
           "$type": "setState",
-          "state": "boardChanged",
-          "expression": "popCount($bind:changed)"
+          "expression": "popCount($bind:changed)",
+          "state": "boardChanged"
         }
       ],
       "gate": {
         "$type": "compareState",
-        "state": "settleHold",
         "comparison": "Equal",
+        "state": "settleHold",
         "value": 60
       },
       "mode": "Edge",
-      "bindings": [
-        {
-          "name": "changed",
-          "kind": "int",
-          "expression": "($board:mask:board:-6:-6 ^ $board:mask:lastLegal:-6:-6) | ($board:mask:board:-5:-5 ^ $board:mask:lastLegal:-5:-5) | ($board:mask:board:-4:-4 ^ $board:mask:lastLegal:-4:-4) | ($board:mask:board:-3:-3 ^ $board:mask:lastLegal:-3:-3) | ($board:mask:board:-2:-2 ^ $board:mask:lastLegal:-2:-2) | ($board:mask:board:-1:-1 ^ $board:mask:lastLegal:-1:-1) | ($board:mask:board:1:1 ^ $board:mask:lastLegal:1:1) | ($board:mask:board:2:2 ^ $board:mask:lastLegal:2:2) | ($board:mask:board:3:3 ^ $board:mask:lastLegal:3:3) | ($board:mask:board:4:4 ^ $board:mask:lastLegal:4:4) | ($board:mask:board:5:5 ^ $board:mask:lastLegal:5:5) | ($board:mask:board:6:6 ^ $board:mask:lastLegal:6:6) | $board:mask:board:7:7"
-        },
-        {
-          "name": "from",
-          "kind": "int",
-          "expression": "move[from]"
-        },
-        {
-          "name": "to",
-          "kind": "int",
-          "expression": "move[to]"
-        },
-        {
-          "name": "sign",
-          "kind": "int",
-          "expression": "1 - 2 * turn"
-        },
-        {
-          "name": "clear",
-          "kind": "int",
-          "expression": "move[kind] == 4 ? ($bind:from / 8) * 8 + ($bind:to > $bind:from ? 7 : 0) : move[kind] == 3 ? $bind:to - 8 * $bind:sign : -1"
-        },
-        {
-          "name": "rook",
-          "kind": "int",
-          "expression": "move[kind] == 4 ? ($bind:from + $bind:to) / 2 : -1"
-        },
-        {
-          "name": "clearUnique",
-          "kind": "int",
-          "expression": "($bind:clear >= 0) * ($bind:clear < 64) * ($bind:clear != $bind:from) * ($bind:clear != $bind:to)"
-        },
-        {
-          "name": "rookUnique",
-          "kind": "int",
-          "expression": "($bind:rook >= 0) * ($bind:rook < 64) * ($bind:rook != $bind:from) * ($bind:rook != $bind:to) * ($bind:rook != $bind:clear)"
-        },
-        {
-          "name": "footprint",
-          "kind": "int",
-          "expression": "(($bind:from >= 0) * (1 << max($bind:from, 0))) | (($bind:to >= 0) * (1 << max($bind:to, 0))) | ($bind:clearUnique * (1 << clamp($bind:clear, 0, 63))) | ($bind:rookUnique * (1 << clamp($bind:rook, 0, 63)))"
-        },
-        {
-          "name": "landed",
-          "kind": "int",
-          "expression": "(abs(move[mover]) == 1) * ($bind:to / 8 == (turn == 0 ? 7 : 0)) ? board[move[to]] : move[mover]"
-        }
-      ]
+      "name": "tabletop-candidate-match"
     },
     {
       "effects": [
@@ -2890,227 +2890,226 @@
       "name": "tabletop-castle-transit-attacked"
     },
     {
-      "name": "tabletop-castle-legal",
+      "bindings": [
+        {
+          "expression": "1 - 2 * turn",
+          "kind": "int",
+          "name": "sign"
+        },
+        {
+          "expression": "4 + 56 * turn",
+          "kind": "int",
+          "name": "home"
+        },
+        {
+          "expression": "move[to] > move[from] ? 1 : -1",
+          "kind": "int",
+          "name": "direction"
+        },
+        {
+          "expression": "$bind:home + ($bind:direction == 1 ? 3 : -4)",
+          "kind": "int",
+          "name": "rook"
+        },
+        {
+          "expression": "($bind:direction == 1 ? 2 : 1) << (2 * turn)",
+          "kind": "int",
+          "name": "right"
+        },
+        {
+          "expression": "$bind:direction == 1 ? $match:chessRayEmpty:lastLegal:E:cell[move[from]] : $match:chessRayEmpty:lastLegal:W:cell[move[from]]",
+          "kind": "int",
+          "name": "path"
+        },
+        {
+          "expression": "turn == 0 ? ($bind:direction == 1 ? castleTransitAttacked[wk] : castleTransitAttacked[wq]) : ($bind:direction == 1 ? castleTransitAttacked[bk] : castleTransitAttacked[bq])",
+          "kind": "int",
+          "name": "attacked"
+        }
+      ],
       "effects": [
         {
           "$type": "setState",
-          "state": "castleLegal",
-          "expression": "(move[kind] == 4) * (move[from] == $bind:home) * (move[to] == $bind:home + 2 * $bind:direction) * ((castleRights & $bind:right) == 0) * (lastLegal[($bind:rook)] == 4 * $bind:sign) * ($bind:path == $bind:rook) * (previousInCheck[moverColor[$value]] == 0) * ($bind:attacked == 0)"
+          "expression": "(move[kind] == 4) * (move[from] == $bind:home) * (move[to] == $bind:home + 2 * $bind:direction) * ((castleRights & $bind:right) == 0) * (lastLegal[($bind:rook)] == 4 * $bind:sign) * ($bind:path == $bind:rook) * (previousInCheck[moverColor[$value]] == 0) * ($bind:attacked == 0)",
+          "state": "castleLegal"
         }
       ],
       "gate": {
         "$type": "compareState",
-        "state": "settleHold",
         "comparison": "Equal",
+        "state": "settleHold",
         "value": 60
       },
       "mode": "Edge",
-      "bindings": [
-        {
-          "name": "sign",
-          "kind": "int",
-          "expression": "1 - 2 * turn"
-        },
-        {
-          "name": "home",
-          "kind": "int",
-          "expression": "4 + 56 * turn"
-        },
-        {
-          "name": "direction",
-          "kind": "int",
-          "expression": "move[to] > move[from] ? 1 : -1"
-        },
-        {
-          "name": "rook",
-          "kind": "int",
-          "expression": "$bind:home + ($bind:direction == 1 ? 3 : -4)"
-        },
-        {
-          "name": "right",
-          "kind": "int",
-          "expression": "($bind:direction == 1 ? 2 : 1) << (2 * turn)"
-        },
-        {
-          "name": "path",
-          "kind": "int",
-          "expression": "$bind:direction == 1 ? $match:chessRayEmpty:lastLegal:E:cell[move[from]] : $match:chessRayEmpty:lastLegal:W:cell[move[from]]"
-        },
-        {
-          "name": "attacked",
-          "kind": "int",
-          "expression": "turn == 0 ? ($bind:direction == 1 ? castleTransitAttacked[wk] : castleTransitAttacked[wq]) : ($bind:direction == 1 ? castleTransitAttacked[bk] : castleTransitAttacked[bq])"
-        }
-      ]
+      "name": "tabletop-castle-legal"
     },
     {
-      "name": "tabletop-shape-final",
+      "bindings": [
+        {
+          "expression": "abs(move[mover])",
+          "kind": "int",
+          "name": "piece"
+        },
+        {
+          "expression": "abs(move[to] % 8 - move[from] % 8)",
+          "kind": "int",
+          "name": "dx"
+        },
+        {
+          "expression": "(move[to] / 8 - move[from] / 8) * (1 - 2 * turn)",
+          "kind": "int",
+          "name": "dy"
+        },
+        {
+          "expression": "max(max(max($match:chessRayEmpty:lastLegal:N:cell[move[to]] == move[from], $match:chessRayEmpty:lastLegal:S:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:E:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:W:cell[move[to]] == move[from])",
+          "kind": "int",
+          "name": "straight"
+        },
+        {
+          "expression": "max(max(max($match:chessRayEmpty:lastLegal:NE:cell[move[to]] == move[from], $match:chessRayEmpty:lastLegal:SE:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:SW:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:NW:cell[move[to]] == move[from])",
+          "kind": "int",
+          "name": "diagonal"
+        },
+        {
+          "expression": "move[from] + 8 * (1 - 2 * turn)",
+          "kind": "int",
+          "name": "middle"
+        },
+        {
+          "expression": "($bind:dx == 0) * (lastLegal[move[to]] == 0) * max($bind:dy == 1, ($bind:dy == 2) * (move[from] / 8 == (turn == 0 ? 1 : 6)) * (lastLegal[($bind:middle)] == 0)) | ($bind:dx == 1) * ($bind:dy == 1) * max(move[kind] == 2, (move[kind] == 3) * (move[to] == enPassantTarget) * (move[captured] == 2 * turn - 1))",
+          "kind": "int",
+          "name": "pawn"
+        }
+      ],
       "effects": [
         {
           "$type": "setState",
-          "state": "shapeLegal",
-          "expression": "$bind:piece == 1 ? $bind:pawn : $bind:piece == 2 ? $bind:dx * $bind:dx + $bind:dy * $bind:dy == 5 : $bind:piece == 3 ? $bind:diagonal : $bind:piece == 4 ? $bind:straight : $bind:piece == 5 ? max($bind:diagonal, $bind:straight) : $bind:piece == 6 ? max((max($bind:dx, abs($bind:dy)) == 1) * (move[kind] != 4), castleLegal) : 0"
+          "expression": "$bind:piece == 1 ? $bind:pawn : $bind:piece == 2 ? $bind:dx * $bind:dx + $bind:dy * $bind:dy == 5 : $bind:piece == 3 ? $bind:diagonal : $bind:piece == 4 ? $bind:straight : $bind:piece == 5 ? max($bind:diagonal, $bind:straight) : $bind:piece == 6 ? max((max($bind:dx, abs($bind:dy)) == 1) * (move[kind] != 4), castleLegal) : 0",
+          "state": "shapeLegal"
         }
       ],
       "gate": {
         "$type": "compareState",
-        "state": "settleHold",
         "comparison": "Equal",
+        "state": "settleHold",
         "value": 60
       },
       "mode": "Edge",
-      "bindings": [
-        {
-          "name": "piece",
-          "kind": "int",
-          "expression": "abs(move[mover])"
-        },
-        {
-          "name": "dx",
-          "kind": "int",
-          "expression": "abs(move[to] % 8 - move[from] % 8)"
-        },
-        {
-          "name": "dy",
-          "kind": "int",
-          "expression": "(move[to] / 8 - move[from] / 8) * (1 - 2 * turn)"
-        },
-        {
-          "name": "straight",
-          "kind": "int",
-          "expression": "max(max(max($match:chessRayEmpty:lastLegal:N:cell[move[to]] == move[from], $match:chessRayEmpty:lastLegal:S:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:E:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:W:cell[move[to]] == move[from])"
-        },
-        {
-          "name": "diagonal",
-          "kind": "int",
-          "expression": "max(max(max($match:chessRayEmpty:lastLegal:NE:cell[move[to]] == move[from], $match:chessRayEmpty:lastLegal:SE:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:SW:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:NW:cell[move[to]] == move[from])"
-        },
-        {
-          "name": "middle",
-          "kind": "int",
-          "expression": "move[from] + 8 * (1 - 2 * turn)"
-        },
-        {
-          "name": "pawn",
-          "kind": "int",
-          "expression": "($bind:dx == 0) * (lastLegal[move[to]] == 0) * max($bind:dy == 1, ($bind:dy == 2) * (move[from] / 8 == (turn == 0 ? 1 : 6)) * (lastLegal[($bind:middle)] == 0)) | ($bind:dx == 1) * ($bind:dy == 1) * max(move[kind] == 2, (move[kind] == 3) * (move[to] == enPassantTarget) * (move[captured] == 2 * turn - 1))"
-        }
-      ]
+      "name": "tabletop-shape-final"
     },
     {
-      "name": "tabletop-check-white",
+      "bindings": [
+        {
+          "expression": "(kingCell[0] >= 0) * (1 << max(kingCell[0], 0))",
+          "kind": "int",
+          "name": "kingMaskWhite"
+        },
+        {
+          "expression": "$bind:kingMaskWhite | boardShift($bind:kingMaskWhite, chessBoard, E) | boardShift($bind:kingMaskWhite, chessBoard, W)",
+          "kind": "int",
+          "name": "kingBand"
+        },
+        {
+          "expression": "(((boardShift($bind:kingMaskWhite, chessBoard, SE) | boardShift($bind:kingMaskWhite, chessBoard, SW)) & $board:mask:board:-1:-1) | (($bind:kingBand | boardShift($bind:kingBand, chessBoard, N) | boardShift($bind:kingBand, chessBoard, S)) & $board:mask:board:-6:-6)) != 0",
+          "kind": "int",
+          "name": "closeCheckWhite"
+        },
+        {
+          "expression": "((boardShift($bind:kingMaskWhite, chessBoard, K0) | boardShift($bind:kingMaskWhite, chessBoard, K1) | boardShift($bind:kingMaskWhite, chessBoard, K2) | boardShift($bind:kingMaskWhite, chessBoard, K3) | boardShift($bind:kingMaskWhite, chessBoard, K4) | boardShift($bind:kingMaskWhite, chessBoard, K5) | boardShift($bind:kingMaskWhite, chessBoard, K6) | boardShift($bind:kingMaskWhite, chessBoard, K7)) & $board:mask:board:-2:-2) != 0",
+          "kind": "int",
+          "name": "knightHitWhite"
+        },
+        {
+          "expression": "(kingCell[0] >= 0) * max(`$board:attacks:board:-5:-4:N,S,E,W`[kingCell[0]], max(`$board:attacks:board:-3:-3:NE,SE,SW,NW`[kingCell[0]], `$board:attacks:board:-5:-5:NE,SE,SW,NW`[kingCell[0]]))",
+          "kind": "int",
+          "name": "slideHitWhite"
+        },
+        {
+          "expression": "max($bind:closeCheckWhite, max($bind:knightHitWhite, $bind:slideHitWhite))",
+          "kind": "int",
+          "name": "inCheckCombineWhite"
+        }
+      ],
       "effects": [
         {
           "$type": "setState",
-          "state": "inCheck",
           "expression": "$bind:inCheckCombineWhite",
-          "key": "0"
+          "key": "0",
+          "state": "inCheck"
         }
       ],
       "gate": {
         "$type": "compareState",
-        "state": "settleHold",
         "comparison": "Equal",
+        "state": "settleHold",
         "value": 60
       },
       "mode": "Edge",
-      "bindings": [
-        {
-          "name": "kingMaskWhite",
-          "kind": "int",
-          "expression": "(kingCell[0] >= 0) * (1 << max(kingCell[0], 0))"
-        },
-        {
-          "name": "kingBand",
-          "kind": "int",
-          "expression": "$bind:kingMaskWhite | boardShift($bind:kingMaskWhite, chessBoard, E) | boardShift($bind:kingMaskWhite, chessBoard, W)"
-        },
-        {
-          "name": "closeCheckWhite",
-          "kind": "int",
-          "expression": "(((boardShift($bind:kingMaskWhite, chessBoard, SE) | boardShift($bind:kingMaskWhite, chessBoard, SW)) & $board:mask:board:-1:-1) | (($bind:kingBand | boardShift($bind:kingBand, chessBoard, N) | boardShift($bind:kingBand, chessBoard, S)) & $board:mask:board:-6:-6)) != 0"
-        },
-        {
-          "name": "knightHitWhite",
-          "kind": "int",
-          "expression": "((boardShift($bind:kingMaskWhite, chessBoard, K0) | boardShift($bind:kingMaskWhite, chessBoard, K1) | boardShift($bind:kingMaskWhite, chessBoard, K2) | boardShift($bind:kingMaskWhite, chessBoard, K3) | boardShift($bind:kingMaskWhite, chessBoard, K4) | boardShift($bind:kingMaskWhite, chessBoard, K5) | boardShift($bind:kingMaskWhite, chessBoard, K6) | boardShift($bind:kingMaskWhite, chessBoard, K7)) & $board:mask:board:-2:-2) != 0"
-        },
-        {
-          "name": "slideHitWhite",
-          "kind": "int",
-          "expression": "(kingCell[0] >= 0) * max(`$board:attacks:board:-5:-4:N,S,E,W`[kingCell[0]], max(`$board:attacks:board:-3:-3:NE,SE,SW,NW`[kingCell[0]], `$board:attacks:board:-5:-5:NE,SE,SW,NW`[kingCell[0]]))"
-        },
-        {
-          "name": "inCheckCombineWhite",
-          "kind": "int",
-          "expression": "max($bind:closeCheckWhite, max($bind:knightHitWhite, $bind:slideHitWhite))"
-        }
-      ]
+      "name": "tabletop-check-white"
     },
     {
-      "name": "tabletop-check-black",
+      "bindings": [
+        {
+          "expression": "(kingCell[1] >= 0) * (1 << max(kingCell[1], 0))",
+          "kind": "int",
+          "name": "kingMaskBlack"
+        },
+        {
+          "expression": "$bind:kingMaskBlack | boardShift($bind:kingMaskBlack, chessBoard, E) | boardShift($bind:kingMaskBlack, chessBoard, W)",
+          "kind": "int",
+          "name": "kingBand"
+        },
+        {
+          "expression": "(((boardShift($bind:kingMaskBlack, chessBoard, NE) | boardShift($bind:kingMaskBlack, chessBoard, NW)) & $board:mask:board:1:1) | (($bind:kingBand | boardShift($bind:kingBand, chessBoard, N) | boardShift($bind:kingBand, chessBoard, S)) & $board:mask:board:6:6)) != 0",
+          "kind": "int",
+          "name": "closeCheckBlack"
+        },
+        {
+          "expression": "((boardShift($bind:kingMaskBlack, chessBoard, K0) | boardShift($bind:kingMaskBlack, chessBoard, K1) | boardShift($bind:kingMaskBlack, chessBoard, K2) | boardShift($bind:kingMaskBlack, chessBoard, K3) | boardShift($bind:kingMaskBlack, chessBoard, K4) | boardShift($bind:kingMaskBlack, chessBoard, K5) | boardShift($bind:kingMaskBlack, chessBoard, K6) | boardShift($bind:kingMaskBlack, chessBoard, K7)) & $board:mask:board:2:2) != 0",
+          "kind": "int",
+          "name": "knightHitBlack"
+        },
+        {
+          "expression": "(kingCell[1] >= 0) * max(`$board:attacks:board:4:5:N,S,E,W`[kingCell[1]], max(`$board:attacks:board:3:3:NE,SE,SW,NW`[kingCell[1]], `$board:attacks:board:5:5:NE,SE,SW,NW`[kingCell[1]]))",
+          "kind": "int",
+          "name": "slideHitBlack"
+        },
+        {
+          "expression": "max($bind:closeCheckBlack, max($bind:knightHitBlack, $bind:slideHitBlack))",
+          "kind": "int",
+          "name": "inCheckCombineBlack"
+        }
+      ],
       "effects": [
         {
           "$type": "setState",
-          "state": "inCheck",
           "expression": "$bind:inCheckCombineBlack",
-          "key": "1"
+          "key": "1",
+          "state": "inCheck"
         }
       ],
       "gate": {
         "$type": "compareState",
-        "state": "settleHold",
         "comparison": "Equal",
+        "state": "settleHold",
         "value": 60
       },
       "mode": "Edge",
-      "bindings": [
-        {
-          "name": "kingMaskBlack",
-          "kind": "int",
-          "expression": "(kingCell[1] >= 0) * (1 << max(kingCell[1], 0))"
-        },
-        {
-          "name": "kingBand",
-          "kind": "int",
-          "expression": "$bind:kingMaskBlack | boardShift($bind:kingMaskBlack, chessBoard, E) | boardShift($bind:kingMaskBlack, chessBoard, W)"
-        },
-        {
-          "name": "closeCheckBlack",
-          "kind": "int",
-          "expression": "(((boardShift($bind:kingMaskBlack, chessBoard, NE) | boardShift($bind:kingMaskBlack, chessBoard, NW)) & $board:mask:board:1:1) | (($bind:kingBand | boardShift($bind:kingBand, chessBoard, N) | boardShift($bind:kingBand, chessBoard, S)) & $board:mask:board:6:6)) != 0"
-        },
-        {
-          "name": "knightHitBlack",
-          "kind": "int",
-          "expression": "((boardShift($bind:kingMaskBlack, chessBoard, K0) | boardShift($bind:kingMaskBlack, chessBoard, K1) | boardShift($bind:kingMaskBlack, chessBoard, K2) | boardShift($bind:kingMaskBlack, chessBoard, K3) | boardShift($bind:kingMaskBlack, chessBoard, K4) | boardShift($bind:kingMaskBlack, chessBoard, K5) | boardShift($bind:kingMaskBlack, chessBoard, K6) | boardShift($bind:kingMaskBlack, chessBoard, K7)) & $board:mask:board:2:2) != 0"
-        },
-        {
-          "name": "slideHitBlack",
-          "kind": "int",
-          "expression": "(kingCell[1] >= 0) * max(`$board:attacks:board:4:5:N,S,E,W`[kingCell[1]], max(`$board:attacks:board:3:3:NE,SE,SW,NW`[kingCell[1]], `$board:attacks:board:5:5:NE,SE,SW,NW`[kingCell[1]]))"
-        },
-        {
-          "name": "inCheckCombineBlack",
-          "kind": "int",
-          "expression": "max($bind:closeCheckBlack, max($bind:knightHitBlack, $bind:slideHitBlack))"
-        }
-      ]
+      "name": "tabletop-check-black"
     },
     {
-      "name": "tabletop-game-start-check",
       "effects": [
         {
           "$type": "setState",
-          "state": "previousInCheck",
           "expression": "inCheck[0]",
-          "key": "0"
+          "key": "0",
+          "state": "previousInCheck"
         },
         {
           "$type": "setState",
-          "state": "previousInCheck",
           "expression": "inCheck[1]",
-          "key": "1"
+          "key": "1",
+          "state": "previousInCheck"
         },
         {
           "$type": "setState",
@@ -3123,85 +3122,85 @@
         "predicates": [
           {
             "$type": "compareState",
-            "state": "settleHold",
             "comparison": "Equal",
+            "state": "settleHold",
             "value": 60
           },
           {
             "$type": "compareState",
-            "state": "gameStarted",
             "comparison": "Equal",
+            "state": "gameStarted",
             "value": 0
           },
           {
             "$type": "compareState",
-            "state": "boardCollisions",
             "comparison": "Equal",
+            "state": "boardCollisions",
             "value": 0
           }
         ]
       },
-      "mode": "Edge"
+      "mode": "Edge",
+      "name": "tabletop-game-start-check"
     },
     {
-      "name": "tabletop-verdict",
+      "bindings": [
+        {
+          "expression": "1 - 2 * turn",
+          "kind": "int",
+          "name": "sign"
+        },
+        {
+          "expression": "(abs(move[mover]) == 1) * (move[to] / 8 == (turn == 0 ? 7 : 0))",
+          "kind": "int",
+          "name": "promotes"
+        },
+        {
+          "expression": "$bind:promotes ? (board[move[to]] * $bind:sign >= 2) * (board[move[to]] * $bind:sign <= 5) : board[move[to]] == move[mover]",
+          "kind": "int",
+          "name": "replacement"
+        },
+        {
+          "expression": "(popCount($board:mask:board:6:6) == 1) * (popCount($board:mask:board:-6:-6) == 1)",
+          "kind": "int",
+          "name": "kings"
+        }
+      ],
       "effects": [
         {
           "$type": "setState",
-          "state": "verdict",
-          "expression": "(move[kind] >= 1) * (move[kind] <= 4) * (boardMismatch == 0) * (boardCollisions == 0) * shapeLegal * $bind:replacement * (move[mover] * $bind:sign > 0) * (move[captured] * $bind:sign <= 0) * (inCheck[moverColor[$value]] == 0) * $bind:kings"
+          "expression": "(move[kind] >= 1) * (move[kind] <= 4) * (boardMismatch == 0) * (boardCollisions == 0) * shapeLegal * $bind:replacement * (move[mover] * $bind:sign > 0) * (move[captured] * $bind:sign <= 0) * (inCheck[moverColor[$value]] == 0) * $bind:kings",
+          "state": "verdict"
         },
         {
           "$type": "setState",
-          "state": "promotionPending",
           "expression": "boardChanged == 0 ? -1 : promotionPending[0]",
-          "key": "0"
+          "key": "0",
+          "state": "promotionPending"
         },
         {
           "$type": "setState",
-          "state": "promotionPending",
           "expression": "boardChanged == 0 ? -1 : promotionPending[1]",
-          "key": "1"
+          "key": "1",
+          "state": "promotionPending"
         }
       ],
       "gate": {
         "$type": "compareState",
-        "state": "settleHold",
         "comparison": "Equal",
+        "state": "settleHold",
         "value": 60
       },
       "mode": "Edge",
-      "bindings": [
-        {
-          "name": "sign",
-          "kind": "int",
-          "expression": "1 - 2 * turn"
-        },
-        {
-          "name": "promotes",
-          "kind": "int",
-          "expression": "(abs(move[mover]) == 1) * (move[to] / 8 == (turn == 0 ? 7 : 0))"
-        },
-        {
-          "name": "replacement",
-          "kind": "int",
-          "expression": "$bind:promotes ? (board[move[to]] * $bind:sign >= 2) * (board[move[to]] * $bind:sign <= 5) : board[move[to]] == move[mover]"
-        },
-        {
-          "name": "kings",
-          "kind": "int",
-          "expression": "(popCount($board:mask:board:6:6) == 1) * (popCount($board:mask:board:-6:-6) == 1)"
-        }
-      ]
+      "name": "tabletop-verdict"
     },
     {
-      "name": "tabletop-promotion-pending",
       "effects": [
         {
           "$type": "setState",
-          "state": "promotionPending",
           "expression": "move[to]",
-          "key": "$cell:moverColor:$value"
+          "key": "$cell:moverColor:$value",
+          "state": "promotionPending"
         }
       ],
       "gate": {
@@ -3209,84 +3208,84 @@
         "predicates": [
           {
             "$type": "compareState",
-            "state": "settleHold",
             "comparison": "Equal",
+            "state": "settleHold",
             "value": 60
           },
           {
             "$type": "compareState",
-            "state": "verdict",
             "comparison": "Equal",
+            "state": "verdict",
             "value": 0
           },
           {
             "$type": "compareValue",
             "comparison": "Equal",
+            "kind": "int",
             "left": "(abs(move[mover]) == 1) * (move[to] / 8 == (moverColor == 0 ? 7 : 0)) * (board[move[to]] == move[mover]) * shapeLegal * (boardMismatch == 0) * (boardCollisions == 0) * (inCheck[moverColor[$value]] == 0) * (popCount($board:mask:board:6:6) == 1) * (popCount($board:mask:board:-6:-6) == 1)",
-            "right": "1",
-            "kind": "int"
+            "right": "1"
           }
         ]
       },
-      "mode": "Edge"
+      "mode": "Edge",
+      "name": "tabletop-promotion-pending"
     },
     {
-      "name": "tabletop-advance-turn",
       "effects": [
         {
           "$type": "transaction",
           "effects": [
             {
               "$type": "setState",
-              "state": "castleRights",
-              "expression": "castleRights | ((lastLegal[(4)] == 6) * (board[(4)] != 6) * 3) | ((lastLegal[(0)] == 4) * (board[(0)] != 4) * 1) | ((lastLegal[(7)] == 4) * (board[(7)] != 4) * 2)"
+              "expression": "castleRights | ((lastLegal[(4)] == 6) * (board[(4)] != 6) * 3) | ((lastLegal[(0)] == 4) * (board[(0)] != 4) * 1) | ((lastLegal[(7)] == 4) * (board[(7)] != 4) * 2)",
+              "state": "castleRights"
             },
             {
               "$type": "setState",
-              "state": "castleRights",
-              "expression": "castleRights | ((lastLegal[(60)] == -6) * (board[(60)] != -6) * 12) | ((lastLegal[(56)] == -4) * (board[(56)] != -4) * 4) | ((lastLegal[(63)] == -4) * (board[(63)] != -4) * 8)"
+              "expression": "castleRights | ((lastLegal[(60)] == -6) * (board[(60)] != -6) * 12) | ((lastLegal[(56)] == -4) * (board[(56)] != -4) * 4) | ((lastLegal[(63)] == -4) * (board[(63)] != -4) * 8)",
+              "state": "castleRights"
             },
             {
               "$type": "transformState",
               "transform": {
                 "$type": "boardCombine",
-                "row": "lastLegal",
+                "left": "board",
                 "operation": "copy",
-                "left": "board"
+                "row": "lastLegal"
               }
             },
             {
               "$type": "setState",
-              "state": "previousInCheck",
               "expression": "inCheck[0]",
-              "key": "0"
-            },
-            {
-              "$type": "setState",
-              "state": "previousInCheck",
-              "expression": "inCheck[1]",
-              "key": "1"
-            },
-            {
-              "$type": "setState",
-              "state": "enPassantTarget",
-              "expression": "(abs(move[mover]) == 1) * (abs(move[to] - move[from]) == 16) ? (move[from] + move[to]) / 2 : -1"
-            },
-            {
-              "$type": "setState",
-              "state": "turn",
-              "expression": "1 - turn"
-            },
-            {
-              "$type": "setState",
-              "state": "promotionPending",
               "key": "0",
+              "state": "previousInCheck"
+            },
+            {
+              "$type": "setState",
+              "expression": "inCheck[1]",
+              "key": "1",
+              "state": "previousInCheck"
+            },
+            {
+              "$type": "setState",
+              "expression": "(abs(move[mover]) == 1) * (abs(move[to] - move[from]) == 16) ? (move[from] + move[to]) / 2 : -1",
+              "state": "enPassantTarget"
+            },
+            {
+              "$type": "setState",
+              "expression": "1 - turn",
+              "state": "turn"
+            },
+            {
+              "$type": "setState",
+              "key": "0",
+              "state": "promotionPending",
               "value": -1
             },
             {
               "$type": "setState",
-              "state": "promotionPending",
               "key": "1",
+              "state": "promotionPending",
               "value": -1
             }
           ]
@@ -3297,54 +3296,29 @@
         "predicates": [
           {
             "$type": "compareState",
-            "state": "settleHold",
             "comparison": "Equal",
+            "state": "settleHold",
             "value": 60
           },
           {
             "$type": "compareState",
-            "state": "verdict",
             "comparison": "Equal",
+            "state": "verdict",
             "value": 1
           },
           {
             "$type": "compareState",
-            "state": "move",
             "comparison": "NotEqual",
-            "value": 0,
-            "key": "kind"
+            "key": "kind",
+            "state": "move",
+            "value": 0
           }
         ]
       },
-      "mode": "Edge"
+      "mode": "Edge",
+      "name": "tabletop-advance-turn"
     },
     {
-      "name": "tabletop-board-history",
-      "mode": "Edge",
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "state": "settleHold",
-            "comparison": "Equal",
-            "value": 60
-          },
-          {
-            "$type": "compareState",
-            "state": "verdict",
-            "comparison": "Equal",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "state": "move",
-            "comparison": "NotEqual",
-            "value": 0,
-            "key": "kind"
-          }
-        ]
-      },
       "effects": [
         {
           "$type": "pushState",
@@ -3356,10 +3330,35 @@
           "expression": "1 + ($history:boardHistory:0 == $history:boardHistory:2) + ($history:boardHistory:0 == $history:boardHistory:4) + ($history:boardHistory:0 == $history:boardHistory:6) + ($history:boardHistory:0 == $history:boardHistory:8) + ($history:boardHistory:0 == $history:boardHistory:10)",
           "state": "repetitionCount"
         }
-      ]
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "settleHold",
+            "value": 60
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "verdict",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "kind",
+            "state": "move",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-history"
     },
     {
-      "name": "tabletop-apply-illegal",
       "effects": [
         {
           "$type": "addState",
@@ -3372,46 +3371,47 @@
         "predicates": [
           {
             "$type": "compareState",
-            "state": "settleHold",
             "comparison": "Equal",
+            "state": "settleHold",
             "value": 60
           },
           {
             "$type": "compareState",
+            "comparison": "Equal",
             "state": "verdict",
-            "comparison": "Equal",
             "value": 0
           },
           {
             "$type": "compareState",
-            "state": "move",
             "comparison": "NotEqual",
-            "value": 0,
-            "key": "kind"
-          },
-          {
-            "$type": "compareState",
-            "state": "boardMismatch",
-            "comparison": "Equal",
+            "key": "kind",
+            "state": "move",
             "value": 0
           },
           {
             "$type": "compareState",
-            "state": "promotionPending",
             "comparison": "Equal",
-            "value": -1,
-            "key": "0"
+            "state": "boardMismatch",
+            "value": 0
           },
           {
             "$type": "compareState",
-            "state": "promotionPending",
             "comparison": "Equal",
-            "value": -1,
-            "key": "1"
+            "key": "0",
+            "state": "promotionPending",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "1",
+            "state": "promotionPending",
+            "value": -1
           }
         ]
       },
-      "mode": "Edge"
+      "mode": "Edge",
+      "name": "tabletop-apply-illegal"
     }
   ],
   "state": {
@@ -3531,6 +3531,7 @@
     ],
     "world": [
       {
+        "capacity": 64,
         "cells": [
           {
             "key": "0",
@@ -3794,12 +3795,12 @@
           "topology": "chessBoard"
         },
         "kind": "int",
-        "name": "board",
-        "capacity": 64,
         "max": 7,
-        "min": -6
+        "min": -6,
+        "name": "board"
       },
       {
+        "capacity": 64,
         "cells": [
           {
             "key": "0",
@@ -4063,19 +4064,18 @@
           "topology": "chessBoard"
         },
         "kind": "int",
-        "name": "lastLegal",
-        "capacity": 64,
+        "max": 6,
         "min": -6,
-        "max": 6
+        "name": "lastLegal"
       },
       {
+        "capacity": 64,
         "domain": {
           "$type": "cellsOf",
           "topology": "chessBoard"
         },
         "kind": "int",
-        "name": "plan",
-        "capacity": 64
+        "name": "plan"
       },
       {
         "kind": "int",
@@ -4614,25 +4614,25 @@
         "name": "castleTransitAttacked"
       },
       {
+        "kind": "int",
+        "max": 64,
+        "min": 0,
         "name": "boardMismatch",
-        "kind": "int",
-        "value": 0,
-        "min": 0,
-        "max": 64
+        "value": 0
       },
       {
+        "kind": "int",
+        "max": 64,
+        "min": 0,
         "name": "boardChanged",
-        "kind": "int",
-        "value": 0,
-        "min": 0,
-        "max": 64
+        "value": 0
       },
       {
-        "name": "boardCollisions",
         "kind": "int",
-        "value": 0,
+        "max": 64,
         "min": 0,
-        "max": 64
+        "name": "boardCollisions",
+        "value": 0
       }
     ]
   }
