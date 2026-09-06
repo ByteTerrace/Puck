@@ -466,7 +466,8 @@
     "games/billiards.world.json",
     "games/bowling.world.json",
     "games/tictactoe.world.json",
-    "games/hexlines.world.json"
+    "games/hexlines.world.json",
+    "games/mancala.world.json"
   ],
   "interactions": {
     "interactions": [
