@@ -4,7 +4,6 @@ namespace Puck.AdvancedGamingBrick.Post;
 
 // --probe <rom> <steps> | --link-init-trace <rom> <loHex> <hiHex> <count> [skip]: blank-screen boot diagnostics.
 internal sealed partial class Diagnostics {
-    /// <summary>Runs a ROM and dumps key machine state, to diagnose a game that boots to a blank screen.</summary>
     /// <summary>Dispatches the blank-screen boot diagnostics — <c>--probe &lt;rom&gt; &lt;steps&gt;</c> and
     /// <c>--link-init-trace &lt;rom&gt; &lt;loHex&gt; &lt;hiHex&gt; &lt;count&gt; [skipAfter]</c>; returns whether it
     /// handled the args (kept out of Program.cs to bound Main's cyclomatic complexity).</summary>
@@ -34,8 +33,8 @@ internal sealed partial class Diagnostics {
                         fromBase: 16
                     ),
                     count: long.Parse(s: args[(index + 4)]),
-                    skipAfter: ((args.Length > (index + 5))
-                    ? long.Parse(s: args[(index + 5)])
+                    skipAfter: ((args.Length > (index + 5)) && long.TryParse(s: args[(index + 5)], result: out var skipAfter)
+                    ? skipAfter
                     : 0)
                 );
 

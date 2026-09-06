@@ -128,7 +128,7 @@ internal static class PackagesCommand {
                 file.Contains(value: $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") ||
                 file.Contains(
                 comparisonType: StringComparison.OrdinalIgnoreCase,
-                value: $"{Path.DirectorySeparatorChar}src{Path.DirectorySeparatorChar}Web.Functions{Path.DirectorySeparatorChar}"
+                value: $"{Path.DirectorySeparatorChar}src{Path.DirectorySeparatorChar}Puck.Azure.Functions{Path.DirectorySeparatorChar}"
             )
             ) {
                 continue;

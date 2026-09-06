@@ -10,7 +10,7 @@ internal enum CosimEventKind : byte {
 
 /// <summary>
 /// One fixed 32-byte little-endian record of the co-simulation trace format shared with SameBoy's <c>sb-trace events</c>
-/// mode (<c>D:\Source\ByteTerrace\Temp\SameBoy\trace_main.c</c>): 8 bytes cycle (the master T-cycle, 4&#8201;MHz, since
+/// mode (the external tracer's <c>trace_main.c</c>): 8 bytes cycle (the master T-cycle, 4&#8201;MHz, since
 /// reset) + 1 byte <see cref="CosimEventKind"/> + 7 reserved zero bytes + 16 bytes of kind-specific payload. KEEP IN
 /// SYNC with trace_main.c's <c>write_event</c>/<c>on_execution</c>/<c>run_events</c>.
 /// <list type="bullet">

@@ -39,7 +39,7 @@
     -->
     <PropertyGroup>
         <PuckArchitectureGateEnabled Condition="'$(PuckArchitectureGateEnabled)' == '' AND $(MSBuildProjectFullPath.Contains('$([System.IO.Path]::DirectorySeparatorChar)experimental$([System.IO.Path]::DirectorySeparatorChar)'))">false</PuckArchitectureGateEnabled>
-        <PuckArchitectureGateEnabled Condition="'$(PuckArchitectureGateEnabled)' == '' AND $(MSBuildProjectFullPath.Contains('$([System.IO.Path]::DirectorySeparatorChar)src$([System.IO.Path]::DirectorySeparatorChar)Web.Functions$([System.IO.Path]::DirectorySeparatorChar)'))">false</PuckArchitectureGateEnabled>
+        <PuckArchitectureGateEnabled Condition="'$(PuckArchitectureGateEnabled)' == '' AND $(MSBuildProjectFullPath.Contains('$([System.IO.Path]::DirectorySeparatorChar)src$([System.IO.Path]::DirectorySeparatorChar)Puck.Azure.Functions$([System.IO.Path]::DirectorySeparatorChar)'))">false</PuckArchitectureGateEnabled>
         <PuckArchitectureGateEnabled Condition="'$(PuckArchitectureGateEnabled)' == ''">true</PuckArchitectureGateEnabled>
     </PropertyGroup>
 

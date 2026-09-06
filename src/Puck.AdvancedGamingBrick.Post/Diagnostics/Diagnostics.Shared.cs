@@ -1,6 +1,6 @@
 namespace Puck.AdvancedGamingBrick.Post;
 
-// Helpers shared across the per-mode Diagnostics partial-class files: CLI arg parsing, the ROM-load-and-direct-boot
+// Helpers shared across the per-mode Diagnostics partial-class files: the ROM-load-and-direct-boot
 // shortcut most single-ROM inspectors start from, and the cycle-parity co-sim pre-flight gate.
 internal sealed partial class Diagnostics {
     /// <summary>

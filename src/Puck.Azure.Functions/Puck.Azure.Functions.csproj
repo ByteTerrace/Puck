@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <AssemblyName>Puck.Azure.Functions</AssemblyName>
+        <AzureFunctionsVersion>v4</AzureFunctionsVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <IsAotCompatible>false</IsAotCompatible>
+        <Nullable>enable</Nullable>
+        <OutputType>Exe</OutputType>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Composition roots</PuckLayer>
+        <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+        <RootNamespace>Puck.Azure.Functions</RootNamespace>
+        <TargetFramework>net10.0</TargetFramework>
+        <UserSecretsId>5fb26ab1-d108-450e-bf40-69f6acd92eb9</UserSecretsId>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Attestation\Puck.Attestation.csproj" />
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+        <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Blobs" Version="[1.*,1.5.2)" />
+        <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Keys" Version="[1.*,1.6.2)" />
+        <!-- Direct only to float past 1.17.1, which declares Azure.Identity.OnBehalfOfCredential that Azure.Core 1.60
+             also declares; transitively Microsoft.Extensions.Azure pins the colliding floor. -->
+        <PackageReference Include="Azure.Identity" Version="[1.*,2.0)" />
+        <PackageReference Include="Azure.Monitor.OpenTelemetry.Exporter" Version="[1.*,1.8.0)" />
+        <PackageReference Include="Azure.Storage.Blobs" Version="[12.*,13.0)" />
+        <PackageReference Include="Azure.ResourceManager.ResourceGraph" Version="[1.*,2.0)" />
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="[10.*,11.0)" />
+        <PackageReference Include="Microsoft.Azure.AppConfiguration.Functions.Worker" Version="[8.*,9.0)" />
+        <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="[2.*,3.0)" />
+        <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.EventGrid" Version="[3.*,4.0)" />
+        <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="[2.*,3.0)" />
+        <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Mcp" Version="[1.*,2.0)" />
+        <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Storage.Blobs" Version="[6.*,7.0)" />
+        <PackageReference Include="Microsoft.Azure.Functions.Worker.OpenTelemetry" Version="[1.*,2.0)" />
+        <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="[2.*,3.0)" />
+        <PackageReference Include="Microsoft.Azure.StackExchangeRedis" Version="[3.*,4.0)" />
+        <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="[10.*,11.0)" />
+        <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="[10.*,11.0)" />
+        <PackageReference Include="Microsoft.FeatureManagement" Version="[4.*,5.0)" />
+        <PackageReference Include="Microsoft.Graph" Version="[6.*,7.0)" />
+        <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="[1.*,2.0)" />
+    </ItemGroup>
+</Project>

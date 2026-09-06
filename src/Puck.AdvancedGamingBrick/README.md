@@ -68,6 +68,44 @@ A forced flush persists the current save even when its emulated flag is clean.
 
 ## 🚀 Quick start
 
+For a .NET 10 application with its own update loop, reference
+`ByteTerrace.Puck.AdvancedGamingBrick` and construct the synchronous core.
+NuGet supplies its managed dependencies; no Puck application, DI registration,
+window, GPU backend, worker thread, or environment configuration is required.
+
+```csharp
+using Puck.AdvancedGamingBrick;
+using Puck.Abstractions.Machines;
+
+using var core = new AdvancedGamingBrickCore(
+    configuration: new AgbMachineConfiguration(
+        bios: File.ReadAllBytes(args[0]), // caller-supplied 16 KiB BIOS
+        rom: File.ReadAllBytes(args[1])));
+
+core.ConfigureAudio(sampleRate: 48_000);
+core.ApplyInput(input: new MachinePadState());
+core.RunCycles(cycles: 280_896); // one nominal native frame at 16,777,216 Hz
+uint[] pixels = core.Framebuffer.ToArray(); // 240 × 160, packed 0x00RRGGBB
+short[] audio = new short[4096];
+int sampleCount = core.DrainAudioSamples(destination: audio); // interleaved L/R
+```
+
+Supply `savePath` to opt into file-backed saves. With its default `null`,
+saves stay in memory; `core.Instance.GetRequiredService<AgbCartridge>()`
+exposes `SaveData` and `LoadSave` for a host's own persistence service.
+The shared [core hosting contract](../Puck.GamingBricks/README.md#synchronous-core-hosting)
+covers threading, buffer lifetime, cycle pacing, audio and snapshots.
+
+`AgbMachineConfiguration.Options` takes an immutable `AgbMachineOptions`.
+`DisableRtc` and `DisablePrefetch` are diagnostic hardware overrides, both
+off by default. `BusTrace` is an optional synchronous `Action<string>`;
+route it to your own logging sink. Each machine gets its own settings and
+forks retain them. Effective RTC and prefetch behavior participates in typed
+snapshot identity; the observational trace sink does not. A shared trace sink
+must handle concurrent calls if the host steps forks concurrently.
+
+For Puck's queued screen-machine adapter:
+
 ```csharp
 using Puck.Abstractions.Machines;
 using Puck.AdvancedGamingBrick;
@@ -83,10 +121,12 @@ IScreenMachine machine = engine.Create(
 ```
 
 `AgbMachineFactory.Create` is the lower-level path `AdvancedMachineHost`
-itself builds on: it takes an `AgbMachineConfiguration` (BIOS + ROM bytes)
+itself builds on: it takes an `AgbMachineConfiguration` (BIOS + ROM bytes + options)
 and an optional composition callback for pre-registering a decorating or
 test-only subsystem — a tracing bus, a flat test bus — before the standard
-`TryAddScoped` registrations defer to it.
+`TryAddScoped` registrations defer to it. The factory returns an unbooted
+machine; call `DirectBoot` for the seeded cartridge handoff or step it from
+reset to execute the supplied BIOS. The synchronous core always direct-boots.
 
 ## 📋 Core types
 
@@ -115,7 +155,7 @@ Tier A covers CPU/bus smoke vectors, determinism, state round trip, fork
 determinism, save round trip, queued-host backpressure, throughput, and
 zero-alloc-per-frame with no external assets; Tier B adds conformance
 CPU/save/misc suites, an ARM fuzz corpus, render hashes, and an accuracy
-suite (`--roms`/`PUCK_AGB_TESTROMS`, `--games`); see the battery's own README
+suite (`--roms`, `--games`); see the battery's own README
 for tier C and every diagnostic switch. `Puck.GamingBricks.Tests` exercises
 the shared serialization/fork/queued-host substrate this core builds on.
 

@@ -22,7 +22,9 @@ signatures, parameters, return values, and exceptions.
 | `PostBattery<TContext>` | Runs an ordered `IPostStage<TContext>` list, isolating each stage's exceptions as `Infra`, into a `PostReport`. |
 | `PostReport` | The folded per-stage results, exit code, and rendered table for one battery run. |
 | `HashDivergenceReport` | Snapshot-hashes two machines and, on a mismatch, prints the component/offset localization and hex windows — the loop and `DescribeDivergence` stay per-brick. |
-| `CommandLineArguments` | `Value(args, name)` looks up a flag's following value. |
+| `CommandLineArguments` | `Value(args, name)` looks up a flag's following value; `TryValidateValues` rejects missing values for a known set of flags. |
+| `CorpusManifest` | Resolves explicit corpus paths or the pinned cache; `Load(path, cacheRoot)` sets the cache used for both fetch and resolution. Both runners expose `--corpus-cache`. |
+| `CoreEmbeddingProbe` | Checks synchronous core input, video, audio, state replay and lookahead without host infrastructure. |
 
 ## Not shared
 

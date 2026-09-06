@@ -4,10 +4,12 @@
         <Project Path="src/Puck.AdvancedGamingBrick.Forge/Puck.AdvancedGamingBrick.Forge.csproj" />
         <Project Path="src/Puck.AdvancedGamingBrick.Post/Puck.AdvancedGamingBrick.Post.csproj" />
         <Project Path="src/Puck.AdvancedGamingBrick/Puck.AdvancedGamingBrick.csproj" />
+        <Project Path="src/Puck.Actors/Puck.Actors.csproj" />
         <Project Path="src/Puck.Analyzers/Puck.Analyzers.csproj" />
         <Project Path="src/Puck.Assets/Puck.Assets.csproj" />
         <Project Path="src/Puck.Attestation/Puck.Attestation.csproj" />
         <Project Path="src/Puck.Audio/Puck.Audio.csproj" />
+        <Project Path="src/Puck.Azure.Functions/Puck.Azure.Functions.csproj" />
         <Project Path="src/Puck.Cli/Puck.Cli.csproj" />
         <Project Path="src/Puck.Commands/Puck.Commands.csproj" />
         <Project Path="src/Puck.DirectX.Presentation/Puck.DirectX.Presentation.csproj" />

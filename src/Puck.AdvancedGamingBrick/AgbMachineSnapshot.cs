@@ -5,7 +5,7 @@ namespace Puck.AdvancedGamingBrick;
 /// <summary>
 /// The identity a snapshot is stamped with so it refuses to load into a mismatched machine — the pre-flight guard the
 /// survey names as preventing a documented top cause of desync (loading a snapshot against the wrong ROM/BIOS pair).
-/// It fingerprints the format version, the BIOS image, and the cartridge ROM; a restore compares this against the
+/// It fingerprints the format version, the BIOS image, the cartridge ROM and the effective RTC/prefetch options; a restore compares this against the
 /// live machine's identity and faults on any difference rather than silently corrupting state.
 /// </summary>
 /// <param name="Version">The snapshot format version.</param>
@@ -42,7 +42,7 @@ public readonly record struct AgbMachineIdentity(int Version, ulong BiosHash, ul
 /// its bytes (through a shared <see cref="SnapshotImage"/>) and aliases nothing in the live machine, so it can be held
 /// indefinitely, restored into the machine it came from to rewind, or loaded into a forked sibling of the same identity
 /// to diverge a run. The captured instant and machine identity travel with it: a restore repositions the master clock
-/// exactly and refuses a machine whose BIOS/ROM identity differs.
+/// exactly and refuses a machine whose BIOS/ROM or effective hardware options differ.
 /// </summary>
 public sealed class AgbMachineSnapshot : MachineSnapshot<AgbMachineSnapshot, AgbMachineIdentity, long> {
     internal AgbMachineSnapshot(AgbMachineIdentity identity, long takenAt, SnapshotImage image)

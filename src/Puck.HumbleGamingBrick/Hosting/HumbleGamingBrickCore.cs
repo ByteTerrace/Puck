@@ -7,8 +7,8 @@ namespace Puck.HumbleGamingBrick;
 /// The SM83-family GamingBrick core adapted to the machine-neutral <see cref="IQueuedMachineCore"/>: it assembles the
 /// machine, loads any battery save, and exposes the run/framebuffer/input/save surface a <see cref="QueuedMachineWorker"/>
 /// drives, plus the bus peek/poke the host surfaces through <see cref="IMachineMemoryPeek"/>. Every machine-facing call —
-/// stepping and the debug peek/poke alike — runs on the worker's single execution thread, so a peek/poke never races the
-/// running core.
+/// stepping and the debug peek/poke alike — must run on one owning thread (a queued worker or the caller's own loop),
+/// so a peek/poke never races the running core.
 /// </summary>
 public sealed class HumbleGamingBrickCore : IQueuedMachineCore {
     // The machine's CPU T-cycle rate (2^22 per second); with EngineTicks.PerSecond it forms the exact rational the tick
@@ -43,7 +43,8 @@ public sealed class HumbleGamingBrickCore : IQueuedMachineCore {
     /// No renderer or background worker is required. Drive and dispose the core on its owning thread.</summary>
     /// <param name="configuration">The hardware model, cartridge, optional boot ROM, and tick resolution.</param>
     /// <param name="savePath">Optional battery-save path; null keeps saves in memory.</param>
-    /// <param name="dmgSpeed">Whether to hold the reported CPU-cycle rate at the monochrome rate.</param>
+    /// <param name="dmgSpeed">Whether to hold the reported pacing rate at 4,194,304 LCD dots/second, including
+    /// double speed. Choose true when using <see cref="CyclesPerSecond"/> to pace a hardware-speed host loop.</param>
     public HumbleGamingBrickCore(MachineConfiguration configuration, string? savePath = null, bool dmgSpeed = false) {
         m_savePath = savePath;
         m_dmgSpeed = dmgSpeed;
@@ -85,7 +86,9 @@ public sealed class HumbleGamingBrickCore : IQueuedMachineCore {
             pad: in input,
             tiltSensor: m_tiltSensor
         );
-    /// <inheritdoc/>
+    /// <summary>Advances by a budget of LCD dots, carrying instruction overshoot into the next call. CPU double
+    /// speed is handled inside the machine; nonpositive budgets do nothing.</summary>
+    /// <param name="cycles">The master-clock budget in LCD dots.</param>
     public void RunCycles(long cycles) {
         if (cycles > 0) {
             m_machine.Machine.Run(tCycles: ((ulong)cycles));

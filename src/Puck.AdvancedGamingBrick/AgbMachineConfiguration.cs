@@ -1,7 +1,7 @@
 namespace Puck.AdvancedGamingBrick;
 
 /// <summary>
-/// The per-machine startup configuration: the BIOS image the machine boots with and the cartridge ROM image it runs.
+/// The per-machine startup configuration: the BIOS image, cartridge ROM and explicit diagnostic options.
 /// Both are immutable inputs the machine never writes back, so a fork rebuilds an identical sibling from the very same
 /// configuration — the same BIOS and ROM bytes shared verbatim — and the two machines differ only in the state they go
 /// on to accumulate. It is retained by an <see cref="AgbMachineInstance"/> precisely so a fork can reconstruct the

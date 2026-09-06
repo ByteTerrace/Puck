@@ -2,6 +2,7 @@ using System.CommandLine;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Puck.Actors;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Launcher;
@@ -86,11 +87,10 @@ builder.Services.AddHostedService(implementationFactory: static sp => new SiloSt
     routing: sp.GetRequiredService<SiloConsoleRouting>()
 ));
 builder.UseOrleans(configureDelegate: siloBuilder => {
-    if (definition!.Clustering.Kind == WorldSiloClusteringKind.Localhost) {
-        siloBuilder.UseLocalhostClustering();
-    } else {
-        Console.Error.WriteLine(value: "clustering.kind 'table' is not wired in this build — Storage Table clustering is deployment-only and deferred.");
-    }
+    siloBuilder.UsePuckOrleansClustering(
+        configuration: builder.Configuration,
+        defaultServiceId: "puck-world-silo"
+    );
 });
 // Every stdout/stderr line a silo run writes from here on carries a '[<row>] '/'[silo] ' prefix (SiloConsoleTagging
 // handles verb output directly; this writer catches engine narration written straight to Console.Out/Error).

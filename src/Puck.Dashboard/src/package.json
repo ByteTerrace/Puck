@@ -1,0 +1,16 @@
+{
+    "name": "workspace",
+    "private": true,
+    "workspaces": [
+        "host",
+        "portal"
+    ],
+    "scripts": {
+        "build": "npm --prefix host run build && npm --prefix portal run build",
+        "restore": "npm --prefix host ci && npm --prefix portal ci",
+        "stage": "node ../scripts/stageDeploy.mjs"
+    },
+    "devDependencies": {
+        "@rolldown/binding-win32-x64-msvc": "^1.2.7"
+    }
+}

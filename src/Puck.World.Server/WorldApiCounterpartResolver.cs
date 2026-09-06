@@ -33,7 +33,7 @@ public sealed class WorldApiCounterpartResolver : IWorldNeighbourResolver {
 
     private const string OwnerKeyPrefix = "owner/";
     /// <summary>The platform API's exposed-scope request — read from the app registration's client id
-    /// (<c>e6a7ab9f-19af-4eb0-b23f-a5bde0f90eb7</c>, <c>src/Web.Functions/configuration.json</c>'s own audience);
+    /// (<c>e6a7ab9f-19af-4eb0-b23f-a5bde0f90eb7</c>, <c>src/Puck.Azure.Functions/configuration.json</c>'s own audience);
     /// this repository carries no independent record of the App ID URI, so this is asserted from that client id per
     /// the standard <c>api://{clientId}/{scope}</c> exposed-API convention, not independently verified against a
     /// live app registration.</summary>

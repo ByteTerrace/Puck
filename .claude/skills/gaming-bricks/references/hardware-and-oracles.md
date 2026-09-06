@@ -222,7 +222,7 @@ one lag constant in isolation.
 - The pixel pipeline carries the same three-dot offset the register edges do, and
   the `--cosim` `ppu-pixel` walk cannot show it: that walk compares content only
   and reports our own cycle. Measure the offset with SameBoy's per-dot trace
-  (`SAMEBOY_PX_TRACE`, whose `abs=` is an exact master T-cycle) against the pixel
+  (external display instrumentation whose `abs=` is an exact master T-cycle) against the pixel
   records' own stamps in `puck.cosim.bin`. On `lycint_dmgpalette_during_m3_1` at
   LY 1 our column x pops three master cycles after SameBoy's, which is why we
   paint the mid-mode-3 palette from x 155 where SameBoy paints from x 157 — its

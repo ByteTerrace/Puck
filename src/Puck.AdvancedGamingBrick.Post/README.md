@@ -29,6 +29,7 @@ BIOS the BIOS-dependent stages skip.
 | `--solar-rom <file>` | A commercial solar-sensor cartridge for `solar-replay`; skips without it. |
 | `--artifacts <directory>` | Override `artifacts/agb-post`. |
 | `--fetch-corpora` | Fill the corpus cache from the manifest and exit. |
+| `--corpus-cache <directory>` | Cache root used for fetching and resolving corpora; default is `Puck/corpora` under the OS local application-data directory. |
 
 Exit code 0 means every selected stage passed or skipped. Exit code 1 means a
 check failed. Exit code 2 means infrastructure prevented a stage from running.
@@ -55,12 +56,17 @@ sharing to prove a failed replacement preserves the old save and retries
 without another emulated write. These stages use explicit zero-filled BIOS
 images only with BIOS-independent cartridges.
 
+`embedding` checks the synchronous public core without host infrastructure,
+including per-machine option isolation, trace callbacks, configured forks,
+typed snapshot compatibility, input, video, audio and replay.
+
 ## External assets
 
 None of these ship with the repository; each stage skips cleanly when its asset
 is absent. The two public corpora are pinned by archive, version, and SHA-256
 in [corpora.json](corpora.json) and fetched once into
-`%LOCALAPPDATA%\Puck\corpora` (`~/.local/share/Puck/corpora` elsewhere);
+`Puck/corpora` under the OS local application-data directory, or the explicit
+`--corpus-cache <directory>`;
 everything else is a per-machine file named on the command line.
 
 | Asset | Source | Configuration |
@@ -77,6 +83,8 @@ everything else is a per-machine file named on the command line.
 Diagnostics that depend on retail BIOS timing reject replacement or unknown
 images unless `--allow-replacement-bios` is supplied deliberately. Missing
 optional assets skip the corresponding stage.
+An explicitly supplied `--bios` must be readable and exactly 16 KiB; an invalid
+file exits 2 rather than silently selecting the stub.
 
 ## Performance diagnostics
 
@@ -158,19 +166,32 @@ machines and identifies the first differing snapshot section and byte. Use
 
 ## Co-simulation
 
-`--lockstep` compares Puck with the configured `ares-cosim` co-simulator (its
-path from `PUCK_ARES_COSIM`). `--trace-cycles` compares instruction timing with
+`--lockstep <rom> <steps> [direct] --ares <executable> --bios <image>` compares
+Puck with an explicitly supplied `ares-cosim` co-simulator. Both executable
+and BIOS paths are required. `--trace-cycles` compares instruction timing with
 the cosim oracle. Normalize the traces before interpreting a mismatch:
 
 - the oracle's cumulative cycle count restarts at frame boundaries, so compare
   per-instruction deltas;
 - Puck's pipeline representation exposes PC four bytes ahead of the oracle's trace;
-- direct-boot and full-BIOS runs have different initial state. Set
-  `PUCK_AGB_FULLBOOT=1` only when both sides are configured for the BIOS path.
+- direct-boot and full-BIOS runs have different initial state. Lockstep boots
+  the BIOS by default; its positional `direct` selects direct boot on both
+  sides. The `--render` and `--probe` inspectors default to direct boot and
+  accept `--full-boot` to start from BIOS reset.
 
 Use a minimal self-checking ROM when isolating one timing rule. Store the result
 in emulated memory and compare the observable value before using an instruction
 trace to explain it.
+
+
+
+extra failure-detail logging for matching accuracy-suite names; `--ags-trace`
+enables detailed AGS tracing. `--no-rtc`, `--no-prefetch` and `--bus-trace`
+map to `AgbMachineOptions`; the trace goes to standard error. These overrides
+are supported by `--render`, `--probe`, `--ags`, `--accuracy-suite`,
+`--lockstep`, `--pctrace`, `--statetrace`, `--trace-cycles`, `--trace-crash`,
+`--iodump` and `--link-init-trace`. Battery, benchmark, oracle and snapshot
+comparison runs use normal hardware settings and reject these overrides.
 
 ## Accuracy workflow
 

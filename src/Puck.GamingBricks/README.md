@@ -57,6 +57,49 @@ returns its underlying sibling to the pool instead of tearing its container
 down, and the next `Fork()` call rents it back and restores into it — a
 restore, not a container build.
 
+## Synchronous core hosting
+
+`IQueuedMachineCore` also works in a host's own synchronous update loop.
+Construct [AdvancedGamingBrickCore](../Puck.AdvancedGamingBrick/README.md#-quick-start)
+or [HumbleGamingBrickCore](../Puck.HumbleGamingBrick/README.md#-quick-start)
+with ROM bytes and explicit configuration. The name describes the adapter
+contract; constructing a core starts no worker or rendering infrastructure.
+
+- Keep stepping, input, output, snapshots and disposal on one owning thread.
+  Separate cores can run concurrently. Keep supplied ROM/configuration buffers
+  immutable for the lifetime of the core and its forks.
+- Apply `MachinePadState` before advancing. `RunCycles` takes master-clock
+  cycles (AGB CPU cycles, HGB LCD dots) and
+  completes the instruction in flight, so a call can overshoot its budget.
+  Carry fractional pacing remainders in a long-running host. HGB carries
+  instruction overshoot internally; AGB callers subtract the previous
+  call's overshoot from the next budget. AGB's rate is
+  16,777,216 cycles/second; HGB's hardware rate is 4,194,304 LCD dots/second,
+  including CGB double speed. HGB's `CyclesPerSecond` retains the queued
+  host's speed policy: pass `dmgSpeed: true` to keep that reported rate at
+  the dot rate when using it for your host's pacing. `NativeFrameIndex` is
+  based on the master clock and remains usable while the LCD is disabled.
+- `Framebuffer` is a live, row-major `0x00RRGGBB` span: 240 × 160 for AGB,
+  160 × 144 for HGB. Copy it before another thread uses it or the core advances.
+  Alpha is absent; set it when uploading to a format that requires it.
+- Call `ConfigureAudio` with the output rate, drain signed 16-bit interleaved
+  stereo samples regularly into an even-sized buffer, and pass only the
+  returned sample count to the audio device. The returned count includes
+  left and right separately. Rate 0 disables output. Audio buffers are
+  presentation state and are cleared on restore.
+- `CaptureState`/`RestoreState` reuse a caller-owned buffer for **same-core**
+  rewind. These raw bytes carry no identity guard; do not load them into a
+  different ROM, model, BIOS or configuration. Use the machine's typed
+  `Snapshot`/`Restore` API when identity validation is needed. Dispose each
+  `CreateLookahead()` rental before disposing its source core.
+- Omit `savePath` for in-memory operation and use the cartridge's export/import
+  API for a custom save service. File-backed hosts should call `FlushSave`
+  periodically; disposal performs a final flush. Optional file I/O failures
+  are reported to standard error.
+
+The `embedding` stage in each Post battery exercises this path without a
+worker, graphics backend or audio device.
+
 ## 🎮 Queued screen-machine hosting
 
 `QueuedMachineHost` is the base class exposed to machine-specific adapters. A

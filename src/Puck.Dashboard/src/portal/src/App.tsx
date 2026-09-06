@@ -1,0 +1,255 @@
+/*
+    - https://mantine.dev/core/package/
+    - https://redux-toolkit.js.org/
+    - https://remixicon.com/
+    - https://r3f.docs.pmnd.rs/
+    - https://threejs.org/
+    - https://usehooks.com/
+*/
+
+import {
+  localStorageColorSchemeManager,
+  Anchor,
+  AppShell,
+  Badge,
+  Box,
+  Burger,
+  Button,
+  Container,
+  Flex,
+  Group,
+  Loader,
+  MantineProvider,
+  NavLink,
+  Tooltip,
+} from "@mantine/core";
+import { useDisclosure } from "@mantine/hooks";
+import { RiDatabase2Fill, RiHistoryLine, RiHome9Fill } from "@remixicon/react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { useSelector } from "react-redux";
+import { HostContextValue } from "../../shared/interfaces";
+import { OnboardingState } from "../../shared/onboarding";
+import { createGraphClient } from "./clients/graphClientApi";
+import GraphClientProvider from "./clients/GraphClientProvider";
+import logoUrl from "/assets/logo.png";
+
+const AuditView = lazy(() => import("./components/AuditView"));
+const DataExplorer = lazy(() => import("./components/DataExplorer"));
+const WorldStudio = lazy(() => import("./components/world/WorldStudio"));
+
+import "@mantine/core/styles.css";
+
+const colorSchemeManager = localStorageColorSchemeManager({
+  key: "byteterrace.mantine.theme.colorScheme",
+});
+
+type Section = "audit" | "data" | "studio" | "home";
+
+// Sections are real routes so refreshes, deep links, and back/forward behave
+// the way a site is expected to.
+const sectionFromLocation = (): Section => {
+  if (location.pathname.startsWith("/audit")) {
+    return "audit";
+  }
+
+  if (location.pathname.startsWith("/data")) {
+    return "data";
+  }
+
+  return "studio";
+};
+
+function OnboardingIndicator() {
+  const onboarding = useSelector(
+    (state: { onboarding?: OnboardingState }) => state.onboarding,
+  );
+
+  if (!onboarding) {
+    return null;
+  }
+
+  switch (onboarding.status) {
+    case "checking":
+    case "onboarding":
+      return (
+        <Badge
+          color="yellow"
+          leftSection={<Loader color="yellow" size={12} />}
+          variant="light"
+        >
+          Setting up your account…
+        </Badge>
+      );
+    case "error":
+      return (
+        <Tooltip label={onboarding.error ?? "Unknown error."}>
+          <Badge color="red" variant="light">
+            Account setup failed
+          </Badge>
+        </Tooltip>
+      );
+    default:
+      return null;
+  }
+}
+
+function App({ context }: { context?: HostContextValue }) {
+  const tokenCredential = context?.serviceProvider?.tryGet?.("tokenCredential") ?? ({
+    getToken: async () => ({ token: "", expiresOnTimestamp: 0 }),
+  } as any);
+  const graphClient = useMemo(
+    () => createGraphClient(tokenCredential),
+    [tokenCredential]
+  );
+  const [opened, { toggle }] = useDisclosure();
+  const [activeSection, setActiveSection] = useState<Section>(sectionFromLocation);
+  const userObjectId = context?.activeAccount?.localAccountId;
+
+  useEffect(() => {
+    const syncToLocation = () => setActiveSection(sectionFromLocation());
+
+    window.addEventListener("byteterrace-share", syncToLocation);
+    window.addEventListener("popstate", syncToLocation);
+
+    return () => {
+      window.removeEventListener("byteterrace-share", syncToLocation);
+      window.removeEventListener("popstate", syncToLocation);
+    };
+  }, []);
+
+  const navigateTo = (section: Section) => {
+    history.pushState(
+      null,
+      "",
+      "audit" === section ? "/audit" : "data" === section ? "/data" : "/",
+    );
+    setActiveSection(section);
+  };
+
+  return (
+    <GraphClientProvider graphClient={graphClient}>
+      <MantineProvider
+        colorSchemeManager={colorSchemeManager}
+        defaultColorScheme={"auto"}
+      >
+        <AppShell //
+          header={{ height: 60 }}
+          navbar={{
+            breakpoint: "sm",
+            collapsed: { mobile: !opened },
+            width: 240,
+          }}
+          padding="md"
+        >
+          <AppShell.Header>
+            <Container fluid h="100%">
+              <Group h="100%" justify="space-between" wrap="nowrap">
+                <Flex align="center" justify="flex-start">
+                  <Burger
+                    hiddenFrom="sm"
+                    onClick={toggle}
+                    opened={opened}
+                    size="sm"
+                  />
+                  <Anchor
+                    href="#"
+                    style={{ color: "var(--mantine-color-text)" }}
+                    underline="never"
+                  >
+                    <Flex align="center" gap="sm" justify="center">
+                      <img alt="Home" src={logoUrl} width={48} />
+                      <Box visibleFrom="sm" fw={700} style={{ letterSpacing: 1 }}>PUCK STUDIO</Box>
+                    </Flex>
+                  </Anchor>
+                </Flex>
+                <Flex align="center" justify="flex-end">
+                  <Group wrap="nowrap">
+                    {context?.isSignedIn ? (
+                      <>
+                        <OnboardingIndicator />
+                        <Button onClick={context.signOut} variant="default">
+                          Sign Out
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button onClick={() => context?.signIn?.()} variant="default" disabled={!context?.signIn}>
+                          {context?.signIn ? "Sign In" : "Local Studio Mode"}
+                        </Button>
+                      </>
+                    )}
+                  </Group>
+                </Flex>
+              </Group>
+            </Container>
+          </AppShell.Header>
+          <AppShell.Navbar>
+            <Box ml={12} mt={12}>
+              <NavLink
+                active={"studio" === activeSection || "home" === activeSection}
+                href="/"
+                label="World Studio"
+                leftSection={<RiHome9Fill />}
+                onClick={(event) => {
+                  event.preventDefault();
+                  navigateTo("studio");
+                }}
+              />
+              <NavLink
+                active={"data" === activeSection}
+                href="/data"
+                label="Cloud Storage"
+                leftSection={<RiDatabase2Fill />}
+                onClick={(event) => {
+                  event.preventDefault();
+                  navigateTo("data");
+                }}
+              />
+              <NavLink
+                active={"audit" === activeSection}
+                href="/audit"
+                label="Audit Trail"
+                leftSection={<RiHistoryLine />}
+                onClick={(event) => {
+                  event.preventDefault();
+                  navigateTo("audit");
+                }}
+              />
+            </Box>
+          </AppShell.Navbar>
+          <AppShell.Main>
+            {"data" === activeSection ? (
+              context?.isSignedIn && userObjectId ? (
+                <Suspense fallback="loading…">
+                  <DataExplorer
+                    tokenCredential={tokenCredential}
+                    userObjectId={userObjectId}
+                  />
+                </Suspense>
+              ) : (
+                "Sign in to explore your data."
+              )
+            ) : "audit" === activeSection ? (
+              context?.isSignedIn && userObjectId ? (
+                <Suspense fallback="loading…">
+                  <AuditView
+                    tokenCredential={tokenCredential}
+                    userObjectId={userObjectId}
+                  />
+                </Suspense>
+              ) : (
+                "Sign in to see your audit history."
+              )
+            ) : (
+              <Suspense fallback="loading World Studio…">
+                <WorldStudio />
+              </Suspense>
+            )}
+          </AppShell.Main>
+        </AppShell>
+      </MantineProvider>
+    </GraphClientProvider>
+  );
+}
+
+export default App;

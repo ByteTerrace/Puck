@@ -1,0 +1,63 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "condition": {
+            "defaultValue": "",
+            "type": "string"
+        },
+        "description": {
+            "type": "string"
+        },
+        "name": {
+            "type": "string"
+        },
+        "principalId": {
+            "type": "string"
+        },
+        "principalType": {
+            "allowedValues": [
+                "Device",
+                "ForeignGroup",
+                "Group",
+                "ServicePrincipal",
+                "User",
+                ""
+            ],
+            "defaultValue": "",
+            "metadata": {
+                "description": "Optional. The principal type of the assigned principal ID."
+            },
+            "type": "string"
+        },
+        "roleDefinitionId": {
+            "type": "string"
+        },
+        "scope": {
+            "type": "string"
+        }
+    },
+    "resources": [
+        {
+            "apiVersion": "2022-04-01",
+            "name": "[parameters('name')]",
+            "properties": {
+                "condition": "[if(empty(parameters('condition')), null(), parameters('condition'))]",
+                "conditionVersion": "[if(empty(parameters('condition')), null(), '2.0')]",
+                "description": "[parameters('description')]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "[parameters('principalType')]",
+                "roleDefinitionId": "[parameters('roleDefinitionId')]"
+            },
+            "scope": "[parameters('scope')]",
+            "type": "Microsoft.Authorization/roleAssignments"
+        }
+    ],
+    "outputs": {
+        "roleAssignmentId": {
+            "type": "string",
+            "value": "[extensionResourceId(parameters('scope'), 'Microsoft.Authorization/roleAssignments', parameters('name'))]"
+        }
+    }
+}
+

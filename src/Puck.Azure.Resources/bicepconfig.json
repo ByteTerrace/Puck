@@ -1,0 +1,12 @@
+{
+  "moduleAliases": {
+    "br": {},
+    "ts": {
+        "bvm": {
+            "resourceGroup": "byteterrace",
+            "subscription": "fd49ea67-135b-449f-a62c-3e4b8d26d3d6"
+        }
+    }
+  }
+}
+

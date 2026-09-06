@@ -9,7 +9,7 @@ namespace Puck.GamingBricks.Post;
 /// The external corpora a battery reads, declared in a <c>corpora.json</c> beside its program: each names a release
 /// archive by URL, version, and SHA-256, and the directory inside the archive that is the corpus root. A corpus
 /// resolves, in order, to an explicit command-line root, else to its entry in the local cache
-/// (<c>%LOCALAPPDATA%/Puck/corpora/&lt;name&gt;/&lt;version&gt;</c>), else to nothing — in which case the stages that
+/// (under the OS local application-data directory unless a cache root is supplied), else to nothing — in which case the stages that
 /// need it skip. <see cref="Fetch"/> fills the cache from the archive, refusing an archive whose hash is not the
 /// declared one. The manifest is the only place a corpus's identity lives: bumping a version there is what changes
 /// which bytes every machine, including a build agent, measures against.
@@ -37,8 +37,13 @@ public sealed partial class CorpusManifest {
 
     private readonly IReadOnlyList<Corpus> m_corpora;
 
-    private CorpusManifest(IReadOnlyList<Corpus> corpora) =>
+    private CorpusManifest(IReadOnlyList<Corpus> corpora, string? cacheRoot) {
         m_corpora = corpora;
+        EffectiveCacheRoot = cacheRoot ?? CacheRoot;
+    }
+
+    /// <summary>Gets this manifest's explicitly configured cache root, or the OS default.</summary>
+    public string EffectiveCacheRoot { get; }
 
     /// <summary>Gets the declared corpora.</summary>
     public IReadOnlyList<Corpus> Corpora =>
@@ -63,8 +68,9 @@ public sealed partial class CorpusManifest {
     );
     /// <summary>Loads a manifest.</summary>
     /// <param name="path">The manifest file's path.</param>
+    /// <param name="cacheRoot">Cache directory; null uses the OS local application-data directory.</param>
     /// <returns>The manifest.</returns>
-    public static CorpusManifest Load(string path) {
+    public static CorpusManifest Load(string path, string? cacheRoot = null) {
         var dtos = (JsonSerializer.Deserialize(
             json: File.ReadAllText(path: path),
             jsonTypeInfo: CorpusJsonContext.Default.CorpusDtoArray
@@ -78,15 +84,16 @@ public sealed partial class CorpusManifest {
                 Sha256: dto.Sha256,
                 Version: dto.Version
             ))
-            .ToArray());
+            .ToArray(), cacheRoot: cacheRoot);
     }
 
     /// <summary>Returns the cached root directory a corpus resolves to, whether or not it exists yet.</summary>
     /// <param name="corpus">The corpus.</param>
+    /// <param name="cacheRoot">Cache directory; null uses the OS default.</param>
     /// <returns>The directory.</returns>
-    public static string CachedRoot(Corpus corpus) {
+    public static string CachedRoot(Corpus corpus, string? cacheRoot = null) {
         var version = Path.Combine(
-            path1: CacheRoot,
+            path1: cacheRoot ?? CacheRoot,
             path2: corpus.Name,
             path3: corpus.Version
         );
@@ -107,7 +114,7 @@ public sealed partial class CorpusManifest {
         using var client = new HttpClient();
 
         foreach (var corpus in m_corpora) {
-            var root = CachedRoot(corpus: corpus);
+            var root = CachedRoot(corpus: corpus, cacheRoot: EffectiveCacheRoot);
 
             if (Directory.Exists(path: root)) {
                 Console.Out.WriteLine(value: $"{corpus.Name} {corpus.Version}: cached at {root}");
@@ -129,7 +136,7 @@ public sealed partial class CorpusManifest {
             }
 
             var versionDirectory = Path.Combine(
-                path1: CacheRoot,
+                path1: EffectiveCacheRoot,
                 path2: corpus.Name,
                 path3: corpus.Version
             );
@@ -181,7 +188,7 @@ public sealed partial class CorpusManifest {
             b: name,
             comparisonType: StringComparison.Ordinal
         )) ?? throw new ArgumentException(message: $"corpora.json declares no corpus named '{name}'."));
-        var root = CachedRoot(corpus: corpus);
+        var root = CachedRoot(corpus: corpus, cacheRoot: EffectiveCacheRoot);
 
         return (Directory.Exists(path: root)
             ? root

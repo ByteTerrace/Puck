@@ -8,6 +8,10 @@ using Puck.HumbleGamingBrick.Post;
 // --accept-regressions, --accept-shrink, --accept-candidate, --require-assets). Every run writes its candidate ledger
 // beside its report; accepting it is a file copy under the refusal rules, never a second run.
 
+if (!CommandLineArguments.TryValidateValues(args: args, names: ["--corpus-cache"], error: out var optionError)) {
+    Console.Error.WriteLine(value: optionError);
+    return 2;
+}
 if (Diagnostics.TryRun(
     args: args,
     exitCode: out var diagnosticExitCode
@@ -45,7 +49,7 @@ var parallelism = int.Parse(
         name: "--parallelism"
     ) ?? "0")
 );
-var corpora = CorpusManifest.Load(path: CorpusManifest.BesideSource());
+var corpora = CorpusManifest.Load(path: CorpusManifest.BesideSource(), cacheRoot: CommandLineArguments.Value(args: args, name: "--corpus-cache"));
 
 // --fetch-corpora fills the local cache from the manifest's pinned archives and exits; a build agent runs it once per
 // cache key, a developer once per version bump.
@@ -53,7 +57,7 @@ if (args.Contains(
     comparer: StringComparer.OrdinalIgnoreCase,
     value: "--fetch-corpora"
 )) {
-    Console.Out.WriteLine(value: $"{corpora.Fetch()} corpus archive(s) fetched into {CorpusManifest.CacheRoot}");
+    Console.Out.WriteLine(value: $"{corpora.Fetch()} corpus archive(s) fetched into {corpora.EffectiveCacheRoot}");
 
     return 0;
 }

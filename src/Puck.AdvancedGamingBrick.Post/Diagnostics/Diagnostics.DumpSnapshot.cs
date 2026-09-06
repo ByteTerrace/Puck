@@ -11,7 +11,7 @@ internal sealed partial class Diagnostics {
     private int DumpSnapshot(string[] args) =>
         SnapshotDumpDiagnostic.Run<AgbMachineSnapshot, AgbMachineIdentity, long>(
             args: args,
-            capture: static (rom, _, frames) => {
+            capture: (rom, _, frames) => {
                 using var machine = PostMachine.Build(
                     bios: BiosImage,
                     rom: rom

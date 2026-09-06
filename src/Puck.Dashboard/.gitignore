@@ -1,0 +1,29 @@
+# Editor directories and files
+!.vscode/extensions.json
+*.esproj.user
+*.njsproj
+*.ntvs*
+*.sln
+*.suo
+*.sw?
+.DS_Store
+.idea
+.vs
+.vscode/*
+obj
+
+# Logs
+*.log
+lerna-debug.log*
+logs
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Node
+*.local
+dist
+dist-deploy
+dist-ssr
+node_modules

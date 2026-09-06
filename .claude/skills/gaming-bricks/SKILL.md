@@ -13,6 +13,13 @@ Post stages are authoritative; update stale skill guidance in the same change.
 ## Core invariants
 
 - Advance emulated state only from integer clocks and explicit inputs.
+- Keep configuration in constructor parameters or CLI options, never environment
+  variables. AGB diagnostic hardware/trace overrides live in `AgbMachineOptions`;
+  preserve them across forks and include behavioral options in typed snapshot identity.
+- Preserve direct embedding through the public synchronous `AdvancedGamingBrickCore`
+  and `HumbleGamingBrickCore` APIs and default factory composition. The shared
+  `Puck.GamingBricks` README owns the host contract; both Post `embedding` stages
+  exercise it without a worker, renderer or audio device.
 - Keep floating point and host timing beyond a one-way presentation seam.
 - Express console differences through capability gates, not forked SM83 cores.
 - Preserve snapshot, replay, fork, and cross-machine link determinism.

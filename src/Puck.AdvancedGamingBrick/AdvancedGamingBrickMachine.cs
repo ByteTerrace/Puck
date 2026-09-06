@@ -103,7 +103,7 @@ public sealed class AdvancedGamingBrickMachine : ISnapshotableMachine {
     public IAgbPpu Ppu => m_ppu;
     /// <summary>Gets the audio-processing unit.</summary>
     public IAgbApu Apu => m_apu;
-    /// <summary>Gets the identity a snapshot of this machine is stamped with (format version + BIOS/ROM fingerprint).</summary>
+    /// <summary>Gets the identity a snapshot of this machine is stamped with (format version, BIOS/ROM fingerprint and effective hardware options).</summary>
     public AgbMachineIdentity Identity => m_identity;
     /// <summary>Gets the current master-clock cycle counter.</summary>
     public long Cycles => m_scheduler.Now;
@@ -231,7 +231,7 @@ public sealed class AdvancedGamingBrickMachine : ISnapshotableMachine {
         }
     }
     /// <summary>Replaces this machine's entire state with a snapshot's, repositioning the master clock and every
-    /// component. Rejects a snapshot whose machine identity (format version / BIOS / ROM) does not match this
+    /// component. Rejects a snapshot whose machine identity (format version / BIOS / ROM / hardware options) does not match this
     /// machine, and faults if the restore does not consume the snapshot exactly — either signals a save/load field
     /// drift or a mismatched image rather than silently loading wrong state.</summary>
     /// <param name="snapshot">The snapshot to restore.</param>
@@ -243,7 +243,7 @@ public sealed class AdvancedGamingBrickMachine : ISnapshotableMachine {
         ArgumentNullException.ThrowIfNull(argument: snapshot);
 
         if (snapshot.Identity != m_identity) {
-            throw new InvalidOperationException(message: "Snapshot identity (format version / BIOS / ROM) does not match this machine; refusing to restore a mismatched image.");
+            throw new InvalidOperationException(message: "Snapshot identity (format version / BIOS / ROM / hardware options) does not match this machine; refusing to restore a mismatched image.");
         }
 
         var reader = snapshot.OpenReader();

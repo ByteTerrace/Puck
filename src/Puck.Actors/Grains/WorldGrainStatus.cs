@@ -1,4 +1,4 @@
-namespace Puck.World.Silo;
+namespace Puck.Actors.Grains;
 
 /// <summary>One grain's own read-back of its row — the payload <see cref="IWorldGrain.StatusAsync"/> answers with.</summary>
 [GenerateSerializer]

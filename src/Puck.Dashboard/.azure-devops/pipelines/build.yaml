@@ -1,0 +1,53 @@
+pool:
+  name: "bytrcmdpp000"
+
+schedules:
+  - cron: "0 18 * * *"
+    always: true
+    displayName: "Daily Build"
+    branches:
+      include:
+        - main
+
+trigger: none
+
+steps:
+  - checkout: self
+    clean: true
+    displayName: "checkout repository"
+    enabled: true
+    fetchDepth: 1
+    timeoutInMinutes: 3
+  - task: UseNode@1
+    displayName: "use Node 24.x"
+    enabled: true
+    inputs:
+      version: "24.x"
+  - task: Npm@1
+    displayName: "npm run restore"
+    enabled: true
+    inputs:
+      command: "custom"
+      customCommand: "run restore"
+      workingDir: "src"
+  - task: Npm@1
+    displayName: "npm run build"
+    enabled: true
+    inputs:
+      command: "custom"
+      customCommand: "run build"
+      workingDir: "src"
+  - task: Npm@1
+    displayName: "npm run stage"
+    enabled: true
+    inputs:
+      command: "custom"
+      customCommand: "run stage"
+      workingDir: "src"
+  - task: PublishPipelineArtifact@1
+    displayName: "publish build artifact"
+    enabled: true
+    inputs:
+      artifact: "dist"
+      publishLocation: "pipeline"
+      targetPath: "$(Pipeline.Workspace)/s/dist-deploy"

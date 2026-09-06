@@ -13,7 +13,7 @@ namespace Puck.AdvancedGamingBrick;
 public static class AgbMachineFactory {
     /// <summary>Creates a machine for a configuration, optionally applying a composition callback that pre-registers
     /// replacement or decorating subsystems into the container.</summary>
-    /// <param name="configuration">The per-machine configuration (BIOS + cartridge ROM).</param>
+    /// <param name="configuration">The per-machine configuration (BIOS, cartridge ROM and diagnostic options).</param>
     /// <param name="compose">An optional callback that registers subsystems into the container before the standard
     /// component set is added; because the standard registrations use <c>TryAdd</c>, anything registered here wins.
     /// Pass <see langword="null"/> for the standard composition. Re-invoked on every <see cref="AgbMachineInstance.Fork"/>,

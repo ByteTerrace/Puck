@@ -1,0 +1,98 @@
+parameters:
+  - name: "agentPoolName"
+    default: "bytrcmdpp000"
+    displayName: "Agent Pool Name"
+    type: "string"
+  - name: "frontDoorEndpointName"
+    default: "default"
+    displayName: "Front Door Endpoint Name"
+    type: "string"
+  - name: "frontDoorProfileName"
+    default: "bytrcfdp000"
+    displayName: "Front Door Profile Name"
+    type: "string"
+  - name: "resourceGroupName"
+    default: "byteterrace"
+    displayName: "Resource Group Name"
+    type: "string"
+  - name: "serviceConnectionName"
+    default: "byteterrace-mpn | byteterrace"
+    displayName: "Service Connection Name"
+    type: "string"
+  - name: "targetUrl"
+    default: "https://bytrcstp001.blob.core.windows.net/$web"
+    displayName: "Target URL"
+    type: "string"
+
+resources:
+  pipelines:
+    - pipeline: "buildArtifact"
+      source: "Build Portal"
+      project: "Koholint"
+      trigger: true
+
+trigger: none
+
+jobs:
+  - deployment: "main"
+    displayName: "main"
+    environment: "production"
+    pool:
+      name: ${{ parameters.agentPoolName }}
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - task: AzureCLI@2
+              displayName: "deploy portal"
+              enabled: true
+              inputs:
+                arguments: >-
+                  -Source '$(Pipeline.Workspace)/buildArtifact/dist'
+                  -Target '${{ parameters.targetUrl }}'
+                azureSubscription: ${{ parameters.serviceConnectionName }}
+                failOnStandardError: true
+                inlineScript: |
+                  [CmdletBinding()]
+                  param(
+                      [Parameter(Mandatory = $true, Position = 0)]
+                      [string]$Source,
+                      [Parameter(Mandatory = $true, Position = 1)]
+                      [string]$Target
+                  )
+                  begin {}
+                  process {
+                      ${Env:AZCOPY_AUTO_LOGIN_TYPE} = 'AZCLI';
+
+                      azcopy sync `
+                          $Source `
+                          $Target `
+                          --compare-hash 'MD5' `
+                          --delete-destination=true `
+                          --put-md5 `
+                          --recursive=true;
+                  }
+                  end {
+                      if ((Test-Path -LiteralPath 'variable:\LASTEXITCODE')) {
+                          exit $LASTEXITCODE;
+                      }
+                  }
+                powerShellIgnoreLASTEXITCODE: true
+                scriptLocation: "inlineScript"
+                scriptType: "pscore"
+                visibleAzLogin: false
+            - task: AzureCLI@2
+              displayName: "purge front door cache"
+              enabled: true
+              inputs:
+                azureSubscription: ${{ parameters.serviceConnectionName }}
+                failOnStandardError: true
+                inlineScript: |
+                  az afd endpoint purge `
+                      --content-paths '/*' `
+                      --endpoint-name '${{ parameters.frontDoorEndpointName }}' `
+                      --profile-name '${{ parameters.frontDoorProfileName }}' `
+                      --resource-group '${{ parameters.resourceGroupName }}';
+                scriptLocation: "inlineScript"
+                scriptType: "pscore"
+                visibleAzLogin: false

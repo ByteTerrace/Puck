@@ -10,10 +10,17 @@ using Puck.AdvancedGamingBrick.Post;
 // accuracy-frontier diagnostic modes (the cosim oracles, single-ROM inspectors) live in Diagnostics and run before the
 // battery when their flag is present; see the README.
 
-var biosImage = LoadBios(path: CommandLineArguments.Value(
-    args: args,
-    name: "--bios"
-));
+if (!CommandLineArguments.TryValidateValues(args: args, names: ["--bios", "--ares", "--suite-focus", "--corpus-cache"], error: out var optionError)) {
+    Console.Error.WriteLine(value: optionError);
+    return 2;
+}
+ReadOnlyMemory<byte> biosImage;
+try {
+    biosImage = LoadBios(path: CommandLineArguments.Value(args: args, name: "--bios"));
+} catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException) {
+    Console.Error.WriteLine(value: $"--bios: {exception.Message}");
+    return 2;
+}
 var machineOptions = new AgbMachineOptions {
     DisablePrefetch = args.Contains(value: "--no-prefetch", comparer: StringComparer.OrdinalIgnoreCase),
     DisableRtc = args.Contains(value: "--no-rtc", comparer: StringComparer.OrdinalIgnoreCase),
@@ -34,13 +41,13 @@ if (diagnostics.TryRun(
 )) {
     return diagnosticExitCode;
 }
-var corpora = CorpusManifest.Load(path: CorpusManifest.BesideSource());
+var corpora = CorpusManifest.Load(path: CorpusManifest.BesideSource(), cacheRoot: CommandLineArguments.Value(args: args, name: "--corpus-cache"));
 
 if (args.Contains(
     comparer: StringComparer.OrdinalIgnoreCase,
     value: "--fetch-corpora"
 )) {
-    Console.Out.WriteLine(value: $"{corpora.Fetch()} corpus archive(s) fetched into {CorpusManifest.CacheRoot}");
+    Console.Out.WriteLine(value: $"{corpora.Fetch()} corpus archive(s) fetched into {corpora.EffectiveCacheRoot}");
 
     return 0;
 }
@@ -129,14 +136,11 @@ static string? ExistingFile(string? path) =>
     (((path is not null) && File.Exists(path: path))
         ? path
         : null);
-// Loads the BIOS image named by --bios when present and correctly sized, so the BIOS-dependent stages (BIOS IRQ
-// dispatch) run; otherwise a zeroed 16 KiB stub, on which those stages skip cleanly. The banner reports the image's
+// Loads the explicit --bios image, rejecting unreadable or wrong-sized files. Only omission selects the zeroed
+// 16 KiB stub, on which BIOS-dependent stages skip cleanly. The banner reports the image's
 // real classification (retail / replacement / unknown) via AgbBiosProfile rather than assuming a replacement.
 static ReadOnlyMemory<byte> LoadBios(string? path) {
-    if (
-        !string.IsNullOrEmpty(value: path) &&
-        File.Exists(path: path)
-    ) {
+    if (path is not null) {
         var bytes = File.ReadAllBytes(path: path);
 
         if (bytes.Length == ReplacementBios.ImageSize) {
@@ -147,7 +151,7 @@ static ReadOnlyMemory<byte> LoadBios(string? path) {
             return bytes;
         }
 
-        Console.WriteLine(value: $"== BIOS: ignoring {path} (expected {ReplacementBios.ImageSize} bytes, got {bytes.Length}) ==");
+        throw new ArgumentException(message: $"Expected {ReplacementBios.ImageSize} bytes in '{path}', got {bytes.Length}.");
     }
 
     return new byte[ReplacementBios.ImageSize];

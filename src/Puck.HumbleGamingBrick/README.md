@@ -81,6 +81,41 @@ submitted (tick budget, seat inputs) segment; no such transport exists.
 
 ## 🚀 Quick start
 
+For a .NET 10 application with its own update loop, reference
+`ByteTerrace.Puck.HumbleGamingBrick` and construct the synchronous core.
+NuGet supplies its managed dependencies; no Puck application, DI registration,
+window, GPU backend, worker thread, or environment configuration is required.
+
+```csharp
+using Puck.HumbleGamingBrick;
+using Puck.Abstractions.Machines;
+
+using var core = new HumbleGamingBrickCore(
+    configuration: new MachineConfiguration(
+        model: ConsoleModel.DmgC,
+        cartridgeRom: File.ReadAllBytes(args[0])),
+    dmgSpeed: true); // keep the reported pacing rate at the hardware dot rate
+
+core.ConfigureAudio(sampleRate: 48_000);
+core.ApplyInput(input: new MachinePadState());
+core.RunCycles(cycles: 70_224); // one nominal DMG frame at 4,194,304 Hz
+uint[] pixels = core.Framebuffer.ToArray(); // 160 × 144, packed 0x00RRGGBB
+short[] audio = new short[4096];
+int sampleCount = core.DrainAudioSamples(destination: audio); // interleaved L/R
+```
+
+The default seeds the selected model's post-boot state. Supply `bootRom`
+in `MachineConfiguration` to execute your own boot image from reset.
+Supply the core's `savePath` to opt into file-backed saves; its default `null`
+keeps saves in memory. For a custom persistence service, resolve
+`Interfaces.ICartridge` from `core.Instance` and use
+`ExportExternalRam`/`ImportExternalRam` plus
+`ExportPersistentClock`/`ImportPersistentClock` for cartridges with clocks.
+The shared [core hosting contract](../Puck.GamingBricks/README.md#synchronous-core-hosting)
+covers threading, buffer lifetime, cycle pacing, audio and snapshots.
+
+For Puck's queued screen-machine adapter:
+
 ```csharp
 using Puck.Abstractions.Machines;
 using Puck.HumbleGamingBrick;
@@ -96,8 +131,10 @@ IScreenMachine machine = engine.Create(
 ```
 
 Constructing a `MachineConfiguration` and calling `MachineFactory.Create`
-directly is the lower-level path `MachineHost` itself builds on, for a caller
-that wants to compose extra DI registrations before the machine resolves.
+directly is the lower-level path `MachineHost` itself builds on. Omitting
+`compose` selects the standard component set. A supplied callback owns
+component registration; call `AddHumbleGamingBrickComponents()` there along
+with custom registrations. Forks retain the configuration and composition.
 
 ## 🔌 Peripherals and link
 
@@ -138,8 +175,8 @@ dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release
 Tier A covers determinism, snapshot/battery-save round trips, fork
 determinism, Advanced-console behavior, and throughput with no external assets;
 Tier B adds the SingleStepTests/sm83 per-instruction corpus and
-conformance/acceptance ROM suites (`--roms`/`PUCK_GB_TESTROMS`,
-`--sst`/`PUCK_GB_SST`); see the battery's own README for tier C and every
+conformance/acceptance ROM suites (`--roms`,
+`--sst`); see the battery's own README for tier C and every
 diagnostic switch. `Puck.GamingBricks.Tests` exercises the shared
 serialization/fork/queued-host substrate this core builds on.
 

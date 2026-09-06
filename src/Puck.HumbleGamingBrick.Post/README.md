@@ -40,6 +40,7 @@ by the stage rather than escaping from a background thread.
 | `--artifacts <directory>` | Override `artifacts/gb-post`. |
 | `--require-assets` | A suite's own ledger rows not matched by a discovered case fail infra (exit 2) instead of skipping — catches a corpus missing entirely, not just one absent ROM. |
 | `--fetch-corpora` | Fill the corpus cache from the manifest and exit. |
+| `--corpus-cache <directory>` | Cache root used for both fetching and resolving corpora. |
 | `--accept` | After the run, promote its candidate ledger to `Expectations.json`; see [Accepting](#accepting). |
 | `--accept-candidate <file>` | Promote a candidate a previous run wrote (a build agent's artifact, say) without running anything. |
 | `--accept-regressions` | With an accept, acknowledge that at least one case regressed from a recorded verdict — otherwise the write is refused. |
@@ -70,6 +71,10 @@ hand:
 
 The self-contained Tier-A and Tier-C stages run under every lane. The
 commercial-cartridge stages run only when their cartridge is named.
+
+The `embedding` Tier-A stage exercises default factory composition and the
+public synchronous core: input, native pixels, stereo audio, nonpositive
+cycle budgets, snapshot replay and lookahead, without host infrastructure.
 
 Every case has a wall-clock budget derived from its frame cap — real time for
 the frames plus a fixed allowance — and a case that exceeds it is an `error`
@@ -232,8 +237,10 @@ paper over an unexplained regression.
 archive, version, SHA-256, and the directory inside the archive that is its
 root. `--fetch-corpora` downloads each archive, refuses one whose bytes do not
 hash to the declared value, and unpacks it under
-`%LOCALAPPDATA%\Puck\corpora\<name>\<version>` (`~/.local/share/Puck/corpora`
-elsewhere); the stages resolve that directory without configuration. Bumping
+`Puck/corpora/<name>/<version>` under the OS local application-data directory;
+`--corpus-cache <directory>` sets a different cache root for both fetching
+and resolving. Individual roots remain configurable with `--roms` and
+`--sst`. The stages resolve the cache without additional configuration. Bumping
 a version in the manifest is what changes which bytes every machine, including
 a build agent, measures against. Commercial cartridges are never in the
 manifest; they are named per run with `--link-rom` and `--trade-rom`.
@@ -444,8 +451,8 @@ by a few T-cycles on either side.
 
 ### Building `sb-trace.exe`
 
-`sb-trace.exe` is a headless SameBoy build living outside this repository
-(`D:\Source\ByteTerrace\Temp\SameBoy`), extended with an `events` mode
+`sb-trace.exe` is a custom headless SameBoy build outside this repository,
+extended with an `events` mode
 (`trace_main.c`) that emits the binary record stream `CosimEvent` in
 `CosimTraceRecord.cs` mirrors — keep the two in sync. Rebuild it with:
 
@@ -460,15 +467,12 @@ Pass `--display` to only recompile `Core/display.c` when the rest of `Core` is
 already built. Note that `trace_main.c` sits outside `Core/`, so a change there
 needs its own compile before the link.
 
-`Core/display.c` also carries a dormant per-dot trace, gated on the
-`SAMEBOY_PX_TRACE` environment variable naming an output file (and optionally
-`SAMEBOY_PX_LINE` naming one LY to restrict it to). It logs every pushed pixel,
-every fetcher step, every polled STAT mode change, every raised STAT interrupt,
-and the LCDC/WX/palette/scroll writes, each stamped with the exact master
-T-cycle. That stamp is what makes the two sides' dot schedules comparable at
-one-dot resolution, which the `--cosim` event stream alone cannot do for the
-PPU. Set the variables in the process that spawns `sb-trace.exe`; a Git Bash
-`VAR=x sb-trace.exe` invocation does not reach it.
+Historical per-dot investigations used additional `Core/display.c`
+instrumentation in that external checkout: pushed pixels, fetcher steps,
+STAT changes and interrupts, and LCDC/WX/palette/scroll writes stamped with
+the exact master T-cycle. This instrumentation is not shipped or configured
+by Puck; consult the supplied tracer's own command-line interface. The
+`--cosim` event stream alone cannot resolve those PPU schedules dot by dot.
 
 SameBoy's `events` mode samples STAT/LY once per `GB_run()` call (the finest
 step SameBoy exposes short of its internal `cycles_since_run` counter, which

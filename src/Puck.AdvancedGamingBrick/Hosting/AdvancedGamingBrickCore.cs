@@ -5,7 +5,7 @@ namespace Puck.AdvancedGamingBrick;
 /// <summary>
 /// The native ARM7TDMI AdvancedGamingBrick core adapted to the machine-neutral <see cref="IQueuedMachineCore"/>: it builds
 /// and direct-boots the machine, loads any battery save, and exposes the run/framebuffer/input/save surface a
-/// <see cref="QueuedMachineWorker"/> drives. All machine-facing calls run on the worker's execution thread.
+/// <see cref="QueuedMachineWorker"/> or a caller's own update loop drives. All machine-facing calls must run on one owning thread.
 /// Restoring state requests a battery flush independently of the emulated dirty flag. Saves are flushed to a
 /// temporary file beside their destination and then replace it; write failures retain the previous save for retry.
 /// </summary>

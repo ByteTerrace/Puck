@@ -11,6 +11,7 @@ internal static class PostStages {
             new SmokeStage(),
             new LifecycleStage(),
             new HostPersistenceStage(),
+            new EmbeddingStage(),
             new PpuCompositionStage(),
             new PpuTextRowStage(),
             new CartridgeFetchStage(),
