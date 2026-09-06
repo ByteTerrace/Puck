@@ -110,7 +110,12 @@ records; they are ordered events, never client submission payloads.
 `LoopbackTransport.cs` is the in-process implementation (with the tap points
 the replay tape records through), and `IWorldServerHost.cs` names exactly the
 server surface the transport calls, so the transport never holds a concrete
-`WorldServer`.
+`WorldServer`. `IClientSink` splits the live-definition delivery in two:
+`DeliverDefinition` after a mutation that changed channels, target registers,
+or scene/HUD shape (the client recompiles those tables and bumps its rebuild-
+watch revision), `DeliverState` after a value-only write (a cell write,
+removal, transform, or draw-site fire — the client stores the fresh
+definition for state reads and recompiles nothing).
 
 `WorldAdmissionDoor` (the admission section's identity door, verified against
 a document's own trust list) lives in `Puck.World.Schema` — a

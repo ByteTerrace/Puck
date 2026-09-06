@@ -33,6 +33,9 @@ internal sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, st
     public void DeliverDefinition(WorldDefinition definition) {
         if (Current()) { Write(WorldFederationResponse.Definition, WorldFederationCodec.EncodeDocument(definition, tier, authority, revision(), recipient)); }
     }
+    // The wire carries one definition-frame kind; a value-only delivery rides the same encode until the wire
+    // grammar grows its own state/definition split.
+    public void DeliverState(WorldDefinition definition) => DeliverDefinition(definition);
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
         if (!Current()) {
             return;

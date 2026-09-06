@@ -745,6 +745,15 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
         );
         m_definitionRevision++;
     }
+    /// <inheritdoc/>
+    public void DeliverState(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        // A value-only mutation cannot have changed channels, target registers, or scene shape: store the fresh
+        // definition for state-value reads (cell contents, HUD bindings) without bumping the frame source's
+        // rebuild-watch revision or recompiling anything DeliverDefinition would.
+        m_definition = definition;
+    }
     /// <summary>Publishes the static-scene query field every presentation consumer shares.</summary>
     /// <param name="field">The evaluator built over the composed program's static layers, or <see langword="null"/>
     /// when the program admits no fixed-point query.</param>

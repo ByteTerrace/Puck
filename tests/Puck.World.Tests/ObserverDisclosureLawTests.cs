@@ -207,6 +207,7 @@ public sealed class ObserverDisclosureLawTests {
             LastAuthority = snapshot.Authority;
         }
         public void DeliverDefinition(WorldDefinition definition) { }
+        public void DeliverState(WorldDefinition definition) { }
         public void DeliverAnswer(in QueryAnswer answer) { }
         public void DeliverComposition(WorldComposition composition) { }
         public void DeliverSessionLever(WorldSessionLever lever) { }

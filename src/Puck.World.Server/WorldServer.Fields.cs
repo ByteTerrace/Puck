@@ -109,7 +109,7 @@ public sealed partial class WorldServer : IWorldFieldLatticeHost {
             correlationId: 0,
             preMetered: false
         );
-        m_output.DeliverDefinition(definition: m_definition);
+        m_output.DeliverState(definition: m_definition);
     }
     // Placement response traits are authored outside the field reaction program and therefore name their row rather
     // than carrying a compiled handle; resolves through the document catalog's name -> handle dictionary and then the
@@ -158,6 +158,6 @@ public sealed partial class WorldServer : IWorldFieldLatticeHost {
             correlationId: 0,
             preMetered: false
         );
-        m_output.DeliverDefinition(definition: m_definition);
+        m_output.DeliverState(definition: m_definition);
     }
 }

@@ -170,8 +170,9 @@ verdict takes its entry silently.
   one `Submit*`/`Query` per payload kind, 12 of those today).
 - `IWorldServerHost` — deliberately 3 members (`AttachSink`, `EnqueueIntent`,
   `Submit`), so the transport never names `WorldServer`.
-- `IClientSink` — 5 deliveries: `DeliverSnapshot`, `DeliverAnswer`,
-  `DeliverDefinition`, `DeliverComposition`, `DeliverSessionLever`.
+- `IClientSink` — 6 deliveries: `DeliverSnapshot`, `DeliverAnswer`,
+  `DeliverDefinition` (a shape change), `DeliverState` (a value-only write),
+  `DeliverComposition`, `DeliverSessionLever`.
 - `AttachSink` is a subscribe (multi-sink via `WorldOutputHub`, with a primer
   snapshot to the newly attached sink only).
 - `LoopbackTransport` carries one replay tap per LOCAL submission kind

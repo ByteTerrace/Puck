@@ -84,7 +84,10 @@ separate constraint on dense populations; reusable appearances do not remove it.
   fixed-step accumulator's residual, with per-entity correction easers so an
   authority correction glides visually while the simulation pose snaps. A
   snapshot entry flagged as a teleport snaps both endpoints so nothing
-  interpolates across a jump.
+  interpolates across a jump. `DeliverDefinition` (a shape change) recompiles
+  the channel and target-register tables and bumps `DefinitionRevision`;
+  `DeliverState` (a value-only write) stores the fresh definition for state
+  reads and recompiles neither.
 - `WorldFramePresenter.cs` — composes the frame the SDF renderer draws: the
   avatar catalog's animated leaves, the static scene, placements, screens, and
   viewport layout; publishes the audio director's per-frame snapshot through

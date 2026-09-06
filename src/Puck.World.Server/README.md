@@ -63,7 +63,10 @@ mutation followed by an `Immediate` read is serialized by the console's drain
 barrier (see the console section of
 [`Puck.World`'s README](../Puck.World/README.md)). Results return through
 typed completions (`WorldSubmissionResult`), and deliveries fan out through
-`WorldOutputHub.cs`, which supports multiple subscribed sinks.
+`WorldOutputHub.cs`, which supports multiple subscribed sinks. A sink's live
+definition delivery is `DeliverDefinition` after a shape change or
+`DeliverState` after a value-only write — see `Puck.World.Protocol`'s
+`IClientSink`.
 
 ## Local flock steering
 

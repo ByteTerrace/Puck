@@ -315,6 +315,17 @@ public sealed class WorldSessionMirror : IClientSink {
         _ = Interlocked.Increment(location: ref m_definitionRevision);
     }
     /// <inheritdoc/>
+    public void DeliverState(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        // A value-only mutation cannot have changed a kit's collider or body-contact mode: publish the fresh
+        // definition for state-value reads without recompiling either table or bumping the rebuild-watch revision.
+        Volatile.Write(
+            location: ref m_definition,
+            value: definition
+        );
+    }
+    /// <inheritdoc/>
     public void DeliverSessionLever(WorldSessionLever lever) {
         // No presentation service of the OBSERVING world is reachable from inside a destination's own delivery.
     }

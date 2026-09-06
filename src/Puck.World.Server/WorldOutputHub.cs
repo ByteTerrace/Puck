@@ -183,6 +183,16 @@ public sealed class WorldOutputHub {
             deliver: static (sink, payload) => sink.DeliverDefinition(definition: payload),
             payload: definition
         );
+    /// <summary>Fans the live world definition out to every typed subscriber after a value-only mutation (see
+    /// <see cref="IClientSink.DeliverState"/>). A faulting sink is isolated and detached — see the class
+    /// remarks.</summary>
+    /// <param name="definition">The definition now live on the server.</param>
+    public void DeliverState(WorldDefinition definition) =>
+        Deliver(
+            callSite: nameof(DeliverState),
+            deliver: static (sink, payload) => sink.DeliverState(definition: payload),
+            payload: definition
+        );
     /// <summary>Fans an accepted live session lever out to every typed subscriber. A faulting sink is isolated and
     /// detached — see the class remarks.</summary>
     /// <param name="lever">The accepted lever write.</param>

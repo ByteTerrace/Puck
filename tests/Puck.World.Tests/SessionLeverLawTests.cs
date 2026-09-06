@@ -287,6 +287,8 @@ public sealed class SessionLeverLawTests {
         }
         public void DeliverDefinition(WorldDefinition definition) {
         }
+        public void DeliverState(WorldDefinition definition) {
+        }
         public void DeliverSessionLever(WorldSessionLever lever) => Levers.Add(item: lever);
         public void DeliverSnapshot(in WorldSnapshot snapshot) {
         }

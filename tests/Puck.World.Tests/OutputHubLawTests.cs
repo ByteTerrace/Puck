@@ -159,6 +159,7 @@ internal sealed class RecordingSink : IClientSink {
     }
     public void DeliverAnswer(in QueryAnswer answer) { }
     public void DeliverDefinition(WorldDefinition definition) { }
+    public void DeliverState(WorldDefinition definition) { }
     public void DeliverComposition(WorldComposition composition) { }
     public void DeliverSessionLever(WorldSessionLever lever) { }
     /// <summary>The most recently delivered snapshot's fact mask for the named entity index, or
@@ -203,6 +204,7 @@ internal sealed class SelfDisposingThrowingSink : IClientSink {
     }
     public void DeliverAnswer(in QueryAnswer answer) { }
     public void DeliverDefinition(WorldDefinition definition) { }
+    public void DeliverState(WorldDefinition definition) { }
     public void DeliverComposition(WorldComposition composition) { }
     public void DeliverSessionLever(WorldSessionLever lever) { }
 }
@@ -224,6 +226,7 @@ internal sealed class ReattachingSink(Puck.World.Server.WorldServer server) : IC
     }
     public void DeliverAnswer(in QueryAnswer answer) { }
     public void DeliverDefinition(WorldDefinition definition) { }
+    public void DeliverState(WorldDefinition definition) { }
     public void DeliverComposition(WorldComposition composition) { }
     public void DeliverSessionLever(WorldSessionLever lever) { }
 }
@@ -242,6 +245,7 @@ internal sealed class FaultingSink(int throwFromCall) : IClientSink {
     }
     public void DeliverAnswer(in QueryAnswer answer) { }
     public void DeliverDefinition(WorldDefinition definition) { }
+    public void DeliverState(WorldDefinition definition) { }
     public void DeliverComposition(WorldComposition composition) { }
     public void DeliverSessionLever(WorldSessionLever lever) { }
 }
