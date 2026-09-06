@@ -46,7 +46,7 @@ public sealed class SearchLawTests {
     private static WorldStateRow Row(WorldFixture fixture, string name) => WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: name)!;
     private static long Cell(WorldFixture fixture, string row, string key) => Row(fixture, row).Cells!.Single(c => c.Key.Value == key).Value;
 
-    private static WorldSearchStatus Settle(WorldFixture fixture) {
+    private static SearchStatus Settle(WorldFixture fixture) {
         // Pieces drop from spawn and settle; the judge only speaks once settleHold reaches its margin.
         for (var tick = 0; tick < 400; tick++) {
             fixture.Step();
@@ -176,10 +176,10 @@ public sealed class SearchLawTests {
 
     // An independent oracle over the SAME declared rule ("any token to any other cell, evicting whoever stood
     // there, always accepted, turn always flips") rather than a second reading of the runtime's own code: plain
-    // recursion over a two-element array, token-major/target-ascending enumeration (matching WorldSearchRuntime's
+    // recursion over a two-element array, token-major/target-ascending enumeration (matching SearchRuntime's
     // own walk order) so a tie resolves to the same candidate.
     private static (long Value, int Token, int Target) ReferenceNegamax(long[] cells, int boardCells, int plies) {
-        var best = -WorldSearchCapacity.MateScore;
+        var best = -SearchCapacity.MateScore;
         var bestToken = -1;
         var bestTarget = -1;
 
@@ -187,7 +187,7 @@ public sealed class SearchLawTests {
             var from = cells[token];
 
             // A token off the board (any value that is no cell — here, the eviction sentinel -1) is left alone,
-            // exactly as WorldSearchRuntime.Walk's own off-board guard leaves it.
+            // exactly as SearchRuntime.Walk's own off-board guard leaves it.
             if ((from < 0L) || (from >= boardCells)) {
                 continue;
             }
@@ -219,7 +219,7 @@ public sealed class SearchLawTests {
         return (best, bestToken, bestTarget);
     }
 
-    private static WorldSearchStatus RunToCompletion(WorldFixture fixture, int maxTicks = 4000) {
+    private static SearchStatus RunToCompletion(WorldFixture fixture, int maxTicks = 4000) {
         var status = fixture.Server.SearchStatus()[0];
 
         for (var tick = 0; (tick < maxTicks) && !status.Done; tick++) {
@@ -449,7 +449,7 @@ public sealed class SearchLawTests {
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
                 new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict", Depth: 1,
-                    Score: "pieceCell[a] == 3 ? 1000 : (pieceCell[a] == 1 ? -1000 : 0)", Method: WorldSearchMethod.Tree, Best: "best", Iterations: iterations, Nodes: nodes),
+                    Score: "pieceCell[a] == 3 ? 1000 : (pieceCell[a] == 1 ? -1000 : 0)", Method: SearchMethod.Tree, Best: "best", Iterations: iterations, Nodes: nodes),
             ]),
         };
 

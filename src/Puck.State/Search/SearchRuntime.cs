@@ -1,12 +1,11 @@
 using Puck.Maths;
-using Puck.World.Protocol;
 
-namespace Puck.World.Server;
+namespace Puck.State;
 
 /// <summary>One recursive ply's checkpointed progress: the position it enumerates candidates from (<see cref="Values"/>,
 /// a frame snapshot in the layout's own order), its own (shape, token, candidate) cursor, its negamax window, and the
 /// best candidate found so far.</summary>
-public sealed record WorldSearchLevelCheckpoint(int Shape, int Token, int Target, long Alpha, long Beta, long Best, int BestToken, int BestTarget, long BaseTurn, long[] Values, ulong Key = 0UL, long AlphaEntry = 0L);
+public sealed record SearchLevelCheckpoint(int Shape, int Token, int Target, long Alpha, long Beta, long Best, int BestToken, int BestTarget, long BaseTurn, long[] Values, ulong Key = 0UL, long AlphaEntry = 0L);
 
 /// <summary>One job's checkpointed progress. <see cref="Legal"/> holds one mask per token in the token row's cell
 /// order, filled as the job walks — populated only for a board of at most <c>BoardMask.MaxCells</c> cells.
@@ -14,36 +13,39 @@ public sealed record WorldSearchLevelCheckpoint(int Shape, int Token, int Target
 /// bit-packed accepted-destination set per token (empty when the job authors no <c>reach</c> output), size-agnostic.
 /// <see cref="Levels"/> holds one entry per ply beyond the root — empty for a depth-one job — populated only while
 /// the negamax search has descended into it.</summary>
-public sealed record WorldSearchJobCheckpoint(
+public sealed record SearchJobCheckpoint(
     string Name, ulong Stamp, bool Running, bool Done, int Shape, int Token, int Target, long Count, long[] Legal, long[] Counts, long[] Wide, long Nodes, long BaseTurn,
-    int PassDepth, int Active, long Best, int BestToken, int BestTarget, long Alpha, long Beta, WorldSearchLevelCheckpoint[] Levels,
-    ulong[] TtKey, long[] TtValue, long[] TtMeta, WorldSearchTreeCheckpoint? Tree = null
+    int PassDepth, int Active, long Best, int BestToken, int BestTarget, long Alpha, long Beta, SearchLevelCheckpoint[] Levels,
+    ulong[] TtKey, long[] TtValue, long[] TtMeta, SearchTreeCheckpoint? Tree = null
 );
 
 /// <summary>A job's tree search in flight: the node pool (parallel arrays, <see cref="Count"/> nodes used), the
 /// path from the root, the phase and its cursors, the playout and path frames, and the draw seed.</summary>
-public sealed record WorldSearchTreeCheckpoint(
+public sealed record SearchTreeCheckpoint(
     bool Active, int Phase, int Count, int Iteration, ulong Seed, int UShape, int UToken, int UTarget, int UScan, int UStart, int PlayoutPlies,
     long[] Parent, long[] FirstChild, long[] ChildCount, long[] Visits, long[] Total, long[] Shape, long[] Token, long[] Target, long[] Expanded,
     long[] Path, int PathLength, long[] UctValues, long[] PlayValues
 );
 
 /// <summary>The search runtime's checkpointed state, in section order.</summary>
-public sealed record WorldSearchCheckpoint(WorldSearchJobCheckpoint[] Jobs) {
+public sealed record SearchCheckpoint(SearchJobCheckpoint[] Jobs) {
     /// <summary>Gets the checkpoint of a runtime with no jobs.</summary>
-    public static WorldSearchCheckpoint Empty { get; } = new(Jobs: []);
+    public static SearchCheckpoint Empty { get; } = new(Jobs: []);
 }
 
-/// <summary>One job's progress as the console reads it.</summary>
-public readonly record struct WorldSearchStatus(
+/// <summary>One job's progress as a document project's read-back reads it.</summary>
+public readonly record struct SearchStatus(
     string Name, bool Running, bool Done, int Token, int Tokens, int Target, int Cells, long Count, long Nodes, int NodesPerTick, long JudgeCost, int JudgeRules,
     bool HasScore, int Depth, int PassDepth, long BestScore, int BestToken, int BestTarget, bool HasOutcome = false, int Iteration = 0, int Iterations = 0
 );
 
-/// <summary>Runs the document's search jobs: a frame over the installed section, the rules a frame can evaluate, and
-/// per job a walk over every (shape, token, target cell or direction) candidate judged by those rules under a
-/// per-tick node quota. A job restarts whenever the frame's inputs change and lands its answer through the ordinary
-/// mutation door when the walk completes. Progress is simulation state: it hashes and checkpoints.
+/// <summary>Runs a set of search jobs over an <see cref="IStateSection"/>'s rows: a frame over the installed
+/// section, the rules a frame can evaluate, and per job a walk over every (shape, token, target cell or direction)
+/// candidate judged by those rules under a per-tick node quota. A job restarts whenever the frame's inputs change
+/// and lands its answer as a set of <see cref="SearchWrite"/>s once the walk completes. Progress is simulation
+/// state: it hashes and checkpoints. Carries no document, host, or wire concept — a document project resolves its
+/// own authored rows into <see cref="SearchPlan"/>s, compiles its own judge rules, and translates a landed job's
+/// writes into whatever mutation vocabulary it owns.
 ///
 /// A job with an authored score iterative-deepens: for each authored depth in turn, the same root walk that always
 /// populates <c>legal</c>/<c>count</c>/<c>reach</c>/<c>counts</c> also negamaxes every accepted candidate to that
@@ -51,7 +53,7 @@ public readonly record struct WorldSearchStatus(
 /// <see cref="StateFrame"/> per ply beyond the root) rather than the call stack, so a tick boundary can suspend it
 /// anywhere and a checkpoint carries it byte-for-byte. The root ply never prunes and never skips a candidate, so a
 /// depth-one job's root outputs are unchanged by whether a score is authored.</summary>
-internal sealed partial class WorldSearchRuntime {
+public sealed partial class SearchRuntime {
     private sealed class Level {
         public StateFrame Frame = null!;
         public int Shape;
@@ -69,21 +71,21 @@ internal sealed partial class WorldSearchRuntime {
     }
 
     private sealed class Job {
-        public Job(WorldSearchPlan plan, int tokenCapacity, FrameLayout layout, IReadOnlyList<StateRow> rows) {
+        public Job(SearchPlan plan, int tokenCapacity, FrameLayout layout, IReadOnlyList<StateRow> rows) {
             Plan = plan;
             Legal = new long[tokenCapacity];
             Counts = new long[tokenCapacity];
-            Wide = ((plan.Row.Reach is not null) ? new long[tokenCapacity * WideWordsPerToken(cellCount: plan.CellCount)] : null);
+            Wide = ((plan.Reach is not null) ? new long[tokenCapacity * WideWordsPerToken(cellCount: plan.CellCount)] : null);
             Levels = BuildLevels(depth: plan.Depth, layout: layout, rows: rows);
             ZoneRows = ResolveZones(plan: plan, rows: rows);
 
-            if ((plan.Score is not null) && (plan.Method == WorldSearchMethod.Negamax)) {
-                TtKey = new ulong[WorldSearchCapacity.TranspositionEntries];
-                TtValue = new long[WorldSearchCapacity.TranspositionEntries];
-                TtMeta = new long[WorldSearchCapacity.TranspositionEntries];
+            if ((plan.Score is not null) && (plan.Method == SearchMethod.Negamax)) {
+                TtKey = new ulong[SearchCapacity.TranspositionEntries];
+                TtValue = new long[SearchCapacity.TranspositionEntries];
+                TtMeta = new long[SearchCapacity.TranspositionEntries];
             }
-            if (plan.Method == WorldSearchMethod.Tree) {
-                var nodes = WorldSearchCapacity.TreeNodes;
+            if (plan.Method == SearchMethod.Tree) {
+                var nodes = SearchCapacity.TreeNodes;
 
                 TreeParent = new int[nodes];
                 TreeFirstChild = new int[nodes];
@@ -100,7 +102,7 @@ internal sealed partial class WorldSearchRuntime {
             }
         }
 
-        // The tree search (WorldSearchRuntime.Uct.cs), allocated only for a job with an outcome.
+        // The tree search (SearchRuntime.Uct.cs), allocated only for a job with an outcome.
         public bool UctActive { get; set; }
         public int Phase { get; set; }
         public int TreeCount { get; set; }
@@ -133,7 +135,7 @@ internal sealed partial class WorldSearchRuntime {
         public long[]? TtValue { get; set; }
         public long[]? TtMeta { get; set; }
 
-        public WorldSearchPlan Plan { get; set; }
+        public SearchPlan Plan { get; set; }
         // A zone job's zones as rows of the bound section, in plan order — the cells a token's value is the index of.
         // Null for a board job. Rebound with the rows.
         public StateRow[]? ZoneRows { get; set; }
@@ -158,14 +160,14 @@ internal sealed partial class WorldSearchRuntime {
         // tried, so the root outputs never depend on whether a score is authored.
         public int PassDepth { get; set; } = 1;
         public int Active { get; set; }
-        public long Best { get; set; } = -WorldSearchCapacity.MateScore;
+        public long Best { get; set; } = -SearchCapacity.MateScore;
         public int BestToken { get; set; } = -1;
         public int BestTarget { get; set; } = -1;
-        public long Alpha { get; set; } = -WorldSearchCapacity.MateScore;
-        public long Beta { get; set; } = WorldSearchCapacity.MateScore;
+        public long Alpha { get; set; } = -SearchCapacity.MateScore;
+        public long Beta { get; set; } = SearchCapacity.MateScore;
         public Level[] Levels { get; set; }
 
-        public static StateRow[]? ResolveZones(WorldSearchPlan plan, IReadOnlyList<StateRow> rows) {
+        public static StateRow[]? ResolveZones(SearchPlan plan, IReadOnlyList<StateRow> rows) {
             if (plan.Zones.Length == 0) {
                 return null;
             }
@@ -173,7 +175,7 @@ internal sealed partial class WorldSearchRuntime {
             var zones = new StateRow[plan.Zones.Length];
 
             for (var index = 0; index < zones.Length; index++) {
-                zones[index] = (StateRows.FindStateRow(rows: rows, name: plan.Zones[index]) ?? throw new InvalidOperationException(message: $"search '{plan.Row.Name}' zone '{plan.Zones[index]}' vanished after planning"));
+                zones[index] = (StateRows.FindStateRow(rows: rows, name: plan.Zones[index]) ?? throw new InvalidOperationException(message: $"search '{plan.Name}' zone '{plan.Zones[index]}' vanished after planning"));
             }
 
             return zones;
@@ -191,11 +193,10 @@ internal sealed partial class WorldSearchRuntime {
 
     private readonly Func<IReadOnlyList<StateRow>> m_live;
     private readonly RowStore m_store;
-    private readonly WorldOutputHub? m_narrationHub;
-    private readonly List<WorldMutation> m_outputs = [];
-    private WorldDefinition m_definition = null!;
+    private readonly Action<string, string>? m_narrate;
+    private readonly List<SearchWrite> m_outputs = [];
     private Job[] m_jobs = [];
-    private CompiledWorldRule[] m_judge = [];
+    private CompiledRule[] m_judge = [];
     private FrameLayout? m_layout;
     private FrameHost? m_host;
     private StateFrame? m_base;
@@ -203,31 +204,35 @@ internal sealed partial class WorldSearchRuntime {
 
     /// <summary>Initializes the runtime over a live row source.</summary>
     /// <param name="live">Returns the installed section's rows.</param>
-    /// <param name="narrationHub">The hub this runtime's narration is delivered through, or <see langword="null"/>
-    /// to leave it undelivered.</param>
-    public WorldSearchRuntime(Func<IReadOnlyList<StateRow>> live, WorldOutputHub? narrationHub = null) {
+    /// <param name="narrate">Delivers one narration line (channel, text), or <see langword="null"/> to leave a
+    /// job's mutation refusal undelivered.</param>
+    public SearchRuntime(Func<IReadOnlyList<StateRow>> live, Action<string, string>? narrate = null) {
         ArgumentNullException.ThrowIfNull(argument: live);
         m_live = live;
-        m_narrationHub = narrationHub;
+        m_narrate = narrate;
         m_store = new RowStore(rows: live);
     }
 
-    /// <summary>Gets how many jobs the installed document declares.</summary>
+    /// <summary>Gets how many jobs are installed.</summary>
     public int Count => m_jobs.Length;
 
-    /// <summary>Rebuilds plans, judge rules, and the frame against an installed document; a frame whose layout still
-    /// fits is rebound and every job keeps its progress, otherwise every job restarts on its next step.</summary>
-    /// <param name="definition">The installed document.</param>
-    /// <param name="rules">Its compiled rules.</param>
-    /// <param name="patterns">Its compiled patterns.</param>
-    /// <param name="tables">Its compiled tables.</param>
-    public void Rebuild(WorldDefinition definition, CompiledWorldRule[] rules, CompiledPatterns patterns, IReadOnlyList<CompiledTable> tables) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
-        m_definition = definition;
-
-        if (!WorldSearchCompilation.TryPlanAll(definition: definition, rules: rules, plans: out var plans, judge: out m_judge, reason: out var reason)) {
-            throw new InvalidOperationException(message: $"search failed to plan after validation: {reason}");
-        }
+    /// <summary>Rebuilds the frame against a resolved job set; a frame whose layout still fits is rebound and every
+    /// job keeps its progress, otherwise every job restarts on its next step.</summary>
+    /// <param name="plans">Every job's resolved plan, in section order.</param>
+    /// <param name="judge">The rules a frame evaluates.</param>
+    /// <param name="rows">The installed section's rows.</param>
+    /// <param name="catalog">The rows' catalog — a fresh instance forces a full rebuild even when the row structure
+    /// is byte-for-byte unchanged, the way a document swap or a checkpoint restore mints one.</param>
+    /// <param name="topology">Resolves a row domain's named topology, for the frame layout.</param>
+    /// <param name="patterns">The installed section's compiled patterns.</param>
+    /// <param name="tables">The installed section's compiled tables.</param>
+    public void Rebuild(SearchPlan[] plans, CompiledRule[] judge, IReadOnlyList<StateRow> rows, StateCatalog catalog, Func<string, CompiledTopology?> topology, CompiledPatterns patterns, IReadOnlyList<CompiledTable> tables) {
+        ArgumentNullException.ThrowIfNull(argument: plans);
+        ArgumentNullException.ThrowIfNull(argument: judge);
+        ArgumentNullException.ThrowIfNull(argument: rows);
+        ArgumentNullException.ThrowIfNull(argument: catalog);
+        ArgumentNullException.ThrowIfNull(argument: topology);
+        m_judge = judge;
 
         if (plans.Length == 0) {
             m_jobs = [];
@@ -238,17 +243,10 @@ internal sealed partial class WorldSearchRuntime {
             return;
         }
 
-        var rows = definition.State;
-        var catalog = definition.StateCatalog;
         var layoutRebuilt = false;
 
-        // A FrameHost's own Catalog is fixed at construction, but a document swap mints a fresh WorldDefinition (and
-        // so a fresh StateCatalog instance) even when the row structure is byte-for-byte unchanged — a checkpoint
-        // restore is exactly this case. Rebinding rows alone would leave the host answering reads against the OLD
-        // catalog while a freshly compiled judge rule's operand carries a StateHandle minted against the NEW one, so
-        // a catalog swap forces the same full rebuild a layout mismatch does.
         if ((m_layout is null) || !m_layout.Fits(rows: rows) || !ReferenceEquals(objA: m_catalog, objB: catalog)) {
-            m_layout = new FrameLayout(rows: rows, topology: name => WorldTopologyCompilation.Find(definition, name));
+            m_layout = new FrameLayout(rows: rows, topology: topology);
             m_host = new FrameHost(layout: m_layout, rows: rows, catalog: catalog, patterns: patterns, tables: tables);
             m_base = new StateFrame(layout: m_layout, rows: rows);
             m_catalog = catalog;
@@ -266,10 +264,10 @@ internal sealed partial class WorldSearchRuntime {
 
         for (var index = 0; index < plans.Length; index++) {
             var plan = plans[index];
-            var tokens = (StateRows.FindStateRow(rows: rows, name: plan.Row.Tokens)?.Cells?.Count ?? 0);
+            var tokens = (StateRows.FindStateRow(rows: rows, name: plan.Tokens)?.Cells?.Count ?? 0);
             var levelCount = Math.Max(val1: 0, val2: (plan.Depth - 1));
-            var expectedWide = ((plan.Row.Reach is not null) ? (tokens * WideWordsPerToken(cellCount: plan.CellCount)) : 0);
-            var kept = Array.Find(array: m_jobs, match: job => string.Equals(a: job.Plan.Row.Name, b: plan.Row.Name, comparisonType: StringComparison.Ordinal));
+            var expectedWide = ((plan.Reach is not null) ? (tokens * WideWordsPerToken(cellCount: plan.CellCount)) : 0);
+            var kept = Array.Find(array: m_jobs, match: job => string.Equals(a: job.Plan.Name, b: plan.Name, comparisonType: StringComparison.Ordinal));
 
             if ((kept is not null) && (kept.Legal.Length == tokens) && ((kept.Wide?.Length ?? 0) == expectedWide)) {
                 kept.Plan = plan;
@@ -305,9 +303,9 @@ internal sealed partial class WorldSearchRuntime {
 
     /// <summary>Advances every job by its node quota, landing a finished job's outputs through <paramref name="apply"/>.</summary>
     /// <param name="tick">The simulation tick.</param>
-    /// <param name="apply">Installs one mutation through the ordinary door.</param>
+    /// <param name="apply">Installs one job's writes through the ordinary door.</param>
     /// <returns><see langword="true"/> when an output installed.</returns>
-    public bool Step(ulong tick, Func<WorldMutation, bool> apply) {
+    public bool Step(ulong tick, Func<IReadOnlyList<SearchWrite>, bool> apply) {
         ArgumentNullException.ThrowIfNull(argument: apply);
 
         if ((m_jobs.Length == 0) || (m_host is null) || (m_base is null) || (m_layout is null)) {
@@ -347,25 +345,25 @@ internal sealed partial class WorldSearchRuntime {
     }
 
     /// <summary>Captures every job's progress.</summary>
-    public WorldSearchCheckpoint Capture() {
-        var jobs = new WorldSearchJobCheckpoint[m_jobs.Length];
+    public SearchCheckpoint Capture() {
+        var jobs = new SearchJobCheckpoint[m_jobs.Length];
 
         for (var index = 0; index < m_jobs.Length; index++) {
             var job = m_jobs[index];
-            var levels = ((job.Levels.Length == 0) ? [] : new WorldSearchLevelCheckpoint[job.Levels.Length]);
+            var levels = ((job.Levels.Length == 0) ? [] : new SearchLevelCheckpoint[job.Levels.Length]);
 
             for (var level = 0; level < levels.Length; level++) {
                 var entry = job.Levels[level];
 
-                levels[level] = new WorldSearchLevelCheckpoint(
+                levels[level] = new SearchLevelCheckpoint(
                     Shape: entry.Shape, Token: entry.Token, Target: entry.Target, Alpha: entry.Alpha, Beta: entry.Beta,
                     Best: entry.Best, BestToken: entry.BestToken, BestTarget: entry.BestTarget, BaseTurn: entry.BaseTurn,
                     Values: entry.Frame.Values.ToArray(), Key: entry.Key, AlphaEntry: entry.AlphaEntry
                 );
             }
 
-            jobs[index] = new WorldSearchJobCheckpoint(
-                Name: job.Plan.Row.Name, Stamp: job.Stamp, Running: job.Running, Done: job.Done, Shape: job.Shape, Token: job.Token, Target: job.Target,
+            jobs[index] = new SearchJobCheckpoint(
+                Name: job.Plan.Name, Stamp: job.Stamp, Running: job.Running, Done: job.Done, Shape: job.Shape, Token: job.Token, Target: job.Target,
                 Count: job.Count, Legal: [.. job.Legal], Counts: [.. job.Counts], Wide: ((job.Wide is { } wide) ? [.. wide] : []), Nodes: job.Nodes, BaseTurn: job.BaseTurn,
                 PassDepth: job.PassDepth, Active: job.Active, Best: job.Best, BestToken: job.BestToken, BestTarget: job.BestTarget,
                 Alpha: job.Alpha, Beta: job.Beta, Levels: levels,
@@ -374,7 +372,7 @@ internal sealed partial class WorldSearchRuntime {
             );
         }
 
-        return new WorldSearchCheckpoint(Jobs: jobs);
+        return new SearchCheckpoint(Jobs: jobs);
     }
     private static long[] Widen(int[] values) {
         var wide = new long[values.Length];
@@ -390,16 +388,16 @@ internal sealed partial class WorldSearchRuntime {
             into[index] = (int)wide[index];
         }
     }
-    private static WorldSearchTreeCheckpoint? CaptureTree(Job job) => ((job.TreeParent is null)
+    private static SearchTreeCheckpoint? CaptureTree(Job job) => ((job.TreeParent is null)
         ? null
-        : new WorldSearchTreeCheckpoint(
+        : new SearchTreeCheckpoint(
             Active: job.UctActive, Phase: job.Phase, Count: job.TreeCount, Iteration: job.Iteration, Seed: job.Seed, UShape: job.UShape, UToken: job.UToken, UTarget: job.UTarget,
             UScan: job.UScan, UStart: job.UStart, PlayoutPlies: job.PlayoutPlies,
             Parent: Widen(job.TreeParent), FirstChild: Widen(job.TreeFirstChild!), ChildCount: Widen(job.TreeChildCount!), Visits: [.. job.TreeVisits!], Total: [.. job.TreeTotal!],
             Shape: Widen(job.TreeShape!), Token: Widen(job.TreeToken!), Target: Widen(job.TreeTarget!), Expanded: [.. job.TreeExpanded!],
             Path: Widen(job.Path!), PathLength: job.PathLength, UctValues: job.UctFrame!.Values.ToArray(), PlayValues: job.PlayFrame!.Values.ToArray()
         ));
-    private static bool TreeFits(Job job, WorldSearchTreeCheckpoint? tree) {
+    private static bool TreeFits(Job job, SearchTreeCheckpoint? tree) {
         if (job.TreeParent is null) {
             return (tree is null);
         }
@@ -413,7 +411,7 @@ internal sealed partial class WorldSearchRuntime {
             (tree.Shape.Length == nodes) && (tree.Token.Length == nodes) && (tree.Target.Length == nodes) && (tree.Expanded.Length == nodes) &&
             (tree.Path.Length == job.Path!.Length) && (tree.UctValues.Length == job.UctFrame!.Values.Length) && (tree.PlayValues.Length == job.PlayFrame!.Values.Length);
     }
-    private static void RestoreTree(Job job, WorldSearchTreeCheckpoint? tree) {
+    private static void RestoreTree(Job job, SearchTreeCheckpoint? tree) {
         if ((job.TreeParent is null) || (tree is null)) {
             return;
         }
@@ -447,11 +445,11 @@ internal sealed partial class WorldSearchRuntime {
     /// <summary>Restores every job's progress by name; a job the checkpoint lacks, or whose shape the checkpoint no
     /// longer matches, restarts on its next step.</summary>
     /// <param name="checkpoint">The checkpoint.</param>
-    public void Restore(WorldSearchCheckpoint checkpoint) {
+    public void Restore(SearchCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
 
         foreach (var job in m_jobs) {
-            var saved = Array.Find(array: checkpoint.Jobs, match: entry => string.Equals(a: entry.Name, b: job.Plan.Row.Name, comparisonType: StringComparison.Ordinal));
+            var saved = Array.Find(array: checkpoint.Jobs, match: entry => string.Equals(a: entry.Name, b: job.Plan.Name, comparisonType: StringComparison.Ordinal));
 
             if (
                 (saved is null) || (saved.Legal.Length != job.Legal.Length) || (saved.Counts.Length != job.Counts.Length) ||
@@ -537,7 +535,7 @@ internal sealed partial class WorldSearchRuntime {
         hash.Add(value: ((uint)m_jobs.Length));
 
         foreach (var job in m_jobs) {
-            hash.Add(value: Fnv1aHash.Compute(values: job.Plan.Row.Name.AsSpan()));
+            hash.Add(value: Fnv1aHash.Compute(values: job.Plan.Name.AsSpan()));
             hash.Add(value: job.Stamp);
             hash.Add(value: ((byte)(job.Running ? 1 : 0)));
             hash.Add(value: ((byte)(job.Done ? 1 : 0)));
@@ -628,17 +626,17 @@ internal sealed partial class WorldSearchRuntime {
         }
     }
     /// <summary>Lists every job's progress.</summary>
-    public IReadOnlyList<WorldSearchStatus> Status() {
-        var status = new WorldSearchStatus[m_jobs.Length];
+    public IReadOnlyList<SearchStatus> Status() {
+        var status = new SearchStatus[m_jobs.Length];
 
         for (var index = 0; index < m_jobs.Length; index++) {
             var job = m_jobs[index];
 
-            status[index] = new WorldSearchStatus(
-                Name: job.Plan.Row.Name, Running: job.Running, Done: job.Done, Token: job.Token, Tokens: job.Legal.Length, Target: job.Target,
+            status[index] = new SearchStatus(
+                Name: job.Plan.Name, Running: job.Running, Done: job.Done, Token: job.Token, Tokens: job.Legal.Length, Target: job.Target,
                 Cells: job.Plan.CellCount, Count: job.Count, Nodes: job.Nodes, NodesPerTick: job.Plan.Nodes, JudgeCost: job.Plan.JudgeCost, JudgeRules: m_judge.Length,
-                HasScore: ((job.Plan.Score is not null) && (job.Plan.Method == WorldSearchMethod.Negamax)), Depth: job.Plan.Depth, PassDepth: job.PassDepth, BestScore: job.Best, BestToken: job.BestToken, BestTarget: job.BestTarget,
-                HasOutcome: (job.Plan.Method == WorldSearchMethod.Tree), Iteration: job.Iteration, Iterations: job.Plan.Iterations
+                HasScore: ((job.Plan.Score is not null) && (job.Plan.Method == SearchMethod.Negamax)), Depth: job.Plan.Depth, PassDepth: job.PassDepth, BestScore: job.Best, BestToken: job.BestToken, BestTarget: job.BestTarget,
+                HasOutcome: (job.Plan.Method == SearchMethod.Tree), Iteration: job.Iteration, Iterations: job.Plan.Iterations
             );
         }
 
@@ -646,8 +644,8 @@ internal sealed partial class WorldSearchRuntime {
     }
 
     // Every framed value except the jobs' own output rows: an output landing never restarts the job that wrote it.
-    // The live document is a fresh record after every state mutation; the frames and each job's zone rows bind to the
-    // rows the tick reads, not the rows the last rebuild saw.
+    // The live rows are a fresh instance after every mutation; the frames and each job's zone rows bind to the rows
+    // the tick reads, not the rows the last rebuild saw.
     private void RebindLive(IReadOnlyList<StateRow> rows) {
         m_base!.Rebind(rows: rows);
         m_host!.Rebind(rows: rows);
@@ -663,15 +661,15 @@ internal sealed partial class WorldSearchRuntime {
             job.PlayFrame?.Rebind(rows: rows);
         }
     }
-    // A job is sized by its token row's live cell count: a token row filled or emptied by a state mutation since the
-    // last rebuild re-sizes the job here, on the tick, so no install is needed to notice it.
+    // A job is sized by its token row's live cell count: a token row filled or emptied by a mutation since the last
+    // rebuild re-sizes the job here, on the tick, so no install is needed to notice it.
     private void ResizeJobs(IReadOnlyList<StateRow> rows) {
         for (var index = 0; index < m_jobs.Length; index++) {
             var job = m_jobs[index];
             var tokens = 0;
 
             if (
-                m_catalog!.TryResolve(lane: StateLane.Document, name: job.Plan.Row.Tokens, handle: out var handle) &&
+                m_catalog!.TryResolve(lane: StateLane.Document, name: job.Plan.Tokens, handle: out var handle) &&
                 m_catalog.TryGetDescriptor(handle: handle, descriptor: out var descriptor) &&
                 (((uint)descriptor.LaneOrdinal) < ((uint)rows.Count))
             ) {
@@ -706,9 +704,9 @@ internal sealed partial class WorldSearchRuntime {
     private bool IsOutput(string name) {
         foreach (var job in m_jobs) {
             if (
-                string.Equals(a: job.Plan.Row.Legal, b: name, comparisonType: StringComparison.Ordinal) ||
-                string.Equals(a: job.Plan.Row.Reach, b: name, comparisonType: StringComparison.Ordinal) ||
-                string.Equals(a: job.Plan.Row.Counts, b: name, comparisonType: StringComparison.Ordinal) ||
+                string.Equals(a: job.Plan.Legal, b: name, comparisonType: StringComparison.Ordinal) ||
+                string.Equals(a: job.Plan.Reach, b: name, comparisonType: StringComparison.Ordinal) ||
+                string.Equals(a: job.Plan.Counts, b: name, comparisonType: StringComparison.Ordinal) ||
                 string.Equals(a: job.Plan.Best, b: name, comparisonType: StringComparison.Ordinal)
             ) {
                 return true;
@@ -747,11 +745,11 @@ internal sealed partial class WorldSearchRuntime {
         job.Legal.AsSpan().Clear();
         job.Counts.AsSpan().Clear();
         job.Wide?.AsSpan().Clear();
-        job.Best = -WorldSearchCapacity.MateScore;
+        job.Best = -SearchCapacity.MateScore;
         job.BestToken = -1;
         job.BestTarget = -1;
-        job.Alpha = -WorldSearchCapacity.MateScore;
-        job.Beta = WorldSearchCapacity.MateScore;
+        job.Alpha = -SearchCapacity.MateScore;
+        job.Beta = SearchCapacity.MateScore;
     }
 
     private static long Slot(StateStore store, string name) =>

@@ -651,7 +651,7 @@ public sealed partial class WorldServer {
         m_profiles.Restore(checkpoint: checkpoint.OwnedWorlds);
         RecompileRules(definition: m_definition);
         RestoreDecisions(server.Decisions);
-        m_search.Restore(checkpoint: (checkpoint.Search ?? WorldSearchCheckpoint.Empty));
+        m_search.Restore(checkpoint: (checkpoint.Search ?? SearchCheckpoint.Empty));
         RestoreBoardEnforcement(checkpoint: (checkpoint.BoardEnforcement ?? WorldBoardEnforcementCheckpoint.Empty));
     }
     /// <summary>Re-applies one mutation from a hosted row's persisted journal tail — the mutations recorded after

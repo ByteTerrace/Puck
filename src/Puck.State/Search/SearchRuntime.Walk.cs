@@ -1,7 +1,7 @@
 using Puck.Maths;
-namespace Puck.World.Server;
+namespace Puck.State;
 
-internal sealed partial class WorldSearchRuntime {
+public sealed partial class SearchRuntime {
     /// <summary>Gets how many 64-bit words one token's wide reach bitset needs for a board of <paramref name="cellCount"/> cells.</summary>
     private static int WideWordsPerToken(int cellCount) => ((cellCount + 63) >> 6);
 
@@ -27,7 +27,7 @@ internal sealed partial class WorldSearchRuntime {
         var scratch = host.Frame;
         var plan = job.Plan;
         var rows = m_base!.Rows;
-        var tokens = StateRows.FindStateRow(rows: rows, name: plan.Row.Tokens);
+        var tokens = StateRows.FindStateRow(rows: rows, name: plan.Tokens);
         var turn = StateRows.FindStateRow(rows: rows, name: plan.Turn);
         var verdict = StateRows.FindStateRow(rows: rows, name: plan.Verdict);
         var cells = plan.CellCount;
@@ -39,7 +39,7 @@ internal sealed partial class WorldSearchRuntime {
             return;
         }
 
-        var hasScore = ((plan.Score is not null) && (plan.Method == WorldSearchMethod.Negamax));
+        var hasScore = ((plan.Score is not null) && (plan.Method == SearchMethod.Negamax));
         var wideWords = ((job.Wide is not null) ? WideWordsPerToken(cellCount: cells) : 0);
         var budget = plan.Nodes;
 
@@ -59,7 +59,7 @@ internal sealed partial class WorldSearchRuntime {
             if (shapeIndex >= shapes.Length) {
                 if (p == 0) {
                     if (!hasScore || (job.PassDepth >= plan.Depth)) {
-                        if (plan.Method == WorldSearchMethod.Tree) {
+                        if (plan.Method == SearchMethod.Tree) {
                             StartUct(job: job);
                         } else {
                             job.Running = false;
@@ -95,7 +95,7 @@ internal sealed partial class WorldSearchRuntime {
             var from = TokenCell(job: job, frame: frame, tokens: tokens, tokenCells: tokenCells, token: token);
             var onBoard = ((from >= 0L) && (from < cells));
 
-            if (onBoard != (shape.Kind != WorldSearchShapeKind.Drop)) {
+            if (onBoard != (shape.Kind != SearchShapeKind.Drop)) {
                 // This shape does not apply to the token in its current state (on the board for every shape but
                 // drop, off it for drop) — skip every candidate for this token under this shape.
                 SetCursorToken(job: job, p: p, value: (token + 1));
@@ -155,7 +155,7 @@ internal sealed partial class WorldSearchRuntime {
                 SetCursorShape(job: job, p: next, value: 0);
                 SetCursorToken(job: job, p: next, value: 0);
                 SetCursorTarget(job: job, p: next, value: 0);
-                SetCursorBest(job: job, p: next, value: -WorldSearchCapacity.MateScore);
+                SetCursorBest(job: job, p: next, value: -SearchCapacity.MateScore);
                 SetCursorBestMove(job: job, p: next, token: -1, target: -1);
                 SetCursorAlpha(job: job, p: next, value: -CursorBeta(job: job, p: p));
                 SetCursorBeta(job: job, p: next, value: -CursorAlpha(job: job, p: p));
@@ -181,7 +181,7 @@ internal sealed partial class WorldSearchRuntime {
     // offset the walked token takes and refuses an occupied one. Every refusal here means "not a candidate", judged
     // exactly like the section's original target-equals-source skip.
     private static bool TryResolveCandidate(
-        WorldSearchShapePlan shape, WorldSearchPlan plan, StateRow[]? zones, StateFrame frame, StateRow tokens, IReadOnlyList<StateCell> tokenCells,
+        SearchShapePlan shape, SearchPlan plan, StateRow[]? zones, StateFrame frame, StateRow tokens, IReadOnlyList<StateCell> tokenCells,
         int token, long from, int candidateIndex, int cells,
         out int target, out int mid, out int companionIndex, out int companionTarget, out long code
     ) {
@@ -192,7 +192,7 @@ internal sealed partial class WorldSearchRuntime {
         code = 0L;
 
         switch (shape.Kind) {
-            case WorldSearchShapeKind.Transfer: {
+            case SearchShapeKind.Transfer: {
                 // The token must stand at the selected end of its zone, and the destination must be another zone with
                 // room: pile order is the zones' own, so nothing but the end token ever moves.
                 if ((zones is null) || (candidateIndex == from)) {
@@ -211,7 +211,7 @@ internal sealed partial class WorldSearchRuntime {
 
                 return true;
             }
-            case WorldSearchShapeKind.Promote: {
+            case SearchShapeKind.Promote: {
                 var offered = shape.PromoteTo!.Length;
                 var cell = (candidateIndex / offered);
 
@@ -224,7 +224,7 @@ internal sealed partial class WorldSearchRuntime {
 
                 return true;
             }
-            case WorldSearchShapeKind.Relocate: {
+            case SearchShapeKind.Relocate: {
                 if (candidateIndex == from) {
                     return false;
                 }
@@ -233,7 +233,7 @@ internal sealed partial class WorldSearchRuntime {
 
                 return true;
             }
-            case WorldSearchShapeKind.Drop: {
+            case SearchShapeKind.Drop: {
                 if (AnyTokenAt(frame: frame, tokens: tokens, tokenCells: tokenCells, cell: candidateIndex, excludeA: -1, excludeB: -1)) {
                     return false;
                 }
@@ -242,7 +242,7 @@ internal sealed partial class WorldSearchRuntime {
 
                 return true;
             }
-            case WorldSearchShapeKind.Jump: {
+            case SearchShapeKind.Jump: {
                 var direction = shape.Directions[candidateIndex];
                 var midCell = plan.Topology!.Neighbour(cell: (int)from, direction: direction);
 
@@ -267,7 +267,7 @@ internal sealed partial class WorldSearchRuntime {
 
                 return true;
             }
-            case WorldSearchShapeKind.Pair: {
+            case SearchShapeKind.Pair: {
                 if (candidateIndex == from) {
                     return false;
                 }
@@ -325,10 +325,10 @@ internal sealed partial class WorldSearchRuntime {
     // carries (an eviction, the companion's move, the new code, the zone transfer). The walk and the tree search
     // apply candidates through this one door, so they cannot disagree about what a shape does.
     private static void ApplyCandidate(
-        WorldSearchShapePlan shape, WorldSearchPlan plan, StateRow[]? zones, StateFrame frame, StateFrame scratch, IReadOnlyList<StateRow> rows,
+        SearchShapePlan shape, SearchPlan plan, StateRow[]? zones, StateFrame frame, StateFrame scratch, IReadOnlyList<StateRow> rows,
         StateRow tokens, IReadOnlyList<StateCell> tokenCells, int token, long from, int target, int mid, int companionIndex, int companionTarget, long code
     ) {
-        if (shape.Kind == WorldSearchShapeKind.Transfer) {
+        if (shape.Kind == SearchShapeKind.Transfer) {
             _ = scratch.TryTransferToken(from: zones![from], to: zones[target], key: tokenCells[token].Key, insertFirst: shape.InsertFirst, reason: out _);
 
             return;
@@ -337,19 +337,19 @@ internal sealed partial class WorldSearchRuntime {
         _ = scratch.TryWrite(row: tokens, key: tokenCells[token].Key, value: target, write: StateWriteKind.Set, reason: out _);
 
         switch (shape.Kind) {
-            case WorldSearchShapeKind.Relocate when shape.Displace:
+            case SearchShapeKind.Relocate when shape.Displace:
                 EvictAt(frame: frame, scratch: scratch, tokens: tokens, tokenCells: tokenCells, cell: target, exclude: token, off: plan.Off);
 
                 break;
-            case WorldSearchShapeKind.Jump:
+            case SearchShapeKind.Jump:
                 EvictAt(frame: frame, scratch: scratch, tokens: tokens, tokenCells: tokenCells, cell: mid, exclude: token, off: plan.Off);
 
                 break;
-            case WorldSearchShapeKind.Pair:
+            case SearchShapeKind.Pair:
                 _ = scratch.TryWrite(row: tokens, key: tokenCells[companionIndex].Key, value: companionTarget, write: StateWriteKind.Set, reason: out _);
 
                 break;
-            case WorldSearchShapeKind.Promote:
+            case SearchShapeKind.Promote:
                 EvictAt(frame: frame, scratch: scratch, tokens: tokens, tokenCells: tokenCells, cell: target, exclude: token, off: plan.Off);
 
                 if (StateRows.FindStateRow(rows: rows, name: shape.Codes!) is { } codes) {
@@ -441,10 +441,10 @@ internal sealed partial class WorldSearchRuntime {
         job.TtMeta![slot] = ((flag << 8) | (long)remaining);
     }
 
-    private long EvaluateScore(WorldSearchPlan plan, ulong tick) =>
+    private long EvaluateScore(SearchPlan plan, ulong tick) =>
         (m_host!.Evaluator.TryEvaluateExpression(program: plan.Score!, kind: CellKind.Int, tick: tick, value: out var value) ? value : 0L);
 
-    private static void AdvanceCandidate(Job job, int p, WorldSearchShapePlan[] shapes, int cellCount, int tokenCount) {
+    private static void AdvanceCandidate(Job job, int p, SearchShapePlan[] shapes, int cellCount, int tokenCount) {
         var shapeIndex = CursorShape(job: job, p: p);
         var bound = shapes[shapeIndex].CandidateCount(cellCount: cellCount);
         var candidate = (CursorTarget(job: job, p: p) + 1);

@@ -218,8 +218,29 @@ public sealed partial class WorldServer : IWorldServerHost {
     // latching, the trace, the refusal ledger, and every state-neutral effect's firing.
     private readonly RuleEvaluator m_evaluator;
     // The `search` jobs over a frame of the installed section, rebuilt with the rules on every install.
-    private readonly WorldSearchRuntime m_search;
-    private readonly Func<WorldMutation, bool> m_searchApply;
+    private readonly SearchRuntime m_search;
+    private readonly Func<IReadOnlyList<SearchWrite>, bool> m_searchApply;
+
+    // Translates a landed job's writes into the ordinary mutation vocabulary: a single write installs directly, more
+    // than one folds into a Batch, so a finished job's observable mutation shape is unchanged by the runtime split.
+    private static WorldMutation ComposeSearchMutation(IReadOnlyList<SearchWrite> writes) {
+        if (writes.Count == 1) {
+            return ToSearchMutation(write: writes[0]);
+        }
+
+        var mutations = new WorldMutation[writes.Count];
+
+        for (var index = 0; index < writes.Count; index++) {
+            mutations[index] = ToSearchMutation(write: writes[index]);
+        }
+
+        return new WorldMutation.Batch(Principal: WorldPrincipal.World, Mutations: mutations);
+    }
+    private static WorldMutation ToSearchMutation(SearchWrite write) => write switch {
+        SearchWrite.Cell cell => new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.World, Row: cell.Row, Key: cell.Key, Value: cell.Value, Kind: WorldDocumentWriteKind.Set),
+        SearchWrite.ClearBoard clear => new WorldMutation.TransformState(Principal: WorldPrincipal.World, Transform: new StateTransform.BoardCombine(Row: clear.Row, Operation: BoardCombineOp.Clear)),
+        _ => throw new InvalidOperationException(message: $"unrecognized search write '{write.GetType().Name}'"),
+    };
     // The installed documents a preflight scope remembers, innermost last (IRuleHost.BeginPreflight/EndPreflight).
     private readonly Stack<WorldDefinition> m_preflightScopes = new();
     // The mutations each open preflight scope composed, innermost last — what TryCommitPreflight installs as one Batch.
@@ -644,8 +665,12 @@ public sealed partial class WorldServer : IWorldServerHost {
 
         m_tables = CompileTables(definition: definition);
         m_evaluator = new RuleEvaluator(host: this);
-        m_search = new WorldSearchRuntime(live: () => m_definition!.State, narrationHub: m_output);
-        m_searchApply = mutation => TryApplyMutation(mutation: mutation, tick: m_searchTick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false);
+        m_search = new SearchRuntime(live: () => m_definition!.State, narrate: (channel, text) => {
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: channel, text: text);
+            }
+        });
+        m_searchApply = writes => TryApplyMutation(mutation: ComposeSearchMutation(writes: writes), tick: m_searchTick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false);
 
         if ((definition.Music is { Count: > 0 } music) && (music[0] is { } row)) {
             // The row's Source/Hash were already proven to load, canonicalize, and pin-verify by

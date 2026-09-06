@@ -1006,7 +1006,7 @@ desktop.
 ## Engine narration (`WorldNarration.cs`, `WorldOutputHub.Narration.cs`)
 
 A `WorldServer`/`WorldPeerHost`/`WorldRemoteAuthority`/`WorldReplayTape`/
-`WorldInstanceHost`/`WorldOwnedWorlds`/`WorldMachineHost`/`WorldSearchRuntime`
+`WorldInstanceHost`/`WorldOwnedWorlds`/`WorldMachineHost`
 line that would otherwise write straight to `Console.Error` instead calls
 `WorldOutputHub.Narrate(channel, format)` — `channel` is the bracketed tag the
 line opens with (`world.grant`, `world.mutation`, `replay.drive`, …), `format`
@@ -1020,10 +1020,10 @@ hold that implementation itself (`build/Architecture.props` denies it a
 `System.Console` reference). A server's own
 narration must be attached from its constructor's `narrationSink` parameter,
 not after — the document's own authored grants narrate during construction,
-before any post-build wiring step could reach them. `WorldMachineHost` and
-`WorldSearchRuntime` take an optional `WorldOutputHub`/narration sink because
-neither owns a single server of its own to share (`WorldMachineHost` is a peer
-singleton to `WorldServer`, constructed first; `WorldOwnedWorlds`,
+before any post-build wiring step could reach them. `WorldMachineHost` takes
+an optional `WorldOutputHub`/narration sink because it owns no single server
+of its own to share (a peer singleton to `WorldServer`, constructed first;
+`WorldOwnedWorlds`,
 `WorldRemoteAuthority`, and `WorldFederatedServerLink` carry the same shape
 for the identical reason). A narration site inside a loop that assigns any of
 the format closure's captured locals before a possible early exit must gate

@@ -322,6 +322,18 @@ Nothing here carries a `World` name — a state library names no world.
   conversion every authored constant and table value crosses, and
   `StateSpelling`, the one home for how a refusal spells a kind, a generator
   source, or a cycle output.
+- *Search (`Search/`):* `SearchRuntime` — negamax with alpha-beta and a
+  transposition table, or UCB1 tree search, walking every (shape, token,
+  target or direction) candidate a `SearchPlan` declares and judging each
+  through a document project's own compiled rules over a `StateFrame`; a
+  finished job lands as `SearchWrite`s (`Cell`, `ClearBoard`), never a
+  document project's own mutation vocabulary. `SearchShapePlan`/`SearchShapeKind`
+  compile the six candidate shapes (relocate, drop, jump, promote, pair,
+  transfer); `SearchCapacity` holds its bounds. A document project resolves
+  its own authored rows into a `SearchPlan[]` (row and topology references,
+  by name), compiles its own judge rules, and translates a landed job's
+  writes into its own wire vocabulary — the runtime holds no world, document,
+  or wire concept.
 
 Numeric `setState`, `addState`, and `pushState` share source resolution. A direct
 source is read once per execution pass; an ordinary write still has separate
@@ -381,6 +393,14 @@ The world's registered families (`WorldRuleVocabulary`, `WorldRuleCompileContext
 host (`WorldServer.RuleHost.cs` in
 [`src/Puck.World.Server`](../Puck.World.Server/README.md)).
 `tests/Puck.State.Tests` proves the expression syntax, the function families,
-the hex topology, and the evaluator over a headless host (a row list, no
-world); the converter and schema facts that need the world
-document's JSON context stay in `tests/Puck.World.Schema.Tests`.
+the hex topology, the evaluator, and the search runtime over a headless host
+(a row list, no world); the converter and schema facts that need the world
+document's JSON context stay in `tests/Puck.World.Schema.Tests`. The `search`
+document section (`WorldSearchSection`/`WorldSearchRow`/`WorldSearchShape`)
+and the compiler that resolves it into a `SearchPlan` (`WorldSearchCompilation`,
+reading the document's placements and topologies to fill in what a row leaves
+implicit) live in `src/Puck.World.Schema`; `WorldServer` holds the runtime and
+translates its landed `SearchWrite`s into the world's own mutation door
+(`WorldServer.cs`, `WorldServer.Step.cs` in
+[`src/Puck.World.Server`](../Puck.World.Server/README.md)); the game laws that
+boot a server stay in `tests/Puck.World.Tests`.

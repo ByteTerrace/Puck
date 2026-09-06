@@ -732,7 +732,15 @@ public sealed partial class WorldServer {
         PruneBoardEnforcement(definition: definition);
         ReconcileDecisions();
         ReconcilePatterns(definition);
-        m_search.Rebuild(definition: definition, rules: m_rules, patterns: m_patterns, tables: m_tables);
+
+        if (!WorldSearchCompilation.TryPlanAll(definition: definition, rules: m_rules, plans: out var searchPlans, judge: out var searchJudge, reason: out var searchReason)) {
+            throw new InvalidOperationException(message: $"search failed to plan after validation: {searchReason}");
+        }
+
+        m_search.Rebuild(
+            plans: searchPlans, judge: searchJudge, rows: definition.State, catalog: definition.StateCatalog,
+            topology: name => WorldTopologyCompilation.Find(definition, name), patterns: m_patterns, tables: m_tables
+        );
         m_population.BindFlockAffinities(definition, EvaluateFlockAffinity);
 
         return definition;
@@ -748,7 +756,7 @@ public sealed partial class WorldServer {
         }
     }
     /// <summary>Lists every search job's progress.</summary>
-    public IReadOnlyList<WorldSearchStatus> SearchStatus() => m_search.Status();
+    public IReadOnlyList<SearchStatus> SearchStatus() => m_search.Status();
     // The live half of link liveness: each DIRECT projection in the tick's frozen graph whose delivered snapshot tick
     // advanced is one refresh. An authored row the source could not resolve contributes no projection at all, which
     // is exactly "nothing was delivered" — the staleness count rises and the grace comparison decides. Replay drives

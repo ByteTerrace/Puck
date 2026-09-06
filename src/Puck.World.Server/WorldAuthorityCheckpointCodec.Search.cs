@@ -3,7 +3,7 @@ using Puck.Networking;
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
-    private static void WriteSearchLevel(WireWriter writer, WorldSearchLevelCheckpoint level) {
+    private static void WriteSearchLevel(WireWriter writer, SearchLevelCheckpoint level) {
         writer.WriteInt32(value: level.Shape);
         writer.WriteInt32(value: level.Token);
         writer.WriteInt32(value: level.Target);
@@ -20,7 +20,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteUInt64(value: level.Key);
         writer.WriteInt64(value: level.AlphaEntry);
     }
-    private static WorldSearchLevelCheckpoint ReadSearchLevel(ref WireReader reader) {
+    private static SearchLevelCheckpoint ReadSearchLevel(ref WireReader reader) {
         var shape = reader.ReadInt32();
         var token = reader.ReadInt32();
         var target = reader.ReadInt32();
@@ -37,7 +37,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var key = reader.ReadUInt64();
         var alphaEntry = reader.ReadInt64();
 
-        return new WorldSearchLevelCheckpoint(
+        return new SearchLevelCheckpoint(
             Shape: shape,
             Token: token,
             Target: target,
@@ -52,7 +52,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             AlphaEntry: alphaEntry
         );
     }
-    private static void WriteSearchJob(WireWriter writer, WorldSearchJobCheckpoint job) {
+    private static void WriteSearchJob(WireWriter writer, SearchJobCheckpoint job) {
         writer.WriteString(value: job.Name);
         writer.WriteUInt64(value: job.Stamp);
         writer.WriteBoolean(value: job.Running);
@@ -123,7 +123,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             }
         }
     }
-    private static WorldSearchJobCheckpoint ReadSearchJob(ref WireReader reader) {
+    private static SearchJobCheckpoint ReadSearchJob(ref WireReader reader) {
         var name = reader.ReadRequiredString(
             field: "search job name",
             maxBytes: MaxHashChars
@@ -173,7 +173,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader,
             field: "search job transposition meta"
         );
-        WorldSearchTreeCheckpoint? tree = null;
+        SearchTreeCheckpoint? tree = null;
 
         if (reader.ReadBoolean()) {
             var treeActive = reader.ReadBoolean();
@@ -197,14 +197,14 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
             }
 
-            tree = new WorldSearchTreeCheckpoint(
+            tree = new SearchTreeCheckpoint(
                 Active: treeActive, Phase: phase, Count: treeCount, Iteration: iteration, Seed: seed, UShape: uShape, UToken: uToken, UTarget: uTarget, UScan: uScan, UStart: uStart, PlayoutPlies: playoutPlies,
                 Parent: arrays[0], FirstChild: arrays[1], ChildCount: arrays[2], Visits: arrays[3], Total: arrays[4], Shape: arrays[5], Token: arrays[6], Target: arrays[7], Expanded: arrays[8],
                 Path: arrays[9], PathLength: pathLength, UctValues: arrays[10], PlayValues: arrays[11]
             );
         }
 
-        return new WorldSearchJobCheckpoint(
+        return new SearchJobCheckpoint(
             Name: name,
             Stamp: stamp,
             Running: running,
@@ -232,7 +232,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             Tree: tree
         );
     }
-    private static byte[] EncodeSearch(WorldSearchCheckpoint section) {
+    private static byte[] EncodeSearch(SearchCheckpoint section) {
         var writer = new WireWriter();
 
         WriteArray(
@@ -243,7 +243,7 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return writer.ToArray();
     }
-    private static bool TryDecodeSearch(byte[] bytes, out string reason, out WorldSearchCheckpoint section) {
+    private static bool TryDecodeSearch(byte[] bytes, out string reason, out SearchCheckpoint section) {
         var reader = new WireReader(bytes: bytes);
         var jobs = ReadArray(
             reader: ref reader,
@@ -258,7 +258,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             return false;
         }
 
-        section = new WorldSearchCheckpoint(Jobs: jobs);
+        section = new SearchCheckpoint(Jobs: jobs);
         reason = string.Empty;
 
         return true;

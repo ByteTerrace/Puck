@@ -10,7 +10,7 @@ namespace Puck.World.Server;
 public sealed partial class WorldServer {
     // Rebuilds only when the installed rows no longer fit the frame's layout, or a document swap minted a fresh
     // StateCatalog (a checkpoint restore mints one even when the row structure is byte-for-byte unchanged) — the
-    // same rebuild-or-rebind rule WorldSearchRuntime.Rebuild follows for its own frame. m_definition.State is a new
+    // same rebuild-or-rebind rule SearchRuntime.Rebuild follows for its own frame. m_definition.State is a new
     // reference only on an install, so a repeat call between two installs (every gate and binding read during one
     // tick) short-circuits on that reference alone rather than re-deriving every row's layout to prove nothing moved.
     private StateFrame EnsureRuleFrame() {

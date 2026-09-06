@@ -1,8 +1,8 @@
 using Puck.Maths;
 
-namespace Puck.World.Server;
+namespace Puck.State;
 
-internal sealed partial class WorldSearchRuntime {
+public sealed partial class SearchRuntime {
     // The tree search a job with the tree method runs once its root walk has landed: a bounded node pool over
     // the base position, one judge per node of budget, resumable at any phase. Selection descends by UCB1 from the
     // root, expansion judges every candidate of the leaf once and keeps the accepted ones as children, a playout
@@ -23,7 +23,7 @@ internal sealed partial class WorldSearchRuntime {
         return (z ^ (z >> 31));
     }
 
-    private static int TotalCandidates(WorldSearchShapePlan[] shapes, int cellCount, int tokenCount) {
+    private static int TotalCandidates(SearchShapePlan[] shapes, int cellCount, int tokenCount) {
         var total = 0;
 
         foreach (var shape in shapes) {
@@ -32,7 +32,7 @@ internal sealed partial class WorldSearchRuntime {
 
         return total;
     }
-    private static void DecodeCandidate(WorldSearchShapePlan[] shapes, int cellCount, int tokenCount, int flat, out int shape, out int token, out int candidate) {
+    private static void DecodeCandidate(SearchShapePlan[] shapes, int cellCount, int tokenCount, int flat, out int shape, out int token, out int candidate) {
         for (shape = 0; shape < shapes.Length; shape++) {
             var span = (tokenCount * shapes[shape].CandidateCount(cellCount: cellCount));
 
@@ -53,14 +53,14 @@ internal sealed partial class WorldSearchRuntime {
 
     // Resolves and applies one candidate from `from` into the host's scratch frame and judges it; true when the
     // judge accepted it (verdict at accept, turn changed).
-    private bool TryJudgeCandidate(Job job, StateFrame from, WorldSearchShapePlan shape, int token, int candidateIndex, StateRow tokens, IReadOnlyList<StateCell> tokenCells, IReadOnlyList<StateRow> rows, ulong tick, out int target, out long code) {
+    private bool TryJudgeCandidate(Job job, StateFrame from, SearchShapePlan shape, int token, int candidateIndex, StateRow tokens, IReadOnlyList<StateCell> tokenCells, IReadOnlyList<StateRow> rows, ulong tick, out int target, out long code) {
         var plan = job.Plan;
         var cells = plan.CellCount;
         var scratch = m_host!.Frame;
         var fromCell = TokenCell(job: job, frame: from, tokens: tokens, tokenCells: tokenCells, token: token);
         var onBoard = ((fromCell >= 0L) && (fromCell < cells));
 
-        if (onBoard != (shape.Kind != WorldSearchShapeKind.Drop)) {
+        if (onBoard != (shape.Kind != SearchShapeKind.Drop)) {
             target = -1;
             code = 0L;
 
@@ -82,7 +82,7 @@ internal sealed partial class WorldSearchRuntime {
         return ((Slot(store: scratch, name: plan.Verdict) == plan.Accept) && (Slot(store: scratch, name: plan.Turn) != mover));
     }
 
-    private long EvaluateOutcome(WorldSearchPlan plan, StateFrame position, ulong tick) {
+    private long EvaluateOutcome(SearchPlan plan, StateFrame position, ulong tick) {
         // The outcome reads the position it is asked about: the host's scratch frame.
         var scratch = m_host!.Frame;
 
@@ -105,7 +105,7 @@ internal sealed partial class WorldSearchRuntime {
         job.TreeExpanded![0] = 0L;
         job.Iteration = 0;
         job.Seed = job.Stamp;
-        job.Best = -WorldSearchCapacity.MateScore;
+        job.Best = -SearchCapacity.MateScore;
         job.BestToken = -1;
         job.BestTarget = -1;
         BeginIteration(job: job);
@@ -335,13 +335,13 @@ internal sealed partial class WorldSearchRuntime {
         var candidate = job.TreeTarget![child];
 
         return shape.Kind switch {
-            WorldSearchShapeKind.Promote => (candidate / Math.Max(val1: 1, val2: (shape.PromoteTo?.Length ?? 1))),
-            WorldSearchShapeKind.Jump => JumpTarget(job: job, child: child, shape: shape, candidate: candidate),
+            SearchShapeKind.Promote => (candidate / Math.Max(val1: 1, val2: (shape.PromoteTo?.Length ?? 1))),
+            SearchShapeKind.Jump => JumpTarget(job: job, child: child, shape: shape, candidate: candidate),
             _ => candidate,
         };
     }
-    private int JumpTarget(Job job, int child, WorldSearchShapePlan shape, int candidate) {
-        var tokens = StateRows.FindStateRow(rows: m_base!.Rows, name: job.Plan.Row.Tokens);
+    private int JumpTarget(Job job, int child, SearchShapePlan shape, int candidate) {
+        var tokens = StateRows.FindStateRow(rows: m_base!.Rows, name: job.Plan.Tokens);
 
         if ((tokens is null) || !m_base.TryStoredAt(row: tokens, index: job.TreeToken![child], value: out var from) || (from < 0L)) {
             return -1;

@@ -8,8 +8,8 @@ public static partial class WorldDefinitionValidator {
         if (rows.Count == 0) {
             return;
         }
-        if (rows.Count > WorldSearchCapacity.MaxJobs) {
-            errors.Add(item: $"search declares {rows.Count} jobs; the maximum is {WorldSearchCapacity.MaxJobs}.");
+        if (rows.Count > SearchCapacity.MaxJobs) {
+            errors.Add(item: $"search declares {rows.Count} jobs; the maximum is {SearchCapacity.MaxJobs}.");
 
             return;
         }

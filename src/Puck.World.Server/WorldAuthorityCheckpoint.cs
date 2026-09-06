@@ -185,6 +185,6 @@ public sealed record WorldAuthorityCheckpoint(
     WorldOwnedWorlds.WorldOwnedWorldsCheckpoint OwnedWorlds,
     WorldAuthorityHostRowCheckpoint HostRow,
     WorldFieldLattice.WorldFieldCheckpoint? Fields = null,
-    WorldSearchCheckpoint? Search = null,
+    SearchCheckpoint? Search = null,
     WorldBoardEnforcementCheckpoint? BoardEnforcement = null
 );

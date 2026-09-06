@@ -17,33 +17,6 @@ public sealed record WorldSearchSection(IReadOnlyList<WorldSearchRow>? Jobs = nu
     public IReadOnlyList<WorldSearchRow> Rows => (Jobs ?? []);
 }
 
-/// <summary>How a job with a score compares plies.</summary>
-[JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldSearchMethod>))]
-public enum WorldSearchMethod : byte {
-    /// <summary>Iterative-deepening negamax with alpha-beta and a transposition table, the score read at the depth cap.</summary>
-    Negamax,
-    /// <summary>UCB1 tree search over a bounded node pool with seeded playouts, the score read where no candidate is
-    /// accepted or at the depth cap, the most-visited root move landed.</summary>
-    Tree,
-}
-
-/// <summary>Which board-state change one candidate shape makes. <see cref="Relocate"/> is the section's original,
-/// still-default shape.</summary>
-public enum WorldSearchShapeKind : byte {
-    /// <summary>One own token moves onto any other cell.</summary>
-    Relocate,
-    /// <summary>A token off the board enters an empty cell.</summary>
-    Drop,
-    /// <summary>The walked token steps two cells along a direction, over a token that leaves the board.</summary>
-    Jump,
-    /// <summary>One token relocates and its code changes to one of an authored list (<see cref="WorldSearchShape.Promote"/>).</summary>
-    Promote,
-    /// <summary>The walked token and a second, fixed token relocate together.</summary>
-    Pair,
-    /// <summary>The walked token, at one end of its ordered zone, moves onto another of the job's zones.</summary>
-    Transfer,
-}
-
 /// <summary>One authored candidate shape a search job enumerates, ahead of token and target/direction in the walk's
 /// fixed order. Every shape but <see cref="Drop"/> requires the walked token on the board; <see cref="Drop"/>
 /// requires it off. Absent from <see cref="WorldSearchRow.Shapes"/>, a job's default and only shape is
@@ -83,7 +56,7 @@ public abstract record WorldSearchShape {
     /// <see cref="Codes"/> becomes one of <see cref="To"/> — one candidate per (cell, code). The judge decides where
     /// a code may change; the shape only offers the change.</summary>
     /// <param name="Codes">An integer row keyed by the tokens holding each token's code.</param>
-    /// <param name="To">The codes a token may take, at most <see cref="WorldSearchCapacity.MaxPromotions"/>.</param>
+    /// <param name="To">The codes a token may take, at most <see cref="SearchCapacity.MaxPromotions"/>.</param>
     public sealed record Promote(string Codes, IReadOnlyList<long> To) : WorldSearchShape;
     /// <summary>The walked token — standing at the <see cref="Selector"/> end of one of the job's
     /// <see cref="WorldSearchRow.Zones"/> — moves onto any other of them, landing last (the top of the pile) or, with
@@ -94,31 +67,6 @@ public abstract record WorldSearchShape {
     /// (default, the top of the pile) or <see cref="ZoneSelector.First"/>.</param>
     /// <param name="InsertFirst">Whether the token lands first in the destination rather than last.</param>
     public sealed record Transferred(ZoneSelector Selector = ZoneSelector.Last, bool InsertFirst = false) : WorldSearchShape;
-}
-
-/// <summary>One job's compiled shape: its kind, and the data the runtime resolves a candidate from.
-/// <see cref="Directions"/> is populated for <see cref="WorldSearchShapeKind.Jump"/> alone — the resolved direction
-/// ordinals <see cref="WorldSearchShape.Jump.Over"/> names. <see cref="PairWithIndex"/> is populated for
-/// <see cref="WorldSearchShapeKind.Pair"/> alone — the fixed companion's ordinal in the job's tokens row.</summary>
-/// <param name="Kind">The shape.</param>
-/// <param name="Displace">Whether a <see cref="WorldSearchShapeKind.Relocate"/> evicts the token standing on the
-/// target; unused by every other kind.</param>
-/// <param name="Directions">The resolved direction ordinals a <see cref="WorldSearchShapeKind.Jump"/> tries.</param>
-/// <param name="PairWithIndex">The companion token's ordinal for a <see cref="WorldSearchShapeKind.Pair"/>, or -1.</param>
-/// <param name="Codes">The codes row a <see cref="WorldSearchShapeKind.Promote"/> writes, or <see langword="null"/>.</param>
-/// <param name="PromoteTo">The codes a <see cref="WorldSearchShapeKind.Promote"/> offers, or <see langword="null"/>.</param>
-/// <param name="Selector">The zone end a <see cref="WorldSearchShapeKind.Transfer"/> moves from.</param>
-/// <param name="InsertFirst">Whether a <see cref="WorldSearchShapeKind.Transfer"/> lands first rather than last.</param>
-public sealed record WorldSearchShapePlan(WorldSearchShapeKind Kind, bool Displace, int[] Directions, int PairWithIndex, string? Codes = null, long[]? PromoteTo = null, ZoneSelector Selector = ZoneSelector.Last, bool InsertFirst = false) {
-    /// <summary>Gets how many candidates this shape enumerates per token: every cell (a board's cells, or a zone
-    /// job's zones) for every kind but <see cref="WorldSearchShapeKind.Jump"/>, which enumerates its resolved
-    /// directions instead, and <see cref="WorldSearchShapeKind.Promote"/>, which offers every code on every cell.</summary>
-    /// <param name="cellCount">The job's cell count.</param>
-    public int CandidateCount(int cellCount) => Kind switch {
-        WorldSearchShapeKind.Jump => Directions.Length,
-        WorldSearchShapeKind.Promote => (cellCount * (PromoteTo?.Length ?? 0)),
-        _ => cellCount,
-    };
 }
 
 /// <summary>One search job.</summary>
@@ -156,9 +104,9 @@ public sealed record WorldSearchShapePlan(WorldSearchShapeKind Kind, bool Displa
 /// Required when <paramref name="Depth"/> exceeds one, or <paramref name="Best"/> is authored.</param>
 /// <param name="Best">A keyed integer row receiving the deepest completed depth's answer: <c>token</c> (the mover's
 /// ordinal in <paramref name="Tokens"/>), <c>to</c> (its destination cell), and <c>score</c> (the negamax value).</param>
-/// <param name="Method">How plies are compared by the score: <see cref="WorldSearchMethod.Negamax"/> to the depth cap,
-/// or <see cref="WorldSearchMethod.Tree"/>, which reads the score where no candidate is accepted or at the cap.</param>
-/// <param name="Iterations">How many tree iterations a <see cref="WorldSearchMethod.Tree"/> job runs before it lands.</param>
+/// <param name="Method">How plies are compared by the score: <see cref="SearchMethod.Negamax"/> to the depth cap,
+/// or <see cref="SearchMethod.Tree"/>, which reads the score where no candidate is accepted or at the cap.</param>
+/// <param name="Iterations">How many tree iterations a <see cref="SearchMethod.Tree"/> job runs before it lands.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldSearchRow(
     string Name,
@@ -176,7 +124,7 @@ public sealed record WorldSearchRow(
     int Depth = 1,
     string? Score = null,
     string? Best = null,
-    WorldSearchMethod Method = WorldSearchMethod.Negamax,
+    SearchMethod Method = SearchMethod.Negamax,
     int Iterations = 256
 ) {
     /// <summary>The one candidate shape a job with none authored enumerates: a plain relocation that evicts
@@ -188,51 +136,6 @@ public sealed record WorldSearchRow(
     [JsonIgnore]
     public IReadOnlyList<WorldSearchShape> EffectiveShapes => ((Shapes is { Count: > 0 }) ? Shapes : s_defaultShapes);
 }
-
-/// <summary>Hard bounds for the search section.</summary>
-public static class WorldSearchCapacity {
-    /// <summary>The most jobs one document declares.</summary>
-    public const int MaxJobs = 8;
-    /// <summary>The most candidate shapes one job declares.</summary>
-    public const int MaxShapesPerJob = 8;
-    /// <summary>The most relocations one job judges per tick, whatever the work sheet leaves.</summary>
-    public const int MaxNodesPerTick = 4_096;
-    /// <summary>The most plies one job searches ahead.</summary>
-    public const int MaxDepth = 32;
-    /// <summary>The most codes one <c>promote</c> shape offers.</summary>
-    public const int MaxPromotions = 8;
-    /// <summary>The transposition table's entries per job with a score: a power of two, indexed by the low bits of a
-    /// position's frame hash.</summary>
-    public const int TranspositionEntries = 1_024;
-    /// <summary>The tree nodes one job with an outcome may grow.</summary>
-    public const int TreeNodes = 2_048;
-    /// <summary>The most tree iterations one job runs before it lands.</summary>
-    public const int MaxIterations = 65_536;
-    /// <summary>The magnitude a terminal position (no accepted relocation) scores for the side to move, and the
-    /// negamax search window's width — shifted down from <see cref="long.MaxValue"/> so a value repeatedly negated
-    /// and compared across the deepest authored search never overflows.</summary>
-    public const long MateScore = (long.MaxValue >> 2);
-}
-
-/// <summary>One job's derived plan: every row resolved, the off-board value, the compiled shapes, and the per-tick
-/// node quota.</summary>
-/// <param name="Row">The authored job.</param>
-/// <param name="Topology">The board's topology, or <see langword="null"/> for a job over zones.</param>
-/// <param name="Zones">The zone rows a zone job's cells are, in authored order; empty for a board job.</param>
-/// <param name="CellCount">How many cells the job has: the board's, or the zone count.</param>
-/// <param name="Turn">The turn row.</param>
-/// <param name="Verdict">The verdict row.</param>
-/// <param name="Off">The token value meaning off the board.</param>
-/// <param name="Nodes">The relocations judged per tick.</param>
-/// <param name="JudgeCost">The work units one judge run costs.</param>
-/// <param name="Depth">How many plies the job searches ahead.</param>
-/// <param name="Score">The compiled score program, or <see langword="null"/> when the job carries none.</param>
-/// <param name="Best">The best-move output row, or <see langword="null"/>.</param>
-/// <param name="Shapes">The compiled candidate shapes, in declared order.</param>
-/// <param name="Accept">The verdict value that accepts a candidate — the board binding's, or 1 without one.</param>
-/// <param name="Method">How the job compares plies by its score.</param>
-/// <param name="Iterations">The tree iterations a <see cref="WorldSearchMethod.Tree"/> job runs.</param>
-public sealed record WorldSearchPlan(WorldSearchRow Row, CompiledTopology? Topology, string[] Zones, int CellCount, string Turn, string Verdict, long Off, int Nodes, long JudgeCost, int Depth, CompiledExpressionToken[]? Score, string? Best, WorldSearchShapePlan[] Shapes, long Accept = 1L, WorldSearchMethod Method = WorldSearchMethod.Negamax, int Iterations = 0);
 
 /// <summary>Derives what a search job needs from the document: the rules a frame can evaluate, their cost, and each
 /// job's plan.</summary>
@@ -279,18 +182,18 @@ public static class WorldSearchCompilation {
     /// <param name="tokens">The tokens row.</param>
     /// <param name="shapes">The compiled shapes, in declared order.</param>
     /// <param name="reason">Why a shape does not compile, or empty.</param>
-    private static bool TryCompileShapes(WorldDefinition definition, WorldSearchRow row, CompiledTopology? topology, WorldStateRow tokens, out WorldSearchShapePlan[] shapes, out string reason) {
+    private static bool TryCompileShapes(WorldDefinition definition, WorldSearchRow row, CompiledTopology? topology, WorldStateRow tokens, out SearchShapePlan[] shapes, out string reason) {
         var authored = row.EffectiveShapes;
 
         shapes = [];
 
-        if ((authored.Count == 0) || (authored.Count > WorldSearchCapacity.MaxShapesPerJob)) {
-            reason = $"search '{row.Name}' declares {authored.Count} shapes; the count must lie in 1..{WorldSearchCapacity.MaxShapesPerJob}";
+        if ((authored.Count == 0) || (authored.Count > SearchCapacity.MaxShapesPerJob)) {
+            reason = $"search '{row.Name}' declares {authored.Count} shapes; the count must lie in 1..{SearchCapacity.MaxShapesPerJob}";
 
             return false;
         }
 
-        var compiled = new WorldSearchShapePlan[authored.Count];
+        var compiled = new SearchShapePlan[authored.Count];
 
         for (var index = 0; index < authored.Count; index++) {
             if ((topology is null) != (authored[index] is WorldSearchShape.Transferred)) {
@@ -309,15 +212,15 @@ public static class WorldSearchCompilation {
                         return false;
                     }
 
-                    compiled[index] = new WorldSearchShapePlan(Kind: WorldSearchShapeKind.Transfer, Displace: false, Directions: [], PairWithIndex: -1, Selector: transfer.Selector, InsertFirst: transfer.InsertFirst);
+                    compiled[index] = new SearchShapePlan(Kind: SearchShapeKind.Transfer, Displace: false, Directions: [], PairWithIndex: -1, Selector: transfer.Selector, InsertFirst: transfer.InsertFirst);
 
                     break;
                 case WorldSearchShape.Relocate relocate:
-                    compiled[index] = new WorldSearchShapePlan(Kind: WorldSearchShapeKind.Relocate, Displace: relocate.Displace, Directions: [], PairWithIndex: -1);
+                    compiled[index] = new SearchShapePlan(Kind: SearchShapeKind.Relocate, Displace: relocate.Displace, Directions: [], PairWithIndex: -1);
 
                     break;
                 case WorldSearchShape.Drop:
-                    compiled[index] = new WorldSearchShapePlan(Kind: WorldSearchShapeKind.Drop, Displace: false, Directions: [], PairWithIndex: -1);
+                    compiled[index] = new SearchShapePlan(Kind: SearchShapeKind.Drop, Displace: false, Directions: [], PairWithIndex: -1);
 
                     break;
                 case WorldSearchShape.Jump jump: {
@@ -351,7 +254,7 @@ public static class WorldSearchCompilation {
                         }
                     }
 
-                    compiled[index] = new WorldSearchShapePlan(Kind: WorldSearchShapeKind.Jump, Displace: false, Directions: directions, PairWithIndex: -1);
+                    compiled[index] = new SearchShapePlan(Kind: SearchShapeKind.Jump, Displace: false, Directions: directions, PairWithIndex: -1);
 
                     break;
                 }
@@ -379,13 +282,13 @@ public static class WorldSearchCompilation {
                         return false;
                     }
 
-                    compiled[index] = new WorldSearchShapePlan(Kind: WorldSearchShapeKind.Pair, Displace: false, Directions: [], PairWithIndex: companion);
+                    compiled[index] = new SearchShapePlan(Kind: SearchShapeKind.Pair, Displace: false, Directions: [], PairWithIndex: companion);
 
                     break;
                 }
                 case WorldSearchShape.Promote promote: {
-                    if (promote.To is not { Count: > 0 and <= WorldSearchCapacity.MaxPromotions }) {
-                        reason = $"search '{row.Name}' shape[{index}] promote offers {promote.To?.Count ?? 0} codes; the count must lie in 1..{WorldSearchCapacity.MaxPromotions}";
+                    if (promote.To is not { Count: > 0 and <= SearchCapacity.MaxPromotions }) {
+                        reason = $"search '{row.Name}' shape[{index}] promote offers {promote.To?.Count ?? 0} codes; the count must lie in 1..{SearchCapacity.MaxPromotions}";
 
                         return false;
                     }
@@ -398,7 +301,7 @@ public static class WorldSearchCompilation {
                         return false;
                     }
 
-                    compiled[index] = new WorldSearchShapePlan(Kind: WorldSearchShapeKind.Promote, Displace: true, Directions: [], PairWithIndex: -1, Codes: promote.Codes, PromoteTo: [.. promote.To]);
+                    compiled[index] = new SearchShapePlan(Kind: SearchShapeKind.Promote, Displace: true, Directions: [], PairWithIndex: -1, Codes: promote.Codes, PromoteTo: [.. promote.To]);
 
                     break;
                 }
@@ -423,7 +326,7 @@ public static class WorldSearchCompilation {
     /// <param name="context">The rule compile context, for compiling <see cref="WorldSearchRow.Score"/>.</param>
     /// <param name="plan">The plan.</param>
     /// <param name="reason">Why the job cannot run, or empty.</param>
-    public static bool TryPlan(WorldDefinition definition, WorldSearchRow row, long judgeCost, long leftover, WorldRuleCompileContext context, out WorldSearchPlan? plan, out string reason) {
+    public static bool TryPlan(WorldDefinition definition, WorldSearchRow row, long judgeCost, long leftover, WorldRuleCompileContext context, out SearchPlan? plan, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: row);
         ArgumentNullException.ThrowIfNull(argument: context);
@@ -576,12 +479,12 @@ public static class WorldSearchCompilation {
 
             return false;
         }
-        if ((row.Depth < 1) || (row.Depth > WorldSearchCapacity.MaxDepth)) {
-            reason = $"search '{row.Name}' depth {row.Depth} must lie in 1..{WorldSearchCapacity.MaxDepth}";
+        if ((row.Depth < 1) || (row.Depth > SearchCapacity.MaxDepth)) {
+            reason = $"search '{row.Name}' depth {row.Depth} must lie in 1..{SearchCapacity.MaxDepth}";
 
             return false;
         }
-        if (((row.Depth > 1) || (row.Best is not null) || (row.Method == WorldSearchMethod.Tree)) && (row.Score is null)) {
+        if (((row.Depth > 1) || (row.Best is not null) || (row.Method == SearchMethod.Tree)) && (row.Score is null)) {
             reason = $"search '{row.Name}' names no score — a depth past one, a best row, or the tree method needs one to compare plies by";
 
             return false;
@@ -591,8 +494,8 @@ public static class WorldSearchCompilation {
 
             return false;
         }
-        if ((row.Iterations < 1) || (row.Iterations > WorldSearchCapacity.MaxIterations)) {
-            reason = $"search '{row.Name}' iterations {row.Iterations} must lie in 1..{WorldSearchCapacity.MaxIterations}";
+        if ((row.Iterations < 1) || (row.Iterations > SearchCapacity.MaxIterations)) {
+            reason = $"search '{row.Name}' iterations {row.Iterations} must lie in 1..{SearchCapacity.MaxIterations}";
 
             return false;
         }
@@ -635,7 +538,7 @@ public static class WorldSearchCompilation {
             }
         }
 
-        var derived = (int)Math.Min(val1: (leftover / judgeCost), val2: WorldSearchCapacity.MaxNodesPerTick);
+        var derived = (int)Math.Min(val1: (leftover / judgeCost), val2: SearchCapacity.MaxNodesPerTick);
 
         if (derived < 1) {
             reason = $"search '{row.Name}' has no work left: the rules leave {leftover} work units per tick and one judge run costs {judgeCost}";
@@ -648,7 +551,12 @@ public static class WorldSearchCompilation {
             return false;
         }
 
-        plan = new WorldSearchPlan(Row: row, Topology: topology, Zones: zones, CellCount: cellCount, Turn: turnName, Verdict: verdictName, Off: off, Nodes: (row.Nodes ?? derived), JudgeCost: judgeCost, Depth: row.Depth, Score: score, Best: row.Best, Shapes: shapes, Accept: (binding?.Accept ?? 1L), Method: row.Method, Iterations: row.Iterations);
+        plan = new SearchPlan(
+            Name: row.Name, Tokens: row.Tokens, Topology: topology, Zones: zones, CellCount: cellCount, Turn: turnName, Verdict: verdictName, Off: off,
+            Nodes: (row.Nodes ?? derived), JudgeCost: judgeCost, Depth: row.Depth, Score: score, Best: row.Best, Shapes: shapes,
+            Legal: row.Legal, Reach: row.Reach, Held: row.Held, Counts: row.Counts,
+            Accept: (binding?.Accept ?? 1L), Method: row.Method, Iterations: row.Iterations
+        );
         reason = string.Empty;
 
         return true;
@@ -660,13 +568,13 @@ public static class WorldSearchCompilation {
     /// <param name="plans">The plans, in section order.</param>
     /// <param name="judge">The rules a frame evaluates.</param>
     /// <param name="reason">Why a job cannot run, or empty.</param>
-    public static bool TryPlanAll(WorldDefinition definition, CompiledWorldRule[] rules, out WorldSearchPlan[] plans, out CompiledWorldRule[] judge, out string reason) {
+    public static bool TryPlanAll(WorldDefinition definition, CompiledWorldRule[] rules, out SearchPlan[] plans, out CompiledWorldRule[] judge, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: rules);
 
         var rows = definition.Search.Rows;
         judge = JudgeRules(rules: rules);
-        plans = new WorldSearchPlan[rows.Count];
+        plans = new SearchPlan[rows.Count];
 
         if (rows.Count == 0) {
             reason = string.Empty;
