@@ -1053,54 +1053,65 @@ itself without risking contact; the garden's proof keeps Wren at a safe
 standoff beside the table and moves pieces by console verb, never by having
 her body touch one.
 
-**The hidden-hand poker table (owner decisions, Lane C).** State only, no
-card bodies: a `cards` token domain with `rank` AND `suit` attribute rows, a
-`deck`/`hand1`/`hand2`/`community` zone family, a plain int `pokerTurn`
-(deal/bet, not the `phase` trait — see the budget paragraph), a `bettor`
-turn-alternation row, a `bets` history ring. Placeholder card backs read
+**The hidden-hand poker table (owner decisions, Lane C; re-cut 2026-09-06 into
+heads-up fixed-limit hold'em).** State only, no card bodies: a `cards` token
+domain with `rank` AND `suit` attribute rows, a
+`deck`/`hand1`/`hand2`/`community` zone family, and, since the re-cut, a whole
+game: blinds, four betting streets with a raise cap, fold, a showdown that
+awards the pot (a tie splits it, the odd chip to the button), the cards
+collected back into the deck, and the next hand dealt on request or
+automatically (`house.autoDeal`). Placeholder card backs read
 through `rank`/`suit`'s own public, `Hidden: Placeholder` visibility rather
 than the zone rows themselves: a row's own `visibility.readers` is
 all-or-nothing (`WorldStateDisclosure.Compose` gates the WHOLE row once
 before ever walking cells), so a zone can show every one of its member
-tokens to an admitted reader or none — never a placeholder for the rest —
+tokens to an admitted reader or none, never a placeholder for the rest,
 while an attribute row keyed over that zone's domain resolves each cell
 through its owning zone's OWN visibility (`Observer.CanRead`'s nested
 zones-by-domain lookup, which requires the attribute row's own `keysOf`
 domain: drop it to save budget and `rank`/`suit` both go fully public, an
-opponent's hole cards included — a near-miss this landing corrected). `hand1`/`hand2` keep
-their own `readers`/`readersFrom` for each seat's direct, full read of its
-own two cards, and `poker-showdown-reveal` widens that same `readersFrom` row
-at showdown — one more use of the tabletop primitive's own reveal seam, not a
-second one. `poker-bet-action-seat1`/`-seat2` gate on `bettor` naming their
-own seat and flip it to the other seat on success, a real turn order over the
-two seats.
+opponent's hole cards included, a near-miss the first landing corrected).
+The `keysOf` domain now also declares `capacity: 52`: a `keysOf` row that
+authors no capacity is priced at the 4096-cell row ceiling inside every
+transform's storage term, document-wide, so the two attribute rows alone were
+taxing every `transfer`, `sort`, and `boardCombine` in the garden, chess's
+included. `hand1`/`hand2` keep their own `readers`/`readersFrom` for each
+seat's direct, full read of its own two cards, `poker-showdown` widens that
+same `readersFrom` row at showdown, one more use of the tabletop primitive's
+own reveal seam, not a second one, and the seat's hole mask and strength word
+live in `private1`/`private2` under the same policy, so nothing derived from
+a hidden hand is ever public.
 
-Live hand-strength is priced against `world.budget`'s per-tick ceiling
-(consult the read-back for the current tally, never a hand-quoted fraction
-here): every `transformState` effect (dealing's `transfer`, a `sort`) is
-priced against the WHOLE document's declared cell storage
-(`WorldRuleWorkBudget.TransformCost`), and `rank`/`suit`'s privacy-required
-`keysOf` domain declares no capacity of its own, so each still adds a full
-topology-sized share to that storage — so the deal's three transfers plus one sort PER SEAT (needed because the
-shipped `hasTripAny`/`hasQuadAny`/`straightAny` patterns are adjacency-based
-and read wrong off an unsorted deal) are a real, non-trivial cost alongside
-chess's and the rigid facets' own rules. `poker-strength1`/`poker-strength2`
-ARE rule-derived — a genuine landed fix, not a console fixture — but fold
-only the shipped `pairAny` pattern; trip/quad/straight/flush reads, a second
-per-seat suit union, and a full house/two-pair tally would each add their
-own full-document-priced transform on top of the sort, so they stay proven
-correct as authored patterns instead (unsorted or sorted as each needs — see
-`hasTripAny`'s pattern shape) by a law test
-(`tests/Puck.World.Tests/PokerHandStrengthLawTests.cs`, which compiles the
-shipped `patterns` rows themselves) and by `world.match`/`world.observe
-<principal>` (composes `WorldStateDisclosure` for an explicitly named
-principal, not the caller's own stamped identity — `world.why`/
-`world.grants`' own authority-side pattern) from the console, never folded
-into `strength1`/`strength2` live. The same ceiling is why the table plays
-exactly one hand per boot: returning a finished hand's cards to the deck for
-a second one costs three more `transfer`s the budget does not have, so
-`poker-deal`'s gate (`pokerTurn == 0`) never reopens once a hand is dealt —
-a second `dealRequest` refuses cleanly rather than partially applying.
+Three decisions carry the re-cut. (1) Hand strength is derived by expressions
+over one 64-bit suit-lane mask (`poker-see-*` fold the cards in with
+`forEach`, `poker-evaluate-*` rank them in sixteen bindings), not by
+sorted-word patterns: the first table needed a scratch copy of each seat's
+ranks and a `sortKeyed` per seat before its adjacency patterns could read,
+folded only `pairAny` live, and its pattern rows (`pairAtRank2..14`,
+`hasTripAny`, `hasQuadAny`, `straightAny`, `suitAtLeast5_*`,
+`raiseAfterTwoChecks`) are deleted with it; the evaluator ranks every
+category with its kickers for a small fraction of what the two sorts alone
+cost (consult `world.budget.rules`, never a figure quoted here). (2)
+`phase.street` has ONE writer, `poker-transition`, and every other rule
+requests a change through `phase.next`: `RuleWorkBudget`'s exclusion trie
+admits one summed value per writer of the pinned cell plus one, so a street
+cell five rules wrote would have priced all eight transforms as a sum, where
+one writer prices the two costliest streets (the deal's two transfers, the
+collect phase's three). The row is named `phase` because the trie orders
+pinned cells by their `row.key` spelling and the street must lead every
+rule's pin set for the nesting to hold. (3) One rule per action for both
+seats: the acting seat's pending action is read through `table[bettor]` in a
+`compareValue` gate and its own cells are written through the expression key
+`$expr:table[bettor]`; the two `betAction` ingress rows stay separate only so
+each seat's `Edit` grant covers its own, and `poker-discard`, declared last,
+clears and counts whatever no handler accepted in the tick. The garden's
+static work sheet reads LOWER after the re-cut than before it (`world.budget`)
+with the table doing strictly more, and the one hand per boot the first table
+was limited to is gone: the collect phase returns every card. The law suite
+(`tests/Puck.World.Tests/PokerHandStrengthLawTests.cs`) runs the shipped rules
+on a real server: every category's exact strength word with a near-miss
+control, the ordering, a full hand to showdown conserving chips and cards
+and revealing both hands, and a fold with an out-of-turn discard.
 
 **Garden W3 integration (owner decision).** The tabletop-rules, rigid-fidelity,
 and cards lanes were each authored and budget-checked in isolation, every one

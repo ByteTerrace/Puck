@@ -178,8 +178,8 @@ domain — no dedicated facet, just `StateDomain.Keys` (`Domain` omitted or
 restricts integer positions to a named topology. A `domain: {"$type": "keysOf",
 "row": "cards", "ordered": true}` row contains boolean membership cells. The
 "every token belongs to exactly one zone" invariant is not engine law — it is
-an authored rule (the garden's `cardsZoneAccounting`/`cardsZoneInvariant`
-sums `$reduce:count:` over every zone against the domain's own capacity).
+an authored rule (the garden's `poker-card-conservation` is one `compareValue`
+gate summing `$reduce:count:` over every zone against the domain row's own count).
 Cell order is pile order; two cards with equal ranks still have different
 keys. Drawn-generator masks
 are separate from these piles: each `drawnMasks` mask is four 64-bit words,

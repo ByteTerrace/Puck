@@ -3,20 +3,20 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Pins the garden's hidden-hand poker table (puck.world.json) by compiling and matching the shipped
-/// `patterns` rows themselves (never a reimplementation), over authored 7-card hands with a near-miss control per
-/// rank, and the showdown reveal's readersFrom audience widening. The live `strength1`/`strength2` rows fold only
-/// `pairAny` — the deal, the two rank sorts, and the `rank`/`suit` attribute rows' privacy-required `keysFrom` each
-/// price a full topology-sized share against the document work-budget ceiling (`world.budget`), so folding
-/// trip/quad/straight/flush in too would add their own such share rather than costing nothing — see
-/// puck.world.json's poker-strength1/2 remarks and docs/campaign.md. `hasTripAny`, `hasQuadAny`, `straightAny`, `pairAtRank2..14`, and
-/// `suitAtLeast5_0..3` remain shipped, correct, and reachable via `world.match` regardless.</summary>
+/// <summary>Pins the garden's heads-up fixed-limit hold'em table (games/poker.world.json) by running the SHIPPED rules
+/// over a real server — never a reimplementation. The seven-card evaluator is fed authored hands through seat 1's own
+/// hole mask (the rules read <c>private1.hole | table.boardMask</c>, so a whole hand may sit in the hole word) and must
+/// produce the exact strength word <c>category &lt;&lt; 28 | primary &lt;&lt; 14 | secondary</c>; a full hand then
+/// plays to showdown and a second folds, proving chip and card conservation, the reveal seam, the phase machine's one
+/// writer, and the discard of an out-of-turn action.</summary>
 public sealed class PokerHandStrengthLawTests {
     private static readonly WorldDefinition Garden = LoadGarden();
 
     private static WorldDefinition LoadGarden() {
         var path = FindGardenWorld();
-        Assert.True(WorldDefinitionFileSource.TryLoad(path, out var definition, out _, out var reason), reason);
+        // The loader (not the raw file source): it resolves the garden's state-bound document values, which is what a
+        // server boot needs and what Fixtures.FreshServer's serialize-then-deserialize round trip cannot do itself.
+        Assert.True(WorldDefinitionLoader.TryLoadFile(path, out var definition, out var reason), reason);
         return definition!;
     }
 
@@ -31,96 +31,185 @@ public sealed class PokerHandStrengthLawTests {
         return Path.Combine(directory!.FullName, "src", "Puck.World", "Assets", "worlds", "puck.world.json");
     }
 
-    private static PatternRow Find(string name) =>
-        Garden.Patterns.FirstOrDefault(p => p.Name.Value == name)
-        ?? throw new InvalidOperationException($"puck.world.json carries no pattern '{name}'");
+    // ------------------------------------------------------------------
+    // The card encoding the document authors: bit 16 * (suit - 1) + (rank - 1), suits C D H S = 1..4, ranks 2..14.
+    // ------------------------------------------------------------------
+    private static int Rank(char c) => c switch { 'T' => 10, 'J' => 11, 'Q' => 12, 'K' => 13, 'A' => 14, _ => c - '0' };
+    private static int Suit(char c) => c switch { 'C' => 1, 'D' => 2, 'H' => 3, 'S' => 4, _ => throw new ArgumentOutOfRangeException(nameof(c)) };
+    private static long Mask(string cards) => cards.Split(' ').Aggregate(0L, (m, card) => m | (1L << (16 * (Suit(card[1]) - 1) + Rank(card[0]) - 1)));
+    private static long RankBit(int rank) => 1L << (rank - 1);
+    private static long Index(int rank) => rank - 1;
+    private static long Strength(int category, long primary, long secondary) => ((long)category << 28) | (primary << 14) | secondary;
 
-    private static long Match(string patternName, params long[] word) {
-        Assert.True(CompiledPattern.TryCompile(Find(patternName), out var compiled, out var reason), reason);
-        return compiled!.Match(word);
+    private static long Cell(WorldDefinition definition, string row, string key) {
+        var found = WorldDefinitionRows.FindStateRow(definition.State, row);
+        Assert.NotNull(found);
+        return found!.Cells!.Single(c => c.Key.Value == key).Value;
+    }
+    private static int Count(WorldDefinition definition, string row) => WorldDefinitionRows.FindStateRow(definition.State, row)!.Cells?.Count ?? 0;
+    private static void Write(WorldFixture fixture, string row, string key, long value) => fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
+        Principal: WorldPrincipal.Console, Row: row, Key: key, Value: value, Kind: WorldDocumentWriteKind.Set
+    ));
+    private static void Steps(WorldFixture fixture, int count) {
+        for (var index = 0; index < count; index++) { fixture.Step(); }
+    }
+    private static long Evaluate(WorldFixture fixture, string cards) {
+        Write(fixture, "private1", "hole", Mask(cards));
+        Write(fixture, "table", "evalPending", 1);
+        Steps(fixture, 2);
+        Assert.Equal(0L, Cell(fixture.Server.Definition, "table", "evalPending"));
+        return Cell(fixture.Server.Definition, "private1", "strength");
     }
 
-    [Theory]
-    [InlineData(new long[] { 2, 5, 8, 9, 12, 13, 13 }, "pairAtRank13", 1)] // a real pair of kings, sorted...
-    [InlineData(new long[] { 2, 5, 8, 9, 12, 13, 14 }, "pairAtRank13", 0)] // ...vs a lone king: the near-miss control.
-    public void PairAtRankMatchesTwoOfARankAndRejectsOne(long[] hand, string pattern, long expected) =>
-        Assert.Equal(expected, Match(pattern, hand));
+    public static TheoryData<string, string, long> Hands => new() {
+        { "royal flush", "AS KS QS JS TS 2C 3D", Strength(8, Index(10), 0) },
+        { "steel wheel", "AS 2S 3S 4S 5S KC QD", Strength(8, 0, 0) },
+        { "quads with an ace kicker", "9C 9D 9H 9S AC 2D 3H", Strength(7, RankBit(9), Index(14)) },
+        { "full house, sevens over jacks", "7C 7D 7H JS JC 2D 5H", Strength(6, Index(7), Index(11)) },
+        { "two trips read as aces full of kings", "AC AD AH KS KC KD 2H", Strength(6, Index(14), Index(13)) },
+        { "flush of exactly five", "2H 5H 9H JH KH 3C 4D", Strength(5, RankBit(2) | RankBit(5) | RankBit(9) | RankBit(11) | RankBit(13), 0) },
+        { "flush of six drops the deuce", "2H 5H 9H JH KH 3H 4D", Strength(5, RankBit(3) | RankBit(5) | RankBit(9) | RankBit(11) | RankBit(13), 0) },
+        { "straight five to nine", "5C 6D 7H 8S 9C KD 2H", Strength(4, Index(5), 0) },
+        { "wheel straight", "AC 2D 3H 4S 5C KD 9H", Strength(4, 0, 0) },
+        { "two straights keep the higher", "5C 6D 7H 8S 9C TD 2H", Strength(4, Index(6), 0) },
+        { "trips with two kickers", "8C 8D 8H AS KC 4D 2H", Strength(3, RankBit(8), RankBit(14) | RankBit(13)) },
+        { "two pair with an ace kicker", "JC JD 4H 4S AC 9D 2H", Strength(2, RankBit(11) | RankBit(4), Index(14)) },
+        { "three pairs keep the top two and the best kicker", "JC JD 4H 4S 9C 9D AH", Strength(2, RankBit(11) | RankBit(9), Index(14)) },
+        { "pair of queens with three kickers", "QC QD 9H 6S 4C 3D 2H", Strength(1, RankBit(12), RankBit(9) | RankBit(6) | RankBit(4)) },
+        { "ace high", "AC KD 9H 7S 5C 3D 2H", Strength(0, RankBit(14) | RankBit(13) | RankBit(9) | RankBit(7) | RankBit(5), 0) },
+    };
 
     [Theory]
-    [InlineData(new long[] { 2, 5, 8, 9, 9, 9, 14 }, 1)] // three of a kind, sorted ascending...
-    [InlineData(new long[] { 2, 5, 8, 9, 9, 12, 14 }, 0)] // ...vs only a pair: the near-miss control.
-    public void HasTripAnyMatchesExistenceOfAnyThreeOfARankAndRejectsAPairAlone(long[] sortedHand, long expected) =>
-        Assert.Equal(expected, Match("hasTripAny", sortedHand));
+    [MemberData(nameof(Hands))]
+    public void TheShippedEvaluatorRanksEverySevenCardHandExactly(string name, string cards, long expected) {
+        using var fixture = Fixtures.FreshServer(definition: Garden);
+        Assert.Equal(expected, Evaluate(fixture, cards));
+        Assert.False(string.IsNullOrEmpty(name));
+    }
 
-    [Theory]
-    [InlineData(new long[] { 2, 5, 8, 9, 9, 9, 9 }, 1)] // four of a kind, sorted ascending...
-    [InlineData(new long[] { 2, 5, 8, 9, 9, 9, 14 }, 0)] // ...vs the same rank stuck at three: the near-miss control.
-    public void HasQuadAnyMatchesExistenceOfAnyFourOfARankAndRejectsAThreeOfAKind(long[] sortedHand, long expected) =>
-        Assert.Equal(expected, Match("hasQuadAny", sortedHand));
-
-    [Theory]
-    [InlineData(new long[] { 2, 3, 4, 5, 6, 9, 13 }, 1)] // five ranks in a row (2-3-4-5-6), sorted ascending...
-    [InlineData(new long[] { 2, 3, 4, 6, 7, 9, 13 }, 0)] // ...vs the same span missing rank 5: the near-miss control.
-    public void StraightAnyMatchesFiveConsecutiveRanksAndRejectsAGappedRun(long[] sortedHand, long expected) =>
-        Assert.Equal(expected, Match("straightAny", sortedHand));
-
-    [Theory]
-    [InlineData(new long[] { 4, 1, 4, 2, 4, 4, 4 }, "suitAtLeast5_3", 1)] // five suit-4 (S) cards, deal order...
-    [InlineData(new long[] { 4, 1, 4, 2, 4, 4, 3 }, "suitAtLeast5_3", 0)] // ...vs only four of them: the control.
-    public void SuitAtLeastFiveMatchesFiveOfASuitAnywhereAndRejectsFour(long[] hand, string pattern, long expected) =>
-        Assert.Equal(expected, Match(pattern, hand));
-
-    // Neither the live strength rows nor a dedicated pattern compute "full house" or "two pair" (the work budget
-    // has no room for a per-rank-pair enumeration or a pairCount tally live — see the class remarks), but the
-    // shipped pairAtRank2..14 patterns still let a follow-up change compose the same distinction: a genuine trip's
-    // own rank always also satisfies pairAtRank (3 >= 2), so "full house" is trip-exists AND a second distinct
-    // pairAtRank, never any two paired ranks alone.
+    // The near-miss controls: one card changed flips the category, so the word is not merely stable but discriminating.
     [Fact]
-    public void FullHouseStillNeedsATripPlusASeparatePairNotJustAnyTwoPairedRanks() {
-        long[] fullHouse = [2, 5, 7, 7, 7, 11, 11]; // trip sevens, pair jacks, sorted ascending
-        long[] tripOnly = [2, 5, 7, 7, 7, 9, 11]; // trip sevens, no second pair — the near-miss control
-
-        Assert.Equal(1, Match("hasTripAny", fullHouse));
-        Assert.Equal(2, PairCount(fullHouse)); // the trip's own rank (absorption) plus the genuine jack pair
-        Assert.Equal(1, Match("hasTripAny", tripOnly));
-        Assert.Equal(1, PairCount(tripOnly)); // only the trip's own rank — no full house
+    public void OneCardSeparatesEachCategoryFromItsNearMiss() {
+        using var fixture = Fixtures.FreshServer(definition: Garden);
+        Assert.Equal(7, Evaluate(fixture, "9C 9D 9H 9S AC 2D 3H") >> 28);
+        Assert.Equal(3, Evaluate(fixture, "9C 9D 9H 8S AC 2D 3H") >> 28); // the fourth nine gone: trips
+        Assert.Equal(6, Evaluate(fixture, "7C 7D 7H JS JC 2D 5H") >> 28);
+        Assert.Equal(3, Evaluate(fixture, "7C 7D 7H JS TC 2D 5H") >> 28); // the second jack gone: trips
+        Assert.Equal(5, Evaluate(fixture, "2H 5H 9H JH KH 3C 4D") >> 28);
+        Assert.Equal(0, Evaluate(fixture, "2H 5H 9H JH KC 3C 4D") >> 28); // the fifth heart gone: high card
+        Assert.Equal(4, Evaluate(fixture, "5C 6D 7H 8S 9C KD 2H") >> 28);
+        Assert.Equal(0, Evaluate(fixture, "5C 6D 7H 8S TC KD 2H") >> 28); // the nine gone: high card
+        Assert.Equal(8, Evaluate(fixture, "AS 2S 3S 4S 5S KC QD") >> 28);
+        Assert.Equal(4, Evaluate(fixture, "AS 2S 3S 4S 5C KC QD") >> 28); // the wheel off-suit: a plain straight
     }
 
-    private static long PairCount(long[] hand) =>
-        Enumerable.Range(2, 13).Sum(rank => Match($"pairAtRank{rank}", hand));
+    // A kicker decides between equal categories, and a better category always beats a worse one, in the plain
+    // integer order of the strength word — the order the showdown rule compares.
+    [Fact]
+    public void TheStrengthWordOrdersHandsTheWayPokerDoes() {
+        using var fixture = Fixtures.FreshServer(definition: Garden);
+        Assert.True(Evaluate(fixture, "QC QD AH 6S 4C 3D 2H") > Evaluate(fixture, "QH QS KH 6C 4D 3S 2C")); // queens, ace kicker beats king kicker
+        Assert.True(Evaluate(fixture, "2C 2D 3H 4S 6C 8D 9H") > Evaluate(fixture, "AC KD QH JS 9C 8D 2H")); // any pair beats ace high
+        Assert.Equal(Evaluate(fixture, "AC KD 9H 7S 5C 3D 2H"), Evaluate(fixture, "AH KS 9C 7D 5S 3C 2D")); // suits never break a tie
+    }
 
     // ------------------------------------------------------------------
-    // The showdown reveal: hand1 is invisible to seat2 until a rule (or, in
-    // this proof, a direct write) puts seat2's token into hand1's
-    // readersFrom row — the exact mechanism poker-showdown-reveal uses.
+    // A whole hand through the shipped phase machine: blinds, a bet and a call, checks to showdown, the reveal, the
+    // award, and the collection back to a full deck. Chips and cards are conserved throughout.
     // ------------------------------------------------------------------
-    [Fact]
-    public void ReadersFromWidensAHiddenHandsAudienceOnlyAfterTheTokenIsWritten() {
-        var definition = Fixtures.BuildDocument() with {
-            StateRaw = new(World: [
-                new(Name("cards"), CellKind.Int, Capacity: 2, Cells: [Cell("AS", 0), Cell("KS", 0)]),
-                new(Name("hand1"), CellKind.Bool, Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true), Capacity: 2,
-                    Cells: [Cell("AS", 1), Cell("KS", 1)],
-                    Visibility: new(Readers: ["seat1"], ReadersFrom: "audience1")),
-                new(Name("audience1"), CellKind.Text, Capacity: 1),
-            ]),
-        };
-        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var reason), reason);
-
-        Assert.Null(WorldStateDisclosure.Compose(definition, WorldPrincipal.Seat(1))); // seat2: nothing disclosed yet
-        Assert.NotNull(WorldStateDisclosure.Compose(definition, WorldPrincipal.Seat(0))); // seat1: its own hand
-
-        var revealed = definition.WithWorldState([.. definition.State.Select(r => r.Name.Value == "audience1"
-            ? r with { Cells = [new StateCell(Name("0"), 0, Text: WorldPrincipal.Seat(1).Describe())] }
-            : r)]);
-
-        var seenBySeat2 = WorldStateDisclosure.Compose(revealed, WorldPrincipal.Seat(1));
-        var hand1 = Assert.Single(seenBySeat2!, row => row.Name == "hand1");
-        Assert.Equal(2, hand1.Cells.Count);
-        Assert.Contains(hand1.Cells, c => c.Key == "AS");
-        Assert.Contains(hand1.Cells, c => c.Key == "KS");
+    private static void Act(WorldFixture fixture, int seat, long action) {
+        Write(fixture, $"betAction{seat}", "act", action);
+        Steps(fixture, 3);
     }
 
-    private static CellName Name(string value) => CellName.Parse(value);
-    private static StateCell Cell(string key, long value = 1) => new(Name(key), value);
+    [Fact]
+    public void AHandPlaysToShowdownConservingChipsAndCardsAndRevealingTheHands() {
+        using var fixture = Fixtures.FreshServer(definition: Garden);
+        Write(fixture, "table", "dealRequest", 1);
+        Steps(fixture, 3);
+
+        var dealt = fixture.Server.Definition;
+        Assert.Equal(1L, Cell(dealt, "phase", "street"));
+        Assert.Equal(1L, Cell(dealt, "table", "button")); // the authored button (2) passed to seat 1
+        Assert.Equal(1L, Cell(dealt, "table", "bettor")); // heads-up: the button posts the small blind and acts first
+        Assert.Equal(2, Count(dealt, "hand1"));
+        Assert.Equal(2, Count(dealt, "hand2"));
+        Assert.Equal(48, Count(dealt, "deck"));
+        Assert.Equal(10L, Cell(dealt, "streetBet", "1"));
+        Assert.Equal(20L, Cell(dealt, "streetBet", "2"));
+        Assert.Equal(30L, Cell(dealt, "table", "pot"));
+        Assert.Null(WorldStateDisclosure.Compose(dealt, WorldPrincipal.Seat(1))?.SingleOrDefault(r => r.Name == "hand1")); // seat 2 cannot see hand 1
+
+        Act(fixture, 1, 0); // the button calls
+        Act(fixture, 2, 0); // the big blind checks: the flop
+        Assert.Equal(2L, Cell(fixture.Server.Definition, "phase", "street"));
+        Assert.Equal(3, Count(fixture.Server.Definition, "community"));
+        Assert.Equal(2L, Cell(fixture.Server.Definition, "table", "bettor")); // post-flop the big blind acts first
+
+        Act(fixture, 2, 1); // a bet of one big blind
+        Act(fixture, 1, 0); // called: the turn
+        Assert.Equal(3L, Cell(fixture.Server.Definition, "phase", "street"));
+        Assert.Equal(4, Count(fixture.Server.Definition, "community"));
+        Assert.Equal(80L, Cell(fixture.Server.Definition, "table", "pot"));
+
+        Act(fixture, 2, 0);
+        Act(fixture, 1, 0); // the river
+        Assert.Equal(4L, Cell(fixture.Server.Definition, "phase", "street"));
+        Assert.Equal(5, Count(fixture.Server.Definition, "community"));
+
+        Act(fixture, 2, 0);
+        Write(fixture, "betAction1", "act", 0); // the last check: the street completes, the next tick lands on the showdown
+        Steps(fixture, 2);
+        var shown = fixture.Server.Definition;
+        Assert.Equal(5L, Cell(shown, "phase", "street"));
+        Assert.Equal(1L, Cell(shown, "table", "hands"));
+        Assert.Equal(0L, Cell(shown, "table", "pot"));
+        Assert.Equal(2000L, Cell(shown, "stack", "1") + Cell(shown, "stack", "2"));
+        var winner = Cell(shown, "table", "winner");
+        var strength1 = Cell(shown, "private1", "strength");
+        var strength2 = Cell(shown, "private2", "strength");
+        Assert.Equal(strength1 > strength2 ? 1L : strength2 > strength1 ? 2L : 0L, winner);
+        Assert.Equal(2, WorldStateDisclosure.Compose(shown, WorldPrincipal.Seat(1))?.SingleOrDefault(r => r.Name == "hand1")?.Cells.Count); // revealed to seat 2
+        Assert.Equal(2, WorldStateDisclosure.Compose(shown, WorldPrincipal.Seat(0))?.SingleOrDefault(r => r.Name == "hand2")?.Cells.Count); // and hand 2 to seat 1
+
+        Steps(fixture, 12); // the collection phase returns every card one per tick, then the table idles
+        var idle = fixture.Server.Definition;
+        Assert.Equal(0L, Cell(idle, "phase", "street"));
+        Assert.Equal(52, Count(idle, "deck"));
+        Assert.Equal(0, Count(idle, "hand1"));
+        Assert.Equal(0, Count(idle, "hand2"));
+        Assert.Equal(0, Count(idle, "community"));
+        Assert.Equal(0L, Cell(idle, "table", "leak"));
+        Assert.Equal(0L, Cell(idle, "table", "refused"));
+    }
+
+    [Fact]
+    public void AFoldAwardsThePotAndAnOutOfTurnActionIsDiscardedAndCounted() {
+        using var fixture = Fixtures.FreshServer(definition: Garden);
+        Write(fixture, "table", "dealRequest", 1);
+        Steps(fixture, 3);
+        Assert.Equal(1L, Cell(fixture.Server.Definition, "table", "bettor"));
+
+        Act(fixture, 2, 0); // seat 2 is not the bettor: discarded, counted, nothing moves
+        var after = fixture.Server.Definition;
+        Assert.Equal(1L, Cell(after, "table", "refused"));
+        Assert.Equal(-1L, Cell(after, "betAction2", "act"));
+        Assert.Equal(0L, Cell(after, "table", "acted"));
+        Assert.Equal(30L, Cell(after, "table", "pot"));
+
+        Act(fixture, 1, 1); // the button raises to two big blinds
+        Assert.Equal(40L, Cell(fixture.Server.Definition, "streetBet", "1"));
+        Assert.Equal(60L, Cell(fixture.Server.Definition, "table", "pot"));
+        Assert.Equal(2L, Cell(fixture.Server.Definition, "table", "bettor"));
+
+        Act(fixture, 2, 2); // the big blind folds
+        Steps(fixture, 12);
+        var settled = fixture.Server.Definition;
+        Assert.Equal(1L, Cell(settled, "table", "winner"));
+        Assert.Equal(1020L, Cell(settled, "stack", "1"));
+        Assert.Equal(980L, Cell(settled, "stack", "2"));
+        Assert.Equal(0L, Cell(settled, "phase", "street"));
+        Assert.Equal(52, Count(settled, "deck"));
+        Assert.Equal(1L, Cell(settled, "table", "hands"));
+    }
 }

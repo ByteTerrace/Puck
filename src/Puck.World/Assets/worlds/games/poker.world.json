@@ -1,2725 +1,186 @@
 {
-  "patterns": [
-    {
-      "kind": "int",
-      "name": "pairAtRank2",
-      "pattern": {
-        "$type": "sequence",
-        "items": [
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 2,
-          "min": 2,
-          "name": "r"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "name": "pairAtRank3",
-      "pattern": {
-        "$type": "sequence",
-        "items": [
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 3,
-          "min": 3,
-          "name": "r"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "name": "pairAtRank4",
-      "pattern": {
-        "$type": "sequence",
-        "items": [
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 4,
-          "min": 4,
-          "name": "r"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "name": "pairAtRank5",
-      "pattern": {
-        "$type": "sequence",
-        "items": [
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 5,
-          "min": 5,
-          "name": "r"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "name": "pairAtRank6",
-      "pattern": {
-        "$type": "sequence",
-        "items": [
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 6,
-          "min": 6,
-          "name": "r"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "name": "pairAtRank7",
-      "pattern": {
-        "$type": "sequence",
-        "items": [
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 7,
-          "min": 7,
-          "name": "r"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "name": "pairAtRank8",
-      "pattern": {
-        "$type": "sequence",
-        "items": [
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 8,
-          "min": 8,
-          "name": "r"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "name": "pairAtRank9",
-      "pattern": {
-        "$type": "sequence",
-        "items": [
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 9,
-          "min": 9,
-          "name": "r"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "name": "pairAtRank10",
-      "pattern": {
-        "$type": "sequence",
-        "items": [
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 10,
-          "min": 10,
-          "name": "r"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "name": "pairAtRank11",
-      "pattern": {
-        "$type": "sequence",
-        "items": [
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 11,
-          "min": 11,
-          "name": "r"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "name": "pairAtRank12",
-      "pattern": {
-        "$type": "sequence",
-        "items": [
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 12,
-          "min": 12,
-          "name": "r"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "name": "pairAtRank13",
-      "pattern": {
-        "$type": "sequence",
-        "items": [
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 13,
-          "min": 13,
-          "name": "r"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "name": "pairAtRank14",
-      "pattern": {
-        "$type": "sequence",
-        "items": [
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "r"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 14,
-          "min": 14,
-          "name": "r"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "maxStates": 256,
-      "name": "hasTripAny",
-      "pattern": {
-        "$type": "choice",
-        "items": [
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r2"
-                },
-                "max": 3,
-                "min": 3
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r3"
-                },
-                "max": 3,
-                "min": 3
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r4"
-                },
-                "max": 3,
-                "min": 3
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r5"
-                },
-                "max": 3,
-                "min": 3
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r6"
-                },
-                "max": 3,
-                "min": 3
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r7"
-                },
-                "max": 3,
-                "min": 3
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r8"
-                },
-                "max": 3,
-                "min": 3
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r9"
-                },
-                "max": 3,
-                "min": 3
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r10"
-                },
-                "max": 3,
-                "min": 3
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r11"
-                },
-                "max": 3,
-                "min": 3
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r12"
-                },
-                "max": 3,
-                "min": 3
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r13"
-                },
-                "max": 3,
-                "min": 3
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r14"
-                },
-                "max": 3,
-                "min": 3
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 2,
-          "min": 2,
-          "name": "r2"
-        },
-        {
-          "max": 3,
-          "min": 3,
-          "name": "r3"
-        },
-        {
-          "max": 4,
-          "min": 4,
-          "name": "r4"
-        },
-        {
-          "max": 5,
-          "min": 5,
-          "name": "r5"
-        },
-        {
-          "max": 6,
-          "min": 6,
-          "name": "r6"
-        },
-        {
-          "max": 7,
-          "min": 7,
-          "name": "r7"
-        },
-        {
-          "max": 8,
-          "min": 8,
-          "name": "r8"
-        },
-        {
-          "max": 9,
-          "min": 9,
-          "name": "r9"
-        },
-        {
-          "max": 10,
-          "min": 10,
-          "name": "r10"
-        },
-        {
-          "max": 11,
-          "min": 11,
-          "name": "r11"
-        },
-        {
-          "max": 12,
-          "min": 12,
-          "name": "r12"
-        },
-        {
-          "max": 13,
-          "min": 13,
-          "name": "r13"
-        },
-        {
-          "max": 14,
-          "min": 14,
-          "name": "r14"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "maxStates": 256,
-      "name": "hasQuadAny",
-      "pattern": {
-        "$type": "choice",
-        "items": [
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r2"
-                },
-                "max": 4,
-                "min": 4
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r3"
-                },
-                "max": 4,
-                "min": 4
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r4"
-                },
-                "max": 4,
-                "min": 4
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r5"
-                },
-                "max": 4,
-                "min": 4
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r6"
-                },
-                "max": 4,
-                "min": 4
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r7"
-                },
-                "max": 4,
-                "min": 4
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r8"
-                },
-                "max": 4,
-                "min": 4
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r9"
-                },
-                "max": 4,
-                "min": 4
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r10"
-                },
-                "max": 4,
-                "min": 4
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r11"
-                },
-                "max": 4,
-                "min": 4
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r12"
-                },
-                "max": 4,
-                "min": 4
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r13"
-                },
-                "max": 4,
-                "min": 4
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r14"
-                },
-                "max": 4,
-                "min": 4
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 2,
-          "min": 2,
-          "name": "r2"
-        },
-        {
-          "max": 3,
-          "min": 3,
-          "name": "r3"
-        },
-        {
-          "max": 4,
-          "min": 4,
-          "name": "r4"
-        },
-        {
-          "max": 5,
-          "min": 5,
-          "name": "r5"
-        },
-        {
-          "max": 6,
-          "min": 6,
-          "name": "r6"
-        },
-        {
-          "max": 7,
-          "min": 7,
-          "name": "r7"
-        },
-        {
-          "max": 8,
-          "min": 8,
-          "name": "r8"
-        },
-        {
-          "max": 9,
-          "min": 9,
-          "name": "r9"
-        },
-        {
-          "max": 10,
-          "min": 10,
-          "name": "r10"
-        },
-        {
-          "max": 11,
-          "min": 11,
-          "name": "r11"
-        },
-        {
-          "max": 12,
-          "min": 12,
-          "name": "r12"
-        },
-        {
-          "max": 13,
-          "min": 13,
-          "name": "r13"
-        },
-        {
-          "max": 14,
-          "min": 14,
-          "name": "r14"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "maxStates": 256,
-      "name": "straightAny",
-      "pattern": {
-        "$type": "choice",
-        "items": [
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r2"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r3"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r4"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r5"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r6"
-                }
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r3"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r4"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r5"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r6"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r7"
-                }
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r4"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r5"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r6"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r7"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r8"
-                }
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r5"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r6"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r7"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r8"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r9"
-                }
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r6"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r7"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r8"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r9"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r10"
-                }
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r7"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r8"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r9"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r10"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r11"
-                }
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r8"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r9"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r10"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r11"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r12"
-                }
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r9"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r10"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r11"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r12"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r13"
-                }
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r10"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r11"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r12"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r13"
-                }
-              },
-              {
-                "$type": "plus",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r14"
-                }
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 2,
-          "min": 2,
-          "name": "r2"
-        },
-        {
-          "max": 3,
-          "min": 3,
-          "name": "r3"
-        },
-        {
-          "max": 4,
-          "min": 4,
-          "name": "r4"
-        },
-        {
-          "max": 5,
-          "min": 5,
-          "name": "r5"
-        },
-        {
-          "max": 6,
-          "min": 6,
-          "name": "r6"
-        },
-        {
-          "max": 7,
-          "min": 7,
-          "name": "r7"
-        },
-        {
-          "max": 8,
-          "min": 8,
-          "name": "r8"
-        },
-        {
-          "max": 9,
-          "min": 9,
-          "name": "r9"
-        },
-        {
-          "max": 10,
-          "min": 10,
-          "name": "r10"
-        },
-        {
-          "max": 11,
-          "min": 11,
-          "name": "r11"
-        },
-        {
-          "max": 12,
-          "min": 12,
-          "name": "r12"
-        },
-        {
-          "max": 13,
-          "min": 13,
-          "name": "r13"
-        },
-        {
-          "max": 14,
-          "min": 14,
-          "name": "r14"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "name": "suitAtLeast5_0",
-      "pattern": {
-        "$type": "sequence",
-        "items": [
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 1,
-          "min": 1,
-          "name": "s"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "name": "suitAtLeast5_1",
-      "pattern": {
-        "$type": "sequence",
-        "items": [
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 2,
-          "min": 2,
-          "name": "s"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "name": "suitAtLeast5_2",
-      "pattern": {
-        "$type": "sequence",
-        "items": [
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 3,
-          "min": 3,
-          "name": "s"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "name": "suitAtLeast5_3",
-      "pattern": {
-        "$type": "sequence",
-        "items": [
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "s"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 4,
-          "min": 4,
-          "name": "s"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "name": "raiseAfterTwoChecks",
-      "pattern": {
-        "$type": "sequence",
-        "items": [
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          },
-          {
-            "$type": "symbol",
-            "name": "check"
-          },
-          {
-            "$type": "symbol",
-            "name": "check"
-          },
-          {
-            "$type": "symbol",
-            "name": "raise"
-          },
-          {
-            "$type": "star",
-            "item": {
-              "$type": "any"
-            }
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 0,
-          "min": 0,
-          "name": "check"
-        },
-        {
-          "max": 1,
-          "min": 1,
-          "name": "raise"
-        }
-      ]
-    },
-    {
-      "kind": "int",
-      "maxStates": 256,
-      "name": "pairAny",
-      "pattern": {
-        "$type": "choice",
-        "items": [
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r2"
-                },
-                "max": 7,
-                "min": 2
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r3"
-                },
-                "max": 7,
-                "min": 2
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r4"
-                },
-                "max": 7,
-                "min": 2
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r5"
-                },
-                "max": 7,
-                "min": 2
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r6"
-                },
-                "max": 7,
-                "min": 2
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r7"
-                },
-                "max": 7,
-                "min": 2
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r8"
-                },
-                "max": 7,
-                "min": 2
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r9"
-                },
-                "max": 7,
-                "min": 2
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r10"
-                },
-                "max": 7,
-                "min": 2
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r11"
-                },
-                "max": 7,
-                "min": 2
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r12"
-                },
-                "max": 7,
-                "min": 2
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r13"
-                },
-                "max": 7,
-                "min": 2
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          },
-          {
-            "$type": "sequence",
-            "items": [
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              },
-              {
-                "$type": "repeat",
-                "item": {
-                  "$type": "symbol",
-                  "name": "r14"
-                },
-                "max": 7,
-                "min": 2
-              },
-              {
-                "$type": "star",
-                "item": {
-                  "$type": "any"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "symbols": [
-        {
-          "max": 2,
-          "min": 2,
-          "name": "r2"
-        },
-        {
-          "max": 3,
-          "min": 3,
-          "name": "r3"
-        },
-        {
-          "max": 4,
-          "min": 4,
-          "name": "r4"
-        },
-        {
-          "max": 5,
-          "min": 5,
-          "name": "r5"
-        },
-        {
-          "max": 6,
-          "min": 6,
-          "name": "r6"
-        },
-        {
-          "max": 7,
-          "min": 7,
-          "name": "r7"
-        },
-        {
-          "max": 8,
-          "min": 8,
-          "name": "r8"
-        },
-        {
-          "max": 9,
-          "min": 9,
-          "name": "r9"
-        },
-        {
-          "max": 10,
-          "min": 10,
-          "name": "r10"
-        },
-        {
-          "max": 11,
-          "min": 11,
-          "name": "r11"
-        },
-        {
-          "max": 12,
-          "min": 12,
-          "name": "r12"
-        },
-        {
-          "max": 13,
-          "min": 13,
-          "name": "r13"
-        },
-        {
-          "max": 14,
-          "min": 14,
-          "name": "r14"
-        }
-      ]
-    }
-  ],
   "rules": [
     {
       "effects": [
         {
-          "$type": "transformState",
-          "transform": {
-            "$type": "transfer",
-            "count": 2,
-            "draw": "cardStream",
-            "from": "deck",
-            "selector": "Random",
-            "to": "hand1"
-          }
+          "$type": "setState",
+          "fromKey": "next",
+          "fromState": "phase",
+          "key": "street",
+          "state": "phase"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparandKey": "next",
+        "comparandState": "phase",
+        "comparison": "NotEqual",
+        "key": "street",
+        "state": "phase"
+      },
+      "mode": "Level",
+      "name": "poker-transition"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "3 - table[button]",
+          "kind": "int",
+          "name": "button"
         },
         {
-          "$type": "transformState",
-          "transform": {
-            "$type": "transfer",
-            "count": 2,
-            "draw": "cardStream",
-            "from": "deck",
-            "selector": "Random",
-            "to": "hand2"
-          }
-        },
+          "expression": "table[button]",
+          "kind": "int",
+          "name": "blind"
+        }
+      ],
+      "effects": [
         {
-          "$type": "transformState",
-          "transform": {
-            "$type": "transfer",
-            "count": 5,
-            "draw": "cardStream",
-            "from": "deck",
-            "selector": "Random",
-            "to": "community"
-          }
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "transformState",
+              "transform": {
+                "$type": "transfer",
+                "count": 2,
+                "draw": "cardStream",
+                "from": "deck",
+                "selector": "Random",
+                "to": "hand1"
+              }
+            },
+            {
+              "$type": "transformState",
+              "transform": {
+                "$type": "transfer",
+                "count": 2,
+                "draw": "cardStream",
+                "from": "deck",
+                "selector": "Random",
+                "to": "hand2"
+              }
+            },
+            {
+              "$type": "setState",
+              "key": "dealRequest",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "expression": "$bind:button",
+              "key": "button",
+              "state": "table"
+            },
+            {
+              "$type": "setState",
+              "expression": "$bind:button",
+              "key": "bettor",
+              "state": "table"
+            },
+            {
+              "$type": "setState",
+              "expression": "house[smallBlind]",
+              "key": "$expr:$bind:button",
+              "state": "streetBet"
+            },
+            {
+              "$type": "setState",
+              "expression": "house[bigBlind]",
+              "key": "$expr:$bind:blind",
+              "state": "streetBet"
+            },
+            {
+              "$type": "addState",
+              "expression": "0 - house[smallBlind]",
+              "key": "$expr:$bind:button",
+              "state": "stack"
+            },
+            {
+              "$type": "addState",
+              "expression": "0 - house[bigBlind]",
+              "key": "$expr:$bind:blind",
+              "state": "stack"
+            },
+            {
+              "$type": "setState",
+              "expression": "house[smallBlind] + house[bigBlind]",
+              "key": "pot",
+              "state": "table"
+            },
+            {
+              "$type": "setState",
+              "key": "acted",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "raises",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "winner",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "boardMask",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "hole",
+              "state": "private1",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "hole",
+              "state": "private2",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "strength",
+              "state": "private1",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "strength",
+              "state": "private2",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "evalPending",
+              "state": "table",
+              "value": 1
+            },
+            {
+              "$type": "setState",
+              "key": "next",
+              "state": "phase",
+              "value": 1
+            }
+          ]
         },
         {
           "$type": "setState",
-          "state": "dealRequest",
-          "value": 0
+          "key": "0",
+          "state": "audience1",
+          "text": "seat1"
         },
         {
           "$type": "setState",
-          "state": "derivePending",
-          "value": 1
-        },
-        {
-          "$type": "setState",
-          "state": "pokerTurn",
-          "value": 1
+          "key": "0",
+          "state": "audience2",
+          "text": "seat2"
         }
       ],
       "gate": {
@@ -2728,14 +189,23 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "dealRequest",
-            "value": 1
+            "key": "street",
+            "state": "phase",
+            "value": 0
           },
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "pokerTurn",
-            "value": 0
+            "key": "dealRequest",
+            "state": "table",
+            "value": 1
+          },
+          {
+            "$type": "compareValue",
+            "comparison": "GreaterOrEqual",
+            "kind": "int",
+            "left": "min(stack[1], stack[2])",
+            "right": "house[bigBlind]"
           }
         ]
       },
@@ -2746,137 +216,806 @@
       "effects": [
         {
           "$type": "setState",
-          "fromKey": "$each",
-          "fromState": "rank",
-          "key": "$each",
-          "state": "combinedByRank1"
+          "expression": "private1[hole] | (1 << (16 * (suit[$each] - 1) + rank[$each] - 1))",
+          "key": "hole",
+          "state": "private1"
         }
       ],
       "forEach": "hand1",
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "derivePending",
+        "key": "evalPending",
+        "state": "table",
         "value": 1
       },
-      "mode": "Edge",
-      "name": "poker-derive-from-hand1"
+      "mode": "Level",
+      "name": "poker-see-hand1"
     },
     {
       "effects": [
         {
           "$type": "setState",
-          "fromKey": "$each",
-          "fromState": "rank",
-          "key": "$each",
-          "state": "combinedByRank2"
+          "expression": "private2[hole] | (1 << (16 * (suit[$each] - 1) + rank[$each] - 1))",
+          "key": "hole",
+          "state": "private2"
         }
       ],
       "forEach": "hand2",
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "derivePending",
+        "key": "evalPending",
+        "state": "table",
         "value": 1
       },
-      "mode": "Edge",
-      "name": "poker-derive-from-hand2"
+      "mode": "Level",
+      "name": "poker-see-hand2"
     },
     {
       "effects": [
         {
           "$type": "setState",
-          "fromKey": "$each",
-          "fromState": "rank",
-          "key": "$each",
-          "state": "combinedByRank1"
-        },
-        {
-          "$type": "setState",
-          "fromKey": "$each",
-          "fromState": "rank",
-          "key": "$each",
-          "state": "combinedByRank2"
+          "expression": "table[boardMask] | (1 << (16 * (suit[$each] - 1) + rank[$each] - 1))",
+          "key": "boardMask",
+          "state": "table"
         }
       ],
       "forEach": "community",
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "derivePending",
+        "key": "evalPending",
+        "state": "table",
         "value": 1
       },
-      "mode": "Edge",
-      "name": "poker-derive-from-community"
+      "mode": "Level",
+      "name": "poker-see-board"
     },
     {
-      "effects": [
+      "bindings": [
         {
-          "$type": "transformState",
-          "transform": {
-            "$type": "sortKeyed",
-            "descending": false,
-            "row": "combinedByRank1"
-          }
+          "expression": "private1[hole] | table[boardMask]",
+          "kind": "int",
+          "name": "s"
         },
         {
-          "$type": "transformState",
-          "transform": {
-            "$type": "sortKeyed",
-            "descending": false,
-            "row": "combinedByRank2"
-          }
+          "expression": "bitField($bind:s, 0, 16)",
+          "kind": "int",
+          "name": "l0"
+        },
+        {
+          "expression": "bitField($bind:s, 16, 16)",
+          "kind": "int",
+          "name": "l1"
+        },
+        {
+          "expression": "bitField($bind:s, 32, 16)",
+          "kind": "int",
+          "name": "l2"
+        },
+        {
+          "expression": "bitField($bind:s, 48, 16)",
+          "kind": "int",
+          "name": "l3"
+        },
+        {
+          "expression": "$bind:l0 | $bind:l1 | $bind:l2 | $bind:l3",
+          "kind": "int",
+          "name": "ranks"
+        },
+        {
+          "expression": "($bind:l0 & $bind:l1) | ($bind:l0 & $bind:l2) | ($bind:l0 & $bind:l3) | ($bind:l1 & $bind:l2) | ($bind:l1 & $bind:l3) | ($bind:l2 & $bind:l3)",
+          "kind": "int",
+          "name": "pairs"
+        },
+        {
+          "expression": "($bind:l0 & $bind:l1 & $bind:l2) | ($bind:l0 & $bind:l1 & $bind:l3) | ($bind:l0 & $bind:l2 & $bind:l3) | ($bind:l1 & $bind:l2 & $bind:l3)",
+          "kind": "int",
+          "name": "trips"
+        },
+        {
+          "expression": "($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 1) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 2) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 3) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 4)",
+          "kind": "int",
+          "name": "sf"
+        },
+        {
+          "expression": "($bind:ranks | (($bind:ranks >> 13) & 1)) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 1) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 2) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 3) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 4)",
+          "kind": "int",
+          "name": "st"
+        },
+        {
+          "expression": "popCount($bind:l0) >= 5 ? $bind:l0 : popCount($bind:l1) >= 5 ? $bind:l1 : popCount($bind:l2) >= 5 ? $bind:l2 : popCount($bind:l3) >= 5 ? $bind:l3 : 0",
+          "kind": "int",
+          "name": "fl"
+        },
+        {
+          "expression": "popCount($bind:pairs) > 2 ? clearLowestSetBit($bind:pairs) : $bind:pairs",
+          "kind": "int",
+          "name": "top2p"
+        },
+        {
+          "expression": "$bind:sf != 0 ? 8 : ($bind:l0 & $bind:l1 & $bind:l2 & $bind:l3) != 0 ? 7 : ($bind:trips != 0) & (popCount($bind:pairs) >= 2) ? 6 : $bind:fl != 0 ? 5 : $bind:st != 0 ? 4 : $bind:trips != 0 ? 3 : popCount($bind:pairs) >= 2 ? 2 : $bind:pairs != 0 ? 1 : 0",
+          "kind": "int",
+          "name": "cat"
+        },
+        {
+          "expression": "$bind:cat == 8 ? 63 - leadingZeroCount(($bind:sf | ($bind:sf >> 16) | ($bind:sf >> 32) | ($bind:sf >> 48)) & 16383) : $bind:cat == 7 ? $bind:l0 & $bind:l1 & $bind:l2 & $bind:l3 : $bind:cat == 6 ? 63 - leadingZeroCount($bind:trips) : $bind:fl ^ parallelBitDeposit((1 << max(popCount($bind:fl) - 5, 0)) - 1, $bind:fl)",
+          "kind": "int",
+          "name": "high"
+        },
+        {
+          "expression": "$bind:cat == 4 ? 63 - leadingZeroCount($bind:st) : $bind:cat == 3 ? $bind:trips : $bind:cat == 2 ? $bind:top2p : $bind:cat == 1 ? $bind:pairs : clearLowestSetBit(clearLowestSetBit($bind:ranks))",
+          "kind": "int",
+          "name": "low"
+        },
+        {
+          "expression": "$bind:cat == 7 ? 63 - leadingZeroCount($bind:ranks ^ ($bind:l0 & $bind:l1 & $bind:l2 & $bind:l3)) : $bind:cat == 6 ? 63 - leadingZeroCount($bind:pairs ^ (1 << max(63 - leadingZeroCount($bind:trips), 0))) : $bind:cat == 3 ? clearLowestSetBit(clearLowestSetBit($bind:ranks ^ $bind:trips)) : $bind:cat == 2 ? 63 - leadingZeroCount($bind:ranks ^ $bind:top2p) : $bind:cat == 1 ? clearLowestSetBit(clearLowestSetBit($bind:ranks ^ $bind:pairs)) : 0",
+          "kind": "int",
+          "name": "secondary"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "($bind:cat << 28) | (($bind:cat >= 5 ? $bind:high : $bind:low) << 14) | $bind:secondary",
+          "key": "strength",
+          "state": "private1"
         }
       ],
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "derivePending",
+        "key": "evalPending",
+        "state": "table",
         "value": 1
       },
-      "mode": "Edge",
-      "name": "poker-sort"
+      "mode": "Level",
+      "name": "poker-evaluate-1"
     },
     {
-      "effects": [
+      "bindings": [
         {
-          "$type": "setState",
-          "expression": "$match:pairAny:combinedByRank1 ? 1 : 0",
-          "state": "strength1"
+          "expression": "private2[hole] | table[boardMask]",
+          "kind": "int",
+          "name": "s"
+        },
+        {
+          "expression": "bitField($bind:s, 0, 16)",
+          "kind": "int",
+          "name": "l0"
+        },
+        {
+          "expression": "bitField($bind:s, 16, 16)",
+          "kind": "int",
+          "name": "l1"
+        },
+        {
+          "expression": "bitField($bind:s, 32, 16)",
+          "kind": "int",
+          "name": "l2"
+        },
+        {
+          "expression": "bitField($bind:s, 48, 16)",
+          "kind": "int",
+          "name": "l3"
+        },
+        {
+          "expression": "$bind:l0 | $bind:l1 | $bind:l2 | $bind:l3",
+          "kind": "int",
+          "name": "ranks"
+        },
+        {
+          "expression": "($bind:l0 & $bind:l1) | ($bind:l0 & $bind:l2) | ($bind:l0 & $bind:l3) | ($bind:l1 & $bind:l2) | ($bind:l1 & $bind:l3) | ($bind:l2 & $bind:l3)",
+          "kind": "int",
+          "name": "pairs"
+        },
+        {
+          "expression": "($bind:l0 & $bind:l1 & $bind:l2) | ($bind:l0 & $bind:l1 & $bind:l3) | ($bind:l0 & $bind:l2 & $bind:l3) | ($bind:l1 & $bind:l2 & $bind:l3)",
+          "kind": "int",
+          "name": "trips"
+        },
+        {
+          "expression": "($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 1) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 2) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 3) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 4)",
+          "kind": "int",
+          "name": "sf"
+        },
+        {
+          "expression": "($bind:ranks | (($bind:ranks >> 13) & 1)) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 1) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 2) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 3) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 4)",
+          "kind": "int",
+          "name": "st"
+        },
+        {
+          "expression": "popCount($bind:l0) >= 5 ? $bind:l0 : popCount($bind:l1) >= 5 ? $bind:l1 : popCount($bind:l2) >= 5 ? $bind:l2 : popCount($bind:l3) >= 5 ? $bind:l3 : 0",
+          "kind": "int",
+          "name": "fl"
+        },
+        {
+          "expression": "popCount($bind:pairs) > 2 ? clearLowestSetBit($bind:pairs) : $bind:pairs",
+          "kind": "int",
+          "name": "top2p"
+        },
+        {
+          "expression": "$bind:sf != 0 ? 8 : ($bind:l0 & $bind:l1 & $bind:l2 & $bind:l3) != 0 ? 7 : ($bind:trips != 0) & (popCount($bind:pairs) >= 2) ? 6 : $bind:fl != 0 ? 5 : $bind:st != 0 ? 4 : $bind:trips != 0 ? 3 : popCount($bind:pairs) >= 2 ? 2 : $bind:pairs != 0 ? 1 : 0",
+          "kind": "int",
+          "name": "cat"
+        },
+        {
+          "expression": "$bind:cat == 8 ? 63 - leadingZeroCount(($bind:sf | ($bind:sf >> 16) | ($bind:sf >> 32) | ($bind:sf >> 48)) & 16383) : $bind:cat == 7 ? $bind:l0 & $bind:l1 & $bind:l2 & $bind:l3 : $bind:cat == 6 ? 63 - leadingZeroCount($bind:trips) : $bind:fl ^ parallelBitDeposit((1 << max(popCount($bind:fl) - 5, 0)) - 1, $bind:fl)",
+          "kind": "int",
+          "name": "high"
+        },
+        {
+          "expression": "$bind:cat == 4 ? 63 - leadingZeroCount($bind:st) : $bind:cat == 3 ? $bind:trips : $bind:cat == 2 ? $bind:top2p : $bind:cat == 1 ? $bind:pairs : clearLowestSetBit(clearLowestSetBit($bind:ranks))",
+          "kind": "int",
+          "name": "low"
+        },
+        {
+          "expression": "$bind:cat == 7 ? 63 - leadingZeroCount($bind:ranks ^ ($bind:l0 & $bind:l1 & $bind:l2 & $bind:l3)) : $bind:cat == 6 ? 63 - leadingZeroCount($bind:pairs ^ (1 << max(63 - leadingZeroCount($bind:trips), 0))) : $bind:cat == 3 ? clearLowestSetBit(clearLowestSetBit($bind:ranks ^ $bind:trips)) : $bind:cat == 2 ? 63 - leadingZeroCount($bind:ranks ^ $bind:top2p) : $bind:cat == 1 ? clearLowestSetBit(clearLowestSetBit($bind:ranks ^ $bind:pairs)) : 0",
+          "kind": "int",
+          "name": "secondary"
         }
       ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "derivePending",
-        "value": 1
-      },
-      "mode": "Edge",
-      "name": "poker-strength1"
-    },
-    {
       "effects": [
         {
           "$type": "setState",
-          "expression": "$match:pairAny:combinedByRank2 ? 1 : 0",
-          "state": "strength2"
+          "expression": "($bind:cat << 28) | (($bind:cat >= 5 ? $bind:high : $bind:low) << 14) | $bind:secondary",
+          "key": "strength",
+          "state": "private2"
         },
         {
           "$type": "setState",
-          "state": "derivePending",
+          "key": "evalPending",
+          "state": "table",
           "value": 0
         }
       ],
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
-        "state": "derivePending",
+        "key": "evalPending",
+        "state": "table",
         "value": 1
       },
-      "mode": "Edge",
-      "name": "poker-strength2"
+      "mode": "Level",
+      "name": "poker-evaluate-2"
     },
     {
+      "bindings": [
+        {
+          "expression": "streetBet[(3 - table[bettor])] - streetBet[(table[bettor])]",
+          "kind": "int",
+          "name": "toCall"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "pushState",
+          "expression": "phase[street] * 100 + table[bettor] * 10 + 0",
+          "state": "bets"
+        },
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "addState",
+              "expression": "0 - $bind:toCall",
+              "key": "$expr:table[bettor]",
+              "state": "stack"
+            },
+            {
+              "$type": "addState",
+              "expression": "$bind:toCall",
+              "key": "pot",
+              "state": "table"
+            },
+            {
+              "$type": "setState",
+              "expression": "streetBet[(3 - table[bettor])]",
+              "key": "$expr:table[bettor]",
+              "state": "streetBet"
+            },
+            {
+              "$type": "addState",
+              "key": "acted",
+              "state": "table",
+              "value": 1
+            },
+            {
+              "$type": "setState",
+              "key": "act",
+              "state": "betAction1",
+              "value": -1
+            },
+            {
+              "$type": "setState",
+              "key": "act",
+              "state": "betAction2",
+              "value": -1
+            },
+            {
+              "$type": "setState",
+              "expression": "3 - table[bettor]",
+              "key": "bettor",
+              "state": "table"
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "street",
+            "state": "phase",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "street",
+            "state": "phase",
+            "value": 4
+          },
+          {
+            "$type": "compareValue",
+            "comparison": "Equal",
+            "kind": "int",
+            "left": "(table[bettor] == 1 ? betAction1[act] : betAction2[act])",
+            "right": "0"
+          },
+          {
+            "$type": "compareValue",
+            "comparison": "GreaterOrEqual",
+            "kind": "int",
+            "left": "stack[(table[bettor])]",
+            "right": "streetBet[(3 - table[bettor])] - streetBet[(table[bettor])]"
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "poker-check-call"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "streetBet[(3 - table[bettor])] - streetBet[(table[bettor])] + house[bigBlind] * (phase[street] >= 3 ? 2 : 1)",
+          "kind": "int",
+          "name": "pay"
+        },
+        {
+          "expression": "house[bigBlind] * (phase[street] >= 3 ? 2 : 1)",
+          "kind": "int",
+          "name": "bet"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "pushState",
+          "expression": "phase[street] * 100 + table[bettor] * 10 + 1",
+          "state": "bets"
+        },
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "addState",
+              "expression": "0 - $bind:pay",
+              "key": "$expr:table[bettor]",
+              "state": "stack"
+            },
+            {
+              "$type": "addState",
+              "expression": "$bind:pay",
+              "key": "pot",
+              "state": "table"
+            },
+            {
+              "$type": "setState",
+              "expression": "streetBet[(3 - table[bettor])] + $bind:bet",
+              "key": "$expr:table[bettor]",
+              "state": "streetBet"
+            },
+            {
+              "$type": "setState",
+              "key": "acted",
+              "state": "table",
+              "value": 1
+            },
+            {
+              "$type": "addState",
+              "key": "raises",
+              "state": "table",
+              "value": 1
+            },
+            {
+              "$type": "setState",
+              "key": "act",
+              "state": "betAction1",
+              "value": -1
+            },
+            {
+              "$type": "setState",
+              "key": "act",
+              "state": "betAction2",
+              "value": -1
+            },
+            {
+              "$type": "setState",
+              "expression": "3 - table[bettor]",
+              "key": "bettor",
+              "state": "table"
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "street",
+            "state": "phase",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "street",
+            "state": "phase",
+            "value": 4
+          },
+          {
+            "$type": "compareValue",
+            "comparison": "Equal",
+            "kind": "int",
+            "left": "(table[bettor] == 1 ? betAction1[act] : betAction2[act])",
+            "right": "1"
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "maxRaises",
+            "comparandState": "house",
+            "comparison": "Less",
+            "key": "raises",
+            "state": "table"
+          },
+          {
+            "$type": "compareValue",
+            "comparison": "GreaterOrEqual",
+            "kind": "int",
+            "left": "stack[(table[bettor])]",
+            "right": "streetBet[(3 - table[bettor])] - streetBet[(table[bettor])] + house[bigBlind] * (phase[street] >= 3 ? 2 : 1)"
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "poker-raise"
+    },
+    {
+      "effects": [
+        {
+          "$type": "pushState",
+          "expression": "phase[street] * 100 + table[bettor] * 10 + 2",
+          "state": "bets"
+        },
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "setState",
+              "expression": "3 - table[bettor]",
+              "key": "winner",
+              "state": "table"
+            },
+            {
+              "$type": "addState",
+              "expression": "table[pot]",
+              "key": "$expr:3 - table[bettor]",
+              "state": "stack"
+            },
+            {
+              "$type": "setState",
+              "key": "pot",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "addState",
+              "key": "hands",
+              "state": "table",
+              "value": 1
+            },
+            {
+              "$type": "setState",
+              "key": "act",
+              "state": "betAction1",
+              "value": -1
+            },
+            {
+              "$type": "setState",
+              "key": "act",
+              "state": "betAction2",
+              "value": -1
+            },
+            {
+              "$type": "setState",
+              "key": "next",
+              "state": "phase",
+              "value": 6
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "street",
+            "state": "phase",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "street",
+            "state": "phase",
+            "value": 4
+          },
+          {
+            "$type": "compareValue",
+            "comparison": "Equal",
+            "kind": "int",
+            "left": "(table[bettor] == 1 ? betAction1[act] : betAction2[act])",
+            "right": "2"
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "poker-fold"
+    },
+    {
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "setState",
+              "expression": "phase[street] + 1",
+              "key": "next",
+              "state": "phase"
+            },
+            {
+              "$type": "setState",
+              "key": "acted",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "raises",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "1",
+              "state": "streetBet",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "2",
+              "state": "streetBet",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "expression": "3 - table[button]",
+              "key": "bettor",
+              "state": "table"
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "street",
+            "state": "phase",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "street",
+            "state": "phase",
+            "value": 4
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "acted",
+            "state": "table",
+            "value": 2
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "2",
+            "comparandState": "streetBet",
+            "comparison": "Equal",
+            "key": "1",
+            "state": "streetBet"
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "poker-street-complete"
+    },
+    {
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "transformState",
+              "transform": {
+                "$type": "transfer",
+                "count": 3,
+                "draw": "cardStream",
+                "from": "deck",
+                "selector": "Random",
+                "to": "community"
+              }
+            },
+            {
+              "$type": "setState",
+              "key": "evalPending",
+              "state": "table",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "street",
+            "state": "phase",
+            "value": 2
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$reduce:count:community",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "poker-flop"
+    },
+    {
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "transformState",
+              "transform": {
+                "$type": "transfer",
+                "count": 1,
+                "draw": "cardStream",
+                "from": "deck",
+                "selector": "Random",
+                "to": "community"
+              }
+            },
+            {
+              "$type": "setState",
+              "key": "evalPending",
+              "state": "table",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "street",
+            "state": "phase",
+            "value": 3
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$reduce:count:community",
+            "value": 3
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "poker-turn"
+    },
+    {
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "transformState",
+              "transform": {
+                "$type": "transfer",
+                "count": 1,
+                "draw": "cardStream",
+                "from": "deck",
+                "selector": "Random",
+                "to": "community"
+              }
+            },
+            {
+              "$type": "setState",
+              "key": "evalPending",
+              "state": "table",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "street",
+            "state": "phase",
+            "value": 4
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$reduce:count:community",
+            "value": 4
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "poker-river"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "private1[strength] > private2[strength] ? 1 : private2[strength] > private1[strength] ? 2 : 0",
+          "kind": "int",
+          "name": "winner"
+        },
+        {
+          "expression": "table[pot] >> 1",
+          "kind": "int",
+          "name": "half"
+        },
+        {
+          "expression": "table[pot] & 1",
+          "kind": "int",
+          "name": "odd"
+        }
+      ],
       "effects": [
         {
           "$type": "setState",
@@ -2891,9 +1030,45 @@
           "text": "seat1"
         },
         {
-          "$type": "setState",
-          "state": "revealed",
-          "value": 1
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "setState",
+              "expression": "$bind:winner",
+              "key": "winner",
+              "state": "table"
+            },
+            {
+              "$type": "addState",
+              "expression": "$bind:winner == 1 ? table[pot] : $bind:winner == 2 ? 0 : $bind:half + $bind:odd * (table[button] == 1)",
+              "key": "1",
+              "state": "stack"
+            },
+            {
+              "$type": "addState",
+              "expression": "$bind:winner == 2 ? table[pot] : $bind:winner == 1 ? 0 : $bind:half + $bind:odd * (table[button] == 2)",
+              "key": "2",
+              "state": "stack"
+            },
+            {
+              "$type": "setState",
+              "key": "pot",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "addState",
+              "key": "hands",
+              "state": "table",
+              "value": 1
+            },
+            {
+              "$type": "setState",
+              "key": "next",
+              "state": "phase",
+              "value": 6
+            }
+          ]
         }
       ],
       "gate": {
@@ -2902,150 +1077,250 @@
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "showdownRequest",
-            "value": 1
+            "key": "street",
+            "state": "phase",
+            "value": 5
           },
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "revealed",
+            "key": "evalPending",
+            "state": "table",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "poker-showdown"
+    },
+    {
+      "effects": [
+        {
+          "$type": "transformState",
+          "transform": {
+            "$type": "transfer",
+            "count": 1,
+            "from": "community",
+            "selector": "First",
+            "to": "deck"
+          }
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "street",
+            "state": "phase",
+            "value": 6
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "state": "$reduce:count:community",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "poker-collect-board"
+    },
+    {
+      "effects": [
+        {
+          "$type": "transformState",
+          "transform": {
+            "$type": "transfer",
+            "count": 1,
+            "from": "hand1",
+            "selector": "First",
+            "to": "deck"
+          }
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "street",
+            "state": "phase",
+            "value": 6
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "state": "$reduce:count:hand1",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "poker-collect-hand1"
+    },
+    {
+      "effects": [
+        {
+          "$type": "transformState",
+          "transform": {
+            "$type": "transfer",
+            "count": 1,
+            "from": "hand2",
+            "selector": "First",
+            "to": "deck"
+          }
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "street",
+            "state": "phase",
+            "value": 6
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "state": "$reduce:count:hand2",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "poker-collect-hand2"
+    },
+    {
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "setState",
+              "key": "acted",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "raises",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "1",
+              "state": "streetBet",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "2",
+              "state": "streetBet",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "expression": "house[autoDeal]",
+              "key": "dealRequest",
+              "state": "table"
+            },
+            {
+              "$type": "setState",
+              "key": "next",
+              "state": "phase",
+              "value": 0
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "street",
+            "state": "phase",
+            "value": 6
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$reduce:count:community",
             "value": 0
           },
           {
             "$type": "compareState",
             "comparison": "Equal",
-            "state": "pokerTurn",
-            "value": 1
+            "state": "$reduce:count:hand1",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$reduce:count:hand2",
+            "value": 0
           }
         ]
       },
       "mode": "Edge",
-      "name": "poker-showdown-reveal"
+      "name": "poker-hand-over"
     },
     {
       "effects": [
         {
-          "$type": "pushState",
-          "fromState": "betAction1",
-          "state": "bets"
-        },
-        {
-          "$type": "addState",
-          "fromState": "betAction1",
-          "state": "pot"
-        },
+          "$type": "setState",
+          "key": "leak",
+          "state": "table",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareValue",
+        "comparison": "NotEqual",
+        "kind": "int",
+        "left": "$reduce:count:deck + $reduce:count:hand1 + $reduce:count:hand2 + $reduce:count:community",
+        "right": "$reduce:count:cards"
+      },
+      "mode": "Edge",
+      "name": "poker-card-conservation"
+    },
+    {
+      "effects": [
         {
           "$type": "setState",
+          "key": "act",
           "state": "betAction1",
           "value": -1
         },
         {
           "$type": "setState",
-          "state": "bettor",
-          "value": 2
-        }
-      ],
-      "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "state": "betAction1",
-            "value": -1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "pokerTurn",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "bettor",
-            "value": 1
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "poker-bet-action-seat1"
-    },
-    {
-      "effects": [
-        {
-          "$type": "pushState",
-          "fromState": "betAction2",
-          "state": "bets"
-        },
-        {
-          "$type": "addState",
-          "fromState": "betAction2",
-          "state": "pot"
-        },
-        {
-          "$type": "setState",
+          "key": "act",
           "state": "betAction2",
           "value": -1
         },
         {
-          "$type": "setState",
-          "state": "bettor",
+          "$type": "addState",
+          "key": "refused",
+          "state": "table",
           "value": 1
         }
       ],
       "gate": {
-        "$type": "all",
-        "predicates": [
-          {
-            "$type": "compareState",
-            "comparison": "NotEqual",
-            "state": "betAction2",
-            "value": -1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "pokerTurn",
-            "value": 1
-          },
-          {
-            "$type": "compareState",
-            "comparison": "Equal",
-            "state": "bettor",
-            "value": 2
-          }
-        ]
-      },
-      "mode": "Edge",
-      "name": "poker-bet-action-seat2"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "expression": "$reduce:count:deck + $reduce:count:hand1 + $reduce:count:hand2 + $reduce:count:community",
-          "state": "cardsZoneTotal"
-        }
-      ],
-      "name": "cardsZoneAccounting"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "state": "cardsZoneInvariantViolated",
-          "value": 1
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparandState": "$reduce:count:cards",
+        "$type": "compareValue",
         "comparison": "NotEqual",
-        "state": "cardsZoneTotal"
+        "kind": "int",
+        "left": "max(betAction1[act], betAction2[act])",
+        "right": "-1"
       },
-      "mode": "Edge",
-      "name": "cardsZoneInvariant"
+      "mode": "Level",
+      "name": "poker-discard"
     }
   ],
   "state": {
@@ -3266,6 +1541,7 @@
         "name": "cards"
       },
       {
+        "capacity": 52,
         "cells": [
           {
             "key": "2C",
@@ -3482,6 +1758,228 @@
         },
         "kind": "int",
         "name": "rank",
+        "visibility": {
+          "hidden": "Placeholder"
+        }
+      },
+      {
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "2C",
+            "value": 1
+          },
+          {
+            "key": "2D",
+            "value": 2
+          },
+          {
+            "key": "2H",
+            "value": 3
+          },
+          {
+            "key": "2S",
+            "value": 4
+          },
+          {
+            "key": "3C",
+            "value": 1
+          },
+          {
+            "key": "3D",
+            "value": 2
+          },
+          {
+            "key": "3H",
+            "value": 3
+          },
+          {
+            "key": "3S",
+            "value": 4
+          },
+          {
+            "key": "4C",
+            "value": 1
+          },
+          {
+            "key": "4D",
+            "value": 2
+          },
+          {
+            "key": "4H",
+            "value": 3
+          },
+          {
+            "key": "4S",
+            "value": 4
+          },
+          {
+            "key": "5C",
+            "value": 1
+          },
+          {
+            "key": "5D",
+            "value": 2
+          },
+          {
+            "key": "5H",
+            "value": 3
+          },
+          {
+            "key": "5S",
+            "value": 4
+          },
+          {
+            "key": "6C",
+            "value": 1
+          },
+          {
+            "key": "6D",
+            "value": 2
+          },
+          {
+            "key": "6H",
+            "value": 3
+          },
+          {
+            "key": "6S",
+            "value": 4
+          },
+          {
+            "key": "7C",
+            "value": 1
+          },
+          {
+            "key": "7D",
+            "value": 2
+          },
+          {
+            "key": "7H",
+            "value": 3
+          },
+          {
+            "key": "7S",
+            "value": 4
+          },
+          {
+            "key": "8C",
+            "value": 1
+          },
+          {
+            "key": "8D",
+            "value": 2
+          },
+          {
+            "key": "8H",
+            "value": 3
+          },
+          {
+            "key": "8S",
+            "value": 4
+          },
+          {
+            "key": "9C",
+            "value": 1
+          },
+          {
+            "key": "9D",
+            "value": 2
+          },
+          {
+            "key": "9H",
+            "value": 3
+          },
+          {
+            "key": "9S",
+            "value": 4
+          },
+          {
+            "key": "TC",
+            "value": 1
+          },
+          {
+            "key": "TD",
+            "value": 2
+          },
+          {
+            "key": "TH",
+            "value": 3
+          },
+          {
+            "key": "TS",
+            "value": 4
+          },
+          {
+            "key": "JC",
+            "value": 1
+          },
+          {
+            "key": "JD",
+            "value": 2
+          },
+          {
+            "key": "JH",
+            "value": 3
+          },
+          {
+            "key": "JS",
+            "value": 4
+          },
+          {
+            "key": "QC",
+            "value": 1
+          },
+          {
+            "key": "QD",
+            "value": 2
+          },
+          {
+            "key": "QH",
+            "value": 3
+          },
+          {
+            "key": "QS",
+            "value": 4
+          },
+          {
+            "key": "KC",
+            "value": 1
+          },
+          {
+            "key": "KD",
+            "value": 2
+          },
+          {
+            "key": "KH",
+            "value": 3
+          },
+          {
+            "key": "KS",
+            "value": 4
+          },
+          {
+            "key": "AC",
+            "value": 1
+          },
+          {
+            "key": "AD",
+            "value": 2
+          },
+          {
+            "key": "AH",
+            "value": 3
+          },
+          {
+            "key": "AS",
+            "value": 4
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "cards"
+        },
+        "kind": "int",
+        "name": "suit",
         "visibility": {
           "hidden": "Placeholder"
         }
@@ -3763,79 +2261,6 @@
         "name": "cardStream"
       },
       {
-        "capacity": 7,
-        "kind": "int",
-        "name": "combinedByRank1"
-      },
-      {
-        "capacity": 7,
-        "kind": "int",
-        "name": "combinedByRank2"
-      },
-      {
-        "kind": "int",
-        "max": 9,
-        "min": 0,
-        "name": "strength1",
-        "value": 0,
-        "visibility": {
-          "readers": [
-            "seat1"
-          ],
-          "readersFrom": "audience1"
-        }
-      },
-      {
-        "kind": "int",
-        "max": 9,
-        "min": 0,
-        "name": "strength2",
-        "value": 0,
-        "visibility": {
-          "readers": [
-            "seat2"
-          ],
-          "readersFrom": "audience2"
-        }
-      },
-      {
-        "kind": "bool",
-        "name": "dealRequest",
-        "value": false
-      },
-      {
-        "kind": "bool",
-        "name": "derivePending",
-        "value": false
-      },
-      {
-        "kind": "bool",
-        "name": "showdownRequest",
-        "value": false
-      },
-      {
-        "kind": "bool",
-        "name": "revealed",
-        "value": false
-      },
-      {
-        "domain": {
-          "$type": "ring",
-          "capacity": 8,
-          "empty": -1
-        },
-        "kind": "int",
-        "name": "bets",
-        "visibility": {}
-      },
-      {
-        "kind": "int",
-        "name": "pot",
-        "nonNegative": true,
-        "value": 0,
-        "visibility": {}
-      },
-      {
         "capacity": 2,
         "cells": [],
         "kind": "text",
@@ -3848,263 +2273,214 @@
         "name": "audience2"
       },
       {
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "street",
+            "value": 0
+          },
+          {
+            "key": "next",
+            "value": 0
+          }
+        ],
         "kind": "int",
-        "name": "pokerTurn",
-        "value": 0,
+        "name": "phase",
         "visibility": {}
       },
       {
+        "capacity": 16,
         "cells": [
           {
-            "key": "2C",
-            "value": 1
-          },
-          {
-            "key": "2D",
+            "key": "button",
             "value": 2
           },
           {
-            "key": "2H",
-            "value": 3
+            "key": "bettor",
+            "value": 0
           },
           {
-            "key": "2S",
-            "value": 4
+            "key": "pot",
+            "value": 0
           },
           {
-            "key": "3C",
-            "value": 1
+            "key": "acted",
+            "value": 0
           },
           {
-            "key": "3D",
-            "value": 2
+            "key": "raises",
+            "value": 0
           },
           {
-            "key": "3H",
-            "value": 3
+            "key": "winner",
+            "value": 0
           },
           {
-            "key": "3S",
-            "value": 4
+            "key": "hands",
+            "value": 0
           },
           {
-            "key": "4C",
-            "value": 1
+            "key": "dealRequest",
+            "value": 0
           },
           {
-            "key": "4D",
-            "value": 2
+            "key": "evalPending",
+            "value": 0
           },
           {
-            "key": "4H",
-            "value": 3
+            "key": "boardMask",
+            "value": 0
           },
           {
-            "key": "4S",
-            "value": 4
+            "key": "refused",
+            "value": 0
           },
           {
-            "key": "5C",
-            "value": 1
-          },
-          {
-            "key": "5D",
-            "value": 2
-          },
-          {
-            "key": "5H",
-            "value": 3
-          },
-          {
-            "key": "5S",
-            "value": 4
-          },
-          {
-            "key": "6C",
-            "value": 1
-          },
-          {
-            "key": "6D",
-            "value": 2
-          },
-          {
-            "key": "6H",
-            "value": 3
-          },
-          {
-            "key": "6S",
-            "value": 4
-          },
-          {
-            "key": "7C",
-            "value": 1
-          },
-          {
-            "key": "7D",
-            "value": 2
-          },
-          {
-            "key": "7H",
-            "value": 3
-          },
-          {
-            "key": "7S",
-            "value": 4
-          },
-          {
-            "key": "8C",
-            "value": 1
-          },
-          {
-            "key": "8D",
-            "value": 2
-          },
-          {
-            "key": "8H",
-            "value": 3
-          },
-          {
-            "key": "8S",
-            "value": 4
-          },
-          {
-            "key": "9C",
-            "value": 1
-          },
-          {
-            "key": "9D",
-            "value": 2
-          },
-          {
-            "key": "9H",
-            "value": 3
-          },
-          {
-            "key": "9S",
-            "value": 4
-          },
-          {
-            "key": "TC",
-            "value": 1
-          },
-          {
-            "key": "TD",
-            "value": 2
-          },
-          {
-            "key": "TH",
-            "value": 3
-          },
-          {
-            "key": "TS",
-            "value": 4
-          },
-          {
-            "key": "JC",
-            "value": 1
-          },
-          {
-            "key": "JD",
-            "value": 2
-          },
-          {
-            "key": "JH",
-            "value": 3
-          },
-          {
-            "key": "JS",
-            "value": 4
-          },
-          {
-            "key": "QC",
-            "value": 1
-          },
-          {
-            "key": "QD",
-            "value": 2
-          },
-          {
-            "key": "QH",
-            "value": 3
-          },
-          {
-            "key": "QS",
-            "value": 4
-          },
-          {
-            "key": "KC",
-            "value": 1
-          },
-          {
-            "key": "KD",
-            "value": 2
-          },
-          {
-            "key": "KH",
-            "value": 3
-          },
-          {
-            "key": "KS",
-            "value": 4
-          },
-          {
-            "key": "AC",
-            "value": 1
-          },
-          {
-            "key": "AD",
-            "value": 2
-          },
-          {
-            "key": "AH",
-            "value": 3
-          },
-          {
-            "key": "AS",
-            "value": 4
+            "key": "leak",
+            "value": 0
           }
         ],
+        "kind": "int",
+        "name": "table",
+        "visibility": {}
+      },
+      {
+        "capacity": 4,
+        "cells": [
+          {
+            "key": "smallBlind",
+            "value": 10
+          },
+          {
+            "key": "bigBlind",
+            "value": 20
+          },
+          {
+            "key": "maxRaises",
+            "value": 4
+          },
+          {
+            "key": "autoDeal",
+            "value": 0
+          }
+        ],
+        "kind": "int",
+        "name": "house",
+        "visibility": {}
+      },
+      {
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "1",
+            "value": 1000
+          },
+          {
+            "key": "2",
+            "value": 1000
+          }
+        ],
+        "kind": "int",
+        "name": "stack",
+        "nonNegative": true,
+        "visibility": {}
+      },
+      {
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ],
+        "kind": "int",
+        "name": "streetBet",
+        "nonNegative": true,
+        "visibility": {}
+      },
+      {
+        "capacity": 1,
+        "cells": [
+          {
+            "key": "act",
+            "value": -1
+          }
+        ],
+        "kind": "int",
+        "max": 2,
+        "min": -1,
+        "name": "betAction1",
+        "visibility": {}
+      },
+      {
+        "capacity": 1,
+        "cells": [
+          {
+            "key": "act",
+            "value": -1
+          }
+        ],
+        "kind": "int",
+        "max": 2,
+        "min": -1,
+        "name": "betAction2",
+        "visibility": {}
+      },
+      {
         "domain": {
-          "$type": "keysOf",
-          "row": "cards"
+          "$type": "ring",
+          "capacity": 16,
+          "empty": -1
         },
         "kind": "int",
-        "name": "suit",
+        "name": "bets",
+        "visibility": {}
+      },
+      {
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "hole",
+            "value": 0
+          },
+          {
+            "key": "strength",
+            "value": 0
+          }
+        ],
+        "kind": "int",
+        "name": "private1",
         "visibility": {
-          "hidden": "Placeholder"
+          "readers": [
+            "seat1"
+          ],
+          "readersFrom": "audience1"
         }
       },
       {
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "hole",
+            "value": 0
+          },
+          {
+            "key": "strength",
+            "value": 0
+          }
+        ],
         "kind": "int",
-        "max": 1,
-        "min": -1,
-        "name": "betAction1",
-        "value": -1,
-        "visibility": {}
-      },
-      {
-        "kind": "int",
-        "max": 1,
-        "min": -1,
-        "name": "betAction2",
-        "value": -1,
-        "visibility": {}
-      },
-      {
-        "kind": "int",
-        "name": "bettor",
-        "value": 1,
-        "visibility": {}
-      },
-      {
-        "kind": "int",
-        "name": "cardsZoneTotal",
-        "value": 0
-      },
-      {
-        "kind": "bool",
-        "name": "cardsZoneInvariantViolated",
-        "value": false
+        "name": "private2",
+        "visibility": {
+          "readers": [
+            "seat2"
+          ],
+          "readersFrom": "audience2"
+        }
       }
     ]
   }
