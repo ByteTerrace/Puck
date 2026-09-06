@@ -836,10 +836,10 @@ public sealed partial class WorldServer {
             kinds: (definition.Groups ?? WorldGroupsSection.Empty).Kinds,
             ownership: (definition.Groups ?? WorldGroupsSection.Empty).Ownership
         );
-        // Unconditional for the identical reason — a drive-gate row lives in `state`, an ordinary section like any
-        // other, so there is no cheaper "did this mutation touch a gate row" classification worth maintaining
-        // either; this is what makes a live world.state.cell.set that flips a gate settle before the SAME tick's
-        // later intent drain reads it (Install always runs before the intents loop within one Step).
+        // Unconditional here (no touchedRow) — the mutation kinds that reach Install (a whole-document rebuild)
+        // are too varied to cheaply name the one row they touched, unlike the single-cell write InstallRuntimeStateValue
+        // below narrows. This is what makes a live world.state.cell.set that flips a gate settle before the SAME
+        // tick's later intent drain reads it (Install always runs before the intents loop within one Step).
         m_grants.SyncState(definition: definition);
 
         // Field reactions are a compiled runtime product even when the mutation does not require a population
@@ -892,10 +892,12 @@ public sealed partial class WorldServer {
     }
     // A scalar state write changes runtime values, not declaration shape. Keep the authoritative document as the
     // journal/save source while retaining the compiled rule/catalog/group/machine products that depend only on
-    // declarations; only state-sensitive grants and field reactions observe the new value immediately.
-    private void InstallRuntimeStateValue(WorldDefinition definition) {
+    // declarations; only state-sensitive grants and field reactions observe the new value immediately. touchedRow
+    // is the one row the write named — SyncState skips its drive-gate rescan entirely when that row is not a
+    // gatesDrive row.
+    private void InstallRuntimeStateValue(WorldDefinition definition, string touchedRow) {
         m_definition = definition;
-        m_grants.SyncState(definition: definition);
+        m_grants.SyncState(definition: definition, touchedRow: touchedRow);
         m_population.InstallFields(definition: definition);
         m_population.SyncBodyScale(definition: definition);
     }
@@ -1246,11 +1248,11 @@ public sealed partial class WorldServer {
             var previous = m_definition;
 
             if (
-                (mutation is WorldMutation.UpsertStateCell) &&
+                (mutation is WorldMutation.UpsertStateCell upsertStateCell) &&
                 ReferenceEquals(objA: candidate.StateCatalog, objB: previous.StateCatalog) &&
                 !RefreshesLookAssignment(candidate: candidate, mutation: mutation)
             ) {
-                InstallRuntimeStateValue(definition: candidate);
+                InstallRuntimeStateValue(definition: candidate, touchedRow: upsertStateCell.Row);
             } else {
                 Install(
                     definition: candidate,

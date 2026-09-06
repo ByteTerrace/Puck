@@ -274,16 +274,46 @@ public sealed partial class WorldServer {
 
         return applied;
     }
+    // Resolves a document row once through the catalog's name -> handle dictionary (StateCatalog.TryResolve) and the
+    // handle's own LaneOrdinal as a direct row-array index, instead of WorldDefinitionRows.FindStateRow's linear scan
+    // over every declared row. Shared by every tick-path reader that starts from a row NAME (Carriers/CarrierKeys
+    // below, WorldServer.BoardEnforcement.cs) — the handle is handed back too, so a caller that walks the row's own
+    // cells afterward reads each one through it rather than resolving the row by name again per cell.
+    private bool TryResolveDocumentRow(string name, out StateHandle handle, out WorldStateRow? row) {
+        var catalog = m_definition.StateCatalog;
+
+        if (
+            catalog.TryResolve(lane: StateLane.Document, name: name, handle: out handle) &&
+            catalog.TryGetDescriptor(handle: handle, descriptor: out var descriptor) &&
+            (((uint)descriptor.LaneOrdinal) < ((uint)m_definition.State.Count))
+        ) {
+            row = m_definition.State[descriptor.LaneOrdinal];
+
+            return true;
+        }
+
+        row = null;
+
+        return false;
+    }
+    private bool TryResolveCarrierRow(string row, out StateHandle handle, out IReadOnlyList<StateCell>? cells) {
+        if (TryResolveDocumentRow(name: row, handle: out handle, row: out var resolved)) {
+            cells = resolved!.Cells;
+
+            return (cells is not null);
+        }
+
+        cells = null;
+
+        return false;
+    }
     // The integer keys a keyed row holds at this moment, ascending — the iteration set of a decision rule. Fills
     // the caller's scratch list; the cells themselves are not retained.
     private void CarrierKeys(string row, List<int> into) {
         into.Clear();
 
-        if (WorldDefinitionRows.FindStateRow(
-            rows: m_definition.State,
-            name: row
-        ) is { Cells: { } cells }) {
-            for (var index = 0; index < cells.Count; index++) {
+        if (TryResolveCarrierRow(row: row, handle: out _, cells: out var cells)) {
+            for (var index = 0; index < cells!.Count; index++) {
                 var cell = cells[index];
                 if (StateReader.TryParseCandidateIndex(
                     index: out var key,
@@ -297,18 +327,16 @@ public sealed partial class WorldServer {
         into.Sort();
     }
     // The active bodies whose cell in a keyed tag row reads nonzero, ascending, into the caller's scratch list. A
-    // plain cell's stored value is its live value; only an advancing cell goes through the reader's as-of-tick walk.
+    // plain cell's stored value is its live value; only an advancing cell goes through the reader's as-of-tick walk,
+    // through the row's own handle rather than a per-cell ReadStateCell(string) name resolve.
     private void Carriers(string row, ulong tick, List<int> into) {
         into.Clear();
 
-        if (WorldDefinitionRows.FindStateRow(
-            rows: m_definition.State,
-            name: row
-        ) is not { Cells: { } cells }) {
+        if (!TryResolveCarrierRow(row: row, handle: out var handle, cells: out var cells)) {
             return;
         }
 
-        for (var cellIndex = 0; cellIndex < cells.Count; cellIndex++) {
+        for (var cellIndex = 0; cellIndex < cells!.Count; cellIndex++) {
             var cell = cells[cellIndex];
             if (
                 !StateReader.TryParseCandidateIndex(
@@ -322,8 +350,8 @@ public sealed partial class WorldServer {
 
             var nonzero = (((cell.Advance is null) && (cell.Cycle is null))
                 ? (cell.Value != 0L)
-                : (ReadStateCell(
-                    row: row,
+                : (ReadStateCellByHandle(
+                    handle: handle,
                     key: cell.Key,
                     tick: tick
                 ) != FixedQ4816.Zero)

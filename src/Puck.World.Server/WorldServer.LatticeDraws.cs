@@ -74,19 +74,47 @@ public sealed partial class WorldServer {
     }
     // Every apply and every undo preserves the live lattice allocation and reaction state. Repaint only rows whose
     // persisted draw position or draw fill actually moved, so an unrelated mutation cannot erase evolved cells.
+    // Pairs a current row with its previous self by INDEX (a name compare, not a scan) whenever both row lists carry
+    // the same count — the common case, since almost every mutation kind that reaches here changes a row's own
+    // cursor/masks/field rather than adding, removing, or reordering rows — and falls back to a name-keyed map, built
+    // once and reused for the rest of this call, only for a row an index pairing did not resolve. Either path is
+    // O(rows) total; a per-row WorldDefinitionRows.FindStateRow scan against the whole previous list would be
+    // O(rows squared).
     private void RepaintChangedLatticeDraws(WorldDefinition previous, WorldDefinition current) {
         if (ReferenceEquals(objA: previous.State, objB: current.State)) {
             return;
         }
 
-        foreach (var row in (current.State ?? [])) {
+        var previousRows = (previous.State ?? []);
+        var currentRows = (current.State ?? []);
+        var sameCount = (previousRows.Count == currentRows.Count);
+        Dictionary<string, WorldStateRow>? previousByName = null;
+
+        for (var index = 0; (index < currentRows.Count); index++) {
+            var row = currentRows[index];
+
+            if (WorldLatticeFill.FindDraw(trait: row.Field) is not { } fill) {
+                continue;
+            }
+
+            WorldStateRow? oldRow = null;
+
             if (
-                (WorldLatticeFill.FindDraw(trait: row.Field) is { } fill) &&
-                (WorldDefinitionRows.FindStateRow(rows: previous.State, name: row.Name.Value) is { } oldRow) &&
+                sameCount &&
+                string.Equals(a: previousRows[index].Name.Value, b: row.Name.Value, comparisonType: StringComparison.Ordinal)
+            ) {
+                oldRow = previousRows[index];
+            } else {
+                previousByName ??= BuildRowsByName(rows: previousRows);
+                previousByName.TryGetValue(key: row.Name.Value, value: out oldRow);
+            }
+
+            if (
+                (oldRow is { } found) &&
                 (
-                    (oldRow.DrawCursor != row.DrawCursor) ||
-                    !SameMasks(left: oldRow.DrawnMasks, right: row.DrawnMasks) ||
-                    !Equals(objA: WorldLatticeFill.FindDraw(trait: oldRow.Field), objB: fill)
+                    (found.DrawCursor != row.DrawCursor) ||
+                    !SameMasks(left: found.DrawnMasks, right: row.DrawnMasks) ||
+                    !Equals(objA: WorldLatticeFill.FindDraw(trait: found.Field), objB: fill)
                 )
             ) {
                 PaintLatticeDraw(
@@ -95,6 +123,15 @@ public sealed partial class WorldServer {
                 );
             }
         }
+    }
+    private static Dictionary<string, WorldStateRow> BuildRowsByName(IReadOnlyList<WorldStateRow> rows) {
+        var byName = new Dictionary<string, WorldStateRow>(capacity: rows.Count, comparer: StringComparer.Ordinal);
+
+        for (var index = 0; (index < rows.Count); index++) {
+            byName[rows[index].Name.Value] = rows[index];
+        }
+
+        return byName;
     }
     private static bool SameMasks(IReadOnlyList<ClosedBitset256>? left, IReadOnlyList<ClosedBitset256>? right) {
         var leftCount = (left?.Count ?? 0);

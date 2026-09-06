@@ -1891,21 +1891,42 @@ public sealed class WorldGrants : IWorldGrantsView {
     /// <summary>Resyncs the drive-admission gate index wholesale from the live document's <c>state</c> section —
     /// called alongside <see cref="SyncGroups"/> at the same choke points (construction, every <c>Install</c>), so a
     /// live <c>world.state.cell.set</c> that flips a gate row's cell is settled before the next tick's intent drain
-    /// reads it. Resolves each candidate cell through
-    /// <see cref="WorldStateReader.TryRead"/> — the section's one (row, key) read seam — rather than a bespoke scan
-    /// of <see cref="StateCell.Value"/>, exactly the discipline the entity-addressable reductions already
-    /// follow. The tick this resolves at is inert for every row this index can ever hold:
-    /// <see cref="WorldStateRow.GatesDrive"/> requires a declared <see cref="StateRow.Capacity"/>
-    /// (WorldDefinitionValidator), and <see cref="StateRow.Advance"/> — the only trait TryRead's tick argument
-    /// affects — refuses beside one, so a gate row can never advance; <c>0</c> reads identically to any other tick.
-    /// First-in-document-order gate wins a body (declaration-order tiebreak, the same convention same-tick rule
-    /// effects resolve by).</summary>
+    /// reads it. Resolves each gatesDrive row once through <see cref="StateCatalog.TryResolve(StateLane,string,out StateHandle)"/>
+    /// and reads every candidate cell through that handle
+    /// (<see cref="StateReader.TryReadHandle(IReadOnlyList{StateRow},StateCatalog,StateHandle,string?,ulong,out StateRow?,out long?,out string?)"/>)
+    /// rather than re-resolving the row by name per cell, or a bespoke scan of <see cref="StateCell.Value"/>. The tick
+    /// this resolves at is inert for every row this index can ever hold: <see cref="WorldStateRow.GatesDrive"/>
+    /// requires a declared <see cref="StateRow.Capacity"/> (WorldDefinitionValidator), and
+    /// <see cref="StateRow.Advance"/> — the only trait a read's tick argument affects — refuses beside one, so a gate
+    /// row can never advance; <c>0</c> reads identically to any other tick. First-in-document-order gate wins a body
+    /// (declaration-order tiebreak, the same convention same-tick rule effects resolve by).</summary>
     /// <param name="definition">The live document.</param>
-    public void SyncState(WorldDefinition definition) {
+    /// <param name="touchedRow">The one row name a scalar state mutation wrote, or <see langword="null"/> for a
+    /// caller that cannot narrow the touch set (a whole-document rebuild). A named row that does not itself declare
+    /// <see cref="WorldStateRow.GatesDrive"/> leaves the index untouched — every gatesDrive row's cells are
+    /// unchanged, so the index they produce cannot be either — instead of rescanning the whole document.</param>
+    public void SyncState(WorldDefinition definition, string? touchedRow = null) {
+        var catalog = definition.StateCatalog;
+
+        if (
+            (touchedRow is not null) &&
+            (
+                !catalog.TryResolve(lane: StateLane.Document, name: touchedRow, handle: out var touchedHandle) ||
+                !catalog.TryGetDescriptor(handle: touchedHandle, descriptor: out var touchedDescriptor) ||
+                (((uint)touchedDescriptor.LaneOrdinal) >= ((uint)definition.State.Count)) ||
+                !definition.State[touchedDescriptor.LaneOrdinal].GatesDrive
+            )
+        ) {
+            return;
+        }
+
         m_driveGates.Clear();
 
         foreach (var row in definition.State) {
-            if (!row.GatesDrive) {
+            if (
+                !row.GatesDrive ||
+                !catalog.TryResolve(lane: StateLane.Document, name: row.Name, handle: out var handle)
+            ) {
                 continue;
             }
 
@@ -1924,9 +1945,10 @@ public sealed class WorldGrants : IWorldGrantsView {
                 }
 
                 if (
-                    WorldStateReader.TryRead(
-                    definition: definition,
-                    rowName: row.Name,
+                    StateReader.TryReadHandle(
+                    rows: definition.State,
+                    catalog: catalog,
+                    handle: handle,
                     key: cell.Key.Value,
                     tick: 0UL,
                     row: out _,

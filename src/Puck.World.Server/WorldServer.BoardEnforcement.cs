@@ -122,7 +122,10 @@ public sealed partial class WorldServer {
                 continue;
             }
 
-            if (!TryReadSlotValue(row: WorldDefinitionRows.FindStateRow(m_definition.State, verdictName), value: out var verdict)) {
+            if (
+                !TryResolveDocumentRow(name: verdictName, handle: out _, row: out var verdictRow) ||
+                !TryReadSlotValue(row: verdictRow, value: out var verdict)
+            ) {
                 continue;
             }
 
@@ -134,7 +137,7 @@ public sealed partial class WorldServer {
                 continue;
             }
 
-            if (WorldDefinitionRows.FindStateRow(m_definition.State, moveName) is { } moveRow) {
+            if (TryResolveDocumentRow(name: moveName, handle: out _, row: out var moveRow) && (moveRow is not null)) {
                 ReturnBoardMove(board: board, moveRow: moveRow);
             }
         }
