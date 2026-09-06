@@ -71,6 +71,45 @@ public static class RuleDataflow {
         return false;
     }
 
+    /// <summary>Returns whether a rule's gate or bindings read the completed-tick counter
+    /// (<see cref="RuleFacts.Tick"/>) — a fact that changes every tick with no state write, so a row-version
+    /// comparison alone cannot prove the rule's verdict unchanged. Effects are not consulted: an effect only runs
+    /// when the rule fires, which never happens while a closed verdict is being reused.</summary>
+    /// <param name="rule">The compiled rule.</param>
+    public static bool ReadsTick(CompiledRule rule) {
+        ArgumentNullException.ThrowIfNull(argument: rule);
+
+        foreach (var binding in (rule.Bindings ?? [])) {
+            if (ExpressionReadsTick(tokens: binding.Expression)) {
+                return true;
+            }
+        }
+        foreach (var token in rule.Gate) {
+            if ((token.Left is TickOperand) || (token.Comparand is TickOperand) || ExpressionReadsTick(tokens: token.LeftExpression) || ExpressionReadsTick(tokens: token.RightExpression)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Returns whether an expression program reads the completed-tick counter, on
+    /// <see cref="ExpressionReadsHost"/>'s terms.</summary>
+    /// <param name="tokens">The compiled postfix program, or <see langword="null"/>.</param>
+    public static bool ExpressionReadsTick(CompiledExpressionToken[]? tokens) {
+        if (tokens is null) {
+            return false;
+        }
+
+        foreach (var token in tokens) {
+            if (token.Operand is TickOperand) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Appends the cells a gate reads: every operand and expression of every token.</summary>
     public static void CollectGate(GateToken[] gate, List<RuleAccess> into) {
         ArgumentNullException.ThrowIfNull(argument: gate);

@@ -24,6 +24,12 @@ public sealed partial class RuleEvaluator {
         m_host = host;
     }
 
+    /// <summary>Gets or sets whether a rule whose gate closed last time, whose reads carry no host or tick
+    /// dependency, and whose every read row's version is unchanged may keep its closed verdict without re-running
+    /// its bindings and gate — and whether an unchanged binding may reuse its memoized value. Defaults to
+    /// <see langword="true"/>; a law flips it off to prove the skip changes no observable result.</summary>
+    public bool SchedulingEnabled { get; set; } = true;
+
     /// <summary>Gets or sets the simulation tick every read answers as of; each entry point that takes a tick sets it
     /// before reading.</summary>
     public ulong Tick { get; set; }
@@ -182,7 +188,7 @@ public sealed partial class RuleEvaluator {
                 BoundEach = -1;
                 BoundEachKey = null;
                 BoundEachPosition = -1;
-                latch.EndSweep(bindings: bindings);
+                latch.EndSweep(name: rule.Name, bindings: bindings);
 
                 continue;
             }
@@ -205,14 +211,40 @@ public sealed partial class RuleEvaluator {
     /// <returns><see langword="true"/> when any effect installed a mutation.</returns>
     public bool EvaluateOnce(CompiledRule rule, RuleLatch latch, Dictionary<LatchKey, bool> bindings, LatchKey binding, ulong tick, ulong stepTicks) {
         RuleName = rule.Name;
+
         var trace = BeginTrace(rule: rule, tick: tick);
+        var existed = bindings.TryGetValue(key: binding, value: out var wasOpen);
+        // Scheduling never runs under a trace: a traced evaluation wants every binding and conjunct computed fresh.
+        var schedule = ((SchedulingEnabled && (trace is null)) ? rule.Schedule(reader: m_host) : null);
+
+        if (existed && !wasOpen && (schedule is { Volatile: false } sched) && VersionsMatch(schedule: sched, cached: latch.GateVersions(name: rule.Name, binding: binding))) {
+            // Nothing this rule reads has changed since it last closed, and it reads no host or tick fact a version
+            // cannot see through — the verdict is still closed, so bindings and gate need not run at all.
+            latch.Touch(binding: binding);
+            EndTrace(entry: trace);
+
+            return false;
+        }
+
         // Bound values first, in declared order, each visible to the ones after it and to the gate and effects. A
         // binding that cannot evaluate closes the gate for this evaluation and is reported once per category like any
         // effect's arithmetic refusal.
         var bound = (rule.Bindings ?? []);
+        var memos = ((schedule is not null) && (bound.Length > 0)) ? latch.BindingMemos(name: rule.Name, binding: binding, count: bound.Length) : null;
 
         for (var ordinal = 0; ordinal < bound.Length; ordinal++) {
             var declared = bound[ordinal];
+
+            if (memos is { } cached) {
+                var bindingSchedule = declared.Schedule(reader: m_host);
+
+                if (!bindingSchedule.Volatile && (cached[ordinal] is { } memo) && VersionsMatch(schedule: bindingSchedule, cached: memo.Versions)) {
+                    m_bindingValues[ordinal] = memo.Value;
+                    trace?.Bindings.Add(item: $"{declared.Name}={RuleEvaluation.DescribeFact(value: memo.Value, kind: declared.Kind, isForever: false)}");
+
+                    continue;
+                }
+            }
 
             if (!TryEvaluateExpression(program: declared.Expression, kind: declared.Kind, tick: tick, value: out var value, fault: out var fault)) {
                 trace?.Bindings.Add(item: $"{declared.Name}=refused");
@@ -225,6 +257,14 @@ public sealed partial class RuleEvaluator {
             }
 
             m_bindingValues[ordinal] = value;
+
+            if (memos is { } cache) {
+                var memo = (cache[ordinal] ??= new RuleLatch.BindingMemo());
+
+                memo.Value = value;
+                CaptureVersions(schedule: declared.Schedule(reader: m_host), cache: ref memo.Versions);
+            }
+
             trace?.Bindings.Add(item: $"{declared.Name}={RuleEvaluation.DescribeFact(value: value, kind: declared.Kind, isForever: false)}");
         }
 
@@ -232,10 +272,17 @@ public sealed partial class RuleEvaluator {
         // the gate reads closed, nothing is refused, and the trace names what each spelling selected.
         var open = (ZonesSelected(rule: rule, tick: tick, trace: trace?.Zones) && GateOpen(gate: rule.Gate, tick: tick, ruleName: rule.Name, trace: trace?.Conjuncts));
         ref var slot = ref CollectionsMarshal.GetValueRefOrAddDefault(dictionary: bindings, key: binding, exists: out _);
-        var wasOpen = slot;
 
         slot = open;
         latch.Touch(binding: binding);
+
+        if ((schedule is { } closedSchedule) && !open) {
+            // The gate closed again: remember what its reads looked like, so an unchanged read next time skips.
+            var cache = (latch.GateVersions(name: rule.Name, binding: binding) ?? []);
+
+            CaptureVersions(schedule: closedSchedule, cache: ref cache);
+            latch.SetGateVersions(name: rule.Name, binding: binding, versions: cache);
+        }
 
         var fires = (open && ((rule.Mode != ActionTriggerMode.Edge) || !wasOpen));
 
@@ -255,6 +302,35 @@ public sealed partial class RuleEvaluator {
         EndTrace(entry: trace);
 
         return applied;
+    }
+
+    // Whether every row a schedule reads reports the same version it did when the cache was captured — a mismatch,
+    // a schedule the host has flagged volatile, or a host that cannot answer a row's version at all all count as
+    // "unproven", which is the safe default: evaluate in full rather than trust a stale or unanswerable cache.
+    private bool VersionsMatch(RuleSchedule schedule, ulong[]? cached) {
+        if (schedule.Volatile || (cached is null) || (cached.Length != schedule.Rows.Length)) {
+            return false;
+        }
+
+        for (var index = 0; index < schedule.Rows.Length; index++) {
+            if (!m_host.TryRowVersion(row: schedule.Rows[index], version: out var version) || (version != cached[index])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+    // Overwrites a cached version array in place, reusing it when its length already matches the schedule's row
+    // count; a row the host cannot answer for is recorded as zero, which VersionsMatch never trusts on its own,
+    // since it re-queries TryRowVersion rather than comparing against a cached placeholder.
+    private void CaptureVersions(RuleSchedule schedule, ref ulong[] cache) {
+        if (cache.Length != schedule.Rows.Length) {
+            cache = new ulong[schedule.Rows.Length];
+        }
+
+        for (var index = 0; index < schedule.Rows.Length; index++) {
+            cache[index] = (m_host.TryRowVersion(row: schedule.Rows[index], version: out var version) ? version : 0UL);
+        }
     }
 
     private bool ZonesSelected(CompiledRule rule, ulong tick, List<string>? trace) {

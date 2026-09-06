@@ -259,6 +259,28 @@ Nothing here carries a `World` name — a state library names no world.
   `OperandFact.HostOnly`,
   `KeyFact.HostOnly`, `EffectFact.ReadsHost`, and `RuleDataflow.ReadsHost`
   name what a frame cannot evaluate.
+- *Scheduling:* every framed row carries a version — a counter
+  `StateFrame` bumps on any write to any of its cells, including a
+  transform's whole-span write and a journal rewind — read by handle
+  through `IRuleReader.TryRowVersion` (default: the host cannot say, so the
+  evaluator always evaluates; `FrameHost` answers from its frame, refusing a
+  text or field row). `RuleSchedule.Build`, cached once per compiled rule and
+  per binding (`CompiledRule.Schedule`/`CompiledRuleBinding.Schedule`, from
+  the fully constructed rule so a document project's own `CollectReads`
+  override is included), folds a rule's or a binding's reads to the row
+  handles they touch and whether they carry a dependency a version cannot
+  prove unchanged: `RuleDataflow.ReadsHost`, `RuleDataflow.ReadsTick` (the
+  `$tick` operand), an unresolved row, or a row whose slot or a keyed cell
+  carries `StateAdvance`/`StateCycle` (a value that drifts with the tick
+  alone). `RuleEvaluator.SchedulingEnabled` (default on) lets a rule whose
+  gate closed last time keep that verdict, and lets a binding whose reads
+  are unchanged reuse its memoized value, whenever every row it reads
+  reports the same version it did last time and it carries no such
+  dependency; an open gate and a traced evaluation always run in full. The
+  row-version and memoized-value caches live in `RuleLatch` beside the edge
+  latch, per rule and per forEach binding, but are not simulation state —
+  they never enter `AppendStateHash`, `Flatten`, or `Restore` — since the
+  skip only elides a re-derivation already proven to answer the same.
 - *Analyses:* `RuleDataflow` (a rule's read and write sets), `RuleHazards`
   (the write-after-read and write-after-write pairs document order decides,
   skipping pairs whose gates pin one cell to disjoint ranges), and

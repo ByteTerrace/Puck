@@ -50,4 +50,15 @@ public interface IRuleReader {
     Span<long> BoardScratch(int cells);
     /// <summary>Gets scratch for one pattern word, sized to the longest word any source in the section can produce.</summary>
     Span<long> PatternWord { get; }
+    /// <summary>Returns a row's version — a counter the host bumps on every state write to any of its cells — so a
+    /// scheduler can prove a row's stored content unchanged between two evaluations without rereading it. The
+    /// default answers "the host cannot say", which keeps every rule evaluating in full; only a host reading through
+    /// a versioned frame overrides it.</summary>
+    /// <param name="row">The row's compiled handle.</param>
+    /// <param name="version">The version, when the host can answer.</param>
+    bool TryRowVersion(StateHandle row, out ulong version) {
+        version = 0UL;
+
+        return false;
+    }
 }

@@ -49,6 +49,9 @@ public sealed class FrameLayout {
     private readonly Dictionary<int, int[]> m_dependents = [];
     // A codes row ordinal -> the derived boards it feeds; a code write recomputes the one cell its token stands on.
     private readonly Dictionary<int, int[]> m_codeDependents = [];
+    // Every frame value index -> the row ordinal owning it, so a per-cell write bumps that row's version with one
+    // array read rather than a binary search over row offsets.
+    private readonly int[] m_rowOfIndex;
 
     /// <summary>Lays out a section's rows.</summary>
     /// <param name="rows">The rows.</param>
@@ -99,6 +102,15 @@ public sealed class FrameLayout {
         }
 
         Length = offset;
+        m_rowOfIndex = new int[Length];
+
+        for (var index = 0; index < rows.Count; index++) {
+            var layout = m_rows[index];
+
+            for (var cell = 0; cell < layout.Length; cell++) {
+                m_rowOfIndex[layout.Offset + cell] = index;
+            }
+        }
     }
 
     /// <summary>Gets the derived board ordinals whose cells recompute from a write to the row at
@@ -121,6 +133,9 @@ public sealed class FrameLayout {
     /// <param name="name">The row name.</param>
     /// <param name="ordinal">The ordinal.</param>
     public bool TryOrdinal(string name, out int ordinal) => m_ordinals.TryGetValue(key: name, value: out ordinal);
+    /// <summary>Gets the row ordinal owning a frame value index.</summary>
+    /// <param name="index">The frame value index.</param>
+    public int RowOfIndex(int index) => m_rowOfIndex[index];
 
     /// <summary>Returns whether other rows would lay out identically — the same names in the same order, each with
     /// the same kind and length — so a frame on this layout can be rebound to them without a new layout.</summary>
@@ -206,6 +221,7 @@ public sealed class StateFrame : StateStore {
     private readonly record struct JournalEntry(int Index, long Previous);
 
     private readonly long[] m_values;
+    private readonly ulong[] m_rowVersions;
     private JournalEntry[] m_journal = new JournalEntry[64];
     private long[] m_snapshot = [];
     private int m_journalLength;
@@ -221,6 +237,7 @@ public sealed class StateFrame : StateStore {
         Layout = layout;
         m_rows = rows;
         m_values = new long[layout.Length];
+        m_rowVersions = new ulong[layout.RowCount];
     }
 
     /// <summary>Opens an undo-journal scope: every write this frame makes until the matching
@@ -237,7 +254,10 @@ public sealed class StateFrame : StateStore {
     /// <param name="mark">The mark <see cref="BeginJournalScope"/> returned for this scope.</param>
     public void RewindJournalScope(int mark) {
         for (var index = (m_journalLength - 1); index >= mark; index--) {
-            m_values[m_journal[index].Index] = m_journal[index].Previous;
+            var cell = m_journal[index].Index;
+
+            m_values[cell] = m_journal[index].Previous;
+            BumpRow(index: cell);
         }
 
         m_journalLength = mark;
@@ -256,6 +276,11 @@ public sealed class StateFrame : StateStore {
     /// scope or not — a test hook for a preflight's write cost, since the running length itself resets to the mark
     /// as each scope closes.</summary>
     public long JournalTouches => m_journalTouches;
+    /// <summary>Gets a row's version: a counter bumped on every write to any of its cells, including a transform's
+    /// whole-span write and a journal rewind. Two reads of the same row taken with no bump between them prove the
+    /// row's stored content did not change.</summary>
+    /// <param name="rowOrdinal">The row's ordinal in <see cref="Layout"/>.</param>
+    public ulong RowVersion(int rowOrdinal) => m_rowVersions[rowOrdinal];
 
     // Writes one value, journaling the cell it overwrites while a scope is open; a scope always closes by undoing
     // in reverse or by discarding the record, never by reading it, so the journal never allocates once its buffer
@@ -266,7 +291,10 @@ public sealed class StateFrame : StateStore {
         }
 
         m_values[index] = value;
+        BumpRow(index: index);
     }
+    // Bumps the version of the row owning a frame index — one array read via the layout's precomputed inverse map.
+    private void BumpRow(int index) => m_rowVersions[Layout.RowOfIndex(index: index)]++;
     // A before-image of one row span for a transform that writes the whole span itself; the buffer grows to the
     // widest row this frame has snapshotted and is reused, so a lattice-sized row costs neither stack nor heap per
     // transform.
@@ -369,6 +397,8 @@ public sealed class StateFrame : StateStore {
                 default:
                     break;
             }
+
+            m_rowVersions[ordinal]++;
         }
     }
     /// <summary>Copies another frame on the same layout.</summary>
@@ -381,6 +411,10 @@ public sealed class StateFrame : StateStore {
 
         RequireNoJournalScope();
         other.m_values.AsSpan().CopyTo(destination: m_values);
+
+        for (var ordinal = 0; ordinal < m_rowVersions.Length; ordinal++) {
+            m_rowVersions[ordinal]++;
+        }
     }
     // A whole-frame load bypasses the journal, so it is refused while a scope could still rewind over it.
     private void RequireNoJournalScope() {
@@ -745,6 +779,7 @@ public sealed class StateFrame : StateStore {
             _ = BoardQueries.ClearEnclosed(topology: layout.Topology, values: target, source: source, lower: enclosed.Lower, upper: enclosed.Upper, empty: layout.Empty);
         }
 
+        m_rowVersions[ordinal]++;
         reason = string.Empty;
 
         return true;
@@ -862,6 +897,7 @@ public sealed class StateFrame : StateStore {
             BoardCombination.Write(combine, topology, left, leftEmpty, right, rightEmpty, target, layout.Empty, direction, element);
         }
 
+        m_rowVersions[ordinal]++;
         reason = string.Empty;
 
         return true;

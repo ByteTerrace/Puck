@@ -61,6 +61,19 @@ public readonly record struct CompiledExpressionToken(ExpressionOp Operation, lo
 /// <param name="Bindings">The compiled per-evaluation bindings, in declared order.</param>
 /// <param name="Zones">The compiled <see cref="Rule.Zones"/> table, or <see langword="null"/>.</param>
 public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate, EffectFact[] Effects, string? ForEach = null, CompiledRuleBinding[]? Bindings = null, ZoneTable? Zones = null) {
+    private RuleSchedule? m_schedule;
+
+    /// <summary>Gets the rule's memoized read schedule — its gate's and bindings' distinct row reads, and whether
+    /// they carry a host or tick dependency — built once against <paramref name="reader"/> from the fully
+    /// constructed rule (so a document project's own <see cref="CollectReads"/> override is included) and cached for
+    /// the rule's lifetime.</summary>
+    /// <param name="reader">The evaluation in flight, for resolving row names and traits.</param>
+    internal RuleSchedule Schedule(IRuleReader reader) => (m_schedule ??= RuleSchedule.Build(
+        reads: RuleDataflow.Reads(rule: this),
+        volatileBase: (RuleDataflow.ReadsHost(rule: this) || RuleDataflow.ReadsTick(rule: this)),
+        reader: reader
+    ));
+
     /// <summary>Appends every state cell one evaluation reads: the gate, the bindings, and the effects. A document
     /// project's rule appends the branches it alone carries.</summary>
     /// <param name="into">The read set being collected.</param>
@@ -100,4 +113,25 @@ public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate
 /// <param name="Name">The authored name.</param>
 /// <param name="Kind">The value kind the expression was compiled in.</param>
 /// <param name="Expression">The compiled postfix program.</param>
-public sealed record CompiledRuleBinding(string Name, CellKind Kind, CompiledExpressionToken[] Expression);
+public sealed record CompiledRuleBinding(string Name, CellKind Kind, CompiledExpressionToken[] Expression) {
+    private RuleSchedule? m_schedule;
+
+    /// <summary>Gets the binding's own memoized read schedule — its expression's distinct row reads, and whether
+    /// they carry a host or tick dependency — built once against <paramref name="reader"/> and cached for the
+    /// binding's lifetime.</summary>
+    /// <param name="reader">The evaluation in flight, for resolving row names and traits.</param>
+    internal RuleSchedule Schedule(IRuleReader reader) {
+        if (m_schedule is null) {
+            var reads = new List<RuleAccess>();
+
+            RuleDataflow.CollectExpression(tokens: Expression, into: reads);
+            m_schedule = RuleSchedule.Build(
+                reads: reads,
+                volatileBase: (RuleDataflow.ExpressionReadsHost(tokens: Expression) || RuleDataflow.ExpressionReadsTick(tokens: Expression)),
+                reader: reader
+            );
+        }
+
+        return m_schedule;
+    }
+}

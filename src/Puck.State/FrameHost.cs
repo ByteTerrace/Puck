@@ -77,6 +77,21 @@ public sealed class FrameHost : IRuleHost {
 
         return m_boardScratch.AsSpan(start: 0, length: cells);
     }
+    /// <inheritdoc/>
+    public bool TryRowVersion(StateHandle row, out ulong version) {
+        version = 0UL;
+
+        if (!Catalog.TryGetDescriptor(handle: row, descriptor: out var descriptor) || (descriptor.Ownership != StateLane.Document)) {
+            return false;
+        }
+        if (!Frame.Layout.TryOrdinal(name: descriptor.Name, ordinal: out var ordinal) || (Frame.Layout[ordinal].Kind == FrameRowKind.Unframed)) {
+            return false;
+        }
+
+        version = Frame.RowVersion(rowOrdinal: ordinal);
+
+        return true;
+    }
 
     /// <summary>Rebinds the frame to rows the layout fits.</summary>
     /// <param name="rows">The rows.</param>
