@@ -240,6 +240,8 @@ public static class ExpressionSpelling {
                 return new StateRead(Name: state.Name, Key: state.Key);
             case ValueToken.BoardShift shift:
                 return (stack.Count >= 1) ? new Call(Name: "boardShift", Arguments: [stack.Pop()], Names: [shift.Topology, shift.Direction]) : null;
+            case ValueToken.BoardFill fill:
+                return (stack.Count >= 1) ? new Call(Name: "boardFill", Arguments: [stack.Pop()], Names: [fill.Topology, fill.Direction]) : null;
             case ValueToken.BoardImage image:
                 return (stack.Count >= 1) ? new Call(Name: "boardImage", Arguments: [stack.Pop()], Names: [image.Topology, image.Element]) : null;
             case ValueToken.Select:
@@ -435,6 +437,7 @@ public static class ExpressionSpelling {
             }
             into.Add(item: Name switch {
                 "boardShift" => new ValueToken.BoardShift(Topology: Names[0], Direction: Names[1]),
+                "boardFill" => new ValueToken.BoardFill(Topology: Names[0], Direction: Names[1]),
                 "boardImage" => new ValueToken.BoardImage(Topology: Names[0], Element: Names[1]),
                 _ => Calls[Name].Make(),
             });
@@ -669,7 +672,7 @@ public static class ExpressionSpelling {
                         if (!quoted && Calls.TryGetValue(key: name, value: out var call)) {
                             return ParseCall(name: name, arity: call.Arity, names: 0);
                         }
-                        if (!quoted && (name is "boardShift" or "boardImage")) {
+                        if (!quoted && (name is "boardShift" or "boardFill" or "boardImage")) {
                             return ParseCall(name: name, arity: 1, names: 2);
                         }
                         if (!quoted && Accept(punctuation: "(")) {

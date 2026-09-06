@@ -17,6 +17,68 @@ public sealed record WorldSearchSection(IReadOnlyList<WorldSearchRow>? Jobs = nu
     public IReadOnlyList<WorldSearchRow> Rows => (Jobs ?? []);
 }
 
+/// <summary>Which board-state change one candidate shape makes. <see cref="Relocate"/> is the section's original,
+/// still-default shape.</summary>
+public enum WorldSearchShapeKind : byte {
+    /// <summary>One own token moves onto any other cell.</summary>
+    Relocate,
+    /// <summary>A token off the board enters an empty cell.</summary>
+    Drop,
+    /// <summary>The walked token steps two cells along a direction, over a token that leaves the board.</summary>
+    Jump,
+    /// <summary>The walked token and a second, fixed token relocate together.</summary>
+    Pair,
+}
+
+/// <summary>One authored candidate shape a search job enumerates, ahead of token and target/direction in the walk's
+/// fixed order. Every shape but <see cref="Drop"/> requires the walked token on the board; <see cref="Drop"/>
+/// requires it off. Absent from <see cref="WorldSearchRow.Shapes"/>, a job's default and only shape is
+/// <see cref="Relocate"/> with <c>displace: true</c> — the one candidate this section always ran.</summary>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+[JsonDerivedType(typeof(WorldSearchShape.Relocate), "relocate")]
+[JsonDerivedType(typeof(WorldSearchShape.Drop), "drop")]
+[JsonDerivedType(typeof(WorldSearchShape.Jump), "jump")]
+[JsonDerivedType(typeof(WorldSearchShape.Paired), "pair")]
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public abstract record WorldSearchShape {
+    /// <summary>One own token moves onto any other cell of the board. <see cref="Displace"/> (default true) evicts
+    /// whatever token already stood on the target — the section's original, unconditional behavior; false leaves it
+    /// standing, so a judge rule that reads two tokens sharing a cell decides the candidate itself.</summary>
+    /// <param name="Displace">Whether the token standing on the target leaves the board.</param>
+    public sealed record Relocate(bool Displace = true) : WorldSearchShape;
+    /// <summary>A token whose current value is off the board (see <see cref="WorldSearchRow.Tokens"/>'s remarks)
+    /// enters any cell no other token stands on.</summary>
+    public sealed record Drop : WorldSearchShape;
+    /// <summary>The walked token steps two cells along one topology direction, over a token standing on the
+    /// intermediate cell — which leaves the board — onto an empty destination; a direction with no such occupied
+    /// intermediate, or whose destination is not empty, is not a candidate.</summary>
+    /// <param name="Over">The directions tried, in the topology's own vocabulary (<c>CompiledTopology.Direction</c>).
+    /// The single-element list <c>["any"]</c> tries every direction the topology declares.</param>
+    public sealed record Jump(IReadOnlyList<string> Over) : WorldSearchShape;
+    /// <summary>The walked token relocates to the target cell and a second, fixed token — named by <see cref="With"/>,
+    /// a cell key of <see cref="WorldSearchRow.Tokens"/> — relocates by the same (dx, dz) grid offset, provided its
+    /// own destination is empty. Grid topologies only: the minimal two-token primitive a castle's rook needs, not a
+    /// general rule for every pair's own reach (see the schema README's search section for the reasoning).</summary>
+    /// <param name="With">The companion token's cell key in <see cref="WorldSearchRow.Tokens"/>.</param>
+    public sealed record Paired(string With) : WorldSearchShape;
+}
+
+/// <summary>One job's compiled shape: its kind, and the data the runtime resolves a candidate from.
+/// <see cref="Directions"/> is populated for <see cref="WorldSearchShapeKind.Jump"/> alone — the resolved direction
+/// ordinals <see cref="WorldSearchShape.Jump.Over"/> names. <see cref="PairWithIndex"/> is populated for
+/// <see cref="WorldSearchShapeKind.Pair"/> alone — the fixed companion's ordinal in the job's tokens row.</summary>
+/// <param name="Kind">The shape.</param>
+/// <param name="Displace">Whether a <see cref="WorldSearchShapeKind.Relocate"/> evicts the token standing on the
+/// target; unused by every other kind.</param>
+/// <param name="Directions">The resolved direction ordinals a <see cref="WorldSearchShapeKind.Jump"/> tries.</param>
+/// <param name="PairWithIndex">The companion token's ordinal for a <see cref="WorldSearchShapeKind.Pair"/>, or -1.</param>
+public sealed record WorldSearchShapePlan(WorldSearchShapeKind Kind, bool Displace, int[] Directions, int PairWithIndex) {
+    /// <summary>Gets how many candidates this shape enumerates per token: every board cell for every kind but
+    /// <see cref="WorldSearchShapeKind.Jump"/>, which enumerates its resolved directions instead.</summary>
+    /// <param name="topology">The job's board topology.</param>
+    public int CandidateCount(CompiledTopology topology) => ((Kind == WorldSearchShapeKind.Jump) ? Directions.Length : topology.CellCount);
+}
+
 /// <summary>One search job.</summary>
 /// <param name="Name">The stable job name.</param>
 /// <param name="Tokens">The keyed integer row whose cells are the tokens and whose values are the board cells they
@@ -26,9 +88,20 @@ public sealed record WorldSearchSection(IReadOnlyList<WorldSearchRow>? Jobs = nu
 /// anchoring <paramref name="Board"/> supplies it.</param>
 /// <param name="Verdict">The slot row the rules judge a relocation into; absent, the same board binding supplies it.</param>
 /// <param name="Accept">The verdict value that accepts a relocation.</param>
+/// <param name="Shapes">The candidate shapes the walk enumerates, in declared order, ahead of token and
+/// target/direction; absent or empty, the one default shape (<see cref="WorldSearchShape.Relocate"/>,
+/// <c>displace: true</c>).</param>
 /// <param name="Legal">An integer row keyed by the tokens receiving, per token, the mask of cells it may relocate to;
 /// requires a board of at most 64 cells.</param>
 /// <param name="Count">A slot row receiving how many relocations were accepted.</param>
+/// <param name="Reach">An integer board row over the same topology as <paramref name="Board"/> receiving, at 1, the
+/// cells <paramref name="Held"/>'s named token may reach and, at its own empty value, every other cell; unlike
+/// <paramref name="Legal"/>, works for a board of any size. Authored together with <paramref name="Held"/>.</param>
+/// <param name="Held">An integer slot row naming the token whose accepted destinations are painted into
+/// <paramref name="Reach"/> — its own ordinal in <paramref name="Tokens"/>'s cell order. A value out of range paints
+/// nothing.</param>
+/// <param name="Counts">An integer row keyed by the tokens receiving, per token, how many candidates it accepted;
+/// unlike <paramref name="Legal"/>, works for a board of any size.</param>
 /// <param name="Nodes">The relocations judged per tick, at most what the work sheet leaves; absent derives that.</param>
 /// <param name="Depth">How many plies the job searches ahead; the depth-one walk this section always ran. A depth
 /// past one asks what the position is worth after the ply, not merely whether it is legal, and requires
@@ -46,18 +119,33 @@ public sealed record WorldSearchRow(
     string? Turn = null,
     string? Verdict = null,
     long Accept = 1L,
+    IReadOnlyList<WorldSearchShape>? Shapes = null,
     string? Legal = null,
     string? Count = null,
+    string? Reach = null,
+    string? Held = null,
+    string? Counts = null,
     int? Nodes = null,
     int Depth = 1,
     string? Score = null,
     string? Best = null
-);
+) {
+    /// <summary>The one candidate shape a job with none authored enumerates: a plain relocation that evicts
+    /// whatever stood on the target — this section's original, unconditional behavior.</summary>
+    private static readonly IReadOnlyList<WorldSearchShape> s_defaultShapes = [new WorldSearchShape.Relocate(Displace: true)];
+
+    /// <summary>Gets the shapes the walk enumerates: <see cref="Shapes"/> when authored and non-empty, otherwise
+    /// the one default relocate shape.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldSearchShape> EffectiveShapes => ((Shapes is { Count: > 0 }) ? Shapes : s_defaultShapes);
+}
 
 /// <summary>Hard bounds for the search section.</summary>
 public static class WorldSearchCapacity {
     /// <summary>The most jobs one document declares.</summary>
     public const int MaxJobs = 8;
+    /// <summary>The most candidate shapes one job declares.</summary>
+    public const int MaxShapesPerJob = 8;
     /// <summary>The most relocations one job judges per tick, whatever the work sheet leaves.</summary>
     public const int MaxNodesPerTick = 4_096;
     /// <summary>The most plies one job searches ahead.</summary>
@@ -68,7 +156,8 @@ public static class WorldSearchCapacity {
     public const long MateScore = (long.MaxValue >> 2);
 }
 
-/// <summary>One job's derived plan: every row resolved, the off-board value, and the per-tick node quota.</summary>
+/// <summary>One job's derived plan: every row resolved, the off-board value, the compiled shapes, and the per-tick
+/// node quota.</summary>
 /// <param name="Row">The authored job.</param>
 /// <param name="Topology">The board's topology.</param>
 /// <param name="Turn">The turn row.</param>
@@ -79,7 +168,8 @@ public static class WorldSearchCapacity {
 /// <param name="Depth">How many plies the job searches ahead.</param>
 /// <param name="Score">The compiled score program, or <see langword="null"/> when the job carries none.</param>
 /// <param name="Best">The best-move output row, or <see langword="null"/>.</param>
-public sealed record WorldSearchPlan(WorldSearchRow Row, CompiledTopology Topology, string Turn, string Verdict, long Off, int Nodes, long JudgeCost, int Depth, CompiledExpressionToken[]? Score, string? Best);
+/// <param name="Shapes">The compiled candidate shapes, in declared order.</param>
+public sealed record WorldSearchPlan(WorldSearchRow Row, CompiledTopology Topology, string Turn, string Verdict, long Off, int Nodes, long JudgeCost, int Depth, CompiledExpressionToken[]? Score, string? Best, WorldSearchShapePlan[] Shapes);
 
 /// <summary>Derives what a search job needs from the document: the rules a frame can evaluate, their cost, and each
 /// job's plan.</summary>
@@ -119,6 +209,111 @@ public static class WorldSearchCompilation {
         return Math.Max(val1: 1L, val2: cost);
     }
 
+    /// <summary>Compiles a job's authored shapes against its board topology and tokens row.</summary>
+    /// <param name="row">The job.</param>
+    /// <param name="topology">The board's topology.</param>
+    /// <param name="tokens">The tokens row.</param>
+    /// <param name="shapes">The compiled shapes, in declared order.</param>
+    /// <param name="reason">Why a shape does not compile, or empty.</param>
+    private static bool TryCompileShapes(WorldSearchRow row, CompiledTopology topology, WorldStateRow tokens, out WorldSearchShapePlan[] shapes, out string reason) {
+        var authored = row.EffectiveShapes;
+
+        shapes = [];
+
+        if ((authored.Count == 0) || (authored.Count > WorldSearchCapacity.MaxShapesPerJob)) {
+            reason = $"search '{row.Name}' declares {authored.Count} shapes; the count must lie in 1..{WorldSearchCapacity.MaxShapesPerJob}";
+
+            return false;
+        }
+
+        var compiled = new WorldSearchShapePlan[authored.Count];
+
+        for (var index = 0; index < authored.Count; index++) {
+            switch (authored[index]) {
+                case WorldSearchShape.Relocate relocate:
+                    compiled[index] = new WorldSearchShapePlan(Kind: WorldSearchShapeKind.Relocate, Displace: relocate.Displace, Directions: [], PairWithIndex: -1);
+
+                    break;
+                case WorldSearchShape.Drop:
+                    compiled[index] = new WorldSearchShapePlan(Kind: WorldSearchShapeKind.Drop, Displace: false, Directions: [], PairWithIndex: -1);
+
+                    break;
+                case WorldSearchShape.Jump jump: {
+                    if (jump.Over is not { Count: > 0 }) {
+                        reason = $"search '{row.Name}' shape[{index}] jump names no 'over' direction";
+
+                        return false;
+                    }
+
+                    int[] directions;
+
+                    if ((jump.Over.Count == 1) && string.Equals(a: jump.Over[0], b: "any", comparisonType: StringComparison.Ordinal)) {
+                        directions = new int[topology.DirectionCount];
+
+                        for (var direction = 0; direction < directions.Length; direction++) {
+                            directions[direction] = direction;
+                        }
+                    } else {
+                        directions = new int[jump.Over.Count];
+
+                        for (var index2 = 0; index2 < jump.Over.Count; index2++) {
+                            var resolved = topology.Direction(token: jump.Over[index2]);
+
+                            if (resolved < 0) {
+                                reason = $"search '{row.Name}' shape[{index}] jump names direction '{jump.Over[index2]}' the board's topology does not declare";
+
+                                return false;
+                            }
+
+                            directions[index2] = resolved;
+                        }
+                    }
+
+                    compiled[index] = new WorldSearchShapePlan(Kind: WorldSearchShapeKind.Jump, Displace: false, Directions: directions, PairWithIndex: -1);
+
+                    break;
+                }
+                case WorldSearchShape.Paired pair: {
+                    if (topology.Kind != TopologyKind.Grid) {
+                        reason = $"search '{row.Name}' shape[{index}] pair requires a grid board; '{row.Board}' is {topology.Kind}";
+
+                        return false;
+                    }
+
+                    var companion = -1;
+
+                    if (tokens.Cells is { } tokenCells) {
+                        for (var t = 0; t < tokenCells.Count; t++) {
+                            if (string.Equals(a: tokenCells[t].Key.Value, b: pair.With, comparisonType: StringComparison.Ordinal)) {
+                                companion = t;
+
+                                break;
+                            }
+                        }
+                    }
+                    if (companion < 0) {
+                        reason = $"search '{row.Name}' shape[{index}] pair 'with' names no cell '{pair.With}' of '{row.Tokens}'";
+
+                        return false;
+                    }
+
+                    compiled[index] = new WorldSearchShapePlan(Kind: WorldSearchShapeKind.Pair, Displace: false, Directions: [], PairWithIndex: companion);
+
+                    break;
+                }
+                default:
+                    reason = $"search '{row.Name}' shape[{index}] is an unrecognized shape";
+
+                    return false;
+            }
+        }
+
+        shapes = compiled;
+        reason = string.Empty;
+
+        return true;
+    }
+
     /// <summary>Derives one job's plan, or names why the job cannot run.</summary>
     /// <param name="definition">The world.</param>
     /// <param name="row">The job.</param>
@@ -144,6 +339,9 @@ public static class WorldSearchCompilation {
         if ((board?.EffectiveDomain is not StateDomain.CellsOf cells) || (board.Kind != CellKind.Int) || (WorldTopologyCompilation.Find(definition, cells.Topology) is not { } topology) || (topology.Kind == TopologyKind.Field)) {
             reason = $"search '{row.Name}' board '{row.Board}' must be an integer board over a discrete topology";
 
+            return false;
+        }
+        if (!TryCompileShapes(row: row, topology: topology, tokens: tokens, shapes: out var shapes, reason: out reason)) {
             return false;
         }
 
@@ -191,6 +389,35 @@ public static class WorldSearchCompilation {
             reason = $"search '{row.Name}' count '{countName}' must be an integer slot row";
 
             return false;
+        }
+        if ((row.Reach is not null) || (row.Held is not null)) {
+            if ((row.Reach is null) || (row.Held is null)) {
+                reason = $"search '{row.Name}' reach and held must be authored together";
+
+                return false;
+            }
+            if (WorldDefinitionRows.FindStateRow(rows: definition.State, name: row.Reach) is not { Kind: CellKind.Int, EffectiveDomain: StateDomain.CellsOf reachDomain } || !string.Equals(a: reachDomain.Topology, b: cells.Topology, comparisonType: StringComparison.Ordinal)) {
+                reason = $"search '{row.Name}' reach '{row.Reach}' must be an integer board over the same topology as '{row.Board}'";
+
+                return false;
+            }
+            if (reachDomain.Empty == 1L) {
+                reason = $"search '{row.Name}' reach '{row.Reach}' declares empty 1, the value the job paints a reachable cell with";
+
+                return false;
+            }
+            if (WorldDefinitionRows.FindStateRow(rows: definition.State, name: row.Held) is not { IsSlot: true, Kind: CellKind.Int }) {
+                reason = $"search '{row.Name}' held '{row.Held}' must be an integer slot row";
+
+                return false;
+            }
+        }
+        if (row.Counts is { } countsName) {
+            if (WorldDefinitionRows.FindStateRow(rows: definition.State, name: countsName) is not { Kind: CellKind.Int, EffectiveDomain: StateDomain.KeysOf countsKeysOf } || !string.Equals(a: countsKeysOf.Row.Value, b: row.Tokens, comparisonType: StringComparison.Ordinal)) {
+                reason = $"search '{row.Name}' counts '{countsName}' must be an integer row keyed by '{row.Tokens}'";
+
+                return false;
+            }
         }
 
         var off = (tokens.Min ?? -1L);
@@ -262,7 +489,7 @@ public static class WorldSearchCompilation {
             return false;
         }
 
-        plan = new WorldSearchPlan(Row: row, Topology: topology, Turn: turnName, Verdict: verdictName, Off: off, Nodes: (row.Nodes ?? derived), JudgeCost: judgeCost, Depth: row.Depth, Score: score, Best: row.Best);
+        plan = new WorldSearchPlan(Row: row, Topology: topology, Turn: turnName, Verdict: verdictName, Off: off, Nodes: (row.Nodes ?? derived), JudgeCost: judgeCost, Depth: row.Depth, Score: score, Best: row.Best, Shapes: shapes);
         reason = string.Empty;
 
         return true;

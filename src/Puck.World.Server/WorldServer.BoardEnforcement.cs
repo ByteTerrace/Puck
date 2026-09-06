@@ -190,12 +190,15 @@ public sealed partial class WorldServer {
             hash.Add(value: verdict);
         }
     }
+    // Sorted by placement id, so the checkpoint's bytes are the same on every server holding the same latch.
     private WorldBoardEnforcementCheckpoint CaptureBoardEnforcement() {
-        var entries = new List<(string, long)>(capacity: m_boardVerdictLatch.Count);
+        var entries = new List<(string PlacementId, long Verdict)>(capacity: m_boardVerdictLatch.Count);
 
         foreach (var (placementId, verdict) in m_boardVerdictLatch) {
             entries.Add(item: (placementId, verdict));
         }
+
+        entries.Sort(comparison: static (left, right) => string.CompareOrdinal(strA: left.PlacementId, strB: right.PlacementId));
 
         return new WorldBoardEnforcementCheckpoint(Entries: entries);
     }

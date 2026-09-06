@@ -3,16 +3,19 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
-/// <summary>One recursive ply's checkpointed progress: the position it enumerates moves from (<see cref="Values"/>,
-/// a frame snapshot in the layout's own order), its own (token, target) cursor, its negamax window, and the best
-/// candidate found so far.</summary>
-public sealed record WorldSearchLevelCheckpoint(int Token, int Target, long Alpha, long Beta, long Best, int BestToken, int BestTarget, long BaseTurn, long[] Values);
+/// <summary>One recursive ply's checkpointed progress: the position it enumerates candidates from (<see cref="Values"/>,
+/// a frame snapshot in the layout's own order), its own (shape, token, candidate) cursor, its negamax window, and the
+/// best candidate found so far.</summary>
+public sealed record WorldSearchLevelCheckpoint(int Shape, int Token, int Target, long Alpha, long Beta, long Best, int BestToken, int BestTarget, long BaseTurn, long[] Values);
 
 /// <summary>One job's checkpointed progress. <see cref="Legal"/> holds one mask per token in the token row's cell
-/// order, filled as the job walks. <see cref="Levels"/> holds one entry per ply beyond the root — empty for a
-/// depth-one job — populated only while the negamax search has descended into it.</summary>
+/// order, filled as the job walks — populated only for a board of at most <c>BoardMask.MaxCells</c> cells.
+/// <see cref="Counts"/> holds one accepted-candidate count per token, size-agnostic. <see cref="Wide"/> holds one
+/// bit-packed accepted-destination set per token (empty when the job authors no <c>reach</c> output), size-agnostic.
+/// <see cref="Levels"/> holds one entry per ply beyond the root — empty for a depth-one job — populated only while
+/// the negamax search has descended into it.</summary>
 public sealed record WorldSearchJobCheckpoint(
-    string Name, ulong Stamp, bool Running, bool Done, int Token, int Target, long Count, long[] Legal, long Nodes, long BaseTurn,
+    string Name, ulong Stamp, bool Running, bool Done, int Shape, int Token, int Target, long Count, long[] Legal, long[] Counts, long[] Wide, long Nodes, long BaseTurn,
     int PassDepth, int Active, long Best, int BestToken, int BestTarget, long Alpha, long Beta, WorldSearchLevelCheckpoint[] Levels
 );
 
@@ -29,19 +32,20 @@ public readonly record struct WorldSearchStatus(
 );
 
 /// <summary>Runs the document's search jobs: a frame over the installed section, the rules a frame can evaluate, and
-/// per job a walk over every (token, target cell) relocation judged by those rules under a per-tick node quota. A
-/// job restarts whenever the frame's inputs change and lands its answer through the ordinary mutation door when the
-/// walk completes. Progress is simulation state: it hashes and checkpoints.
+/// per job a walk over every (shape, token, target cell or direction) candidate judged by those rules under a
+/// per-tick node quota. A job restarts whenever the frame's inputs change and lands its answer through the ordinary
+/// mutation door when the walk completes. Progress is simulation state: it hashes and checkpoints.
 ///
 /// A job with an authored score iterative-deepens: for each authored depth in turn, the same root walk that always
-/// populates <c>legal</c>/<c>count</c> also negamaxes every accepted relocation to that depth and keeps the best.
-/// The recursion below the root runs on an explicit stack (<see cref="Job.Levels"/>, one <see cref="StateFrame"/>
-/// per ply beyond the root) rather than the call stack, so a tick boundary can suspend it anywhere and a checkpoint
-/// carries it byte-for-byte. The root ply never prunes and never skips a candidate, so a depth-one job's <c>legal</c>
-/// and <c>count</c> are unchanged by whether a score is authored.</summary>
-internal sealed class WorldSearchRuntime {
+/// populates <c>legal</c>/<c>count</c>/<c>reach</c>/<c>counts</c> also negamaxes every accepted candidate to that
+/// depth and keeps the best. The recursion below the root runs on an explicit stack (<see cref="Job.Levels"/>, one
+/// <see cref="StateFrame"/> per ply beyond the root) rather than the call stack, so a tick boundary can suspend it
+/// anywhere and a checkpoint carries it byte-for-byte. The root ply never prunes and never skips a candidate, so a
+/// depth-one job's root outputs are unchanged by whether a score is authored.</summary>
+internal sealed partial class WorldSearchRuntime {
     private sealed class Level {
         public StateFrame Frame = null!;
+        public int Shape;
         public int Token;
         public int Target;
         public long Alpha;
@@ -56,6 +60,8 @@ internal sealed class WorldSearchRuntime {
         public Job(WorldSearchPlan plan, int tokenCapacity, FrameLayout layout, IReadOnlyList<StateRow> rows) {
             Plan = plan;
             Legal = new long[tokenCapacity];
+            Counts = new long[tokenCapacity];
+            Wide = ((plan.Row.Reach is not null) ? new long[tokenCapacity * WideWordsPerToken(cellCount: plan.Topology.CellCount)] : null);
             Levels = BuildLevels(depth: plan.Depth, layout: layout, rows: rows);
         }
 
@@ -63,10 +69,13 @@ internal sealed class WorldSearchRuntime {
         public ulong Stamp { get; set; }
         public bool Running { get; set; }
         public bool Done { get; set; }
+        public int Shape { get; set; }
         public int Token { get; set; }
         public int Target { get; set; }
         public long Count { get; set; }
         public long[] Legal { get; set; }
+        public long[] Counts { get; set; }
+        public long[]? Wide { get; set; }
         public long Nodes { get; set; }
         public long BaseTurn { get; set; }
 
@@ -75,7 +84,7 @@ internal sealed class WorldSearchRuntime {
         // own running negamax result, overwritten every pass, so whatever they hold when the job finishes is the
         // deepest completed pass's answer. Alpha/Beta are the root's own window: it updates Alpha as candidates fold
         // in (so a child gets a tighter bound), but never breaks its own loop on it — every root candidate is always
-        // tried, so legal/count never depend on whether a score is authored.
+        // tried, so the root outputs never depend on whether a score is authored.
         public int PassDepth { get; set; } = 1;
         public int Active { get; set; }
         public long Best { get; set; } = -WorldSearchCapacity.MateScore;
@@ -171,9 +180,10 @@ internal sealed class WorldSearchRuntime {
             var plan = plans[index];
             var tokens = (StateRows.FindStateRow(rows: rows, name: plan.Row.Tokens)?.Cells?.Count ?? 0);
             var levelCount = Math.Max(val1: 0, val2: (plan.Depth - 1));
+            var expectedWide = ((plan.Row.Reach is not null) ? (tokens * WideWordsPerToken(cellCount: plan.Topology.CellCount)) : 0);
             var kept = Array.Find(array: m_jobs, match: job => string.Equals(a: job.Plan.Row.Name, b: plan.Row.Name, comparisonType: StringComparison.Ordinal));
 
-            if ((kept is not null) && (kept.Legal.Length == tokens)) {
+            if ((kept is not null) && (kept.Legal.Length == tokens) && ((kept.Wide?.Length ?? 0) == expectedWide)) {
                 kept.Plan = plan;
 
                 if (layoutRebuilt || (kept.Levels.Length != levelCount)) {
@@ -242,15 +252,15 @@ internal sealed class WorldSearchRuntime {
                 var entry = job.Levels[level];
 
                 levels[level] = new WorldSearchLevelCheckpoint(
-                    Token: entry.Token, Target: entry.Target, Alpha: entry.Alpha, Beta: entry.Beta,
+                    Shape: entry.Shape, Token: entry.Token, Target: entry.Target, Alpha: entry.Alpha, Beta: entry.Beta,
                     Best: entry.Best, BestToken: entry.BestToken, BestTarget: entry.BestTarget, BaseTurn: entry.BaseTurn,
                     Values: entry.Frame.Values.ToArray()
                 );
             }
 
             jobs[index] = new WorldSearchJobCheckpoint(
-                Name: job.Plan.Row.Name, Stamp: job.Stamp, Running: job.Running, Done: job.Done, Token: job.Token, Target: job.Target,
-                Count: job.Count, Legal: [.. job.Legal], Nodes: job.Nodes, BaseTurn: job.BaseTurn,
+                Name: job.Plan.Row.Name, Stamp: job.Stamp, Running: job.Running, Done: job.Done, Shape: job.Shape, Token: job.Token, Target: job.Target,
+                Count: job.Count, Legal: [.. job.Legal], Counts: [.. job.Counts], Wide: ((job.Wide is { } wide) ? [.. wide] : []), Nodes: job.Nodes, BaseTurn: job.BaseTurn,
                 PassDepth: job.PassDepth, Active: job.Active, Best: job.Best, BestToken: job.BestToken, BestTarget: job.BestTarget,
                 Alpha: job.Alpha, Beta: job.Beta, Levels: levels
             );
@@ -267,7 +277,10 @@ internal sealed class WorldSearchRuntime {
         foreach (var job in m_jobs) {
             var saved = Array.Find(array: checkpoint.Jobs, match: entry => string.Equals(a: entry.Name, b: job.Plan.Row.Name, comparisonType: StringComparison.Ordinal));
 
-            if ((saved is null) || (saved.Legal.Length != job.Legal.Length) || (saved.Levels.Length != job.Levels.Length)) {
+            if (
+                (saved is null) || (saved.Legal.Length != job.Legal.Length) || (saved.Counts.Length != job.Counts.Length) ||
+                (saved.Wide.Length != (job.Wide?.Length ?? 0)) || (saved.Levels.Length != job.Levels.Length)
+            ) {
                 job.Stamp = 0UL;
                 job.Running = false;
                 job.Done = false;
@@ -295,10 +308,15 @@ internal sealed class WorldSearchRuntime {
             job.Stamp = saved.Stamp;
             job.Running = saved.Running;
             job.Done = saved.Done;
+            job.Shape = saved.Shape;
             job.Token = saved.Token;
             job.Target = saved.Target;
             job.Count = saved.Count;
             saved.Legal.AsSpan().CopyTo(destination: job.Legal);
+            saved.Counts.AsSpan().CopyTo(destination: job.Counts);
+            if (job.Wide is { } wide) {
+                saved.Wide.AsSpan().CopyTo(destination: wide);
+            }
             job.Nodes = saved.Nodes;
             job.BaseTurn = saved.BaseTurn;
             job.PassDepth = saved.PassDepth;
@@ -313,6 +331,7 @@ internal sealed class WorldSearchRuntime {
                 var entry = job.Levels[level];
                 var restored = saved.Levels[level];
 
+                entry.Shape = restored.Shape;
                 entry.Token = restored.Token;
                 entry.Target = restored.Target;
                 entry.Alpha = restored.Alpha;
@@ -335,6 +354,7 @@ internal sealed class WorldSearchRuntime {
             hash.Add(value: job.Stamp);
             hash.Add(value: ((byte)(job.Running ? 1 : 0)));
             hash.Add(value: ((byte)(job.Done ? 1 : 0)));
+            hash.Add(value: ((uint)job.Shape));
             hash.Add(value: ((uint)job.Token));
             hash.Add(value: ((uint)job.Target));
             hash.Add(value: job.Count);
@@ -351,7 +371,16 @@ internal sealed class WorldSearchRuntime {
             foreach (var mask in job.Legal) {
                 hash.Add(value: mask);
             }
+            foreach (var count in job.Counts) {
+                hash.Add(value: count);
+            }
+            if (job.Wide is { } wide) {
+                foreach (var word in wide) {
+                    hash.Add(value: word);
+                }
+            }
             foreach (var level in job.Levels) {
+                hash.Add(value: ((uint)level.Shape));
                 hash.Add(value: ((uint)level.Token));
                 hash.Add(value: ((uint)level.Target));
                 hash.Add(value: level.Alpha);
@@ -409,6 +438,8 @@ internal sealed class WorldSearchRuntime {
             if (
                 string.Equals(a: job.Plan.Row.Legal, b: name, comparisonType: StringComparison.Ordinal) ||
                 string.Equals(a: job.Plan.Row.Count, b: name, comparisonType: StringComparison.Ordinal) ||
+                string.Equals(a: job.Plan.Row.Reach, b: name, comparisonType: StringComparison.Ordinal) ||
+                string.Equals(a: job.Plan.Row.Counts, b: name, comparisonType: StringComparison.Ordinal) ||
                 string.Equals(a: job.Plan.Best, b: name, comparisonType: StringComparison.Ordinal)
             ) {
                 return true;
@@ -428,219 +459,24 @@ internal sealed class WorldSearchRuntime {
         ResetPass(job: job);
     }
 
-    // A fresh iterative-deepening pass over the same (unchanged) root position: legal/count are recomputed
+    // A fresh iterative-deepening pass over the same (unchanged) root position: the root outputs are recomputed
     // identically every pass, and the running negamax result starts over at the terminal sentinel. The caller owns
     // PassDepth — this never touches it, so a mid-search pass transition (already incremented) and a full restart
     // (set to 1) share the same reset.
     private static void ResetPass(Job job) {
         job.Active = 0;
+        job.Shape = 0;
         job.Token = 0;
         job.Target = 0;
         job.Count = 0L;
         job.Legal.AsSpan().Clear();
+        job.Counts.AsSpan().Clear();
+        job.Wide?.AsSpan().Clear();
         job.Best = -WorldSearchCapacity.MateScore;
         job.BestToken = -1;
         job.BestTarget = -1;
         job.Alpha = -WorldSearchCapacity.MateScore;
         job.Beta = WorldSearchCapacity.MateScore;
-    }
-
-    // One relocation per node: the token moves to the target cell, whatever stood there leaves the board, the judge
-    // runs, and the verdict at its accept value with the turn changed is an accepted relocation. Ply 0 is the root —
-    // its own (token, target) cursor lives on the job and is always exhausted before the job finishes, so legal/count
-    // never depend on whether a score is authored or how deep the search goes. A ply past 0 lives on job.Levels and
-    // exists only long enough to negamax one accepted root candidate (or a descendant of one) to the pass's depth.
-    private void Walk(Job job, ulong tick) {
-        var host = m_host!;
-        var scratch = host.Frame;
-        var plan = job.Plan;
-        var rows = m_base!.Rows;
-        var tokens = StateRows.FindStateRow(rows: rows, name: plan.Row.Tokens);
-        var turn = StateRows.FindStateRow(rows: rows, name: plan.Turn);
-        var verdict = StateRows.FindStateRow(rows: rows, name: plan.Verdict);
-        var cells = plan.Topology.CellCount;
-
-        if ((tokens?.Cells is not { } tokenCells) || (turn is null) || (verdict is null) || (tokenCells.Count != job.Legal.Length)) {
-            job.Running = false;
-
-            return;
-        }
-
-        var hasScore = (plan.Score is not null);
-        var budget = plan.Nodes;
-
-        while ((budget > 0) && job.Running) {
-            var p = job.Active;
-            var frame = Position(job: job, p: p);
-            var token = CursorToken(job: job, p: p);
-
-            if (token >= tokenCells.Count) {
-                if (p == 0) {
-                    if (!hasScore || (job.PassDepth >= plan.Depth)) {
-                        job.Running = false;
-                    } else {
-                        job.PassDepth++;
-                        ResetPass(job: job);
-                    }
-                } else {
-                    var value = -CursorBest(job: job, p: p);
-                    var parent = (p - 1);
-
-                    Fold(job: job, p: parent, value: value, token: CursorToken(job: job, p: parent), target: CursorTarget(job: job, p: parent));
-                    Advance(job: job, p: parent, cells: cells, tokenCount: tokenCells.Count);
-                    job.Active = parent;
-                }
-
-                continue;
-            }
-
-            var target = CursorTarget(job: job, p: p);
-            var from = (frame.TryStoredAt(row: tokens, index: token, value: out var stored) ? stored : plan.Off);
-
-            if ((from < 0L) || (from >= cells) || (target >= cells)) {
-                SetCursorToken(job: job, p: p, value: (token + 1));
-                SetCursorTarget(job: job, p: p, value: 0);
-
-                continue;
-            }
-            if (target == from) {
-                SetCursorTarget(job: job, p: p, value: (target + 1));
-
-                continue;
-            }
-
-            scratch.CopyFrom(other: frame);
-            _ = scratch.TryWrite(row: tokens, key: tokenCells[token].Key, value: target, write: StateWriteKind.Set, reason: out _);
-
-            for (var other = 0; other < tokenCells.Count; other++) {
-                if ((other != token) && frame.TryStoredAt(row: tokens, index: other, value: out var standing) && (standing == target)) {
-                    _ = scratch.TryWrite(row: tokens, key: tokenCells[other].Key, value: plan.Off, write: StateWriteKind.Set, reason: out _);
-                }
-            }
-
-            _ = host.Judge(rules: m_judge, tick: tick);
-
-            var mover = CursorBaseTurn(job: job, p: p);
-            var accepted = ((Slot(store: scratch, name: plan.Verdict) == plan.Row.Accept) && (Slot(store: scratch, name: plan.Turn) != mover));
-
-            if ((p == 0) && accepted) {
-                job.Count++;
-
-                if (target < BoardMask.MaxCells) {
-                    job.Legal[token] |= (1L << target);
-                }
-            }
-            if (hasScore && accepted && (p < (job.PassDepth - 1))) {
-                var next = (p + 1);
-                var levelFrame = job.Levels[next - 1].Frame;
-
-                levelFrame.CopyFrom(other: scratch);
-                SetCursorToken(job: job, p: next, value: 0);
-                SetCursorTarget(job: job, p: next, value: 0);
-                SetCursorBest(job: job, p: next, value: -WorldSearchCapacity.MateScore);
-                SetCursorBestMove(job: job, p: next, token: -1, target: -1);
-                SetCursorAlpha(job: job, p: next, value: -CursorBeta(job: job, p: p));
-                SetCursorBeta(job: job, p: next, value: -CursorAlpha(job: job, p: p));
-                SetCursorBaseTurn(job: job, p: next, value: Slot(store: scratch, name: plan.Turn));
-                job.Active = next;
-            } else if (hasScore && accepted) {
-                var value = EvaluateScore(plan: plan, tick: tick);
-
-                Fold(job: job, p: p, value: value, token: token, target: target);
-                Advance(job: job, p: p, cells: cells, tokenCount: tokenCells.Count);
-            } else {
-                Advance(job: job, p: p, cells: cells, tokenCount: tokenCells.Count);
-            }
-
-            job.Nodes++;
-            budget--;
-        }
-    }
-
-    private long EvaluateScore(WorldSearchPlan plan, ulong tick) =>
-        (m_host!.Evaluator.TryEvaluateExpression(program: plan.Score!, kind: CellKind.Int, tick: tick, value: out var value) ? value : 0L);
-
-    private static void Advance(Job job, int p, int cells, int tokenCount) {
-        var target = (CursorTarget(job: job, p: p) + 1);
-
-        if (target >= cells) {
-            SetCursorToken(job: job, p: p, value: (CursorToken(job: job, p: p) + 1));
-            target = 0;
-        }
-
-        SetCursorTarget(job: job, p: p, value: target);
-
-        // The root ply never prunes: every candidate is tried, so legal/count are exhaustive whether or not a score
-        // is authored. A ply past the root may cut once its window has closed.
-        if ((p > 0) && (CursorAlpha(job: job, p: p) >= CursorBeta(job: job, p: p))) {
-            SetCursorToken(job: job, p: p, value: tokenCount);
-        }
-    }
-    private static void Fold(Job job, int p, long value, int token, int target) {
-        if (value > CursorBest(job: job, p: p)) {
-            SetCursorBest(job: job, p: p, value: value);
-            SetCursorBestMove(job: job, p: p, token: token, target: target);
-        }
-        if (value > CursorAlpha(job: job, p: p)) {
-            SetCursorAlpha(job: job, p: p, value: value);
-        }
-    }
-
-    private StateFrame Position(Job job, int p) => ((p == 0) ? m_base! : job.Levels[p - 1].Frame);
-    private static int CursorToken(Job job, int p) => ((p == 0) ? job.Token : job.Levels[p - 1].Token);
-    private static void SetCursorToken(Job job, int p, int value) { if (p == 0) { job.Token = value; } else { job.Levels[p - 1].Token = value; } }
-    private static int CursorTarget(Job job, int p) => ((p == 0) ? job.Target : job.Levels[p - 1].Target);
-    private static void SetCursorTarget(Job job, int p, int value) { if (p == 0) { job.Target = value; } else { job.Levels[p - 1].Target = value; } }
-    private static long CursorAlpha(Job job, int p) => ((p == 0) ? job.Alpha : job.Levels[p - 1].Alpha);
-    private static void SetCursorAlpha(Job job, int p, long value) { if (p == 0) { job.Alpha = value; } else { job.Levels[p - 1].Alpha = value; } }
-    private static long CursorBeta(Job job, int p) => ((p == 0) ? job.Beta : job.Levels[p - 1].Beta);
-    private static void SetCursorBeta(Job job, int p, long value) { if (p == 0) { job.Beta = value; } else { job.Levels[p - 1].Beta = value; } }
-    private static long CursorBest(Job job, int p) => ((p == 0) ? job.Best : job.Levels[p - 1].Best);
-    private static void SetCursorBest(Job job, int p, long value) { if (p == 0) { job.Best = value; } else { job.Levels[p - 1].Best = value; } }
-    private static void SetCursorBestMove(Job job, int p, int token, int target) {
-        if (p == 0) {
-            job.BestToken = token;
-            job.BestTarget = target;
-        } else {
-            job.Levels[p - 1].BestToken = token;
-            job.Levels[p - 1].BestTarget = target;
-        }
-    }
-    private static long CursorBaseTurn(Job job, int p) => ((p == 0) ? job.BaseTurn : job.Levels[p - 1].BaseTurn);
-    private static void SetCursorBaseTurn(Job job, int p, long value) { if (p == 0) { job.BaseTurn = value; } else { job.Levels[p - 1].BaseTurn = value; } }
-
-    private bool Land(Job job, Func<WorldMutation, bool> apply) {
-        var plan = job.Plan;
-        var rows = m_live();
-
-        m_outputs.Clear();
-
-        if ((plan.Row.Legal is { } legal) && (StateRows.FindStateRow(rows: rows, name: plan.Row.Tokens)?.Cells is { } tokenCells)) {
-            for (var index = 0; (index < tokenCells.Count) && (index < job.Legal.Length); index++) {
-                m_outputs.Add(item: new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.World, Row: legal, Key: tokenCells[index].Key.Value, Value: job.Legal[index], Kind: WorldDocumentWriteKind.Set));
-            }
-        }
-        if (plan.Row.Count is { } count) {
-            m_outputs.Add(item: new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.World, Row: count, Key: StateRow.SlotKey.Value, Value: job.Count, Kind: WorldDocumentWriteKind.Set));
-        }
-        if (plan.Best is { } best) {
-            m_outputs.Add(item: new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.World, Row: best, Key: "token", Value: job.BestToken, Kind: WorldDocumentWriteKind.Set));
-            m_outputs.Add(item: new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.World, Row: best, Key: "to", Value: job.BestTarget, Kind: WorldDocumentWriteKind.Set));
-            m_outputs.Add(item: new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.World, Row: best, Key: "score", Value: job.Best, Kind: WorldDocumentWriteKind.Set));
-        }
-        if (m_outputs.Count == 0) {
-            return false;
-        }
-
-        var mutation = ((m_outputs.Count == 1) ? m_outputs[0] : new WorldMutation.Batch(Principal: WorldPrincipal.World, Mutations: [.. m_outputs]));
-
-        if (apply(mutation)) {
-            return true;
-        }
-
-        Console.Error.WriteLine(value: $"[world.search: job '{plan.Row.Name}' finished but its outputs were refused by the mutation door; world.search shows the count it found]");
-
-        return false;
     }
 
     private static long Slot(StateStore store, string name) =>

@@ -147,6 +147,7 @@ public static partial class RuleCompiler {
                 ValueToken.ArrangementAt => IntBinary(ExpressionOp.ArrangementAt),
                 ValueToken.ArrangementMember => IntArity(ExpressionOp.ArrangementMember, 3),
                 ValueToken.BoardShift shift => ResolveBoardShift(shift),
+                ValueToken.BoardFill fill => ResolveBoardFill(fill),
                 ValueToken.BoardImage image => ResolveBoardImage(image),
                 null => throw Malformed("contains a null token"),
                 _ => throw Malformed($"contains unsupported token '{authored[index].GetType().Name}'"),
@@ -218,6 +219,20 @@ public static partial class RuleCompiler {
             Require(ExpressionOp.BoardShift, 1);
             RequireKind(ExpressionOp.BoardShift, depth - 1, CellKind.Int);
             return new CompiledExpressionToken(Operation: ExpressionOp.BoardShift, Board: new BoardNeighbourQuery(topology: topology, direction: direction));
+        }
+        CompiledExpressionToken ResolveBoardFill(ValueToken.BoardFill fill) {
+            if (kind != CellKind.Int) { throw Malformed("token 'BoardFill' is admitted in kind=int expressions only"); }
+            if (context.FindTopology(name: (fill.Topology ?? string.Empty)) is not { } topology) {
+                throw Malformed($"token 'BoardFill' names no discrete topology '{fill.Topology}'");
+            }
+            if (topology.CellCount > BoardMask.MaxCells) {
+                throw Malformed($"token 'BoardFill' fills a mask of at most {BoardMask.MaxCells} cells; '{fill.Topology}' has {topology.CellCount}");
+            }
+            var direction = topology.Direction(token: (fill.Direction ?? string.Empty));
+            if (direction < 0) { throw Malformed($"token 'BoardFill' names no direction '{fill.Direction}' of '{fill.Topology}'"); }
+            Require(ExpressionOp.BoardFill, 1);
+            RequireKind(ExpressionOp.BoardFill, depth - 1, CellKind.Int);
+            return new CompiledExpressionToken(Operation: ExpressionOp.BoardFill, Board: new BoardNeighbourQuery(topology: topology, direction: direction));
         }
         CompiledExpressionToken ResolveBoardImage(ValueToken.BoardImage image) {
             if (kind != CellKind.Int) { throw Malformed("token 'BoardImage' is admitted in kind=int expressions only"); }

@@ -169,6 +169,10 @@ public static class RuleEvaluation {
                     stack[top - 1] = BoardQueries.ShiftMask((BoardNeighbourQuery)token.Board!, stack[top - 1]);
                     continue;
                 }
+                if (token.Operation == ExpressionOp.BoardFill) {
+                    stack[top - 1] = BoardQueries.FillMask((BoardNeighbourQuery)token.Board!, stack[top - 1]);
+                    continue;
+                }
                 if (token.Operation == ExpressionOp.BoardImage) {
                     var image = (BoardNeighbourQuery)token.Board!;
                     stack[top - 1] = BoardQueries.ImageOfMask(image.Topology, image.Direction, stack[top - 1]);

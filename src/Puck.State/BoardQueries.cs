@@ -148,6 +148,21 @@ public static class BoardQueries {
         return (long)image;
     }
 
+    /// <summary>Returns the union of a mask and every repeated shift of it in the query's direction until no bit
+    /// has a neighbour that way: a wrapped topology's fill is the whole cycle each seed bit lies on.</summary>
+    /// <param name="query">The compiled topology and direction.</param>
+    /// <param name="mask">The seed mask, one bit per cell ordinal.</param>
+    public static long FillMask(BoardNeighbourQuery query, long mask) {
+        ArgumentNullException.ThrowIfNull(query);
+        var filled = mask;
+        var frontier = mask;
+        // Every step adds at least one new bit or stops, so at most one step per cell.
+        for (var step = 0; (step < query.Topology.CellCount) && (frontier != 0L); step++) {
+            frontier = (ShiftMask(query, frontier) & ~filled);
+            filled |= frontier;
+        }
+        return filled;
+    }
     /// <summary>Moves every set bit of a cell mask to its neighbour in the query's direction, dropping a bit whose
     /// cell has no neighbour that way.</summary>
     /// <param name="query">The compiled topology and direction.</param>
