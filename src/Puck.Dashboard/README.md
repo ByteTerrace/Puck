@@ -23,8 +23,13 @@ Start with an example or import JSON into the editor. Typing changes a draft;
 document leaves the applied world and preview history intact. Drafts survive
 switching tool tabs. Leaving with unsaved changes asks before discarding them.
 
-The designers change the applied document and reset preview history. Apply or
-export an outstanding JSON draft before opening a designer. JSON is also the
+The designers, cell painting, appearance bindings, and applied JSON edits all use
+the same document transaction path. Each edit resets preview history. **Undo
+edit** and **Redo edit** travel through document revisions; Ctrl/Cmd+Z and
+Ctrl/Cmd+Shift+Z do the same outside text fields. A bulk paint is one revision.
+Invalid edits leave both histories intact. Saving establishes the clean revision,
+so undoing away from it marks the document unsaved. Apply or export an outstanding
+JSON draft before opening a designer or painting. JSON is also the
 editing surface for constructs the designers do not support. HUD settings are
 stored as a string in `metadata.custom.puckStudioHud`; they are authoring data,
 not a native HUD binding.
@@ -40,20 +45,60 @@ it for a portable copy or before clearing browser data. Preview register changes
 and played moves are temporary: they do not alter the authored document or its
 saved revisions.
 
-## Explore the preview
+## Select and paint
 
-The board uses native buttons and displays boxes one layer at a time. Tab enters
-the board; arrows, Home, and End move focus; Enter or Space submits a supported
-demo move. Hover and focus only inspect the current cell in a fixed area. They
-never execute rules or place a speculative piece. Ring and hex cells retain their
-native ordinals; the inspector shows coordinates. This view does not load the
-3D renderer.
+The explorer chooses a topology and one of its cell state domains. The viewport
+and inspector share selection by topology name and native cell ordinal. Click a
+cell to select it; Shift-click adds or removes it. The address field accepts
+inclusive ranges such as **0-19, 32, 63**, and **Select visible** selects the
+current layer and visibility filter. Selection outside the view remains selected
+and is counted explicitly. **Apply to cells** paints the entire selection in the
+chosen domain, after checking integer precision and declared bounds.
+
+The **Author** view displays authored values. **Preview** displays temporary
+execution state; painting requires switching back to Author. Selecting a cell
+never runs rules. The inspector's **Submit selected cell** is an explicit preview
+action through the supported input adapter. Preview register controls and time
+travel live in the collapsible **Document & diagnostics** panel.
+
+Value appearance maps arbitrary integer values to a label, color, shape (cube,
+sphere, or diamond), and optional visibility. Both views use the same binding;
+3D shows a label for the primary visible selection, and 2D labels every button.
+Bindings are JSON stored in the native custom string extension
+`metadata.custom.puckStudioPresentation`. Qubic's X/O labels and shapes are
+example metadata, not renderer behavior. **Show hidden values** keeps hidden
+values available for editing. **Reveal in JSON** focuses the selected authored
+cell value, or its state row when that cell has no explicit authored value.
+
+## Navigate spatially
+
+Volumetric topology opens in 3D. Drag to orbit, right-drag to pan, and scroll to
+zoom. Fit world, fit selection, axis views, and orthographic projection offer
+explicit framing. Layer isolation and adjustable separation expose dense volumes;
+these controls never change logical coordinates or saved topology. The optional
+authored-direction overlay is shown with all layers and values.
+
+The 2D view uses native buttons and retains the same selection. Tab enters the
+cell list; arrows, Home, and End move focus; Enter or Space selects. Shift adds
+or removes a cell. Volumes show one layer at a time, with at most 144 buttons per
+page. Non-hex pages use native ordinal order; hex pages show the native coordinate
+layout. The address inspector is also available without pointer interaction.
+3D load or rendering failures offer a 2D fallback.
+
+Spatial projection supports grid, box, hex, ring, and explicit lattice geometry.
+Hex positions use the Eisenstein basis; rings have a circular presentation.
+Box and lattice logical z is vertical in the 3D view. Presentation is centered
+near the origin, while the inspector retains native coordinates and addresses.
+This topology visualization is not the native SDF world renderer.
+
+## Explore the preview
 
 Each preview tick evaluates rules once in document order. Edge rules remember
 whether their gate was open on the previous tick. A demo board move runs an input
 tick followed by an idle tick so request acknowledgements can rearm Edge gates.
-Applying a preview register value runs one tick. Undo and redo include latch
-state, and editing after undo starts a new history branch. Trace details use the
+Applying a preview register value runs one tick. Previous/next preview controls
+include latch state, and changing preview after stepping back starts a new
+preview branch. These controls never edit document revisions. Trace details use the
 state at each gate evaluation, rather than the final state of the tick.
 
 The expression interpreter parses a small grammar instead of executing
@@ -78,20 +123,34 @@ empty-cell values and wrapped grids require native preview.
 
 Document intake is limited to 2 MB, 100,000 values, 32 topologies, 512 state rows,
 and 256 rules.
-Geometry is cached by immutable topology identity and limited to 4,096 cells;
-the board renders at most 144 cells per page. Expressions have character, token,
+Geometry is cached by immutable topology identity and limited to 4,096 cells.
+Three.js is lazy-loaded behind the viewport boundary. It renders on demand,
+batches cells by three primitive shapes using instancing, updates changed
+instance buffer ranges, caps pixel ratio at 1.5, and uses no shadows or continuous
+hover animation. React Three Fiber disposes declaratively owned GPU resources
+on unmount. Direction overlays cap at 16,384 unique edges. Camera and hover
+interaction never dispatch document or simulation actions. View options include
+a one-second frame-count measurement and renderer draw/resource counts; these
+are local diagnostics, not a frame-rate guarantee.
+
+Expressions have character, token,
 nesting, and operation budgets. A preview tick has a 25 ms deadline checked
 between rules and effects. A refusal leaves the prior interactive snapshot
 intact; it is not a partial commit.
 
-History retains at most 128 snapshots and shares unchanged board rows. Trace
+Document history retains at most 64 revisions and 8,388,608 UTF-16 code units
+(roughly 16 MiB of text), dropping oldest revisions when either budget is exceeded.
+Preview history retains at most 128 snapshots and shares unchanged board rows. Trace
 details expand on demand, and inactive tool panels are unmounted. Scenario and
 Monte Carlo batches run in a dedicated worker with cancellation and a 30-second
 deadline. Rollouts allow at most 200 games and 128 ticks per game. Their random
 results are observations of this preview, not replay proofs or deadlock proofs.
 
 The implementation lives under `src/portal/src`: `engine` owns intake and bounded
-execution, `machines/worldSimulationMachine.ts` owns applied documents and
-preview history, `components/world` owns editing and inspection, and
+execution and demo input adapters; `authoring` owns cell references, immutable
+paint candidates, presentation bindings, scene projection, and JSON addressing.
+`machines/worldSimulationMachine.ts` owns document transactions and the separate
+preview history. `components/world` owns editing and inspection, with Three.js
+objects confined to `SpatialTopology3D.tsx`, and
 `clients/worldStorageClient.ts` owns local document persistence. The TypeScript
 tests are exercised by Node's test runner in `src/portal/tests`.

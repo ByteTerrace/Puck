@@ -1,19 +1,13 @@
 import { setup, assign } from "xstate";
-import { TopologyDefinition, WorldRule, getTopologyCoordinates } from "../engine/evaluator";
+import { TopologyDefinition, WorldRule } from "../engine/evaluator";
 import { executePreviewAction, executeSimulationTick, StateDelta } from "../engine/tickRunner";
 import { inspectWorldDocument } from "../engine/documentValidation";
 import { TickSnapshot } from "../engine/replayTape";
-import { StateRowDefinition } from "../components/world/StateMatrixView";
+import { paintCells, validSelection, type CellReference, type StateRowDefinition } from "../authoring/documentTools";
+import { bindAppearance, type ValueAppearance } from "../authoring/presentation";
+import { previewCellAction } from "../engine/previewInputAdapter";
 import { TIC_TAC_TOE_WORLD } from "../catalog/worldCatalog";
-export interface SpeculativeResult {
-  illegal: boolean;
-  message?: string;
-  cell?: number;
-  nextWinner?: number;
-  firedRuleName?: string;
-  nextPlayer?: number;
-  isWinningMove?: boolean;
-}
+
 export interface RayBeam {
   name: string;
   cells: number[];
@@ -31,24 +25,31 @@ export interface WorldSimulationContext {
   history: TickSnapshot[];
   historyIndex: number;
   // Transient Probing & Projections
-  hoveredCell: number | null;
   hoveredMask: bigint | null;
-  speculativeResult: SpeculativeResult | null;
   probedRayBeam: RayBeam | null;
-  winningRayBeam: RayBeam | null;
   previewIssues: string[];
   error: string | null;
   // Local document state
+  documentHistory: { text: string; label: string }[];
+  documentIndex: number;
+  savedDocumentText: string;
+  selection: CellReference[];
   isDirty: boolean;
 }
-export type WorldSimulationEvent = {
+export type WorldSimulationEvent =
+  | { type: "APPLY_DOCUMENT"; worldJsonText: string }
+  | { type: "SELECT_CELLS"; selection: CellReference[] }
+  | { type: "PAINT_CELLS"; stateName: string; value: number }
+  | { type: "BIND_APPEARANCE"; stateName: string; value: number; appearance: ValueAppearance }
+  | { type: "DOCUMENT_UNDO" | "DOCUMENT_REDO" }
+  | {
   type: "LOAD_WORLD";
   worldJsonText: string;
 } | {
   type: "SELECT_TOPOLOGY";
   name: string;
 } | {
-  type: "CELL_CLICK";
+  type: "PREVIEW_CELL";
   cellIdx: number;
 } | {
   type: "DISPATCH_ACTION";
@@ -117,25 +118,52 @@ function createInitialSnapshot(stateDefinitions: StateRowDefinition[]): TickSnap
     },
   };
 }
-const transient = { hoveredCell: null, hoveredMask: null, speculativeResult: null, winningRayBeam: null, probedRayBeam: null };
-function load(text: string): WorldSimulationContext {
-  const { world, previewIssues } = inspectWorldDocument(text);
+const transient = { hoveredMask: null, probedRayBeam: null };
+function load(text: string, candidate?: any): WorldSimulationContext {
+  const inspected = inspectWorldDocument(text);
+  const world = candidate ?? inspected.world, previewIssues = inspected.previewIssues;
   const topologies: TopologyDefinition[] = world.state.lattices ?? [];
   const stateDefinitions = world.state.world ?? [];
   return {
     worldJsonText: text, parsedWorld: world, previewIssues, error: null, topologies,
     topologyMap: Object.fromEntries(topologies.map(t => [t.name, t])),
     selectedTopologyName: topologies[0]?.name ?? "", stateDefinitions, rules: world.rules ?? [],
-    history: [createInitialSnapshot(stateDefinitions)], historyIndex: 0, ...transient, isDirty: false
+    history: [createInitialSnapshot(stateDefinitions)], historyIndex: 0, ...transient, isDirty: false,
+    documentHistory: [{ text, label: "Opened document" }], documentIndex: 0, savedDocumentText: text, selection: []
   };
 }
-function replaceDocument(context: WorldSimulationContext, world: any) {
+function preserveGeometry(context: WorldSimulationContext, loaded: WorldSimulationContext): WorldSimulationContext {
+  const stable = loaded.topologies.map(topology => {
+    const previous = context.topologyMap[topology.name];
+    return previous && JSON.stringify(previous) === JSON.stringify(topology) ? previous : topology;
+  });
+  const topologies = stable.length === context.topologies.length && stable.every((t, i) => t === context.topologies[i]) ? context.topologies : stable;
+  return { ...loaded, topologies, topologyMap: Object.fromEntries(topologies.map(t => [t.name, t])) };
+}
+function replaceDocument(context: WorldSimulationContext, world: any, label = "Edit document", sourceText?: string) {
   try {
-    return { ...load(JSON.stringify(world, null, 2)), isDirty: true };
-  }
-  catch(error) {
-    return { error: (error as Error).message, isDirty: context.isDirty };
-  }
+    if (world === context.parsedWorld) return { error: null };
+    const text = sourceText ?? JSON.stringify(world, null, 2);
+    if (text === context.worldJsonText) return { error: null };
+    const loaded = preserveGeometry(context, load(text, world));
+    const documentHistory = [...context.documentHistory.slice(0, context.documentIndex + 1), { text, label }];
+    let characters = documentHistory.reduce((sum, revision) => sum + revision.text.length, 0);
+    while (documentHistory.length > 1 && (documentHistory.length > 64 || characters > 8 * 1024 * 1024)) characters -= documentHistory.shift()!.text.length;
+    return { ...loaded, documentHistory, documentIndex: documentHistory.length - 1,
+      savedDocumentText: context.savedDocumentText, isDirty: text !== context.savedDocumentText,
+      selectedTopologyName: loaded.topologyMap[context.selectedTopologyName] ? context.selectedTopologyName : loaded.selectedTopologyName,
+      selection: validSelection(world, context.selection) };
+  } catch (error) { return { error: (error as Error).message }; }
+}
+function travelDocument(context: WorldSimulationContext, delta: number) {
+  const documentIndex = Math.max(0, Math.min(context.documentHistory.length - 1, context.documentIndex + delta));
+  if (documentIndex === context.documentIndex) return {};
+  const text = context.documentHistory[documentIndex].text;
+  const loaded = preserveGeometry(context, load(text));
+  return { ...loaded, documentHistory: context.documentHistory, documentIndex,
+    savedDocumentText: context.savedDocumentText, isDirty: text !== context.savedDocumentText,
+    selectedTopologyName: loaded.topologyMap[context.selectedTopologyName] ? context.selectedTopologyName : loaded.selectedTopologyName,
+    selection: validSelection(loaded.parsedWorld, context.selection) };
 }
 function step(context: WorldSimulationContext, mutations: Record<string, any>, intent: string, input = false) {
   try {
@@ -174,8 +202,17 @@ export const worldSimulationMachine = setup({
           catch(error) {
             return { error: (error as Error).message };
           }
-        case "SELECT_TOPOLOGY": return { selectedTopologyName: e.name, ...transient };
-        case "SET_DIRTY": return { isDirty: e.isDirty };
+        case "SELECT_TOPOLOGY": return c.topologyMap[e.name] ? { selectedTopologyName: e.name, ...transient } : {};
+        case "SET_DIRTY": return { isDirty: e.isDirty, savedDocumentText: e.isDirty ? c.savedDocumentText : c.worldJsonText };
+        case "DOCUMENT_UNDO": return travelDocument(c, -1);
+        case "DOCUMENT_REDO": return travelDocument(c, 1);
+        case "SELECT_CELLS": return { selection: validSelection(c.parsedWorld, e.selection), error: null };
+        case "APPLY_DOCUMENT": try { return replaceDocument(c, inspectWorldDocument(e.worldJsonText).world, "Apply JSON", e.worldJsonText); }
+          catch (error) { return { error: (error as Error).message }; }
+        case "PAINT_CELLS": try { return replaceDocument(c, paintCells(c.parsedWorld, e.stateName, c.selection, e.value), "Paint " + c.selection.length + " cells in " + e.stateName); }
+          catch (error) { return { error: (error as Error).message }; }
+        case "BIND_APPEARANCE": try { return replaceDocument(c, bindAppearance(c.parsedWorld, e.stateName, e.value, e.appearance), "Bind appearance for " + e.stateName); }
+          catch (error) { return { error: (error as Error).message }; }
         case "HOVER_CELL": return {}; // Cell inspection is local UI state and never evaluates rules.
         case "HOVER_MASK": return { hoveredMask: e.mask };
         case "PROBE_RAY": return { probedRayBeam: e.ray };
@@ -185,19 +222,10 @@ export const worldSimulationMachine = setup({
         case "RESET_WORLD": return { history: [createInitialSnapshot(c.stateDefinitions)], historyIndex: 0, error: null, ...transient };
         case "STATE_CHANGE": return step(c, { [e.stateName]: e.newValue }, "Edit preview register " + e.stateName);
         case "DISPATCH_ACTION": return step(c, e.mutations, e.intent);
-        case "CELL_CLICK": {
-          const snap = c.history[c.historyIndex];
-          const prefix = Object.hasOwn(snap.state, "tttMoveRequest") ? "ttt" : Object.hasOwn(snap.state, "hexMoveRequest") ? "hex" : null;
-          if(!prefix)
-            return { error: "This document has no supported board input adapter. Inspect cells or edit preview registers." };
-          const topology = c.topologyMap[c.selectedTopologyName];
-          if(!topology || e.cellIdx < 0 || e.cellIdx >= getTopologyCoordinates(topology).length)
-            return {};
-          const board = c.stateDefinitions.find(s => s.domain?.topology === c.selectedTopologyName);
-          if(!board || (snap.boardCells[board.name]?.[e.cellIdx] ?? 0) !== 0 || (snap.state[prefix + "Winner"] ?? 0) !== 0)
-            return {};
-          return step(c, { [prefix + "MoveCell"]: e.cellIdx, [prefix + "MoveRequest"]: Number(snap.state[prefix + "MoveRequest"]) + 1 }, "Place mark at cell " + e.cellIdx, true);
-        }
+        case "PREVIEW_CELL": try {
+          const mutations = previewCellAction(c.history[c.historyIndex], c.topologyMap[c.selectedTopologyName], c.stateDefinitions, e.cellIdx);
+          return step(c, mutations, "Preview input at cell " + e.cellIdx, true);
+        } catch (error) { return { error: (error as Error).message }; }
         case "ADD_RULE": return replaceDocument(c, { ...c.parsedWorld, rules: [...c.rules, e.rule] });
         case "SAVE_STATE_DEFINITIONS": return replaceDocument(c, { ...c.parsedWorld, state: { ...c.parsedWorld.state, world: e.stateDefinitions } });
         case "SAVE_TOPOLOGY": {
@@ -209,24 +237,12 @@ export const worldSimulationMachine = setup({
   },
 }).createMachine({
   id: "worldSimulation", context: () => load(JSON.stringify(TIC_TAC_TOE_WORLD, null, 2)),
-  on: Object.fromEntries(["LOAD_WORLD", "SELECT_TOPOLOGY", "SET_DIRTY", "HOVER_CELL", "HOVER_MASK", "PROBE_RAY", "UNDO", "REDO", "JUMP_TO_TICK", "RESET_WORLD", "STATE_CHANGE", "DISPATCH_ACTION", "CELL_CLICK", "ADD_RULE", "SAVE_STATE_DEFINITIONS", "SAVE_TOPOLOGY"].map(type => [type, { actions: "reduce" as const }]))
+  on: Object.fromEntries(["LOAD_WORLD", "SELECT_TOPOLOGY", "SET_DIRTY", "HOVER_CELL", "HOVER_MASK", "PROBE_RAY", "UNDO", "REDO", "JUMP_TO_TICK", "RESET_WORLD", "STATE_CHANGE", "DISPATCH_ACTION", "PREVIEW_CELL", "APPLY_DOCUMENT", "SELECT_CELLS", "PAINT_CELLS", "BIND_APPEARANCE", "DOCUMENT_UNDO", "DOCUMENT_REDO", "ADD_RULE", "SAVE_STATE_DEFINITIONS", "SAVE_TOPOLOGY"].map(type => [type, { actions: "reduce" as const }]))
 });
 // Fine-grained Reactive Selectors for React 19 / @xstate/react
 export const selectCurrentSnapshot = (s: {
   context: WorldSimulationContext;
 }): TickSnapshot | null => s.context.history[s.context.historyIndex] ?? null;
-export const selectActivePlayer = (s: {
-  context: WorldSimulationContext;
-}): number => {
-  const snap = s.context.history[s.context.historyIndex];
-  return snap?.state["tttActive"] ?? snap?.state["hexTurn"] ?? snap?.state["chessTurn"] ?? 1;
-};
-export const selectWinner = (s: {
-  context: WorldSimulationContext;
-}): number => {
-  const snap = s.context.history[s.context.historyIndex];
-  return snap?.state["tttWinner"] ?? snap?.state["hexWinner"] ?? 0;
-};
 export const selectTickCount = (s: {
   context: WorldSimulationContext;
 }): number => s.context.history[s.context.historyIndex]?.tickNumber ?? 0;
@@ -271,24 +287,15 @@ export const selectWorldJsonText = (s: {
 export const selectIsDirty = (s: {
   context: WorldSimulationContext;
 }): boolean => s.context.isDirty;
-export const selectHoveredCell = (s: {
-  context: WorldSimulationContext;
-}): number | null => s.context.hoveredCell;
 export const selectHoveredMask = (s: {
   context: WorldSimulationContext;
 }): bigint | null => s.context.hoveredMask;
 export const selectProbedRayBeam = (s: {
   context: WorldSimulationContext;
 }): RayBeam | null => s.context.probedRayBeam;
-export const selectWinningRayBeam = (s: {
-  context: WorldSimulationContext;
-}): RayBeam | null => s.context.winningRayBeam;
-export const selectSpeculativeResult = (s: {
-  context: WorldSimulationContext;
-}): SpeculativeResult | null => s.context.speculativeResult;
 export const selectDisplayedRayBeam = (s: {
   context: WorldSimulationContext;
-}): RayBeam | null => s.context.winningRayBeam ?? s.context.probedRayBeam;
+}): RayBeam | null => s.context.probedRayBeam;
 export const selectCanUndo = (s: {
   context: WorldSimulationContext;
 }): boolean => s.context.historyIndex > 0;

@@ -1,7 +1,7 @@
 import { StudioConfirmation, useStudioConfirmation } from "./StudioConfirmation";
 import { AVAILABLE_PRESETS } from "../../catalog/worldCatalog";
-import React, { useState, useEffect, useCallback } from "react";
-import { Box, Grid, Stack, Text, Tabs } from "@mantine/core";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { Box, Button, Group, Text, Tabs } from "@mantine/core";
 import {
   RiHistoryLine,
   RiFlaskLine,
@@ -18,19 +18,17 @@ import {
   selectCurrentSnapshot,
   selectSnapshotsList,
   selectLiveState,
-  selectLiveCells,
   selectTopologies,
   selectTopologyMap,
   selectActiveTopology,
   selectStateDefinitions,
   selectRules,
   selectWorldJsonText,
-  selectHoveredMask,
   selectDisplayedRayBeam,
   selectLastDeltas,
 } from "../../machines/worldSimulationMachine";
 
-import UniversalTopologyView from "./UniversalTopologyView";
+import { AuthoringWorkspace, type JsonReference } from "./authoring/AuthoringWorkspace";
 import ReactiveRuleGraph from "./ReactiveRuleGraph";
 import StateMatrixView from "./StateMatrixView";
 import WorldWorkbench from "./WorldWorkbench";
@@ -49,14 +47,13 @@ import { WorldStudioHeader, StudioModalType } from "./WorldStudioHeader";
 import { WorldStudioAlerts } from "./WorldStudioAlerts";
 import { defaultWorldStorageClient, WorldMetadata } from "../../clients/worldStorageClient";
 import { TopologyDefinition, WorldRule, getTopologyCoordinates } from "../../engine/evaluator";
-import { StateRowDefinition } from "./StateMatrixView";
+import { StateRowDefinition } from "../../authoring/documentTools";
 
 const WorldStudioInner: React.FC = () => {
   const confirm = useStudioConfirmation();
   const [uiMessage, setUiMessage] = useState<string | null>(null);
   const simActor = SimulationContext.useActorRef();
 
-  const selectCell = useCallback((cellIdx: number) => simActor.send({ type: "CELL_CLICK", cellIdx }), [simActor]);
   const changeState = useCallback((stateName: string, newValue: any) => simActor.send({ type: "STATE_CHANGE", stateName, newValue }), [simActor]);
   const resetState = useCallback(() => simActor.send({ type: "RESET_WORLD" }), [simActor]);
   const highlightMask = useCallback((mask: bigint | null) => simActor.send({ type: "HOVER_MASK", mask }), [simActor]);
@@ -66,19 +63,23 @@ const WorldStudioInner: React.FC = () => {
   const currentSnapshot = SimulationContext.useSelector(selectCurrentSnapshot);
   const snapshotsList = SimulationContext.useSelector(selectSnapshotsList);
   const liveState = SimulationContext.useSelector(selectLiveState);
-  const liveCells = SimulationContext.useSelector(selectLiveCells);
   const topologies = SimulationContext.useSelector(selectTopologies);
   const topologyMap = SimulationContext.useSelector(selectTopologyMap);
   const activeTopology = SimulationContext.useSelector(selectActiveTopology);
+  const activeCellCount = useMemo(() => { try { return activeTopology ? getTopologyCoordinates(activeTopology).length : 0; } catch { return 0; } }, [activeTopology]);
   const stateDefinitions = SimulationContext.useSelector(selectStateDefinitions);
   const rules = SimulationContext.useSelector(selectRules);
   const worldJsonText = SimulationContext.useSelector(selectWorldJsonText);
-  const hoveredMask = SimulationContext.useSelector(selectHoveredMask);
   const displayedRayBeam = SimulationContext.useSelector(selectDisplayedRayBeam);
   const lastDeltas = SimulationContext.useSelector(selectLastDeltas);
 
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [diagnosticTab, setDiagnosticTab] = useState<string | null>("workbench");
+  const [jsonReference, setJsonReference] = useState<JsonReference | undefined>();
+  const canPreviewUndo = SimulationContext.useSelector(s => s.context.historyIndex > 0);
+  const canPreviewRedo = SimulationContext.useSelector(s => s.context.historyIndex < s.context.history.length - 1);
   const [draft, setDraft] = useState(worldJsonText);
-  useEffect(() => setDraft(worldJsonText), [worldJsonText]);
+  useEffect(() => { setDraft(worldJsonText); setJsonReference(undefined); }, [worldJsonText]);
   const dirty = SimulationContext.useSelector(s => s.context.isDirty);
   const hasEdits = dirty || draft !== worldJsonText;
   const previewIssues = SimulationContext.useSelector(s => s.context.previewIssues);
@@ -88,6 +89,19 @@ const WorldStudioInner: React.FC = () => {
     window.addEventListener("puck-before-navigate", navigateGuard);
     window.addEventListener("beforeunload", guard); return () => { window.removeEventListener("beforeunload", guard); window.removeEventListener("puck-before-navigate", navigateGuard); };
   }, [hasEdits, confirm]);
+
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || (event.target as HTMLElement)?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return;
+      const key = event.key.toLowerCase();
+      if (key !== "z" && key !== "y") return;
+      event.preventDefault();
+      if (draft !== worldJsonText) { setUiMessage("Apply or export your JSON draft before using document undo."); return; }
+      simActor.send({ type: key === "y" || event.shiftKey ? "DOCUMENT_REDO" : "DOCUMENT_UNDO" });
+    };
+    window.addEventListener("keydown", shortcut);
+    return () => window.removeEventListener("keydown", shortcut);
+  }, [draft, worldJsonText, simActor]);
 
   // Studio UI Modals (discriminated union prevents conflicting open modals)
   const [activeModal, setActiveModal] = useState<StudioModalType>(null);
@@ -155,55 +169,22 @@ const WorldStudioInner: React.FC = () => {
         size="sm"
         mb="sm">{uiMessage}</Text>}
 
-      {/* Main Studio Two-Column Grid */}
-      <Grid
-        gap="md">
-        {/* Left Column: Topology and preview registers (7 Cols) */}
-        <Grid.Col
-          span={{ base: 12, md: 7 }}>
-          <Stack
-            gap="md">
-            {activeTopology ? (
-              <UniversalTopologyView
-                key={activeTopology.name + worldJsonText}
-                topology={activeTopology}
-                cellValues={liveCells}
-                selectedCell={liveState["tttMoveCell"]}
-                onSelectCell={selectCell}
-                hoveredMask={hoveredMask}
-                activeWinningRay={displayedRayBeam}
-              />
-            ) : (
-              <Text
-                c="var(--ink-faint)"
-                size="sm">
-                No topology declared in this world.
-              </Text>
-            )}
+      <AuthoringWorkspace draftDirty={draft !== worldJsonText} onRevealJson={reference => {
+        setJsonReference(reference); setDiagnosticTab("workbench"); setDiagnosticsOpen(true);
+      }} />
+      <details className="studio-diagnostics" open={diagnosticsOpen} onToggle={e => setDiagnosticsOpen(e.currentTarget.open)}>
+        <summary>Document & diagnostics <span>JSON, preview registers, traces and rule tools</span></summary>
+        {diagnosticsOpen && <Tabs
 
-            <StateMatrixView
-              stateDefinitions={stateDefinitions}
-              currentState={liveState}
-              lastDeltas={lastDeltas}
-              onStateChange={changeState}
-              onResetState={resetState}
-              onHoverMask={highlightMask}
-            />
-          </Stack>
-        </Grid.Col>
-
-        {/* Right Column: Advanced Simulation Subsystem Tabs (5 Cols) */}
-        <Grid.Col
-          span={{ base: 12, md: 5 }}>
-          <Tabs
-            defaultValue="workbench"
+            value={diagnosticTab}
+            onChange={setDiagnosticTab}
             variant="outline"
             keepMounted={false}>
             <Tabs.List
               mb="xs"
               style={{ flexWrap: "wrap" }}>
-              <Tabs.Tab
-                value="trace"
+              <Tabs.Tab value="registers">Preview registers</Tabs.Tab>
+              <Tabs.Tab value="trace"
                 leftSection={<RiHistoryLine
                   size={15} />}>
                 Trace Log
@@ -223,7 +204,7 @@ const WorldStudioInner: React.FC = () => {
                 Monte Carlo
               </Tabs.Tab>
               <Tabs.Tab
-                disabled={previewIssues.length > 0 || (activeTopology ? getTopologyCoordinates(activeTopology).length > 64 : true)}
+                disabled={previewIssues.length > 0 || (activeCellCount === 0 || activeCellCount > 64)}
                 value="rays"
                 leftSection={<RiCompass3Fill
                   size={15} />}>
@@ -249,7 +230,16 @@ const WorldStudioInner: React.FC = () => {
               </Tabs.Tab>
             </Tabs.List>
 
-            {/* Tab 1: Causal Execution Trace with Predicate Truth Trees */}
+            <Tabs.Panel value="registers">
+              <Group mb="sm">
+                <Button variant="default" size="xs" disabled={!canPreviewUndo} onClick={() => simActor.send({ type: "UNDO" })}>Previous preview</Button>
+                <Text size="sm">Preview tick {currentSnapshot?.tickNumber ?? 0}</Text>
+                <Button variant="default" size="xs" disabled={!canPreviewRedo} onClick={() => simActor.send({ type: "REDO" })}>Next preview</Button>
+                <Button variant="default" size="xs" onClick={resetState}>Restart preview</Button>
+              </Group>
+              <StateMatrixView stateDefinitions={stateDefinitions} currentState={liveState} lastDeltas={lastDeltas}
+                onStateChange={changeState} onResetState={resetState} onHoverMask={highlightMask} />
+            </Tabs.Panel>
             <Tabs.Panel
               value="trace">
               <ExecutionTraceLog
@@ -326,18 +316,18 @@ const WorldStudioInner: React.FC = () => {
             <Tabs.Panel
               value="workbench">
               <WorldWorkbench
+                reference={jsonReference}
                 worldJson={worldJsonText}
                 draft={draft}
                 onDraftChange={setDraft}
                 onWorldJsonChange={(newJson) => {
-                  simActor.send({ type: "LOAD_WORLD", worldJsonText: newJson });
-                  simActor.send({ type: "SET_DIRTY", isDirty: true });
+                  simActor.send({ type: "APPLY_DOCUMENT", worldJsonText: newJson });
+                  if (!simActor.getSnapshot().context.error) setSelectedPresetId("custom");
                 }}
               />
             </Tabs.Panel>
-          </Tabs>
-        </Grid.Col>
-      </Grid>
+          </Tabs>}
+      </details>
 
       {/* Visual Rule Authoring Modal Dialog */}
       {activeModal === "rule" && (
@@ -415,10 +405,9 @@ const WorldStudioInner: React.FC = () => {
                 },
               };
               simActor.send({
-                type: "LOAD_WORLD",
+                type: "APPLY_DOCUMENT",
                 worldJsonText: JSON.stringify(updatedWorld, null, 2),
               });
-              simActor.send({ type: "SET_DIRTY", isDirty: true });
             } catch(err) {
               console.error("Failed to save HUD config", err);
             }

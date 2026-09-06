@@ -1,5 +1,6 @@
 import { getTopologyCoordinates } from "./evaluator";
 import { validatePreviewExpression } from "./previewExpression";
+import { readPresentation } from "../authoring/presentation";
 export const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
 /** Structural intake checks and offline capabilities, not native engine validation. */
 export function inspectWorldDocument(text: string): {
@@ -142,5 +143,6 @@ export function inspectWorldDocument(text: string): {
       }
     }
   }
+  readPresentation(world);
   return { world, previewIssues: [...issues] };
 }

@@ -201,7 +201,7 @@ function App({ context }: { context?: HostContextValue }) {
           header={{ height: 60 }}
           navbar={{
             breakpoint: "sm",
-            collapsed: { mobile: !opened },
+            collapsed: { mobile: !opened, desktop: activeSection === "studio" && !opened },
             width: 240,
           }}
           padding="md"
@@ -211,7 +211,7 @@ function App({ context }: { context?: HostContextValue }) {
               <Group h="100%" justify="space-between" wrap="nowrap">
                 <Flex align="center" justify="flex-start">
                   <Burger
-                    hiddenFrom="sm"
+                    aria-label="Toggle navigation"
                     onClick={toggle}
                     opened={opened}
                     size="sm"

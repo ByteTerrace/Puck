@@ -1,13 +1,27 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Alert, Button, Card, FileButton, Group, Stack, Text, Textarea } from "@mantine/core";
 import { inspectWorldDocument, MAX_DOCUMENT_BYTES } from "../../engine/documentValidation";
+import { findJsonRange } from "../../authoring/jsonReference";
+import type { JsonReference } from "./authoring/AuthoringWorkspace";
 export interface WorldWorkbenchProps {
+  reference?: JsonReference;
   worldJson: string;
   draft: string;
   onDraftChange: (text: string) => void;
   onWorldJsonChange: (text: string) => void;
 }
-export const WorldWorkbench: React.FC<WorldWorkbenchProps> = ({ worldJson, draft, onDraftChange, onWorldJsonChange }) => {
+export const WorldWorkbench: React.FC<WorldWorkbenchProps> = ({ worldJson, draft, onDraftChange, onWorldJsonChange, reference }) => {
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!reference || !textarea.current || draft !== worldJson) return;
+    const range = findJsonRange(draft, reference.path);
+    if (range) {
+      textarea.current.focus();
+      textarea.current.setSelectionRange(...range);
+      const line = draft.slice(0, range[0]).split("\n").length;
+      textarea.current.scrollTop = Math.max(0, (line - 4) * 20.15);
+    }
+  }, [reference, worldJson]);
   const [message, setMessage] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const check = (apply: boolean) => {
@@ -69,7 +83,9 @@ export const WorldWorkbench: React.FC<WorldWorkbenchProps> = ({ worldJson, draft
       <Text
         size="sm"
         c="var(--ink-soft)">Edit your document, then apply it to restart preview. Exports contain the editor text; local saves contain the applied document.</Text>
+      {reference && <Text size="xs" c="dimmed">Reference: /{reference.path.join("/")}{draft !== worldJson ? " · apply the draft to reveal the applied location" : ""}</Text>}
       <Textarea
+        ref={textarea}
         label="World JSON"
         value={draft}
         onChange={event => { onDraftChange(event.currentTarget.value); setMessage(null); }}

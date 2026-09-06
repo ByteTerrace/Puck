@@ -1,18 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Button, Card, Group, ScrollArea, Stack, Table, Text, TextInput } from "@mantine/core";
 import { StateDelta } from "../../engine/tickRunner";
-export interface StateRowDefinition {
-  name: string;
-  kind?: string;
-  value?: number | string | boolean | bigint;
-  min?: number;
-  max?: number;
-  nonNegative?: boolean;
-  domain?: {
-    $type?: string;
-    topology?: string;
-  };
-}
+import { StateRowDefinition } from "../../authoring/documentTools";
 export interface StateMatrixViewProps {
   stateDefinitions: StateRowDefinition[];
   currentState: Record<string, any>;

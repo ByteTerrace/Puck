@@ -1,10 +1,10 @@
 {
   "latestErrorEvent": {
     "code": "TYPE-001",
-    "message": "Failed to generate type declaration. Execute the below cmd to reproduce and fix the error. #TYPE-001\nargs: {\"cmd\":\"npx tsc --project D:\\\\Source\\\\ByteTerrace\\\\Puck\\\\src\\\\Puck.Dashboard\\\\src\\\\portal\\\\node_modules\\\\.federation\\\\tsconfig.16e60637b637d49c2668baedf18b0328.json\"}\nView the docs to see how to solve: https://module-federation.io/guide/troubleshooting/type#type-001",
+    "message": "Failed to generate type declaration. Execute the below cmd to reproduce and fix the error. #TYPE-001\nargs: {\"cmd\":\"npx tsc --project D:\\\\Source\\\\ByteTerrace\\\\Puck\\\\src\\\\Puck.Dashboard\\\\src\\\\portal\\\\node_modules\\\\.federation\\\\tsconfig.a6a930d007f62126bce6b43e519f3075.json\"}\nView the docs to see how to solve: https://module-federation.io/guide/troubleshooting/type#type-001",
     "args": {
-      "cmd": "npx tsc --project D:\\Source\\ByteTerrace\\Puck\\src\\Puck.Dashboard\\src\\portal\\node_modules\\.federation\\tsconfig.16e60637b637d49c2668baedf18b0328.json"
+      "cmd": "npx tsc --project D:\\Source\\ByteTerrace\\Puck\\src\\Puck.Dashboard\\src\\portal\\node_modules\\.federation\\tsconfig.a6a930d007f62126bce6b43e519f3075.json"
     },
-    "timestamp": 1788723502744
+    "timestamp": 1788727027565
   }
 }

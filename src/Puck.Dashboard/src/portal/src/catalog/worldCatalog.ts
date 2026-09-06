@@ -1,4 +1,4 @@
-// World catalog containing authentic game definitions from src/Puck.World/Assets/worlds/games/
+// Browser examples based on the native game documents, with optional studio presentation metadata.
 
 export interface WorldCatalogItem {
   id: string;
@@ -9,6 +9,10 @@ export interface WorldCatalogItem {
 }
 
 export const TIC_TAC_TOE_WORLD = {
+  metadata: { custom: { puckStudioPresentation: JSON.stringify({ tttBoard: {
+    "1": { label: "X", color: "#efaf91", shape: "sphere" },
+    "2": { label: "O", color: "#74c9ba", shape: "diamond" },
+  } }) } },
   rules: [
     {
       name: "ttt-place-mark",

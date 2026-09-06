@@ -29,7 +29,7 @@ import {
   RiShieldCheckLine,
   RiInformationLine,
 } from "@remixicon/react";
-import { StateRowDefinition } from "../StateMatrixView";
+import { StateRowDefinition } from "../../../authoring/documentTools";
 import { TopologyDefinition } from "../../../engine/evaluator";
 
 export interface StateSchemaDesignerModalProps {
