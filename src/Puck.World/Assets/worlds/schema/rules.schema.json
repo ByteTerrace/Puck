@@ -233,7 +233,7 @@
         "default": null
       },
       "zones": {
-        "description": "The rule\u0027s zone table, or null: ordered zones over one token domain, in index order, an empty entry holding an index no zone answers. Every row position in the rule \u2014 a compareState\u0027s state, a $reduce:/$match: row, a $zone: endpoint\u0027s zone, a transfer\u0027s from/to, an expression\u0027s row \u2014 may spell $zones[\u003Cindex\u003E] to select an entry live, the index being an infix cell key (game[from], $each, $bind:\u003Cname\u003E, or any expression), so one rule serves every pile of a game. forEach: \u0022$zones\u0022 iterates the table\u0027s own non-empty indices with $each bound to each.",
+        "description": "The rule\u0027s zone table, or null: ordered zones over one token domain, in index order, an empty entry holding an index no zone answers. Every row position in the rule \u2014 a compareState\u0027s state, a $reduce:/$match: row, a $zone: endpoint\u0027s zone, a transfer\u0027s from/to, an expression\u0027s row \u2014 may spell $zones[\u003Cindex\u003E] to select an entry live, the index being an infix cell key (game[from], $each, $bind:\u003Cname\u003E, or any expression), so one rule serves every pile of a game. An evaluation applies only when every live index selects an entry \u2014 an index outside the table, or at an empty entry, reads the gate closed, so a table\u0027s gaps are the rule\u0027s own statement of which piles it is for. forEach: \u0022$zones\u0022 iterates the table\u0027s own non-empty indices with $each bound to each.",
         "type": [
           "array",
           "null"

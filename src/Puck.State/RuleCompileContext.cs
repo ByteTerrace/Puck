@@ -16,6 +16,8 @@ public class RuleCompileContext {
     private readonly Dictionary<string, object> m_scope = new(comparer: StringComparer.Ordinal);
     private readonly CompiledTable?[] m_tables;
     private readonly string?[] m_tableErrors;
+    // Scope identity keeps pattern-local token bindings separate from the enclosing rule's bindings.
+    internal Dictionary<(string Text, BoundKey[]? Scope), CompiledCellRef> KeyExpressions { get; } = [];
 
     /// <summary>Initializes a context over one section.</summary>
     /// <param name="section">The state section every row name resolves against.</param>
@@ -141,6 +143,7 @@ public class RuleCompileContext {
         RuleBindings = null;
         ForEachRow = null;
         Zones = null;
+        KeyExpressions.Clear();
         m_scope.Clear();
     }
 }

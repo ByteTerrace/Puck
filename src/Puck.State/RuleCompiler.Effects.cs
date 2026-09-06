@@ -148,7 +148,7 @@ public static partial class RuleCompiler {
         return new TransactionEffect(effects: effects, onFailure: failure, describe: $"transaction {effects.Length} effect(s), failure {failure.Length}");
     }
 
-    private static EffectFact[] CompileTransactionSteps(IReadOnlyList<TransactionStep> steps, string ruleName, RuleCompileContext context) {
+    private static EffectFact[] CompileTransactionSteps(IReadOnlyList<ActionEffect> steps, string ruleName, RuleCompileContext context) {
         var compiled = new EffectFact[steps.Count];
         var closingSuffix = false;
 
@@ -164,21 +164,18 @@ public static partial class RuleCompiler {
         return compiled;
     }
 
-    private static EffectFact CompileTransactionStep(TransactionStep? step, string ruleName, RuleCompileContext context) {
-        var effect = step switch {
-            TransactionStep.TransformStateStep transform => new ActionEffect.TransformState(transform.Transform),
-            TransactionStep.SetCell set => new ActionEffect.SetState(State: set.State, Key: set.Key, Value: set.Value, FromState: set.FromState, FromKey: set.FromKey, ValueSeconds: set.ValueSeconds, Expression: set.Expression),
-            TransactionStep.AddCell add => new ActionEffect.AddState(State: add.State, Key: add.Key, Value: add.Value, FromState: add.FromState, FromKey: add.FromKey, ValueSeconds: add.ValueSeconds, Expression: add.Expression),
-            TransactionStep.CountdownCell countdown => new ActionEffect.CountdownState(State: countdown.State, Key: countdown.Key),
-            TransactionStep.RemoveCell remove => new ActionEffect.RemoveStateCell(State: remove.State, Key: remove.Key),
-            TransactionStep.ScheduleCell schedule => new ActionEffect.ScheduleState(State: schedule.State, DelaySeconds: schedule.DelaySeconds, Key: schedule.Key),
-            TransactionStep.GenerateStep generate => new ActionEffect.Generate(Row: generate.Row),
+    private static EffectFact CompileTransactionStep(ActionEffect? step, string ruleName, RuleCompileContext context) {
+        var admitted = step switch {
+            ActionEffect.Transaction => throw new RuleException(refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName, detail: "a transaction cannot contain another transaction"),
             null => throw new RuleException(refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName, detail: "transaction contains a null step"),
-            _ => (context.Vocabulary.StepOf(step: step)?.Lift(step: step)
-                ?? throw new RuleException(refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName, detail: $"transaction step kind '{step.GetType().Name}' is not supported")),
+            ActionEffect.TransformState or ActionEffect.SetState or ActionEffect.AddState or ActionEffect.PushState or
+                ActionEffect.CountdownState or ActionEffect.RemoveStateCell or ActionEffect.ScheduleState or ActionEffect.Generate => true,
+            _ => context.Vocabulary.EffectOf(step)?.AllowsTransaction == true,
         };
-
-        return CompileEffect(effect: effect, ruleName: ruleName, context: context);
+        if (!admitted) {
+            throw new RuleException(refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName, detail: $"transaction step kind '{step.GetType().Name}' is not supported");
+        }
+        return CompileEffect(effect: step, ruleName: ruleName, context: context);
     }
 
     private static EffectFact ResolveCountdown(ActionEffect.CountdownState effect, string ruleName, RuleCompileContext context) {
@@ -524,22 +521,13 @@ public static partial class RuleCompiler {
                 if (target.EffectiveDomain is not StateDomain.CellsOf targetBoard || context.FindTopology(name: targetBoard.Topology) is not { } targetTopology) {
                     throw Invalid("boardCombine writes a board row");
                 }
-                var needsLeft = combine.Operation is not (BoardCombineOp.Fill or BoardCombineOp.Clear);
-                var needsRight = combine.Operation is BoardCombineOp.And or BoardCombineOp.Or or BoardCombineOp.Xor or BoardCombineOp.AndNot;
-                if (!Enum.IsDefined(combine.Operation) || needsLeft != (combine.Left is not null) || needsRight != (combine.Right is not null) ||
-                    (combine.Operation == BoardCombineOp.Shift) != (combine.Direction is not null) || (combine.Operation == BoardCombineOp.Image) != (combine.Element is not null)) {
-                    throw Invalid("boardCombine takes left for every operation but fill and clear, right for and/or/xor/andNot, direction for shift alone, and element for image alone");
+                if (!BoardCombination.TryValidate(combine, target, targetBoard.Empty, targetTopology, out _, out _, out var combineReason)) {
+                    throw Invalid(combineReason);
                 }
                 foreach (var sourceName in new[] { combine.Left, combine.Right }) {
                     if (sourceName is not null && (Row(sourceName).EffectiveDomain is not StateDomain.CellsOf sourceBoard || sourceBoard.Topology != targetBoard.Topology)) {
                         throw Invalid($"boardCombine source '{sourceName}' must be a board over '{targetBoard.Topology}'");
                     }
-                }
-                if ((combine.Direction is { } direction && targetTopology.Direction(direction) < 0) || (combine.Element is { } element && targetTopology.Element(element) < 0)) {
-                    throw Invalid("boardCombine names a direction or point-group element its topology does not declare");
-                }
-                if (target.ClampToEnvelope(combine.Value) != combine.Value || (target.Kind == CellKind.Bool && combine.Value is not (0 or 1)) || combine.Value == targetBoard.Empty) {
-                    throw Invalid("boardCombine writes a member value the board admits and that is not the board's own empty value");
                 }
                 break;
             }

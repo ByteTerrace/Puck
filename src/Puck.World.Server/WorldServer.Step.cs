@@ -560,7 +560,7 @@ public sealed partial class WorldServer {
 
         candidate = RebaseCellTraits(candidate: candidate, mutation: mutation, original: current, tick: tick);
 
-        if (!TryValidateMutationCandidate(candidate: candidate, mutation: mutation, reason: out reason)) {
+        if (!TryValidateMutationCandidate(candidate: candidate, mutation: mutation, reason: out reason, compilation: out _, retainCompilation: false)) {
             return false;
         }
 
@@ -674,12 +674,14 @@ public sealed partial class WorldServer {
     // this before anything else reads the document, so a hand-authored or restored definition whose derived boards
     // have drifted from their tokens/codes rows never survives past this call — RecomposeDerivedBoards is a no-op
     // for the ordinary case where the live mutation pipeline already composed them correctly.
-    private WorldDefinition RecompileRules(WorldDefinition definition) {
+    private WorldDefinition RecompileRules(WorldDefinition definition, WorldRuleCompilation? compilation = null) {
         definition = RecomposeDerivedBoards(definition: definition);
         m_definition = definition;
-        m_tables = CompileTables(definition: definition);
-        m_rules = WorldRuleCompiler.CompileAll(definition: definition);
-        m_interactions = WorldRuleCompiler.CompileAllInteractions(definition: definition);
+        // Recomposition may change dependencies: only the exact definition can reuse its validation result.
+        if (!ReferenceEquals(compilation?.Definition, definition)) { compilation = WorldRuleCompilation.Compile(definition); }
+        m_tables = compilation!.Tables;
+        m_rules = compilation.Rules;
+        m_interactions = compilation.Interactions;
 
         m_ruleGateHeld.Prune(compiled: m_rules);
         m_interactionGateHeld.Prune(compiled: m_interactions);

@@ -239,15 +239,15 @@ public sealed class DiscreteStateLawTests {
             new(Name("occupancy"), CellKind.Int, Domain: new StateDomain.CellsOf("map", Empty: 0), Cells: [Cell("0", 1)])
         ) with {
             Rules = [new(Name("move"), Effects: [new ActionEffect.Transaction([
-                new TransactionStep.AddCell("allowance", Key: "0", Expression: new([
+                new ActionEffect.AddState("allowance", Key: "0", Expression: new([
                     new ValueToken.State("$board:pathCost:terrain:cell:destination:0:100:16", Key: "$cell:position:0"),
                     new ValueToken.Negate(),
                 ])),
-                new TransactionStep.SetCell("occupancy", Key: "$cell:position:0", Value: 0),
-                new TransactionStep.SetCell("terrain", Key: "$cell:position:0", Value: 1),
-                new TransactionStep.SetCell("position", Key: "0", FromState: "destination", FromKey: "0"),
-                new TransactionStep.SetCell("occupancy", Key: "$cell:position:0", Value: 1),
-                new TransactionStep.SetCell("terrain", Key: "$cell:position:0", Value: -1),
+                new ActionEffect.SetState("occupancy", Key: "$cell:position:0", Value: 0),
+                new ActionEffect.SetState("terrain", Key: "$cell:position:0", Value: 1),
+                new ActionEffect.SetState("position", Key: "0", FromState: "destination", FromKey: "0"),
+                new ActionEffect.SetState("occupancy", Key: "$cell:position:0", Value: 1),
+                new ActionEffect.SetState("terrain", Key: "$cell:position:0", Value: -1),
             ])], Mode: ActionTriggerMode.Edge, Gate: new ActionPredicate.All([
                 new ActionPredicate.CompareState("position", ActionStateComparison.NotEqual, Key: "0", ComparandState: "destination", ComparandKey: "0"),
                 new ActionPredicate.CompareState("$board:pathCost:terrain:cell:destination:0:100:16", ActionStateComparison.LessOrEqual, Key: "$cell:position:0", ComparandState: "allowance", ComparandKey: "0"),
@@ -282,9 +282,9 @@ public sealed class DiscreteStateLawTests {
             new(Name("hand"), CellKind.Bool, Cells: [], Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true)),
             Row("failed", new StateCell(WorldStateRow.SlotKey, 0))) with {
             Rules = [new(Name("atomic"), Effects: [new ActionEffect.Transaction([
-                new TransactionStep.TransformStateStep(new StateTransform.Transfer("deck", "hand", ZoneSelector.First)),
-                new TransactionStep.RemoveCell("hand", "missing")
-            ], OnFailure: [new TransactionStep.SetCell("failed", Value: 1)])])],
+                new ActionEffect.TransformState(new StateTransform.Transfer("deck", "hand", ZoneSelector.First)),
+                new ActionEffect.RemoveStateCell("hand", "missing")
+            ], OnFailure: [new ActionEffect.SetState("failed", Value: 1)])])],
         };
         using var fixture = Fixtures.FreshServer(definition: definition);
         fixture.Step();

@@ -454,40 +454,71 @@ public static class StateReader {
     /// <param name="row">The already-resolved row.</param>
     /// <param name="op">The reduction to apply.</param>
     /// <param name="tick">The tick at which value-over-time traits are evaluated.</param>
-    public static long ReduceRaw(StateStore? store, StateRow row, StateReduceOp op, ulong tick) {
-        ArgumentNullException.ThrowIfNull(argument: row);
-        var cells = (row.Cells ?? []);
-        var count = ((store is not null) ? store.CellCount(row: row) : cells.Count);
+    public static long ReduceRaw(StateStore? store, StateRow row, StateReduceOp op, ulong tick) => ReduceRaw(store, row, op, tick, null, null);
 
-        if (op == StateReduceOp.Count) {
-            return count;
+    /// <summary>Reduces current membership with an optional nonzero keyed filter and inclusive raw range.
+    /// The filter is indexed in read-local scratch; unfiltered count remains constant-time.</summary>
+    /// <param name="store">The current value store, or null for authored cells.</param>
+    /// <param name="row">The source row.</param>
+    /// <param name="op">The aggregate.</param>
+    /// <param name="tick">The evaluation tick.</param>
+    /// <param name="filter">The row whose nonzero values admit matching keys, or null.</param>
+    /// <param name="range">Inclusive bounds in the source's raw encoding, or null.</param>
+    /// <returns>The aggregate, zero for no admitted cells, or -1 for arrangement rank, which requires its own reader.</returns>
+    public static long ReduceRaw(StateStore? store, StateRow row, StateReduceOp op, ulong tick, StateRow? filter, (long Lower, long Upper)? range) {
+        ArgumentNullException.ThrowIfNull(row);
+        var count = store?.CellCount(row) ?? row.Cells?.Count ?? 0;
+        if (op == StateReduceOp.Count && filter is null && range is null) { return count; }
+        if (op == StateReduceOp.ArrangementRank) { return -1L; }
+        if (count == 0) { return 0L; }
+
+        // Dense frames can hold keys outside the authored cell list. Their keyed path resolves topology ordinals.
+        var denseFilter = store is StateFrame && filter?.EffectiveDomain is StateDomain.CellsOf;
+        var filterCount = filter is null || denseFilter ? 0 : store?.CellCount(filter) ?? filter.Cells?.Count ?? 0;
+        var scratchLength = filter is null || denseFilter ? 0 : CellOrdinalIndex.ScratchLength(filterCount);
+        var rented = scratchLength > 512 ? System.Buffers.ArrayPool<int>.Shared.Rent(scratchLength) : null;
+        var scratch = rented is null ? stackalloc int[scratchLength] : rented.AsSpan(0, scratchLength);
+        try {
+            var lookup = filter is null || denseFilter ? default : new CellOrdinalIndex(store, filter, scratch);
+            var hasValue = false;
+            var accumulator = 0L;
+            for (var index = 0; index < count; index++) {
+                if (filter is not null) {
+                    var key = default(CellName);
+                    if (store is not null) {
+                        if (!store.TryKeyAt(row, index, out key)) { continue; }
+                    } else {
+                        key = row.Cells![index].Key;
+                    }
+                    if (denseFilter) {
+                        ReadCell(store!, filter, key.Value, tick, out var admitted, out _);
+                        if (admitted is null or 0L) { continue; }
+                    } else {
+                        var filterIndex = lookup.Find(key);
+                        if (filterIndex < 0 || LiveAt(store, filter, filterIndex, tick) == 0L) { continue; }
+                    }
+                }
+                var raw = range is not null || op != StateReduceOp.Count ? LiveAt(store, row, index, tick) : 0L;
+                if (range is { } bounds && (raw < bounds.Lower || raw > bounds.Upper)) { continue; }
+                if (op == StateReduceOp.Count) { accumulator++; continue; }
+                accumulator = !hasValue ? raw : op switch {
+                    StateReduceOp.Sum => unchecked(accumulator + raw),
+                    StateReduceOp.Max => Math.Max(accumulator, raw),
+                    _ => Math.Min(accumulator, raw),
+                };
+                hasValue = true;
+            }
+            return accumulator;
+        } finally {
+            if (rented is not null) { System.Buffers.ArrayPool<int>.Shared.Return(rented); }
         }
-        if (op == StateReduceOp.ArrangementRank) {
-            // The rank needs the token domain's order, which only the section holds (ArrangementRank).
-            return -1L;
-        }
-
-        var hasAcc = false;
-        var acc = 0L;
-
-        for (var index = 0; index < count; index++) {
-            var value = LiveAt(store, row, index, tick);
-            acc = (!hasAcc
-                ? value
-                : (op switch {
-                    StateReduceOp.Sum => unchecked(acc + value),
-                    StateReduceOp.Max => ((value > acc) ? value : acc),
-                    _ => ((value < acc) ? value : acc),
-                }));
-            hasAcc = true;
-        }
-
-        return acc;
     }
     // Known-cell reads share advancing-value semantics and use the store's ordinal path, including scratch frames.
     internal static long LiveAt(StateStore? store, StateRow row, int index, ulong tick) {
-        // A frame's zone may hold a member past the row's own cells; the value then has no cell trait to advance.
-        var cell = ((index < (row.Cells?.Count ?? 0)) ? row.Cells![index] : null);
+        // Zone membership can move independently of authored metadata; resolve its trait by the current key.
+        var cell = store is StateFrame && row.EffectiveDomain is StateDomain.KeysOf { Ordered: true }
+            ? (store.TryKeyAt(row, index, out var key) ? StateRows.FindCell(row.Cells, key) : null)
+            : ((index < (row.Cells?.Count ?? 0)) ? row.Cells![index] : null);
         var stored = store is not null && store.TryStoredAt(row, index, out var framed) ? framed : (cell?.Value ?? 0L);
         return Live(row, cell, stored, tick);
     }
@@ -535,11 +566,11 @@ public static class StateReader {
         text = null;
         var target = (key ?? StateRow.SlotKey.Value);
 
-        if (!CellName.TryParse(candidate: target, name: out var targetKey, reason: out _) || !store.TryStored(row: row, key: targetKey, value: out var stored, text: out text)) {
+        if (!CellName.TryParse(candidate: target, name: out var targetKey, reason: out _) || !store.TryStored(row: row, key: targetKey, value: out var stored, text: out text, cell: out var cell)) {
             return;
         }
 
-        rawValue = Live(row: row, cell: StateRows.FindCell(cells: row.Cells, key: targetKey), baseValue: stored, tick: tick);
+        rawValue = Live(row: row, cell: cell, baseValue: stored, tick: tick);
     }
     /// <summary>Resolves one (row, key) pair against a section's live rows.</summary>
     /// <param name="rows">The section's rows, or <see langword="null"/> for none.</param>

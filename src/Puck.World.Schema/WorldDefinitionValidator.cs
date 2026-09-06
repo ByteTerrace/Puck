@@ -861,7 +861,7 @@ public static partial class WorldDefinitionValidator {
         public HashSet<string> PrototypeIds { get; set; } = [];
     }
 
-    private static void ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims) {
+    private static WorldRuleCompilation? ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, bool retainCompilation = false) {
         ArgumentNullException.ThrowIfNull(definition);
 
         var errors = new List<string>();
@@ -1320,10 +1320,12 @@ public static partial class WorldDefinitionValidator {
             definition: definition,
             errors: errors
         );
-        ValidateRules(
+        WorldRuleCompileContext? ruleContext = null;
+        var compiledRules = ValidateRules(
             rules: definition.Rules,
             definition: definition,
-            errors: errors
+            errors: errors,
+            context: ref ruleContext
         );
 
         // Properties/Interactions validate right after Rules: the property registry's own shape check (each name
@@ -1334,20 +1336,21 @@ public static partial class WorldDefinitionValidator {
             stateRows: stateRows,
             errors: errors
         );
-        ValidateInteractions(
+        var compiledInteractions = ValidateInteractions(
             interactions: definition.Interactions,
             definition: definition,
-            errors: errors
+            errors: errors,
+            context: ref ruleContext
         );
         if (errors.Count == 0) {
-            foreach (var (rule, cell) in WorldRuleWorkBudget.ContradictoryGates(definition: definition)) {
+            foreach (var (rule, cell) in WorldRuleWorkBudget.ContradictoryGates(compiledRules)) {
                 errors.Add(item: $"rule '{rule}' gate can never hold: its comparisons pin {cell} to an empty range.");
             }
-            var ruleBudget = WorldRuleWorkBudget.Measure(definition: definition);
+            var ruleBudget = WorldRuleWorkBudget.Measure(definition, compiledRules, compiledInteractions);
             if (ruleBudget.WorkUnitsPerTick > RuleCapacity.MaxWorkUnitsPerTick) {
                 var costliest = string.Join(
                     separator: ", ",
-                    values: WorldRuleWorkBudget.Contributors(definition: definition).Take(count: 3).Select(selector: static line => $"'{line.Name}' x{line.Multiplier} = {line.WorkUnits}")
+                    values: WorldRuleWorkBudget.Contributors(definition, compiledRules, compiledInteractions).Take(count: 3).Select(selector: static line => $"'{line.Name}' x{line.Multiplier} = {line.WorkUnits}")
                 );
                 errors.Add(item: $"rules/interactions/flock affinities derive {ruleBudget.WorkUnitsPerTick} worst-case work units per tick, exceeding the maximum of {RuleCapacity.MaxWorkUnitsPerTick}; costliest: {costliest} (a forEach line's multiplier is its row's capacity, so author the capacity the row needs; world.budget.rules lists every line).");
             }
@@ -1355,6 +1358,7 @@ public static partial class WorldDefinitionValidator {
         if (errors.Count == 0) {
             ValidateSearch(
                 definition: definition,
+                rules: compiledRules,
                 errors: errors
             );
         }
@@ -1893,6 +1897,7 @@ public static partial class WorldDefinitionValidator {
         );
 
         RefuseCollected(errors: errors);
+        return retainCompilation ? new WorldRuleCompilation(definition, compiledRules, compiledInteractions, WorldRuleCompilation.CompileTables(definition, ruleContext)) : null;
     }
     private static void RefuseCollected(List<string> errors) {
         if (errors.Count > 0) {
@@ -1980,12 +1985,24 @@ public static partial class WorldDefinitionValidator {
     /// <param name="definition">The candidate definition.</param>
     /// <param name="reason">The collapsed failure reason, or empty on success.</param>
     /// <returns><see langword="true"/> when the document-local facts are valid.</returns>
-    public static bool TryValidateLocally(WorldDefinition definition, out string reason) {
+    public static bool TryValidateLocally(WorldDefinition definition, out string reason) => TryValidateLocallyCore(definition, out reason, out _, retainCompilation: false);
+
+    /// <summary>Validates document-local facts and returns the same programs used by validation for immediate
+    /// installation. On failure no compilation result escapes.</summary>
+    /// <param name="definition">The candidate, whose collections must remain unchanged through installation.</param>
+    /// <param name="reason">The failure reason, or empty on success.</param>
+    /// <param name="compilation">The validated programs, or null on failure.</param>
+    /// <returns>Whether the document-local facts are valid.</returns>
+    public static bool TryValidateLocally(WorldDefinition definition, out string reason, out WorldRuleCompilation? compilation) => TryValidateLocallyCore(definition, out reason, out compilation, retainCompilation: true);
+
+    private static bool TryValidateLocallyCore(WorldDefinition definition, out string reason, out WorldRuleCompilation? compilation, bool retainCompilation) {
+        compilation = null;
         try {
-            ValidateCore(
+            compilation = ValidateCore(
                 definition: definition,
                 neighbours: null,
-                validateAdjacencyClaims: false
+                validateAdjacencyClaims: false,
+                retainCompilation: retainCompilation
             );
             reason = string.Empty;
 

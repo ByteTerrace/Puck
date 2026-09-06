@@ -14,6 +14,34 @@ public sealed class ExpressionSpellingLawTests {
         return tokens;
     }
 
+    [Fact]
+    public void EveryContextFreeTokenHasOneRoundTrippingSpellingAndCompiles() {
+        var context = new RuleCompileContext(null, StateCatalog.Compile(null), null, null, null, 240, RuleVocabulary.Core);
+        var types = typeof(ValueToken).GetNestedTypes().Where(type => type.IsSubclassOf(typeof(ValueToken)) && type.GetConstructor(Type.EmptyTypes) is not null).ToArray();
+        // The other opcodes carry literal, operand, or topology payloads.
+        Assert.Equal(Enum.GetValues<ExpressionOp>().Length - 5, types.Length);
+        foreach (var type in types) {
+            var token = (ValueToken)Activator.CreateInstance(type)!;
+            IReadOnlyList<ValueToken>? expression = null;
+            for (var arity = 1; arity <= 4; arity++) {
+                ValueToken[] candidate = [.. Enumerable.Repeat(S("v"), arity), token];
+                if (!ExpressionSpelling.TryPrint(candidate, out var text)) { continue; }
+                Assert.Equal(candidate, Parse(text));
+                Assert.Null(expression);
+                expression = candidate;
+            }
+            Assert.NotNull(expression);
+            var admitted = false;
+            foreach (var kind in new[] { CellKind.Int, CellKind.Fixed }) {
+                try {
+                    _ = RuleCompiler.CompileExpression(new ValueExpression([.. expression.Select(item => item is ValueToken.State ? C(1) : item)]), kind, "catalog-law", "catalog-law", context);
+                    admitted = true;
+                } catch (RuleException) { }
+            }
+            Assert.True(admitted, $"No numeric kind admits {type.Name}");
+        }
+    }
+
     [Theory]
     [InlineData("a + b * c", "a", "b", "c", "multiply", "add")]
     [InlineData("(a + b) * c", "a", "b", "add", "c", "multiply")]

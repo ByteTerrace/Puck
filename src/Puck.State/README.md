@@ -88,7 +88,8 @@ Nothing here carries a `World` name — a state library names no world.
   (`Document`, `Participant`, `Identity`) and `StateStorageShape`;
   `StateReader` is the one (row, key) → raw-value computation (advance, cycle,
   eased reads, reductions, arg-extrema); `StateCellWriter` the one cell-write
-  composition with FIFO eviction.
+  composition with FIFO eviction. `StateStore.TryStored` can return stored values
+  and authored behavior metadata together, so keyed reads resolve the cell once.
 - *Authored randomness:* `Draw`/`DrawTiming` (the site facet),
   `StateGenerator` with its context/alternative/weighted-outcome rows,
   `GeneratorMode`/`GeneratorSource`/`GeneratorCapacity`, `ClosedBitset256`
@@ -106,12 +107,19 @@ Nothing here carries a `World` name — a state library names no world.
   Missing filter keys are excluded; an empty result is zero. Bounds must be
   representable and ordered. `arrangementRank` takes neither filter. A range
   reduction costs three work units per candidate capacity (read and two comparisons).
+  Filtered and unfiltered reads share one accumulator; plain `count` stays constant-time.
+  Sparse filters use an index scoped to the read, so replacing cells or transferring
+  frame membership cannot leave a stale index. Large indexes rent scratch storage;
+  small ones use the stack. Dense frame filters retain their topology key reads.
 - *Expressions:* `ValueExpression` and its `ValueToken` postfix vocabulary,
   `ExpressionSpelling` (the infix spelling and its inverse — syntax only, no
   second evaluator), `ValueExpressionJsonConverter` (reads either spelling,
   writes each back in its own), `ExpressionOp` (the compiled opcode), and
   `ExpressionArithmetic` (the allocation-free Int and Q48.16 evaluator every
-  opcode lowers to). Periodic masks use `replicationMask(width)` (one bit at
+  opcode lowers to). `ExpressionOperators` defines context-free spelling, opcode,
+  arity, type signature, and pricing once for parsing, printing, compilation,
+  folding, and dispatch. Literal, state, and topology payloads keep specialized
+  lowering; arithmetic domain checks remain in the evaluator. Periodic masks use `replicationMask(width)` (one bit at
   the bottom of each block) and `repeatBits(pattern, width)` (repeat a block
   across the 64-bit carrier). Width must be 1, 2, 4, 8, 16, 32, or 64, and a
   pattern must fit its block; invalid arguments refuse evaluation. Width 64
@@ -158,10 +166,12 @@ Nothing here carries a `World` name — a state library names no world.
 - *Rules:* `Rule` and `RuleBinding` (the authored row), `ActionPredicate`
   (`compareState`, `compareValue`, `all`, `any`, `not`), `ActionEffect`
   (`setState`, `addState`, `pushState`, `transformState`, `countdownState`,
-  `generate`, `removeStateCell`, `scheduleState`, `transaction`) with its
-  `TransactionStep` mirrors, `ActionTarget`, `ActionStateComparison`, and
+  `generate`, `removeStateCell`, `scheduleState`, `transaction`),
+  `ActionTarget`, `ActionStateComparison`, and
   `ActionTriggerMode` — the last two shared with `Puck.Physics`' compiled
   per-body predicates, so neither can grow an arm the other lacks.
+  Transactions contain ordinary effects with compiler-enforced admission;
+  registered families opt in only when their host supports bounded rollback.
 - *The compiler:* `RuleCompiler` compiles a `Rule` against a
   `RuleCompileContext` (the section, its catalog, its pinned `TableSource`s,
   patterns, generators, and the simulation rate) into a `CompiledRule` —
@@ -180,7 +190,7 @@ Nothing here carries a `World` name — a state library names no world.
   unions: each answers `Read(IRuleReader)` (operands), `Cost(context)`, and
   the cells it reads and writes (`CollectReads`/`CollectWrites` into
   `RuleAccess` lists). `CompiledCellRef` is the one key-indirection carrier
-  (`$cell:`, a bound key, an `$expr:` key that compiles to an implicit binding
+  (`$cell:`, a bound key, an `$expr:` key that compiles to a shared implicit binding
   read back through `BindingKeyFact`, a `$bind:` binding, a `$zone:` endpoint,
   or a document project's `KeyFact`). `LiveZone` is its row-side mirror: a
   rule declares a `zones` table (ordered zones over one token domain and kind,
@@ -281,6 +291,11 @@ Nothing here carries a `World` name — a state library names no world.
   `StateSpelling`, the one home for how a refusal spells a kind, a generator
   source, or a cycle output.
 
+Numeric `setState`, `addState`, and `pushState` share source resolution. A direct
+source is read once per execution pass; an ordinary write still has separate
+preflight and live passes. Absent and `forever` sources skip the effect, while
+expression faults retain their diagnostic behavior.
+
 ## 🔌 How a document project extends it
 
 Extension is by registration and derivation, never by an edit inside this
@@ -289,8 +304,8 @@ package:
 - A `RuleVocabulary` registers the families a document project adds: an
   `OperandFamily` claims the reserved spellings it answers and compiles them
   to its own `OperandFact`s; an `EffectFamily` owns an `ActionEffect`-derived
-  arm, its `$type` discriminator, the `TransactionStep` that mirrors it, and
-  its compile to an `EffectFact`; a `PredicateFamily` owns a predicate arm
+  arm, its `$type` discriminator, its explicit `AllowsTransaction` admission,
+  and its compile to an `EffectFact`; a `PredicateFamily` owns a predicate arm
   (which may refuse in rule scope); a `KeyFamily` answers a dynamic-key
   spelling with a `KeyFact`. Registered families are consulted before the
   library's own. `RuleVocabulary.ExtendJson` is the `JsonTypeInfo` modifier a

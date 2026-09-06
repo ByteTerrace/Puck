@@ -4,7 +4,7 @@ using Puck.Maths;
 namespace Puck.State;
 
 /// <summary>Compiles authored <see cref="Rule"/> rows against a <see cref="RuleCompileContext"/>. Called twice by
-/// design: once (wrapped, per rule) inside a document's validator so a malformed rule refuses by name instead of
+/// design: once inside a document's validator so a malformed rule refuses by name instead of
 /// throwing later, and once more (unwrapped — validation already proved success) inside the evaluator's install path
 /// to obtain the live array the tick evaluates. Every piece a document project's own compile surface composes from
 /// (<see cref="CompileGate"/>, <see cref="CompileEffects"/>, <see cref="CompileExpression"/>,
@@ -710,7 +710,8 @@ public static partial class RuleCompiler {
 
     /// <summary>Compiles an expression key (<see cref="RuleFacts.ExpressionKeyPrefix"/>) into an implicit int binding
     /// appended to the rule's bindings — evaluated before the gate like a declared one, traced as <c>$key&lt;n&gt;</c> —
-    /// and returns the key that reads it back. An implicit binding a declared binding's expression needs is appended
+    /// and returns the key that reads it back. Repeated spellings in the same binding scope reuse that binding.
+    /// An implicit binding a declared binding's expression needs is appended
     /// before that binding, so evaluation order is always dependency order.</summary>
     /// <param name="text">The expression's canonical infix spelling.</param>
     /// <param name="ruleName">The rule being compiled.</param>
@@ -719,22 +720,30 @@ public static partial class RuleCompiler {
     public static CompiledCellRef CompileKeyExpression(string text, string ruleName, RuleCompileContext context, string where) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
+        var cacheKey = (text, context.BindingScope);
+        if (context.KeyExpressions.TryGetValue(cacheKey, out var cached)) {
+            return cached;
+        }
+
         if (!ExpressionSpelling.TryParse(text: text, tokens: out var tokens, error: out var error)) {
             throw new RuleException(refusal: RuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"{where} key expression '{text}' does not parse: {error}");
         }
 
         var bindings = (context.RuleBindings ??= []);
+        var program = CompileExpression(expression: new ValueExpression(Tokens: tokens), kind: CellKind.Int, ruleName: ruleName, verb: $"{where} key expression", context: context);
 
+        // Nested keys append their dependencies while compiling the expression; price the new binding after them.
         if (bindings.Count >= RuleCapacity.MaxBindingsPerRule) {
             throw new RuleException(refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName, detail: $"{where} key expression '{text}' would be binding {bindings.Count + 1}, exceeding the {RuleCapacity.MaxBindingsPerRule}-binding ceiling (declared and implicit key bindings together)");
         }
 
-        var program = CompileExpression(expression: new ValueExpression(Tokens: tokens), kind: CellKind.Int, ruleName: ruleName, verb: $"{where} key expression", context: context);
         var ordinal = bindings.Count;
 
         bindings.Add(item: new CompiledRuleBinding(Name: $"$key{ordinal}", Kind: CellKind.Int, Expression: program));
 
-        return new CompiledCellRef(Row: string.Empty, Key: string.Empty, Custom: new BindingKeyFact(ordinal: ordinal));
+        var reference = new CompiledCellRef(Row: string.Empty, Key: string.Empty, Custom: new BindingKeyFact(ordinal: ordinal));
+        context.KeyExpressions.Add(cacheKey, reference);
+        return reference;
     }
 
     /// <summary>Resolves a literal key against a row under the (row, key) pair rule: a null key means the row's slot

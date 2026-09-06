@@ -296,11 +296,21 @@ public sealed class StateFrame : StateStore {
     }
 
     /// <inheritdoc/>
-    public override bool TryStored(StateRow row, CellName key, out long value, out string? text) {
+    public override bool TryStored(StateRow row, CellName key, out long value, out string? text) => TryStoredCore(row, key, false, out value, out text, out _);
+    /// <inheritdoc/>
+    public override bool TryStored(StateRow row, CellName key, out long value, out string? text, out StateCell? cell) => TryStoredCore(row, key, true, out value, out text, out cell);
+
+    private bool TryStoredCore(StateRow row, CellName key, bool metadata, out long value, out string? text, out StateCell? cell) {
         text = null;
+        var authoredIndex = -2;
+        int AuthoredIndex() => authoredIndex == -2 ? authoredIndex = IndexOf(row.Cells, key) : authoredIndex;
+        cell = metadata && AuthoredIndex() >= 0 ? row.Cells![authoredIndex] : null;
 
         if (!Layout.TryOrdinal(name: row.Name.Value, ordinal: out var ordinal) || (Layout[ordinal].Kind == FrameRowKind.Unframed)) {
-            return RowStore.Stored(row: row, key: key, value: out value, text: out text);
+            if (!metadata && AuthoredIndex() >= 0) { cell = row.Cells![authoredIndex]; }
+            value = cell?.Value ?? 0L;
+            text = cell?.Text;
+            return cell is not null;
         }
 
         var layout = Layout[ordinal];
@@ -311,23 +321,23 @@ public sealed class StateFrame : StateStore {
 
                 return (key == StateRow.SlotKey);
             case FrameRowKind.Keyed: {
-                var index = IndexOf(cells: row.Cells, key: key);
+                var index = AuthoredIndex();
                 value = ((index >= 0) ? m_values[layout.Offset + index] : 0L);
 
                 return (index >= 0);
             }
             case FrameRowKind.Board: {
-                if (!layout.Topology!.TryCell(key: key.Value, cell: out var cell)) {
+                if (!layout.Topology!.TryCell(key: key.Value, cell: out var boardCell)) {
                     value = 0L;
 
                     return false;
                 }
 
-                value = m_values[layout.Offset + cell];
+                value = m_values[layout.Offset + boardCell];
 
                 // The row's own list holds only the cells it was given; a frame cell still at the empty value that the
                 // row never held reads absent, the same answer the row would give.
-                return ((value != layout.Empty) || (IndexOf(cells: row.Cells, key: key) >= 0));
+                return ((value != layout.Empty) || (AuthoredIndex() >= 0));
             }
             case FrameRowKind.Ring: {
                 var capacity = (layout.Length - 1);
@@ -705,30 +715,9 @@ public sealed class StateFrame : StateStore {
 
         var row = Rows[ordinal];
         var topology = layout.Topology!;
-        var operation = combine.Operation;
-        var needsLeft = (operation is not (BoardCombineOp.Fill or BoardCombineOp.Clear));
-        var needsRight = (operation is BoardCombineOp.And or BoardCombineOp.Or or BoardCombineOp.Xor or BoardCombineOp.AndNot);
-
-        if (
-            !Enum.IsDefined(value: operation) || (needsLeft != (combine.Left is not null)) || (needsRight != (combine.Right is not null)) ||
-            ((operation == BoardCombineOp.Shift) != (combine.Direction is not null)) || ((operation == BoardCombineOp.Image) != (combine.Element is not null))
-        ) {
-            reason = "boardCombine takes left for every operation but fill and clear, right for and/or/xor/andNot, direction for shift alone, and element for image alone";
-
-            return false;
-        }
-        if ((row.ClampToEnvelope(value: combine.Value) != combine.Value) || ((row.Kind == CellKind.Bool) && (combine.Value is not (0L or 1L))) || (combine.Value == layout.Empty)) {
-            reason = "boardCombine writes a member value the board admits and that is not the board's own empty value";
-
-            return false;
-        }
-
-        var direction = ((combine.Direction is { } directionName) ? topology.Direction(token: directionName) : -1);
-        var element = ((combine.Element is { } elementName) ? topology.Element(name: elementName) : -1);
-
-        if (((combine.Direction is not null) && (direction < 0)) || ((combine.Element is not null) && (element < 0))) {
-            reason = "boardCombine names a direction or point-group element its topology does not declare";
-
+        var needsLeft = BoardCombination.NeedsLeft(combine.Operation);
+        var needsRight = BoardCombination.NeedsRight(combine.Operation);
+        if (!BoardCombination.TryValidate(combine, row, layout.Empty, topology, out var direction, out var element, out reason)) {
             return false;
         }
         var leftLayout = default(FrameRowLayout);
@@ -742,7 +731,6 @@ public sealed class StateFrame : StateStore {
 
         Span<long> left = stackalloc long[topology.CellCount];
         Span<long> right = stackalloc long[topology.CellCount];
-        Span<bool> member = stackalloc bool[topology.CellCount];
         var leftEmpty = 0L;
         var rightEmpty = 0L;
 
@@ -755,34 +743,8 @@ public sealed class StateFrame : StateStore {
             rightEmpty = rightLayout.Empty;
         }
 
-        for (var cell = 0; cell < topology.CellCount; cell++) {
-            var inLeft = (needsLeft && (left[cell] != leftEmpty));
-            var inRight = (needsRight && (right[cell] != rightEmpty));
-
-            switch (operation) {
-                case BoardCombineOp.Fill: member[cell] = true; break;
-                case BoardCombineOp.And: member[cell] = (inLeft && inRight); break;
-                case BoardCombineOp.Or: member[cell] = (inLeft || inRight); break;
-                case BoardCombineOp.Xor: member[cell] = (inLeft ^ inRight); break;
-                case BoardCombineOp.AndNot: member[cell] = (inLeft && !inRight); break;
-                case BoardCombineOp.Not: member[cell] = !inLeft; break;
-                case BoardCombineOp.Shift:
-                    if (inLeft && (topology.Neighbour(cell: cell, direction: direction) is >= 0 and var neighbour)) { member[neighbour] = true; }
-                    break;
-                case BoardCombineOp.Image:
-                    if (inLeft) { member[topology.Image(element: element, cell: cell)] = true; }
-                    break;
-                default: break;
-            }
-        }
-
         var target = m_values.AsSpan(start: layout.Offset, length: topology.CellCount);
-
-        for (var cell = 0; cell < topology.CellCount; cell++) {
-            target[cell] = ((operation == BoardCombineOp.Copy)
-                ? ((left[cell] != leftEmpty) ? left[cell] : layout.Empty)
-                : (member[cell] ? combine.Value : layout.Empty));
-        }
+        BoardCombination.Write(combine, topology, left, leftEmpty, right, rightEmpty, target, layout.Empty, direction, element);
 
         reason = string.Empty;
 

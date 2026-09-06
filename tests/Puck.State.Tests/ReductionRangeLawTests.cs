@@ -37,6 +37,42 @@ public sealed class ReductionRangeLawTests {
         }
     }
 
+    private sealed class CountedCells(StateCell[] cells) : IReadOnlyList<StateCell> {
+        public int Reads { get; set; }
+        public int Count => cells.Length;
+        public StateCell this[int index] { get { Reads++; return cells[index]; } }
+        public IEnumerator<StateCell> GetEnumerator() => ((IEnumerable<StateCell>)cells).GetEnumerator();
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    [Fact]
+    public void AKeyedReadResolvesValueAndAdvancingMetadataInOneWalk() {
+        var cells = new CountedCells([.. Enumerable.Range(0, 32).Select(index => new StateCell(Name(index.ToString()), index, Advance: new StateAdvance(2, 1)))]);
+        var row = Row("values") with { Cells = cells };
+        StateReader.ReadCell(new RowStore([row]), row, "31", 3, out var value, out _);
+        Assert.Equal(37, value);
+        Assert.Equal(32, cells.Reads);
+    }
+
+    [Fact]
+    public void FilterLookupsAvoidRepeatedFullScansAndObserveInPlaceReplacement() {
+        const int count = 512;
+        var values = Row("values", [.. Enumerable.Repeat(2L, count)]);
+        var members = Row("eligible", [.. Enumerable.Repeat(1L, count)]).Cells!.ToArray();
+        var cells = new CountedCells(members);
+        var filter = Row("eligible") with { Cells = cells };
+        var store = new RowStore([values, filter]);
+        Assert.Equal(2 * count, StateReader.ReduceRaw(store, values, StateReduceOp.Sum, 0, filter, null));
+        // Allow hash collisions, but rule out the former two full key scans per source cell (over 260,000 reads).
+        Assert.InRange(cells.Reads, count, 32 * count);
+        Array.Reverse(members);
+        members[0] = new StateCell(Name("outside"), 1);
+        members[1] = members[1] with { Value = 0, Advance = new StateAdvance(1, 1) };
+        Assert.Equal(2 * (count - 2), StateReader.ReduceRaw(store, values, StateReduceOp.Sum, 0, filter, null));
+        Assert.Equal(2 * (count - 1), StateReader.ReduceRaw(store, values, StateReduceOp.Sum, 1, filter, null));
+        Assert.Equal(count, StateReader.ReduceRaw(store, values, StateReduceOp.Count, 1));
+    }
+
     [Theory]
     [InlineData("count", 3)]
     [InlineData("sum", 64)]

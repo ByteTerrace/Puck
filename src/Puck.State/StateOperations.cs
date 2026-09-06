@@ -23,7 +23,7 @@ public enum ZoneSelector : byte {
 /// board when its value is not the board's declared <c>empty</c>.</summary>
 [JsonConverter(typeof(StrictEnumConverter<BoardCombineOp>))]
 public enum BoardCombineOp : byte {
-    /// <summary>Every cell of <c>left</c>, value for value.</summary>
+    /// <summary>Every cell of <c>left</c>, value for value, including its empty value even when the target's differs.</summary>
     Copy,
     /// <summary>Every cell a member.</summary>
     Fill,

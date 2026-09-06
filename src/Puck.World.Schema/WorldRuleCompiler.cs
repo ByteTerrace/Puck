@@ -6,8 +6,8 @@ namespace Puck.World;
 
 /// <summary>Compiles the world's rules and interactions: the state library's own compile pieces composed with the
 /// world's registered vocabulary (<see cref="WorldRuleVocabulary"/>), the decision policy, and the interaction
-/// co-occurrence. Called twice by design: wrapped per rule inside the validator so a malformed rule refuses by
-/// name, and unwrapped inside the server's install path for the live array the tick evaluates.</summary>
+/// co-occurrence. Validation returns its compiled arrays for gate, budget, search analysis, and immediate server installation.
+/// An installation without a matching result compiles a fresh bundle. Malformed rules refuse by name.</summary>
 public static partial class WorldRuleCompiler {
     /// <summary>Creates the compile context for a document.</summary>
     /// <param name="definition">The world.</param>
@@ -20,7 +20,7 @@ public static partial class WorldRuleCompiler {
     /// <summary>Compiles one rule against a fresh context.</summary>
     public static CompiledWorldRule Compile(WorldRule rule, WorldDefinition definition) => Compile(rule: rule, context: Context(definition: definition));
 
-    /// <summary>Compiles one rule. Does not check name presence or uniqueness — that is <see cref="CompileAll"/>'s job.</summary>
+    /// <summary>Compiles one rule. Does not check name presence or uniqueness — that is <see cref="CompileAll(WorldDefinition)"/>'s job.</summary>
     /// <exception cref="RuleException">The rule names something the document does not declare, or uses a
     /// predicate/effect kind rule scope has no meaning for.</exception>
     public static CompiledWorldRule Compile(WorldRule rule, WorldRuleCompileContext context) {
@@ -53,6 +53,11 @@ public static partial class WorldRuleCompiler {
 
     /// <summary>Compiles every rule in document order, checking that each carries a unique, unreserved name.</summary>
     public static CompiledWorldRule[] CompileAll(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(definition);
+        return definition.Rules is { Count: > 0 } ? CompileAll(definition, Context(definition)) : [];
+    }
+
+    internal static CompiledWorldRule[] CompileAll(WorldDefinition definition, WorldRuleCompileContext context) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         var rules = (definition.Rules ?? []);
@@ -61,7 +66,6 @@ public static partial class WorldRuleCompiler {
             return [];
         }
 
-        var context = Context(definition: definition);
         var seen = new HashSet<string>(capacity: rules.Count, comparer: StringComparer.Ordinal);
         var compiled = new CompiledWorldRule[rules.Count];
 
@@ -77,6 +81,11 @@ public static partial class WorldRuleCompiler {
 
     /// <summary>Compiles every interaction in document order.</summary>
     public static CompiledWorldRule[] CompileAllInteractions(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(definition);
+        return definition.Interactions?.Interactions is { Count: > 0 } ? CompileAllInteractions(definition, Context(definition)) : [];
+    }
+
+    internal static CompiledWorldRule[] CompileAllInteractions(WorldDefinition definition, WorldRuleCompileContext context) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         var interactions = (definition.Interactions?.Interactions ?? []);
@@ -88,7 +97,6 @@ public static partial class WorldRuleCompiler {
             throw new RuleException(refusal: RuleRefusal.EffectKindInadmissible, ruleName: "<interactions>", detail: $"declares {interactions.Count} rows, exceeding the {WorldInteractionCapacity.MaxInteractions}-interaction ceiling", subject: "interaction");
         }
 
-        var context = Context(definition: definition);
         var registry = new HashSet<string>(collection: (definition.Properties?.Names ?? []), comparer: StringComparer.Ordinal);
         var seen = new HashSet<string>(capacity: interactions.Count, comparer: StringComparer.Ordinal);
         var compiled = new CompiledWorldRule[interactions.Count];
@@ -163,7 +171,6 @@ public static partial class WorldRuleCompiler {
     /// operands are state-backed facts only, so movement-pass observations stay order-independent.</summary>
     public static CompiledExpressionToken[] CompileFlockAffinity(ValueExpression expression, WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: expression);
-
         var context = Context(definition: definition);
 
         context.BindingScope = [BoundKey.Left, BoundKey.Right];

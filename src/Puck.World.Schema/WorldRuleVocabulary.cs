@@ -233,73 +233,62 @@ public static class WorldRuleVocabulary {
             BodyProgramArm<WorldEffect.Designate>(discriminator: "designate"),
             new WorldEffectArm(
                 effectType: typeof(WorldEffect.EmitCue), discriminator: "emitCue",
-                stepType: typeof(WorldTransactionStep.EmitCueStep), stepDiscriminator: "emitCue",
-                lift: static step => { var cue = (WorldTransactionStep.EmitCueStep)step; return new WorldEffect.EmitCue(Name: cue.Name, Payload: cue.Payload, Key: cue.Key); },
+                allowsTransaction: true,
                 compile: static (effect, ruleName, context) => WorldRuleCompiler.ResolveCue(effect: (WorldEffect.EmitCue)effect, ruleName: ruleName, context: context)
             ),
             new WorldEffectArm(
                 effectType: typeof(WorldEffect.SetBodyVerticalVelocity), discriminator: "setBodyVerticalVelocity",
-                stepType: typeof(WorldTransactionStep.SetBodyVerticalVelocityStep), stepDiscriminator: "setBodyVerticalVelocity",
-                lift: static step => { var body = (WorldTransactionStep.SetBodyVerticalVelocityStep)step; return new WorldEffect.SetBodyVerticalVelocity(Key: body.Key, Velocity: body.Velocity); },
+                allowsTransaction: true,
                 compile: static (effect, ruleName, context) => { var body = (WorldEffect.SetBodyVerticalVelocity)effect; return WorldRuleCompiler.ResolveBodyVerticalVelocity(key: body.Key, value: body.Velocity, operation: BodyMotionOp.SetVerticalVelocity, verb: "setBodyVerticalVelocity", ruleName: ruleName, context: context); }
             ),
             new WorldEffectArm(
                 effectType: typeof(WorldEffect.ScaleBodyVerticalVelocity), discriminator: "scaleBodyVerticalVelocity",
-                stepType: typeof(WorldTransactionStep.ScaleBodyVerticalVelocityStep), stepDiscriminator: "scaleBodyVerticalVelocity",
-                lift: static step => { var body = (WorldTransactionStep.ScaleBodyVerticalVelocityStep)step; return new WorldEffect.ScaleBodyVerticalVelocity(Key: body.Key, Factor: body.Factor); },
+                allowsTransaction: true,
                 compile: static (effect, ruleName, context) => { var body = (WorldEffect.ScaleBodyVerticalVelocity)effect; return WorldRuleCompiler.ResolveBodyVerticalVelocity(key: body.Key, value: body.Factor, operation: BodyMotionOp.ScaleVerticalVelocity, verb: "scaleBodyVerticalVelocity", ruleName: ruleName, context: context); }
             ),
             new WorldEffectArm(
                 effectType: typeof(WorldEffect.ApplyBodyImpulse), discriminator: "applyBodyImpulse",
-                stepType: typeof(WorldTransactionStep.ApplyBodyImpulseStep), stepDiscriminator: "applyBodyImpulse",
-                lift: static step => { var impulse = (WorldTransactionStep.ApplyBodyImpulseStep)step; return new WorldEffect.ApplyBodyImpulse(Key: impulse.Key, BodyDirection: impulse.BodyDirection, Speed: impulse.Speed, DurationSeconds: impulse.DurationSeconds); },
+                allowsTransaction: true,
                 compile: static (effect, ruleName, context) => WorldRuleCompiler.ResolveBodyImpulse(effect: (WorldEffect.ApplyBodyImpulse)effect, ruleName: ruleName, context: context)
             ),
             new WorldEffectArm(
                 effectType: typeof(WorldEffect.DesignateBody), discriminator: "designateBody",
-                stepType: typeof(WorldTransactionStep.DesignateBodyStep), stepDiscriminator: "designateBody",
-                lift: static step => { var designate = (WorldTransactionStep.DesignateBodyStep)step; return new WorldEffect.DesignateBody(Key: designate.Key, Register: designate.Register, Kind: designate.Kind, TargetKey: designate.TargetKey); },
+                allowsTransaction: true,
                 compile: static (effect, ruleName, context) => WorldRuleCompiler.ResolveBodyDesignation(effect: (WorldEffect.DesignateBody)effect, ruleName: ruleName, context: context)
             ),
             new WorldEffectArm(
                 effectType: typeof(WorldEffect.PaintField), discriminator: "paintField",
-                stepType: typeof(WorldTransactionStep.PaintFieldStep), stepDiscriminator: "paintField",
-                lift: static step => { var paint = (WorldTransactionStep.PaintFieldStep)step; return new WorldEffect.PaintField(Field: paint.Field, X: paint.X, Y: paint.Y, Z: paint.Z, Value: paint.Value, Operation: paint.Operation, Radius: paint.Radius); },
+                allowsTransaction: true,
                 compile: static (effect, ruleName, context) => WorldRuleCompiler.ResolveFieldPaint(effect: (WorldEffect.PaintField)effect, ruleName: ruleName, context: context)
             ),
             new WorldEffectArm(
                 effectType: typeof(WorldEffect.UpsertHudPanel), discriminator: "upsertHudPanel",
-                stepType: typeof(WorldTransactionStep.UpsertHudPanelStep), stepDiscriminator: "upsertHudPanel",
-                lift: static step => new WorldEffect.UpsertHudPanel(Panel: ((WorldTransactionStep.UpsertHudPanelStep)step).Panel),
+                allowsTransaction: true,
                 compile: static (effect, ruleName, context) => WorldRuleCompiler.ResolveUpsertHudPanel(effect: (WorldEffect.UpsertHudPanel)effect, ruleName: ruleName)
             ),
             new WorldEffectArm(
                 effectType: typeof(WorldEffect.RemoveHudPanel), discriminator: "removeHudPanel",
-                stepType: typeof(WorldTransactionStep.RemoveHudPanelStep), stepDiscriminator: "removeHudPanel",
-                lift: static step => new WorldEffect.RemoveHudPanel(Id: ((WorldTransactionStep.RemoveHudPanelStep)step).Id),
+                allowsTransaction: true,
                 compile: static (effect, ruleName, context) => WorldRuleCompiler.ResolveRemoveHudPanel(effect: (WorldEffect.RemoveHudPanel)effect, ruleName: ruleName)
             ),
             new WorldEffectArm(
                 effectType: typeof(WorldEffect.UpsertPlacement), discriminator: "upsertPlacement",
-                stepType: typeof(WorldTransactionStep.UpsertPlacementStep), stepDiscriminator: "upsertPlacement",
-                lift: static step => new WorldEffect.UpsertPlacement(Placement: ((WorldTransactionStep.UpsertPlacementStep)step).Placement),
+                allowsTransaction: true,
                 compile: static (effect, ruleName, context) => WorldRuleCompiler.ResolveUpsertPlacement(effect: (WorldEffect.UpsertPlacement)effect, ruleName: ruleName)
             ),
             new WorldEffectArm(
                 effectType: typeof(WorldEffect.RemovePlacement), discriminator: "removePlacement",
-                stepType: typeof(WorldTransactionStep.RemovePlacementStep), stepDiscriminator: "removePlacement",
-                lift: static step => new WorldEffect.RemovePlacement(Id: ((WorldTransactionStep.RemovePlacementStep)step).Id),
+                allowsTransaction: true,
                 compile: static (effect, ruleName, context) => WorldRuleCompiler.ResolveRemovePlacement(effect: (WorldEffect.RemovePlacement)effect, ruleName: ruleName)
             ),
             new WorldEffectArm(
                 effectType: typeof(WorldEffect.Save), discriminator: "save",
-                stepType: null, stepDiscriminator: null, lift: null,
+                allowsTransaction: false,
                 compile: static (effect, ruleName, context) => SaveEffect.Instance
             ),
             new WorldEffectArm(
                 effectType: typeof(WorldEffect.Pose), discriminator: "pose",
-                stepType: typeof(WorldTransactionStep.PoseStep), stepDiscriminator: "pose",
-                lift: static step => { var pose = (WorldTransactionStep.PoseStep)step; return new WorldEffect.Pose(Key: pose.Key, SpawnPoint: pose.SpawnPoint, Position: pose.Position, YawDegrees: pose.YawDegrees, PitchDegrees: pose.PitchDegrees, RollDegrees: pose.RollDegrees); },
+                allowsTransaction: true,
                 compile: static (effect, ruleName, context) => WorldRuleCompiler.ResolvePose(effect: (WorldEffect.Pose)effect, ruleName: ruleName, context: context)
             ),
         ],
@@ -315,31 +304,24 @@ public static class WorldRuleVocabulary {
     private static WorldEffectArm BodyProgramArm<TEffect>(string discriminator) where TEffect : ActionEffect => new(
         effectType: typeof(TEffect),
         discriminator: discriminator,
-        stepType: null,
-        stepDiscriminator: null,
-        lift: null,
+        allowsTransaction: false,
         compile: (effect, ruleName, context) => throw new RuleException(refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName, detail: $"'{discriminator}' has no world-scope meaning — it belongs to a kit's action programs")
     );
 
     private sealed class WorldEffectArm : EffectFamily {
-        private readonly Func<TransactionStep, ActionEffect>? m_lift;
         private readonly Func<ActionEffect, string, WorldRuleCompileContext, EffectFact> m_compile;
 
-        public WorldEffectArm(Type effectType, string discriminator, Type? stepType, string? stepDiscriminator, Func<TransactionStep, ActionEffect>? lift, Func<ActionEffect, string, WorldRuleCompileContext, EffectFact> compile) {
+        public WorldEffectArm(Type effectType, string discriminator, bool allowsTransaction, Func<ActionEffect, string, WorldRuleCompileContext, EffectFact> compile) {
             EffectType = effectType;
             Discriminator = discriminator;
-            StepType = stepType;
-            StepDiscriminator = stepDiscriminator;
-            m_lift = lift;
+            AllowsTransaction = allowsTransaction;
             m_compile = compile;
         }
 
         public override Type EffectType { get; }
         public override string Discriminator { get; }
-        public override Type? StepType { get; }
-        public override string? StepDiscriminator { get; }
+        public override bool AllowsTransaction { get; }
 
-        public override ActionEffect Lift(TransactionStep step) => ((m_lift ?? throw new NotSupportedException(message: $"'{Discriminator}' has no transaction step")))(step);
         public override EffectFact Compile(ActionEffect effect, string ruleName, RuleCompileContext context) => m_compile(effect, ruleName, (WorldRuleCompileContext)context);
     }
 

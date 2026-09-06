@@ -4800,12 +4800,6 @@
       ],
       "additionalProperties": false
     },
-    "SortKeyList": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/SortKey"
-      }
-    },
     "StateTransformSortZone": {
       "description": "Reorders an ordered zone by attribute rows over its token domain, stably: the first key decides and each later key breaks the ties before it. The canonical order a pattern reads a hand in.",
       "properties": {
@@ -4817,8 +4811,11 @@
           "type": "string"
         },
         "by": {
-          "$ref": "#/$defs/SortKeyList",
-          "description": "The attribute keys, 1..MaxSortKeys distinct numeric rows keyed over the zone\u0027s token domain, in precedence order; each carries its own direction."
+          "description": "The attribute keys, 1..MaxSortKeys distinct numeric rows keyed over the zone\u0027s token domain, in precedence order; each carries its own direction.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SortKey"
+          }
         }
       },
       "required": [
@@ -5202,221 +5199,175 @@
       ],
       "additionalProperties": false
     },
-    "TransactionStepTransformStateStep": {
-      "description": "One atomic state transform.",
+    "ActionEffectTransaction": {
+      "description": "Applies a bounded list of effects atomically after preflight. When any effect refuses, none apply and OnFailure runs instead. The compiler refuses nested transactions and effects a document project has not admitted through AllowsTransaction.",
       "properties": {
         "$type": {
-          "const": "transformState"
+          "const": "transaction"
         },
-        "transform": {
-          "$ref": "#/$defs/StateTransform",
-          "description": "The bounded operation."
-        }
-      },
-      "required": [
-        "transform"
-      ],
-      "additionalProperties": false
-    },
-    "TransactionStepSetCell": {
-      "description": "Sets one state cell from exactly one numeric source spelling.",
-      "properties": {
-        "$type": {
-          "const": "setState"
+        "effects": {
+          "description": "The main transaction branch.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ActionEffect"
+          }
         },
-        "state": {
-          "description": "The destination row.",
-          "type": "string"
-        },
-        "key": {
-          "description": "The optional destination cell key.",
+        "onFailure": {
+          "description": "The optional branch run after a main-branch refusal.",
           "type": [
-            "string",
+            "array",
             "null"
           ],
-          "default": null
-        },
-        "value": {
-          "description": "The literal source.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "fromState": {
-          "description": "The live source row or reserved channel.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "fromKey": {
-          "description": "The optional source cell key.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "valueSeconds": {
-          "description": "The exact engine-tick duration source.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "expression": {
-          "$ref": "#/$defs/ValueExpression",
-          "description": "The bounded postfix numeric source.",
+          "items": {
+            "$ref": "#/$defs/ActionEffect"
+          },
           "default": null
         }
       },
       "required": [
-        "state"
+        "effects"
       ],
       "additionalProperties": false
     },
-    "TransactionStepAddCell": {
-      "description": "Adds exactly one numeric source to a state cell.",
+    "WorldEffectSetVerticalVelocity": {
+      "description": "Writes the body\u0027s vertical-velocity channel (the jump launch / the surge).",
       "properties": {
         "$type": {
-          "const": "addState"
+          "const": "setVerticalVelocity"
         },
-        "state": {
-          "description": "The destination row.",
-          "type": "string"
-        },
-        "key": {
-          "description": "The optional destination cell key.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "value": {
-          "description": "The literal source.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "fromState": {
-          "description": "The live source row or reserved channel.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "fromKey": {
-          "description": "The optional source cell key.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "valueSeconds": {
-          "description": "The exact engine-tick duration source.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "expression": {
-          "$ref": "#/$defs/ValueExpression",
-          "description": "The bounded postfix numeric source.",
-          "default": null
-        }
-      },
-      "required": [
-        "state"
-      ],
-      "additionalProperties": false
-    },
-    "TransactionStepCountdownCell": {
-      "description": "Consumes one non-negative integer countdown by the current engine-step width.",
-      "properties": {
-        "$type": {
-          "const": "countdownState"
-        },
-        "state": {
-          "description": "The countdown row.",
-          "type": "string"
-        },
-        "key": {
-          "description": "The optional cell key.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "required": [
-        "state"
-      ],
-      "additionalProperties": false
-    },
-    "TransactionStepScheduleCell": {
-      "description": "Writes one absolute simulation-tick deadline.",
-      "properties": {
-        "$type": {
-          "const": "scheduleState"
-        },
-        "state": {
-          "description": "The integer destination row.",
-          "type": "string"
-        },
-        "delaySeconds": {
-          "description": "The non-negative delay, converted with the document\u0027s simulation rate and rounded up.",
+        "velocity": {
           "type": "number"
         },
-        "key": {
-          "description": "The optional cell key.",
-          "type": [
-            "string",
-            "null"
+        "target": {
+          "enum": [
+            "Self",
+            "ProducerTarget",
+            "AffectingSubject"
           ],
-          "default": null
+          "default": "Self"
+        }
+      },
+      "required": [
+        "velocity"
+      ],
+      "additionalProperties": false
+    },
+    "WorldEffectScaleVerticalVelocity": {
+      "description": "Multiplies the body\u0027s vertical velocity (the jump cut; gate on Rising).",
+      "properties": {
+        "$type": {
+          "const": "scaleVerticalVelocity"
+        },
+        "factor": {
+          "type": "number"
+        },
+        "target": {
+          "enum": [
+            "Self",
+            "ProducerTarget",
+            "AffectingSubject"
+          ],
+          "default": "Self"
+        }
+      },
+      "required": [
+        "factor"
+      ],
+      "additionalProperties": false
+    },
+    "WorldEffectPlanarImpulse": {
+      "description": "A timed planar velocity overlay (the dash): BodyDirection is rotated by the body\u0027s attitude at fire time and ridden as authored, never normalized, at Speed for DurationSeconds.",
+      "properties": {
+        "$type": {
+          "const": "planarImpulse"
+        },
+        "bodyDirection": {},
+        "speed": {
+          "type": "number"
+        },
+        "durationSeconds": {
+          "type": "number"
+        },
+        "target": {
+          "enum": [
+            "Self",
+            "ProducerTarget",
+            "AffectingSubject"
+          ],
+          "default": "Self"
+        }
+      },
+      "required": [
+        "bodyDirection",
+        "speed",
+        "durationSeconds"
+      ],
+      "additionalProperties": false
+    },
+    "WorldEffectStartTimer": {
+      "description": "Starts a named timer slot with an authored duration.",
+      "properties": {
+        "$type": {
+          "const": "startTimer"
+        },
+        "state": {
+          "type": "string"
+        },
+        "seconds": {
+          "type": "number"
+        },
+        "target": {
+          "enum": [
+            "Self",
+            "ProducerTarget",
+            "AffectingSubject"
+          ],
+          "default": "Self"
         }
       },
       "required": [
         "state",
-        "delaySeconds"
+        "seconds"
       ],
       "additionalProperties": false
     },
-    "TransactionStepGenerateStep": {
-      "description": "Redraws one declared state draw site.",
+    "WorldEffectDesignate": {
+      "description": "Submits the selected subject into a named target register.",
       "properties": {
         "$type": {
-          "const": "generate"
+          "const": "designate"
         },
-        "row": {
+        "register": {
+          "description": "The authored target-register name.",
           "type": "string"
+        },
+        "target": {
+          "description": "The subject source.",
+          "enum": [
+            "Self",
+            "ProducerTarget",
+            "AffectingSubject"
+          ],
+          "default": "AffectingSubject"
         }
       },
       "required": [
-        "row"
+        "register"
       ],
       "additionalProperties": false
     },
-    "WorldTransactionStepEmitCueStep": {
+    "WorldEffectEmitCue": {
+      "description": "Emits a deterministic presentation-neutral cue (WorldGameplayCue).",
       "properties": {
         "$type": {
           "const": "emitCue"
         },
         "name": {
+          "description": "The cue name; see IsValidName.",
           "type": "string"
         },
         "payload": {
+          "description": "An optional bounded payload.",
           "type": [
             "string",
             "null"
@@ -5424,6 +5375,7 @@
           "default": null
         },
         "key": {
+          "description": "The body the cue is about \u2014 a body index, a $cell: indirection, or a bound key.",
           "type": [
             "string",
             "null"
@@ -5436,7 +5388,8 @@
       ],
       "additionalProperties": false
     },
-    "WorldTransactionStepSetBodyVerticalVelocityStep": {
+    "WorldEffectSetBodyVerticalVelocity": {
+      "description": "Writes a world-addressed body\u0027s vertical velocity.",
       "properties": {
         "$type": {
           "const": "setBodyVerticalVelocity"
@@ -5454,7 +5407,8 @@
       ],
       "additionalProperties": false
     },
-    "WorldTransactionStepScaleBodyVerticalVelocityStep": {
+    "WorldEffectScaleBodyVerticalVelocity": {
+      "description": "Scales a world-addressed body\u0027s vertical velocity.",
       "properties": {
         "$type": {
           "const": "scaleBodyVerticalVelocity"
@@ -5472,7 +5426,8 @@
       ],
       "additionalProperties": false
     },
-    "WorldTransactionStepApplyBodyImpulseStep": {
+    "WorldEffectApplyBodyImpulse": {
+      "description": "Rides a unit BodyDirection at Speed on a world-addressed body for an exact whole-engine-tick duration.",
       "properties": {
         "$type": {
           "const": "applyBodyImpulse"
@@ -5496,7 +5451,8 @@
       ],
       "additionalProperties": false
     },
-    "WorldTransactionStepDesignateBodyStep": {
+    "WorldEffectDesignateBody": {
+      "description": "Designates or clears a world-addressed body\u0027s target register.",
       "properties": {
         "$type": {
           "const": "designateBody"
@@ -5528,7 +5484,8 @@
       ],
       "additionalProperties": false
     },
-    "WorldTransactionStepPaintFieldStep": {
+    "WorldEffectPaintField": {
+      "description": "Paints one lattice field cell, or the cube of Radius around it.",
       "properties": {
         "$type": {
           "const": "paintField"
@@ -5829,7 +5786,8 @@
       ],
       "additionalProperties": false
     },
-    "WorldTransactionStepUpsertHudPanelStep": {
+    "WorldEffectUpsertHudPanel": {
+      "description": "Upserts a HUD panel document row.",
       "properties": {
         "$type": {
           "const": "upsertHudPanel"
@@ -5843,7 +5801,8 @@
       ],
       "additionalProperties": false
     },
-    "WorldTransactionStepRemoveHudPanelStep": {
+    "WorldEffectRemoveHudPanel": {
+      "description": "Removes a HUD panel document row by id.",
       "properties": {
         "$type": {
           "const": "removeHudPanel"
@@ -6377,7 +6336,8 @@
       ],
       "additionalProperties": false
     },
-    "WorldTransactionStepUpsertPlacementStep": {
+    "WorldEffectUpsertPlacement": {
+      "description": "Upserts a placement document row; inside a transaction it must sit in the closing suffix.",
       "properties": {
         "$type": {
           "const": "upsertPlacement"
@@ -6391,7 +6351,8 @@
       ],
       "additionalProperties": false
     },
-    "WorldTransactionStepRemovePlacementStep": {
+    "WorldEffectRemovePlacement": {
+      "description": "Removes a placement document row by id; inside a transaction it must sit in the closing suffix.",
       "properties": {
         "$type": {
           "const": "removePlacement"
@@ -6405,7 +6366,17 @@
       ],
       "additionalProperties": false
     },
-    "WorldTransactionStepPoseStep": {
+    "WorldEffectSave": {
+      "description": "Saves the world through the host\u0027s save tap.",
+      "properties": {
+        "$type": {
+          "const": "save"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldEffectPose": {
+      "description": "Teleports a world-addressed body to a spawn point, or to a literal position with angles; exactly one of SpawnPoint and Position is authored.",
       "properties": {
         "$type": {
           "const": "pose"
@@ -6439,271 +6410,6 @@
       "required": [
         "key"
       ],
-      "additionalProperties": false
-    },
-    "TransactionStep": {
-      "description": "The finite, non-recursive effect vocabulary admitted inside an atomic Transaction. It mirrors the rollback-safe effects explicitly; nested transactions have no wire shape. The arms declared here are the ones this library owns; a document project appends its own through a RuleVocabulary, each paired with the ActionEffect arm it lifts to.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "required": [
-        "$type"
-      ],
-      "anyOf": [
-        {
-          "$ref": "#/$defs/TransactionStepTransformStateStep"
-        },
-        {
-          "$ref": "#/$defs/TransactionStepSetCell"
-        },
-        {
-          "$ref": "#/$defs/TransactionStepAddCell"
-        },
-        {
-          "$ref": "#/$defs/TransactionStepCountdownCell"
-        },
-        {
-          "$ref": "#/$defs/ActionEffectRemoveStateCell",
-          "description": "Removes one addressed state cell."
-        },
-        {
-          "$ref": "#/$defs/TransactionStepScheduleCell"
-        },
-        {
-          "$ref": "#/$defs/TransactionStepGenerateStep"
-        },
-        {
-          "$ref": "#/$defs/WorldTransactionStepEmitCueStep"
-        },
-        {
-          "$ref": "#/$defs/WorldTransactionStepSetBodyVerticalVelocityStep"
-        },
-        {
-          "$ref": "#/$defs/WorldTransactionStepScaleBodyVerticalVelocityStep"
-        },
-        {
-          "$ref": "#/$defs/WorldTransactionStepApplyBodyImpulseStep"
-        },
-        {
-          "$ref": "#/$defs/WorldTransactionStepDesignateBodyStep"
-        },
-        {
-          "$ref": "#/$defs/WorldTransactionStepPaintFieldStep"
-        },
-        {
-          "$ref": "#/$defs/WorldTransactionStepUpsertHudPanelStep"
-        },
-        {
-          "$ref": "#/$defs/WorldTransactionStepRemoveHudPanelStep"
-        },
-        {
-          "$ref": "#/$defs/WorldTransactionStepUpsertPlacementStep"
-        },
-        {
-          "$ref": "#/$defs/WorldTransactionStepRemovePlacementStep"
-        },
-        {
-          "$ref": "#/$defs/WorldTransactionStepPoseStep"
-        }
-      ]
-    },
-    "ActionEffectTransaction": {
-      "description": "Applies a bounded list of effects atomically after preflight. When any effect refuses, none apply and OnFailure runs instead. Nested transactions are structurally unavailable, and so is any effect a document project declares without a bounded rollback representation.",
-      "properties": {
-        "$type": {
-          "const": "transaction"
-        },
-        "effects": {
-          "description": "The main transaction branch.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/TransactionStep"
-          }
-        },
-        "onFailure": {
-          "description": "The optional branch run after a main-branch refusal.",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/TransactionStep"
-          },
-          "default": null
-        }
-      },
-      "required": [
-        "effects"
-      ],
-      "additionalProperties": false
-    },
-    "WorldEffectSetVerticalVelocity": {
-      "description": "Writes the body\u0027s vertical-velocity channel (the jump launch / the surge).",
-      "properties": {
-        "$type": {
-          "const": "setVerticalVelocity"
-        },
-        "velocity": {
-          "type": "number"
-        },
-        "target": {
-          "enum": [
-            "Self",
-            "ProducerTarget",
-            "AffectingSubject"
-          ],
-          "default": "Self"
-        }
-      },
-      "required": [
-        "velocity"
-      ],
-      "additionalProperties": false
-    },
-    "WorldEffectScaleVerticalVelocity": {
-      "description": "Multiplies the body\u0027s vertical velocity (the jump cut; gate on Rising).",
-      "properties": {
-        "$type": {
-          "const": "scaleVerticalVelocity"
-        },
-        "factor": {
-          "type": "number"
-        },
-        "target": {
-          "enum": [
-            "Self",
-            "ProducerTarget",
-            "AffectingSubject"
-          ],
-          "default": "Self"
-        }
-      },
-      "required": [
-        "factor"
-      ],
-      "additionalProperties": false
-    },
-    "WorldEffectPlanarImpulse": {
-      "description": "A timed planar velocity overlay (the dash): BodyDirection is rotated by the body\u0027s attitude at fire time and ridden as authored, never normalized, at Speed for DurationSeconds.",
-      "properties": {
-        "$type": {
-          "const": "planarImpulse"
-        },
-        "bodyDirection": {},
-        "speed": {
-          "type": "number"
-        },
-        "durationSeconds": {
-          "type": "number"
-        },
-        "target": {
-          "enum": [
-            "Self",
-            "ProducerTarget",
-            "AffectingSubject"
-          ],
-          "default": "Self"
-        }
-      },
-      "required": [
-        "bodyDirection",
-        "speed",
-        "durationSeconds"
-      ],
-      "additionalProperties": false
-    },
-    "WorldEffectStartTimer": {
-      "description": "Starts a named timer slot with an authored duration.",
-      "properties": {
-        "$type": {
-          "const": "startTimer"
-        },
-        "state": {
-          "type": "string"
-        },
-        "seconds": {
-          "type": "number"
-        },
-        "target": {
-          "enum": [
-            "Self",
-            "ProducerTarget",
-            "AffectingSubject"
-          ],
-          "default": "Self"
-        }
-      },
-      "required": [
-        "state",
-        "seconds"
-      ],
-      "additionalProperties": false
-    },
-    "WorldEffectDesignate": {
-      "description": "Submits the selected subject into a named target register.",
-      "properties": {
-        "$type": {
-          "const": "designate"
-        },
-        "register": {
-          "description": "The authored target-register name.",
-          "type": "string"
-        },
-        "target": {
-          "description": "The subject source.",
-          "enum": [
-            "Self",
-            "ProducerTarget",
-            "AffectingSubject"
-          ],
-          "default": "AffectingSubject"
-        }
-      },
-      "required": [
-        "register"
-      ],
-      "additionalProperties": false
-    },
-    "WorldEffectEmitCue": {
-      "description": "Emits a deterministic presentation-neutral cue (WorldGameplayCue).",
-      "properties": {
-        "$type": {
-          "const": "emitCue"
-        },
-        "name": {
-          "description": "The cue name; see IsValidName.",
-          "type": "string"
-        },
-        "payload": {
-          "description": "An optional bounded payload.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "key": {
-          "description": "The body the cue is about \u2014 a body index, a $cell: indirection, or a bound key.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "required": [
-        "name"
-      ],
-      "additionalProperties": false
-    },
-    "WorldEffectSave": {
-      "description": "Saves the world through the host\u0027s save tap.",
-      "properties": {
-        "$type": {
-          "const": "save"
-        }
-      },
       "additionalProperties": false
     },
     "ActionEffect": {
@@ -6762,47 +6468,37 @@
           "$ref": "#/$defs/WorldEffectEmitCue"
         },
         {
-          "$ref": "#/$defs/WorldTransactionStepSetBodyVerticalVelocityStep",
-          "description": "Writes a world-addressed body\u0027s vertical velocity."
+          "$ref": "#/$defs/WorldEffectSetBodyVerticalVelocity"
         },
         {
-          "$ref": "#/$defs/WorldTransactionStepScaleBodyVerticalVelocityStep",
-          "description": "Scales a world-addressed body\u0027s vertical velocity."
+          "$ref": "#/$defs/WorldEffectScaleBodyVerticalVelocity"
         },
         {
-          "$ref": "#/$defs/WorldTransactionStepApplyBodyImpulseStep",
-          "description": "Rides a unit BodyDirection at Speed on a world-addressed body for an exact whole-engine-tick duration."
+          "$ref": "#/$defs/WorldEffectApplyBodyImpulse"
         },
         {
-          "$ref": "#/$defs/WorldTransactionStepDesignateBodyStep",
-          "description": "Designates or clears a world-addressed body\u0027s target register."
+          "$ref": "#/$defs/WorldEffectDesignateBody"
         },
         {
-          "$ref": "#/$defs/WorldTransactionStepPaintFieldStep",
-          "description": "Paints one lattice field cell, or the cube of Radius around it."
+          "$ref": "#/$defs/WorldEffectPaintField"
         },
         {
-          "$ref": "#/$defs/WorldTransactionStepUpsertHudPanelStep",
-          "description": "Upserts a HUD panel document row."
+          "$ref": "#/$defs/WorldEffectUpsertHudPanel"
         },
         {
-          "$ref": "#/$defs/WorldTransactionStepRemoveHudPanelStep",
-          "description": "Removes a HUD panel document row by id."
+          "$ref": "#/$defs/WorldEffectRemoveHudPanel"
         },
         {
-          "$ref": "#/$defs/WorldTransactionStepUpsertPlacementStep",
-          "description": "Upserts a placement document row; inside a transaction it must sit in the closing suffix."
+          "$ref": "#/$defs/WorldEffectUpsertPlacement"
         },
         {
-          "$ref": "#/$defs/WorldTransactionStepRemovePlacementStep",
-          "description": "Removes a placement document row by id; inside a transaction it must sit in the closing suffix."
+          "$ref": "#/$defs/WorldEffectRemovePlacement"
         },
         {
           "$ref": "#/$defs/WorldEffectSave"
         },
         {
-          "$ref": "#/$defs/WorldTransactionStepPoseStep",
-          "description": "Teleports a world-addressed body to a spawn point, or to a literal position with angles; exactly one of SpawnPoint and Position is authored."
+          "$ref": "#/$defs/WorldEffectPose"
         }
       ]
     },

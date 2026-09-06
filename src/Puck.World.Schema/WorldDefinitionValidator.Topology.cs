@@ -270,15 +270,15 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} '{value}' must be a \"host:port\" pair with a port 1..65535.");
         }
     }
-    /// <summary>Validates the <c>interactions</c> section by compiling it — <see cref="WorldRuleCompiler.CompileAllInteractions"/>
+    /// <summary>Validates the <c>interactions</c> section by compiling it — <see cref="WorldRuleCompiler.CompileAllInteractions(WorldDefinition)"/>
     /// owns which co-occurrence/effect kinds are admissible and which names resolve (the property registry, a region
     /// placement), so this pass calls it and reports its by-name refusal, mirroring <see cref="ValidateRules"/>'s own
-    /// division against <see cref="WorldRuleCompiler.CompileAll"/>.</summary>
-    private static void ValidateInteractions(WorldInteractionsSection? interactions, WorldDefinition definition, List<string> errors) {
+    /// division against <see cref="WorldRuleCompiler.CompileAll(WorldDefinition)"/>.</summary>
+    private static CompiledWorldRule[] ValidateInteractions(WorldInteractionsSection? interactions, WorldDefinition definition, List<string> errors, ref WorldRuleCompileContext? context) {
         var rows = (interactions?.Interactions ?? []);
 
         if (rows.Count == 0) {
-            return;
+            return [];
         }
 
         if (rows.Count > WorldInteractionCapacity.MaxInteractions) {
@@ -316,9 +316,10 @@ public static partial class WorldDefinitionValidator {
         }
 
         try {
-            _ = WorldRuleCompiler.CompileAllInteractions(definition: definition);
+            return WorldRuleCompiler.CompileAllInteractions(definition, context ??= WorldRuleCompiler.Context(definition));
         } catch (RuleException exception) {
             errors.Add(item: exception.Message);
+            return [];
         }
     }
     private static void ValidatePortals(WorldPortalsSection? portals, List<string> errors) {
@@ -458,9 +459,9 @@ public static partial class WorldDefinitionValidator {
     /// predicate/effect kinds are admissible at world scope and which names resolve, so this pass calls it and
     /// reports its by-name refusal rather than restating the rule set (the exact division
     /// <c>BodyMotionProgramException</c> already has for kit programs).</summary>
-    private static void ValidateRules(IReadOnlyList<WorldRule>? rules, WorldDefinition definition, List<string> errors) {
+    private static CompiledWorldRule[] ValidateRules(IReadOnlyList<WorldRule>? rules, WorldDefinition definition, List<string> errors, ref WorldRuleCompileContext? context) {
         if (rules is not { Count: > 0 }) {
-            return;
+            return [];
         }
 
         for (var index = 0; (index < rules.Count); index++) {
@@ -483,9 +484,10 @@ public static partial class WorldDefinitionValidator {
         }
 
         try {
-            _ = WorldRuleCompiler.CompileAll(definition: definition);
+            return WorldRuleCompiler.CompileAll(definition, context ??= WorldRuleCompiler.Context(definition));
         } catch (RuleException exception) {
             errors.Add(item: exception.Message);
+            return [];
         }
     }
     /// <summary>Gets whether the document declares at least one medium lattice field — the premise a kit authoring

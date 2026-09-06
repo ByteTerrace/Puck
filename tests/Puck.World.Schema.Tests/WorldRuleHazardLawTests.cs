@@ -21,6 +21,24 @@ public sealed class WorldRuleHazardLawTests {
     );
 
     [Fact]
+    public void ValidationReturnsProgramsForOnlyTheExactCandidateAndNoResultOnFailure() {
+        var definition = Document(Rule("damage", new ActionEffect.AddState("hp", Value: -3)));
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var reason, out var compilation), reason);
+        Assert.NotNull(compilation);
+        Assert.Same(definition, compilation.Definition);
+        Assert.Equal("damage", Assert.Single(compilation.Rules).Name);
+        Assert.Empty(compilation.Interactions);
+        Assert.Empty(compilation.Tables);
+        var changed = definition with { Rules = [Rule("heal", new ActionEffect.AddState("hp", Value: 4))] };
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(changed, out reason, out var next), reason);
+        Assert.NotSame(compilation.Definition, next!.Definition);
+        Assert.Equal("heal", Assert.Single(next.Rules).Name);
+        var invalid = changed with { Rules = [Rule("bad", new ActionEffect.SetState("missing", Value: 1))] };
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(invalid, out _, out var refused));
+        Assert.Null(refused);
+    }
+
+    [Fact]
     public void AnEarlierReadOfALaterWriteIsAWriteAfterReadHazard() {
         var hazards = WorldRuleHazards.Analyze(Document(
             Rule("faint", new ActionEffect.SetState(State: "fainted", Value: 1m), HpAtMost(0)),
@@ -76,7 +94,7 @@ public sealed class WorldRuleHazardLawTests {
     public void ReadAndWriteSetsFollowIndirectionsAndBranches() {
         var rule = WorldRuleCompiler.CompileAll(Document(
             Rule("r", new ActionEffect.Transaction(Effects: [
-                new TransactionStep.SetCell(State: "armor", Value: 1m),
+                new ActionEffect.SetState(State: "armor", Value: 1m),
             ]), HpAtMost(0))
         ))[0];
         Assert.Contains(new RuleAccess("hp", WorldStateRow.SlotKey), RuleDataflow.Reads(rule));

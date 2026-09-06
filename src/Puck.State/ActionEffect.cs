@@ -134,13 +134,13 @@ public abstract record ActionEffect {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null
     ) : ActionEffect;
     /// <summary>Applies a bounded list of effects atomically after preflight. When any effect refuses, none apply and
-    /// <paramref name="OnFailure"/> runs instead. Nested transactions are structurally unavailable, and so is any
-    /// effect a document project declares without a bounded rollback representation.</summary>
+    /// <paramref name="OnFailure"/> runs instead. The compiler refuses nested transactions and effects
+    /// a document project has not admitted through <see cref="EffectFamily.AllowsTransaction"/>.</summary>
     /// <param name="Effects">The main transaction branch.</param>
     /// <param name="OnFailure">The optional branch run after a main-branch refusal.</param>
     public sealed record Transaction(
-        IReadOnlyList<TransactionStep> Effects,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TransactionStep>? OnFailure = null
+        IReadOnlyList<ActionEffect> Effects,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ActionEffect>? OnFailure = null
     ) : ActionEffect;
     /// <summary>Redraws a draw site (a <c>state</c> row declaring a <see cref="Draw"/>). A draw's moment is authored
     /// through the rule that fires this: a <see cref="DrawTiming.TickPeriod"/> site redraws on an ordinary
@@ -149,71 +149,4 @@ public abstract record ActionEffect {
     /// <param name="Row">The draw site's row name. One name, not a (source, destination) pair: a site's source is its
     /// own facet and a site is a scalar slot, so there is nothing else to address.</param>
     public sealed record Generate(string Row) : ActionEffect;
-}
-
-/// <summary>The finite, non-recursive effect vocabulary admitted inside an atomic <see cref="ActionEffect.Transaction"/>.
-/// It mirrors the rollback-safe effects explicitly; nested transactions have no wire shape. The arms declared here are
-/// the ones this library owns; a document project appends its own through a <see cref="RuleVocabulary"/>, each paired
-/// with the <see cref="ActionEffect"/> arm it lifts to.</summary>
-[JsonDerivedType(typeof(TransactionStep.TransformStateStep), typeDiscriminator: "transformState")]
-[JsonDerivedType(typeof(TransactionStep.SetCell), typeDiscriminator: "setState")]
-[JsonDerivedType(typeof(TransactionStep.AddCell), typeDiscriminator: "addState")]
-[JsonDerivedType(typeof(TransactionStep.CountdownCell), typeDiscriminator: "countdownState")]
-[JsonDerivedType(typeof(TransactionStep.RemoveCell), typeDiscriminator: "removeStateCell")]
-[JsonDerivedType(typeof(TransactionStep.ScheduleCell), typeDiscriminator: "scheduleState")]
-[JsonDerivedType(typeof(TransactionStep.GenerateStep), typeDiscriminator: "generate")]
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
-public abstract record TransactionStep {
-    /// <summary>One atomic state transform.</summary>
-    /// <param name="Transform">The bounded operation.</param>
-    public sealed record TransformStateStep(StateTransform Transform) : TransactionStep;
-    /// <summary>Sets one state cell from exactly one numeric source spelling.</summary>
-    /// <param name="State">The destination row.</param>
-    /// <param name="Key">The optional destination cell key.</param>
-    /// <param name="Value">The literal source.</param>
-    /// <param name="FromState">The live source row or reserved channel.</param>
-    /// <param name="FromKey">The optional source cell key.</param>
-    /// <param name="ValueSeconds">The exact engine-tick duration source.</param>
-    /// <param name="Expression">The bounded postfix numeric source.</param>
-    public sealed record SetCell(
-        string State,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Value = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromState = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ValueSeconds = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? Expression = null
-    ) : TransactionStep;
-    /// <summary>Adds exactly one numeric source to a state cell.</summary>
-    /// <param name="State">The destination row.</param>
-    /// <param name="Key">The optional destination cell key.</param>
-    /// <param name="Value">The literal source.</param>
-    /// <param name="FromState">The live source row or reserved channel.</param>
-    /// <param name="FromKey">The optional source cell key.</param>
-    /// <param name="ValueSeconds">The exact engine-tick duration source.</param>
-    /// <param name="Expression">The bounded postfix numeric source.</param>
-    public sealed record AddCell(
-        string State,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? Value = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromState = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FromKey = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] decimal? ValueSeconds = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? Expression = null
-    ) : TransactionStep;
-    /// <summary>Consumes one non-negative integer countdown by the current engine-step width.</summary>
-    /// <param name="State">The countdown row.</param>
-    /// <param name="Key">The optional cell key.</param>
-    public sealed record CountdownCell(string State, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null) : TransactionStep;
-    /// <summary>Removes one addressed state cell.</summary>
-    /// <param name="State">The row to remove from.</param>
-    /// <param name="Key">The optional cell key.</param>
-    public sealed record RemoveCell(string State, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null) : TransactionStep;
-    /// <summary>Writes one absolute simulation-tick deadline.</summary>
-    /// <param name="State">The integer destination row.</param>
-    /// <param name="DelaySeconds">The non-negative delay, converted with the document's simulation rate and rounded up.</param>
-    /// <param name="Key">The optional cell key.</param>
-    public sealed record ScheduleCell(string State, decimal DelaySeconds, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null) : TransactionStep;
-    /// <summary>Redraws one declared state draw site.</summary>
-    public sealed record GenerateStep(string Row) : TransactionStep;
 }

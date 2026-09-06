@@ -189,7 +189,7 @@ public static class WorldDefinitionFileSource {
     /// <param name="neighbours">The injected neighbour resolver a cross-document adjacency proof reads.</param>
     /// <param name="validateAdjacencyClaims">Whether to prove cross-document adjacency claims
     /// (<see cref="WorldDefinitionValidator.TryValidate"/>) or validate only document-local facts
-    /// (<see cref="WorldDefinitionValidator.TryValidateLocally"/>).</param>
+    /// (<see cref="WorldDefinitionValidator.TryValidateLocally(WorldDefinition, out string)"/>).</param>
     /// <param name="definition">The parsed, migrated, validated definition on success; <see langword="null"/> on failure.</param>
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
     /// <returns><see langword="true"/> when the document parsed, migrated, and validated.</returns>

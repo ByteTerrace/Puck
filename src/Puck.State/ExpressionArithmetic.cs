@@ -87,13 +87,9 @@ public static partial class ExpressionArithmetic {
         }
     }
 
-    /// <summary>Gets a value indicating whether an operation consumes one stack value.</summary>
+    /// <summary>Gets a value indicating whether a core arithmetic operator consumes one stack value (functions have their own dispatcher).</summary>
     /// <param name="operation">An expression operation.</param>
-    public static bool IsUnary(ExpressionOp operation) => operation is ExpressionOp.BitNot or ExpressionOp.PopCount
-        or ExpressionOp.LeadingZeroCount or ExpressionOp.TrailingZeroCount or ExpressionOp.LowestSetBit
-        or ExpressionOp.ClearLowestSetBit or ExpressionOp.ByteSwap or ExpressionOp.BitReverse
-        or ExpressionOp.ReplicationMask
-        or ExpressionOp.Negate or ExpressionOp.Abs or ExpressionOp.Sign;
+    public static bool IsUnary(ExpressionOp operation) => ExpressionOperators.Find(operation) is { Function: false, Arity: 1 };
 
     /// <summary>Evaluates one unary operation. Bit operations read the Int carrier's two's-complement bits; Negate and
     /// Abs keep the operand's kind and refuse the carrier's minimum; Sign yields Int -1, 0, or 1 for either kind.</summary>

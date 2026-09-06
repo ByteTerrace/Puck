@@ -36,6 +36,22 @@ public sealed class DerivedBoardFrameLawTests {
     }
 
     [Fact]
+    public void AFilterReadsDenseCellsCreatedAfterFrameLoad() {
+        var topology = TopologyCompilation.Compile(new LatticeTopology.Grid("map", new DocumentVector3(0, 0, 0), 1, 4, 4), Vector3.Zero);
+        var source = new StateRow(Name("values"), CellKind.Int, Capacity: 2, Cells: [new(Name("2"), 7), new(Name("3"), 11)]);
+        var filter = new StateRow(Name("filter"), CellKind.Int, Domain: new StateDomain.CellsOf("map", Empty: -1), Cells: []);
+        StateRow[] rows = [source, filter];
+        var frame = new StateFrame(new FrameLayout(rows, _ => topology), rows);
+        frame.Load(new RowStore(rows));
+        Assert.Equal(0, StateReader.ReduceRaw(frame, source, StateReduceOp.Sum, 0, filter, null));
+        Assert.True(frame.TryWrite(filter, Name("2"), 1, StateWriteKind.Set, out _));
+        Assert.Equal(7, StateReader.ReduceRaw(frame, source, StateReduceOp.Sum, 0, filter, null));
+        Assert.True(frame.TryWrite(filter, Name("2"), 0, StateWriteKind.Set, out _));
+        Assert.Equal(0, StateReader.ReduceRaw(frame, source, StateReduceOp.Sum, 0, filter, null));
+        Assert.Empty(filter.Cells!);
+    }
+
+    [Fact]
     public void RelocatingATokenRewritesTheDerivedBoardInTheFrameAndLeavesTheBaseRowsUntouched() {
         var (layout, frame, rows) = Build();
         var tokensOrdinal = layout.TryOrdinal(name: "tokens", ordinal: out var ordinal) ? ordinal : -1;

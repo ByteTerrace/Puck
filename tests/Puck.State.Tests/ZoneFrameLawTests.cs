@@ -38,6 +38,15 @@ public sealed class ZoneFrameLawTests {
     }
 
     [Fact]
+    public void AReductionFilterTracksTransferredMembership() {
+        var (_, frame, rows) = Build();
+        Assert.Equal(3, StateReader.ReduceRaw(frame, rows[0], StateReduceOp.Count, 0, rows[1], null));
+        Assert.True(frame.TryTransferToken(rows[1], rows[2], Name("a"), false, out _));
+        Assert.Equal(2, StateReader.ReduceRaw(frame, rows[0], StateReduceOp.Count, 0, rows[1], null));
+        Assert.Equal(1, StateReader.ReduceRaw(frame, rows[0], StateReduceOp.Count, 0, rows[2], null));
+    }
+
+    [Fact]
     public void AZoneLaysOutByItsCapacityAndLoadsItsMembersInPileOrder() {
         var (layout, frame, rows) = Build();
 

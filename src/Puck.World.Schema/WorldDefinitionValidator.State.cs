@@ -93,6 +93,21 @@ public static partial class WorldDefinitionValidator {
             ? FixedQ4816.FromRawBits(value: raw).ToString()
             : raw.ToString(provider: CultureInfo.InvariantCulture)
         );
+    // Trait placement and trait fields are separate: scalar and keyed forms share the field laws below.
+    private static bool TraitSlotEligible(StateRow row) => row.Capacity is null &&
+        (row.Cells is null or { Count: 0 } || row.Cells is { Count: 1 } cells && cells[0].Key == StateRow.SlotKey);
+
+    private static void ValidateAdvanceFields(StateAdvance advance, string path, List<string> errors) {
+        if (advance.RateDenominator <= 0) {
+            errors.Add($"{path}.advance.rateDenominator {advance.RateDenominator} must be positive.");
+        }
+        RequireNonNegativeEpoch(advance.EpochTick, $"{path}.advance.epochTick", errors);
+    }
+    private static void ValidateDynamicsFields(StateDynamics dynamics, ISet<string> names, string path, List<string> errors) {
+        RequireDeclared(value: dynamics.Row, declaredSet: names, path: path, field: "dynamics.row", rowNoun: "dynamics", errors: errors);
+        RequireNonNegativeEpoch(dynamics.EpochTick, $"{path}.dynamics.epochTick", errors);
+    }
+
     /// <summary>Validates a row's authored <see cref="StateAdvance"/> continuous-accumulation trait. Whether
     /// reaching a declared envelope bound clamps the computed value (it never rewrites the stored base/epoch) is the
     /// settled read-side half of the envelope duality, documented on <see cref="StateAdvance"/> itself and not a
@@ -110,22 +125,13 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} ('{row.Name}') declares advance on a {StateSpelling.Kind(kind: row.Kind)} row — only int/fixed rows accumulate.");
         }
 
-        if (advance.RateDenominator <= 0) {
-            errors.Add(item: $"{path}.advance.rateDenominator {advance.RateDenominator} must be positive.");
-        }
-
-        RequireNonNegativeEpoch(
-            value: advance.EpochTick,
-            name: $"{path}.advance.epochTick",
-            errors: errors
-        );
+        ValidateAdvanceFields(advance, path, errors);
 
         // Advance is a SCALAR (slot) trait: legitimate only on a row declaring no capacity and holding at most its
         // one slot cell — empty (declared, never yet set) or exactly one cell keyed WorldStateRow.SlotKey. A row that
         // has grown past that (a keyed table, or a slot that later gained a second author-keyed cell) is refused
         // here rather than silently accumulating a value nothing addresses as "the" row value.
-        var cells = (row.Cells ?? []);
-        var slotEligible = ((row.Capacity is null) && ((cells.Count == 0) || ((cells.Count == 1) && (cells[0].Key == WorldStateRow.SlotKey))));
+        var slotEligible = TraitSlotEligible(row);
 
         if (!slotEligible) {
             errors.Add(item: $"{path} ('{row.Name}') declares advance on a keyed row — advance is legitimate only on a scalar (slot) row, authored with 'value' or left empty until the first explicit set.");
@@ -147,15 +153,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares advance on a {StateSpelling.Kind(kind: row.Kind)} cell — only int/fixed cells accumulate.");
         }
 
-        if (advance.RateDenominator <= 0) {
-            errors.Add(item: $"{cellPath}.advance.rateDenominator {advance.RateDenominator} must be positive.");
-        }
-
-        RequireNonNegativeEpoch(
-            value: advance.EpochTick,
-            name: $"{cellPath}.advance.epochTick",
-            errors: errors
-        );
+        ValidateAdvanceFields(advance, cellPath, errors);
     }
     /// <summary>Validates a row's authored <see cref="StateCycle"/> rotation trait: the generator, power and step length the
     /// read side can compute over, an output the row's kind can carry, and the same scalar-row exclusivity the other
@@ -186,13 +184,13 @@ public static partial class WorldDefinitionValidator {
             subject: $"{path} ('{row.Name}')"
         );
 
-        var cells = (row.Cells ?? []);
-        var slotEligible = ((row.Capacity is null) && ((cells.Count == 0) || ((cells.Count == 1) && (cells[0].Key == WorldStateRow.SlotKey))));
+        var slotEligible = TraitSlotEligible(row);
 
         if (!slotEligible) {
             errors.Add(item: $"{path} ('{row.Name}') declares cycle on a keyed row — cycle is legitimate only on a scalar (slot) row, authored with 'value' or left empty; a keyed row's cells each declare their own 'cycle'.");
         }
 
+        var cells = row.Cells ?? [];
         if (StateCycle.IsLatticeOutput(output: cycle.Output) && (cells.Count == 1) && (StateCycle.Phase(baseValue: cells[0].Value, kind: row.Kind) is < 0 or >= SymmetryLattice.NodeCount)) {
             errors.Add(item: $"{path} ('{row.Name}') value {DescribeValue(kind: row.Kind, raw: cells[0].Value)} is not a symmetry-lattice node — a {StateSpelling.CycleOutput(output: cycle.Output)} cycle stores the node its ring walk starts from, 0..{SymmetryLattice.NodeCount - 1}.");
         }
@@ -285,24 +283,10 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} ('{row.Name}') declares dynamics on a {StateSpelling.Kind(kind: row.Kind)} row — only int/fixed rows ease.");
         }
 
-        RequireDeclared(
-            value: dynamics.Row,
-            declaredSet: dynamicsNames,
-            path: path,
-            field: "dynamics.row",
-            rowNoun: "dynamics",
-            errors: errors
-        );
-
-        RequireNonNegativeEpoch(
-            value: dynamics.EpochTick,
-            name: $"{path}.dynamics.epochTick",
-            errors: errors
-        );
+        ValidateDynamicsFields(dynamics, dynamicsNames, path, errors);
 
         // Dynamics is a SCALAR (slot) trait, exactly like Advance — the same slot-eligibility test.
-        var cells = (row.Cells ?? []);
-        var slotEligible = ((row.Capacity is null) && ((cells.Count == 0) || ((cells.Count == 1) && (cells[0].Key == WorldStateRow.SlotKey))));
+        var slotEligible = TraitSlotEligible(row);
 
         if (!slotEligible) {
             errors.Add(item: $"{path} ('{row.Name}') declares dynamics on a keyed row — dynamics is legitimate only on a scalar (slot) row; a keyed row's own cells ease independently.");
@@ -320,20 +304,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares dynamics on a {StateSpelling.Kind(kind: row.Kind)} cell — only int/fixed cells ease.");
         }
 
-        RequireDeclared(
-            value: dynamics.Row,
-            declaredSet: dynamicsNames,
-            path: cellPath,
-            field: "dynamics.row",
-            rowNoun: "dynamics",
-            errors: errors
-        );
-
-        RequireNonNegativeEpoch(
-            value: dynamics.EpochTick,
-            name: $"{cellPath}.dynamics.epochTick",
-            errors: errors
-        );
+        ValidateDynamicsFields(dynamics, dynamicsNames, cellPath, errors);
     }
     /// <summary>Validates a state row's authored <see cref="Draw"/> site — its own shape rules, then the shared
     /// site rule with the row's own envelope as the admissible domain.</summary>

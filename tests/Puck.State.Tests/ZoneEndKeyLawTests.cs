@@ -92,11 +92,11 @@ public sealed class ZoneEndKeyLawTests {
     [InlineData(true)]
     public void DynamicTransfersResolveEachStepAndRollBackTogether(bool fail) {
         var (host, context, _) = Build();
-        List<TransactionStep> steps = [
-            new TransactionStep.TransformStateStep(new StateTransform.Transfer("deck", "hand", ZoneSelector.Key, "$zone:deck:first")),
-            new TransactionStep.TransformStateStep(new StateTransform.Transfer("deck", "hand", ZoneSelector.Key, "$zone:deck:first")),
+        List<ActionEffect> steps = [
+            new ActionEffect.TransformState(new StateTransform.Transfer("deck", "hand", ZoneSelector.Key, "$zone:deck:first")),
+            new ActionEffect.TransformState(new StateTransform.Transfer("deck", "hand", ZoneSelector.Key, "$zone:deck:first")),
         ];
-        if (fail) { steps.Add(new TransactionStep.TransformStateStep(new StateTransform.Transfer("deck", "hand", ZoneSelector.Key, "gamma"))); }
+        if (fail) { steps.Add(new ActionEffect.TransformState(new StateTransform.Transfer("deck", "hand", ZoneSelector.Key, "gamma"))); }
         var rules = RuleCompiler.CompileAll([new Rule(Name("move"), [new ActionEffect.Transaction(steps)])], context);
         Assert.Equal(!fail, host.Judge(rules, 1));
         Assert.Equal(fail ? "gamma" : "beta", Resolve(host, Key(context, "$zone:deck:first")));

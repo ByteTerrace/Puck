@@ -38,122 +38,11 @@ public static partial class RuleCompiler {
                         Constant: LiteralToRaw(kind: kind, literal: constant.Value, ruleName: ruleName, verb: verb)
                     ), kind),
                 ValueToken.State state => ResolveState(state),
-                ValueToken.Add => Binary(ExpressionOp.Add),
-                ValueToken.Subtract => Binary(ExpressionOp.Subtract),
-                ValueToken.Multiply => Binary(ExpressionOp.Multiply),
-                ValueToken.Divide => Binary(ExpressionOp.Divide),
-                ValueToken.Min => Binary(ExpressionOp.Minimum),
-                ValueToken.Max => Binary(ExpressionOp.Maximum),
-                ValueToken.Modulo => Binary(ExpressionOp.Modulo),
-                ValueToken.Clamp => Ternary(ExpressionOp.Clamp),
-                ValueToken.BitAnd => IntBinary(ExpressionOp.BitAnd),
-                ValueToken.BitOr => IntBinary(ExpressionOp.BitOr),
-                ValueToken.BitXor => IntBinary(ExpressionOp.BitXor),
-                ValueToken.ShiftLeft => IntBinary(ExpressionOp.ShiftLeft),
-                ValueToken.ShiftRight => IntBinary(ExpressionOp.ShiftRight),
-                ValueToken.ShiftRightLogical => IntBinary(ExpressionOp.ShiftRightLogical),
-                ValueToken.BitNot => IntUnary(ExpressionOp.BitNot),
-                ValueToken.Equal => Comparison(ExpressionOp.Equal),
-                ValueToken.NotEqual => Comparison(ExpressionOp.NotEqual),
-                ValueToken.Less => Comparison(ExpressionOp.Less),
-                ValueToken.LessOrEqual => Comparison(ExpressionOp.LessOrEqual),
-                ValueToken.Greater => Comparison(ExpressionOp.Greater),
-                ValueToken.GreaterOrEqual => Comparison(ExpressionOp.GreaterOrEqual),
-                ValueToken.Select => Select(),
-                ValueToken.PopCount => IntUnary(ExpressionOp.PopCount),
-                ValueToken.LeadingZeroCount => IntUnary(ExpressionOp.LeadingZeroCount),
-                ValueToken.TrailingZeroCount => IntUnary(ExpressionOp.TrailingZeroCount),
-                ValueToken.LowestSetBit => IntUnary(ExpressionOp.LowestSetBit),
-                ValueToken.ClearLowestSetBit => IntUnary(ExpressionOp.ClearLowestSetBit),
-                ValueToken.ByteSwap => IntUnary(ExpressionOp.ByteSwap),
-                ValueToken.BitReverse => IntUnary(ExpressionOp.BitReverse),
-                ValueToken.ReplicationMask => IntUnary(ExpressionOp.ReplicationMask),
-                ValueToken.RepeatBits => IntBinary(ExpressionOp.RepeatBits),
-                ValueToken.RotateLeft => IntBinary(ExpressionOp.RotateLeft),
-                ValueToken.RotateRight => IntBinary(ExpressionOp.RotateRight),
-                ValueToken.Negate => Unary(ExpressionOp.Negate),
-                ValueToken.Abs => Unary(ExpressionOp.Abs),
-                ValueToken.Sign => SignOf(),
-                ValueToken.ParallelBitExtract => IntBinary(ExpressionOp.ParallelBitExtract),
-                ValueToken.ParallelBitDeposit => IntBinary(ExpressionOp.ParallelBitDeposit),
-                ValueToken.BitField => IntArity(ExpressionOp.BitField, 3),
-                ValueToken.BitInsert => IntArity(ExpressionOp.BitInsert, 4),
-                ValueToken.Pair => IntBinary(ExpressionOp.Pair),
-                ValueToken.PairX => IntUnary(ExpressionOp.PairX),
-                ValueToken.PairY => IntUnary(ExpressionOp.PairY),
-                ValueToken.PairSwap => IntUnary(ExpressionOp.PairSwap),
-                ValueToken.PairMax => IntUnary(ExpressionOp.PairMax),
-                ValueToken.PairMin => IntUnary(ExpressionOp.PairMin),
-                ValueToken.PairSum => IntUnary(ExpressionOp.PairSum),
-                ValueToken.PairDifference => IntUnary(ExpressionOp.PairDifference),
-                ValueToken.PairTranslate => IntBinary(ExpressionOp.PairTranslate),
-                ValueToken.PairScale => IntBinary(ExpressionOp.PairScale),
-                ValueToken.Morton => IntBinary(ExpressionOp.Morton),
-                ValueToken.MortonX => IntUnary(ExpressionOp.MortonX),
-                ValueToken.MortonY => IntUnary(ExpressionOp.MortonY),
-                ValueToken.Hilbert => IntArity(ExpressionOp.Hilbert, 3),
-                ValueToken.HilbertX => IntBinary(ExpressionOp.HilbertX),
-                ValueToken.HilbertY => IntBinary(ExpressionOp.HilbertY),
-                ValueToken.HexIndex => IntBinary(ExpressionOp.HexIndex),
-                ValueToken.HexQ => IntUnary(ExpressionOp.HexQ),
-                ValueToken.HexR => IntUnary(ExpressionOp.HexR),
-                ValueToken.HexRadius => IntUnary(ExpressionOp.HexRadius),
-                ValueToken.HexEuclideanSquared => IntUnary(ExpressionOp.HexEuclideanSquared),
-                ValueToken.HexDistance => IntBinary(ExpressionOp.HexDistance),
-                ValueToken.HexNeighbor => IntBinary(ExpressionOp.HexNeighbor),
-                ValueToken.HexRotate => IntBinary(ExpressionOp.HexRotate),
-                ValueToken.HexMirror => IntUnary(ExpressionOp.HexMirror),
-                ValueToken.HexSwap => IntUnary(ExpressionOp.HexSwap),
-                ValueToken.HexAdd => IntBinary(ExpressionOp.HexAdd),
-                ValueToken.HexSubtract => IntBinary(ExpressionOp.HexSubtract),
-                ValueToken.HexMultiply => IntBinary(ExpressionOp.HexMultiply),
-                ValueToken.HexScale => IntBinary(ExpressionOp.HexScale),
-                ValueToken.HexTranslate => IntArity(ExpressionOp.HexTranslate, 3),
-                ValueToken.Layer => IntArity(ExpressionOp.Layer, 4),
-                ValueToken.LayerOffset => IntArity(ExpressionOp.LayerOffset, 4),
-                ValueToken.LayerStart => IntArity(ExpressionOp.LayerStart, 4),
-                ValueToken.LayerSize => IntArity(ExpressionOp.LayerSize, 4),
-                ValueToken.SquareRoot => Unary(ExpressionOp.SquareRoot),
-                ValueToken.Sine => FixedUnary(ExpressionOp.Sine),
-                ValueToken.Cosine => FixedUnary(ExpressionOp.Cosine),
-                ValueToken.SquareIndex => IntBinary(ExpressionOp.SquareIndex),
-                ValueToken.SquareX => IntUnary(ExpressionOp.SquareX),
-                ValueToken.SquareY => IntUnary(ExpressionOp.SquareY),
-                ValueToken.SquareRadius => IntUnary(ExpressionOp.SquareRadius),
-                ValueToken.SquareLength => IntUnary(ExpressionOp.SquareLength),
-                ValueToken.SquareEuclideanSquared => IntUnary(ExpressionOp.SquareEuclideanSquared),
-                ValueToken.SquareDistance => IntBinary(ExpressionOp.SquareDistance),
-                ValueToken.SquareChebyshev => IntBinary(ExpressionOp.SquareChebyshev),
-                ValueToken.SquareNeighbor => IntBinary(ExpressionOp.SquareNeighbor),
-                ValueToken.SquareRotate => IntBinary(ExpressionOp.SquareRotate),
-                ValueToken.SquareMirror => IntUnary(ExpressionOp.SquareMirror),
-                ValueToken.SquareSwap => IntUnary(ExpressionOp.SquareSwap),
-                ValueToken.SquareAdd => IntBinary(ExpressionOp.SquareAdd),
-                ValueToken.SquareSubtract => IntBinary(ExpressionOp.SquareSubtract),
-                ValueToken.SquareMultiply => IntBinary(ExpressionOp.SquareMultiply),
-                ValueToken.SquareScale => IntBinary(ExpressionOp.SquareScale),
-                ValueToken.SquareTranslate => IntArity(ExpressionOp.SquareTranslate, 3),
-                ValueToken.GreatestCommonDivisor => IntBinary(ExpressionOp.GreatestCommonDivisor),
-                ValueToken.LeastCommonMultiple => IntBinary(ExpressionOp.LeastCommonMultiple),
-                ValueToken.FloorModulo => IntBinary(ExpressionOp.FloorModulo),
-                ValueToken.CycleForward => IntArity(ExpressionOp.CycleForward, 3),
-                ValueToken.CycleDistance => IntArity(ExpressionOp.CycleDistance, 3),
-                ValueToken.SmallestMissing => IntUnary(ExpressionOp.SmallestMissing),
-                ValueToken.IsPrime => IntUnary(ExpressionOp.IsPrime),
-                ValueToken.Prime => IntUnary(ExpressionOp.Prime),
-                ValueToken.Choose => IntBinary(ExpressionOp.Choose),
-                ValueToken.Factorial => IntUnary(ExpressionOp.Factorial),
-                ValueToken.SubsetRank => IntBinary(ExpressionOp.SubsetRank),
-                ValueToken.SubsetAt => IntArity(ExpressionOp.SubsetAt, 3),
-                ValueToken.SubsetMember => IntArity(ExpressionOp.SubsetMember, 4),
-                ValueToken.ArrangementRank => IntBinary(ExpressionOp.ArrangementRank),
-                ValueToken.ArrangementAt => IntBinary(ExpressionOp.ArrangementAt),
-                ValueToken.ArrangementMember => IntArity(ExpressionOp.ArrangementMember, 3),
                 ValueToken.BoardShift shift => ResolveBoardShift(shift),
                 ValueToken.BoardFill fill => ResolveBoardFill(fill),
                 ValueToken.BoardImage image => ResolveBoardImage(image),
                 null => throw Malformed("contains a null token"),
-                _ => throw Malformed($"contains unsupported token '{authored[index].GetType().Name}'"),
+                _ => ResolveOperator(authored[index]),
             };
         }
 
@@ -192,21 +81,19 @@ public static partial class RuleCompiler {
                 throw Malformed($"token '{operation}' needs a kind={DescribeCellKind(kind: required)} operand but found kind={DescribeCellKind(kind: kinds[slot])}");
             }
         }
-        CompiledExpressionToken Binary(ExpressionOp operation) {
-            Require(operation, 2);
-            RequireKind(operation, depth - 2, kind);
-            RequireKind(operation, depth - 1, kind);
-            depth--;
-            return new CompiledExpressionToken(Operation: operation);
-        }
-        CompiledExpressionToken IntBinary(ExpressionOp operation) {
-            if (kind != CellKind.Int) { throw Malformed($"token '{operation}' is admitted in kind=int expressions only"); }
-            return Binary(operation);
-        }
-        CompiledExpressionToken IntUnary(ExpressionOp operation) {
-            if (kind != CellKind.Int) { throw Malformed($"token '{operation}' is admitted in kind=int expressions only"); }
-            Require(operation, 1);
-            RequireKind(operation, depth - 1, CellKind.Int);
+        CompiledExpressionToken ResolveOperator(ValueToken token) {
+            var descriptor = ExpressionOperators.Find(token)
+                ?? throw Malformed($"contains unsupported token '{token.GetType().Name}'");
+            var operation = descriptor.Operation;
+            if (descriptor.Signature == ExpressionSignature.Sign) { return SignOf(); }
+            if (descriptor.Signature == ExpressionSignature.Comparison) { return Comparison(operation); }
+            if (descriptor.Signature == ExpressionSignature.Select) { return Select(); }
+            if (!descriptor.Admits(kind)) {
+                throw Malformed($"token '{operation}' is admitted in kind={descriptor.Signature.ToString().ToLowerInvariant()} expressions only");
+            }
+            Require(operation, descriptor.Arity);
+            for (var slot = depth - descriptor.Arity; slot < depth; slot++) { RequireKind(operation, slot, kind); }
+            depth -= descriptor.Arity - 1;
             return new CompiledExpressionToken(Operation: operation);
         }
         // The one door every board token (BoardShift/BoardFill/BoardImage) enters through: kind=int only, a declared
@@ -232,24 +119,6 @@ public static partial class RuleCompiler {
             ResolveBoard(ExpressionOp.BoardFill, fill.Topology, "fills", "direction", fill.Direction, static (topology, token) => topology.Direction(token: token));
         CompiledExpressionToken ResolveBoardImage(ValueToken.BoardImage image) =>
             ResolveBoard(ExpressionOp.BoardImage, image.Topology, "carries", "symmetry element", image.Element, static (topology, name) => topology.Element(name: name));
-        CompiledExpressionToken IntArity(ExpressionOp operation, int arity) {
-            if (kind != CellKind.Int) { throw Malformed($"token '{operation}' is admitted in kind=int expressions only"); }
-            Require(operation, arity);
-            for (var slot = depth - arity; slot < depth; slot++) { RequireKind(operation, slot, CellKind.Int); }
-            depth -= (arity - 1);
-            return new CompiledExpressionToken(Operation: operation);
-        }
-        CompiledExpressionToken FixedUnary(ExpressionOp operation) {
-            if (kind != CellKind.Fixed) { throw Malformed($"token '{operation}' is admitted in kind=fixed expressions only"); }
-            Require(operation, 1);
-            RequireKind(operation, depth - 1, CellKind.Fixed);
-            return new CompiledExpressionToken(Operation: operation);
-        }
-        CompiledExpressionToken Unary(ExpressionOp operation) {
-            Require(operation, 1);
-            RequireKind(operation, depth - 1, kind);
-            return new CompiledExpressionToken(Operation: operation);
-        }
         CompiledExpressionToken SignOf() {
             Require(ExpressionOp.Sign, 1);
             if (kinds[depth - 1] is not (CellKind.Int or CellKind.Fixed)) {
@@ -257,14 +126,6 @@ public static partial class RuleCompiler {
             }
             kinds[depth - 1] = CellKind.Int;
             return new CompiledExpressionToken(Operation: ExpressionOp.Sign);
-        }
-        CompiledExpressionToken Ternary(ExpressionOp operation) {
-            Require(operation, 3);
-            RequireKind(operation, depth - 3, kind);
-            RequireKind(operation, depth - 2, kind);
-            RequireKind(operation, depth - 1, kind);
-            depth -= 2;
-            return new CompiledExpressionToken(Operation: operation);
         }
         CompiledExpressionToken Comparison(ExpressionOp operation) {
             Require(operation, 2);

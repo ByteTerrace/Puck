@@ -254,7 +254,7 @@ public static class RuleEvaluation {
                 }
                 if (ExpressionArithmetic.FunctionArity(operation: token.Operation) is > 0 and var arity) {
                     top -= arity;
-                    if (!ExpressionArithmetic.TryFunction(operation: token.Operation, kind: kind, arguments: stack.Slice(start: top, length: arity), value: out var applied)) {
+                    if (!ExpressionArithmetic.FunctionAdmits(token.Operation, kind) || !ExpressionArithmetic.TryValidatedFunction(operation: token.Operation, kind: kind, arguments: stack.Slice(start: top, length: arity), value: out var applied)) {
                         value = 0L;
                         return false;
                     }

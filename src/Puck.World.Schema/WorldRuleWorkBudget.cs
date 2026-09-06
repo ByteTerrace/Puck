@@ -18,9 +18,11 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     public static WorldRuleWorkBudget Measure(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
+        return Measure(definition, WorldRuleCompiler.CompileAll(definition), WorldRuleCompiler.CompileAllInteractions(definition));
+    }
+
+    internal static WorldRuleWorkBudget Measure(WorldDefinition definition, CompiledWorldRule[] rules, CompiledWorldRule[] interactions) {
         var context = WorldRuleCompiler.Context(definition: definition);
-        var rules = WorldRuleCompiler.CompileAll(definition: definition);
-        var interactions = WorldRuleCompiler.CompileAllInteractions(definition: definition);
         var decisionScales = new HashSet<long>();
 
         foreach (var rule in rules) {
@@ -56,8 +58,12 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     public static IReadOnlyList<RuleWorkContributor> Contributors(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
+        return Contributors(definition, WorldRuleCompiler.CompileAll(definition), WorldRuleCompiler.CompileAllInteractions(definition));
+    }
+
+    internal static IReadOnlyList<RuleWorkContributor> Contributors(WorldDefinition definition, CompiledWorldRule[] rules, CompiledWorldRule[] interactions) {
         var context = WorldRuleCompiler.Context(definition: definition);
-        var contributors = Lines(definition: definition, context: context, rules: WorldRuleCompiler.CompileAll(definition: definition), interactions: WorldRuleCompiler.CompileAllInteractions(definition: definition));
+        var contributors = Lines(definition: definition, context: context, rules: rules, interactions: interactions);
 
         contributors.Sort(comparison: static (left, right) => {
             var byWork = right.WorkUnits.CompareTo(value: left.WorkUnits);
@@ -73,9 +79,13 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     public static IReadOnlyList<(string Rule, string Cell)> ContradictoryGates(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
+        return ContradictoryGates(WorldRuleCompiler.CompileAll(definition));
+    }
+
+    internal static IReadOnlyList<(string Rule, string Cell)> ContradictoryGates(CompiledWorldRule[] rules) {
         var result = new List<(string, string)>();
 
-        foreach (var rule in WorldRuleCompiler.CompileAll(definition: definition)) {
+        foreach (var rule in rules) {
             foreach (var pinned in RuleWorkBudget.PinnedCells(gate: rule.Gate, contradictory: out _)) {
                 if (pinned.IsEmpty) {
                     result.Add(item: (rule.Name, pinned.Cell));

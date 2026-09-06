@@ -16,6 +16,20 @@ public abstract class StateStore {
     /// <returns><see langword="true"/> when the row holds a cell under that key.</returns>
     public abstract bool TryStored(StateRow row, CellName key, out long value, out string? text);
 
+    /// <summary>Reads a stored value together with its authored cell metadata. Dense cells created only in a frame
+    /// may have a value without authored metadata. Stores can override this to resolve the key once.</summary>
+    /// <param name="row">The row.</param>
+    /// <param name="key">The cell key.</param>
+    /// <param name="value">The stored raw value.</param>
+    /// <param name="text">The stored text, or null.</param>
+    /// <param name="cell">The authored cell carrying behavior traits, or null.</param>
+    /// <returns>Whether the store holds the cell.</returns>
+    public virtual bool TryStored(StateRow row, CellName key, out long value, out string? text, out StateCell? cell) {
+        var found = TryStored(row, key, out value, out text);
+        cell = found ? StateRows.FindCell(row.Cells, key) : null;
+        return found;
+    }
+
     /// <summary>Reads the stored raw value of the cell at a position of the row's cell order.</summary>
     /// <param name="row">The row.</param>
     /// <param name="index">The position in <see cref="StateRow.Cells"/> order — for a ring, the slot.</param>
@@ -87,6 +101,13 @@ public sealed class RowStore : StateStore {
 
     /// <inheritdoc/>
     public override bool TryStored(StateRow row, CellName key, out long value, out string? text) => Stored(row: row, key: key, value: out value, text: out text);
+    /// <inheritdoc/>
+    public override bool TryStored(StateRow row, CellName key, out long value, out string? text, out StateCell? cell) {
+        cell = StateRows.FindCell(row.Cells, key);
+        value = cell?.Value ?? 0L;
+        text = cell?.Text;
+        return cell is not null;
+    }
     /// <inheritdoc/>
     public override bool TryStoredAt(StateRow row, int index, out long value) {
         var cells = row.Cells;

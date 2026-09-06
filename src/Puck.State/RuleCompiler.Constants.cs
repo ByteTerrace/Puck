@@ -11,14 +11,7 @@ public static partial class RuleCompiler {
         var count = 0;
         var depth = 0;
         foreach (var token in tokens) {
-            var arity = token.Operation switch {
-                ExpressionOp.Constant or ExpressionOp.Operand => 0,
-                ExpressionOp.Clamp or ExpressionOp.Select or ExpressionOp.BitField => 3,
-                ExpressionOp.BitInsert => 4,
-                ExpressionOp.BoardShift or ExpressionOp.BoardFill or ExpressionOp.BoardImage => 1,
-                _ => ExpressionArithmetic.FunctionArity(token.Operation) is > 0 and var functionArity
-                    ? functionArity : ExpressionArithmetic.IsUnary(token.Operation) ? 1 : 2,
-            };
+            var arity = ExpressionOperators.Arity(token.Operation);
             var start = arity == 0 ? count : starts[depth - arity];
             var constant = token.Operation != ExpressionOp.Operand;
             for (var argument = depth - arity; argument < depth; argument++) { constant &= constants[argument]; }

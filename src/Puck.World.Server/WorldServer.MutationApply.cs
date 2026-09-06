@@ -463,7 +463,8 @@ public sealed partial class WorldServer {
         // Step, so it repeats only document-local checks and never reaches transport from the tick path.
         if (!WorldDefinitionValidator.TryValidateLocally(
             definition: candidate,
-            reason: out var validationReason
+            reason: out var validationReason,
+            compilation: out var compilation
         )) {
             RejectRebuild(
                 connectionId: connectionId,
@@ -613,6 +614,7 @@ public sealed partial class WorldServer {
 
             Install(
                 definition: candidate,
+                compilation: compilation,
                 rebuildPopulation: true
             );
             RepaintChangedLatticeDraws(
@@ -822,10 +824,10 @@ public sealed partial class WorldServer {
     // assignment, motion, producer, seat kit, spawns) recompile the population's fixed tables and live bodies; the
     // scene/screens rebuild on the client through the delivered definition, and cameras/render/population defaults are
     // document-only.
-    private void Install(WorldDefinition definition, bool rebuildPopulation) {
+    private void Install(WorldDefinition definition, bool rebuildPopulation, WorldRuleCompilation? compilation = null) {
         m_definition = definition;
         m_inputHold.Reconfigure(settings: definition.CompiledInputHold);
-        definition = RecompileRules(definition: definition);
+        definition = RecompileRules(definition: definition, compilation: compilation);
         // Unconditional, like RecompileRules above: a group/member count is capacity-bounded, so a full resync costs
         // nothing on the ticks that never touch the groups section, and unconditional is what keeps membership
         // expansion CHECK-TIME correct without a bespoke "did this mutation touch Groups" classification to maintain.
@@ -898,15 +900,13 @@ public sealed partial class WorldServer {
         m_population.SyncBodyScale(definition: definition);
     }
 
-    private static bool TryValidateMutationCandidate(WorldDefinition candidate, WorldMutation mutation, out string reason) => mutation switch {
-        WorldMutation.UpsertStateCell state => WorldDefinitionValidator.TryValidateRuntimeStateCell(
-            definition: candidate,
-            rowName: state.Row,
-            key: state.Key,
-            reason: out reason
-        ),
-        _ => WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out reason),
-    };
+    private static bool TryValidateMutationCandidate(WorldDefinition candidate, WorldMutation mutation, out string reason, out WorldRuleCompilation? compilation, bool retainCompilation = true) {
+        compilation = null;
+        return mutation is WorldMutation.UpsertStateCell state
+            ? WorldDefinitionValidator.TryValidateRuntimeStateCell(candidate, state.Row, state.Key, out reason)
+            : retainCompilation ? WorldDefinitionValidator.TryValidateLocally(candidate, out reason, out compilation)
+            : WorldDefinitionValidator.TryValidateLocally(candidate, out reason);
+    }
     private void Reject(WorldMutation mutation, string reason, int connectionId, long correlationId) {
         Console.Error.WriteLine(value: $"[world.mutation rejected: {Describe(mutation: mutation)} — {reason}]");
         EchoTap?.Invoke(obj: new WorldEditEcho(
@@ -1076,7 +1076,7 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        if (!TryValidateMutationCandidate(candidate: candidate, mutation: mutation, reason: out var validationReason)) {
+        if (!TryValidateMutationCandidate(candidate: candidate, mutation: mutation, reason: out var validationReason, compilation: out var compilation)) {
             Reject(
                 connectionId: connectionId,
                 correlationId: correlationId,
@@ -1254,6 +1254,7 @@ public sealed partial class WorldServer {
             } else {
                 Install(
                     definition: candidate,
+                    compilation: compilation,
                     rebuildPopulation: (AffectsPopulation(mutation: mutation) || RefreshesLookAssignment(
                     candidate: candidate,
                     mutation: mutation

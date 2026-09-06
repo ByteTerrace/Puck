@@ -50,9 +50,7 @@ public static partial class WorldStateTransforms {
         return true;
     }
 
-    // Membership is "not the board's empty value"; the result writes members as the transform's value and drops
-    // every other cell, which reads as empty. Every board shares the target's topology, so one values span per source
-    // and one member span for the result bound the work at three walks of the board.
+    // Storage adapters share operation admission and dense evaluation; this one publishes a sparse row.
     private static bool TryBoardCombine(WorldDefinition definition, WorldStateRow[] rows, StateTransform.BoardCombine combine, out string reason) {
         if (!TryFind(rows, combine.Row, out var index, out reason)) {
             return false;
@@ -61,20 +59,10 @@ public static partial class WorldStateTransforms {
         if (row.EffectiveDomain is not StateDomain.CellsOf board || WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology) {
             return Refuse("boardCombine writes a board row", out reason);
         }
-        var operation = combine.Operation;
-        var needsLeft = operation is not (BoardCombineOp.Fill or BoardCombineOp.Clear);
-        var needsRight = operation is BoardCombineOp.And or BoardCombineOp.Or or BoardCombineOp.Xor or BoardCombineOp.AndNot;
-        if (!Enum.IsDefined(operation) || needsLeft != (combine.Left is not null) || needsRight != (combine.Right is not null) ||
-            (operation == BoardCombineOp.Shift) != (combine.Direction is not null) || (operation == BoardCombineOp.Image) != (combine.Element is not null)) {
-            return Refuse("boardCombine takes left for every operation but fill and clear, right for and/or/xor/andNot, direction for shift alone, and element for image alone", out reason);
-        }
-        if (row.ClampToEnvelope(combine.Value) != combine.Value || (row.Kind == CellKind.Bool && combine.Value is not (0 or 1)) || combine.Value == board.Empty) {
-            return Refuse("boardCombine writes a member value the board admits and that is not the board's own empty value", out reason);
-        }
-        var direction = (combine.Direction is { } directionName) ? topology.Direction(directionName) : -1;
-        var element = (combine.Element is { } elementName) ? topology.Element(elementName) : -1;
-        if ((combine.Direction is not null && direction < 0) || (combine.Element is not null && element < 0)) {
-            return Refuse("boardCombine names a direction or point-group element its topology does not declare", out reason);
+        var needsLeft = BoardCombination.NeedsLeft(combine.Operation);
+        var needsRight = BoardCombination.NeedsRight(combine.Operation);
+        if (!BoardCombination.TryValidate(combine, row, board.Empty, topology, out var direction, out var element, out reason)) {
+            return false;
         }
         Span<long> left = stackalloc long[topology.CellCount];
         Span<long> right = stackalloc long[topology.CellCount];
@@ -86,36 +74,16 @@ public static partial class WorldStateTransforms {
         if (needsRight && !TryReadBoard(definition, rows, combine.Right!, board.Topology, topology, right, out rightEmpty, out reason)) {
             return false;
         }
-        Span<bool> member = stackalloc bool[topology.CellCount];
-        for (var cell = 0; cell < topology.CellCount; cell++) {
-            var inLeft = needsLeft && (left[cell] != leftEmpty);
-            var inRight = needsRight && (right[cell] != rightEmpty);
-            switch (operation) {
-                case BoardCombineOp.Fill: member[cell] = true; break;
-                case BoardCombineOp.And: member[cell] = (inLeft && inRight); break;
-                case BoardCombineOp.Or: member[cell] = (inLeft || inRight); break;
-                case BoardCombineOp.Xor: member[cell] = (inLeft ^ inRight); break;
-                case BoardCombineOp.AndNot: member[cell] = (inLeft && !inRight); break;
-                case BoardCombineOp.Not: member[cell] = !inLeft; break;
-                case BoardCombineOp.Shift:
-                    if (inLeft && topology.Neighbour(cell, direction) is >= 0 and var neighbour) { member[neighbour] = true; }
-                    break;
-                case BoardCombineOp.Image:
-                    if (inLeft) { member[topology.Image(element, cell)] = true; }
-                    break;
-                default: break;
-            }
-        }
+        Span<long> result = stackalloc long[topology.CellCount];
+        BoardCombination.Write(combine, topology, left, leftEmpty, right, rightEmpty, result, board.Empty, direction, element);
         var written = 0;
-        for (var cell = 0; cell < topology.CellCount; cell++) {
-            written += ((operation == BoardCombineOp.Copy) ? ((left[cell] != board.Empty) ? 1 : 0) : (member[cell] ? 1 : 0));
+        foreach (var value in result) {
+            written += value != board.Empty ? 1 : 0;
         }
         var cells = new List<StateCell>(written);
         for (var cell = 0; cell < topology.CellCount; cell++) {
-            if (operation == BoardCombineOp.Copy) {
-                if (left[cell] != board.Empty) { cells.Add(new(topology.NameOf(cell), left[cell])); }
-            } else if (member[cell]) {
-                cells.Add(new(topology.NameOf(cell), combine.Value));
+            if (result[cell] != board.Empty) {
+                cells.Add(new(topology.NameOf(cell), result[cell]));
             }
         }
         rows[index] = row with { Cells = cells };

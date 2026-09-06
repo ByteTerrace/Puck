@@ -151,7 +151,7 @@ public sealed class WorldExpressionVocabularyLawTests {
             state: [Slot("target", 5L), Slot("failed", 0L), Slot("wrapped", long.MinValue), Slot("zero", 9L)],
             rules: [
                 new WorldRule(Name: Name("bad-shift"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.Transaction(
-                    Effects: [new TransactionStep.SetCell(
+                    Effects: [new ActionEffect.SetState(
                         State: "target",
                         Expression: new ValueExpression(Tokens: [
                             new ValueToken.Constant(Value: 1m),
@@ -159,10 +159,10 @@ public sealed class WorldExpressionVocabularyLawTests {
                             new ValueToken.ShiftLeft(),
                         ])
                     )],
-                    OnFailure: [new TransactionStep.SetCell(State: "failed", Value: 1m)]
+                    OnFailure: [new ActionEffect.SetState(State: "failed", Value: 1m)]
                 )]),
                 new WorldRule(Name: Name("bad-modulo"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.Transaction(
-                    Effects: [new TransactionStep.SetCell(
+                    Effects: [new ActionEffect.SetState(
                         State: "target",
                         Expression: new ValueExpression(Tokens: [
                             new ValueToken.Constant(Value: 1m),
@@ -170,7 +170,7 @@ public sealed class WorldExpressionVocabularyLawTests {
                             new ValueToken.Modulo(),
                         ])
                     )],
-                    OnFailure: [new TransactionStep.AddCell(State: "failed", Value: 1m)]
+                    OnFailure: [new ActionEffect.AddState(State: "failed", Value: 1m)]
                 )]),
                 new WorldRule(Name: Name("min-modulo"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.SetState(
                     State: "zero",
@@ -312,16 +312,16 @@ public sealed class WorldExpressionVocabularyLawTests {
                 Rule("trail", "trail", [new ValueToken.State(Name: "zero"), new ValueToken.TrailingZeroCount()]),
                 Rule("low", "low", [new ValueToken.State(Name: "zero"), new ValueToken.LowestSetBit()]),
                 new WorldRule(Name: Name("refuse-negate"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.Transaction(
-                    Effects: [new TransactionStep.SetCell(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "min"), new ValueToken.Negate()]))],
-                    OnFailure: [new TransactionStep.AddCell(State: "failed", Value: 1m)]
+                    Effects: [new ActionEffect.SetState(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "min"), new ValueToken.Negate()]))],
+                    OnFailure: [new ActionEffect.AddState(State: "failed", Value: 1m)]
                 )]),
                 new WorldRule(Name: Name("refuse-abs"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.Transaction(
-                    Effects: [new TransactionStep.SetCell(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "min"), new ValueToken.Abs()]))],
-                    OnFailure: [new TransactionStep.AddCell(State: "failed", Value: 1m)]
+                    Effects: [new ActionEffect.SetState(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "min"), new ValueToken.Abs()]))],
+                    OnFailure: [new ActionEffect.AddState(State: "failed", Value: 1m)]
                 )]),
                 new WorldRule(Name: Name("refuse-rotate"), Mode: ActionTriggerMode.Edge, Effects: [new ActionEffect.Transaction(
-                    Effects: [new TransactionStep.SetCell(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "low"), new ValueToken.Constant(Value: 64m), new ValueToken.RotateLeft()]))],
-                    OnFailure: [new TransactionStep.AddCell(State: "failed", Value: 1m)]
+                    Effects: [new ActionEffect.SetState(State: "target", Expression: new ValueExpression(Tokens: [new ValueToken.State(Name: "low"), new ValueToken.Constant(Value: 64m), new ValueToken.RotateLeft()]))],
+                    OnFailure: [new ActionEffect.AddState(State: "failed", Value: 1m)]
                 )]),
             ]
         );
@@ -353,12 +353,12 @@ public sealed class WorldExpressionVocabularyLawTests {
             state: [Slot("width", width), Slot("pattern", pattern), Slot("mask", 5), Slot("repeated", 7), Slot("failed", 0)],
             rules: [new WorldRule(Name: Name("replicate"), Effects: [new ActionEffect.Transaction(
                 Effects: [
-                    new TransactionStep.SetCell(State: "mask", Expression: ValueExpression.Parse("replicationMask(width)")),
-                    new TransactionStep.SetCell(State: "repeated", Expression: new ValueExpression(Tokens: [
+                    new ActionEffect.SetState(State: "mask", Expression: ValueExpression.Parse("replicationMask(width)")),
+                    new ActionEffect.SetState(State: "repeated", Expression: new ValueExpression(Tokens: [
                         new ValueToken.State(Name: "pattern"), new ValueToken.State(Name: "width"), new ValueToken.RepeatBits(),
                     ])),
                 ],
-                OnFailure: [new TransactionStep.SetCell(State: "failed", Value: 1)]
+                OnFailure: [new ActionEffect.SetState(State: "failed", Value: 1)]
             )])]
         );
         var parsed = WorldDefinitionSerialization.Deserialize(WorldDefinitionSerialization.Serialize(definition));

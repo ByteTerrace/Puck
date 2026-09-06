@@ -100,29 +100,6 @@ public static class WorldEffect {
     ) : ActionEffect;
 }
 
-/// <summary>The transaction-step mirrors of the world-rule arms of <see cref="WorldEffect"/>, registered onto
-/// <see cref="TransactionStep"/> by <see cref="WorldRuleVocabulary"/> under the same discriminators.</summary>
-public static class WorldTransactionStep {
-    public sealed record UpsertHudPanelStep(WorldHudPanel Panel) : TransactionStep;
-    public sealed record RemoveHudPanelStep(string Id) : TransactionStep;
-    public sealed record UpsertPlacementStep(WorldPlacement Placement) : TransactionStep;
-    public sealed record RemovePlacementStep(string Id) : TransactionStep;
-    public sealed record PoseStep(
-        string Key,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SpawnPoint = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Position = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float YawDegrees = 0f,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float PitchDegrees = 0f,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float RollDegrees = 0f
-    ) : TransactionStep;
-    public sealed record EmitCueStep(string Name, string? Payload = null, string? Key = null) : TransactionStep;
-    public sealed record SetBodyVerticalVelocityStep(string Key, decimal Velocity) : TransactionStep;
-    public sealed record ScaleBodyVerticalVelocityStep(string Key, decimal Factor) : TransactionStep;
-    public sealed record ApplyBodyImpulseStep(string Key, DocumentVector3 BodyDirection, decimal Speed, decimal DurationSeconds) : TransactionStep;
-    public sealed record DesignateBodyStep(string Key, string Register, WorldBodyDesignationKind Kind, string? TargetKey = null) : TransactionStep;
-    public sealed record PaintFieldStep(string Field, int X, int Y, int Z, decimal Value, WorldFieldWriteOp Operation = WorldFieldWriteOp.Set, int Radius = 0) : TransactionStep;
-}
-
 /// <summary>How a rule-triggered body designation chooses its target.</summary>
 [JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldBodyDesignationKind>))]
 public enum WorldBodyDesignationKind : byte {

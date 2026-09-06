@@ -39,100 +39,7 @@ public static class ExpressionSpelling {
     /// (the 64-token ceiling still applies to what it parses to).</summary>
     public const int MaxLength = 4096;
 
-    private static readonly Dictionary<string, (int Arity, Func<ValueToken> Make)> Calls = new(comparer: StringComparer.Ordinal) {
-        ["min"] = (2, static () => new ValueToken.Min()),
-        ["max"] = (2, static () => new ValueToken.Max()),
-        ["clamp"] = (3, static () => new ValueToken.Clamp()),
-        ["abs"] = (1, static () => new ValueToken.Abs()),
-        ["sign"] = (1, static () => new ValueToken.Sign()),
-        ["popCount"] = (1, static () => new ValueToken.PopCount()),
-        ["leadingZeroCount"] = (1, static () => new ValueToken.LeadingZeroCount()),
-        ["trailingZeroCount"] = (1, static () => new ValueToken.TrailingZeroCount()),
-        ["lowestSetBit"] = (1, static () => new ValueToken.LowestSetBit()),
-        ["clearLowestSetBit"] = (1, static () => new ValueToken.ClearLowestSetBit()),
-        ["byteSwap"] = (1, static () => new ValueToken.ByteSwap()),
-        ["bitReverse"] = (1, static () => new ValueToken.BitReverse()),
-        ["replicationMask"] = (1, static () => new ValueToken.ReplicationMask()),
-        ["repeatBits"] = (2, static () => new ValueToken.RepeatBits()),
-        ["rotateLeft"] = (2, static () => new ValueToken.RotateLeft()),
-        ["rotateRight"] = (2, static () => new ValueToken.RotateRight()),
-        ["parallelBitExtract"] = (2, static () => new ValueToken.ParallelBitExtract()),
-        ["parallelBitDeposit"] = (2, static () => new ValueToken.ParallelBitDeposit()),
-        ["bitField"] = (3, static () => new ValueToken.BitField()),
-        ["bitInsert"] = (4, static () => new ValueToken.BitInsert()),
-        ["select"] = (3, static () => new ValueToken.Select()),
-        ["pair"] = (2, static () => new ValueToken.Pair()),
-        ["pairX"] = (1, static () => new ValueToken.PairX()),
-        ["pairY"] = (1, static () => new ValueToken.PairY()),
-        ["pairSwap"] = (1, static () => new ValueToken.PairSwap()),
-        ["pairMax"] = (1, static () => new ValueToken.PairMax()),
-        ["pairMin"] = (1, static () => new ValueToken.PairMin()),
-        ["pairSum"] = (1, static () => new ValueToken.PairSum()),
-        ["pairDifference"] = (1, static () => new ValueToken.PairDifference()),
-        ["pairTranslate"] = (2, static () => new ValueToken.PairTranslate()),
-        ["pairScale"] = (2, static () => new ValueToken.PairScale()),
-        ["morton"] = (2, static () => new ValueToken.Morton()),
-        ["mortonX"] = (1, static () => new ValueToken.MortonX()),
-        ["mortonY"] = (1, static () => new ValueToken.MortonY()),
-        ["hilbert"] = (3, static () => new ValueToken.Hilbert()),
-        ["hilbertX"] = (2, static () => new ValueToken.HilbertX()),
-        ["hilbertY"] = (2, static () => new ValueToken.HilbertY()),
-        ["hex"] = (2, static () => new ValueToken.HexIndex()),
-        ["hexQ"] = (1, static () => new ValueToken.HexQ()),
-        ["hexR"] = (1, static () => new ValueToken.HexR()),
-        ["hexRadius"] = (1, static () => new ValueToken.HexRadius()),
-        ["hexEuclideanSquared"] = (1, static () => new ValueToken.HexEuclideanSquared()),
-        ["hexDistance"] = (2, static () => new ValueToken.HexDistance()),
-        ["hexNeighbor"] = (2, static () => new ValueToken.HexNeighbor()),
-        ["hexRotate"] = (2, static () => new ValueToken.HexRotate()),
-        ["hexMirror"] = (1, static () => new ValueToken.HexMirror()),
-        ["hexSwap"] = (1, static () => new ValueToken.HexSwap()),
-        ["hexAdd"] = (2, static () => new ValueToken.HexAdd()),
-        ["hexSubtract"] = (2, static () => new ValueToken.HexSubtract()),
-        ["hexMultiply"] = (2, static () => new ValueToken.HexMultiply()),
-        ["hexScale"] = (2, static () => new ValueToken.HexScale()),
-        ["hexTranslate"] = (3, static () => new ValueToken.HexTranslate()),
-        ["layer"] = (4, static () => new ValueToken.Layer()),
-        ["layerOffset"] = (4, static () => new ValueToken.LayerOffset()),
-        ["layerStart"] = (4, static () => new ValueToken.LayerStart()),
-        ["layerSize"] = (4, static () => new ValueToken.LayerSize()),
-        ["sqrt"] = (1, static () => new ValueToken.SquareRoot()),
-        ["sin"] = (1, static () => new ValueToken.Sine()),
-        ["cos"] = (1, static () => new ValueToken.Cosine()),
-        ["square"] = (2, static () => new ValueToken.SquareIndex()),
-        ["squareX"] = (1, static () => new ValueToken.SquareX()),
-        ["squareY"] = (1, static () => new ValueToken.SquareY()),
-        ["squareRadius"] = (1, static () => new ValueToken.SquareRadius()),
-        ["squareLength"] = (1, static () => new ValueToken.SquareLength()),
-        ["squareEuclideanSquared"] = (1, static () => new ValueToken.SquareEuclideanSquared()),
-        ["squareDistance"] = (2, static () => new ValueToken.SquareDistance()),
-        ["squareChebyshev"] = (2, static () => new ValueToken.SquareChebyshev()),
-        ["squareNeighbor"] = (2, static () => new ValueToken.SquareNeighbor()),
-        ["squareRotate"] = (2, static () => new ValueToken.SquareRotate()),
-        ["squareMirror"] = (1, static () => new ValueToken.SquareMirror()),
-        ["squareSwap"] = (1, static () => new ValueToken.SquareSwap()),
-        ["squareAdd"] = (2, static () => new ValueToken.SquareAdd()),
-        ["squareSubtract"] = (2, static () => new ValueToken.SquareSubtract()),
-        ["squareMultiply"] = (2, static () => new ValueToken.SquareMultiply()),
-        ["squareScale"] = (2, static () => new ValueToken.SquareScale()),
-        ["squareTranslate"] = (3, static () => new ValueToken.SquareTranslate()),
-        ["gcd"] = (2, static () => new ValueToken.GreatestCommonDivisor()),
-        ["lcm"] = (2, static () => new ValueToken.LeastCommonMultiple()),
-        ["mod"] = (2, static () => new ValueToken.FloorModulo()),
-        ["cycleForward"] = (3, static () => new ValueToken.CycleForward()),
-        ["cycleDistance"] = (3, static () => new ValueToken.CycleDistance()),
-        ["smallestMissing"] = (1, static () => new ValueToken.SmallestMissing()),
-        ["isPrime"] = (1, static () => new ValueToken.IsPrime()),
-        ["prime"] = (1, static () => new ValueToken.Prime()),
-        ["choose"] = (2, static () => new ValueToken.Choose()),
-        ["factorial"] = (1, static () => new ValueToken.Factorial()),
-        ["subsetRank"] = (2, static () => new ValueToken.SubsetRank()),
-        ["subsetAt"] = (3, static () => new ValueToken.SubsetAt()),
-        ["subsetMember"] = (4, static () => new ValueToken.SubsetMember()),
-        ["arrangementRank"] = (2, static () => new ValueToken.ArrangementRank()),
-        ["arrangementAt"] = (2, static () => new ValueToken.ArrangementAt()),
-        ["arrangementMember"] = (3, static () => new ValueToken.ArrangementMember()),
-    };
+    private static IReadOnlyDictionary<string, ExpressionOperator> Calls => ExpressionOperators.Calls;
 
     /// <summary>Parses an infix spelling to its postfix token list.</summary>
     /// <param name="text">The spelling.</param>
@@ -312,10 +219,8 @@ public static class ExpressionSpelling {
         if (BinaryOperator(token: token) is { } symbol) {
             return Pop(stack, 2) is { } operands ? new Binary(Operator: symbol, Left: operands[0], Right: operands[1]) : null;
         }
-        foreach (var (name, (arity, make)) in Calls) {
-            if (make().GetType() == token.GetType()) {
-                return Pop(stack, arity) is { } arguments ? new Call(Name: name, Arguments: arguments, Names: []) : null;
-            }
+        if (ExpressionOperators.Find(token) is { Name: { } name } descriptor) {
+            return Pop(stack, descriptor.Arity) is { } arguments ? new Call(Name: name, Arguments: arguments, Names: []) : null;
         }
         return null;
     }
@@ -331,46 +236,8 @@ public static class ExpressionSpelling {
         return result;
     }
 
-    private static string? BinaryOperator(ValueToken token) => token switch {
-        ValueToken.Add => "+",
-        ValueToken.Subtract => "-",
-        ValueToken.Multiply => "*",
-        ValueToken.Divide => "/",
-        ValueToken.Modulo => "%",
-        ValueToken.BitAnd => "&",
-        ValueToken.BitOr => "|",
-        ValueToken.BitXor => "^",
-        ValueToken.ShiftLeft => "<<",
-        ValueToken.ShiftRight => ">>",
-        ValueToken.ShiftRightLogical => ">>>",
-        ValueToken.Equal => "==",
-        ValueToken.NotEqual => "!=",
-        ValueToken.Less => "<",
-        ValueToken.LessOrEqual => "<=",
-        ValueToken.Greater => ">",
-        ValueToken.GreaterOrEqual => ">=",
-        _ => null,
-    };
-
-    private static ValueToken BinaryToken(string symbol) => symbol switch {
-        "+" => new ValueToken.Add(),
-        "-" => new ValueToken.Subtract(),
-        "*" => new ValueToken.Multiply(),
-        "/" => new ValueToken.Divide(),
-        "%" => new ValueToken.Modulo(),
-        "&" => new ValueToken.BitAnd(),
-        "|" => new ValueToken.BitOr(),
-        "^" => new ValueToken.BitXor(),
-        "<<" => new ValueToken.ShiftLeft(),
-        ">>" => new ValueToken.ShiftRight(),
-        ">>>" => new ValueToken.ShiftRightLogical(),
-        "==" => new ValueToken.Equal(),
-        "!=" => new ValueToken.NotEqual(),
-        "<" => new ValueToken.Less(),
-        "<=" => new ValueToken.LessOrEqual(),
-        ">" => new ValueToken.Greater(),
-        _ => new ValueToken.GreaterOrEqual(),
-    };
+    private static string? BinaryOperator(ValueToken token) => ExpressionOperators.Find(token)?.Symbol;
+    private static ValueToken BinaryToken(string symbol) => ExpressionOperators.Binary(symbol);
 
     // Binding strength, C's order: the ternary is loosest, a primary tightest.
     private static int Level(string symbol) => symbol switch {

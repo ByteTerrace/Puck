@@ -9,14 +9,12 @@ public sealed class WorldRuleEffectRunLawTests {
     private static WorldStateRow Slot(string name, long value, long max) =>
         new(CellName.Parse(name), CellKind.Int, Min: 0, Max: max, Cells: [new StateCell(WorldStateRow.SlotKey, value)]);
     private static ActionEffect.SetState Set(string state, params ValueToken[] tokens) => new(State: state, Expression: new ValueExpression(tokens));
-    private static TransactionStep.SetCell Step(string state, params ValueToken[] tokens) => new(State: state, Expression: new ValueExpression(tokens));
     private static ValueToken[] Tz(string row) => [new ValueToken.State(row), new ValueToken.TrailingZeroCount()];
     private static long Value(WorldFixture fixture, string row) =>
         StateRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
 
     private static WorldDefinition Document(long capturedMax, bool asTransaction) {
         ActionEffect[] writes = [Set("fromCell", Tz("ownVac")), Set("toCell", Tz("ownOcc")), Set("capturedCell", Tz("otherVac"))];
-        TransactionStep[] steps = [Step("fromCell", Tz("ownVac")), Step("toCell", Tz("ownOcc")), Step("capturedCell", Tz("otherVac"))];
         return Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [
                 Slot("ownVac", 0L, 65535), Slot("ownOcc", 0L, 65535), Slot("otherVac", 0L, 65535),
@@ -24,7 +22,7 @@ public sealed class WorldRuleEffectRunLawTests {
             ]),
             Rules = [
                 new WorldRule(CellName.Parse("masks"), [Set("ownVac", new ValueToken.Constant(1m)), Set("ownOcc", new ValueToken.Constant(4m))]),
-                new WorldRule(CellName.Parse("cells"), asTransaction ? [new ActionEffect.Transaction(Effects: steps)] : writes),
+                new WorldRule(CellName.Parse("cells"), asTransaction ? [new ActionEffect.Transaction(Effects: writes)] : writes),
             ],
         };
     }

@@ -22,37 +22,13 @@ public static partial class ExpressionArithmetic {
     /// <summary>Returns how many values a function token consumes, or 0 for an operator token the arithmetic core
     /// evaluates itself.</summary>
     /// <param name="operation">The operation.</param>
-    public static int FunctionArity(ExpressionOp operation) => operation switch {
-        ExpressionOp.PairX or ExpressionOp.PairY or ExpressionOp.PairSwap or ExpressionOp.PairMax or ExpressionOp.PairMin or ExpressionOp.PairSum or ExpressionOp.PairDifference
-            or ExpressionOp.MortonX or ExpressionOp.MortonY
-            or ExpressionOp.HexQ or ExpressionOp.HexR or ExpressionOp.HexRadius or ExpressionOp.HexEuclideanSquared or ExpressionOp.HexMirror or ExpressionOp.HexSwap
-            or ExpressionOp.SquareRoot or ExpressionOp.Sine or ExpressionOp.Cosine => 1,
-        ExpressionOp.Pair or ExpressionOp.PairTranslate or ExpressionOp.PairScale or ExpressionOp.Morton or ExpressionOp.HilbertX or ExpressionOp.HilbertY
-            or ExpressionOp.HexIndex or ExpressionOp.HexDistance or ExpressionOp.HexNeighbor or ExpressionOp.HexRotate or ExpressionOp.HexAdd or ExpressionOp.HexSubtract or ExpressionOp.HexMultiply or ExpressionOp.HexScale => 2,
-        ExpressionOp.Hilbert or ExpressionOp.HexTranslate => 3,
-        ExpressionOp.Layer or ExpressionOp.LayerOffset or ExpressionOp.LayerStart or ExpressionOp.LayerSize => 4,
-        ExpressionOp.SquareX or ExpressionOp.SquareY or ExpressionOp.SquareRadius or ExpressionOp.SquareLength or ExpressionOp.SquareEuclideanSquared or ExpressionOp.SquareMirror or ExpressionOp.SquareSwap
-            or ExpressionOp.SmallestMissing or ExpressionOp.IsPrime or ExpressionOp.Prime => 1,
-        ExpressionOp.SquareIndex or ExpressionOp.SquareDistance or ExpressionOp.SquareChebyshev or ExpressionOp.SquareNeighbor or ExpressionOp.SquareRotate or ExpressionOp.SquareAdd
-            or ExpressionOp.SquareSubtract or ExpressionOp.SquareMultiply or ExpressionOp.SquareScale
-            or ExpressionOp.GreatestCommonDivisor or ExpressionOp.LeastCommonMultiple or ExpressionOp.FloorModulo => 2,
-        ExpressionOp.SquareTranslate or ExpressionOp.CycleForward or ExpressionOp.CycleDistance => 3,
-        ExpressionOp.Factorial => 1,
-        ExpressionOp.Choose or ExpressionOp.SubsetRank or ExpressionOp.ArrangementRank or ExpressionOp.ArrangementAt => 2,
-        ExpressionOp.SubsetAt or ExpressionOp.ArrangementMember => 3,
-        ExpressionOp.SubsetMember => 4,
-        _ => 0,
-    };
+    public static int FunctionArity(ExpressionOp operation) => ExpressionOperators.Find(operation) is { Function: true } descriptor ? descriptor.Arity : 0;
 
     /// <summary>Gets a value indicating whether a function token is admitted in expressions of <paramref name="kind"/>:
     /// <c>sqrt</c> in both kinds, <c>sin</c>/<c>cos</c> in fixed only, every other function in int only.</summary>
     /// <param name="operation">The operation.</param>
     /// <param name="kind">The expression kind.</param>
-    public static bool FunctionAdmits(ExpressionOp operation, CellKind kind) => operation switch {
-        ExpressionOp.SquareRoot => kind is CellKind.Int or CellKind.Fixed,
-        ExpressionOp.Sine or ExpressionOp.Cosine => kind == CellKind.Fixed,
-        _ => kind == CellKind.Int,
-    };
+    public static bool FunctionAdmits(ExpressionOp operation, CellKind kind) => ExpressionOperators.Find(operation) is { Function: true } descriptor && descriptor.Admits(kind);
 
     /// <summary>Evaluates a function token over its arguments. A domain fault (a negative index, a component past the
     /// cell's capacity, an order outside 1..31, a layer sequence constant outside its range) fails the expression
@@ -67,6 +43,12 @@ public static partial class ExpressionArithmetic {
             return false;
         }
 
+        return TryValidatedFunction(operation, kind, arguments, out value);
+    }
+
+    // The compiler proved kind and arity; dynamic arithmetic domains are still checked below.
+    internal static bool TryValidatedFunction(ExpressionOp operation, CellKind kind, ReadOnlySpan<long> arguments, out long value) {
+        value = 0L;
         try {
             switch (operation) {
                 case ExpressionOp.SquareRoot:

@@ -191,43 +191,11 @@ public sealed class ReductionOperand : OperandFact {
         if (Reduce == StateReduceOp.ArrangementRank) {
             return RuleFact.Finite(value: StateReader.ArrangementRank(store: reader.Store, zone: declared), kind: ValueKind);
         }
-        if (FilterRow is null && Range is null) {
-            return RuleFact.Finite(value: StateReader.ReduceRaw(store: reader.Store, row: declared, op: Reduce, tick: reader.Tick), kind: ValueKind);
+        StateRow? filter = null;
+        if (FilterRow is not null && !StateReader.TryReadHandle(reader.Store, reader.Catalog, FilterHandle, null, reader.Tick, out filter, out _, out _)) {
+            return RuleFact.Finite(0L, ValueKind);
         }
-
-        var hasValue = false;
-        var accumulator = 0L;
-        var count = reader.Store.CellCount(row: declared);
-        for (var index = 0; index < count; index++) {
-            if (!reader.Store.TryKeyAt(row: declared, index: index, key: out var key)) {
-                continue;
-            }
-            if (FilterRow is not null && (
-                !StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: FilterHandle, key: key.Value, tick: reader.Tick, row: out _, rawValue: out var filterRaw, text: out _) ||
-                (filterRaw.GetValueOrDefault() == 0L)
-            )) {
-                continue;
-            }
-            var raw = Range is not null || Reduce != StateReduceOp.Count
-                ? StateReader.LiveAt(reader.Store, declared, index, reader.Tick) : 0L;
-            if (Range is { } range && (raw < range.Lower || raw > range.Upper)) {
-                continue;
-            }
-            if (Reduce == StateReduceOp.Count) {
-                accumulator++;
-                continue;
-            }
-            accumulator = (!hasValue
-                ? raw
-                : Reduce switch {
-                    StateReduceOp.Sum => unchecked(accumulator + raw),
-                    StateReduceOp.Max => Math.Max(accumulator, raw),
-                    _ => Math.Min(accumulator, raw),
-                }
-            );
-            hasValue = true;
-        }
-        return RuleFact.Finite(value: accumulator, kind: ValueKind);
+        return RuleFact.Finite(StateReader.ReduceRaw(reader.Store, declared, Reduce, reader.Tick, filter, Range), ValueKind);
     }
     /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) => (RowFrom?.Table.Capacity ?? context.RowCapacity(name: Row)) * (Range is null ? 1L : 3L);

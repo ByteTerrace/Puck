@@ -291,7 +291,8 @@ the layer family over `LayerSequence` (`layer`, `layerOffset`, `layerStart`, `la
 `(index-or-layer, start, step, seed)` — `layer(i, 6, 6, 1)` is `hexRadius(i)`); and `sqrt` (both kinds),
 a keyed read is `row[key]` (a bare name or number is the literal key), `row[other[k]]` (a `$cell:` indirection), or
 `row[from + 1]` / `row[(from)]` (any other expression as the key — an implicit int binding evaluated before the
-gate, traced as `$key<n>`, one of the rule's bindings; parenthesize a bare name to read its row's value);
+gate, traced as `$key<n>`, one of the rule's bindings; identical expression-key spellings share a binding within
+the same binding scope, never across rules or pattern-local scopes; parenthesize a bare name to read its row's value);
 `sin`, `cos` (fixed radians). Every other function is int-only, and a domain fault fails the expression the way
 an overflow does — and is counted: a faulting binding, effect, or `compareValue` conjunct reports `Arithmetic`
 in `world.rule.failures` (narrated once per category on stderr) and `world.rule.trace` shows the conjunct as
@@ -310,7 +311,10 @@ integer literal, a `$cell:` indirection, `$each`, or an int `$bind:`; a missing
 dynamic key is a `TableKeyMissing` refusal, never a value. Every top-level
 state effect is its own boundary; only a `transaction` groups effects
 atomically, and it journals once (a `Batch` mutation whose replay composes its
-members in order), so three `boardCombine`s in one transaction are one entry. `$symmetry:<function>[:<argument>]:<row>`
+members in order), so three `boardCombine`s in one transaction are one entry. Branches use ordinary `ActionEffect`
+records; `EffectFamily.AllowsTransaction` opts registered arms in, while the compiler rejects nesting and `save`.
+`BoardCombination` owns the compiler/frame/live board operation contract; `copy` preserves all source values,
+including its empty value when the target's differs. `$symmetry:<function>[:<argument>]:<row>`
 reads a cell holding a symmetry-lattice node (0..239) through `ring`, `antipode`,
 `canonicalRay`, `cycle:<steps>`, `reflect:<node|cell:<row>[.<key>]>`,
 `orthogonal:<node|cell:…>` (1/0), `innerProduct:<node|cell:…>` (−2..2; 1 is a
@@ -480,14 +484,18 @@ discriminators: a row carrying both, or a `value` beside a `capacity`
 Omitting both is a declared-but-empty row.
 
 Runtime rule operands compile world-row names to catalog-bound handles. Keyed
-reductions and arg-extrema resolve the row once and evaluate each candidate once,
-so aggregate cost is linear in cell count. Rule numeric literals are exact JSON
+reads return stored values and authored behavior metadata together. Reductions
+share one accumulator; sparse filters build a read-local ordinal index, and dense
+frame filters retain topology key lookup. Unfiltered count stays constant-time. Rule numeric literals are exact JSON
 decimal values (not binary32); integer values beyond 2^24 retain their low bits,
 and fixed literals lower through the invariant Q48.16 parser. Contiguous state
 effects in one rule are preflighted as one candidate and apply atomically. A
 value-only `UpsertStateCell` uses targeted cell validation/install; declaration
-changes still use whole-document validation and rebuild the affected compiled
-surfaces.
+changes still use whole-document validation. `WorldRuleCompilation` carries that
+validation's rules, interactions, and tables directly into mutation/reload install
+for the exact unchanged definition; derived-board recomposition invalidates the
+receipt when it produces another definition. Do not cache programs by catalog
+shape or share evaluator latches with the compilation result.
 
 An advancing trait's compiled rational lives in a weak external cache, never in
 record equality. Dynamics `y0`/`v0` are always raw Q48.16 continuous-state bits,
@@ -1318,6 +1326,8 @@ avoids per-moving-tick epoch writes; `$physics:quiescent` is bool-kind, so an in
 conditional expression cannot combine its gates.
 Periodic expression masks use `replicationMask(width)` and `repeatBits(pattern, width)`;
 [Puck.State](../../../../src/Puck.State/README.md) owns their Int-only domain and refusal contract.
+`Puck.State/ExpressionOperators.cs` owns context-free operator spelling, arity,
+type signature, and cost; keep payload-bearing literal/state/board lowering specialized.
 The compiler folds successful constant subexpressions after full validation,
 using the runtime evaluator; never elide a live read or a refusing conditional branch.
 Chess's fixed transit masks use hexadecimal base patterns and `byteSwap` for rank reflection.

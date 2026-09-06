@@ -6,6 +6,30 @@ namespace Puck.State.Tests;
 /// <summary>The evaluator runs authoritative rules over a bare row list: a host with no world, no bodies, and no
 /// document — the card game or turn-based resolver the library exists for.</summary>
 public sealed class RuleEvaluatorLawTests {
+    private sealed class CountingOperand(RuleFact fact) : OperandFact(CellKind.Int) {
+        public int Reads { get; private set; }
+        public override RuleFact Read(IRuleReader reader) { Reads++; return fact; }
+        public override long Cost(RuleCompileContext context) => 1;
+    }
+
+    [Theory]
+    [InlineData(StateWriteKind.Set, false)]
+    [InlineData(StateWriteKind.Add, false)]
+    [InlineData(StateWriteKind.Set, true)]
+    [InlineData(StateWriteKind.Add, true)]
+    public void ACopyReadsItsSourceOncePerPassAndStillSkipsAbsentAndForever(StateWriteKind write, bool transaction) {
+        foreach (var fact in new[] { RuleFact.Finite(7, CellKind.Int), RuleFact.Absent(CellKind.Int), RuleFact.Forever(CellKind.Int) }) {
+            var (host, evaluator, _, _) = Arrange([], [Slot("target", 2)]);
+            var source = new CountingOperand(fact);
+            var effect = new WriteEffect("target", StateRow.SlotKey.Value, null, write, 0, source, null, null, "copy");
+            EffectFact submitted = transaction ? new TransactionEffect([effect], [], "atomic copy") : effect;
+            Assert.Equal(!fact.IsAbsent && !fact.IsForever, evaluator.FireEffects([submitted], "copy", 1, 1));
+            Assert.Equal(transaction ? 1 : 2, source.Reads);
+            Assert.Equal(fact.IsAbsent || fact.IsForever ? 2 : write == StateWriteKind.Set ? 7 : 9, host.Cell("target"));
+            Assert.Empty(evaluator.Diagnostics());
+        }
+    }
+
     // A host over an in-memory row list. Its door replaces one cell per upsert and refuses every write to a row named
     // "locked", so a transaction has something to fail on; a preflight scope is a snapshot of the (immutable) row
     // list.
@@ -232,8 +256,8 @@ public sealed class RuleEvaluatorLawTests {
     public void ARefusedTransactionRollsBackItsEarlierStepsAndFiresOnFailure() {
         var (host, evaluator, rules, latch) = Arrange(
             rules: [R(name: "trade", gate: null, effects: new ActionEffect.Transaction(
-                Effects: [new TransactionStep.AddCell(State: "gold", Value: 5m), new TransactionStep.SetCell(State: "locked", Value: 1m)],
-                OnFailure: [new TransactionStep.AddCell(State: "refunds", Value: 1m)]
+                Effects: [new ActionEffect.AddState(State: "gold", Value: 5m), new ActionEffect.SetState(State: "locked", Value: 1m)],
+                OnFailure: [new ActionEffect.AddState(State: "refunds", Value: 1m)]
             ))],
             rows: [Slot(name: "gold", value: 0L), Slot(name: "locked", value: 0L), Slot(name: "refunds", value: 0L)]
         );
@@ -255,7 +279,7 @@ public sealed class RuleEvaluatorLawTests {
     public void ACommittedTransactionInstallsOnce() {
         var (host, evaluator, rules, latch) = Arrange(
             rules: [R(name: "deal", gate: null, effects: new ActionEffect.Transaction(
-                Effects: [new TransactionStep.AddCell(State: "gold", Value: 5m), new TransactionStep.AddCell(State: "cards", Value: 2m), new TransactionStep.SetCell(State: "turn", Value: 1m)]
+                Effects: [new ActionEffect.AddState(State: "gold", Value: 5m), new ActionEffect.AddState(State: "cards", Value: 2m), new ActionEffect.SetState(State: "turn", Value: 1m)]
             ))],
             rows: [Slot(name: "gold", value: 0L), Slot(name: "cards", value: 0L), Slot(name: "turn", value: 0L)]
         );
@@ -328,15 +352,15 @@ public sealed class RuleEvaluatorLawTests {
         );
         var (host, evaluator, rules, latch) = Arrange(rules: [rule], rows: [Keyed(name: "board", cells: [("2", 6L), ("3", 7L), ("1", 40L)]), Slot(name: "from", value: 2L), Slot(name: "next", value: 0L)]);
 
-        Assert.Equal(4, rules[0].Bindings!.Length);
-        Assert.Equal(["$key0", "$key1", "$key2", "$key3"], rules[0].Bindings!.Select(static b => b.Name));
+        Assert.Equal(3, rules[0].Bindings!.Length);
+        Assert.Equal(["$key0", "$key1", "$key2"], rules[0].Bindings!.Select(static b => b.Name));
         Assert.True(evaluator.ArmTrace(rule: "step", evaluations: 1));
         Assert.True(evaluator.Evaluate(rules: rules, latch: latch, tick: 1UL, stepTicks: 1UL));
-        // board[3] + board[board[2] - 5] = 7 + board[1] = 47; the gate key, the two effect keys, and the nested read each bind
+        // board[3] + board[board[2] - 5] = 47; gate and effect share their key, followed by the nested dependency and its reader.
         Assert.Equal(47L, host.Cell(row: "next"));
         Assert.Contains("$key0=3", evaluator.DescribeTrace(verb: "trace")!, StringComparison.Ordinal);
-        Assert.Contains("$key2=2", evaluator.DescribeTrace(verb: "trace")!, StringComparison.Ordinal);
-        Assert.Contains("$key3=1", evaluator.DescribeTrace(verb: "trace")!, StringComparison.Ordinal);
+        Assert.Contains("$key1=2", evaluator.DescribeTrace(verb: "trace")!, StringComparison.Ordinal);
+        Assert.Contains("$key2=1", evaluator.DescribeTrace(verb: "trace")!, StringComparison.Ordinal);
 
         // The infix spelling round-trips: a key expression prints back as it was written.
         Assert.True(ExpressionSpelling.TryParse(text: "board[from + 1]", tokens: out var tokens, error: out _));

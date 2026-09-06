@@ -47,21 +47,15 @@ public abstract class KeyFamily {
 }
 
 /// <summary>One authored effect arm a document project owns: the record type and its <c>$type</c> discriminator
-/// (registered onto <see cref="ActionEffect"/>'s polymorphism at serializer resolution), the transaction step that
-/// mirrors it (if any), and its compile.</summary>
+/// (registered onto <see cref="ActionEffect"/>'s polymorphism at serializer resolution), its transaction admission, and its compile.</summary>
 public abstract class EffectFamily {
     /// <summary>Gets the <see cref="ActionEffect"/>-derived record type.</summary>
     public abstract Type EffectType { get; }
     /// <summary>Gets the <c>$type</c> discriminator the record is spelled under.</summary>
     public abstract string Discriminator { get; }
-    /// <summary>Gets the <see cref="TransactionStep"/>-derived record type mirroring the effect inside a transaction,
-    /// or <see langword="null"/> when the effect has no atomic step.</summary>
-    public virtual Type? StepType => null;
-    /// <summary>Gets the step's <c>$type</c> discriminator, or <see langword="null"/>.</summary>
-    public virtual string? StepDiscriminator => null;
-    /// <summary>Lifts a transaction step of <see cref="StepType"/> to the effect it mirrors.</summary>
-    /// <param name="step">The step.</param>
-    public virtual ActionEffect Lift(TransactionStep step) => throw new NotSupportedException(message: $"'{Discriminator}' has no transaction step");
+    /// <summary>Whether this effect has a bounded rollback representation and may appear in a transaction.
+    /// Families opt in explicitly; effects with irreversible external work must remain excluded.</summary>
+    public virtual bool AllowsTransaction => false;
     /// <summary>Compiles an authored effect of <see cref="EffectType"/>.</summary>
     /// <param name="effect">The effect.</param>
     /// <param name="ruleName">The rule being compiled.</param>
@@ -130,20 +124,6 @@ public sealed class RuleVocabulary {
         return null;
     }
 
-    /// <summary>Finds the effect family whose transaction step an authored step's type is, or <see langword="null"/>.</summary>
-    /// <param name="step">The step.</param>
-    public EffectFamily? StepOf(TransactionStep step) {
-        var type = step.GetType();
-
-        foreach (var family in Effects) {
-            if (family.StepType == type) {
-                return family;
-            }
-        }
-
-        return null;
-    }
-
     /// <summary>Finds the predicate family owning an authored predicate's type, or <see langword="null"/>.</summary>
     /// <param name="predicate">The predicate.</param>
     public PredicateFamily? PredicateOf(ActionPredicate predicate) {
@@ -160,7 +140,7 @@ public sealed class RuleVocabulary {
 
     /// <summary>Appends the registered arms to a resolved polymorphic base's derived-type list — the
     /// <see cref="JsonTypeInfo"/> modifier a document project's serializer options install so
-    /// <see cref="ActionEffect"/>, <see cref="ActionPredicate"/>, and <see cref="TransactionStep"/> read and write
+    /// <see cref="ActionEffect"/> and <see cref="ActionPredicate"/> read and write
     /// the registered arms under their discriminators.</summary>
     /// <param name="typeInfo">The type info being resolved.</param>
     public void ExtendJson(JsonTypeInfo typeInfo) {
@@ -172,12 +152,6 @@ public sealed class RuleVocabulary {
         if (typeInfo.Type == typeof(ActionEffect)) {
             foreach (var family in Effects) {
                 polymorphism.DerivedTypes.Add(item: new JsonDerivedType(derivedType: family.EffectType, typeDiscriminator: family.Discriminator));
-            }
-        } else if (typeInfo.Type == typeof(TransactionStep)) {
-            foreach (var family in Effects) {
-                if ((family.StepType is { } stepType) && (family.StepDiscriminator is { } stepDiscriminator)) {
-                    polymorphism.DerivedTypes.Add(item: new JsonDerivedType(derivedType: stepType, typeDiscriminator: stepDiscriminator));
-                }
             }
         } else if (typeInfo.Type == typeof(ActionPredicate)) {
             foreach (var family in Predicates) {

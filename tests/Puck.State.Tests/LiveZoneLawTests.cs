@@ -77,6 +77,54 @@ public sealed class LiveZoneLawTests {
     }
 
     [Fact]
+    public void RepeatedExpressionKeysShareCapacityAndRefreshForEachEvaluation() {
+        var (host, context, rows) = Build();
+        var repeated = new ActionPredicate.All([.. Enumerable.Range(0, 17).Select(_ =>
+            Cmp("$reduce:count:$zones[cards[beta] + 0]", ActionStateComparison.GreaterOrEqual, 0))]);
+        var rules = RuleCompiler.CompileAll([
+            R("repeat", repeated, new ActionEffect.SetState("cards", Key: "alpha", Expression: ValueExpression.Parse("$reduce:count:$zones[cards[beta] + 0]"))),
+            R("next", null, new ActionEffect.SetState("cards", Key: "gamma", Expression: ValueExpression.Parse("$reduce:count:$zones[cards[beta] + 0]"))),
+        ], context);
+        Assert.All(rules, rule => Assert.Single(rule.Bindings!));
+        Seed(host, "beta", 0);
+        Assert.True(host.Judge(rules, 2));
+        Assert.Equal(3, Stored(host, rows, "cards", "alpha"));
+        Assert.Equal(3, Stored(host, rows, "cards", "gamma"));
+        Seed(host, "beta", 1);
+        Assert.True(host.Judge(rules, 3));
+        Assert.Equal(0, Stored(host, rows, "cards", "alpha"));
+        Assert.Equal(0, Stored(host, rows, "cards", "gamma"));
+    }
+
+    [Fact]
+    public void DistinctExpressionKeysStillRespectTheBindingCeiling() {
+        var (_, context, _) = Build();
+        var gate = new ActionPredicate.All([.. Enumerable.Range(0, 17).Select(index =>
+            Cmp($"$reduce:count:$zones[cards[beta] + {index}]", ActionStateComparison.GreaterOrEqual, 0))]);
+        Assert.Throws<RuleException>(() => RuleCompiler.CompileAll([R("distinct", gate, new ActionEffect.SetState("cards", Key: "alpha", Value: 1))], context));
+    }
+
+    [Fact]
+    public void NestedKeyDependenciesCannotOverrunTheBindingCeiling() {
+        var (_, context, _) = Build();
+        var rule = R("nested", null, new ActionEffect.SetState("cards", Key: "alpha", Expression: ValueExpression.Parse("cards[cards[cards[beta] + 0] + 0]"))) with {
+            Bindings = [.. Enumerable.Range(0, 15).Select(index => new RuleBinding(Name($"b{index}"), CellKind.Int, ValueExpression.Parse("0")))],
+        };
+        Assert.Throws<RuleException>(() => RuleCompiler.CompileAll([rule], context));
+    }
+
+    [Fact]
+    public void ASharedKeyCannotMakeARuleBindingVisibleInsideAPattern() {
+        var (_, context, _) = Build();
+        RuleCompiler.BeginScope(R("scope", null, new ActionEffect.SetState("cards", Key: "alpha", Value: 1)) with { ForEach = "cards" }, context);
+        _ = RuleCompiler.CompileKeyExpression("cards[$each] + 0", "scope", context, "key");
+        var pattern = new PatternRow(Name("bad"), CellKind.Int, [new PatternSymbol(Name("up"), 1, 1)],
+            new PatternNode.Symbol("up"), Value: ValueExpression.Parse("cards[cards[$each] + 0]"));
+        Assert.False(RuleCompiler.TryCompilePatternValue(context, pattern, "cards", "scope", out _, out _));
+        context.ClearScope();
+    }
+
+    [Fact]
     public void ALiveZoneWordMatchesAndAnAbsentZoneRefusesTheExpression() {
         var (host, context, rows) = Build();
         var rules = RuleCompiler.CompileAll([

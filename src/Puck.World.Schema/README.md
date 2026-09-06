@@ -212,7 +212,10 @@ mutation per operation: `copy`, `fill`, `clear`, `and`, `or`, `xor`, `andNot`,
 `not`, `shift` (along a direction, the move `boardShift` makes), and `image`
 (through a point-group element, the move `boardImage` makes), every board over
 one topology; a cell is a member when its value is not its board's `empty`,
-members are written as `value`, and the rest read as empty. A 19×19 board's
+members are written as `value`, and the rest read as empty. `copy` instead
+preserves every source value, including the source's empty value when the
+target declares a different one. Frames and live mutations use the same
+`BoardCombination` kernel. A 19×19 board's
 attack map is three `boardCombine`s where an 8×8's is one expression. The same
 operation travels as the `TransformState` document mutation. A transform
 composes a new row and one journal entry — that is what a mutation is; the read
@@ -1438,6 +1441,14 @@ entry count and columns. A lookup prices as 2 plus the log of the entry count.
 
 ## The `rules` document — the per-body action primitive, one level up
 
+Validation can return a [WorldRuleCompilation](WorldRuleCompilation.cs) containing
+its rules, interactions, and pinned tables. Mutation and reload installation
+reuse this result for the exact unchanged definition. Derived-board recomposition
+that produces another definition forces a fresh compile. Rules, interactions,
+and table compilation share one context; a catalog's shape alone never licenses
+program reuse. Scalar and keyed behavior traits share field validation while
+retaining their distinct placement and exclusivity checks.
+
 `WorldRules.cs` holds the optional `rules` section. A `WorldRule` is
 `Puck.State`'s `Rule` (`Name, Gate, Effects, Mode, ForEach, Bindings`) plus the
 `Decision` only a world evaluates, over the same `ActionPredicate`, `ActionEffect`
@@ -1450,7 +1461,7 @@ fill draws, placement ordinals, body references). `WorldRuleVocabulary` is the
 one `RuleVocabulary` the world registers: an operand family for its reserved
 channels (`WorldRuleFacts` — bodies, distance, line of sight, screens, links,
 regions, the population, the music clock, `$board:cellOf`), one `EffectFamily`
-per world arm of `WorldEffect` with the `WorldTransactionStep` mirroring it,
+per world arm of `WorldEffect` with explicit transaction admission,
 the four `WorldPredicate` body-program arms (which refuse in rule scope), and
 the `$pair:` key. The same vocabulary's `ExtendJson` is what `WorldJsonVocabulary`
 installs so those arms read and write under their `$type` discriminators. A
@@ -1841,13 +1852,17 @@ C precedence over `+ - * / %`, `& | ^ ~`, `<< >> >>>`, `== != < <= > >=`, and
 direction)`, ...), a state read as its row name keyed `row[key]` — a bare name or number is the literal key,
 `row[other[k]]` reads the key live from another cell, and any other expression (`row[from + 1]`, or
 `row[(from)]` to read row `from`'s value as the key) compiles to an implicit int binding evaluated before the
-gate (traced as `$key<n>`, counted against the rule's binding ceiling) — (backquoted,
+gate (traced as `$key<n>`, counted against the rule's binding ceiling).
+Repeated identical expression-key spellings in the same binding scope share
+one implicit binding; declared bindings keep their names, and every evaluation
+recomputes its values. Row names are backquoted,
 `` `seat-1` ``, when the name is not a bare identifier; a `$`-channel carries
-its colons), a table read indexed the same way (`$table:moves:power[$bind:move]`
-is `$table:moves:power:$bind:move`), a key read from another cell as nested
-brackets (`buffs[minion[$each]]` is the `$cell:minion:$each` indirection — a
-two-hop join in one read), decimal or `0x` literals — or as the postfix `{ "tokens": [...] }`
-object. The string is syntax only: it parses to exactly the tokens an author
+its colons. A table read is indexed the same way (`$table:moves:power[$bind:move]`
+is `$table:moves:power:$bind:move`). Nested brackets read a key from another
+cell: `buffs[minion[$each]]` is the `$cell:minion:$each` indirection, a
+two-hop join in one read. Literals may be decimal or `0x` hexadecimal.
+The alternative spelling is a postfix `{ "tokens": [...] }` object.
+The string is syntax only: it parses to exactly the tokens an author
 could have written by hand (`ExpressionSpelling`, which lives with the
 token vocabulary, the opcode enum, the arithmetic, and the state transforms in
 `Puck.State`), the compiler proves and
@@ -1932,8 +1947,10 @@ combine state cells, draw generation, HUD/placement mutations, poses, cues, body
 effects, and field paints. The whole branch is preflighted against each preceding
 candidate before anything escapes; a refusal runs `onFailure` with no leaked cue,
 impulse, paint, or document write. Placement steps form the final suffix because
-they may rebuild the active population. Nested transactions and `save` remain
-structurally unavailable: persistence I/O cannot be rolled back.
+they may rebuild the active population. Branches use ordinary `ActionEffect`
+records, including text writes and expression-sourced history pushes. The
+compiler rejects nested transactions and `save`: persistence I/O cannot be
+rolled back. Registered effect families opt in through `AllowsTransaction`.
 `removeStateCell` lets the same transaction retire keyed membership cleanly.
 
 `emitCue` publishes a stable dotted token of at most 64 ASCII characters, an

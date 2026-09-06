@@ -160,14 +160,6 @@ public sealed partial class RuleEvaluator {
             current = storedPhase;
         }
 
-        // A live 'from' operand is read fresh every firing and converted to the destination row's own encoding; a
-        // literal keeps the value the compiler already converted once. A forever fact has no number to store, and an
-        // absent one names no cell — the copy silently does not fire, the same no-narration shape a level gate's own
-        // not-holding takes.
-        if ((write is WriteEffect { From: { } probe }) && (Read(operand: probe, tick: tick) is { IsForever: true } or { IsAbsent: true })) {
-            return false;
-        }
-
         var fault = ExpressionFault.None;
         long raw;
 
@@ -175,21 +167,12 @@ public sealed partial class RuleEvaluator {
             raw = -Math.Min(val1: current, val2: checked((long)stepTicks));
         } else if (write is ScheduleStateEffect schedule) {
             raw = ScheduleDueTick(tick: tick, delayTicks: schedule.DelayTicks, fault: out fault);
-        } else if (((WriteEffect)write).Expression is { } expression) {
-            raw = (TryEvaluateExpression(program: expression, kind: row.Kind, tick: tick, value: out var evaluated, fault: out fault) ? evaluated : 0L);
-        } else if (((WriteEffect)write).From is { } from) {
-            raw = Read(operand: from, tick: tick).ToRaw(kind: row.Kind);
-        } else {
-            raw = ((WriteEffect)write).RawValue;
+        } else if (!TryReadSource((WriteEffect)write, row.Kind, tick, out raw, out fault) && fault == ExpressionFault.None) {
+            return false;
         }
 
         if (fault != ExpressionFault.None) {
-            if (preflight) {
-                m_preflightRejected = true;
-            }
-            if (fault != ExpressionFault.TableKeyMissing) {
-                ReportRefusal(refusal: RuleEffectRefusal.Arithmetic, ruleName: ruleName, effect: effect, tick: tick, detail: DescribeFault(fault: fault));
-            }
+            RefuseSource(effect, ruleName, tick, preflight, fault);
 
             return false;
         }
@@ -226,32 +209,42 @@ public sealed partial class RuleEvaluator {
             return false;
         }
 
-        long raw;
-
-        if (effect.Expression is { } expression) {
-            if (!TryEvaluateExpression(program: expression, kind: row.Kind, tick: tick, value: out raw, fault: out var fault)) {
-                if (preflight) {
-                    m_preflightRejected = true;
-                }
-                if (fault != ExpressionFault.TableKeyMissing) {
-                    ReportRefusal(refusal: RuleEffectRefusal.Arithmetic, ruleName: ruleName, effect: effect, tick: tick, detail: DescribeFault(fault: fault));
-                }
-
-                return false;
+        if (!TryReadSource(effect, row.Kind, tick, out var raw, out var fault)) {
+            if (fault != ExpressionFault.None) {
+                RefuseSource(effect, ruleName, tick, preflight, fault);
             }
-        } else if (effect.From is { } from) {
-            var fact = Read(operand: from, tick: tick);
-
-            if (fact.IsForever || fact.IsAbsent) {
-                return false;
-            }
-
-            raw = fact.ToRaw(kind: row.Kind);
-        } else {
-            raw = effect.RawValue;
+            return false;
         }
 
         return Apply(effect: effect, ruleName: ruleName, mutation: new StateMutation.Apply(Transform: new StateTransform.Push(Row: row.Name.Value, Value: raw)), tick: tick, preflight: preflight);
+    }
+
+    // One source read per execution pass. Absence/forever skip a direct copy; expression faults remain diagnostic.
+    private bool TryReadSource(IValueSourcedEffect source, CellKind kind, ulong tick, out long raw, out ExpressionFault fault) {
+        fault = ExpressionFault.None;
+        if (source.Expression is { } expression) {
+            return TryEvaluateExpression(expression, kind, tick, out raw, out fault);
+        }
+        if (source.From is { } from) {
+            var fact = Read(from, tick);
+            raw = 0;
+            if (fact.IsAbsent || fact.IsForever) {
+                return false;
+            }
+            raw = fact.ToRaw(kind);
+        } else {
+            raw = source.RawValue;
+        }
+        return true;
+    }
+
+    private void RefuseSource(EffectFact effect, string ruleName, ulong tick, bool preflight, ExpressionFault fault) {
+        if (preflight) {
+            m_preflightRejected = true;
+        }
+        if (fault != ExpressionFault.TableKeyMissing) {
+            ReportRefusal(refusal: RuleEffectRefusal.Arithmetic, ruleName: ruleName, effect: effect, tick: tick, detail: DescribeFault(fault));
+        }
     }
 
     // A transaction preflights its branch under one host scope, then commits that scope as one mutation; the steps
