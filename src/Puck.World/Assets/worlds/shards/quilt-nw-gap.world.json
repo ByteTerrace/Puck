@@ -1,0 +1,14 @@
+{
+  "basis": "quilt-nw.world.json",
+  "documentId": "quilt-nw-gap",
+  "adjacencies": [
+    {
+      "name": "east",
+      "$drop": true
+    },
+    {
+      "name": "south",
+      "$drop": true
+    }
+  ]
+}

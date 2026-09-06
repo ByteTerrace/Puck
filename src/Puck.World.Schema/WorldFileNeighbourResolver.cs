@@ -1,12 +1,18 @@
+using System.Text.Json.Nodes;
+
 namespace Puck.World;
 
 /// <summary>
 /// The file-backed <see cref="IWorldNeighbourResolver"/> — reads a named neighbour's document straight off disk,
-/// relative to a base directory resolved fresh on every call. The natural resolver for a locally-authored quilt: the
-/// four shipped <c>quilt-*.world.json</c> documents name each other by a bare <see cref="WorldReference.Document"/>
-/// file name (e.g. <c>"quilt-ne.world.json"</c>) and live SIDE BY SIDE in the same directory as the document doing
-/// the naming, so "beside the document that names it" is the whole resolution rule — <see cref="Path.Combine(string,
-/// string)"/>, never a catalog or a discovery step.
+/// relative to a base directory resolved fresh on every call. The natural resolver for a locally-authored quilt: a
+/// document names its neighbours by a <see cref="WorldReference.Document"/> locator relative to its own directory
+/// (the island names <c>"shards/quilt-nw.world.json"</c>; a shard names <c>"quilt-ne.world.json"</c> beside itself
+/// and <c>"../puck.world.json"</c> above it), so "relative to the document that names it" is the whole resolution
+/// rule — <see cref="Path.Combine(string, string)"/>, never a catalog or a discovery step. The definition handed
+/// back is read from the base directory, so every locator the neighbour authored is re-expressed against that base
+/// (<see cref="ReexpressReferences"/>): the derived-corner walk compares two neighbours' locators for one third
+/// document by string and resolves the winner beside the reading document, and both hold only when every locator
+/// is spelled from the same place.
 /// </summary>
 /// <remarks>
 /// <para><b>Read-only and parse-only</b>, mirroring <c>Server.WorldStorageNeighbourResolver</c>'s own contract
@@ -70,15 +76,74 @@ public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
             return WorldNeighbourResolution.Unavailable(reason: $"'{path}' could not be read — {composeReason}");
         }
 
+        ReexpressReferences(
+            baseDirectory: directory,
+            neighbourDirectory: (Path.GetDirectoryName(path: path) ?? directory),
+            tree: tree!
+        );
+
+        // A reference into a first-fill draw site stays attached through this parse and is answered once the
+        // site draws, the same two steps the neighbour's own boot takes (WorldDefinitionLoader), under the same
+        // boot instance name, so the image proven here is the document the neighbour boots as.
         if (!WorldJsonPayload.TryParse(
             json: tree!.ToJsonString(),
             info: WorldJsonContext.Default.WorldDefinition,
             value: out var parsed,
-            error: out var parseError
+            error: out var parseError,
+            deferDrawSites: true
         )) {
             return WorldNeighbourResolution.Unavailable(reason: $"'{path}' does not parse as {WorldDefinition.SchemaVersion} — {parseError}");
         }
 
-        return WorldNeighbourResolution.Resolved(definition: WorldDefinitionMigrations.Apply(definition: parsed));
+        if (!WorldDrawBootResolver.TryResolve(
+            definition: WorldDefinitionMigrations.Apply(definition: parsed),
+            instanceIdentity: WorldDefinitionLoader.BootInstanceName,
+            reason: out var drawReason,
+            resolved: out var drawn
+        )) {
+            return WorldNeighbourResolution.Unavailable(reason: $"'{path}' draw refused — {drawReason}");
+        }
+
+        if (!WorldStateDocumentValues.TryResolve(
+            definition: drawn,
+            reason: out var referenceReason
+        )) {
+            return WorldNeighbourResolution.Unavailable(reason: $"'{path}' holds a state reference nothing fills — {referenceReason}");
+        }
+
+        return WorldNeighbourResolution.Resolved(definition: drawn);
+    }
+    // A references row's locator is relative to the document that authors it, the rule basis and imports follow;
+    // the reader resolves it from its own base directory. A sibling's bare spelling re-expresses to itself. An
+    // owner-form reference carries no locator and is left alone.
+    private static void ReexpressReferences(JsonObject tree, string neighbourDirectory, string baseDirectory) {
+        if (tree["references"] is not JsonArray rows) {
+            return;
+        }
+
+        foreach (var row in rows) {
+            if (
+                (row is not JsonObject reference) ||
+                (reference["document"] is not JsonValue locator) ||
+                !locator.TryGetValue<string>(value: out var document) ||
+                string.IsNullOrWhiteSpace(value: document) ||
+                Path.IsPathRooted(path: document)
+            ) {
+                continue;
+            }
+
+            var absolute = Path.GetFullPath(path: Path.Combine(
+                path1: neighbourDirectory,
+                path2: document
+            ));
+
+            reference["document"] = Path.GetRelativePath(
+                path: absolute,
+                relativeTo: baseDirectory
+            ).Replace(
+                newChar: '/',
+                oldChar: '\\'
+            );
+        }
     }
 }
