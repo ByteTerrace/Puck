@@ -10,7 +10,7 @@ namespace Puck.HumbleGamingBrick;
 /// stepping and the debug peek/poke alike — runs on the worker's single execution thread, so a peek/poke never races the
 /// running core.
 /// </summary>
-internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
+public sealed class HumbleGamingBrickCore : IQueuedMachineCore {
     // The machine's CPU T-cycle rate (2^22 per second); with EngineTicks.PerSecond it forms the exact rational the tick
     // accumulator carries remainders in.
     private const ulong MachineCyclesPerSecond = 4_194_304UL;
@@ -36,16 +36,18 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
     /// <param name="savePath">The cartridge's battery-save path, or <see langword="null"/> for an in-memory-only save.</param>
     /// <param name="dmgSpeed">When <see langword="true"/>, the FAIRNESS pin: the tick-to-cycle budget stays at the DMG rate
     /// regardless of the KEY1 double-speed latch, so the budget is a function of configuration alone.</param>
-    public HumbleGamingBrickCore(ConsoleModel model, byte[] cartridgeRom, string? savePath, bool dmgSpeed) {
+    public HumbleGamingBrickCore(ConsoleModel model, byte[] cartridgeRom, string? savePath = null, bool dmgSpeed = false)
+        : this(configuration: new MachineConfiguration(model: model, cartridgeRom: cartridgeRom), savePath: savePath, dmgSpeed: dmgSpeed) { }
+
+    /// <summary>Builds a core for an external host's own update loop, with optional boot ROM and clock configuration.
+    /// No renderer or background worker is required. Drive and dispose the core on its owning thread.</summary>
+    /// <param name="configuration">The hardware model, cartridge, optional boot ROM, and tick resolution.</param>
+    /// <param name="savePath">Optional battery-save path; null keeps saves in memory.</param>
+    /// <param name="dmgSpeed">Whether to hold the reported CPU-cycle rate at the monochrome rate.</param>
+    public HumbleGamingBrickCore(MachineConfiguration configuration, string? savePath = null, bool dmgSpeed = false) {
         m_savePath = savePath;
         m_dmgSpeed = dmgSpeed;
-        m_machine = MachineFactory.Create(
-            configuration: new MachineConfiguration(
-                model: model,
-                cartridgeRom: cartridgeRom
-            ),
-            compose: static services => services.AddHumbleGamingBrickComponents()
-        );
+        m_machine = MachineFactory.Create(configuration: configuration);
         m_audioSink = m_machine.GetRequiredService<IAudioSink>();
         m_cartridge = m_machine.GetRequiredService<ICartridge>();
         m_framebuffer = m_machine.GetRequiredService<IFramebuffer>();
@@ -84,8 +86,11 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
             tiltSensor: m_tiltSensor
         );
     /// <inheritdoc/>
-    public void RunCycles(long cycles) =>
-        m_machine.Machine.Run(tCycles: ((ulong)cycles));
+    public void RunCycles(long cycles) {
+        if (cycles > 0) {
+            m_machine.Machine.Run(tCycles: ((ulong)cycles));
+        }
+    }
     /// <inheritdoc/>
     public int CaptureState(ref byte[] buffer) {
         m_timeTravelWriter.Reset();

@@ -1,7 +1,7 @@
 namespace Puck.AdvancedGamingBrick.Post;
 
-internal static partial class Diagnostics {
-    private static bool TryCompareExecution(string[] args, out int exitCode) {
+internal sealed partial class Diagnostics {
+    private bool TryCompareExecution(string[] args, out int exitCode) {
         exitCode = 0;
         if (Array.IndexOf(array: args, value: "--compare-execution") < 0) {
             return false;

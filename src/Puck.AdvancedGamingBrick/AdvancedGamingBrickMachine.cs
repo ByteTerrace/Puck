@@ -84,7 +84,9 @@ public sealed class AdvancedGamingBrickMachine : ISnapshotableMachine {
         m_cartridge = cartridge;
         m_identity = AgbMachineIdentity.Compute(
             bios: bios.Image.Span,
-            rom: cartridge.Rom
+            rom: cartridge.Rom,
+            prefetchDisabled: bus.PrefetchDisabled,
+            hasRtc: cartridge.HasRtc
         );
         BiosIdentity = AgbBiosProfile.Identify(image: bios.Image.Span);
     }

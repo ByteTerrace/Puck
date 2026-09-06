@@ -138,6 +138,7 @@ internal sealed class TracingAgbBus : IAgbBus {
 
     public void Halt(bool stop) => m_inner.Halt(stop: stop);
     public void StepHalted() => m_inner.StepHalted();
+    public bool PrefetchDisabled => m_inner.PrefetchDisabled;
 
     private void Watch(uint address, uint value) {
         if ((address & ~0x3u) == (m_watchAddress & ~0x3u)) {

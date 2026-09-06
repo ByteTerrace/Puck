@@ -23,9 +23,9 @@ internal sealed class AccuracySuiteStage : IPostStage<PostContext> {
             return PostStageOutcome.Skip(detail: "no accuracy-suite ROM (pass --accuracy-suite)");
         }
 
-        Diagnostics.BiosImage = context.BiosImage;
+        var diagnostics = new Diagnostics(biosImage: context.BiosImage);
 
-        var failed = Diagnostics.RunAccuracySuite(
+        var failed = diagnostics.RunAccuracySuite(
             name: "accuracy suite",
             romPath: romPath
         );

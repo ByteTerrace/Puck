@@ -24,18 +24,26 @@ public sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
     /// <param name="bios">An explicit 16 KiB BIOS image. Zeroed images support only BIOS-independent diagnostics.</param>
     /// <param name="cartridgeRom">The native AGB cartridge image.</param>
     /// <param name="savePath">The optional battery-save path.</param>
-    public AdvancedGamingBrickCore(byte[] bios, byte[] cartridgeRom, string? savePath) {
+    public AdvancedGamingBrickCore(byte[] bios, byte[] cartridgeRom, string? savePath = null)
+        : this(configuration: new AgbMachineConfiguration(bios: bios, rom: cartridgeRom), savePath: savePath) { }
+
+    /// <summary>Builds a core for an external host's own update loop. No renderer, worker thread or disk save is
+    /// required. The host supplies cycle budgets and input, drains output, and disposes the core on its owning thread.</summary>
+    /// <param name="configuration">Explicit BIOS, cartridge and per-machine options.</param>
+    /// <param name="savePath">Optional battery-save path; null keeps saves in memory.</param>
+    public AdvancedGamingBrickCore(AgbMachineConfiguration configuration, string? savePath = null) {
         m_savePath = savePath;
-        m_instance = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
-            bios: bios,
-            rom: cartridgeRom
-        ));
+        m_instance = AgbMachineFactory.Create(configuration: configuration);
         m_machine = m_instance.Machine;
         m_cartridge = m_instance.GetRequiredService<AgbCartridge>();
 
         LoadBatterySave();
         m_machine.DirectBoot();
     }
+
+    /// <summary>Gets the owned machine instance for peripheral, cartridge and link access. Use it only on the
+    /// core's owning thread; the core retains responsibility for disposal.</summary>
+    public AgbMachineInstance Instance => m_instance;
 
     /// <inheritdoc/>
     public ulong CyclesPerSecond =>

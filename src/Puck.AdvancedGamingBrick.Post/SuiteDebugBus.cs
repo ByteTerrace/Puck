@@ -31,6 +31,7 @@ internal sealed class SuiteDebugBus : IAgbBus {
 
     public void Halt(bool stop) => m_inner.Halt(stop: stop);
     public void StepHalted() => m_inner.StepHalted();
+    public bool PrefetchDisabled => m_inner.PrefetchDisabled;
     public byte Read8(uint address, BusAccessType access) {
         if (TryReadDebug(
             address: address,

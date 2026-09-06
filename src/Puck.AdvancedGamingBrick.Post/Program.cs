@@ -14,9 +14,21 @@ var biosImage = LoadBios(path: CommandLineArguments.Value(
     args: args,
     name: "--bios"
 ));
-Diagnostics.BiosImage = biosImage;
+var machineOptions = new AgbMachineOptions {
+    DisablePrefetch = args.Contains(value: "--no-prefetch", comparer: StringComparer.OrdinalIgnoreCase),
+    DisableRtc = args.Contains(value: "--no-rtc", comparer: StringComparer.OrdinalIgnoreCase),
+    BusTrace = args.Contains(value: "--bus-trace", comparer: StringComparer.OrdinalIgnoreCase) ? Console.Error.WriteLine : null,
+};
+if (machineOptions.DisablePrefetch || machineOptions.DisableRtc || machineOptions.BusTrace is not null) {
+    string[] supported = ["--render", "--probe", "--ags", "--accuracy-suite", "--lockstep", "--pctrace", "--statetrace", "--trace-cycles", "--trace-crash", "--iodump", "--link-init-trace"];
+    if (!args.Any(predicate: arg => supported.Contains(value: arg, comparer: StringComparer.OrdinalIgnoreCase))) {
+        Console.Error.WriteLine(value: "--no-prefetch, --no-rtc and --bus-trace require a single-ROM inspection diagnostic; battery and benchmark runs use normal hardware behavior.");
+        return 2;
+    }
+}
+var diagnostics = new Diagnostics(biosImage: biosImage, machineOptions: machineOptions);
 // A diagnostic flag short-circuits the battery: run that single investigative mode and return its exit code.
-if (Diagnostics.TryRun(
+if (diagnostics.TryRun(
     args: args,
     exitCode: out var diagnosticExitCode
 )) {

@@ -41,6 +41,7 @@ public sealed partial class AgbBus : IAgbBus {
     private readonly AgbDmaController? m_dmaCore;
     private readonly AgbApu? m_apuCore;
     private readonly AgbClockState m_clockState = new();
+    private readonly Action<string>? m_busTrace;
 
     private uint m_openBus;
     private uint m_prevFetchHalf;
@@ -90,8 +91,9 @@ public sealed partial class AgbBus : IAgbBus {
     /// <param name="serial">The serial communication controller.</param>
     /// <param name="ppu">The picture-processing unit (owns palette/VRAM/OAM and the display registers).</param>
     /// <param name="apu">The audio-processing unit.</param>
-    /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public AgbBus(AgbScheduler scheduler, IBios bios, AgbCartridge cartridge, IAgbInterruptController interrupts, IAgbTimerController timers, IAgbDmaController dma, IAgbSerialController serial, IAgbPpu ppu, IAgbApu apu) {
+    /// <param name="options">Per-machine diagnostic overrides, or null for normal hardware behavior.</param>
+    /// <exception cref="ArgumentNullException">A required subsystem is <see langword="null"/>.</exception>
+    public AgbBus(AgbScheduler scheduler, IBios bios, AgbCartridge cartridge, IAgbInterruptController interrupts, IAgbTimerController timers, IAgbDmaController dma, IAgbSerialController serial, IAgbPpu ppu, IAgbApu apu, AgbMachineOptions? options = null) {
         ArgumentNullException.ThrowIfNull(scheduler);
         ArgumentNullException.ThrowIfNull(bios);
         ArgumentNullException.ThrowIfNull(cartridge);
@@ -103,6 +105,8 @@ public sealed partial class AgbBus : IAgbBus {
         ArgumentNullException.ThrowIfNull(apu);
 
         m_scheduler = scheduler;
+        PrefetchDisabled = options?.DisablePrefetch ?? false;
+        m_busTrace = options?.BusTrace;
         m_bios = bios.Image.ToArray();
         m_cartridge = cartridge;
         m_interrupts = interrupts;
@@ -133,6 +137,8 @@ public sealed partial class AgbBus : IAgbBus {
 
     /// <summary>Gets the current master-clock time (committed clock plus the CPU's running offset).</summary>
     public long Cycles => m_scheduler.Now;
+    /// <inheritdoc/>
+    public bool PrefetchDisabled { get; }
 
     /// <summary>Reads an I/O register halfword without advancing the clock — for the I/O-read differential dump.</summary>
     public ushort DebugReadIo(uint offset) => ReadIoHalf(offset: offset);
@@ -459,7 +465,7 @@ public sealed partial class AgbBus : IAgbBus {
         var region = (address >> 24);
 
         if (
-            !DisablePrefetch &&
+            !PrefetchDisabled &&
             m_prefetchEnabled &&
             (region >= 0x08u) &&
             (region <= 0x0Du)
@@ -524,7 +530,7 @@ public sealed partial class AgbBus : IAgbBus {
             width: 2
         );
 
-        if (!DisablePrefetch) {
+        if (!PrefetchDisabled) {
             PrefetchStep(clocks: cost);
         }
 
@@ -550,7 +556,7 @@ public sealed partial class AgbBus : IAgbBus {
         var region = (address >> 24);
 
         if (
-            !DisablePrefetch &&
+            !PrefetchDisabled &&
             m_prefetchEnabled &&
             (region >= 0x08u) &&
             (region <= 0x0Du)
@@ -609,7 +615,7 @@ public sealed partial class AgbBus : IAgbBus {
             width: 4
         );
 
-        if (!DisablePrefetch) {
+        if (!PrefetchDisabled) {
             PrefetchStep(clocks: cost);
         }
 
@@ -708,11 +714,11 @@ public sealed partial class AgbBus : IAgbBus {
     public void Idle(int cycles) {
         RunPendingDma();
 
-        if (BusTraceEnabled) {
-            Console.Error.WriteLine(value: $"  c={m_scheduler.Now} I x{cycles}");
+        if (m_busTrace is { } trace) {
+            trace($"  c={m_scheduler.Now} I x{cycles}");
         }
 
-        if (!DisablePrefetch) {
+        if (!PrefetchDisabled) {
             PrefetchStep(clocks: cycles);
         }
 
@@ -1103,7 +1109,7 @@ public sealed partial class AgbBus : IAgbBus {
 
         // The buffer stops running ahead; the interrupted prefetch run is abandoned so the refill after this fetch
         // restarts non-sequentially. Contents are left in place (a full flush over-charges the post-DMA fetch).
-        if (!DisablePrefetch) {
+        if (!PrefetchDisabled) {
             m_prefetchStopped = true;
             m_prefetchAhead = false;
         }
@@ -1545,7 +1551,7 @@ public sealed partial class AgbBus : IAgbBus {
             // per-access palette-contention cost, exactly the DMA-into-palette case some commercial games' boot hits.
             for (var half = 0; (half < cost); ++half) {
                 do {
-                    if (!DisablePrefetch) {
+                    if (!PrefetchDisabled) {
                         PrefetchStep(clocks: 1);
                     }
 
@@ -1557,7 +1563,7 @@ public sealed partial class AgbBus : IAgbBus {
             return;
         }
 
-        if (!DisablePrefetch) {
+        if (!PrefetchDisabled) {
             if (
                 m_prefetchEnabled &&
                 (region >= 0x08u) &&
@@ -1570,14 +1576,12 @@ public sealed partial class AgbBus : IAgbBus {
         StepClocks(n: cost);
     }
 
-    private static readonly bool DisablePrefetch = (Environment.GetEnvironmentVariable(variable: "PUCK_NO_PREFETCH") == "1");
     // Per-access bus trace, mirroring the reference oracle's bus-trace format, so the two access streams diff
     // directly to localise cycle divergences. Logs the running clock (committed + uncommitted) BEFORE the access.
-    private static readonly bool BusTraceEnabled = (Environment.GetEnvironmentVariable(variable: "PUCK_BUSTRACE") == "1");
 
     private void BusTrace(char op, uint address, int width, BusAccessType access) {
-        if (BusTraceEnabled) {
-            Console.Error.WriteLine(value: $"  c={m_scheduler.Now} {op} a={address:X8} w={width} {((access == BusAccessType.Sequential)
+        if (m_busTrace is { } trace) {
+            trace($"  c={m_scheduler.Now} {op} a={address:X8} w={width} {((access == BusAccessType.Sequential)
                 ? "S"
                 : "N")}");
         }

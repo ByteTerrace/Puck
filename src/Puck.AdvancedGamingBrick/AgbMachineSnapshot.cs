@@ -12,7 +12,9 @@ namespace Puck.AdvancedGamingBrick;
 /// <param name="BiosHash">A 64-bit fingerprint of the BIOS image.</param>
 /// <param name="RomHash">A 64-bit fingerprint of the cartridge ROM.</param>
 /// <param name="RomLength">The cartridge ROM length in bytes.</param>
-public readonly record struct AgbMachineIdentity(int Version, ulong BiosHash, ulong RomHash, int RomLength) {
+/// <param name="PrefetchDisabled">Whether the bus suppresses game-pak prefetch.</param>
+/// <param name="HasRtc">Whether the cartridge exposes an RTC after applying explicit overrides.</param>
+public readonly record struct AgbMachineIdentity(int Version, ulong BiosHash, ulong RomHash, int RomLength, bool PrefetchDisabled = false, bool HasRtc = false) {
     /// <summary>The current snapshot format version. Bump when the serialized field layout changes so an old
     /// snapshot is rejected rather than misread.</summary>
     /// <remarks>6: AgbCartridge gained the rumble motor latch, the solar-sensor counter/edge/threshold (G1/G2), and
@@ -22,13 +24,17 @@ public readonly record struct AgbMachineIdentity(int Version, ulong BiosHash, ul
     /// <summary>Computes an identity for a BIOS image and cartridge ROM using a stable FNV-1a fingerprint.</summary>
     /// <param name="bios">The BIOS image bytes.</param>
     /// <param name="rom">The cartridge ROM bytes.</param>
+    /// <param name="prefetchDisabled">Whether the bus suppresses game-pak prefetch.</param>
+    /// <param name="hasRtc">Whether the cartridge exposes an RTC.</param>
     /// <returns>The identity stamp.</returns>
-    public static AgbMachineIdentity Compute(ReadOnlySpan<byte> bios, ReadOnlySpan<byte> rom) =>
+    public static AgbMachineIdentity Compute(ReadOnlySpan<byte> bios, ReadOnlySpan<byte> rom, bool prefetchDisabled = false, bool hasRtc = false) =>
         new(
         Version: CurrentVersion,
         BiosHash: Fnv1aHash.Compute(values: bios),
         RomHash: Fnv1aHash.Compute(values: rom),
-        RomLength: rom.Length
+        RomLength: rom.Length,
+        PrefetchDisabled: prefetchDisabled,
+        HasRtc: hasRtc
     );
 }
 /// <summary>

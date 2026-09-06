@@ -16,14 +16,20 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// never chased; the two self-checking gates are the only hard pass/fail rows.
 /// </para>
 /// </summary>
-internal static class OracleProbes {
+internal sealed class OracleProbes {
+    private readonly ReadOnlyMemory<byte> m_bios;
+
+    public OracleProbes(ReadOnlyMemory<byte> bios) {
+        m_bios = bios;
+    }
+
     private const uint IoBase = 0x04000000u;
     private const uint ResultBase = 0x02000000u;
 
     /// <summary>Runs every probe against the core and prints the measured-vs-documented table. Returns 0 (the two
     /// self-checking gates gate; the measurement rows never fail the process — they are evidence).</summary>
-    public static int RunOracle(string[] args) {
-        var bios = Diagnostics.BiosImage;
+    public int RunOracle(string[] args) {
+        var bios = m_bios;
         var identity = AgbBiosProfile.Identify(image: bios.Span);
         var hasRetailBios = identity.IsCycleParityTrustworthy;
 
@@ -138,7 +144,7 @@ internal static class OracleProbes {
 
     // Runs a measurement probe and prints "measured vs documented". resultIndex >= 0 reads one masked-16 timer value;
     // resultIndex == -1 prints both 32-bit result words (for probes that store two values).
-    private static void Measure(string name, string documented, byte[] rom, int resultIndex, bool hasRetailBios, bool needsBios) {
+    private void Measure(string name, string documented, byte[] rom, int resultIndex, bool hasRetailBios, bool needsBios) {
         if (
             needsBios &&
             !hasRetailBios
@@ -171,14 +177,14 @@ internal static class OracleProbes {
     }
     // Builds a direct-booted machine over the probe ROM, runs it to its spin loop (or a step cap), and reads the
     // result words the ROM stored to EWRAM (0x02000000+). Returns null when the ROM could not run.
-    private static uint[]? RunRom(byte[] rom, int resultCount, bool hasRetailBios, bool needsBios) {
+    private uint[]? RunRom(byte[] rom, int resultCount, bool hasRetailBios, bool needsBios) {
         _ = needsBios;
 
         var cartridge = new AgbCartridge(rom: rom);
         var services = new ServiceCollection();
 
         _ = services.AddAdvancedGamingBrick();
-        _ = services.AddReplacementBios(image: Diagnostics.BiosImage);
+        _ = services.AddReplacementBios(image: m_bios);
         services.AddScoped<AgbCartridge>(implementationFactory: _ => cartridge);
 
         using var provider = services.BuildServiceProvider();
@@ -220,7 +226,7 @@ internal static class OracleProbes {
     // AgbApu directly and assert the model's documented properties. Expected values are DERIVED FROM THE MODEL SPEC, so
     // this is a true self-checking gate.
     // -------------------------------------------------------------------------------------------------------------
-    private static (bool ok, List<string> lines) FifoModelProbe() {
+    private (bool ok, List<string> lines) FifoModelProbe() {
         var lines = new List<string>();
         var ok = true;
 
@@ -370,7 +376,7 @@ internal static class OracleProbes {
     // then channel 0 runs an UNDRIVABLE (BIOS-region source) transfer whose destination therefore receives CHANNEL 0's
     // own open-bus latch. With per-channel latches that value is 0 (ch0 never drove its latch); with a single shared
     // latch it would be channel 1's 0xAABBCCDD. Result[0] = ch0 dest, Result[1] = ch1 dest.
-    private static byte[] BuildDmaLatchProbe() {
+    private byte[] BuildDmaLatchProbe() {
         var a = new Asm();
 
         a.LdrConst(
@@ -455,7 +461,7 @@ internal static class OracleProbes {
     }
     // Timer0 (÷1) enabled, then an immediate 4-word DMA is triggered; the timer is read right after. The measured
     // value reflects the DMA start delay + burst cycles. Documented corpus target: 20.
-    private static byte[] BuildDmaStartDelayProbe() {
+    private byte[] BuildDmaStartDelayProbe() {
         var a = new Asm();
 
         a.LdrConst(
@@ -519,7 +525,7 @@ internal static class OracleProbes {
     }
     // Timer0 (÷1) enabled, an immediate 1-word DMA runs, then a plain memory access follows: hardware forces the
     // instruction fetch after a DMA non-sequential. The timer read afterward captures the combined cost. Target: 88.
-    private static byte[] BuildDmaForceNseqProbe() {
+    private byte[] BuildDmaForceNseqProbe() {
         var a = new Asm();
 
         a.LdrConst(
@@ -585,7 +591,7 @@ internal static class OracleProbes {
     }
     // Enable timer0 (÷1), read it a few cycles later (result 0), then STOP it and read again (result 1, frozen).
     // Documented: reads ~3 while running, then a frozen value (corpus target 8).
-    private static byte[] BuildTimerStartStopProbe() {
+    private byte[] BuildTimerStartStopProbe() {
         var a = new Asm();
 
         a.LdrConst(
@@ -640,7 +646,7 @@ internal static class OracleProbes {
     }
     // Timer0 near overflow (reload 0xFFF0), let it run, then write a new reload while live and read the counter: probes
     // whether the live counter or the freshly written reload wins at the boundary. Documented boundary: 0xDEAE/0xFFF9.
-    private static byte[] BuildTimerReloadRaceProbe() {
+    private byte[] BuildTimerReloadRaceProbe() {
         var a = new Asm();
 
         a.LdrConst(
@@ -700,7 +706,7 @@ internal static class OracleProbes {
     // timer0 so the reading isolates the dispatch window as closely as this coarse harness allows. This is a coarse
     // MEASUREMENT (our harness shape, not the corpus's) against the documented region-dependent latency 92/112/120;
     // it needs the retail BIOS IRQ vector to dispatch at all.
-    private static byte[] BuildIrqLatencyProbe() {
+    private byte[] BuildIrqLatencyProbe() {
         var a = new Asm();
 
         a.LdrConst(
@@ -797,7 +803,7 @@ internal static class OracleProbes {
     }
     // Enable timer0 (÷1), HALT (write HALTCNT=0), and immediately raise a pending timer IRQ so the CPU wakes; the
     // timer is read after wake, capturing the halt-exit latency. Documented direct halt-exit: 12. Needs the retail BIOS.
-    private static byte[] BuildHaltExitProbe() {
+    private byte[] BuildHaltExitProbe() {
         var a = new Asm();
 
         a.LdrConst(

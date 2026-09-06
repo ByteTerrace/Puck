@@ -2,7 +2,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 
 // --hash-divergence <romA> [romB]: the per-tick hash-divergence localizer, dispatched out of TryRun to bound its
 // cyclomatic complexity.
-internal static partial class Diagnostics {
+internal sealed partial class Diagnostics {
     /// <summary>
     /// Dispatches <c>--hash-divergence &lt;romA&gt; [romB]</c> — the per-tick hash-divergence localizer: step two
     /// machines in lockstep, snapshot-hashing each (FNV-1a) every frame (or every scanline with <c>--fine</c>) and
@@ -15,7 +15,7 @@ internal static partial class Diagnostics {
     /// <param name="args">The command-line arguments.</param>
     /// <param name="exitCode">The exit code the mode produced, when handled.</param>
     /// <returns><see langword="true"/> when <c>--hash-divergence</c> was present (return <paramref name="exitCode"/>).</returns>
-    private static bool TryHashDivergence(string[] args, out int exitCode) {
+    private bool TryHashDivergence(string[] args, out int exitCode) {
         exitCode = 0;
 
         var hashDivergenceIndex = Array.IndexOf(

@@ -30,7 +30,8 @@ internal static class BenchDiagnostic {
     /// <param name="args">The command-line arguments (<c>--bench-rom</c>, <c>--bench-frames</c>,
     /// <c>--bench-fleet</c>, <c>--bench-warmup-frames</c>, <c>--artifacts</c>).</param>
     /// <returns>0 on a clean run; 1 when a determinism guard failed.</returns>
-    public static int Run(string[] args) {
+    /// <param name="bios">The explicitly supplied BIOS image.</param>
+    public static int Run(string[] args, ReadOnlyMemory<byte> bios) {
         var romPath = CommandLineArguments.Value(
             args: args,
             name: "--bench-rom"
@@ -57,7 +58,6 @@ internal static class BenchDiagnostic {
             path1: "artifacts",
             path2: "gba-post"
         ));
-        var bios = Diagnostics.BiosImage;
         byte[] rom;
         string romName;
 

@@ -9,18 +9,16 @@ namespace Puck.HumbleGamingBrick;
 /// copies.
 /// </summary>
 public static class MachineFactory {
-    /// <summary>Creates a machine for a configuration, applying a composition callback that registers the machine's
-    /// components.</summary>
+    /// <summary>Creates a complete machine for a configuration, optionally replacing the default component registration.</summary>
     /// <param name="configuration">The per-machine configuration.</param>
     /// <param name="compose">A callback that registers the machine's components into its container; each component is
     /// typically registered once by its concrete type (which the <see cref="Timing.ComponentClock"/> resolves for the
-    /// per-tick fan-out) and forwarded to <see cref="ISnapshotable"/>.</param>
+    /// per-tick fan-out) and forwarded to <see cref="ISnapshotable"/>. Null selects the standard components.</param>
     /// <returns>The assembled, isolated machine instance. The caller owns it and must dispose it.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="configuration"/> or <paramref name="compose"/> is
-    /// <see langword="null"/>.</exception>
-    public static MachineInstance Create(MachineConfiguration configuration, Action<IServiceCollection>? compose) {
+    /// <exception cref="ArgumentNullException"><paramref name="configuration"/> is <see langword="null"/>.</exception>
+    public static MachineInstance Create(MachineConfiguration configuration, Action<IServiceCollection>? compose = null) {
         ArgumentNullException.ThrowIfNull(argument: configuration);
-        ArgumentNullException.ThrowIfNull(argument: compose);
+        compose ??= static services => services.AddHumbleGamingBrickComponents();
 
         var services = new ServiceCollection();
 

@@ -3,32 +3,26 @@ using System.Diagnostics;
 namespace Puck.AdvancedGamingBrick.Post;
 
 // --lockstep <rom> <steps> [direct]: step Puck against the cosim oracle in lockstep to the first divergence.
-internal static partial class Diagnostics {
+internal sealed partial class Diagnostics {
     /// <summary>
     /// Lockstep differential against the cosim oracle (the cycle-stepped reference Puck is being realigned to).
     /// Spawns <c>ares-cosim.exe</c> on the same ROM/steps/BIOS, reads its per-instruction trace, and steps Puck
     /// in lockstep — comparing architectural state (cpsr + r0..r14) and per-instruction cycle deltas. Both boot
     /// the real BIOS, so the streams align 1:1 by instruction index. Halts at the first FUNCTIONAL divergence (a
     /// real bug, or the symptom of accumulated timing drift resolving a timing-paced branch differently) and
-    /// reports the first TIMING-delta divergence + cumulative drift — the M-CYCLE target. Cosim path from
-    /// <c>PUCK_ARES_COSIM</c> (default the gba-cosim dir); BIOS from <c>PUCK_AGB_BIOS</c>.
+    /// reports the first TIMING-delta divergence + cumulative drift. The executable and BIOS paths are explicit
+    /// parameters supplied by <c>--ares</c> and <c>--bios</c>; no machine-specific fallback paths are used.
     /// </summary>
-    public static int Lockstep(string romPath, long steps, bool direct = false) {
+    public int Lockstep(string romPath, long steps, string? cosimExe, string? biosPath, bool direct = false) {
         if (!File.Exists(path: romPath)) {
             Console.WriteLine(value: $"  [SKIP] lockstep: rom not found at {romPath}");
 
             return 0;
         }
 
-        var cosimExe = (Environment.GetEnvironmentVariable(variable: "PUCK_ARES_COSIM")
-            ?? @"D:\Source\ByteTerrace\Temp\gba-cosim\ares-cosim.exe");
-        var biosPath = (Environment.GetEnvironmentVariable(variable: "PUCK_AGB_BIOS")
-            ?? @"D:\Source\ByteTerrace\Temp\GBA_bios.rom");
-
-        if (!File.Exists(path: cosimExe)) {
-            Console.WriteLine(value: $"  [SKIP] lockstep: ares-cosim not found at {cosimExe} (set PUCK_ARES_COSIM)");
-
-            return 0;
+        if (!File.Exists(path: cosimExe) || !File.Exists(path: biosPath)) {
+            Console.Error.WriteLine(value: "lockstep requires existing --ares <executable> and --bios <image> paths.");
+            return 2;
         }
 
         var psi = new ProcessStartInfo {

@@ -4,8 +4,8 @@ using Puck.Assets;
 namespace Puck.AdvancedGamingBrick.Post;
 
 // --render <rom> <out.png> [steps]: boot a ROM and dump its framebuffer, to eyeball the PPU output.
-internal static partial class Diagnostics {
-    public static void Render(string romPath, string outputPath, long steps = 6_000_000) {
+internal sealed partial class Diagnostics {
+    public void Render(string romPath, string outputPath, long steps = 6_000_000, bool fullBoot = false) {
         if (!TryLoad(
             romPath: romPath,
             name: Path.GetFileName(path: romPath),
@@ -17,9 +17,9 @@ internal static partial class Diagnostics {
         using (instance) {
             var machine = instance.Machine;
 
-            // PUCK_AGB_FULLBOOT=1: run the real BIOS intro then jump to the cartridge (cpu.Reset), instead of the
+            // --full-boot runs the real BIOS intro then jumps to the cartridge (cpu.Reset), instead of the
             // direct-boot post-BIOS state. Some carts depend on full-BIOS-boot side effects.
-            if (Environment.GetEnvironmentVariable(variable: "PUCK_AGB_FULLBOOT") == "1") {
+            if (fullBoot) {
                 machine.Cpu.Reset();
             }
 

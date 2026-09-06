@@ -109,8 +109,9 @@ public sealed partial class AgbCartridge {
 
     /// <summary>Creates a cartridge from a ROM image, detecting and allocating its save backup.</summary>
     /// <param name="rom">The cartridge ROM image.</param>
+    /// <param name="options">Per-machine diagnostic overrides, or null for normal cartridge detection.</param>
     /// <exception cref="ArgumentNullException"><paramref name="rom"/> is <see langword="null"/>.</exception>
-    public AgbCartridge(byte[] rom) {
+    public AgbCartridge(byte[] rom, AgbMachineOptions? options = null) {
         ArgumentNullException.ThrowIfNull(rom);
 
         m_rom = rom;
@@ -130,13 +131,13 @@ public sealed partial class AgbCartridge {
             value: ((byte)0xFF)
         );
 
-        // RTC presence: the override wins, else the SIIRTC_V string scan. Diagnostic override (PUCK_AGB_NO_RTC=1)
-        // forces the GPIO/RTC off, to isolate whether an RTC-protocol issue stalls a boot vs an engine-timing issue.
+        // RTC presence: the game override wins, else the SIIRTC_V string scan. The caller can suppress the RTC
+        // explicitly to isolate a device-protocol issue from an engine-timing issue.
         m_hasRtc = ((over?.HasRtc ?? Contains(
             haystack: rom,
             needle: RtcSignature
         ))
-            && (Environment.GetEnvironmentVariable(variable: "PUCK_AGB_NO_RTC") != "1"));
+            && !(options?.DisableRtc ?? false));
         m_rtcControl = 0x40; // 24-hour mode
         InitRtcTime();
 

@@ -3,15 +3,16 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Puck.AdvancedGamingBrick.Post;
 
 // --probe <rom> <steps> | --link-init-trace <rom> <loHex> <hiHex> <count> [skip]: blank-screen boot diagnostics.
-internal static partial class Diagnostics {
+internal sealed partial class Diagnostics {
     /// <summary>Runs a ROM and dumps key machine state, to diagnose a game that boots to a blank screen.</summary>
     /// <summary>Dispatches the blank-screen boot diagnostics — <c>--probe &lt;rom&gt; &lt;steps&gt;</c> and
     /// <c>--link-init-trace &lt;rom&gt; &lt;loHex&gt; &lt;hiHex&gt; &lt;count&gt; [skipAfter]</c>; returns whether it
     /// handled the args (kept out of Program.cs to bound Main's cyclomatic complexity).</summary>
-    public static bool TryDiagnostic(string[] args) {
+    public bool TryDiagnostic(string[] args) {
         for (var index = 0; (index < (args.Length - 2)); ++index) {
             if (args[index] == "--probe") {
                 Probe(
+                    fullBoot: args.Contains(value: "--full-boot", comparer: StringComparer.OrdinalIgnoreCase),
                     romPath: args[(index + 1)],
                     steps: long.Parse(s: args[(index + 2)])
                 );
@@ -47,9 +48,9 @@ internal static partial class Diagnostics {
     /// <summary>Full-boots a ROM, runs until the PC first enters [triggerLo, triggerHi), then dumps the next
     /// <paramref name="count"/> instructions with PC + r0..r6 + the SIO/timer/IRQ registers the link probe reads —
     /// to see exactly why a cart's link-init loops, with no external oracle.</summary>
-    public static void LinkInitTrace(string romPath, uint triggerLo, uint triggerHi, long count, long skipAfter = 0) {
+    public void LinkInitTrace(string romPath, uint triggerLo, uint triggerHi, long count, long skipAfter = 0) {
         using var instance = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
-            bios: BiosImage,
+            bios: BiosImage, options: MachineOptions,
             rom: File.ReadAllBytes(path: romPath)
         ));
         var machine = instance.Machine;
@@ -98,7 +99,7 @@ internal static partial class Diagnostics {
             machine.Step();
         }
     }
-    public static void Probe(string romPath, long steps) {
+    public void Probe(string romPath, long steps, bool fullBoot = false) {
         if (!File.Exists(path: romPath)) {
             Console.WriteLine(value: $"  [SKIP] {Path.GetFileName(path: romPath)}: not found");
             return;
@@ -112,7 +113,7 @@ internal static partial class Diagnostics {
 
         using var instance = AgbMachineFactory.Create(
             configuration: new AgbMachineConfiguration(
-                bios: BiosImage,
+                bios: BiosImage, options: MachineOptions,
                 rom: File.ReadAllBytes(path: romPath)
             ),
             compose: services => {
@@ -150,9 +151,9 @@ internal static partial class Diagnostics {
         machineProbeRef = machine;
         machine.DirectBoot();
 
-        // PUCK_AGB_FULLBOOT=1: undo the HLE direct-boot state and run the real BIOS intro from the reset vector
+        // --full-boot undoes the direct-boot state and runs the real BIOS intro from the reset vector
         // (cpu.Reset()), the same path a hardware power-on takes. The default stays direct boot for quick game-state probes.
-        if (Environment.GetEnvironmentVariable(variable: "PUCK_AGB_FULLBOOT") == "1") {
+        if (fullBoot) {
             machine.Cpu.Reset();
         }
 

@@ -3,12 +3,12 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Puck.AdvancedGamingBrick.Post;
 
 // --ags <rom>: run the AGS aging cartridge (TCHK10 dump) headlessly and print the per-test result stream.
-internal static partial class Diagnostics {
+internal sealed partial class Diagnostics {
     // The AGS tests run in this order under the default (KEYINPUT-advanced / COM / SIO-extended tests disabled).
     // Names are best-effort annotations for the value stream written to 0x04; the raw index + value is
     // authoritative. The SIO interrupt test spins waiting for a link cable, so a headless run stalls there (after
     // ~32 results).
-    private static readonly string[] AgsTestNames = [
+    private readonly string[] AgsTestNames = [
         "mem: cpu_external_work_ram", "mem: cpu_internal_work_ram", "mem: palette_ram", "mem: vram", "mem: oam",
         "mem: cartridge_type_flag", "mem: prefetch_buffer", "mem: waitstate_wait_control", "mem: cartridge_ram_wait_control",
         "lcd: vcounter", "lcd: vcount_intr_flag", "lcd: hblank_intr_flag", "lcd: vblank_intr_flag", "lcd: vcount_status",
@@ -25,7 +25,7 @@ internal static partial class Diagnostics {
     /// captures that stream. A flag value of 0 means the test passed. Runs until the result stream goes quiet
     /// (the SIO interrupt test stalls waiting for a link cable, which is expected).
     /// </summary>
-    public static int RunAgs(string romPath, string name) {
+    public int RunAgs(string romPath, string name, bool trace = false) {
         if (!File.Exists(path: romPath)) {
             Console.WriteLine(value: $"  [SKIP] {name}: not found at {romPath}");
 
@@ -52,7 +52,6 @@ internal static partial class Diagnostics {
         var timer1Reads = new List<(int afterResults, uint value)>();
         var connectIoReads = new List<(int afterResults, uint address, uint value, long cycles)>();
         var connectIoWrites = new List<(int afterResults, uint address, uint value, long cycles)>();
-        var trace = (Environment.GetEnvironmentVariable(variable: "PUCK_AGS_TRACE") == "1");
         AdvancedGamingBrickMachine? machineRef = null;
         AgbBus? busRef = null;
 
@@ -60,7 +59,7 @@ internal static partial class Diagnostics {
         // TracingAgbBus that wraps it. The compose callback runs before AddAdvancedGamingBrick's TryAdd, so ours wins.
         using var instance = AgbMachineFactory.Create(
             configuration: new AgbMachineConfiguration(
-                bios: BiosImage,
+                bios: BiosImage, options: MachineOptions,
                 rom: rom
             ),
             compose: services => {

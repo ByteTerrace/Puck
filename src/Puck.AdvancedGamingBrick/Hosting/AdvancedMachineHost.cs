@@ -19,6 +19,7 @@ public sealed class AdvancedMachineHost : QueuedMachineHost {
     public const int DefaultMaximumPendingSteps = 8;
 
     private readonly byte[] m_bios;
+    private readonly AgbMachineOptions m_options;
 
     /// <summary>Creates an empty host or direct-boots <paramref name="cartridgeRom"/> when supplied.</summary>
     /// <param name="cartridgeRom">The native AGB cartridge image, or <see langword="null"/> for an empty host.</param>
@@ -30,7 +31,8 @@ public sealed class AdvancedMachineHost : QueuedMachineHost {
     /// a silent host performs zero presentation-side audio synthesis.</param>
     /// <exception cref="ArgumentNullException"><paramref name="biosImage"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="biosImage"/> is not 16 KiB.</exception>
-    public AdvancedMachineHost(byte[] biosImage, byte[]? cartridgeRom = null, string? savePath = null, int audioSampleRate = 0)
+    /// <param name="options">Per-machine diagnostic overrides, or null for normal hardware behavior.</param>
+    public AdvancedMachineHost(byte[] biosImage, byte[]? cartridgeRom = null, string? savePath = null, int audioSampleRate = 0, AgbMachineOptions? options = null)
         : base(
         width: ScreenWidth,
         height: ScreenHeight,
@@ -48,6 +50,7 @@ public sealed class AdvancedMachineHost : QueuedMachineHost {
         }
 
         m_bios = biosImage.ToArray();
+        m_options = options ?? new AgbMachineOptions();
 
         if (cartridgeRom is not null) {
             LoadContent(
@@ -60,8 +63,7 @@ public sealed class AdvancedMachineHost : QueuedMachineHost {
     /// <inheritdoc/>
     protected override IQueuedMachineCore CreateCore(byte[] data, string? savePath) =>
         new AdvancedGamingBrickCore(
-        bios: m_bios,
-        cartridgeRom: data,
+        configuration: new AgbMachineConfiguration(bios: m_bios, rom: data, options: m_options),
         savePath: savePath
     );
 }

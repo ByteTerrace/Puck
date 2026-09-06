@@ -8,6 +8,9 @@ namespace Puck.AdvancedGamingBrick;
 /// against a flat-memory test bus (for ARM/Thumb conformance vectors) as readily as against the decoded machine.
 /// </summary>
 public interface IAgbBus {
+    /// <summary>Whether the bus suppresses game-pak prefetch for diagnostics. Included in machine identity;
+    /// bus decorators must forward the underlying value.</summary>
+    bool PrefetchDisabled => false;
     /// <summary>Gets a value indicating whether the interrupt controller is asserting the IRQ line — the
     /// signal the CPU samples each instruction boundary. Test buses with no interrupt source return false.</summary>
     bool IrqPending { get; }

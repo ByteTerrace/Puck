@@ -24,9 +24,9 @@ internal sealed class AgsStage : IPostStage<PostContext> {
             return PostStageOutcome.Skip(detail: "no AGS aging-cartridge ROM (pass --ags with the TCHK10 dump)");
         }
 
-        Diagnostics.BiosImage = context.BiosImage;
+        var diagnostics = new Diagnostics(biosImage: context.BiosImage);
 
-        var failed = Diagnostics.RunAgs(
+        var failed = diagnostics.RunAgs(
             romPath: romPath,
             name: Path.GetFileName(path: romPath)
         );
