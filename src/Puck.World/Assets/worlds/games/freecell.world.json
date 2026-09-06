@@ -1,4 +1,19 @@
 {
+  "exports": {
+    "actions": [
+      "solitaireFreecell"
+    ],
+    "bindings": [
+      "solitaireFreecell"
+    ],
+    "reads": [
+      "solitaireFreecell",
+      "solitaireFreecellCards",
+      "solitaireFreecellFace",
+      "solitaireFreecellRank",
+      "solitaireFreecellSuit"
+    ]
+  },
   "state": {
   "world": [
     {

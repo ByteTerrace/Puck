@@ -1,4 +1,24 @@
 {
+  "exports": {
+    "actions": [
+      "solitaire",
+      "solitaireFreecell",
+      "solitaireKlondike",
+      "solitaireSpider"
+    ],
+    "bindings": [
+      "solitaire",
+      "solitaireFreecell",
+      "solitaireKlondike",
+      "solitaireSpider"
+    ],
+    "reads": [
+      "solitaire",
+      "solitaireFreecell",
+      "solitaireKlondike",
+      "solitaireSpider"
+    ]
+  },
   "imports": [
     {
       "document": "klondike.world.json"

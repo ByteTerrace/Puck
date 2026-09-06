@@ -1,4 +1,19 @@
 {
+  "exports": {
+    "actions": [
+      "solitaireSpider"
+    ],
+    "bindings": [
+      "solitaireSpider"
+    ],
+    "reads": [
+      "solitaireSpider",
+      "solitaireSpiderCards",
+      "solitaireSpiderFace",
+      "solitaireSpiderRank",
+      "solitaireSpiderSuit"
+    ]
+  },
   "state": {
   "world": [
     {

@@ -164,6 +164,12 @@ public sealed record WorldDefinition(
     /// (no directory to resolve imports against) refuses a non-null value the same way <see cref="Basis"/> does.</remarks>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<WorldImport>? Imports { get; init; }
+    /// <summary>Gets the surface this document offers a host that imports it (<see cref="WorldExports"/>): the
+    /// names the host may read, drive, and bind to. Every other name the document declares is private to it. Consumed
+    /// where the document is imported (<see cref="WorldModuleExports"/>), so a live document always carries
+    /// <see langword="null"/> here and the validator refuses anything else.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldExports? Exports { get; init; }
     /// <summary>Gets the per-world binding overlays — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldBindingOverlay> BindingOverlays => (BindingOverlaysRaw ?? []);

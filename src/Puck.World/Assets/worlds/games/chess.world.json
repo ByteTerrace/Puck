@@ -1,4 +1,27 @@
 {
+  "exports": {
+    "actions": [
+      "board",
+      "gameStarted",
+      "move"
+    ],
+    "bindings": [
+      "illegalCount",
+      "inCheck",
+      "turn",
+      "verdict"
+    ],
+    "reads": [
+      "board",
+      "chessBoard",
+      "gameStarted",
+      "inCheck",
+      "move",
+      "plan",
+      "turn",
+      "verdict"
+    ]
+  },
   "kits": {
     "rows": [
       {

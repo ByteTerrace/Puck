@@ -1,4 +1,23 @@
 {
+  "exports": {
+    "actions": [
+      "tttMoveCell",
+      "tttMoveRequest"
+    ],
+    "bindings": [
+      "tttActive",
+      "tttMoveCount",
+      "tttWinner"
+    ],
+    "reads": [
+      "tttActive",
+      "tttBoard",
+      "tttCube",
+      "tttMoveApplied",
+      "tttMoveCount",
+      "tttWinner"
+    ]
+  },
   "rules": [
     {
       "effects": [

@@ -1,4 +1,23 @@
 {
+  "exports": {
+    "actions": [
+      "mancalaBoard",
+      "mancalaMoveRequest",
+      "mancalaSelectedPit"
+    ],
+    "bindings": [
+      "mancalaStatus",
+      "mancalaTurn"
+    ],
+    "reads": [
+      "mancalaBoard",
+      "mancalaMoveApplied",
+      "mancalaPitSeeds",
+      "mancalaSelectedPit",
+      "mancalaStatus",
+      "mancalaTurn"
+    ]
+  },
   "placements": {
     "rows": [
       {

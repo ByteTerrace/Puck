@@ -887,6 +887,10 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"imports [{string.Join(separator: ", ", values: imports.Select(selector: static import => import.Document))}] survived to validation — imports resolve only at the file-load boundary; this document arrived somewhere no import can be resolved, so it must be composed (flattened) before it can run.");
         }
 
+        if (definition.Exports is { } exports) {
+            errors.Add(item: $"exports [{exports.Describe()}] survived to validation — a module's exports bind only where the module is imported; this document was loaded as a world, not imported, so nothing can bind to them.");
+        }
+
         ValidateExtensions(
             extensions: definition.Extensions,
             errors: errors

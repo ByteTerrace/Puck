@@ -81,10 +81,15 @@ public static class WorldModuleNamespace {
         return new Rewriter(declared: declared).Rewrite(text: text, role: role);
     }
 
-    // The type-directed walk over a raw tree: each present member is resolved against the registry by its C# member,
-    // a $type discriminator selects the arm, and the two converter-backed shapes (an expression's token object, a
-    // reaction scalar's row object) are followed by hand.
-    private static void Visit(JsonNode? node, Type type, Action<JsonObject, string, JsonNode, WorldNameField> visitor) {
+    /// <summary>Walks a raw tree type-directed, calling <paramref name="visitor"/> at every registered name-bearing
+    /// site with the holding object, the member's JSON name, the value, and the registration: each present member
+    /// is resolved against the registry by its C# member, a <c>$type</c> discriminator selects the arm, and the two
+    /// converter-backed shapes (an expression's token object, a reaction scalar's row object) are followed by
+    /// hand.</summary>
+    /// <param name="node">The tree, or the subtree to walk.</param>
+    /// <param name="type">The model type <paramref name="node"/> holds.</param>
+    /// <param name="visitor">Called once per registered site, in document order.</param>
+    public static void Visit(JsonNode? node, Type type, Action<JsonObject, string, JsonNode, WorldNameField> visitor) {
         type = (Nullable.GetUnderlyingType(nullableType: type) ?? type);
 
         if (node is null) {
@@ -165,6 +170,12 @@ public static class WorldModuleNamespace {
             case JsonTypeInfoKind.Enumerable when (node is JsonArray list):
                 foreach (var element in list) {
                     Visit(node: element, type: typeInfo.ElementType!, visitor: visitor);
+                }
+
+                break;
+            case JsonTypeInfoKind.Dictionary when (node is JsonObject entries):
+                foreach (var entry in entries) {
+                    Visit(node: entry.Value, type: typeInfo.ElementType!, visitor: visitor);
                 }
 
                 break;

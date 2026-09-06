@@ -52,13 +52,14 @@ public static partial class WorldNameRegistry {
         _ = output.Append(value: "dynamics name. `[]` is a list element; `[name]` is a `$type` arm; `{tokens}` is an expression's postfix\n");
         _ = output.Append(value: "spelling; `{row}` is a reaction scalar's row form. A path ending in `…` re-enters a shape listed above it.\n");
         _ = output.Append(value: "An aliased import (`imports[].as`) prefixes every `Declares` site with `<alias>_` and rewrites every other\n");
-        _ = output.Append(value: "role's names to match; see `src/Puck.World.Schema/README.md`.\n\n");
-        _ = output.Append(value: "## Registered fields\n\n| Path | Kind | Role | Member |\n|---|---|---|---|\n");
+        _ = output.Append(value: "role's names to match. Facet is the export list (`exports.reads`/`actions`/`bindings`) that admits a host\n");
+        _ = output.Append(value: "reference through the field to an imported module's name; see `src/Puck.World.Schema/README.md`.\n\n");
+        _ = output.Append(value: "## Registered fields\n\n| Path | Kind | Role | Facet | Member |\n|---|---|---|---|---|\n");
 
         foreach (var site in walk.Sites) {
             _ = output.Append(value: ((site.Field.Member.Length == 0)
-                ? $"| `{site.Path}` | | | re-enters `{TypeName(type: site.Field.Owner)}` |\n"
-                : $"| `{site.Path}` | {site.Field.Kind} | {site.Field.Role} | `{TypeName(type: site.Field.Owner)}.{site.Field.Member}` |\n"
+                ? $"| `{site.Path}` | | | | re-enters `{TypeName(type: site.Field.Owner)}` |\n"
+                : $"| `{site.Path}` | {site.Field.Kind} | {site.Field.Role} | {((site.Field.Role == WorldNameRole.Declares) ? "" : site.Field.Facet.ToString())} | `{TypeName(type: site.Field.Owner)}.{site.Field.Member}` |\n"
             ));
         }
 
@@ -90,15 +91,21 @@ public static partial class WorldNameRegistry {
     }
     // A state row is converter-backed, so its metadata lists no properties; the converter reads the record's own
     // init-able members by camel-cased name, which is what the walk reflects here.
-    internal static IEnumerable<(string JsonName, Type DeclaringType, string Member, Type PropertyType)> ReflectedRowMembers(Type type) {
-        foreach (var property in type.GetProperties(bindingAttr: (BindingFlags.Public | BindingFlags.Instance))) {
-            if ((property.SetMethod is null) || property.IsDefined(attributeType: typeof(System.Text.Json.Serialization.JsonIgnoreAttribute), inherit: true)) {
-                continue;
+    internal static IReadOnlyList<(string JsonName, Type DeclaringType, string Member, Type PropertyType)> ReflectedRowMembers(Type type) =>
+        RowMembers.GetOrAdd(key: type, valueFactory: static type => {
+            var members = new List<(string JsonName, Type DeclaringType, string Member, Type PropertyType)>();
+
+            foreach (var property in type.GetProperties(bindingAttr: (BindingFlags.Public | BindingFlags.Instance))) {
+                if ((property.SetMethod is null) || property.IsDefined(attributeType: typeof(System.Text.Json.Serialization.JsonIgnoreAttribute), inherit: true)) {
+                    continue;
+                }
+
+                members.Add(item: (JsonNamingPolicy.CamelCase.ConvertName(name: property.Name), (property.DeclaringType ?? type), property.Name, property.PropertyType));
             }
 
-            yield return (JsonNamingPolicy.CamelCase.ConvertName(name: property.Name), (property.DeclaringType ?? type), property.Name, property.PropertyType);
-        }
-    }
+            return members;
+        });
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, IReadOnlyList<(string JsonName, Type DeclaringType, string Member, Type PropertyType)>> RowMembers = new();
     /// <summary>Finds the registration for a member, or the implicit one its type carries: a
     /// <see cref="BindableScalar"/>/<see cref="BindableColor"/> member is a state binding wherever it sits.</summary>
     /// <param name="declaringType">The type the member was found on.</param>
@@ -114,7 +121,7 @@ public static partial class WorldNameRegistry {
         var leaf = Unwrap(type: propertyType);
 
         if ((leaf == typeof(BindableScalar)) || (leaf == typeof(BindableColor))) {
-            field = new WorldNameField(Owner: declaringType, Member: member, Kind: WorldNameKind.State, Role: WorldNameRole.Binding);
+            field = new WorldNameField(Owner: declaringType, Member: member, Kind: WorldNameKind.State, Role: WorldNameRole.Binding, Facet: WorldExportFacet.Binding);
 
             return true;
         }
@@ -264,7 +271,7 @@ public static partial class WorldNameRegistry {
             var leaf = Unwrap(type: propertyType);
 
             if ((leaf == typeof(BindableScalar)) || (leaf == typeof(BindableColor))) {
-                Sites.Add(item: new WorldNameSite(Path: path, Field: new WorldNameField(Owner: declaringType, Member: member, Kind: WorldNameKind.State, Role: WorldNameRole.Binding)));
+                Sites.Add(item: new WorldNameSite(Path: path, Field: new WorldNameField(Owner: declaringType, Member: member, Kind: WorldNameKind.State, Role: WorldNameRole.Binding, Facet: WorldExportFacet.Binding)));
 
                 return;
             }

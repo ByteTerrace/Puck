@@ -1,4 +1,25 @@
 {
+  "exports": {
+    "actions": [
+      "betAction1",
+      "betAction2",
+      "table"
+    ],
+    "bindings": [
+      "bets",
+      "phase",
+      "stack"
+    ],
+    "reads": [
+      "bets",
+      "community",
+      "hand1",
+      "hand2",
+      "phase",
+      "stack",
+      "table"
+    ]
+  },
   "rules": [
     {
       "effects": [

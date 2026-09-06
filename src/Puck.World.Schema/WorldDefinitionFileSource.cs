@@ -677,6 +677,7 @@ public static class WorldDefinitionFileSource {
             }
 
             var importTrees = new List<(string Name, JsonObject Tree)>();
+            var modules = new List<(string Name, JsonObject Tree, WorldExports Exports)>();
 
             foreach (var entry in importsArray) {
                 if (!TryReadImportEntry(
@@ -722,8 +723,35 @@ public static class WorldDefinitionFileSource {
                     return false;
                 }
 
-                importTrees.Add(item: (DescribeImport(alias: importAlias, resolvedName: importResolvedName), importResult!));
+                var importDescription = DescribeImport(alias: importAlias, resolvedName: importResolvedName);
+
+                if (!WorldModuleExports.TryTake(
+                    exports: out var exports,
+                    module: importResult!,
+                    moduleName: importDescription,
+                    reason: out var exportsReason
+                )) {
+                    reason = $"{resolvedPath} imports {exportsReason}";
+
+                    return false;
+                }
+
+                modules.Add(item: (importDescription, importResult!, exports));
+                importTrees.Add(item: (importDescription, importResult!));
                 touched.AddRange(collection: importTouched);
+            }
+
+            if (!WorldModuleExports.TryCheckLayers(
+                basis: basisComposed,
+                hostPath: resolvedPath,
+                imports: modules,
+                ownBody: ownBody,
+                reason: out var surfaceReason,
+                surfaces: out _
+            )) {
+                reason = surfaceReason;
+
+                return false;
             }
 
             if (!WorldDocumentBasis.TryMergeImports(
@@ -907,9 +935,10 @@ public static class WorldDefinitionFileSource {
     }
     // Shares TryComposeLayers' cycle/depth walk and basis-then-imports-then-own-body recursion order, but collects
     // a (path, own top-level keys) entry per file instead of merging JSON — the read-back `world.imports` prints.
-    // Each entry's keys are exactly what that file's own JSON declares at the root (basis/imports members excluded),
-    // in MERGE order: a later entry's same key overrides an earlier one's.
-    private static bool TryDescribeLayers(IWorldDocumentSource source, string resolvedPath, string? alias, byte[] bytes, IReadOnlyList<string> ancestors, List<(string Path, string? Alias, IReadOnlyList<string> Keys)> layers, out string reason) {
+    // Each entry's keys are exactly what that file's own JSON declares at the root (basis/imports/exports members
+    // excluded; exports ride beside the keys as authored), in MERGE order: a later entry's same key overrides an
+    // earlier one's.
+    private static bool TryDescribeLayers(IWorldDocumentSource source, string resolvedPath, string? alias, byte[] bytes, IReadOnlyList<string> ancestors, List<(string Path, string? Alias, IReadOnlyList<string> Keys, WorldExports? Exports)> layers, out string reason) {
         if (ancestors.Contains(
             value: resolvedPath,
             comparer: StringComparer.OrdinalIgnoreCase
@@ -1021,11 +1050,24 @@ public static class WorldDefinitionFileSource {
         var ownKeys = root.Select(selector: static member => member.Key)
             .Where(predicate: static name => (
                 !string.Equals(a: name, b: WorldDocumentBasis.BasisMemberName, comparisonType: StringComparison.Ordinal) &&
-                !string.Equals(a: name, b: WorldDocumentBasis.ImportsMemberName, comparisonType: StringComparison.Ordinal)
+                !string.Equals(a: name, b: WorldDocumentBasis.ImportsMemberName, comparisonType: StringComparison.Ordinal) &&
+                !string.Equals(a: name, b: WorldExports.MemberName, comparisonType: StringComparison.Ordinal)
             ))
             .ToArray();
 
-        layers.Add(item: (resolvedPath, alias, ownKeys));
+        WorldExports? exports = null;
+
+        if (root.TryGetPropertyValue(propertyName: WorldExports.MemberName, jsonNode: out var exportsNode) && (exportsNode is not null)) {
+            try {
+                exports = JsonSerializer.Deserialize<WorldExports>(node: exportsNode, options: WorldJsonContext.Default.Options);
+            } catch (JsonException exception) {
+                reason = $"'{WorldExports.MemberName}' in {resolvedPath} is malformed: {exception.Message}";
+
+                return false;
+            }
+        }
+
+        layers.Add(item: (resolvedPath, alias, ownKeys, exports));
         reason = string.Empty;
 
         return true;
@@ -1037,12 +1079,12 @@ public static class WorldDefinitionFileSource {
     /// remarks).</summary>
     /// <param name="path">The document file to describe.</param>
     /// <param name="layers">Each layer in merge order on success — its resolved path, the alias it composed under
-    /// (<see langword="null"/> for a basis link or an unaliased import), and its own top-level keys; empty on
-    /// failure.</param>
+    /// (<see langword="null"/> for a basis link or an unaliased import), its own top-level keys, and the
+    /// <c>exports</c> it authors as written (<see langword="null"/> when it authors none); empty on failure.</param>
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
     /// <returns><see langword="true"/> when the file was readable and its graph resolved.</returns>
-    public static bool TryDescribeComposition(string path, out IReadOnlyList<(string Path, string? Alias, IReadOnlyList<string> Keys)> layers, out string reason) {
-        var collected = new List<(string Path, string? Alias, IReadOnlyList<string> Keys)>();
+    public static bool TryDescribeComposition(string path, out IReadOnlyList<(string Path, string? Alias, IReadOnlyList<string> Keys, WorldExports? Exports)> layers, out string reason) {
+        var collected = new List<(string Path, string? Alias, IReadOnlyList<string> Keys, WorldExports? Exports)>();
 
         try {
             var bytes = File.ReadAllBytes(path: path);

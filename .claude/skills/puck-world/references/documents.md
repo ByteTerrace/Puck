@@ -1419,8 +1419,17 @@ owned worlds share a basis. An entry's `as` composes the fragment under a namesp
 the fragment — bare name positions, `$` channel segments, `$cell:`/`cell:`/`$expr:` keys, infix and postfix
 expressions, `state.<row>` bindings — is rewritten to match (`WorldModuleNamespace`); names the fragment does not
 declare stay as written. An alias is a bare identifier (letter or underscore, then letters, digits, underscores).
-One fragment composes twice under two aliases; an entry with no `as` composes its names unchanged. Law suites:
-`tests/Puck.World.Tests/ModuleAliasImportLawTests.cs`, `tests/Puck.World.Schema.Tests/WorldNameRegistryLawTests.cs`.
+One fragment composes twice under two aliases; an entry with no `as` composes its names unchanged. A fragment's
+names are private by default: its `exports` record (`WorldExports` — `reads`, `actions`, `bindings`, each naming the
+fragment's own declarations) is the surface a host may bind, and at compose time (`WorldModuleExports`, same pass)
+every other layer — the importing file's body, its basis, each sibling import — refuses by name the first registered
+site spelling a private name, quoting the JSON path and the export list that would admit it (the registry field's
+`Facet`: effect destinations, transform targets, and a board facet's `occupancy` are `actions`; HUD/overlay/camera
+bindings are `bindings`; every other read position is `reads`). The member is stripped from the composed tree, a
+document loaded as a world with `exports` on it refuses at validation, and `world.imports` prints each layer's
+`exports[...]`. Law suites:
+`tests/Puck.World.Tests/ModuleAliasImportLawTests.cs`, `tests/Puck.World.Tests/ModuleExportsLawTests.cs`,
+`tests/Puck.World.Schema.Tests/WorldNameRegistryLawTests.cs`, `tests/Puck.World.Schema.Tests/WorldExportsLawTests.cs`.
 Law suite: `tests/Puck.World.Tests/DocumentBasisLawTests.cs`,
 `StorageCompositionLawTests.cs`.
 

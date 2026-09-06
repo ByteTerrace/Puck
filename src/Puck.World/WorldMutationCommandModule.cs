@@ -505,7 +505,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.imports",
-            description: "Reads the loaded world's whole basis-and-imports composition graph back: every file that contributed to it, in MERGE order (the deepest basis ancestor through every import to the file's own body last — a later entry's same key overrides an earlier one's), each paired with the top-level keys ITS OWN JSON declares. A flat file (no basis, no imports) reports just itself.",
+            description: "Reads the loaded world's whole basis-and-imports composition graph back: every file that contributed to it, in MERGE order (the deepest basis ancestor through every import to the file's own body last — a later entry's same key overrides an earlier one's), each paired with the top-level keys ITS OWN JSON declares and, for a module that authors one, its exports record as written. A flat file (no basis, no imports) reports just itself.",
             handler: (_, args) => {
                 if (CommandResult.RequireNoArguments(args: args, verb: "world.imports") is { } refusal) {
                     return refusal;
@@ -521,7 +521,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
 
                 var formatted = string.Join(
                     separator: " | ",
-                    values: layers.Select(selector: layer => $"{layer.Path}{((layer.Alias is null) ? "" : $" as {layer.Alias}")} [{string.Join(separator: ",", values: layer.Keys)}]")
+                    values: layers.Select(selector: layer => $"{layer.Path}{((layer.Alias is null) ? "" : $" as {layer.Alias}")} [{string.Join(separator: ",", values: layer.Keys)}]{((layer.Exports is null) ? "" : $" exports[{layer.Exports.Describe()}]")}")
                 );
 
                 return new CommandResult(Output: $"[world.imports: {formatted}]");

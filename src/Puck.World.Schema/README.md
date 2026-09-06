@@ -697,6 +697,34 @@ underscores), refused by name otherwise. The same fragment composes twice under
 two aliases (`tests/Puck.World.Tests/Fixtures/twin-tictactoe-host.world.json`),
 and an entry with no `as` composes its names unchanged.
 
+**Exports: a module's names are private by default.** A module document may
+carry an `exports` record (`WorldExports.cs`) with three lists — `reads`,
+`actions`, `bindings` — each naming declarations of the module as the module
+spells them. Everything the module declares and does not list is internal to
+it: at compose time (`WorldModuleExports.cs`, in the same pass that prefixes an
+alias) every other layer of the composition — the importing file's own body,
+its basis, each sibling import — is walked over the same registry, and the
+first registered site spelling a module's private name refuses by name, quoting
+the site's JSON path, the module, and the export list that would admit it. The
+list a site binds through is the registry field's facet
+(`WorldNameField.Facet`, the `Facet` column of the generated table): a state
+effect's destination, a transform's target row or zone, a generate row, a field
+write, and a placement board's `occupancy` are `actions`; a HUD element or
+template, an overlay predicate, a camera program scalar, and a binding wheel or
+bar row are `bindings`; every other read position — a gate, a comparand, an
+expression operand, a `$cell:` key, a domain, a zone table, a board facet's
+`topology`/`turn`/`verdict`/`move`/`plan` — is `reads`. A module's own
+references to its own names are never checked, nor is a name the checked layer
+itself declares. Under an aliased import the export lists are prefixed with the
+declarations, so a host binds an exported action by its alias-qualified name
+(`a_tttMoveCell`). An export naming nothing the module declares, or listed
+twice, refuses; a document loaded as a world with `exports` still on it refuses
+at validation, since nothing imported it. The record is stripped from the
+composed tree, so a live document never carries it; `world.imports` prints each
+layer's `exports[...]` as authored. Every shipped game module under
+`Assets/worlds/games/` authors its surface; `solitaire.world.json` re-exports
+its three tables' control rows, which its own imports must export first.
+
 **The validator is the one thick gate.** `WorldDefinitionValidator.cs` runs
 over the entire composed candidate document — at boot, on every live mutation,
 and on a whole-document swap — so builders and mutation appliers never repeat

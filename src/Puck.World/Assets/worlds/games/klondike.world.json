@@ -1,4 +1,19 @@
 {
+  "exports": {
+    "actions": [
+      "solitaireKlondike"
+    ],
+    "bindings": [
+      "solitaireKlondike"
+    ],
+    "reads": [
+      "solitaireKlondike",
+      "solitaireKlondikeCards",
+      "solitaireKlondikeFace",
+      "solitaireKlondikeRank",
+      "solitaireKlondikeSuit"
+    ]
+  },
   "state": {
   "world": [
     {
