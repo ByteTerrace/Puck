@@ -58,7 +58,9 @@ public interface IWorldExternalOperationProvider {
     ValueTask<WorldExternalOperationResult> ExecuteAsync(WorldExternalOperation operation, CancellationToken cancellationToken);
     /// <summary>Observes a previously claimed request without repeating its side effect.</summary>
     /// <param name="operation">The original immutable request.</param>
+    /// <param name="previous">The last durable provider observation, including any opaque continuation data.
+    /// It contains no authority recovery image. Preserve continuation data when an observation is uncertain.</param>
     /// <param name="cancellationToken">Cancels the status query.</param>
     /// <returns>A known status or Unknown when the provider cannot establish one.</returns>
-    ValueTask<WorldExternalOperationResult> ReconcileAsync(WorldExternalOperation operation, CancellationToken cancellationToken);
+    ValueTask<WorldExternalOperationResult> ReconcileAsync(WorldExternalOperation operation, WorldExternalOperationResult previous, CancellationToken cancellationToken);
 }

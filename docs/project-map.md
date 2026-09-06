@@ -51,6 +51,7 @@ been quarantined out of the repository.
 
 ```text
 Optional extensions      Puck.World.AgentBridge  Puck.World.AgentHarness
+                         Puck.World.Azure
 Composition roots        Puck.Actors  Puck.Azure.Functions  Puck.Launcher.Stub
                          Puck.World  Puck.World.Silo
 Validation               Puck.AdvancedGamingBrick.Post  Puck.GamingBricks.Post
@@ -88,8 +89,9 @@ Leaf contracts and data  Puck.Abstractions  Puck.Assets  Puck.Attestation
                          Puck.SdfVm.Tests  Puck.ShaderVm.Tests
                          Puck.Shaders.Tests  Puck.SignedDistance.Tests
                          Puck.State.Tests  Puck.Text.Tests
-                         Puck.World.Agents.Tests  Puck.World.Protocol.Tests
-                         Puck.World.Schema.Tests  Puck.World.Tests
+                         Puck.World.Agents.Tests  Puck.World.Azure.Tests
+                         Puck.World.Protocol.Tests  Puck.World.Schema.Tests
+                         Puck.World.Tests
 (Tool)                   Puck.Cli
 (Analyzer)               Puck.Analyzers
 ```

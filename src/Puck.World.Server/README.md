@@ -25,6 +25,8 @@ Recorded providers and durable external operations share the engine's authority
 and replay paths. See [Extensions and external operations](Extensions.md) for
 the hosting contract, operation recovery, and the distinction between a
 deterministic WASM guest and a provider whose contributions are recorded.
+The optional [Azure resource extension](../Puck.World.Azure/README.md) supplies
+an ARM provider without adding Azure management dependencies to the server.
 
 ## The tick (`WorldServer.cs`)
 

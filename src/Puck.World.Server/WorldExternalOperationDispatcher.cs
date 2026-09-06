@@ -87,7 +87,7 @@ public sealed class WorldExternalOperationDispatcher {
         WorldExternalOperationResult result;
         try {
             result = reconcile
-                ? await provider.ReconcileAsync(entry.Operation, cancellationToken).ConfigureAwait(false)
+                ? await provider.ReconcileAsync(entry.Operation, new(entry.Status, entry.Result), cancellationToken).ConfigureAwait(false)
                 : await provider.ExecuteAsync(entry.Operation, cancellationToken).ConfigureAwait(false);
             if (result is null || result.Result is null || result.Status is not (
                 WorldExternalOperationStatus.Running or WorldExternalOperationStatus.Succeeded or
@@ -97,7 +97,9 @@ public sealed class WorldExternalOperationDispatcher {
         } catch (Exception exception) {
             // A timeout, cancellation, or provider fault does not prove the effect did not happen. Do not persist
             // arbitrary exception messages: SDK errors can contain URLs, request bodies, or credentials.
-            result = new WorldExternalOperationResult(WorldExternalOperationStatus.Unknown, exception.GetType().Name);
+            // A failed status query must retain the receipt needed by the next query after a restart.
+            result = new WorldExternalOperationResult(WorldExternalOperationStatus.Unknown,
+                reconcile ? entry.Result : exception.GetType().Name);
         }
         // If shutdown cancels this write, Dispatching remains durable and recovery reconciles it. A store failure
         // is never confused with provider failure and must never cause ExecuteAsync to run again.

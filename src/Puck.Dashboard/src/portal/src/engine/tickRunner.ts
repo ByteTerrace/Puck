@@ -19,6 +19,7 @@ export interface RuleExecutionEvent {
   fired: boolean;
   gateSummary: string;
   deltas: StateDelta[];
+  gate?: any;
   error?: string;
 }
 
@@ -141,6 +142,7 @@ export function executeSimulationTick(
         fired: true,
         gateSummary: gateEval.details,
         deltas,
+        gate: rule.gate,
       });
     } else {
       ruleEvents.push({
@@ -149,6 +151,7 @@ export function executeSimulationTick(
         fired: false,
         gateSummary: gateEval.details,
         deltas: [],
+        gate: rule.gate,
       });
     }
   }
@@ -171,6 +174,7 @@ export function executeSimulationTick(
           fired: true,
           gateSummary: gateEval.details,
           deltas,
+          gate: rule.gate,
         });
 
         if (deltas.length > 0) {

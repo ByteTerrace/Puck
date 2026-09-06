@@ -93,10 +93,13 @@ public sealed class WorldExternalOperationJournal {
             if (index < 0) { return false; }
             var current = snapshot.Entries[index];
             if (current != expected) {
-                // A concurrent status poll must not discard a definitive late execution result. Terminal
-                // outcomes are immutable; an obsolete nonterminal observation never overwrites newer evidence.
+                // A concurrent status poll must not discard a late execution result. In particular, an
+                // accepted asynchronous response can carry the only durable continuation. It may replace
+                // uncertainty about the original claim, but never a newer running or terminal observation.
                 var definitive = result.Status is WorldExternalOperationStatus.Succeeded or WorldExternalOperationStatus.Failed;
-                if (!definitive || current.Status is WorldExternalOperationStatus.Pending or WorldExternalOperationStatus.Succeeded or
+                var acceptedClaim = expected.Status == WorldExternalOperationStatus.Dispatching &&
+                    result.Status == WorldExternalOperationStatus.Running && current.Status == WorldExternalOperationStatus.Unknown;
+                if ((!definitive && !acceptedClaim) || current.Status is WorldExternalOperationStatus.Pending or WorldExternalOperationStatus.Succeeded or
                     WorldExternalOperationStatus.Failed || current.Operation != expected.Operation || current.Cause != expected.Cause) {
                     return false;
                 }

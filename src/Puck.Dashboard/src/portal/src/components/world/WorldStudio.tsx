@@ -22,6 +22,12 @@ import {
   RiTrophyLine,
   RiGitMergeLine,
   RiHistoryLine,
+  RiFlaskLine,
+  RiCpuLine,
+  RiCompass3Fill,
+  RiTerminalBoxLine,
+  RiAddLine,
+  RiSparklingLine,
 } from "@remixicon/react";
 
 import UniversalTopologyView from "./UniversalTopologyView";
@@ -29,6 +35,12 @@ import ReactiveRuleGraph from "./ReactiveRuleGraph";
 import StateMatrixView, { StateRowDefinition } from "./StateMatrixView";
 import WorldWorkbench from "./WorldWorkbench";
 import ExecutionTraceLog from "./ExecutionTraceLog";
+import ScenarioTestStudio from "./ScenarioTestStudio";
+import MonteCarloStudio from "./MonteCarloStudio";
+import LatticeRayStudio from "./LatticeRayStudio";
+import PuckReplConsole from "./PuckReplConsole";
+import RuleAuthoringModal from "./RuleAuthoringModal";
+
 import {
   TopologyDefinition,
   WorldRule,
@@ -80,6 +92,15 @@ export const WorldStudio: React.FC = () => {
   const [snapshotsList, setSnapshotsList] = useState<TickSnapshot[]>([]);
   const [hoveredMask, setHoveredMask] = useState<bigint | null>(null);
 
+  // Probed vector beam from LatticeRayStudio
+  const [probedRayBeam, setProbedRayBeam] = useState<{ name: string; cells: number[] } | null>(null);
+
+  // Visual Rule Composer Modal
+  const [ruleModalOpen, setRuleModalOpen] = useState(false);
+
+  // Hovered cell for speculative ghost move projection
+  const [hoveredCell, setHoveredCell] = useState<number | null>(null);
+
   // Initialize replay tape whenever a new world definition is loaded
   useEffect(() => {
     const initialScalars: Record<string, any> = {};
@@ -110,6 +131,44 @@ export const WorldStudio: React.FC = () => {
   const activePlayer = liveState["tttActive"] ?? liveState["hexTurn"] ?? liveState["chessTurn"] ?? 1;
   const winner = liveState["tttWinner"] ?? liveState["hexWinner"] ?? 0;
   const lastDeltas: StateDelta[] = currentSnapshot?.trace?.allDeltas ?? [];
+
+  // Speculative Ghost Move Simulation on Hover
+  const speculativeResult = useMemo(() => {
+    if (hoveredCell === null || winner !== 0 || !currentSnapshot) return null;
+    const isOccupied = liveCells[hoveredCell] && liveCells[hoveredCell] !== 0;
+    if (isOccupied) {
+      return { illegal: true, message: `Cell #${hoveredCell} is already occupied` };
+    }
+
+    const moveRequestSeq = Number(liveState["tttMoveRequest"] ?? 0) + 1;
+    const sim = executeSimulationTick(
+      tickCount + 1,
+      `Speculative Move at #${hoveredCell}`,
+      {
+        tttMoveCell: hoveredCell,
+        tttMoveRequest: moveRequestSeq,
+        hexMoveCell: hoveredCell,
+        hexMoveRequest: moveRequestSeq,
+      },
+      currentSnapshot.state,
+      currentSnapshot.boardCells,
+      rules,
+      topologyMap
+    );
+
+    const nextWinner = sim.nextState["tttWinner"] ?? sim.nextState["hexWinner"] ?? 0;
+    const firedRule = sim.trace.ruleEvents.find((r) => r.fired);
+    const nextPlayer = sim.nextState["tttActive"] ?? sim.nextState["hexTurn"] ?? 1;
+
+    return {
+      illegal: false,
+      cell: hoveredCell,
+      nextWinner,
+      firedRuleName: firedRule?.ruleName ?? "ttt-place-mark",
+      nextPlayer,
+      isWinningMove: nextWinner > 0,
+    };
+  }, [hoveredCell, winner, currentSnapshot, liveCells, liveState, rules, topologyMap, tickCount]);
 
   // Calculate winning ray cells for 3D beam illumination
   const activeWinningRay = useMemo(() => {
@@ -160,10 +219,14 @@ export const WorldStudio: React.FC = () => {
     return null;
   }, [winner, liveCells, activeTopology]);
 
+  // Combined ray passed to 3D view (winning ray has priority, otherwise probed ray)
+  const displayedRayBeam = activeWinningRay ?? probedRayBeam;
+
   // Handle Preset World Switch
   const handlePresetSelect = (presetId: string | null) => {
     if (!presetId) return;
     setSelectedPresetId(presetId);
+    setProbedRayBeam(null);
     const item = AVAILABLE_PRESETS.find((p) => p.id === presetId);
     if (item) {
       setWorldJsonText(JSON.stringify(item.world, null, 2));
@@ -252,6 +315,17 @@ export const WorldStudio: React.FC = () => {
     });
   };
 
+  const handleSaveCustomRule = (newRule: WorldRule) => {
+    try {
+      const currentWorld = JSON.parse(worldJsonText);
+      const updatedRules = [...(currentWorld.rules ?? []), newRule];
+      const updatedWorld = { ...currentWorld, rules: updatedRules };
+      setWorldJsonText(JSON.stringify(updatedWorld, null, 2));
+    } catch {
+      // ignore
+    }
+  };
+
   return (
     <Box p="md">
       {/* Studio Header Toolbar */}
@@ -260,10 +334,10 @@ export const WorldStudio: React.FC = () => {
           <Group gap="sm">
             <RiGamepadLine size={26} color="var(--accent)" />
             <div>
-              <div className="kicker">Puck World Studio IDE</div>
+              <div className="kicker">Puck World Simulation IDE</div>
               <Group gap={8} align="baseline">
                 <Text fw={600} size="md" style={{ fontFamily: '"Lora", Georgia, serif', color: "var(--ink)" }}>
-                  Zero-3D Spatial CAD & Reactive Engine Workbench
+                  Formal State Simulation, CAD & Rule Studio
                 </Text>
               </Group>
             </div>
@@ -277,7 +351,7 @@ export const WorldStudio: React.FC = () => {
               value={selectedPresetId}
               onChange={handlePresetSelect}
               data={AVAILABLE_PRESETS.map((p) => ({ label: `${p.name} (${p.category})`, value: p.id }))}
-              style={{ width: 260 }}
+              style={{ width: 250 }}
             />
 
             {topologies.length > 1 && (
@@ -287,9 +361,20 @@ export const WorldStudio: React.FC = () => {
                 value={selectedTopologyName}
                 onChange={(val) => val && setSelectedTopologyName(val)}
                 data={topologies.map((t) => ({ label: `${t.name} (${t.$type})`, value: t.name }))}
-                style={{ width: 180 }}
+                style={{ width: 170 }}
               />
             )}
+
+            <Button
+              size="xs"
+              variant="outline"
+              color="jade"
+              leftSection={<RiAddLine size={14} />}
+              onClick={() => setRuleModalOpen(true)}
+              style={{ alignSelf: "flex-end" }}
+            >
+              New Rule
+            </Button>
           </Group>
 
           {/* Simulation & Time-Travel Controls */}
@@ -361,6 +446,37 @@ export const WorldStudio: React.FC = () => {
         </Alert>
       )}
 
+      {/* Speculative Ghost Hover HUD Alert */}
+      {speculativeResult && winner === 0 && (
+        <Alert
+          icon={<RiSparklingLine size={18} color={speculativeResult.isWinningMove ? "var(--accent)" : "var(--accent-2)"} />}
+          color={speculativeResult.isWinningMove ? "yellow" : speculativeResult.illegal ? "red" : "teal"}
+          variant="light"
+          mb="md"
+          title={`Speculative Move Preview [Cell #${hoveredCell}]`}
+        >
+          {speculativeResult.illegal ? (
+            <Text size="xs" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+              Illegal Action: {speculativeResult.message}
+            </Text>
+          ) : (
+            <Group gap="md">
+              <Text size="xs" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+                Rule: <strong>{speculativeResult.firedRuleName}</strong> will fire
+              </Text>
+              <Text size="xs" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+                Next Turn: Player {speculativeResult.nextPlayer}
+              </Text>
+              {speculativeResult.isWinningMove && (
+                <Badge size="xs" color="yellow" variant="filled">
+                  CRITICAL WINNING MOVE!
+                </Badge>
+              )}
+            </Group>
+          )}
+        </Alert>
+      )}
+
       {/* Main Studio Two-Column Grid */}
       <Grid gap="md">
         {/* Left Column: Spatial Topology CAD & State Matrix (7 Cols) */}
@@ -373,7 +489,10 @@ export const WorldStudio: React.FC = () => {
                 selectedCell={liveState["tttMoveCell"]}
                 onSelectCell={handleSelectCell}
                 hoveredMask={hoveredMask}
-                activeWinningRay={activeWinningRay}
+                activeWinningRay={displayedRayBeam}
+                ghostCell={hoveredCell}
+                ghostPlayer={activePlayer}
+                onHoverCell={setHoveredCell}
               />
             ) : (
               <Text c="var(--ink-faint)" size="sm">
@@ -392,21 +511,34 @@ export const WorldStudio: React.FC = () => {
           </Stack>
         </Grid.Col>
 
-        {/* Right Column: Causal Execution Trace, Reactive Rule DAG, and Workbench (5 Cols) */}
+        {/* Right Column: Advanced Simulation Subsystem Tabs (5 Cols) */}
         <Grid.Col span={{ base: 12, md: 5 }}>
           <Tabs defaultValue="trace" variant="outline">
-            <Tabs.List mb="xs">
-              <Tabs.Tab value="trace" leftSection={<RiHistoryLine size={16} />}>
-                Causal Trace Log
+            <Tabs.List mb="xs" style={{ flexWrap: "wrap" }}>
+              <Tabs.Tab value="trace" leftSection={<RiHistoryLine size={15} />}>
+                Trace Log
               </Tabs.Tab>
-              <Tabs.Tab value="rules" leftSection={<RiGitMergeLine size={16} />}>
-                Reactive Rule Network
+              <Tabs.Tab value="scenarios" leftSection={<RiFlaskLine size={15} />}>
+                Test Suite
               </Tabs.Tab>
-              <Tabs.Tab value="workbench" leftSection={<RiCodeSSlashLine size={16} />}>
-                JSON Workbench
+              <Tabs.Tab value="montecarlo" leftSection={<RiCpuLine size={15} />}>
+                Monte Carlo
+              </Tabs.Tab>
+              <Tabs.Tab value="rays" leftSection={<RiCompass3Fill size={15} />}>
+                Ray Prober
+              </Tabs.Tab>
+              <Tabs.Tab value="repl" leftSection={<RiTerminalBoxLine size={15} />}>
+                REPL
+              </Tabs.Tab>
+              <Tabs.Tab value="rules" leftSection={<RiGitMergeLine size={15} />}>
+                Rule DAG
+              </Tabs.Tab>
+              <Tabs.Tab value="workbench" leftSection={<RiCodeSSlashLine size={15} />}>
+                JSON
               </Tabs.Tab>
             </Tabs.List>
 
+            {/* Tab 1: Causal Execution Trace with Predicate Truth Trees */}
             <Tabs.Panel value="trace">
               <ExecutionTraceLog
                 snapshots={snapshotsList}
@@ -415,10 +547,53 @@ export const WorldStudio: React.FC = () => {
               />
             </Tabs.Panel>
 
+            {/* Tab 2: Scenario Test Suite */}
+            <Tabs.Panel value="scenarios">
+              <ScenarioTestStudio
+                worldId={selectedPresetId}
+                rules={rules}
+                topologies={topologyMap}
+              />
+            </Tabs.Panel>
+
+            {/* Tab 3: Monte Carlo Batch Rollout & Rule Health */}
+            <Tabs.Panel value="montecarlo">
+              <MonteCarloStudio
+                rules={rules}
+                topologies={topologyMap}
+                initialState={currentSnapshot?.state ?? {}}
+                initialBoardCells={currentSnapshot?.boardCells ?? {}}
+              />
+            </Tabs.Panel>
+
+            {/* Tab 4: 3D Lattice Ray Prober */}
+            <Tabs.Panel value="rays">
+              {activeTopology ? (
+                <LatticeRayStudio
+                  topology={activeTopology}
+                  onSelectRayBeam={(rayName, cells) => setProbedRayBeam({ name: rayName, cells })}
+                  activeRayName={displayedRayBeam?.name}
+                />
+              ) : (
+                <Text size="xs" c="dimmed">No active topology to probe.</Text>
+              )}
+            </Tabs.Panel>
+
+            {/* Tab 5: Interactive Expression REPL */}
+            <Tabs.Panel value="repl">
+              <PuckReplConsole
+                state={liveState}
+                boardCells={currentSnapshot?.boardCells ?? {}}
+                topologies={topologyMap}
+              />
+            </Tabs.Panel>
+
+            {/* Tab 6: Reactive Rule Dependency DAG */}
             <Tabs.Panel value="rules">
               <ReactiveRuleGraph rules={rules} currentState={liveState} />
             </Tabs.Panel>
 
+            {/* Tab 7: Raw World JSON Workbench */}
             <Tabs.Panel value="workbench">
               <WorldWorkbench
                 worldJson={worldJsonText}
@@ -428,6 +603,15 @@ export const WorldStudio: React.FC = () => {
           </Tabs>
         </Grid.Col>
       </Grid>
+
+      {/* Visual Rule Authoring Modal Dialog */}
+      <RuleAuthoringModal
+        opened={ruleModalOpen}
+        onClose={() => setRuleModalOpen(false)}
+        onSaveRule={handleSaveCustomRule}
+        existingStateVars={stateDefinitions.map((s) => s.name)}
+        topologyNames={topologies.map((t) => t.name)}
+      />
     </Box>
   );
 };

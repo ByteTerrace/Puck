@@ -7,6 +7,7 @@ import {
   Badge,
   ScrollArea,
   Paper,
+  Box,
 } from "@mantine/core";
 import {
   RiGitCommitLine,
@@ -15,6 +16,7 @@ import {
   RiTimeLine,
 } from "@remixicon/react";
 import { TickSnapshot } from "../../engine/replayTape";
+import PredicateTruthTree from "./PredicateTruthTree";
 
 export interface ExecutionTraceLogProps {
   snapshots: TickSnapshot[];
@@ -110,18 +112,18 @@ export const ExecutionTraceLog: React.FC<ExecutionTraceLogProps> = ({
 
                 {/* Fired rules */}
                 {firedEvents.length > 0 && (
-                  <Stack gap={4} mt={4}>
+                  <Stack gap={6} mt={4}>
                     {firedEvents.map((e, eIdx) => (
                       <Paper
                         key={eIdx}
-                        p={4}
+                        p={6}
                         radius="xs"
                         style={{
                           background: "var(--code-bg)",
                           borderLeft: e.mode === "Edge" ? "3px solid var(--accent)" : "3px solid var(--accent-2)",
                         }}
                       >
-                        <Group justify="space-between" wrap="nowrap">
+                        <Group justify="space-between" wrap="nowrap" mb={4}>
                           <Group gap={6} wrap="nowrap">
                             <RiCheckFill size={12} color={e.mode === "Edge" ? "var(--accent)" : "var(--accent-2)"} />
                             <Badge size="xs" variant="light" color={e.mode === "Edge" ? "coral" : "jade"}>
@@ -135,35 +137,60 @@ export const ExecutionTraceLog: React.FC<ExecutionTraceLogProps> = ({
                             {e.gateSummary}
                           </Text>
                         </Group>
+
+                        {e.gate && (
+                          <Box mt={4}>
+                            <PredicateTruthTree
+                              gate={e.gate}
+                              state={snap.state}
+                              boardCells={snap.boardCells}
+                              initialExpanded={false}
+                            />
+                          </Box>
+                        )}
                       </Paper>
                     ))}
                   </Stack>
                 )}
 
-                {/* Blocked rules if intent was rejected */}
-                {blockedEvents.length > 0 && firedEvents.length === 0 && (
-                  <Stack gap={4} mt={4}>
-                    {blockedEvents.slice(0, 2).map((e, eIdx) => (
+                {/* Blocked rules if intent was rejected or to inspect guards */}
+                {blockedEvents.length > 0 && (
+                  <Stack gap={6} mt={4}>
+                    {blockedEvents.map((e, eIdx) => (
                       <Paper
                         key={eIdx}
-                        p={4}
+                        p={6}
                         radius="xs"
                         style={{
                           background: "var(--code-bg)",
-                          borderLeft: "3px solid var(--ink-faint)",
+                          borderLeft: "3px solid var(--accent)",
                         }}
                       >
-                        <Group justify="space-between" wrap="nowrap">
+                        <Group justify="space-between" wrap="nowrap" mb={4}>
                           <Group gap={6} wrap="nowrap">
-                            <RiCloseFill size={12} color="#847d93" />
-                            <Text size="xs" ff="monospace" style={{ color: "#847d93" }}>
-                              {e.ruleName}: BLOCKED
+                            <RiCloseFill size={12} color="var(--accent)" />
+                            <Badge size="xs" variant="light" color="red">
+                              BLOCKED
+                            </Badge>
+                            <Text size="xs" ff="monospace" style={{ color: "var(--accent)", fontWeight: 600 }}>
+                              {e.ruleName}
                             </Text>
                           </Group>
                           <Text size="xs" c="var(--ink-faint)" ff="monospace" style={{ fontSize: 10 }}>
                             {e.gateSummary}
                           </Text>
                         </Group>
+
+                        {e.gate && (
+                          <Box mt={4}>
+                            <PredicateTruthTree
+                              gate={e.gate}
+                              state={snap.state}
+                              boardCells={snap.boardCells}
+                              initialExpanded={true}
+                            />
+                          </Box>
+                        )}
                       </Paper>
                     ))}
                   </Stack>

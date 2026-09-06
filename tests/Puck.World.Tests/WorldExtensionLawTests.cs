@@ -9,6 +9,26 @@ public sealed class WorldExtensionLawTests {
     private static readonly WorldExternalOperation Request = new("creature:7:incarnation:3:death", "creature-resource", "resource-incarnation:3/delete/schema:1", "{}");
 
     [Fact]
+    public async Task FailedReconciliationPreservesDurableContinuationAcrossProviderRestart() {
+        using var fixture = Fixtures.FreshServer();
+        using var extension = Extension(fixture.Server);
+        var store = new FakeObjectBlobStore();
+        var provider = new Provider { ExecutionStatus = WorldExternalOperationStatus.Running, ExecutionResult = "opaque-poll-reference", LosePoll = true };
+        var dispatcher = Dispatcher(extension, Journal(store), provider);
+        await dispatcher.CommitAsync(Request, "private-cause", TestContext.Current.CancellationToken);
+        await dispatcher.DispatchAsync(Request.Id, TestContext.Current.CancellationToken);
+        var unknown = await dispatcher.ReconcileAsync(Request.Id, TestContext.Current.CancellationToken);
+        Assert.Equal(WorldExternalOperationStatus.Unknown, unknown.Status);
+        Assert.Equal("opaque-poll-reference", unknown.Result);
+        Assert.Equal(new(WorldExternalOperationStatus.Running, "opaque-poll-reference"), provider.Previous);
+
+        var restartedProvider = new Provider();
+        await Dispatcher(extension, Journal(store), restartedProvider).ReconcileAsync(Request.Id, TestContext.Current.CancellationToken);
+        Assert.Equal(new(WorldExternalOperationStatus.Unknown, "opaque-poll-reference"), restartedProvider.Previous);
+        Assert.Equal(0, restartedProvider.Executions);
+    }
+
+    [Fact]
     public void TickHostCannotAdvertiseRecordedContributionsAndStillBeReexecuted() {
         using var fixture = Fixtures.FreshServer();
         using var host = new NullAddonHost { ReplayPolicy = WorldExtensionReplayPolicy.Recorded };
@@ -114,18 +134,23 @@ public sealed class WorldExtensionLawTests {
         await Assert.ThrowsAsync<ObjectDisposedException>(() => dispatcher.DispatchAsync(Request.Id, TestContext.Current.CancellationToken).AsTask());
     }
 
-    [Fact]
-    public async Task DefinitiveLateResponseWinsOverConcurrentUncertainty() {
+    [Theory]
+    [InlineData(WorldExternalOperationStatus.Succeeded)]
+    [InlineData(WorldExternalOperationStatus.Failed)]
+    [InlineData(WorldExternalOperationStatus.Running)]
+    public async Task LateExecutionResponseWinsOverConcurrentUncertainty(WorldExternalOperationStatus status) {
         using var fixture = Fixtures.FreshServer();
         using var extension = Extension(fixture.Server);
         var journal = Journal(new FakeObjectBlobStore());
-        var provider = new Provider { Finish = new(TaskCreationOptions.RunContinuationsAsynchronously) };
+        var provider = new Provider { Finish = new(TaskCreationOptions.RunContinuationsAsynchronously), ExecutionStatus = status, ExecutionResult = "receipt" };
         var dispatcher = Dispatcher(extension, journal, provider);
         await dispatcher.CommitAsync(Request, "cause", TestContext.Current.CancellationToken);
         var running = dispatcher.DispatchAsync(Request.Id, TestContext.Current.CancellationToken).AsTask();
         Assert.Equal(WorldExternalOperationStatus.Unknown, (await dispatcher.ReconcileAsync(Request.Id, TestContext.Current.CancellationToken)).Status);
         provider.Finish.SetResult();
-        Assert.Equal(WorldExternalOperationStatus.Succeeded, (await running).Status);
+        var result = await running;
+        Assert.Equal(status, result.Status);
+        Assert.Equal("receipt", result.Result);
         Assert.Equal(1, provider.Executions);
     }
 
@@ -280,6 +305,10 @@ public sealed class WorldExtensionLawTests {
         public int Executions;
         public int Reconciliations;
         public bool LoseResponse;
+        public bool LosePoll;
+        public WorldExternalOperationStatus ExecutionStatus = WorldExternalOperationStatus.Succeeded;
+        public string ExecutionResult = "deleted";
+        public WorldExternalOperationResult? Previous;
         public TaskCompletionSource? Finish;
         private bool m_deleted;
 
@@ -288,10 +317,12 @@ public sealed class WorldExtensionLawTests {
             if (Finish is { } finish) { await finish.Task.WaitAsync(cancellationToken); }
             m_deleted = true;
             if (LoseResponse) { throw new IOException("response lost; secret must not be journaled"); }
-            return new(WorldExternalOperationStatus.Succeeded, "deleted");
+            return new(ExecutionStatus, ExecutionResult);
         }
-        public ValueTask<WorldExternalOperationResult> ReconcileAsync(WorldExternalOperation operation, CancellationToken cancellationToken) {
+        public ValueTask<WorldExternalOperationResult> ReconcileAsync(WorldExternalOperation operation, WorldExternalOperationResult previous, CancellationToken cancellationToken) {
             Reconciliations++;
+            Previous = previous;
+            if (LosePoll) { throw new IOException("poll lost; secret must not be journaled"); }
             return ValueTask.FromResult(new WorldExternalOperationResult(
                 m_deleted ? WorldExternalOperationStatus.Succeeded : WorldExternalOperationStatus.Unknown, "observed"));
         }

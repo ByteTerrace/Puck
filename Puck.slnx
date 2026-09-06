@@ -48,6 +48,7 @@
         <Project Path="src/Puck.World.AgentBridge/Puck.World.AgentBridge.csproj" />
         <Project Path="src/Puck.World.AgentHarness/Puck.World.AgentHarness.csproj" />
         <Project Path="src/Puck.World.Authoring/Puck.World.Authoring.csproj" />
+        <Project Path="src/Puck.World.Azure/Puck.World.Azure.csproj" />
         <Project Path="src/Puck.World.Client/Puck.World.Client.csproj" />
         <Project Path="src/Puck.World.Console/Puck.World.Console.csproj" />
         <Project Path="src/Puck.World.Protocol/Puck.World.Protocol.csproj" />
@@ -82,6 +83,7 @@
         <Project Path="tests/Puck.SignedDistance.Tests/Puck.SignedDistance.Tests.csproj" />
         <Project Path="tests/Puck.State.Tests/Puck.State.Tests.csproj" />
         <Project Path="tests/Puck.Text.Tests/Puck.Text.Tests.csproj" />
+        <Project Path="tests/Puck.World.Azure.Tests/Puck.World.Azure.Tests.csproj" />
         <Project Path="tests/Puck.World.Protocol.Tests/Puck.World.Protocol.Tests.csproj" />
         <Project Path="tests/Puck.World.Agents.Tests/Puck.World.Agents.Tests.csproj" />
         <Project Path="tests/Puck.World.Schema.Tests/Puck.World.Schema.Tests.csproj" />

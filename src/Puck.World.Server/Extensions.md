@@ -122,6 +122,15 @@ return `Unknown`. There is no automatic retry of an ambiguous effect or universa
 exactly-once claim. Compensation or replacement is a separate authorized request
 with a new id.
 
+Reconciliation receives the previous durable `WorldExternalOperationResult` as
+well as the original request. Providers use its opaque result to resume a service
+status query after restart. The dispatcher preserves this result when a query
+throws, so an intermittent failure cannot erase the continuation. The private
+causal recovery image is never passed to a provider.
+A late execution response that confirms asynchronous acceptance may replace
+concurrent uncertainty about that claim, preserving its continuation. It cannot
+overwrite a newer running observation or any terminal outcome.
+
 Identical repeated commits return the existing entry. Reusing an id with a
 different binding or payload refuses. Terminal entries remain for deduplication;
 dispatching one returns its status without invoking the provider. `ReadAsync`
@@ -156,6 +165,10 @@ backend, and a fake external service. It covers copied bounded contributions,
 authority and manifest checks, provider-free replay, duplicate dispatch, crashes
 before outcome persistence, lost responses, reconciliation, and late completion.
 It does not claim Azure API conformance.
+
+The optional [Azure resource extension](../Puck.World.Azure/README.md) implements
+generic ARM mutations and durable status polling. Its tests exercise the real
+Azure SDK pipeline against an in-memory HTTP service.
 
 ```text
 dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --filter FullyQualifiedName~WorldExtensionLawTests

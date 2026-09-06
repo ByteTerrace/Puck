@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Text as Text3D } from "@react-three/drei";
-import { Box, Group, Badge, Text } from "@mantine/core";
+import { Box, Group, Badge, Button } from "@mantine/core";
 import * as THREE from "three";
 import { TopologyDefinition, getTopologyCoordinates } from "../../engine/evaluator";
 
@@ -12,6 +12,9 @@ export interface SpatialTopology3DProps {
   onSelectCell?: (cellIdx: number) => void;
   hoveredMask?: bigint | null;
   activeWinningRay?: { name: string; cells: number[] } | null;
+  ghostCell?: number | null;
+  ghostPlayer?: number;
+  onHoverCell?: (cellIdx: number | null) => void;
 }
 
 interface Cell3DProps {
@@ -21,6 +24,10 @@ interface Cell3DProps {
   isSelected: boolean;
   isMaskHighlighted: boolean;
   isWinningCell: boolean;
+  isGhostCell: boolean;
+  ghostPlayer: number;
+  showHeatmap: boolean;
+  heatmapDensity: number;
   onSelect: (idx: number) => void;
   onHover: (idx: number | null) => void;
 }
@@ -32,6 +39,10 @@ const Cell3D: React.FC<Cell3DProps> = ({
   isSelected,
   isMaskHighlighted,
   isWinningCell,
+  isGhostCell,
+  ghostPlayer,
+  showHeatmap,
+  heatmapDensity,
   onSelect,
   onHover,
 }) => {
@@ -53,11 +64,18 @@ const Cell3D: React.FC<Cell3DProps> = ({
     if (isWinningCell) return "#ffd166"; // Gold winning ray
     if (value === 1) return coralColor;
     if (value === 2) return jadeColor;
+    if (isGhostCell) return ghostPlayer === 1 ? coralColor : jadeColor;
+    if (showHeatmap && value === 0) {
+      // Density-based heatmap: 7 -> Gold/Hot, 4 -> Coral/Purple, 3 -> Deep Indigo
+      if (heatmapDensity >= 7) return "#ffd166";
+      if (heatmapDensity >= 4) return "#a79cf2";
+      return "#474059";
+    }
     if (isSelected) return coralColor;
     if (isMaskHighlighted) return "#a79cf2";
     if (hovered) return hoverColor;
     return idleColor;
-  }, [value, isSelected, isMaskHighlighted, isWinningCell, hovered]);
+  }, [value, isSelected, isMaskHighlighted, isWinningCell, isGhostCell, ghostPlayer, showHeatmap, heatmapDensity, hovered]);
 
   return (
     <group position={[posX, posY, posZ]}>
@@ -111,16 +129,30 @@ const Cell3D: React.FC<Cell3DProps> = ({
         </mesh>
       )}
 
+      {/* Ghost Mark Holographic Preview */}
+      {value === 0 && isGhostCell && ghostPlayer === 1 && (
+        <mesh position={[0, 0.28, 0]}>
+          <sphereGeometry args={[0.26, 16, 16]} />
+          <meshStandardMaterial color={coralColor} transparent opacity={0.6} roughness={0.1} metalness={0.4} />
+        </mesh>
+      )}
+      {value === 0 && isGhostCell && ghostPlayer === 2 && (
+        <mesh position={[0, 0.28, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.22, 0.08, 12, 24]} />
+          <meshStandardMaterial color={jadeColor} transparent opacity={0.6} roughness={0.1} metalness={0.4} />
+        </mesh>
+      )}
+
       {/* Cell number label */}
       <Text3D
         position={[0, 0.13, 0]}
         rotation={[-Math.PI / 2, 0, 0]}
         fontSize={0.22}
-        color={value > 0 ? "#ffffff" : "#b5aec3"}
+        color={value > 0 ? "#ffffff" : isGhostCell ? (ghostPlayer === 1 ? coralColor : jadeColor) : "#b5aec3"}
         anchorX="center"
         anchorY="middle"
       >
-        {value === 1 ? "X" : value === 2 ? "O" : String(index)}
+        {value === 1 ? "X" : value === 2 ? "O" : isGhostCell ? (ghostPlayer === 1 ? "X" : "O") : String(index)}
       </Text3D>
     </group>
   );
@@ -133,8 +165,12 @@ export const SpatialTopology3D: React.FC<SpatialTopology3DProps> = ({
   onSelectCell,
   hoveredMask,
   activeWinningRay,
+  ghostCell,
+  ghostPlayer = 1,
+  onHoverCell,
 }) => {
   const [hoveredCellIdx, setHoveredCellIdx] = useState<number | null>(null);
+  const [showHeatmap, setShowHeatmap] = useState<boolean>(false);
   const coords = useMemo(() => getTopologyCoordinates(topology), [topology]);
 
   const layers = topology.dimensions?.z ?? topology.layers ?? (topology.$type === "box" ? 4 : 1);
@@ -143,6 +179,29 @@ export const SpatialTopology3D: React.FC<SpatialTopology3DProps> = ({
   const winningCellSet = useMemo(() => {
     return new Set(activeWinningRay?.cells ?? []);
   }, [activeWinningRay]);
+
+  // Compute connectivity density for Qubic 4x4x4 (closed-form line membership)
+  const connectivityMap = useMemo(() => {
+    const map: Record<number, number> = {};
+    for (let i = 0; i < coords.length; i++) {
+      const c = coords[i];
+      if (!c) continue;
+      const midCount =
+        (c.x === 1 || c.x === 2 ? 1 : 0) +
+        (c.y === 1 || c.y === 2 ? 1 : 0) +
+        (c.z === 1 || c.z === 2 ? 1 : 0);
+      if (midCount === 3) map[i] = 7; // Center (7 lines)
+      else if (midCount === 2) map[i] = 4; // Face center (4 lines)
+      else if (midCount === 0) map[i] = 4; // Corner (4 lines)
+      else map[i] = 3; // Edge (3 lines)
+    }
+    return map;
+  }, [coords]);
+
+  const handleCellHover = (idx: number | null) => {
+    setHoveredCellIdx(idx);
+    onHoverCell?.(idx);
+  };
 
   return (
     <Box style={{ position: "relative", width: "100%", height: 460, borderRadius: 12, overflow: "hidden", background: "var(--code-bg)" }}>
@@ -185,6 +244,7 @@ export const SpatialTopology3D: React.FC<SpatialTopology3DProps> = ({
             ? ((hoveredMask & (1n << BigInt(idx))) !== 0n)
             : false;
           const isWinning = winningCellSet.has(idx);
+          const isGhost = (ghostCell !== null && ghostCell !== undefined && ghostCell === idx) || hoveredCellIdx === idx;
 
           return (
             <Cell3D
@@ -195,8 +255,12 @@ export const SpatialTopology3D: React.FC<SpatialTopology3DProps> = ({
               isSelected={isSelected}
               isMaskHighlighted={isMasked}
               isWinningCell={isWinning}
+              isGhostCell={isGhost}
+              ghostPlayer={ghostPlayer}
+              showHeatmap={showHeatmap}
+              heatmapDensity={connectivityMap[idx] ?? 3}
               onSelect={(i) => onSelectCell?.(i)}
-              onHover={setHoveredCellIdx}
+              onHover={handleCellHover}
             />
           );
         })}
@@ -208,15 +272,21 @@ export const SpatialTopology3D: React.FC<SpatialTopology3DProps> = ({
           <Badge color="coral" variant="filled" size="sm" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
             3D Spatial Orbit CAD
           </Badge>
-          <Text size="xs" style={{ fontFamily: '"JetBrains Mono", monospace', color: "var(--ink-soft)" }}>
-            Drag to Rotate • Scroll to Zoom
-          </Text>
+          <Button
+            size="compact-xs"
+            variant={showHeatmap ? "filled" : "outline"}
+            color={showHeatmap ? "yellow" : "gray"}
+            onClick={() => setShowHeatmap(!showHeatmap)}
+            style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 10 }}
+          >
+            Threat Heatmap: {showHeatmap ? "ON (76 Lines)" : "OFF"}
+          </Button>
         </Group>
 
         <Group gap="xs" style={{ pointerEvents: "auto" }}>
           {hoveredCellIdx !== null && coords[hoveredCellIdx] && (
             <Badge color="gray" variant="light" size="sm" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
-              Cell #{hoveredCellIdx} (x:{coords[hoveredCellIdx].x}, y:{coords[hoveredCellIdx].y}, z:{coords[hoveredCellIdx].z})
+              Cell #{hoveredCellIdx} (x:{coords[hoveredCellIdx].x}, y:{coords[hoveredCellIdx].y}, z:{coords[hoveredCellIdx].z}) [Density: {connectivityMap[hoveredCellIdx] ?? 3}]
             </Badge>
           )}
 
@@ -232,3 +302,4 @@ export const SpatialTopology3D: React.FC<SpatialTopology3DProps> = ({
 };
 
 export default SpatialTopology3D;
+

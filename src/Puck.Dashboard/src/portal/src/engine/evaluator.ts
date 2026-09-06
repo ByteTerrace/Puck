@@ -35,6 +35,8 @@ export interface ActionPredicate {
   predicate?: ActionPredicate;
 }
 
+export type PuckPredicate = ActionPredicate;
+
 export interface ActionEffect {
   $type: string;
   state: string;
@@ -124,12 +126,61 @@ export function computeBoardMask(
 ): bigint {
   let mask = 0n;
   for (let i = 0; i < 64; i++) {
-    const val = Array.isArray(boardCells) ? boardCells[i] : boardCells[i];
+    const val = (boardCells as any)[i];
     if (val === targetVal) {
       mask |= (1n << BigInt(i));
     }
   }
   return mask;
+}
+
+// Parse balanced-parentheses boardShift calls from innermost to outermost
+function resolveBoardShiftCalls(
+  str: string,
+  evalFn: (subExpr: string, topoName: string, dirName: string) => string
+): string {
+  let pos = 0;
+  while (true) {
+    const idx = str.indexOf("boardShift(", pos);
+    if (idx === -1) break;
+
+    let depth = 0;
+    let endIdx = -1;
+    for (let i = idx + "boardShift".length; i < str.length; i++) {
+      if (str[i] === "(") depth++;
+      else if (str[i] === ")") {
+        depth--;
+        if (depth === 0) {
+          endIdx = i;
+          break;
+        }
+      }
+    }
+    if (endIdx === -1) {
+      pos = idx + 1;
+      continue;
+    }
+
+    const inside = str.slice(idx + "boardShift(".length, endIdx);
+    if (inside.includes("boardShift(")) {
+      pos = idx + "boardShift(".length;
+      continue;
+    }
+
+    const lastComma = inside.lastIndexOf(",");
+    const secondLastComma = inside.lastIndexOf(",", lastComma - 1);
+    if (lastComma !== -1 && secondLastComma !== -1) {
+      const subExpr = inside.slice(0, secondLastComma).trim();
+      const topoName = inside.slice(secondLastComma + 1, lastComma).trim();
+      const dirName = inside.slice(lastComma + 1).trim();
+      const val = evalFn(subExpr, topoName, dirName);
+      str = str.slice(0, idx) + val + str.slice(endIdx + 1);
+      pos = 0;
+    } else {
+      pos = idx + 1;
+    }
+  }
+  return str;
 }
 
 // Tokenize and evaluate expression string with BigInt and arithmetic support
@@ -139,7 +190,7 @@ export function evaluatePuckExpression(
   boardCells: Record<string, Record<number, number>>,
   topologies: Record<string, TopologyDefinition>
 ): any {
-  const trimmed = expression.trim();
+  let trimmed = expression.trim();
   if (!trimmed) return 0;
 
   // 1. Literal numbers
@@ -147,7 +198,7 @@ export function evaluatePuckExpression(
     return trimmed.endsWith("n") ? BigInt(trimmed.slice(0, -1)) : Number(trimmed);
   }
 
-  // 2. $board:mask:boardState:targetValue:maskBit
+  // 2. Standalone $board:mask:boardState:targetValue:maskBit
   const boardMaskMatch = trimmed.match(/^\$board:mask:([^:]+):(-?\d+):(-?\d+)$/);
   if (boardMaskMatch) {
     const [, boardName, targetValStr] = boardMaskMatch;
@@ -162,30 +213,27 @@ export function evaluatePuckExpression(
     return val !== undefined ? val : 0;
   }
 
-  // Pre-process function calls like boardShift(arg, topo, dir)
-  let processed = trimmed;
-
-  // Recursively expand boardShift calls from innermost outwards
-  const shiftRegex = /boardShift\s*\(\s*([^,]+?)\s*,\s*([a-zA-Z0-9_]+)\s*,\s*([a-zA-Z0-9_]+)\s*\)/;
-  let guard = 0;
-  while (shiftRegex.test(processed) && guard++ < 30) {
-    processed = processed.replace(shiftRegex, (_, subExpr, topoName, dirName) => {
-      const subVal = evaluatePuckExpression(subExpr, state, boardCells, topologies);
-      const maskBigInt = typeof subVal === "bigint" ? subVal : BigInt(subVal || 0);
-      const topo = topologies[topoName];
-      const result = boardShift(maskBigInt, topo, dirName);
-      return `${result.toString()}n`;
-    });
-  }
+  // Pre-process function calls: resolve nested boardShift calls from innermost to outermost
+  trimmed = resolveBoardShiftCalls(trimmed, (subExpr, topoName, dirName) => {
+    const subVal = evaluatePuckExpression(subExpr, state, boardCells, topologies);
+    const maskBigInt = typeof subVal === "bigint" ? subVal : BigInt(subVal || 0);
+    const topo = topologies[topoName];
+    const result = boardShift(maskBigInt, topo, dirName);
+    return `${result.toString()}n`;
+  });
 
   // Replace $board:mask references inside compound expressions
-  processed = processed.replace(
+  trimmed = trimmed.replace(
     /\$board:mask:([a-zA-Z0-9_]+):(-?\d+):(-?\d+)/g,
     (_, bName, tVal) => {
       const mask = computeBoardMask(boardCells[bName] ?? {}, Number(tVal));
       return `${mask.toString()}n`;
     }
   );
+
+  // Normalize comparisons against 0 for BigInt operands: '!= 0' -> '!= 0n'
+  trimmed = trimmed.replace(/!=\s*0\b/g, "!= 0n");
+  trimmed = trimmed.replace(/==\s*0\b/g, "== 0n");
 
   // Substitute state variables with BigInt/number representation
   // Sort keys by length descending to prevent substring collisions
@@ -194,26 +242,18 @@ export function evaluatePuckExpression(
     const val = state[vName];
     const regex = new RegExp(`\\b${vName}\\b`, "g");
     if (typeof val === "bigint") {
-      processed = processed.replace(regex, `${val.toString()}n`);
+      trimmed = trimmed.replace(regex, `${val.toString()}n`);
     } else if (typeof val === "number") {
-      processed = processed.replace(regex, `${val}`);
+      trimmed = trimmed.replace(regex, `${val}`);
     } else if (typeof val === "boolean") {
-      processed = processed.replace(regex, val ? "true" : "false");
+      trimmed = trimmed.replace(regex, val ? "true" : "false");
     }
   }
 
   try {
-    // Safely evaluate standard mathematical/bitwise expressions
-    // Normalizing BigInt operations where needed
-    // In JS: (BigInt != 0n) produces boolean
     const fn = new Function(`
       try {
-        const res = (${processed});
-        if (typeof res === "bigint") {
-          return res <= BigInt(Number.MAX_SAFE_INTEGER) && res >= BigInt(Number.MIN_SAFE_INTEGER)
-            ? Number(res)
-            : res;
-        }
+        const res = (${trimmed});
         if (typeof res === "boolean") return res ? 1 : 0;
         return res;
       } catch (e) {

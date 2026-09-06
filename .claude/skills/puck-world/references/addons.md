@@ -23,6 +23,12 @@ stopping recording. Keep pinned modules available. After a live replay, only an
 explicit host `StartRecordedExtensionEpoch` admits fresh recorded runtimes;
 it refuses during active replay and never revives old instances.
 
+`src/Puck.World.Azure/README.md` owns the optional generic ARM provider. Keep
+its SDK dependency above Server. Reconciliation receives the last durable
+provider result, not the authority recovery image; preserve that result when a
+status query fails. SDK retries of mutations and cross-origin polling must not
+bypass the external-operation journal. No live cloud operation belongs in tests.
+
 ## Contents
 
 - The row, mounting, and the prepare/commit transaction

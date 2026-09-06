@@ -24,6 +24,9 @@ export interface UniversalTopologyViewProps {
   activeDirection?: { name: string; x: number; y: number; z: number } | null;
   hoveredMask?: bigint | null;
   activeWinningRay?: { name: string; cells: number[] } | null;
+  ghostCell?: number | null;
+  ghostPlayer?: number;
+  onHoverCell?: (cellIndex: number | null) => void;
 }
 
 export const UniversalTopologyView: React.FC<UniversalTopologyViewProps> = ({
@@ -34,6 +37,9 @@ export const UniversalTopologyView: React.FC<UniversalTopologyViewProps> = ({
   activeDirection,
   hoveredMask,
   activeWinningRay,
+  ghostCell,
+  ghostPlayer = 1,
+  onHoverCell,
 }) => {
   const is3DTopology = topology.$type === "box" || (topology.layers ?? 1) > 1;
   const [viewMode, setViewMode] = useState<"3d" | "2d">(is3DTopology ? "3d" : "2d");
@@ -307,15 +313,18 @@ export const UniversalTopologyView: React.FC<UniversalTopologyViewProps> = ({
               const cellIdx = item.originalIndex;
               const val = cellValues[cellIdx] ?? 0;
               const isSelected = selectedCell === cellIdx;
+              const isGhost = ghostCell === cellIdx && Number(val) === 0;
 
               return (
                 <Tooltip
                   key={cellIdx}
-                  label={`Cell ${cellIdx} (x:${x}, y:${y}, z:${currentZ}) = ${val}`}
+                  label={`Cell ${cellIdx} (x:${x}, y:${y}, z:${currentZ}) = ${val}${isGhost ? " [Speculative Ghost Move]" : ""}`}
                   withArrow
                 >
                   <Paper
                     onClick={() => onSelectCell?.(cellIdx)}
+                    onMouseEnter={() => onHoverCell?.(cellIdx)}
+                    onMouseLeave={() => onHoverCell?.(null)}
                     style={{
                       height: 54,
                       display: "flex",
@@ -328,9 +337,13 @@ export const UniversalTopologyView: React.FC<UniversalTopologyViewProps> = ({
                         ? "var(--accent-ink)"
                         : Number(val) > 0
                         ? "var(--quote-bg)"
+                        : isGhost
+                        ? "var(--accent-ink)"
                         : "var(--paper-2)",
                       border: isSelected
                         ? "2px solid var(--accent)"
+                        : isGhost
+                        ? "2px dashed var(--accent)"
                         : "1px solid var(--rule)",
                       transition: "all 0.15s ease",
                       userSelect: "none",
@@ -339,8 +352,35 @@ export const UniversalTopologyView: React.FC<UniversalTopologyViewProps> = ({
                     <Text size="xs" style={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', color: "var(--ink-faint)" }}>
                       #{cellIdx}
                     </Text>
-                    <Text fw={700} size="md" style={{ fontFamily: '"JetBrains Mono", monospace', color: Number(val) === 1 ? "var(--accent)" : Number(val) === 2 ? "var(--accent-2)" : "var(--ink-faint)" }}>
-                      {Number(val) === 1 ? "X" : Number(val) === 2 ? "O" : val !== 0 ? String(val) : "·"}
+                    <Text
+                      fw={700}
+                      size="md"
+                      style={{
+                        fontFamily: '"JetBrains Mono", monospace',
+                        color:
+                          Number(val) === 1
+                            ? "var(--accent)"
+                            : Number(val) === 2
+                            ? "var(--accent-2)"
+                            : isGhost
+                            ? ghostPlayer === 1
+                              ? "var(--accent)"
+                              : "var(--accent-2)"
+                            : "var(--ink-faint)",
+                        opacity: isGhost ? 0.65 : 1,
+                      }}
+                    >
+                      {Number(val) === 1
+                        ? "X"
+                        : Number(val) === 2
+                        ? "O"
+                        : isGhost
+                        ? ghostPlayer === 1
+                          ? "X"
+                          : "O"
+                        : val !== 0
+                        ? String(val)
+                        : "·"}
                     </Text>
                   </Paper>
                 </Tooltip>
@@ -397,6 +437,9 @@ export const UniversalTopologyView: React.FC<UniversalTopologyViewProps> = ({
           onSelectCell={onSelectCell}
           hoveredMask={hoveredMask}
           activeWinningRay={activeWinningRay}
+          ghostCell={ghostCell}
+          ghostPlayer={ghostPlayer}
+          onHoverCell={onHoverCell}
         />
       ) : (
         <>
