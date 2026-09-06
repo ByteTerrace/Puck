@@ -133,8 +133,14 @@ public sealed class SearchLawTests {
 
         var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint);
         Assert.True(WorldAuthorityCheckpointCodec.TryDecode(bytes, out var decoded, out var decodeReason), decodeReason);
-        Assert.Equal(checkpoint.Search.Jobs[0], decoded!.Search!.Jobs[0] with { Legal = checkpoint.Search.Jobs[0].Legal });
+        Assert.Equal(checkpoint.Search.Jobs[0], decoded!.Search!.Jobs[0] with {
+            Legal = checkpoint.Search.Jobs[0].Legal,
+            Counts = checkpoint.Search.Jobs[0].Counts,
+            Wide = checkpoint.Search.Jobs[0].Wide,
+        });
         Assert.Equal(checkpoint.Search.Jobs[0].Legal, decoded.Search.Jobs[0].Legal);
+        Assert.Equal(checkpoint.Search.Jobs[0].Counts, decoded.Search.Jobs[0].Counts);
+        Assert.Equal(checkpoint.Search.Jobs[0].Wide, decoded.Search.Jobs[0].Wide);
     }
 
     // A hand-built, non-chess fixture: a 1x4 grid, two tokens ("a"/"b"), and a rule that accepts every relocation
@@ -306,5 +312,299 @@ public sealed class SearchLawTests {
         Assert.Equal(interruptedFinal.BestToken, resumedFinal.BestToken);
         Assert.Equal(interruptedFinal.BestTarget, resumedFinal.BestTarget);
         Assert.Equal(interruptedFinal.Count, resumedFinal.Count);
+    }
+
+    private static long BoardCellOrEmpty(WorldFixture fixture, string row, int cell) =>
+        (Row(fixture, row).Cells?.FirstOrDefault(c => c.Key.Value == cell.ToString(System.Globalization.CultureInfo.InvariantCulture))?.Value ?? 0L);
+
+    // Drop fixture: a 1x4 strip, one token "a" off the board (value -1) and one token "b" standing on cell 2. A
+    // drop candidate is a cell no token occupies, so "a" should own every cell but 2 — the rule accepts every
+    // candidate the walk itself resolves, so the occupied-cell exclusion is proven by the walk, not the judge.
+    private static WorldDefinition DropWorld() {
+        var state = new WorldStateSection(
+            World: [
+                new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
+                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), -1L), new StateCell(CellName.Parse("b"), 2L)]),
+                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
+                new WorldStateRow(CellName.Parse("count"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+            ],
+            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 4, Depth: 1)]
+        );
+        var definition = Fixtures.BuildDocument() with {
+            StateRaw = state,
+            Rules = [
+                new WorldRule(Name: CellName.Parse("accept"), Effects: [
+                    new ActionEffect.SetState(State: "verdict", Value: 1),
+                    new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                ]),
+            ],
+            SearchRaw = new WorldSearchSection(Jobs: [
+                new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict",
+                    Shapes: [new WorldSearchShape.Drop()], Legal: "legal", Count: "count"),
+            ]),
+        };
+
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+
+        return definition;
+    }
+
+    [Fact]
+    public void DropOffboardTokenReachesEveryEmptyCellAndNoOccupiedOne() {
+        using var fixture = Fixtures.FreshServer(definition: DropWorld());
+
+        var status = RunToCompletion(fixture);
+
+        Assert.True(status.Done, status.ToString());
+        Assert.Equal(3L, status.Count);
+        Assert.Equal(3L, Cell(fixture, "count", WorldStateRow.SlotKey.Value));
+        Assert.Equal((1L << 0) | (1L << 1) | (1L << 3), Cell(fixture, "legal", "a"));
+        Assert.Equal(0L, Cell(fixture, "legal", "b"));
+    }
+
+    // Jump fixture: a 1x5 strip, "a" at cell 0 and "b" at cell 1. The judge's own gate reads pieceCell[b] < 0 —
+    // true only once the jumped token has actually left the board — so an accepted candidate proves the eviction
+    // rather than merely a rule that accepts unconditionally.
+    private static WorldDefinition JumpWorld() {
+        var state = new WorldStateSection(
+            World: [
+                new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
+                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), 0L), new StateCell(CellName.Parse("b"), 1L)]),
+                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
+                new WorldStateRow(CellName.Parse("count"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+            ],
+            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 5, Depth: 1)]
+        );
+        var definition = Fixtures.BuildDocument() with {
+            StateRaw = state,
+            Rules = [
+                new WorldRule(
+                    Name: CellName.Parse("accept"),
+                    Gate: new ActionPredicate.CompareValue(Left: ValueExpression.Parse("pieceCell[b]"), Comparison: ActionStateComparison.Less, Right: ValueExpression.Parse("0"), Kind: CellKind.Int),
+                    Effects: [
+                        new ActionEffect.SetState(State: "verdict", Value: 1),
+                        new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                    ]
+                ),
+            ],
+            SearchRaw = new WorldSearchSection(Jobs: [
+                new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict",
+                    Shapes: [new WorldSearchShape.Jump(Over: ["E"])], Legal: "legal", Count: "count"),
+            ]),
+        };
+
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+
+        return definition;
+    }
+
+    [Fact]
+    public void JumpOverAnOccupiedIntermediateCellLandsOnTheEmptyCellBeyondAndEvictsIt() {
+        using var fixture = Fixtures.FreshServer(definition: JumpWorld());
+
+        var status = RunToCompletion(fixture);
+
+        Assert.True(status.Done, status.ToString());
+        Assert.Equal(1L, status.Count);
+        Assert.Equal((1L << 2), Cell(fixture, "legal", "a"));
+        Assert.Equal(0L, Cell(fixture, "legal", "b"));
+    }
+
+    // Relocate fixture: a 1x4 strip, "a" at cell 0 and "b" at cell 2. The judge's own gate reads pieceCell[a] ==
+    // pieceCell[b] — true only when "a" lands on "b" without evicting it, so the frame genuinely holds two tokens
+    // sharing one cell.
+    private static WorldDefinition RelocateWorld(bool displace) {
+        var state = new WorldStateSection(
+            World: [
+                new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
+                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), 0L), new StateCell(CellName.Parse("b"), 2L)]),
+                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
+                new WorldStateRow(CellName.Parse("count"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+            ],
+            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 4, Depth: 1)]
+        );
+        var definition = Fixtures.BuildDocument() with {
+            StateRaw = state,
+            Rules = [
+                new WorldRule(
+                    Name: CellName.Parse("accept"),
+                    Gate: new ActionPredicate.CompareValue(Left: ValueExpression.Parse("pieceCell[a]"), Comparison: ActionStateComparison.Equal, Right: ValueExpression.Parse("pieceCell[b]"), Kind: CellKind.Int),
+                    Effects: [
+                        new ActionEffect.SetState(State: "verdict", Value: 1),
+                        new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                    ]
+                ),
+            ],
+            SearchRaw = new WorldSearchSection(Jobs: [
+                new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict",
+                    Shapes: [new WorldSearchShape.Relocate(Displace: displace)], Legal: "legal", Count: "count"),
+            ]),
+        };
+
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+
+        return definition;
+    }
+
+    [Fact]
+    public void RelocateWithDisplaceFalseNeverRemovesTheStandingToken() {
+        using var fixture = Fixtures.FreshServer(definition: RelocateWorld(displace: false));
+
+        var status = RunToCompletion(fixture);
+
+        Assert.True(status.Done, status.ToString());
+        // Only landing exactly on the OTHER token's cell can satisfy the judge's two-tokens-one-cell gate — "a"
+        // onto "b"'s cell 2, or "b" onto "a"'s cell 0 — and each only still reads the other's cell back because
+        // displace:false left it standing there.
+        Assert.Equal(2L, status.Count);
+        Assert.Equal((1L << 2), Cell(fixture, "legal", "a"));
+        Assert.Equal((1L << 0), Cell(fixture, "legal", "b"));
+
+        using var control = Fixtures.FreshServer(definition: RelocateWorld(displace: true));
+        var controlStatus = RunToCompletion(control);
+
+        // The same gate never once reads two tokens sharing a cell when displace evicts whoever stood there.
+        Assert.True(controlStatus.Done, controlStatus.ToString());
+        Assert.Equal(0L, controlStatus.Count);
+    }
+
+    // A 10x10 board — over BoardMask.MaxCells (64) — with two tokens and the default relocate shape, unconditionally
+    // accepted; reach/held/counts work at this size, legal does not.
+    private static WorldDefinition WideBoardWorld(bool withLegal) {
+        var rows = new List<WorldStateRow> {
+            new(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
+            new(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), 0L), new StateCell(CellName.Parse("b"), 50L)]),
+            new(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+            new(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+            new(CellName.Parse("reach"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
+            new(CellName.Parse("held"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+            new(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
+        };
+
+        if (withLegal) {
+            rows.Add(new(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))));
+        }
+
+        var state = new WorldStateSection(World: rows, Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 10, Depth: 10)]);
+
+        return Fixtures.BuildDocument() with {
+            StateRaw = state,
+            Rules = [
+                new WorldRule(Name: CellName.Parse("accept"), Effects: [
+                    new ActionEffect.SetState(State: "verdict", Value: 1),
+                    new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                ]),
+            ],
+            SearchRaw = new WorldSearchSection(Jobs: [
+                new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict",
+                    Reach: "reach", Held: "held", Counts: "counts", Legal: (withLegal ? "legal" : null)),
+            ]),
+        };
+    }
+
+    [Fact]
+    public void ReachHeldAndCountsWorkPastTheLegalMaskCeilingWhereLegalItselfIsRefused() {
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(WideBoardWorld(withLegal: true), out var invalidReason));
+        Assert.Contains("64 cells", invalidReason);
+
+        var definition = WideBoardWorld(withLegal: false);
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var validReason), validReason);
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        var status = RunToCompletion(fixture);
+
+        Assert.True(status.Done, status.ToString());
+        Assert.Equal(198L, status.Count);
+        Assert.Equal(99L, Cell(fixture, "counts", "a"));
+        Assert.Equal(99L, Cell(fixture, "counts", "b"));
+
+        // "held" defaults to 0, "a"'s own ordinal: every cell but its own starting one is a reachable destination.
+        for (var cell = 0; cell < 100; cell++) {
+            Assert.Equal((cell == 0) ? 0L : 1L, BoardCellOrEmpty(fixture, "reach", cell));
+        }
+    }
+
+    // Two shapes in one job over the same 1x4 strip: relocate (default, displace true) applies to the on-board
+    // token, drop to the off-board one. One node per tick spans the whole six-candidate walk across many ticks, so
+    // a capture partway through lands genuinely mid-walk, astride the boundary between the two shapes.
+    private static WorldDefinition MultiShapeWorld(int? nodes) {
+        var state = new WorldStateSection(
+            World: [
+                new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf("board")),
+                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), 0L), new StateCell(CellName.Parse("b"), -1L)]),
+                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
+                new WorldStateRow(CellName.Parse("count"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+            ],
+            Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 4, Depth: 1)]
+        );
+        var definition = Fixtures.BuildDocument() with {
+            StateRaw = state,
+            Rules = [
+                new WorldRule(Name: CellName.Parse("accept"), Effects: [
+                    new ActionEffect.SetState(State: "verdict", Value: 1),
+                    new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                ]),
+            ],
+            SearchRaw = new WorldSearchSection(Jobs: [
+                new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict",
+                    Shapes: [new WorldSearchShape.Relocate(Displace: true), new WorldSearchShape.Drop()], Legal: "legal", Count: "count", Nodes: nodes),
+            ]),
+        };
+
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+
+        return definition;
+    }
+
+    [Fact]
+    public void ACheckpointMidWalkAcrossMultipleShapesRestoresAndFinishesIdentically() {
+        var document = MultiShapeWorld(nodes: 1);
+
+        using var continuous = Fixtures.FreshServer(definition: document);
+        var continuousStatus = RunToCompletion(continuous);
+        Assert.True(continuousStatus.Done, continuousStatus.ToString());
+        Assert.Equal(6L, continuousStatus.Count);
+
+        using var interrupted = Fixtures.FreshServer(definition: document);
+
+        for (var tick = 0; tick < 3; tick++) {
+            interrupted.Step();
+        }
+
+        var midStatus = interrupted.Server.SearchStatus()[0];
+        Assert.False(midStatus.Done, "the capture must land mid-search for a restore to prove anything");
+        Assert.Equal(3L, midStatus.Nodes);
+
+        Assert.True(interrupted.Server.TryCaptureCheckpoint(hostRow: WorldAuthorityHostRowCheckpoint.Empty, checkpoint: out var checkpoint, reason: out var reason), reason);
+
+        var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint!.Server.DefinitionJson);
+        using var restoredMachines = new WorldMachineHost(engines: [], screens: restoredDefinition.Screens);
+        var (restoredServer, _) = WorldServer.FromCheckpoint(
+            checkpoint: checkpoint,
+            instanceIdentity: "boot",
+            machines: restoredMachines,
+            profiles: new WorldOwnedWorlds(directory: Directory.CreateTempSubdirectory(prefix: "puck-search-tests-").FullName, machineId: Guid.NewGuid(), template: restoredDefinition)
+        );
+        using var resumed = new WorldFixture(server: restoredServer, machines: restoredMachines, stateDirectory: Directory.CreateTempSubdirectory(prefix: "puck-search-tests-").FullName);
+
+        var interruptedFinal = RunToCompletion(interrupted);
+        var resumedFinal = RunToCompletion(resumed);
+
+        Assert.True(interruptedFinal.Done, interruptedFinal.ToString());
+        Assert.True(resumedFinal.Done, resumedFinal.ToString());
+        Assert.Equal(continuousStatus.Count, interruptedFinal.Count);
+        Assert.Equal(interruptedFinal.Count, resumedFinal.Count);
+        Assert.Equal(14L, Cell(interrupted, "legal", "a"));
+        Assert.Equal(14L, Cell(interrupted, "legal", "b"));
+        Assert.Equal(Cell(interrupted, "legal", "a"), Cell(resumed, "legal", "a"));
+        Assert.Equal(Cell(interrupted, "legal", "b"), Cell(resumed, "legal", "b"));
     }
 }

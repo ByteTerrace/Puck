@@ -2325,24 +2325,53 @@ are the cells of `board` its tokens stand on; a value that is no cell is a
 token off the board, which the job leaves alone) and `board` (an integer board
 over a discrete topology). Its `turn` and `verdict` slot rows derive from the
 tabletop board binding anchoring `board` unless authored; `accept` (default 1)
-is the verdict value that accepts a position. Outputs are ordinary rows the
-job writes when it finishes: `legal`, an integer row keyed by the tokens
-receiving per token the mask of cells it may relocate to (boards of at most 64
-cells), and `count`, a slot receiving how many relocations were accepted.
+is the verdict value that accepts a candidate.
 
-The job walks every (token, target cell) pair: it copies the installed section
-into a value frame (`Puck.State.StateFrame`, every integer cell laid out once),
-writes the relocation into the frame — the token to the target, whatever stood
-there off the board — and evaluates the frame-evaluable rules over it through
-a `FrameHost`: every rule that is neither an interaction nor a decision and
-reads no world-only fact (`RuleDataflow.ReadsHost`; a body's cell, its
-uprightness, quiescence). A relocation is accepted when the verdict reads
+`shapes` declares the candidate shapes the walk enumerates, ahead of token and
+target/direction — absent or empty, the one default `relocate` shape with
+`displace: true`, this section's original candidate: one own token relocating
+to any other cell, evicting whatever stood there. The other shapes: `drop`
+(a token whose value is off the board — see `tokens`'s remarks — enters any
+cell no other token stands on), `jump` (`over`, a list of topology direction
+names or the single-element list `["any"]` for every direction the topology
+declares — the walked token steps two cells along one, over a token standing
+on the intermediate cell, which leaves the board, onto an empty destination;
+a direction with no such occupied intermediate, or whose destination is not
+empty, is not a candidate), and `pair` (`with`, a cell key of `tokens` — the
+walked token relocates to the target and the named companion relocates by the
+same grid offset, provided its own destination is empty; grid topologies
+only, and no eviction of its own — the minimal two-token primitive a castle's
+rook needs, not a general rule for every pair's own reach). `relocate` with
+`displace: false` leaves the standing token in place, so a judge rule that
+reads two tokens sharing a cell decides the candidate itself. Promotion — a
+token's own code changing — is not a shape; it is out of this section's scope.
+
+Outputs are ordinary rows the job writes when it finishes: `legal`, an integer
+row keyed by the tokens receiving per token the mask of cells it may reach
+(boards of at most 64 cells), and `count`, a slot receiving how many
+candidates were accepted. `reach` and `counts` work for a board of any size:
+`reach`, an integer board over the same topology as `board`, is painted with 1
+at every cell the token `held` names (its ordinal in `tokens`) may reach and
+its own empty value everywhere else — a value of `held` out of range paints
+nothing — and `counts`, an integer row keyed by the tokens, receives per token
+how many candidates it accepted. `reach` and `held` are authored together.
+
+The job walks every (shape, token, target cell or direction) triple, in that
+fixed order: it copies the installed section into a value frame
+(`Puck.State.StateFrame`, every integer cell laid out once), applies the
+shape's move to the frame — a candidate whose geometry the shape itself
+refuses (an occupied landing, an unoccupied jump intermediate, an off-board
+companion) is skipped before judging, exactly like the section's original
+target-equals-source skip — and evaluates the frame-evaluable rules over it
+through a `FrameHost`: every rule that is neither an interaction nor a decision
+and reads no world-only fact (`RuleDataflow.ReadsHost`; a body's cell, its
+uprightness, quiescence). A candidate is accepted when the verdict reads
 `accept` and the turn changed. Nothing hypothetical reaches the installed
 section. The job restarts whenever any framed cell other than its own outputs
 changes, so a settling piece restarts it every tick until the board rests.
 This root walk is unconditional and exhaustive — it never prunes and never
-skips a candidate — so `legal`/`count` are the same whether or not the job
-searches deeper.
+skips a candidate whose geometry is valid — so `legal`/`count`/`reach`/`counts`
+are the same whether or not the job searches deeper.
 
 `depth` (default 1) and `score` ask what a position beyond the immediate ply is
 worth. `score` is an infix expression, in the rule expression grammar,
@@ -2364,7 +2393,7 @@ the ply. A position with no accepted relocation scores `-WorldSearchCapacity.
 MateScore` for the side to move — a magnitude shifted down from
 `long.MaxValue` so repeated negation and comparison across the deepest
 authored search never overflows. Alpha-beta prunes every ply past the root
-(the root itself never prunes, preserving `legal`/`count`). The recursion runs
+(the root itself never prunes, preserving the root outputs). The recursion runs
 on an explicit stack — one `StateFrame` per ply beyond the root, pooled and
 sized to `depth - 1` — rather than the call stack, so a tick boundary can
 suspend it at any node and a checkpoint carries it byte-for-byte (per-ply

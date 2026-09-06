@@ -4,6 +4,7 @@ namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
     private static void WriteSearchLevel(WireWriter writer, WorldSearchLevelCheckpoint level) {
+        writer.WriteInt32(value: level.Shape);
         writer.WriteInt32(value: level.Token);
         writer.WriteInt32(value: level.Target);
         writer.WriteInt64(value: level.Alpha);
@@ -18,6 +19,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
     private static WorldSearchLevelCheckpoint ReadSearchLevel(ref WireReader reader) {
+        var shape = reader.ReadInt32();
         var token = reader.ReadInt32();
         var target = reader.ReadInt32();
         var alpha = reader.ReadInt64();
@@ -32,6 +34,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
 
         return new WorldSearchLevelCheckpoint(
+            Shape: shape,
             Token: token,
             Target: target,
             Alpha: alpha,
@@ -48,12 +51,21 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteUInt64(value: job.Stamp);
         writer.WriteBoolean(value: job.Running);
         writer.WriteBoolean(value: job.Done);
+        writer.WriteInt32(value: job.Shape);
         writer.WriteInt32(value: job.Token);
         writer.WriteInt32(value: job.Target);
         writer.WriteInt64(value: job.Count);
         WriteLongArray(
             writer: writer,
             values: job.Legal
+        );
+        WriteLongArray(
+            writer: writer,
+            values: job.Counts
+        );
+        WriteLongArray(
+            writer: writer,
+            values: job.Wide
         );
         writer.WriteInt64(value: job.Nodes);
         writer.WriteInt64(value: job.BaseTurn);
@@ -78,12 +90,21 @@ public static partial class WorldAuthorityCheckpointCodec {
         var stamp = reader.ReadUInt64();
         var running = reader.ReadBoolean();
         var done = reader.ReadBoolean();
+        var shape = reader.ReadInt32();
         var token = reader.ReadInt32();
         var target = reader.ReadInt32();
         var count = reader.ReadInt64();
         var legal = ReadLongArray(
             reader: ref reader,
             field: "search job legal"
+        );
+        var counts = ReadLongArray(
+            reader: ref reader,
+            field: "search job counts"
+        );
+        var wide = ReadLongArray(
+            reader: ref reader,
+            field: "search job wide"
         );
         var nodes = reader.ReadInt64();
         var baseTurn = reader.ReadInt64();
@@ -105,10 +126,13 @@ public static partial class WorldAuthorityCheckpointCodec {
             Stamp: stamp,
             Running: running,
             Done: done,
+            Shape: shape,
             Token: token,
             Target: target,
             Count: count,
             Legal: legal,
+            Counts: counts,
+            Wide: wide,
             Nodes: nodes,
             BaseTurn: baseTurn,
             PassDepth: passDepth,

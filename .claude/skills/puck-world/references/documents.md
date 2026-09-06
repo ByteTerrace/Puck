@@ -692,14 +692,33 @@ or box — never `fromCreation`) and `bodyContact: solid`.
 `WorldSearch.cs` owns `search.jobs`. A job names `tokens` (keyed int row, values
 are cells of `board`; a non-cell value is off the board) and `board`; `turn`/
 `verdict` derive from the tabletop board binding over `board` unless authored;
-`accept` is the accepting verdict value (1). Outputs: `legal` (int row keyed by
-the tokens, a per-token destination mask, boards ≤ 64 cells) and `count` (slot).
-The job relocates every token to every other cell in a `StateFrame` copy of the
-section, judges it with the rules a frame can evaluate (no interaction, no
-decision, no world-only read — `RuleDataflow.ReadsHost`), and accepts when the
-verdict reads `accept` and the turn changed. This root walk never prunes and
-never skips a candidate, so `legal`/`count` are unaffected by `depth`/`score`.
-It restarts when any framed cell other than its outputs changes. Quota derives
+`accept` is the accepting verdict value (1).
+
+`shapes` names the candidate shapes the walk enumerates, ahead of token and
+target/direction; absent, the one default `relocate` (`displace: true`) this
+section always ran. `drop` (a token off the board enters an empty cell),
+`jump` (`over`: a direction-name list, or `["any"]` for every direction the
+topology declares — two cells along one, over an occupied intermediate that
+leaves the board, onto an empty destination), and `pair` (`with`: a cell key
+of `tokens` — the companion relocates by the same grid offset, its own
+destination empty; grid topologies only) are the other arms. `relocate` with
+`displace: false` leaves the standing token in place rather than evicting it.
+
+Outputs: `legal` (int row keyed by the tokens, a per-token destination mask,
+boards ≤ 64 cells) and `count` (slot). `reach`/`held`/`counts` work for a board
+of any size: `reach` (int board over `board`'s topology) is painted 1 at every
+cell `held` (int slot, the token's ordinal in `tokens`) may reach, empty
+elsewhere — out of range paints nothing — and `counts` (int row keyed by the
+tokens) is each token's own accepted count. `reach`/`held` are authored
+together. The job walks every (shape, token, target cell or direction) triple
+in that order: it applies the shape's move to a `StateFrame` copy of the
+section — an invalid candidate (occupied landing, unoccupied jump
+intermediate, off-board companion) is skipped before judging — and judges it
+with the rules a frame can evaluate (no interaction, no decision, no
+world-only read — `RuleDataflow.ReadsHost`), accepting when the verdict reads
+`accept` and the turn changed. This root walk never prunes and never skips a
+valid candidate, so the root outputs are unaffected by `depth`/`score`. It
+restarts when any framed cell other than its outputs changes. Quota derives
 from what the work sheet leaves divided by the judge's cost (`nodes` may only
 lower it, and a deeper search spends the same quota over more ticks); progress
 hashes and checkpoints. `world.search` narrates each job. Sharp edge: a token

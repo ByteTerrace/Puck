@@ -1,0 +1,350 @@
+namespace Puck.World.Server;
+
+internal sealed partial class WorldSearchRuntime {
+    /// <summary>Gets how many 64-bit words one token's wide reach bitset needs for a board of <paramref name="cellCount"/> cells.</summary>
+    private static int WideWordsPerToken(int cellCount) => ((cellCount + 63) >> 6);
+
+    private static void SetWideBit(long[] wide, int token, int cell, int words) {
+        var index = ((token * words) + (cell >> 6));
+
+        wide[index] |= (1L << (cell & 63));
+    }
+    private static bool WideBit(long[] wide, int token, int cell, int words) {
+        var index = ((token * words) + (cell >> 6));
+
+        return ((wide[index] & (1L << (cell & 63))) != 0L);
+    }
+
+    // One candidate per node: a shape's own move applies to a scratch copy of the position, the judge runs, and the
+    // verdict at its accept value with the turn changed is an accepted candidate. Ply 0 is the root — its own
+    // (shape, token, target/direction) cursor lives on the job and is always exhausted before the job finishes, so
+    // the root outputs never depend on whether a score is authored or how deep the search goes. A ply past 0 lives
+    // on job.Levels and exists only long enough to negamax one accepted root candidate (or a descendant of one) to
+    // the pass's depth. The walk enumerates in fixed order: shape, then token, then target/direction.
+    private void Walk(Job job, ulong tick) {
+        var host = m_host!;
+        var scratch = host.Frame;
+        var plan = job.Plan;
+        var rows = m_base!.Rows;
+        var tokens = StateRows.FindStateRow(rows: rows, name: plan.Row.Tokens);
+        var turn = StateRows.FindStateRow(rows: rows, name: plan.Turn);
+        var verdict = StateRows.FindStateRow(rows: rows, name: plan.Verdict);
+        var cells = plan.Topology.CellCount;
+        var shapes = plan.Shapes;
+
+        if ((tokens?.Cells is not { } tokenCells) || (turn is null) || (verdict is null) || (tokenCells.Count != job.Legal.Length)) {
+            job.Running = false;
+
+            return;
+        }
+
+        var hasScore = (plan.Score is not null);
+        var wideWords = ((job.Wide is not null) ? WideWordsPerToken(cellCount: cells) : 0);
+        var budget = plan.Nodes;
+
+        while ((budget > 0) && job.Running) {
+            var p = job.Active;
+            var frame = Position(job: job, p: p);
+            var shapeIndex = CursorShape(job: job, p: p);
+
+            if (shapeIndex >= shapes.Length) {
+                if (p == 0) {
+                    if (!hasScore || (job.PassDepth >= plan.Depth)) {
+                        job.Running = false;
+                    } else {
+                        job.PassDepth++;
+                        ResetPass(job: job);
+                    }
+                } else {
+                    var value = -CursorBest(job: job, p: p);
+                    var parent = (p - 1);
+
+                    Fold(job: job, p: parent, value: value, token: CursorToken(job: job, p: parent), target: CursorTarget(job: job, p: parent));
+                    AdvanceCandidate(job: job, p: parent, shapes: shapes, topology: plan.Topology, tokenCount: tokenCells.Count);
+                    job.Active = parent;
+                }
+
+                continue;
+            }
+
+            var shape = shapes[shapeIndex];
+            var token = CursorToken(job: job, p: p);
+
+            if (token >= tokenCells.Count) {
+                SetCursorShape(job: job, p: p, value: (shapeIndex + 1));
+                SetCursorToken(job: job, p: p, value: 0);
+                SetCursorTarget(job: job, p: p, value: 0);
+
+                continue;
+            }
+
+            var from = (frame.TryStoredAt(row: tokens, index: token, value: out var stored) ? stored : plan.Off);
+            var onBoard = ((from >= 0L) && (from < cells));
+
+            if (onBoard != (shape.Kind != WorldSearchShapeKind.Drop)) {
+                // This shape does not apply to the token in its current state (on the board for every shape but
+                // drop, off it for drop) — skip every candidate for this token under this shape.
+                SetCursorToken(job: job, p: p, value: (token + 1));
+                SetCursorTarget(job: job, p: p, value: 0);
+
+                continue;
+            }
+
+            var candidateIndex = CursorTarget(job: job, p: p);
+            var bound = shape.CandidateCount(topology: plan.Topology);
+
+            if (candidateIndex >= bound) {
+                SetCursorToken(job: job, p: p, value: (token + 1));
+                SetCursorTarget(job: job, p: p, value: 0);
+
+                continue;
+            }
+            if (!TryResolveCandidate(shape: shape, plan: plan, frame: frame, tokens: tokens, tokenCells: tokenCells, token: token, from: from, candidateIndex: candidateIndex, cells: cells,
+                target: out var target, mid: out var mid, companionIndex: out var companionIndex, companionTarget: out var companionTarget)) {
+                SetCursorTarget(job: job, p: p, value: (candidateIndex + 1));
+
+                continue;
+            }
+
+            scratch.CopyFrom(other: frame);
+            _ = scratch.TryWrite(row: tokens, key: tokenCells[token].Key, value: target, write: StateWriteKind.Set, reason: out _);
+
+            switch (shape.Kind) {
+                case WorldSearchShapeKind.Relocate:
+                    if (shape.Displace) {
+                        EvictAt(frame: frame, scratch: scratch, tokens: tokens, tokenCells: tokenCells, cell: target, exclude: token, off: plan.Off);
+                    }
+
+                    break;
+                case WorldSearchShapeKind.Jump:
+                    EvictAt(frame: frame, scratch: scratch, tokens: tokens, tokenCells: tokenCells, cell: mid, exclude: token, off: plan.Off);
+
+                    break;
+                case WorldSearchShapeKind.Pair:
+                    _ = scratch.TryWrite(row: tokens, key: tokenCells[companionIndex].Key, value: companionTarget, write: StateWriteKind.Set, reason: out _);
+
+                    break;
+                default:
+                    break;
+            }
+
+            _ = host.Judge(rules: m_judge, tick: tick);
+
+            var mover = CursorBaseTurn(job: job, p: p);
+            var accepted = ((Slot(store: scratch, name: plan.Verdict) == plan.Row.Accept) && (Slot(store: scratch, name: plan.Turn) != mover));
+
+            if ((p == 0) && accepted) {
+                job.Count++;
+                job.Counts[token]++;
+
+                if (target < BoardMask.MaxCells) {
+                    job.Legal[token] |= (1L << target);
+                }
+                if (job.Wide is { } wide) {
+                    SetWideBit(wide: wide, token: token, cell: target, words: wideWords);
+                }
+            }
+            if (hasScore && accepted && (p < (job.PassDepth - 1))) {
+                var next = (p + 1);
+                var levelFrame = job.Levels[next - 1].Frame;
+
+                levelFrame.CopyFrom(other: scratch);
+                SetCursorShape(job: job, p: next, value: 0);
+                SetCursorToken(job: job, p: next, value: 0);
+                SetCursorTarget(job: job, p: next, value: 0);
+                SetCursorBest(job: job, p: next, value: -WorldSearchCapacity.MateScore);
+                SetCursorBestMove(job: job, p: next, token: -1, target: -1);
+                SetCursorAlpha(job: job, p: next, value: -CursorBeta(job: job, p: p));
+                SetCursorBeta(job: job, p: next, value: -CursorAlpha(job: job, p: p));
+                SetCursorBaseTurn(job: job, p: next, value: Slot(store: scratch, name: plan.Turn));
+                job.Active = next;
+            } else if (hasScore && accepted) {
+                var value = EvaluateScore(plan: plan, tick: tick);
+
+                Fold(job: job, p: p, value: value, token: token, target: target);
+                AdvanceCandidate(job: job, p: p, shapes: shapes, topology: plan.Topology, tokenCount: tokenCells.Count);
+            } else {
+                AdvanceCandidate(job: job, p: p, shapes: shapes, topology: plan.Topology, tokenCount: tokenCells.Count);
+            }
+
+            job.Nodes++;
+            budget--;
+        }
+    }
+
+    // Resolves one shape's candidate from the pre-move frame alone, without allocating a scratch copy: relocate
+    // refuses a no-op target; drop and jump refuse an occupied landing (and jump additionally requires an occupied
+    // intermediate cell, its own defining feature); paired resolves the companion's destination by the same grid
+    // offset the walked token takes and refuses an occupied one. Every refusal here means "not a candidate", judged
+    // exactly like the section's original target-equals-source skip.
+    private static bool TryResolveCandidate(
+        WorldSearchShapePlan shape, WorldSearchPlan plan, StateFrame frame, StateRow tokens, IReadOnlyList<StateCell> tokenCells,
+        int token, long from, int candidateIndex, int cells,
+        out int target, out int mid, out int companionIndex, out int companionTarget
+    ) {
+        target = -1;
+        mid = -1;
+        companionIndex = -1;
+        companionTarget = -1;
+
+        switch (shape.Kind) {
+            case WorldSearchShapeKind.Relocate: {
+                if (candidateIndex == from) {
+                    return false;
+                }
+
+                target = candidateIndex;
+
+                return true;
+            }
+            case WorldSearchShapeKind.Drop: {
+                if (AnyTokenAt(frame: frame, tokens: tokens, tokenCells: tokenCells, cell: candidateIndex, excludeA: -1, excludeB: -1)) {
+                    return false;
+                }
+
+                target = candidateIndex;
+
+                return true;
+            }
+            case WorldSearchShapeKind.Jump: {
+                var direction = shape.Directions[candidateIndex];
+                var midCell = plan.Topology.Neighbour(cell: (int)from, direction: direction);
+
+                if (midCell < 0) {
+                    return false;
+                }
+
+                var targetCell = plan.Topology.Neighbour(cell: midCell, direction: direction);
+
+                if (targetCell < 0) {
+                    return false;
+                }
+                if (!AnyTokenAt(frame: frame, tokens: tokens, tokenCells: tokenCells, cell: midCell, excludeA: token, excludeB: -1)) {
+                    return false;
+                }
+                if (AnyTokenAt(frame: frame, tokens: tokens, tokenCells: tokenCells, cell: targetCell, excludeA: token, excludeB: -1)) {
+                    return false;
+                }
+
+                mid = midCell;
+                target = targetCell;
+
+                return true;
+            }
+            case WorldSearchShapeKind.Pair: {
+                if (candidateIndex == from) {
+                    return false;
+                }
+
+                var companion = shape.PairWithIndex;
+
+                if (companion == token) {
+                    return false;
+                }
+
+                var companionFrom = (frame.TryStoredAt(row: tokens, index: companion, value: out var stored) ? stored : plan.Off);
+
+                if ((companionFrom < 0L) || (companionFrom >= cells)) {
+                    return false;
+                }
+
+                var width = plan.Topology.Width;
+                var dx = ((candidateIndex % width) - ((int)from % width));
+                var dz = ((candidateIndex / width) - ((int)from / width));
+
+                if (!plan.Topology.TryOffset(cell: (int)companionFrom, dx: dx, dz: dz, result: out var companionCell) || (companionCell == candidateIndex)) {
+                    return false;
+                }
+                if (AnyTokenAt(frame: frame, tokens: tokens, tokenCells: tokenCells, cell: companionCell, excludeA: token, excludeB: companion)) {
+                    return false;
+                }
+
+                companionIndex = companion;
+                companionTarget = companionCell;
+                target = candidateIndex;
+
+                return true;
+            }
+            default:
+                return false;
+        }
+    }
+
+    private static bool AnyTokenAt(StateFrame frame, StateRow tokens, IReadOnlyList<StateCell> tokenCells, long cell, int excludeA, int excludeB) {
+        for (var index = 0; index < tokenCells.Count; index++) {
+            if ((index == excludeA) || (index == excludeB)) {
+                continue;
+            }
+            if (frame.TryStoredAt(row: tokens, index: index, value: out var standing) && (standing == cell)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    private static void EvictAt(StateFrame frame, StateFrame scratch, StateRow tokens, IReadOnlyList<StateCell> tokenCells, long cell, int exclude, long off) {
+        for (var other = 0; other < tokenCells.Count; other++) {
+            if ((other != exclude) && frame.TryStoredAt(row: tokens, index: other, value: out var standing) && (standing == cell)) {
+                _ = scratch.TryWrite(row: tokens, key: tokenCells[other].Key, value: off, write: StateWriteKind.Set, reason: out _);
+            }
+        }
+    }
+
+    private long EvaluateScore(WorldSearchPlan plan, ulong tick) =>
+        (m_host!.Evaluator.TryEvaluateExpression(program: plan.Score!, kind: CellKind.Int, tick: tick, value: out var value) ? value : 0L);
+
+    private static void AdvanceCandidate(Job job, int p, WorldSearchShapePlan[] shapes, CompiledTopology topology, int tokenCount) {
+        var shapeIndex = CursorShape(job: job, p: p);
+        var bound = shapes[shapeIndex].CandidateCount(topology: topology);
+        var candidate = (CursorTarget(job: job, p: p) + 1);
+
+        if (candidate >= bound) {
+            SetCursorToken(job: job, p: p, value: (CursorToken(job: job, p: p) + 1));
+            candidate = 0;
+        }
+
+        SetCursorTarget(job: job, p: p, value: candidate);
+
+        // The root ply never prunes: every candidate is tried, so the root outputs are exhaustive whether or not a
+        // score is authored. A ply past the root may cut once its window has closed — forcing both the token and
+        // shape cursors to their sentinel completes the ply on the very next iteration.
+        if ((p > 0) && (CursorAlpha(job: job, p: p) >= CursorBeta(job: job, p: p))) {
+            SetCursorToken(job: job, p: p, value: tokenCount);
+            SetCursorShape(job: job, p: p, value: shapes.Length);
+        }
+    }
+    private static void Fold(Job job, int p, long value, int token, int target) {
+        if (value > CursorBest(job: job, p: p)) {
+            SetCursorBest(job: job, p: p, value: value);
+            SetCursorBestMove(job: job, p: p, token: token, target: target);
+        }
+        if (value > CursorAlpha(job: job, p: p)) {
+            SetCursorAlpha(job: job, p: p, value: value);
+        }
+    }
+
+    private StateFrame Position(Job job, int p) => ((p == 0) ? m_base! : job.Levels[p - 1].Frame);
+    private static int CursorShape(Job job, int p) => ((p == 0) ? job.Shape : job.Levels[p - 1].Shape);
+    private static void SetCursorShape(Job job, int p, int value) { if (p == 0) { job.Shape = value; } else { job.Levels[p - 1].Shape = value; } }
+    private static int CursorToken(Job job, int p) => ((p == 0) ? job.Token : job.Levels[p - 1].Token);
+    private static void SetCursorToken(Job job, int p, int value) { if (p == 0) { job.Token = value; } else { job.Levels[p - 1].Token = value; } }
+    private static int CursorTarget(Job job, int p) => ((p == 0) ? job.Target : job.Levels[p - 1].Target);
+    private static void SetCursorTarget(Job job, int p, int value) { if (p == 0) { job.Target = value; } else { job.Levels[p - 1].Target = value; } }
+    private static long CursorAlpha(Job job, int p) => ((p == 0) ? job.Alpha : job.Levels[p - 1].Alpha);
+    private static void SetCursorAlpha(Job job, int p, long value) { if (p == 0) { job.Alpha = value; } else { job.Levels[p - 1].Alpha = value; } }
+    private static long CursorBeta(Job job, int p) => ((p == 0) ? job.Beta : job.Levels[p - 1].Beta);
+    private static void SetCursorBeta(Job job, int p, long value) { if (p == 0) { job.Beta = value; } else { job.Levels[p - 1].Beta = value; } }
+    private static long CursorBest(Job job, int p) => ((p == 0) ? job.Best : job.Levels[p - 1].Best);
+    private static void SetCursorBest(Job job, int p, long value) { if (p == 0) { job.Best = value; } else { job.Levels[p - 1].Best = value; } }
+    private static void SetCursorBestMove(Job job, int p, int token, int target) {
+        if (p == 0) {
+            job.BestToken = token;
+            job.BestTarget = target;
+        } else {
+            job.Levels[p - 1].BestToken = token;
+            job.Levels[p - 1].BestTarget = target;
+        }
+    }
+    private static long CursorBaseTurn(Job job, int p) => ((p == 0) ? job.BaseTurn : job.Levels[p - 1].BaseTurn);
+    private static void SetCursorBaseTurn(Job job, int p, long value) { if (p == 0) { job.BaseTurn = value; } else { job.Levels[p - 1].BaseTurn = value; } }
+}

@@ -1347,10 +1347,16 @@ rules a frame can run derives from the dataflow: a rule reading a world
 operand (a body's cell, its uprightness, quiescence) is host-only, and the
 candidate is applied where those rules sit, which is where the physical move
 enters the sequence; a world with something specific in mind names the rule
-the candidate follows. Candidates derive as one own piece relocating to any
-other cell; the castle, the en-passant clearing, and the promotion are
-authored candidate shapes, and an authored per-element reach mask prunes
-before the judge where strength matters. Legality is written once, as the
+the candidate follows. Candidates derive as authored shapes, walked in a fixed
+order ahead of token and target/direction: `relocate` (one own piece to any
+other cell, evicting or not whatever stood there), `drop` (a token off the
+board into an empty cell — a supply piece, a hand), `jump` (two cells along a
+direction, over an occupied intermediate that leaves the board — the
+en-passant clearing's shape, not its exact geometry), and `pair` (two tokens
+relocating together by the same offset — the castle's minimal primitive, not
+a general rule for every pair's own reach); an authored per-element reach mask
+prunes before the judge where strength matters. A token's own code changing
+(promotion) is out of this section's scope. Legality is written once, as the
 judge: *enforcement* is the author's choice per table — the diegetic
 tabletop records an illegal move and lets the players fix the board, a
 teaching world refuses it or paints the `plan` row from the search's

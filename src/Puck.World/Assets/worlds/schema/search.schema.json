@@ -50,6 +50,87 @@
             "type": "integer",
             "default": 1
           },
+          "shapes": {
+            "description": "The candidate shapes the walk enumerates, in declared order, ahead of token and target/direction; absent or empty, the one default shape (Relocate, displace: true).",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "One authored candidate shape a search job enumerates, ahead of token and target/direction in the walk\u0027s fixed order. Every shape but Drop requires the walked token on the board; Drop requires it off. Absent from Shapes, a job\u0027s default and only shape is Relocate with displace: true \u2014 the one candidate this section always ran.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "required": [
+                "$type"
+              ],
+              "anyOf": [
+                {
+                  "description": "One own token moves onto any other cell of the board. Displace (default true) evicts whatever token already stood on the target \u2014 the section\u0027s original, unconditional behavior; false leaves it standing, so a judge rule that reads two tokens sharing a cell decides the candidate itself.",
+                  "properties": {
+                    "$type": {
+                      "const": "relocate"
+                    },
+                    "displace": {
+                      "description": "Whether the token standing on the target leaves the board.",
+                      "type": "boolean",
+                      "default": true
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "description": "A token whose current value is off the board (see Tokens\u0027s remarks) enters any cell no other token stands on.",
+                  "properties": {
+                    "$type": {
+                      "const": "drop"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "description": "The walked token steps two cells along one topology direction, over a token standing on the intermediate cell \u2014 which leaves the board \u2014 onto an empty destination; a direction with no such occupied intermediate, or whose destination is not empty, is not a candidate.",
+                  "properties": {
+                    "$type": {
+                      "const": "jump"
+                    },
+                    "over": {
+                      "description": "The directions tried, in the topology\u0027s own vocabulary (CompiledTopology.Direction). The single-element list [\u0022any\u0022] tries every direction the topology declares.",
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "over"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "description": "The walked token relocates to the target cell and a second, fixed token \u2014 named by With, a cell key of Tokens \u2014 relocates by the same (dx, dz) grid offset, provided its own destination is empty. Grid topologies only: the minimal two-token primitive a castle\u0027s rook needs, not a general rule for every pair\u0027s own reach (see the schema README\u0027s search section for the reasoning).",
+                  "properties": {
+                    "$type": {
+                      "const": "pair"
+                    },
+                    "with": {
+                      "description": "The companion token\u0027s cell key in Tokens.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "with"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "default": null
+          },
           "legal": {
             "description": "An integer row keyed by the tokens receiving, per token, the mask of cells it may relocate to; requires a board of at most 64 cells.",
             "type": [
@@ -60,6 +141,30 @@
           },
           "count": {
             "description": "A slot row receiving how many relocations were accepted.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "reach": {
+            "description": "An integer board row over the same topology as Board receiving, at 1, the cells Held\u0027s named token may reach and, at its own empty value, every other cell; unlike Legal, works for a board of any size. Authored together with Held.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "held": {
+            "description": "An integer slot row naming the token whose accepted destinations are painted into Reach \u2014 its own ordinal in Tokens\u0027s cell order. A value out of range paints nothing.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "counts": {
+            "description": "An integer row keyed by the tokens receiving, per token, how many candidates it accepted; unlike Legal, works for a board of any size.",
             "type": [
               "string",
               "null"
