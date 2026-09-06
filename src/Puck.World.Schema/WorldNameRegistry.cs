@@ -223,6 +223,11 @@ public static partial class WorldNameRegistry {
         new(typeof(WorldReaction.Flow), nameof(WorldReaction.Flow.Over), WorldNameKind.Field, WorldNameRole.Names),
         new(typeof(WorldReaction.Flow), nameof(WorldReaction.Flow.SpillRow), WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action),
         new(typeof(WorldLatticeScalar), nameof(WorldLatticeScalar.Row), WorldNameKind.State, WorldNameRole.Names),
+        new(typeof(WorldPlacementResponseCondition.FieldCondition), nameof(WorldPlacementResponseCondition.FieldCondition.Field), WorldNameKind.Field, WorldNameRole.Names),
+        new(typeof(WorldPlacementResponseCondition.StateCondition), nameof(WorldPlacementResponseCondition.StateCondition.State), WorldNameKind.State, WorldNameRole.Names),
+        new(typeof(WorldPlacementResponseCondition.StateCondition), nameof(WorldPlacementResponseCondition.StateCondition.Key), WorldNameKind.State, WorldNameRole.Key),
+        new(typeof(WorldPlacementResponseCondition.StateCondition), nameof(WorldPlacementResponseCondition.StateCondition.ComparandState), WorldNameKind.State, WorldNameRole.Names),
+        new(typeof(WorldPlacementResponseCondition.StateCondition), nameof(WorldPlacementResponseCondition.StateCondition.ComparandKey), WorldNameKind.State, WorldNameRole.Key),
         new(typeof(WorldNavigationDomain), nameof(WorldNavigationDomain.Medium), WorldNameKind.Field, WorldNameRole.Names),
         new(typeof(WorldMarkerRing), nameof(WorldMarkerRing.Field), WorldNameKind.Field, WorldNameRole.Names),
         // Bindings: HUD, overlays, cameras, theme.

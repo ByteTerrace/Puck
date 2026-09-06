@@ -99,7 +99,7 @@ public sealed class PlacementResponseRowReferenceLawTests {
                     Scale: 1f,
                     Respond: [
                         new WorldPlacementResponse(
-                            When: new WorldFieldCondition(Comparison: ActionStateComparison.GreaterOrEqual, Field: FieldName, Value: threshold),
+                            When: new WorldPlacementResponseCondition.FieldCondition(Comparison: ActionStateComparison.GreaterOrEqual, Field: FieldName, Value: threshold),
                             PrototypeId: TargetCreation
                         ),
                     ]

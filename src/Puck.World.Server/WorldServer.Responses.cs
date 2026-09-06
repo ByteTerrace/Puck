@@ -5,13 +5,17 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
-    /// <summary>Describes every placement carrying a response trait: its current prototype, and which authored
-    /// condition (if any) currently holds at its coupled cell.</summary>
-    public string DescribeResponses() {
-        if (m_population.Fields is not { } lattice) {
-            return "[world.responses: none — no fields section]";
-        }
+    // Per-placement memo for the response sweep's skip: the raw cell values (and whether each cell was present) a
+    // placement's State entries read the last time it was fully evaluated. Populated only for a placement whose
+    // every entry is a State condition — a Field entry has no comparably cheap "did anything move" proof (the field
+    // lattice steps every tick regardless), so such a placement is never entered here and is swept in full every
+    // tick exactly as before this facet gained a state arm.
+    private readonly Dictionary<string, (long[] Values, bool[] Present)> m_responseObservedValues = [];
 
+    /// <summary>Describes every placement carrying a response trait: its current prototype, and which authored
+    /// condition (if any) currently holds.</summary>
+    public string DescribeResponses() {
+        var lattice = m_population.Fields;
         var lines = new List<string>();
 
         foreach (var placement in m_definition.Placements) {
@@ -19,15 +23,10 @@ public sealed partial class WorldServer {
                 continue;
             }
 
-            var matchedIndex = ResolveMatchingResponse(
-                lattice: lattice,
-                placement: placement,
-                responses: responses,
-                tick: m_lastCompletedTick
-            );
+            var matchedIndex = ResolveMatchingResponse(lattice: lattice, placement: placement, responses: responses, tick: m_lastCompletedTick);
 
             lines.Add(item: ((matchedIndex >= 0)
-                ? $"'{placement.Id}' prototype={placement.PrototypeId} holds=[{matchedIndex}] {responses[matchedIndex].When.Field} {responses[matchedIndex].When.Comparison} -> {responses[matchedIndex].PrototypeId}"
+                ? $"'{placement.Id}' prototype={placement.PrototypeId} holds=[{matchedIndex}] {DescribeCondition(condition: responses[matchedIndex].When)} -> {responses[matchedIndex].PrototypeId}"
                 : $"'{placement.Id}' prototype={placement.PrototypeId} holds=none"
             ));
         }
@@ -37,26 +36,42 @@ public sealed partial class WorldServer {
             : $"[world.responses: {string.Join(separator: "; ", values: lines)}]"
         );
     }
+    private static string DescribeCondition(WorldPlacementResponseCondition condition) => (condition switch {
+        WorldPlacementResponseCondition.FieldCondition field => $"{field.Field} {field.Comparison}",
+        WorldPlacementResponseCondition.StateCondition state => $"state:{state.State}{((state.Key is { } key) ? $".{key}" : string.Empty)} {state.Comparison}",
+        _ => "?",
+    });
 
-    // Runs immediately after StepFields (WorldServer.Step.cs), so a response condition reads THIS tick's own lattice
-    // writes rather than a tick-stale value — a burning tree's stump swap fires the same tick the char field crosses
-    // its threshold.
+    // Runs after StepFields, so a Field entry reads this tick's own lattice writes — unchanged from before this
+    // facet gained a state arm. A State entry reads the installed document directly (WorldStateReader, the same
+    // reader every other row-name comparand in this file already goes through), so it sees a rule's own write the
+    // moment EvaluateWorldRules' end-of-tick fold installs it, and a field reaction's or the console's write the
+    // moment IT installs, both still within this same tick's sweep.
     private void SweepPlacementResponses(ulong tick) {
-        if (m_population.Fields is not { } lattice) {
-            return;
-        }
+        var lattice = m_population.Fields;
+        // Declared once and reused every iteration below — a stackalloc inside the loop body would not release its
+        // frame slot between iterations, growing with the placement count instead of staying constant.
+        Span<long> values = stackalloc long[(WorldResponseCapacity.MaxEntries * 2)];
+        Span<bool> present = stackalloc bool[(WorldResponseCapacity.MaxEntries * 2)];
 
         foreach (var placement in m_definition.Placements) {
             if (placement.Respond is not { Count: > 0 } responses) {
                 continue;
             }
 
-            var matchedIndex = ResolveMatchingResponse(
-                lattice: lattice,
-                placement: placement,
-                responses: responses,
-                tick: tick
-            );
+            var skippable = TryReadResponseSnapshot(definition: m_definition, responses: responses, tick: tick, values: values, present: present, count: out var count);
+
+            if (skippable && ObservedValuesUnchanged(placementId: placement.Id, values: values[..count], present: present[..count])) {
+                continue;
+            }
+
+            if (skippable) {
+                m_responseObservedValues[placement.Id] = (values[..count].ToArray(), present[..count].ToArray());
+            } else if (m_responseObservedValues.Count > 0) {
+                m_responseObservedValues.Remove(key: placement.Id);
+            }
+
+            var matchedIndex = ResolveMatchingResponse(lattice: lattice, placement: placement, responses: responses, tick: tick);
 
             if (matchedIndex < 0) {
                 continue;
@@ -99,50 +114,116 @@ public sealed partial class WorldServer {
                 var respondPrevious = previous;
                 var respondTarget = target;
                 var respondEntry = matchedIndex;
-                var respondField = responses[matchedIndex].When.Field;
-                var respondComparison = responses[matchedIndex].When.Comparison;
+                var respondDescribe = DescribeCondition(condition: responses[matchedIndex].When);
 
                 m_output.Narrate(
                     channel: "world.respond",
-                    text: $"[world.respond: '{respondId}' {respondPrevious} -> {respondTarget} (entry {respondEntry}: {respondField} {respondComparison})]"
+                    text: $"[world.respond: '{respondId}' {respondPrevious} -> {respondTarget} (entry {respondEntry}: {respondDescribe})]"
                 );
             }
         }
     }
-    // The first authored entry whose condition holds at the placement's coupled cell, or -1 when none do (or the
-    // placement's authored, static position never couples to the lattice at all). The condition scalar is resolved
-    // here rather than inside the kernel: a response's WorldLatticeScalar is document vocabulary the kernel does not
-    // carry, unlike a reaction's scalar, which is compiled to a StateHandle ahead of time.
-    private int ResolveMatchingResponse(FieldLattice lattice, WorldPlacement placement, IReadOnlyList<WorldPlacementResponse> responses, ulong tick) {
-        if (!lattice.TryBodyCellOf(
+    // The first authored entry whose condition holds, or -1 when none do. A Field condition resolves the
+    // placement's coupled cell once (unchanged from before this facet gained a state arm); a State condition needs
+    // no cell at all.
+    private int ResolveMatchingResponse(FieldLattice? lattice, WorldPlacement placement, IReadOnlyList<WorldPlacementResponse> responses, ulong tick) {
+        var cell = 0;
+        var hasCell = ((lattice is not null) && lattice.TryBodyCellOf(
             position: FixedVector3.FromVector3(value: WorldDefinitionRows.ResolvedPosition(definition: m_definition, placement: placement)),
-            cell: out var cell
-        )) {
-            return -1;
-        }
+            cell: out cell
+        ));
 
         for (var index = 0; (index < responses.Count); index++) {
-            var condition = responses[index].When;
+            var holds = (responses[index].When switch {
+                WorldPlacementResponseCondition.FieldCondition field => (hasCell && FieldConditionHolds(condition: field, lattice: lattice!, cell: cell, tick: tick)),
+                WorldPlacementResponseCondition.StateCondition state => StateConditionHolds(condition: state, definition: m_definition, tick: tick),
+                _ => false,
+            });
 
-            if (!lattice.TryFieldIndex(name: condition.Field, field: out var field)) {
-                continue;
+            if (holds) {
+                return index;
             }
-
-            var expected = ((condition.Value.Row is { } row)
-                ? ReadScalarSlot(row: row, tick: tick)
-                : FixedQ4816.FromDouble(value: (condition.Value.Literal ?? 0f))
-            );
-
-            if (!condition.Comparison.Holds(
-                value: lattice.Value(field: field, cell: cell),
-                expected: expected
-            )) {
-                continue;
-            }
-
-            return index;
         }
 
         return -1;
+    }
+    private bool FieldConditionHolds(WorldPlacementResponseCondition.FieldCondition condition, FieldLattice lattice, int cell, ulong tick) {
+        if (!lattice.TryFieldIndex(name: condition.Field, field: out var field)) {
+            return false;
+        }
+
+        var expected = ((condition.Value.Row is { } row)
+            ? ReadScalarSlot(row: row, tick: tick)
+            : FixedQ4816.FromDouble(value: (condition.Value.Literal ?? 0f))
+        );
+
+        return condition.Comparison.Holds(
+            value: lattice.Value(field: field, cell: cell),
+            expected: expected
+        );
+    }
+    private static bool StateConditionHolds(WorldPlacementResponseCondition.StateCondition condition, WorldDefinition definition, ulong tick) {
+        if (!WorldStateReader.TryRead(definition: definition, rowName: condition.State, key: condition.Key, tick: tick, row: out var row, rawValue: out var raw, text: out _) || (raw is not { } rawValue)) {
+            return false;
+        }
+
+        long expected;
+
+        if (condition.ComparandState is { } comparandRow) {
+            if (!WorldStateReader.TryRead(definition: definition, rowName: comparandRow, key: condition.ComparandKey, tick: tick, row: out _, rawValue: out var comparand, text: out _) || (comparand is not { } comparandValue)) {
+                return false;
+            }
+
+            expected = comparandValue;
+        } else {
+            expected = LiteralToRaw(kind: row.Kind, literal: (condition.Value ?? 0f));
+        }
+
+        return condition.Comparison.Holds(
+            value: FixedQ4816.FromRawBits(value: rawValue),
+            expected: FixedQ4816.FromRawBits(value: expected)
+        );
+    }
+    // A Fixed row's literal keeps its exact fixed-point scale; an Int/Bool row's literal rounds to the nearest whole
+    // number — the raw encoding StateCellWriter.TryParseNumericToken already gives every other author-typed literal
+    // of that kind, so a state condition's comparand reads the same way a console cell edit would.
+    private static long LiteralToRaw(CellKind kind, float literal) => (kind switch {
+        CellKind.Fixed => FixedQ4816.FromDouble(value: literal).Value,
+        _ => ((long)MathF.Round(x: literal, mode: MidpointRounding.ToEven)),
+    });
+    // Reads every State entry's primary (and, when authored, comparand) cell straight off the installed document —
+    // the snapshot the skip below compares tick to tick. Returns false (never skippable) the moment any entry is a
+    // Field condition, so a mixed respond list is always swept in full.
+    private static bool TryReadResponseSnapshot(WorldDefinition definition, IReadOnlyList<WorldPlacementResponse> responses, ulong tick, Span<long> values, Span<bool> present, out int count) {
+        count = 0;
+
+        foreach (var response in responses) {
+            if (response.When is not WorldPlacementResponseCondition.StateCondition state) {
+                return false;
+            }
+
+            ReadResponseSnapshotCell(definition: definition, row: state.State, key: state.Key, tick: tick, values: values, present: present, index: count);
+            count++;
+
+            if (state.ComparandState is { } comparandRow) {
+                ReadResponseSnapshotCell(definition: definition, row: comparandRow, key: state.ComparandKey, tick: tick, values: values, present: present, index: count);
+                count++;
+            }
+        }
+
+        return true;
+    }
+    private static void ReadResponseSnapshotCell(WorldDefinition definition, string row, string? key, ulong tick, Span<long> values, Span<bool> present, int index) {
+        var found = (WorldStateReader.TryRead(definition: definition, rowName: row, key: key, tick: tick, row: out _, rawValue: out var raw, text: out _) && (raw is not null));
+
+        present[index] = found;
+        values[index] = (raw ?? 0L);
+    }
+    private bool ObservedValuesUnchanged(string placementId, ReadOnlySpan<long> values, ReadOnlySpan<bool> present) {
+        if (!m_responseObservedValues.TryGetValue(key: placementId, value: out var cached) || (cached.Values.Length != values.Length)) {
+            return false;
+        }
+
+        return (cached.Values.AsSpan().SequenceEqual(other: values) && cached.Present.AsSpan().SequenceEqual(other: present));
     }
 }

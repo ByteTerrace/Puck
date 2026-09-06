@@ -73,8 +73,9 @@ public sealed class PlacementResponseValidationLawTests {
             HashRaw: canonical.Hash
         );
     }
-    // One 1x1x1 lattice cell carrying the one field the well-formed condition names — the smallest fields section a
-    // response's condition can validate against.
+    private const string CounterRow = "declaredCounter";
+    // One 1x1x1 lattice cell carrying the one field the well-formed condition names, plus one plain Int row a state
+    // condition's own laws validate against — the smallest fields+state section either arm needs.
     private static WorldStateSection FieldsSection() => new(
         World: [
             new WorldStateRow(
@@ -82,6 +83,7 @@ public sealed class PlacementResponseValidationLawTests {
                 Kind: CellKind.Fixed,
                 Domain: new StateDomain.CellsOf(Topology: "world"), Field: new WorldStateFieldTrait(Initial: 0f, Min: 0f, Max: 1f)
             ),
+            new WorldStateRow(Name: CellName.Parse(candidate: CounterRow), Kind: CellKind.Int),
         ],
         Lattices: [
             new WorldFieldTopology(
@@ -112,7 +114,7 @@ public sealed class PlacementResponseValidationLawTests {
         Scale: 1f,
         Respond: [
             new WorldPlacementResponse(
-                When: new WorldFieldCondition(Comparison: ActionStateComparison.GreaterOrEqual, Field: FieldName, Value: 0.5f),
+                When: new WorldPlacementResponseCondition.FieldCondition(Comparison: ActionStateComparison.GreaterOrEqual, Field: FieldName, Value: 0.5f),
                 PrototypeId: TargetCreation
             ),
         ]
@@ -136,7 +138,7 @@ public sealed class PlacementResponseValidationLawTests {
         AssertRefusedNaming(
             definition: With(placement: (WellFormed() with {
                 Respond = [new WorldPlacementResponse(
-                    When: new WorldFieldCondition(Comparison: ActionStateComparison.GreaterOrEqual, Field: "no-such-field", Value: 0.5f),
+                    When: new WorldPlacementResponseCondition.FieldCondition(Comparison: ActionStateComparison.GreaterOrEqual, Field: "no-such-field", Value: 0.5f),
                     PrototypeId: TargetCreation
                 )],
             })),
@@ -151,7 +153,7 @@ public sealed class PlacementResponseValidationLawTests {
         AssertRefusedNaming(
             definition: With(placement: (WellFormed() with {
                 Respond = [new WorldPlacementResponse(
-                    When: new WorldFieldCondition(Comparison: ((ActionStateComparison)byte.MaxValue), Field: FieldName, Value: 0.5f),
+                    When: new WorldPlacementResponseCondition.FieldCondition(Comparison: ((ActionStateComparison)byte.MaxValue), Field: FieldName, Value: 0.5f),
                     PrototypeId: TargetCreation
                 )],
             })),
@@ -218,5 +220,25 @@ public sealed class PlacementResponseValidationLawTests {
             needle: $"exceeding the {WorldResponseCapacity.MaxEntries}-entry ceiling"
         );
         AssertValidates(definition: With(placement: WellFormed()));
+    }
+    /// <summary>DENIAL: a state condition naming a row the document does not declare. CONTROL: the declared
+    /// row.</summary>
+    [Fact]
+    public void StateConditionRowMustBeDeclared() {
+        AssertRefusedNaming(
+            definition: With(placement: (WellFormed() with {
+                Respond = [new WorldPlacementResponse(
+                    When: new WorldPlacementResponseCondition.StateCondition(State: "no-such-row", Comparison: ActionStateComparison.GreaterOrEqual, Value: 3),
+                    PrototypeId: TargetCreation
+                )],
+            })),
+            needle: "which the document does not declare"
+        );
+        AssertValidates(definition: With(placement: (WellFormed() with {
+            Respond = [new WorldPlacementResponse(
+                When: new WorldPlacementResponseCondition.StateCondition(State: CounterRow, Comparison: ActionStateComparison.GreaterOrEqual, Value: 3),
+                PrototypeId: TargetCreation
+            )],
+        })));
     }
 }
