@@ -52,6 +52,19 @@ Even a retained storage handle becomes unusable when replay suppresses the clien
 
 ## Invoke and observe
 
+An installed `IWorldConfiguredProvider` can additionally implement
+`IWorldConfiguredObservationProvider`. Its `BindObservation` validates private
+settings without I/O and returns an owned `IWorldExtensionObservationSource`.
+`ReadAsync` returns a complete, detached collection of stable keyed items with
+explicitly disclosed scalar fields, and cooperates with cancellation. Throw on
+incomplete results; returning an empty collection means authoritative absence.
+The [configuration layer](ExtensionConfiguration.md#observe-a-collection) owns
+bounded scheduling, table/static-placement projection, and source disposal.
+Custom hosts call `WorldConfiguredExtensions.Pump` at closed boundaries;
+observation-only configurations do not need `Host.Start` or effect checkpoints.
+This optional collection adapter does not constrain richer SDK integrations to
+a universal resource model.
+
 Caller code needs only the granted client:
 
 ```csharp

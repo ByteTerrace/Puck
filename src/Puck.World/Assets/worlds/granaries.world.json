@@ -59,21 +59,6 @@
       "name": "rise",
       "role": "MoveUp",
       "shape": "Bipolar"
-    },
-    {
-      "composition": true,
-      "name": "tetherAttach",
-      "shape": "Binary"
-    },
-    {
-      "composition": true,
-      "name": "tetherDetach",
-      "shape": "Binary"
-    },
-    {
-      "composition": true,
-      "name": "tetherReel",
-      "shape": "Bipolar"
     }
   ],
   "bodyMotionPrograms": [
@@ -290,7 +275,29 @@
     ]
   },
   "render": {
-    "farDistance": 120
+    "farDistance": 120,
+    "lighting": {
+      "sun": {
+        "direction": [
+          0.4,
+          0.9,
+          -0.6
+        ],
+        "weight": 0.85,
+        "color": "#FFF2CE"
+      },
+      "ambient": {
+        "base": 0.28,
+        "hemisphere": 0.25,
+        "color": "#DBE9E7"
+      }
+    },
+    "sky": {
+      "zenith": "#7899A8",
+      "horizon": "#D2D8C7",
+      "ground": "#7D8865",
+      "fogDensity": 0.006
+    }
   },
   "spawnPoints": [
     {
@@ -352,6 +359,21 @@
             "height": 1
           }
         ]
+      },
+      {
+        "name": "walk",
+        "seatCount": 0,
+        "slots": [
+          {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1,
+            "camera": null
+          }
+        ],
+        "transitionSeconds": 0.4,
+        "transitionRenderScale": 0.5
       }
     ]
   },
@@ -370,8 +392,8 @@
             "subject": {
               "$type": "worldPoint",
               "point": [
-                20,
-                1,
+                24,
+                5,
                 -83
               ]
             }
@@ -382,8 +404,8 @@
               "$type": "worldPoint",
               "point": [
                 -4,
-                -13,
-                -47
+                -15,
+                -48
               ]
             }
           },
@@ -406,5 +428,59 @@
       "previewDeadlineFrames": 8,
       "derivedFaceScreens": 0
     }
+  },
+  "state": {
+    "world": [
+      {
+        "cells": [
+          {
+            "key": "axisX",
+            "value": "#FF3B30"
+          },
+          {
+            "key": "axisZ",
+            "value": "#2F6BFF"
+          },
+          {
+            "key": "avatarBody",
+            "value": "#FF73BF"
+          },
+          {
+            "key": "avatarMark",
+            "value": "#1ABFB2"
+          },
+          {
+            "key": "avatarEye",
+            "value": "#FFFFFF"
+          },
+          {
+            "key": "avatarPupil",
+            "value": "#0D0D0D"
+          },
+          {
+            "key": "defaultAvatarPrimary",
+            "value": "#FF2D95"
+          },
+          {
+            "key": "defaultAvatarSecondary",
+            "value": "#2DFF97"
+          },
+          {
+            "key": "groundPrimary",
+            "value": "#738565"
+          },
+          {
+            "key": "groundSecondary",
+            "value": "#738565"
+          },
+          {
+            "key": "groundTertiary",
+            "value": "#738565"
+          }
+        ],
+        "kind": "text",
+        "name": "colors"
+      }
+    ]
   }
 }

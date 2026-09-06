@@ -38,6 +38,10 @@ Extension hosting tests use fake providers and controlled scheduling time.
 `WorldConfiguredExtensionLawTests` composes multiple providers from configuration,
 drives request/status tables through the real authority, and checks restart,
 revocation, failed composition cleanup, and isolation of invalid requests.
+`WorldObservationLawTests` checks complete collection projection, unchanged-read
+suppression, retained state on failures, ordinary authority refusal, and replay
+revocation. `WorldRenderEnvelopeLawTests` exercises the real scene capacity probe
+without a GPU, including new per-shape placements within authored headroom.
 `ConfinedStorageLawTests` uses real files for link, namespace, concurrent
 replacement, and conditional-write behavior. Run that class on Windows and
 Linux x64: Windows covers junctions and hard links, while Linux also covers

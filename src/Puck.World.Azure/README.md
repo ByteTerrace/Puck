@@ -94,6 +94,28 @@ Azure RBAC independently checks the supplied credential. Do not hand untrusted
 code a dispatcher containing bindings it should not invoke. Grant a scoped
 client instead; its operation discovery contains only those grants.
 
+## Read resource inventory
+
+For read-only discovery, `AzureResourceInventory` uses the same generic ARM SDK
+pipeline to list an explicitly named resource group's resources. The
+[granaries deployment](../Puck.World/Assets/hosting/granaries.extensions.json)
+shows the complete no-C# wiring. Source settings pin `resourceGroup`, `apiVersion`,
+and `resourceType`; optional `namePrefix` and `excludeNames` narrow membership.
+`fields` maps disclosure names to slash-separated property paths such as `/id`,
+`/location`, and `/sku/name`. Only selected scalar values leave the adapter;
+missing or null properties become empty strings. Select only metadata safe for
+the world's readers. ARM metadata does not imply usage, health, or grain placement.
+
+All pages must succeed before publication. Defaults limit the query to 16 pages
+and each response to 1 MiB (`maximumPages` and `maximumResponseBytes`); the source
+also caps inspected resources at 4096 and honors the observation's item ceiling.
+Duplicate IDs, out-of-group resources, malformed bodies, and exceeded limits
+refuse the whole read. Continuations must remain on the exact approved HTTPS
+origin and collection path. Redirects remain disabled. GET reads may retry twice;
+the mutation adapter's no-resend policy is unchanged. Resource Graph and telemetry
+queries can be added as distinct Azure source capabilities; this implementation
+does not yet execute those queries.
+
 ## Completion and recovery
 
 The shared host runs service work on workers. The dispatcher claims each operation durably
@@ -146,7 +168,9 @@ dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --filter F
 The Azure suite exercises declarative provider setup and the real SDK authentication and HTTP pipeline against
 a scripted in-memory service: generic verbs, unchanged JSON, pinned identities,
 preconditions, pending operations, restart polling, ambiguous failures, URL
-containment, and byte limits. The server suite exercises durable dispatch,
+containment, and byte limits. Inventory tests cover pagination, field disclosure,
+scope confinement, duplicate IDs, and refusal of truncated collections.
+The server suite exercises durable dispatch,
 continuation preservation, authority, and replay. These tests require no Azure
 account and perform no live resource changes.
 

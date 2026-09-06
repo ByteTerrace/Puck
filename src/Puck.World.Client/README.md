@@ -18,6 +18,13 @@ audio director imports `Puck.World.Audio` types directly. `WorldFramePresenter`,
 root-crossing dependency was the audio director, narrowed to
 `IWorldAudioFrameFeed`/`IWorldAudioCueSink` below.
 
+Live static-placement admission reserves both rendering forms at boot: whole
+creation stamps and per-shape instances. Each `authoringHeadroomPlacements` slot
+reserves a whole stamp and up to `WorldPlacementPolicy.MaxShapesPerStamp` entries
+in the per-shape floor. The floors are conservative GPU capacity reservations,
+not a strict count of editable rows. This keeps newly discovered or authored
+simple creations inside the same frozen envelope as scoped creations.
+
 ## Seats and input
 
 - `PlayerRoster.cs` — seat metadata: which devices sit at which of the four

@@ -25,6 +25,11 @@ public sealed class WorldObservationLawTests {
         Assert.Equal(new[] { "b" }, Names(world.Server));
         Assert.DoesNotContain(world.Server.Definition.Placements, row => row.Id == "observed-a");
         Assert.Contains(world.Server.Definition.Placements, row => row.Id == "court");
+        provider.Items = [];
+        await Observe(runtime, world.Server, 60);
+        Assert.Empty(Names(world.Server));
+        Assert.Single(world.Server.Definition.Placements);
+        Assert.True(Assert.Single(runtime.Observations).Applied);
     }
 
     [Fact]
@@ -41,10 +46,28 @@ public sealed class WorldObservationLawTests {
         provider.Items = Enumerable.Range(0, 5).Select(i => Item("x" + i)).ToArray();
         await Observe(runtime, world.Server, 40, fails: true);
         Assert.Equal(new[] { "a" }, Names(world.Server));
+        Assert.Equal(1, Assert.Single(runtime.Observations).Items);
         world.Server.SuppressRecordedExtensions();
         var reads = provider.Reads;
         runtime.Pump(60);
         Assert.Equal(reads, provider.Reads);
+    }
+
+    [Fact]
+    public async Task AReadThatFinishesAfterReplayCannotProjectItsResult() {
+        using var world = Fixtures.FreshServer(Document());
+        using var provider = new Source { Deferred = new(TaskCreationOptions.RunContinuationsAsynchronously) };
+        await using var runtime = Create(world.Server, provider);
+        runtime.Pump(1);
+        await provider.Started.Task.WaitAsync(Cancel);
+        world.Server.SuppressRecordedExtensions();
+        provider.Deferred.SetResult([Item("late")]);
+        await runtime.FlushObservationsAsync(Cancel);
+        runtime.Pump(2);
+        world.Server.DrainAdministrative();
+        Assert.Empty(Names(world.Server));
+        Assert.Equal(0, Assert.Single(runtime.Observations).Submissions);
+        Assert.Equal(1, provider.Reads);
     }
 
     [Fact]
@@ -59,6 +82,7 @@ public sealed class WorldObservationLawTests {
         world.Server.DrainAdministrative();
         Assert.Empty(Names(world.Server));
         Assert.NotNull(Assert.Single(runtime.Observations).Failure);
+        Assert.False(Assert.Single(runtime.Observations).Applied);
     }
 
     private static async Task Observe(WorldConfiguredExtensions runtime, WorldServer server, ulong tick, bool fails = false) {
@@ -92,10 +116,14 @@ public sealed class WorldObservationLawTests {
         public IReadOnlyList<WorldExtensionObservationItem> Items = [];
         public bool Fail;
         public int Reads;
+        public TaskCompletionSource<IReadOnlyList<WorldExtensionObservationItem>>? Deferred;
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public WorldExtensionOperation Bind(string name, string description, JsonElement settings) => throw new NotSupportedException();
         public IWorldExtensionObservationSource BindObservation(JsonElement settings, int maximumItems) => this;
         public ValueTask<IReadOnlyList<WorldExtensionObservationItem>> ReadAsync(CancellationToken cancellationToken) {
             Reads++;
+            Started.TrySetResult();
+            if (Deferred is { } deferred) { return new(deferred.Task.WaitAsync(cancellationToken)); }
             return Fail ? ValueTask.FromException<IReadOnlyList<WorldExtensionObservationItem>>(new IOException("offline")) : ValueTask.FromResult(Items);
         }
         public void Dispose() { }

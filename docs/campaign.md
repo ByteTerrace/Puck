@@ -1510,6 +1510,11 @@ public-content identity** (the principal whose container the front door already 
 cached under `/public/*`, never a person's container) is unchanged and not started; Orleans hosting is
 its prerequisite, the identity is not.
 
+The [partition granaries](../src/Puck.World/Assets/worlds/modules/README.md) now
+provide a diegetic view of the existing user-data account inventory through an
+explicitly enabled Azure observation source. This is an authored storage metaphor,
+not evidence that the silo-hosted hub or live grain-placement telemetry is running.
+
 **Client seam.** `PlayerRoster`'s loopback-only reads of the live server become a link query that works
 identically in-process and over the wire; no direct-object interface is minted for the shortcut, and
 `WorldOwnedWorlds` stays in Server. Remote is the default path.

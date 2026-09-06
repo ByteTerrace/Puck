@@ -57,6 +57,19 @@ Run `WorldConfiguredExtensionLawTests` plus the existing extension/storage laws,
 and run the real headless executable for composition changes. Use only local
 input refusals or empty request tables for Azure boot canaries; never cloud mutations.
 
+Collection reads use the optional `IWorldConfiguredObservationProvider` capability
+and `IWorldExtensionObservationSource`, scheduled by `WorldConfiguredExtensions`.
+Sources return complete detached snapshots, disclose only approved fields, and
+cooperate with deadline/lifetime cancellation. Failures and overflow retain the
+last collection; never return a truncated set as complete. Projection uses one
+recorded mutation batch for existing text tables and optional authored static
+placements. It checks admission read-back before suppressing retries. Replay
+revokes reads and blocks late projection. Keep provider concepts out of Server.
+Run `WorldObservationLawTests`; Azure pagination/confinement tests use fake HTTP.
+Live read-only discovery needs task authorization and must not gain mutation
+bindings. Check render admission too: a headless run cannot prove the boot
+placement-headroom envelope. The granaries module is the authored example.
+
 ## Contents
 
 - The row, mounting, and the prepare/commit transaction

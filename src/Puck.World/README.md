@@ -28,6 +28,10 @@ selects the file with `--extensions-config-file`; `world.extensions.catalog`
 lists installed provider types and `world.extensions` reads back the configured
 connections. Imported world content cannot enable cloud access by itself.
 
+The [partition granaries](Assets/worlds/modules/README.md) demonstrate read-only
+discovery of the existing Azure deployment as an importable, authored storeyard.
+The same collection tables can serve a text world without placement projection.
+
 ```
 dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 6
 ```

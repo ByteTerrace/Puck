@@ -107,7 +107,8 @@ public sealed partial class WorldConfiguredExtensions {
                     var copy = new List<WorldExtensionObservationItem>(items.Count);
                     foreach (var item in items) {
                         ValidateName(item.Key);
-                        if (!keys.Add(item.Key) || item.Fields.Count > 32 || item.Fields.Any(field => field.Value is null || field.Value.Length > 4096)) {
+                        if (!keys.Add(item.Key) || item.Fields.Count > 32 || item.Fields.Any(field => field.Value is null || field.Value.Length > 4096) ||
+                            observation.Settings.Fields.Keys.Any(field => !item.Fields.ContainsKey(field))) {
                             throw new InvalidOperationException("Invalid or oversized observation item.");
                         }
                         copy.Add(new(item.Key, new Dictionary<string, string>(item.Fields, StringComparer.Ordinal)));

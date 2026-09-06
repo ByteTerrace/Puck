@@ -13,6 +13,14 @@ envelope, content seams, and unsupported graph requests was deleted on
 2026-08-02 and has no replacement — read `SdfWorldRenderSpec`/
 `SdfWorldRenderBuilder` directly.
 
+World static-placement headroom must cover both emission classes. A scoped
+creation has one instance; a scope-free creation has one per shape.
+`WorldSceneEmitter` reserves each headroom copy in both independent probe floors,
+using `WorldPlacementPolicy.MaxShapesPerStamp` for the per-shape floor. Keep
+construction probing and `ComposeCandidate` accounting aligned. Verify through
+`WorldRenderEnvelopeLawTests` and a rendered live placement addition, since
+headless admission has no GPU capacity lease.
+
 > **Unification-contract alignment** (see docs/vision.md): world content is
 > authored and loaded in-session — the `world.row.set`/`world.row.step`
 > document-row mutation verbs and `world.load`/`world.save` — never only

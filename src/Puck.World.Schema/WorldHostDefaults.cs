@@ -62,7 +62,8 @@ public sealed record WorldStorageDefaults(string? Endpoint = null, string? UserI
 /// <param name="AuthoringHeadroomScreens">Boot-consumed. The extra screen slots the probe reserves, bounded by the
 /// engine's <see cref="Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces"/> ceiling.</param>
     /// <param name="AuthoringHeadroomPlacements">Boot-consumed. The placement rows of headroom the probe reserves beyond
-/// the boot placements (see <c>Client.WorldPlacementStamper.StaticStampInstances</c>).</param>
+/// the boot placements. Each slot reserves both a whole-creation stamp and the maximum per-shape instance count;
+/// these independent conservative buffer floors are not a strict row quota.</param>
 /// <param name="MinPlacementScale">Live-consumed. The placement uniform-scale envelope's floor — a pure validator
 /// bound, revalidated on every placement mutation.</param>
 /// <param name="MaxPlacementScale">Live-consumed. The placement uniform-scale envelope's ceiling — also the worst-case
