@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using System.Numerics;
 using Puck.World.Authoring;
 using Puck.Maths;
@@ -43,7 +44,7 @@ public sealed class AdjacencyBandSelectionLawTests {
         new(Id: id, PrototypeId: prototype, Position: position, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f));
     // A south-facing seam at z = SeamZ whose band reaches deep enough to admit every row below.
     private static WorldFaceFrame Seam() => new WorldAdjacencyBoundary(
-        Center: new DocumentVector3(X: 0f, Y: 0f, Z: SeamZ),
+        Center: new DocumentVector3(x: 0f, y: 0f, z: SeamZ),
         OutwardYawDegrees: 0f,
         OutwardPitchDegrees: 0f,
         Width: 48f,

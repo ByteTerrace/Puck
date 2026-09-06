@@ -29,11 +29,6 @@
     },
     {
       "composition": true,
-      "name": "autoAttack",
-      "shape": "Binary"
-    },
-    {
-      "composition": true,
       "name": "element",
       "shape": "Binary"
     }
@@ -53,38 +48,6 @@
   },
   "interactions": {
     "interactions": [
-      {
-        "coOccurrence": "Distance",
-        "effects": [
-          {
-            "$type": "setState",
-            "key": "$right",
-            "state": "burning",
-            "valueSeconds": 3.0
-          }
-        ],
-        "left": "hot",
-        "mode": "Edge",
-        "name": "heat-ignites",
-        "range": 2.0,
-        "right": "flammable"
-      },
-      {
-        "coOccurrence": "Distance",
-        "effects": [
-          {
-            "$type": "setState",
-            "key": "$right",
-            "state": "frozen",
-            "valueSeconds": 3.0
-          }
-        ],
-        "left": "cold",
-        "mode": "Edge",
-        "name": "cold-spreads",
-        "range": 2.0,
-        "right": "freezable"
-      },
       {
         "coOccurrence": "Region",
         "effects": [
@@ -679,24 +642,6 @@
       },
       "mode": "Edge",
       "name": "target-nearest"
-    },
-    {
-      "effects": [
-        {
-          "$type": "setState",
-          "key": "0",
-          "state": "autoAttackToggle",
-          "value": 1
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "GreaterOrEqual",
-        "state": "$channel:1:autoAttack",
-        "value": 1
-      },
-      "mode": "Edge",
-      "name": "auto-attack-request"
     },
     {
       "effects": [

@@ -129,7 +129,7 @@
     }
   ],
   "bodies": {
-    "capacity": 192,
+    "capacity": 144,
     "localSeats": 2,
     "scaleRow": "scale",
     "seatSpawns": [
@@ -1868,107 +1868,6 @@
             }
           }
         }
-      },
-      {
-        "autonomy": {
-          "motionSeconds": 0.1,
-          "steeringSeconds": 0.1
-        },
-        "bodyContact": "Overlap",
-        "bodyMotionProgram": "fishMotion",
-        "collider": {
-          "$type": "sphere",
-          "radius": 0.1
-        },
-        "motion": {
-          "facingSnap": true,
-          "holds": [
-            {
-              "bond": "Medium",
-              "envelope": {
-                "riseSpeed": 1.0,
-                "sinkSpeed": 1.0
-              },
-              "hold": "None",
-              "medium": {
-                "equilibriumOffset": 0.6,
-                "idleDrift": 0.6,
-                "settleRate": 0.8
-              },
-              "name": "water"
-            },
-            {
-              "bond": "Free",
-              "envelope": {
-                "sinkSpeed": 1
-              },
-              "gravity": {
-                "fall": 1,
-                "rise": 1
-              },
-              "hold": "Gravity",
-              "name": "air"
-            }
-          ],
-          "shaping": [
-            {
-              "along": {}
-            }
-          ],
-          "speed": {
-            "value": 1.0
-          },
-          "turn": {
-            "rate": 1.5
-          }
-        },
-        "name": "fishKit",
-        "producers": {
-          "school": {
-            "channels": {},
-            "flock": {
-              "alignment": 0.6,
-              "arrivalDistance": 0.2,
-              "candidateBudget": 12,
-              "cohesion": 0.5,
-              "goal": 0,
-              "halfAngleDegrees": 180,
-              "inertia": 0.3,
-              "maxNeighbors": 6,
-              "movementDomain": "pond",
-              "range": 3,
-              "requiresLineOfSight": false,
-              "separation": 1.0,
-              "separationRadius": 0.35,
-              "space": "Volume",
-              "updateSeconds": 0.1
-            },
-            "scalars": {}
-          },
-          "wander": {
-            "channels": {},
-            "scalars": {
-              "activityRateBase": 1.0,
-              "activityRateRange": 0.3,
-              "altitudeBase": 0.0,
-              "altitudeGain": 0.5,
-              "altitudeRange": 0.0,
-              "forward": 0.6,
-              "inwardGain": 0.8,
-              "pitchWave": 0.0,
-              "pressThreshold": 0.0,
-              "rollTurn": 0.0,
-              "softRadius": 5.0,
-              "strafeWave": 0.0,
-              "turnScale": 3.0,
-              "turnWave": 0.0,
-              "upWave": 0.0,
-              "weaveAmplitude": 0.3,
-              "weaveFrequencyBase": 0.6,
-              "weaveFrequencyRange": 0.2
-            }
-          }
-        }
       }
     ]
   },
@@ -2349,28 +2248,6 @@
           42.0
         ],
         "width": 24
-      },
-      {
-        "agentRadius": 0.24,
-        "arrivalDistance": 0.4,
-        "cellSize": 0.5,
-        "depth": 16,
-        "kind": "Medium",
-        "layers": 3,
-        "maxExpandedNodes": 768,
-        "maxPathNodes": 64,
-        "medium": "water",
-        "name": "pond",
-        "origin": [
-          52.0,
-          -0.5,
-          50.0
-        ],
-        "shared": {
-          "expandedNodesPerTick": 64,
-          "goalCapacity": 2
-        },
-        "width": 16
       },
       {
         "agentHeight": 0.5,
@@ -3003,38 +2880,6 @@
         "yawDegrees": 0
       },
       {
-        "id": "pondFish",
-        "inhabit": {
-          "count": 8,
-          "distribution": {
-            "fill": {
-              "name": "additive",
-              "offset": 0,
-              "step": 0.001
-            },
-            "region": {
-              "$type": "disc",
-              "radius": 1.2
-            }
-          },
-          "kit": "fishKit",
-          "look": "fish",
-          "source": {
-            "$type": "producer",
-            "name": "school"
-          }
-        },
-        "parent": "gardenCourt",
-        "position": [
-          16,
-          0.2,
-          14
-        ],
-        "prototypeId": "fish",
-        "scale": 1,
-        "yawDegrees": 0
-      },
-      {
         "id": "drinkMe",
         "parent": "gardenCourt",
         "position": [
@@ -3221,7 +3066,11 @@
   "properties": {
     "names": [
       "hound",
-      "wren"
+      "wren",
+      "arena_hot",
+      "arena_cold",
+      "arena_flammable",
+      "arena_freezable"
     ]
   },
   "prototypes": [
@@ -10499,22 +10348,6 @@
         "name": "tethered"
       }
     ],
-    "lattices": [
-      {
-        "$type": "field",
-        "cellSize": 0.5,
-        "depth": 16,
-        "layers": 1,
-        "name": "pondBasin",
-        "origin": [
-          52.0,
-          -0.5,
-          50.0
-        ],
-        "stepEveryTicks": 8,
-        "width": 16
-      }
-    ],
     "world": [
       {
         "capacity": 6,
@@ -10841,32 +10674,6 @@
         "name": "pondColors"
       },
       {
-        "domain": {
-          "$type": "cellsOf",
-          "topology": "pondBasin"
-        },
-        "field": {
-          "color": "state.pondColors.water",
-          "heightScale": 1,
-          "initial": 1.4,
-          "max": 2,
-          "medium": {},
-          "min": 0,
-          "paint": [
-            {
-              "$type": "rect",
-              "maxX": 60.0,
-              "maxZ": 58.0,
-              "minX": 52.0,
-              "minZ": 50.0,
-              "value": 1.4
-            }
-          ]
-        },
-        "kind": "fixed",
-        "name": "water"
-      },
-      {
         "cells": [
           {
             "key": "ball",
@@ -11125,120 +10932,6 @@
       "version": "puck.camera.v1"
     }
   },
-  "references": [
-    {
-      "name": "nw",
-      "document": "shards/quilt-nw.world.json"
-    },
-    {
-      "name": "ne",
-      "document": "shards/quilt-ne.world.json"
-    },
-    {
-      "name": "se",
-      "document": "shards/quilt-se.world.json"
-    },
-    {
-      "name": "sw",
-      "document": "shards/quilt-sw.world.json"
-    }
-  ],
-  "destinations": [
-    {
-      "name": "nw",
-      "reference": "nw",
-      "durability": "persisted",
-      "scope": "global"
-    },
-    {
-      "name": "ne",
-      "reference": "ne",
-      "durability": "persisted",
-      "scope": "global"
-    },
-    {
-      "name": "se",
-      "reference": "se",
-      "durability": "persisted",
-      "scope": "global"
-    },
-    {
-      "name": "sw",
-      "reference": "sw",
-      "durability": "persisted",
-      "scope": "global"
-    }
-  ],
-  "adjacencies": [
-    {
-      "name": "north",
-      "destination": "nw",
-      "counterpart": "island",
-      "boundary": {
-        "center": [
-          0,
-          0,
-          -24.0
-        ],
-        "outwardYawDegrees": 180,
-        "outwardPitchDegrees": 0,
-        "width": 48.0,
-        "height": 16.0
-      },
-      "unavailable": "Closed"
-    },
-    {
-      "name": "east",
-      "destination": "ne",
-      "counterpart": "island",
-      "boundary": {
-        "center": [
-          24.0,
-          0,
-          0
-        ],
-        "outwardYawDegrees": 90,
-        "outwardPitchDegrees": 0,
-        "width": 48.0,
-        "height": 16.0
-      },
-      "unavailable": "Closed"
-    },
-    {
-      "name": "south",
-      "destination": "se",
-      "counterpart": "island",
-      "boundary": {
-        "center": [
-          0,
-          0,
-          24.0
-        ],
-        "outwardYawDegrees": 0,
-        "outwardPitchDegrees": 0,
-        "width": 48.0,
-        "height": 16.0
-      },
-      "unavailable": "Closed"
-    },
-    {
-      "name": "west",
-      "destination": "sw",
-      "counterpart": "island",
-      "boundary": {
-        "center": [
-          -24.0,
-          0,
-          0
-        ],
-        "outwardYawDegrees": -90,
-        "outwardPitchDegrees": 0,
-        "width": 48.0,
-        "height": 16.0
-      },
-      "unavailable": "Closed"
-    }
-  ],
   "admission": [
     {
       "domain": "*",
