@@ -8968,7 +8968,7 @@
                 "default": null
               },
               "verdict": {
-                "description": "An optional row read back beside the frame (a ruling on the last recorded change).",
+                "description": "An optional row read back beside the frame (a ruling on the last recorded change). Required when Enforcement is Return (validated).",
                 "type": [
                   "string",
                   "null"
@@ -8976,7 +8976,7 @@
                 "default": null
               },
               "move": {
-                "description": "An optional keyed row (conventionally cells \u0022from\u0022/\u0022to\u0022) read back beside the frame.",
+                "description": "An optional keyed row (conventionally cells \u0022from\u0022/\u0022to\u0022) read back beside the frame. Required when Enforcement is Return (validated).",
                 "type": [
                   "string",
                   "null"
@@ -8990,6 +8990,19 @@
                   "null"
                 ],
                 "default": null
+              },
+              "enforcement": {
+                "description": "What the engine itself does once Verdict refuses a move.",
+                "enum": [
+                  "Record",
+                  "Return"
+                ],
+                "default": "Record"
+              },
+              "accept": {
+                "description": "The Verdict value the judge writes to accept a move \u2014 any other value is a refusal.",
+                "type": "integer",
+                "default": 1
               }
             },
             "required": [

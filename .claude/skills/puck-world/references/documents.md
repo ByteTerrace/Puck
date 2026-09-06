@@ -771,7 +771,10 @@ it; identity symmetry only) — and `cellSize` must quantize to a
 positive Q48.16 value — it is the divisor `$board:cellOf` resolves world
 positions against (the garden's `chessBoard` alongside its own `pondBasin`
 water field — see `Puck.World.Schema/README.md`'s tabletop-primitive
-section). A discrete topology's own `directions` (optional; each kind's
+section). The board facet's own `enforcement` (`record`, the default, or
+`return`) is the one engine-side reaction to its `verdict` row refusing a
+move — `return` poses the mover back onto `move`'s `from` cell on the
+refuse edge; see that same section for the full contract. A discrete topology's own `directions` (optional; each kind's
 compass/space names are the unauthored default) replaces its whole direction
 vocabulary — see the schema README's discrete-boards section for the
 authoring shape and validation. Field-shaped

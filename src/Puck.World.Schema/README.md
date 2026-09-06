@@ -347,7 +347,18 @@ path. `topology` names the anchored Grid; `occupancy` names the board row the
 engine reads back; `turn`/`verdict`/`move`/`plan` are author-named convenience
 rows a `world.tabletop` read-back echoes together, never engine-interpreted —
 any tabletop game names whichever it needs. A topology is carried by at most
-one placement (validated). The shipped `body.carry` facet (`WorldCarry`) is a
+one placement (validated). `enforcement` (`WorldBoardEnforcement`, default
+`record`) is the one engine-side, game-agnostic reaction to `verdict` refusing
+a move: `record` is the behaviour above (a rejected candidate stands, undone by
+nothing); `return` poses the mover — the body whose `$board:cellOf` reads
+`move`'s `to` cell — back onto `move`'s `from` cell, on the tick `verdict`
+transitions from `accept` (default 1, the value that reads as legal) to any
+other value. The transition is an edge, not a level: a `verdict` left sitting
+at its refusing value returns the mover exactly once, and the engine remembers
+the last `verdict` it saw per board binding to detect it, so the remembered
+value folds into the state hash and the checkpoint. `return` requires both
+`move` and `verdict` to be authored (validated). The shipped
+`body.carry` facet (`WorldCarry`) is a
 separate primitive: it picks up a rigid body, never a placement or board. The
 bridge from rigid bodies to this row is authored, not built
 in: a world rule reads each piece's `$board:cellOf:<occupancy row>:body:<n>`
@@ -361,8 +372,9 @@ qualifies as the mover, so its own disappearance is never ruled legal or
 illegal by its own color — then a verdict any authored predicate — occupancy, turn order,
 a `$match:…:cell`/`$board:offset` movement-geometry check — may set to 0
 without touching the mover; a legal verdict alone advances turn and adopts the
-new position into `lastLegal`). Illegal moves are recorded, never undone —
-the world never rejects or repositions a physical piece. Every top-level
+new position into `lastLegal`). The shipped chess module authors the default
+`record` enforcement: an illegal move is recorded and never undone by the
+engine — see `enforcement` above for the `return` alternative. Every top-level
 `setState`/`addState`/etc. effect preflights and applies on its own; only an
 explicit `transaction` groups writes atomically. A `body.pose` reposition
 is a kinematic write: one that leaves the piece resting on its support (its

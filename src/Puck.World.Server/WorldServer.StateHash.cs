@@ -15,6 +15,7 @@ public sealed partial class WorldServer {
             compiled: m_interactions,
             hash: ref hash
         );
+        AppendBoardEnforcementStateHash(hash: ref hash);
         hash.Add(value: ((uint)m_population.Capacity));
 
         for (var index = 0; (index < m_population.Capacity); index++) {
