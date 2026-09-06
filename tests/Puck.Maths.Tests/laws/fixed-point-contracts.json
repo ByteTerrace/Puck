@@ -286,6 +286,10 @@
       },
       {
         "Type": "Puck.Maths.FixedTickConversion",
+        "Name": "DurationTicks"
+      },
+      {
+        "Type": "Puck.Maths.FixedTickConversion",
         "Name": "TicksPerSecond"
       }
     ],
@@ -293,8 +297,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedTickConversion.DurationEngineTicks at a curated edge set (zero, the smallest positive raw, long.MinValue/MaxValue, the one-second boundary 65536 and its two neighbours, the five-second boundary and its two neighbours, and small negative raws) plus a dense sweep of every 97th raw across the first five positive seconds and every 251st raw across the first negative second",
-        "Against": "an independent BigInteger recomputation of the round-up rule transcribed from the definition — ceil(raw * TicksPerSecond / 65536) via exact rational ceiling division on BigInteger, sharing no line with BinaryIntegerFunctions.CeilingDivide<T> or the subject's own Int128 arithmetic; non-positive raws are pinned to zero by the same independent check",
+        "Subject": "FixedTickConversion.DurationTicks at rates 0, 1, 7, 24, 30, 60, 120, 240, 1000, and 50400 (TicksPerSecond) — and DurationEngineTicks held equal to the 50400 case — at a curated edge set (zero, the smallest positive raw, long.MinValue/MaxValue, the one-second boundary 65536 and its two neighbours, the five-second boundary and its two neighbours, and small negative raws) plus a dense sweep of every 97th raw across the first five positive seconds and every 251st raw across the first negative second",
+        "Against": "an independent BigInteger recomputation of the round-up rule transcribed from the definition — ceil(raw * ratePerSecond / 65536) via exact rational ceiling division on BigInteger, sharing no line with BinaryIntegerFunctions.CeilingDivide<T> or the subject's own Int128 arithmetic; non-positive raws are pinned to zero by the same independent check",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

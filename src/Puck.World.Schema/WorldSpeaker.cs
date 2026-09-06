@@ -282,43 +282,30 @@ public sealed record WorldAudioCue(
 
     /// <summary>Determines whether <paramref name="token"/> is one of the published <see cref="EventTokens"/>.</summary>
     /// <param name="token">The candidate token.</param>
-    public static bool IsEventToken(string? token) {
-        foreach (var candidate in EventTokens) {
-            if (string.Equals(
-                a: candidate,
-                b: token,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    public static bool IsEventToken(string? token) => Contains(
+        candidate: token,
+        tokens: EventTokens
+    );
     /// <summary>Determines whether <paramref name="token"/> is one of the <see cref="MusicWhenTokens"/> a
     /// <c>puck.music.v1</c> <c>when</c> field may name.</summary>
     /// <param name="token">The candidate token.</param>
-    public static bool IsMusicWhenToken(string? token) {
-        foreach (var candidate in MusicWhenTokens) {
-            if (string.Equals(
-                a: candidate,
-                b: token,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    public static bool IsMusicWhenToken(string? token) => Contains(
+        candidate: token,
+        tokens: MusicWhenTokens
+    );
     /// <summary>Determines whether <paramref name="token"/> is one of the <see cref="ProducerBypassedTokens"/> a
     /// producer fires directly, so an authored <c>audio.cues</c> row can never target it.</summary>
     /// <param name="token">The candidate token.</param>
-    public static bool IsProducerBypassedToken(string? token) {
-        foreach (var candidate in ProducerBypassedTokens) {
+    public static bool IsProducerBypassedToken(string? token) => Contains(
+        candidate: token,
+        tokens: ProducerBypassedTokens
+    );
+    // Ordinal membership over a published token list, allocation-free — the one scan the three Is*Token doors share.
+    private static bool Contains(IReadOnlyList<string> tokens, string? candidate) {
+        for (var index = 0; (index < tokens.Count); index++) {
             if (string.Equals(
-                a: candidate,
-                b: token,
+                a: tokens[index],
+                b: candidate,
                 comparisonType: StringComparison.Ordinal
             )) {
                 return true;

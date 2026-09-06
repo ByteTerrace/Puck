@@ -8,7 +8,8 @@
     "type": "object",
     "properties": {
       "principal": {
-        "description": "The acting identity the grant is for."
+        "description": "The acting identity the grant is for.",
+        "type": "string"
       },
       "capability": {
         "description": "The capability conferred.",
@@ -21,7 +22,8 @@
         ]
       },
       "subject": {
-        "description": "The subject the capability scopes to."
+        "description": "The subject the capability scopes to.",
+        "type": "string"
       },
       "exclusive": {
         "description": "Whether the grant is held exclusively (single holder per capability\u002Bsubject).",

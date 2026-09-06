@@ -99,44 +99,6 @@ public static class WorldSeatAnchors {
 
         return true;
     }
-    /// <summary>Resolves a seat-relative anchor's pose from a list-backed transform buffer.</summary>
-    /// <inheritdoc cref="TryResolve(WorldAnchor?, int, WorldClient, WorldStampPool, WorldPerceptionAnchor, WorldSpeechClock, ReadOnlySpan{DynamicTransform}, out SdfAnchor)"/>
-    public static bool TryResolve(WorldAnchor? anchor, int slot, WorldClient client, WorldStampPool stamps, WorldPerceptionAnchor perception, WorldSpeechClock speech, IReadOnlyList<DynamicTransform> transforms, out SdfAnchor pose) {
-        ArgumentNullException.ThrowIfNull(argument: client);
-        ArgumentNullException.ThrowIfNull(argument: stamps);
-
-        if (!TryResolveBody(
-            anchor: anchor,
-            body: out var body,
-            client: client,
-            perception: perception,
-            slot: slot,
-            speech: speech
-        )) {
-            pose = default;
-
-            return false;
-        }
-
-        if (PartOf(anchor: anchor) is { } partId) {
-            return WorldEntityPartResolver.TryPackedPose(
-                client: client,
-                entityIndex: body,
-                partId: partId,
-                pose: out pose,
-                stamps: stamps,
-                transforms: transforms
-            );
-        }
-
-        pose = RootPose(
-            body: body,
-            client: client
-        );
-
-        return true;
-    }
-
     private static SdfAnchor RootPose(int body, WorldClient client) => new(
         Orientation: client.Orientation(index: body),
         Position: client.Position(index: body)

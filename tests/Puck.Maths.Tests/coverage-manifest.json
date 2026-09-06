@@ -8497,6 +8497,13 @@
       ]
     },
     {
+      "Id": "Puck.Maths.FixedTickConversion.DurationTicks(Puck.Maths.FixedQ4816,System.UInt64)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.fixed-tick-conversion-rounds-up-against-rational-arithmetic"
+      ]
+    },
+    {
       "Id": "Puck.Maths.FixedTickConversion.TicksPerSecond",
       "State": "covered",
       "CoveredBy": [

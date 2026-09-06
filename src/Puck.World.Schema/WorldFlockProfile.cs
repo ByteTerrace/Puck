@@ -54,7 +54,7 @@ public sealed class FixedWorldFlockProfile {
         Range = FixedQ4816.FromDouble(source.Range);
         ArrivalDistance = FixedQ4816.FromDouble(source.ArrivalDistance);
         MinimumDot = FixedQ4816.Cos(FixedQ4816.FromDouble(source.HalfAngleDegrees * (Math.PI / 180.0)));
-        PeriodEngineTicks = WorldSimulationTickConversion.DurationTicks(source.UpdateSeconds, (uint)FixedTickConversion.TicksPerSecond);
+        PeriodEngineTicks = FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: source.UpdateSeconds));
         Weights = new FixedFlockWeights(FixedQ4816.FromDouble(source.SeparationRadius), FixedQ4816.FromDouble(source.Separation),
             FixedQ4816.FromDouble(source.Alignment), FixedQ4816.FromDouble(source.Cohesion), FixedQ4816.FromDouble(source.Goal), FixedQ4816.FromDouble(source.Inertia));
     }

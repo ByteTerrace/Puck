@@ -141,6 +141,59 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
         return new CommandResult(Output: builder.Append(value: ']').ToString());
     }
+    // The spellings each adaptive lever's exact and fast sides answer to, beside the shared "auto".
+    private static readonly string[] ExactOrQuality = ["exact", "quality"];
+    private static readonly string[] FastOrFleet = ["fast", "fleet"];
+    private static readonly string[] ExactOrGather = ["exact", "gather"];
+    private static readonly string[] CameraTileAliases = ["camera", "camera-tile", "tile"];
+
+    // The one argument grammar every adaptive render-quality lever (world.ao-quality, world.shadow-march,
+    // world.shadow-mask) parses: auto, the exact side, or the fast side, as the ordinal each lever's own three-value
+    // mode enum shares (Auto = 0, exact = 1, fast = 2) — the value the session lever carries.
+    private static bool TryParseAdaptiveMode(in WireArgs args, string[] exact, string[] fast, out int ordinal) {
+        if (args.Is(
+            index: 0,
+            value: "auto"
+        )) {
+            ordinal = 0;
+
+            return true;
+        }
+
+        if (MatchesAny(
+            args: in args,
+            spellings: exact
+        )) {
+            ordinal = 1;
+
+            return true;
+        }
+
+        if (MatchesAny(
+            args: in args,
+            spellings: fast
+        )) {
+            ordinal = 2;
+
+            return true;
+        }
+
+        ordinal = -1;
+
+        return false;
+    }
+    private static bool MatchesAny(in WireArgs args, string[] spellings) {
+        foreach (var spelling in spellings) {
+            if (args.Is(
+                index: 0,
+                value: spelling
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     /// <summary>Owns the automatic population threshold and readout shape shared by adaptive render-quality levers.</summary>
     private string DescribeAdaptiveQuality(string verb, (string Configured, bool? Fast) modes, string exact, string fast) {
         var resolved = ((modes.Fast ?? (population.SimulatedCount >= 16))
@@ -756,49 +809,19 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return new CommandResult(Output: DescribeShadowMask());
                 }
 
-                ShadowMaskMode? mode = null;
-
-                if (args.Is(
-                    index: 0,
-                    value: "auto"
+                if (!TryParseAdaptiveMode(
+                    args: in args,
+                    exact: ExactOrGather,
+                    fast: CameraTileAliases,
+                    ordinal: out var ordinal
                 )) {
-                    mode = ShadowMaskMode.Auto;
-                } else if (
-                    args.Is(
-                    index: 0,
-                    value: "exact"
-                ) ||
-                    args.Is(
-                    index: 0,
-                    value: "gather"
-                )
-                ) {
-                    mode = ShadowMaskMode.ExactGather;
-                } else if (
-                    args.Is(
-                    index: 0,
-                    value: "camera"
-                ) ||
-                    args.Is(
-                    index: 0,
-                    value: "camera-tile"
-                ) ||
-                    args.Is(
-                    index: 0,
-                    value: "tile"
-                )
-                ) {
-                    mode = ShadowMaskMode.CameraTile;
-                }
-
-                if (mode is not { } resolved) {
                     return CommandResult.Error(output: $"[world.shadow-mask: unknown mode '{args[0]}' — auto|exact|camera-tile]");
                 }
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
                     name: WorldSessionLevers.ShadowMask,
-                    a: ((double)resolved),
+                    a: ordinal,
                     formatEcho: () => new CommandResult(Output: DescribeShadowMask())
                 );
             }
@@ -812,45 +835,19 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return new CommandResult(Output: DescribeAmbientOcclusionQuality());
                 }
 
-                AmbientOcclusionMode? mode = null;
-
-                if (args.Is(
-                    index: 0,
-                    value: "auto"
+                if (!TryParseAdaptiveMode(
+                    args: in args,
+                    exact: ExactOrQuality,
+                    fast: FastOrFleet,
+                    ordinal: out var ordinal
                 )) {
-                    mode = AmbientOcclusionMode.Auto;
-                } else if (
-                    args.Is(
-                    index: 0,
-                    value: "exact"
-                ) ||
-                    args.Is(
-                    index: 0,
-                    value: "quality"
-                )
-                ) {
-                    mode = AmbientOcclusionMode.Exact;
-                } else if (
-                    args.Is(
-                    index: 0,
-                    value: "fast"
-                ) ||
-                    args.Is(
-                    index: 0,
-                    value: "fleet"
-                )
-                ) {
-                    mode = AmbientOcclusionMode.Fast;
-                }
-
-                if (mode is not { } resolved) {
                     return CommandResult.Error(output: $"[world.ao-quality: unknown mode '{args[0]}' — auto|exact|fast]");
                 }
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
                     name: WorldSessionLevers.AmbientOcclusionQuality,
-                    a: ((double)resolved),
+                    a: ordinal,
                     formatEcho: () => new CommandResult(Output: DescribeAmbientOcclusionQuality())
                 );
             }
@@ -864,45 +861,19 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return new CommandResult(Output: DescribeShadowMarch());
                 }
 
-                ShadowMarchMode? mode = null;
-
-                if (args.Is(
-                    index: 0,
-                    value: "auto"
+                if (!TryParseAdaptiveMode(
+                    args: in args,
+                    exact: ExactOrQuality,
+                    fast: FastOrFleet,
+                    ordinal: out var ordinal
                 )) {
-                    mode = ShadowMarchMode.Auto;
-                } else if (
-                    args.Is(
-                    index: 0,
-                    value: "exact"
-                ) ||
-                    args.Is(
-                    index: 0,
-                    value: "quality"
-                )
-                ) {
-                    mode = ShadowMarchMode.Exact;
-                } else if (
-                    args.Is(
-                    index: 0,
-                    value: "fast"
-                ) ||
-                    args.Is(
-                    index: 0,
-                    value: "fleet"
-                )
-                ) {
-                    mode = ShadowMarchMode.Fast;
-                }
-
-                if (mode is not { } resolved) {
                     return CommandResult.Error(output: $"[world.shadow-march: unknown mode '{args[0]}' — auto|exact|fast]");
                 }
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
                     name: WorldSessionLevers.ShadowMarch,
-                    a: ((double)resolved),
+                    a: ordinal,
                     formatEcho: () => new CommandResult(Output: DescribeShadowMarch())
                 );
             }

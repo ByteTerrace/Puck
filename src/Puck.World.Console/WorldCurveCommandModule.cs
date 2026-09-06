@@ -22,23 +22,10 @@ public sealed class WorldCurveCommandModule(IWorldConsoleAuthority authority) : 
         };
     }
 
-    // One pass over the whole document, grouped by the referenced row name — every row's census then looks itself up
-    // rather than each re-walking the document.
-    private static Dictionary<string, ReferenceCounts> CountReferencesByRow(WorldDefinition definition) {
-        var counts = new Dictionary<string, ReferenceCounts>(comparer: StringComparer.Ordinal);
-
-        foreach (var reference in WorldDefinitionRows.EnumerateCurveReferences(definition: definition)) {
-            counts[reference.RowName] = (counts.TryGetValue(
-                key: reference.RowName,
-                value: out var existing
-            )
-                ? existing
-                : default
-            ).Increment(section: reference.Section);
-        }
-
-        return counts;
-    }
+    private static Dictionary<string, ReferenceCounts> CountReferencesByRow(WorldDefinition definition) => WorldReferenceCensus.CountByRow(
+        references: WorldDefinitionRows.EnumerateCurveReferences(definition: definition),
+        increment: static (ReferenceCounts counts, string section) => counts.Increment(section: section)
+    );
     private static string DescribeCurves(WorldDefinition definition) {
         var curves = definition.Curves;
 

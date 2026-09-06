@@ -305,7 +305,7 @@ public sealed partial class WorldServer {
                 (state.Server.Body(index: index) is not null) &&
                 (!state.HasFilter || (state.Server.ReadStateCellByHandle(
                     handle: state.FilterHandle,
-                    key: WorldBodyKeyCache.Get(index: index),
+                    key: IndexKeyCache.Get(index: index),
                     tick: state.Tick
                 ) != FixedQ4816.Zero))
         );
@@ -354,7 +354,7 @@ public sealed partial class WorldServer {
     // Canonical "a_b" pair keys (underscore, not colon: CellName reserves ':'), cached per distinct DIRECTED
     // pair once minted so a steady-state rule scan allocates nothing: (a, b) and (b, a) name different cells (an
     // observer's impression of a subject is not the reverse), and the domain (population capacity squared) is too
-    // large to precompute the way WorldBodyKeyCache's single-index table is, so this grows lazily instead — the
+    // large to precompute the way IndexKeyCache's single-index table is, so this grows lazily instead — the
     // first read of a never-before-seen pair mints its key once, and every later read of that same directed pair is
     // a dictionary hit.
     private readonly Dictionary<long, string> m_pairKeyCache = [];
@@ -392,7 +392,7 @@ public sealed partial class WorldServer {
                 (Body(index: index) is not { } candidate) ||
                 (ReadStateCellByHandle(
                 handle: tagRowHandle,
-                key: WorldBodyKeyCache.Get(index: index),
+                key: IndexKeyCache.Get(index: index),
                 tick: tick
             ) == FixedQ4816.Zero)
             ) {

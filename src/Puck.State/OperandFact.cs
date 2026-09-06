@@ -45,8 +45,7 @@ public interface IStateAddressedOperand {
     CompiledCellRef? KeyFrom { get; }
 }
 
-/// <summary>A cell key a document project's <see cref="KeyFamily"/> resolves live — the one arm of
-/// <see cref="CompiledCellRef"/> this library does not spell itself.</summary>
+/// <summary>A cell key resolved live by the engine or a document project's <see cref="KeyFamily"/>.</summary>
 public abstract class KeyFact {
     /// <summary>Resolves the key for the evaluation in flight. Allocation-free in steady state: a key minted once is
     /// cached by the family's own reader.</summary>

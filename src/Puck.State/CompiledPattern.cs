@@ -231,6 +231,28 @@ public sealed class CompiledPattern {
         public int Epsilon { get; }
         public int Universe { get; }
 
+        // The n-ary lowering Choice and Both share: a non-empty item list, each item lowered in order, the first
+
+        // refusal winning — the combinator (Or/And) is the caller's only difference.
+
+        private bool TryLowerItems(IReadOnlyList<PatternNode>? items, string what, ulong[] masks, Dictionary<string, int> names, out int[] parts, out string reason) {
+
+            if (items is not { Count: > 0 }) { parts = []; reason = $"{what} needs at least one item"; return false; }
+
+            parts = new int[items.Count];
+
+            for (var index = 0; index < parts.Length; index++) {
+
+                if (!TryLower(items[index], masks, names, out parts[index], out reason)) { return false; }
+
+            }
+
+            reason = string.Empty;
+
+            return true;
+
+        }
+
         public bool TryLower(PatternNode? node, ulong[] masks, Dictionary<string, int> names, out int term, out string reason) {
             term = Empty;
             reason = string.Empty;
@@ -263,20 +285,12 @@ public sealed class CompiledPattern {
                     return true;
                 }
                 case PatternNode.Choice choice: {
-                    if (choice.Items is not { Count: > 0 }) { reason = "choice needs at least one item"; return false; }
-                    var parts = new int[choice.Items.Count];
-                    for (var index = 0; index < parts.Length; index++) {
-                        if (!TryLower(choice.Items[index], masks, names, out parts[index], out reason)) { return false; }
-                    }
+                    if (!TryLowerItems(choice.Items, "choice", masks, names, out var parts, out reason)) { return false; }
                     term = Or(parts);
                     return true;
                 }
                 case PatternNode.Both both: {
-                    if (both.Items is not { Count: > 0 }) { reason = "all needs at least one item"; return false; }
-                    var parts = new int[both.Items.Count];
-                    for (var index = 0; index < parts.Length; index++) {
-                        if (!TryLower(both.Items[index], masks, names, out parts[index], out reason)) { return false; }
-                    }
+                    if (!TryLowerItems(both.Items, "all", masks, names, out var parts, out reason)) { return false; }
                     term = And(parts);
                     return true;
                 }

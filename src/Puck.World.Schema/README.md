@@ -224,7 +224,12 @@ redrawable integer `streamDraw` site, and `count` (1..256) moves that many
 tokens in one mutation, each selected afresh from what remains, so a deal is
 one journal entry; `Slice` moves the keyed token and every token after it as
 one run, in order (a solitaire column from a card to its top), and onto the
-same zone rotates that run to the other end. A cursor advances only with the committed transfer. `setRay` (`row`, `from`, `direction`, `pattern`, `value`) walks a ray from
+same zone rotates that run to the other end. In rules, a transfer's `key` accepts
+the same dynamic spellings as a state write, resolved before each transaction
+step. `$zone:<ordered-zone>:first|last` selects an endpoint's original string
+key from the active store; an empty zone resolves absent for reads and cannot
+address a write. Direct transform mutations carry literal keys. A cursor
+advances only with the committed transfer. `setRay` (`row`, `from`, `direction`, `pattern`, `value`) walks a ray from
 its origin and writes the longest run its named `patterns` row accepts — the
 same compiled machine and prefix semantics `$match` reads, landed back on the
 board instead of read as a fact; a bracket capture is authored as

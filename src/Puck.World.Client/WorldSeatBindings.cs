@@ -676,15 +676,46 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     // already narrated the same finding; echoing it again on every read would trade one flood for another.
     private static BindingProfileDocument SkipUnregisteredPages(BindingProfileDocument document, WorldChannelTable channels, string? label) {
         var rows = document.Chords;
-        List<BindingChordDefinition>? rewritten = null;
-
-        for (var rowIndex = 0; (rowIndex < rows.Count); rowIndex++) {
-            var row = rows[rowIndex];
-            var filtered = SkipUnregisteredEntries(
+        var chords = FilterRows(
+            rows: rows,
+            state: channels,
+            label: label,
+            filter: static (row, channels, label) => SkipUnregisteredEntries(
                 channels: channels,
                 label: label,
                 row: row
-            );
+            )
+        );
+        var wheels = SkipUnregisteredWheels(
+            wheels: document.Wheels,
+            chords: chords,
+            label: label
+        );
+
+        if (
+            ReferenceEquals(
+            objA: chords,
+            objB: rows
+        ) &&
+            ReferenceEquals(
+            objA: wheels,
+            objB: document.Wheels
+        )
+        ) {
+            return document;
+        }
+
+        return (document with { Chords = chords, Wheels = wheels });
+    }
+    // The copy-on-write row filter both skips share: returns ROWS ITSELF (by reference) when every row survives
+    // unchanged, else a fresh list of the survivors, each possibly rewritten — so the common nothing-dropped path
+    // allocates nothing and a caller tells "changed" from reference identity alone.
+    private static IReadOnlyList<T> FilterRows<T, TState>(IReadOnlyList<T> rows, TState state, string? label, Func<T, TState, string?, T?> filter) where T : class {
+        List<T>? rewritten = null;
+
+        for (var rowIndex = 0; (rowIndex < rows.Count); rowIndex++) {
+            var row = rows[rowIndex];
+            var filtered = filter(row, state, label);
 
             if (ReferenceEquals(
                 objA: filtered,
@@ -702,24 +733,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             }
         }
 
-        var chords = (((IReadOnlyList<BindingChordDefinition>?)rewritten) ?? rows);
-        var wheels = SkipUnregisteredWheels(
-            wheels: document.Wheels,
-            chords: chords,
-            label: label
-        );
-
-        if (
-            (rewritten is null) &&
-            ReferenceEquals(
-            objA: wheels,
-            objB: document.Wheels
-        )
-        ) {
-            return document;
-        }
-
-        return (document with { Chords = chords, Wheels = wheels });
+        return (((IReadOnlyList<T>?)rewritten) ?? rows);
     }
     // One wheel's half of the skip — see SkipUnregisteredWheels.
     private static BindingWheelDefinition? SkipUnregisteredSectors(BindingWheelDefinition wheel, IReadOnlyList<BindingChordDefinition> chords, string? label) {
@@ -818,36 +832,24 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             return null;
         }
 
-        List<BindingWheelDefinition>? rewritten = null;
-
-        for (var wheelIndex = 0; (wheelIndex < wheels.Count); wheelIndex++) {
-            var wheel = wheels[wheelIndex];
-            var filtered = SkipUnregisteredSectors(
+        var filtered = FilterRows(
+            rows: wheels,
+            state: chords,
+            label: label,
+            filter: static (wheel, chords, label) => SkipUnregisteredSectors(
                 chords: chords,
                 label: label,
                 wheel: wheel
-            );
+            )
+        );
 
-            if (ReferenceEquals(
-                objA: filtered,
-                objB: wheel
-            )) {
-                rewritten?.Add(item: wheel);
-
-                continue;
-            }
-
-            rewritten ??= [.. wheels.Take(count: wheelIndex)];
-
-            if (filtered is not null) {
-                rewritten.Add(item: filtered);
-            }
-        }
-
-        return ((rewritten is null)
+        return (ReferenceEquals(
+            objA: filtered,
+            objB: wheels
+        )
             ? wheels
-            : ((rewritten.Count > 0)
-                ? rewritten
+            : ((filtered.Count > 0)
+                ? filtered
                 : null
         ));
     }

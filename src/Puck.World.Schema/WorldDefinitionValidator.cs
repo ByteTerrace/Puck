@@ -74,14 +74,21 @@ public static partial class WorldDefinitionValidator {
             : null)
         );
     }
-    // Loads the referenced document (never required to exist until here — the row itself is a plain Name/Source/Hash
-    // triple with nothing to validate offline), then runs the SAME structural check CheckAsset already gives every
-    // embedded family — see CheckMusic's remarks, the same load-then-check shape.
-    private static AssetCheck? CheckPatch(WorldPatch patch) {
-        if (!WorldAssetRowLoader.TryLoadPatch(
-            document: out var document,
-            error: out var loadError,
-            row: patch
+    private delegate bool TryLoadAsset<TRow, TDocument>(TRow row, out TDocument? document, out string? error);
+    // The load-then-check shape every off-disk asset row (patch, table, tune) validates through: a row that cannot
+    // load refuses on its source, one that loads runs the SAME structural CheckAsset every embedded family gets.
+    // CheckMusic keeps its own body because it layers document-crossing facts on top of the canonicalizer's own.
+    private static AssetCheck? CheckLoadedAsset<TRow, TDocument>(
+        TRow row,
+        string source,
+        TryLoadAsset<TRow, TDocument> tryLoad,
+        Func<TDocument, IReadOnlyList<DocumentValidationError>> validate,
+        Func<TDocument, string, string> canonicalHash
+    ) where TDocument : class {
+        if (!tryLoad(
+            row,
+            out var document,
+            out var loadError
         )) {
             return new AssetCheck(
                 CanonicalHash: null,
@@ -91,16 +98,26 @@ public static partial class WorldDefinitionValidator {
 
         return CheckAsset(
             document: document,
-            source: patch.Name,
-            validate: static document => SynthPatchCanonicalizer.Validate(document: document),
+            source: source,
+            validate: validate,
             path: static violation => violation.Path,
             message: static violation => violation.Message,
-            canonicalHash: static (document, source) => SynthPatchCanonicalizer.Canonicalize(
-                document: document,
-                source: source
-            ).Hash
+            canonicalHash: canonicalHash
         );
     }
+    // Loads the referenced document (never required to exist until here — the row itself is a plain Name/Source/Hash
+    // triple with nothing to validate offline), then runs the SAME structural check CheckAsset already gives every
+    // embedded family — see CheckMusic's remarks, the same load-then-check shape.
+    private static AssetCheck? CheckPatch(WorldPatch patch) => CheckLoadedAsset<WorldPatch, SynthPatchDocument>(
+        row: patch,
+        source: patch.Name,
+        tryLoad: WorldAssetRowLoader.TryLoadPatch,
+        validate: static document => SynthPatchCanonicalizer.Validate(document: document),
+        canonicalHash: static (document, source) => SynthPatchCanonicalizer.Canonicalize(
+            document: document,
+            source: source
+        ).Hash
+    );
     // Loads the referenced document (never required to exist until here — the row itself is a plain Name/Source/Hash
     // triple with nothing to validate offline), then runs the SAME structural check CheckAsset already gives every
     // embedded family, plus facts MusicCanonicalizer alone cannot check: it validates one document at a time
@@ -111,30 +128,16 @@ public static partial class WorldDefinitionValidator {
     // vocabulary — which this document family's own project cannot reference without inverting the dependency; and a
     // layer/embellishment `gainThousandths` rides the same CreationSoundDocument.MaxLevel ceiling ValidateCues
     // enforces on a cue row, so the ceiling stays the one place — this validator — that enforces it everywhere.
-    private static AssetCheck? CheckTable(TableRow row) {
-        if (!WorldAssetRowLoader.TryLoadTable(
-            document: out var document,
-            error: out var loadError,
-            row: row
-        )) {
-            return new AssetCheck(
-                CanonicalHash: null,
-                Violations: [("source", loadError!)]
-            );
-        }
-
-        return CheckAsset(
+    private static AssetCheck? CheckTable(TableRow row) => CheckLoadedAsset<TableRow, TableDocument>(
+        row: row,
+        source: row.Name,
+        tryLoad: WorldAssetRowLoader.TryLoadTable,
+        validate: static document => TableCanonicalizer.Validate(document: document),
+        canonicalHash: static (document, source) => TableCanonicalizer.Canonicalize(
             document: document,
-            source: row.Name,
-            validate: static document => TableCanonicalizer.Validate(document: document),
-            path: static violation => violation.Path,
-            message: static violation => violation.Message,
-            canonicalHash: static (document, source) => TableCanonicalizer.Canonicalize(
-                document: document,
-                source: source
-            ).Hash
-        );
-    }
+            source: source
+        ).Hash
+    );
     private static AssetCheck? CheckMusic(WorldMusicRow row, HashSet<string> tuneIds, HashSet<string> patchIds) {
         if (!WorldAssetRowLoader.TryLoadMusic(
             document: out var document,
@@ -243,31 +246,16 @@ public static partial class WorldDefinitionValidator {
             Violations: [.. violations]
         );
     }
-    // See CheckPatch's remarks — the same load-then-check shape.
-    private static AssetCheck? CheckTune(WorldTune tune) {
-        if (!WorldAssetRowLoader.TryLoadTune(
-            document: out var document,
-            error: out var loadError,
-            row: tune
-        )) {
-            return new AssetCheck(
-                CanonicalHash: null,
-                Violations: [("source", loadError!)]
-            );
-        }
-
-        return CheckAsset(
+    private static AssetCheck? CheckTune(WorldTune tune) => CheckLoadedAsset<WorldTune, AudioDocument>(
+        row: tune,
+        source: tune.Name,
+        tryLoad: WorldAssetRowLoader.TryLoadTune,
+        validate: static document => AudioCanonicalizer.Validate(document: document),
+        canonicalHash: static (document, source) => AudioCanonicalizer.Canonicalize(
             document: document,
-            source: tune.Name,
-            validate: static document => AudioCanonicalizer.Validate(document: document),
-            path: static violation => violation.Path,
-            message: static violation => violation.Message,
-            canonicalHash: static (document, source) => AudioCanonicalizer.Canonicalize(
-                document: document,
-                source: source
-            ).Hash
-        );
-    }
+            source: source
+        ).Hash
+    );
     // THIS document's channel table, for the binding-overlay vocabulary check — or null when the channels section is
     // itself too malformed to compile (a null row, or more rows than ordinals exist). Null is safe rather than
     // permissive: every condition that produces it is already an error ValidateChannels added, so the document is

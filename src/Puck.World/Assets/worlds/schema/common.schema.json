@@ -6117,7 +6117,11 @@
         },
         "contributor": {
           "description": "Server-stamped. The acting principal that filled the slot; null while unfilled. Never accepted from a submitted payload or an authored document.",
-          "default": null
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "retractDeadlineTick": {
           "description": "Server-stamped. The simulation tick at or after which the presence sweep retracts this slot; null while the link is reachable.",

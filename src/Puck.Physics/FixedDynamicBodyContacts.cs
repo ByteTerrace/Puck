@@ -4,7 +4,15 @@ namespace Puck.Physics;
 
 /// <summary>Deterministic compound convex-body overlap and depenetration geometry.</summary>
 public static class FixedDynamicBodyContacts {
-    private static FixedVector3 ClosestDelta(FixedVector3 p1, FixedVector3 q1, FixedVector3 p2, FixedVector3 q2) {
+    /// <summary>Computes the vector from segment <c>[p2, q2]</c>'s closest point to segment <c>[p1, q1]</c>'s — the
+    /// one deterministic segment-to-segment witness every capsule/sphere pair test (the contact solver here, the
+    /// event feed's overlap sense) measures through, so no consumer carries a second clamp order.</summary>
+    /// <param name="p1">The first segment's start.</param>
+    /// <param name="q1">The first segment's end (equal to <paramref name="p1"/> for a sphere).</param>
+    /// <param name="p2">The second segment's start.</param>
+    /// <param name="q2">The second segment's end (equal to <paramref name="p2"/> for a sphere).</param>
+    /// <returns>The closest-point delta, first segment minus second.</returns>
+    public static FixedVector3 ClosestDelta(FixedVector3 p1, FixedVector3 q1, FixedVector3 p2, FixedVector3 q2) {
         var d1 = (q1 - p1);
         var d2 = (q2 - p2);
         var r = (p1 - p2);

@@ -52,9 +52,7 @@ internal sealed partial class WorldNavigationRuntime {
         private readonly int[] m_cost;
         private readonly uint[] m_edges;
         private readonly FixedQ4816[] m_ground;
-        private readonly int[] m_heap;
-        private int m_heapCount;
-        private readonly int[] m_heapPosition;
+        private readonly NodeHeap m_open;
         private readonly int[] m_openStamp;
         private readonly int[] m_parent;
         private int m_searchStamp;
@@ -81,8 +79,7 @@ internal sealed partial class WorldNavigationRuntime {
             m_parent = new int[count];
             m_openStamp = new int[count];
             m_closedStamp = new int[count];
-            m_heapPosition = new int[count];
-            m_heap = new int[count];
+            m_open = new NodeHeap(cells: count);
 
             for (var node = 0; node < count; node++) {
                 Coordinates(node: node, x: out var x, y: out var y, z: out var z);
@@ -194,8 +191,8 @@ internal sealed partial class WorldNavigationRuntime {
 
             BeginSearch();
             Open(node: start, cost: 0, parent: -1, goal: goal);
-            while (m_heapCount != 0) {
-                var current = Pop(goal: goal);
+            while (m_open.Count != 0) {
+                var current = m_open.Pop(order: new GoalOrder(domain: this, goal: goal));
                 m_closedStamp[current] = m_searchStamp;
                 expanded++;
                 if (current == goal) {
@@ -238,7 +235,7 @@ internal sealed partial class WorldNavigationRuntime {
         }
 
         private void BeginSearch() {
-            m_heapCount = 0;
+            m_open.Clear();
             m_searchStamp++;
             if (m_searchStamp == int.MaxValue) {
                 Array.Clear(array: m_openStamp);
@@ -396,11 +393,15 @@ internal sealed partial class WorldNavigationRuntime {
             }
             return (1U << ordinal);
         }
+        // f = g + h, then the smaller h, then the lower index: a total order, so the heap never breaks a tie itself.
         private int Compare(int left, int right, int goal) {
             var leftH = Heuristic(left, goal);
             var rightH = Heuristic(right, goal);
             var f = (m_cost[left] + leftH).CompareTo(m_cost[right] + rightH);
             return f != 0 ? f : (leftH != rightH ? leftH.CompareTo(rightH) : left.CompareTo(right));
+        }
+        private readonly struct GoalOrder(Domain domain, int goal) : INodeOrder {
+            public int Compare(int left, int right) => domain.Compare(left: left, right: right, goal: goal);
         }
         private int Heuristic(int node, int goal) {
             Coordinates(node: node, x: out var nx, y: out var ny, z: out var nz);
@@ -426,23 +427,13 @@ internal sealed partial class WorldNavigationRuntime {
         private void Open(int node, int cost, int parent, int goal) {
             m_cost[node] = cost;
             m_parent[node] = parent;
+            var order = new GoalOrder(domain: this, goal: goal);
             if (m_openStamp[node] != m_searchStamp) {
                 m_openStamp[node] = m_searchStamp;
-                m_heapPosition[node] = m_heapCount;
-                m_heap[m_heapCount++] = node;
+                m_open.Push(node: node, order: order);
+            } else {
+                m_open.Decrease(node: node, order: order);
             }
-            SiftUp(index: m_heapPosition[node], goal: goal);
-        }
-        private int Pop(int goal) {
-            var result = m_heap[0];
-            var last = m_heap[--m_heapCount];
-            if (m_heapCount != 0) {
-                m_heap[0] = last;
-                m_heapPosition[last] = 0;
-                SiftDown(index: 0, goal: goal);
-            }
-            m_heapPosition[result] = -1;
-            return result;
         }
         private WorldNavigationStatus Reconstruct(int goal, Span<int> path, out int pathLength) {
             pathLength = 0;
@@ -469,36 +460,6 @@ internal sealed partial class WorldNavigationRuntime {
                 quotient++;
             }
             return quotient;
-        }
-        private void SiftUp(int index, int goal) {
-            while (index > 0) {
-                var parent = (index - 1) >> 1;
-                if (Compare(m_heap[index], m_heap[parent], goal) >= 0) {
-                    break;
-                }
-                Swap(index, parent);
-                index = parent;
-            }
-        }
-        private void SiftDown(int index, int goal) {
-            while (true) {
-                var left = (index * 2) + 1;
-                if (left >= m_heapCount) {
-                    break;
-                }
-                var right = left + 1;
-                var best = (right < m_heapCount && Compare(m_heap[right], m_heap[left], goal) < 0) ? right : left;
-                if (Compare(m_heap[best], m_heap[index], goal) >= 0) {
-                    break;
-                }
-                Swap(index, best);
-                index = best;
-            }
-        }
-        private void Swap(int left, int right) {
-            (m_heap[left], m_heap[right]) = (m_heap[right], m_heap[left]);
-            m_heapPosition[m_heap[left]] = left;
-            m_heapPosition[m_heap[right]] = right;
         }
     }
 }

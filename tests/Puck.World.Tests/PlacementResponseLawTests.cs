@@ -96,7 +96,7 @@ public sealed class PlacementResponseLawTests {
             ],
         });
     }
-    private static WorldPlacementResponse Entry(WorldFieldComparison comparison, float threshold, string prototypeId) => new(
+    private static WorldPlacementResponse Entry(ActionStateComparison comparison, float threshold, string prototypeId) => new(
         When: new WorldFieldCondition(Comparison: comparison, Field: FieldName, Value: threshold),
         PrototypeId: prototypeId
     );
@@ -121,7 +121,7 @@ public sealed class PlacementResponseLawTests {
         );
 
         using var present = Fixtures.FreshServer(definition: Document(respond: [
-            Entry(comparison: WorldFieldComparison.GreaterOrEqual, prototypeId: TargetCreation, threshold: 0.5f),
+            Entry(comparison: ActionStateComparison.GreaterOrEqual, prototypeId: TargetCreation, threshold: 0.5f),
         ]));
 
         for (var index = 0; (index < 20); index++) {
@@ -141,8 +141,8 @@ public sealed class PlacementResponseLawTests {
         const string secondTarget = "ember";
 
         using var firstWins = Fixtures.FreshServer(definition: (Document(respond: [
-            Entry(comparison: WorldFieldComparison.GreaterOrEqual, prototypeId: TargetCreation, threshold: 0.2f),
-            Entry(comparison: WorldFieldComparison.GreaterOrEqual, prototypeId: secondTarget, threshold: 0.2f),
+            Entry(comparison: ActionStateComparison.GreaterOrEqual, prototypeId: TargetCreation, threshold: 0.2f),
+            Entry(comparison: ActionStateComparison.GreaterOrEqual, prototypeId: secondTarget, threshold: 0.2f),
         ]) with {
             CreationsRaw = [Creation(id: BaseCreation), Creation(id: TargetCreation), Creation(id: secondTarget)],
         }));
@@ -157,8 +157,8 @@ public sealed class PlacementResponseLawTests {
         );
 
         using var secondWins = Fixtures.FreshServer(definition: (Document(respond: [
-            Entry(comparison: WorldFieldComparison.GreaterOrEqual, prototypeId: secondTarget, threshold: 0.2f),
-            Entry(comparison: WorldFieldComparison.GreaterOrEqual, prototypeId: TargetCreation, threshold: 0.2f),
+            Entry(comparison: ActionStateComparison.GreaterOrEqual, prototypeId: secondTarget, threshold: 0.2f),
+            Entry(comparison: ActionStateComparison.GreaterOrEqual, prototypeId: TargetCreation, threshold: 0.2f),
         ]) with {
             CreationsRaw = [Creation(id: BaseCreation), Creation(id: TargetCreation), Creation(id: secondTarget)],
         }));
@@ -178,7 +178,7 @@ public sealed class PlacementResponseLawTests {
     [Fact]
     public void ANonHoldingConditionNeverSwaps() {
         using var fixture = Fixtures.FreshServer(definition: Document(respond: [
-            Entry(comparison: WorldFieldComparison.GreaterOrEqual, prototypeId: TargetCreation, threshold: 999f),
+            Entry(comparison: ActionStateComparison.GreaterOrEqual, prototypeId: TargetCreation, threshold: 999f),
         ]));
 
         for (var index = 0; (index < 20); index++) {
@@ -196,7 +196,7 @@ public sealed class PlacementResponseLawTests {
     [Fact]
     public void TheSwapTickIsDeterministicAcrossIndependentRuns() {
         WorldDefinition Build() => Document(respond: [
-            Entry(comparison: WorldFieldComparison.GreaterOrEqual, prototypeId: TargetCreation, threshold: 0.5f),
+            Entry(comparison: ActionStateComparison.GreaterOrEqual, prototypeId: TargetCreation, threshold: 0.5f),
         ]);
 
         using var a = Fixtures.FreshServer(definition: Build());

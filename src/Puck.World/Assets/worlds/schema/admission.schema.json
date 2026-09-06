@@ -55,7 +55,11 @@
               ]
             },
             "subject": {
-              "description": "The subject it scopes to; null means the body this admission assigns, resolved by SubjectFor once that index is known. An authored template cannot name a body index \u2014 the door runs before the population picks one \u2014 so a row that must follow the admitted body omits its subject."
+              "description": "The subject it scopes to; null means the body this admission assigns, resolved by SubjectFor once that index is known. An authored template cannot name a body index \u2014 the door runs before the population picks one \u2014 so a row that must follow the admitted body omits its subject.",
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "exclusive": {
               "description": "Whether the mint is exclusive.",

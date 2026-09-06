@@ -38,10 +38,11 @@ public static partial class WorldDefinitionValidator {
             name: name,
             value: value
         );
-
-        if (float.IsFinite(f: value) && (value > 0f) && (FixedQ4816.FromDouble(value: value) <= FixedQ4816.Zero)) {
-            errors.Add(item: $"{name} {value} is positive but quantizes to zero in Q48.16.");
-        }
+        RequireQuantizesNonZero(
+            errors: errors,
+            name: name,
+            value: value
+        );
     }
     // The non-negative sibling: zero is an admitted authored value, but a positive one must still survive Q48.16.
     private static void RequireNonNegativeFixed(float value, string name, List<string> errors) {
@@ -50,7 +51,15 @@ public static partial class WorldDefinitionValidator {
             name: name,
             value: value
         );
-
+        RequireQuantizesNonZero(
+            errors: errors,
+            name: name,
+            value: value
+        );
+    }
+    // A positive authored value that rounds to zero in Q48.16 would silently disable what it tunes; the sign check
+    // is the caller's, this is only the quantization door both fixed-valued requirements share.
+    private static void RequireQuantizesNonZero(float value, string name, List<string> errors) {
         if (float.IsFinite(f: value) && (value > 0f) && (FixedQ4816.FromDouble(value: value) <= FixedQ4816.Zero)) {
             errors.Add(item: $"{name} {value} is positive but quantizes to zero in Q48.16.");
         }

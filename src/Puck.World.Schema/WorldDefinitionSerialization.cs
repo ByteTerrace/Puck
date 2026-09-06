@@ -832,27 +832,28 @@ internal sealed class WorldDestinationScopeJsonConverter() : TokenEnumJsonConver
 /// spelling. <see cref="GrantSubjectKind.Composition"/> is never emitted (nothing constructs it outside the grant
 /// table's own boot seed) and is rejected on read like any other token the grammar does not recognize.
 /// </summary>
-internal sealed class GrantSubjectJsonConverter : JsonConverter<GrantSubject> {
+internal sealed class GrantSubjectJsonConverter : TryParseStringJsonConverter<GrantSubject> {
     /// <inheritdoc/>
-    public override GrantSubject Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        var token = reader.GetString();
-
+    protected override bool TryParse(string? candidate, out GrantSubject value, out string reason) {
         if (
-            (token is null) ||
-            !GrantSubject.TryParse(
-            subject: out var subject,
-            token: token
+            (candidate is not null) &&
+            GrantSubject.TryParse(
+            subject: out value,
+            token: candidate
         )
         ) {
-            throw new JsonException(message: $"grant subject '{token}' must be 'all', 'body:<n>', 'screen:<n>', 'section:<name>', 'state:<name>', 'region:<name>', 'seat:<n>', 'creation:<id>', or 'placement:<id>'.");
+            reason = string.Empty;
+
+            return true;
         }
 
-        return subject;
+        value = default;
+        reason = "must be 'all', 'body:<n>', 'screen:<n>', 'section:<name>', 'state:<name>', 'region:<name>', 'seat:<n>', 'creation:<id>', or 'placement:<id>'";
+
+        return false;
     }
     /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, GrantSubject value, JsonSerializerOptions options) {
-        writer.WriteStringValue(value: value.Describe());
-    }
+    protected override string ToValue(GrantSubject value) => value.Describe();
 }
 /// <summary>
 /// Reads and writes a <see cref="WorldPrincipal"/> as the same compact token <c>world.grant</c> takes —
@@ -863,27 +864,28 @@ internal sealed class GrantSubjectJsonConverter : JsonConverter<GrantSubject> {
 /// shape a live grant uses, matching <see cref="GrantSubjectJsonConverter"/>'s reasoning exactly. Writing rides
 /// <see cref="WorldPrincipal.Describe"/>, the same label the console's own accept/reject lines print.
 /// </summary>
-internal sealed class WorldPrincipalJsonConverter : JsonConverter<WorldPrincipal> {
+internal sealed class WorldPrincipalJsonConverter : TryParseStringJsonConverter<WorldPrincipal> {
     /// <inheritdoc/>
-    public override WorldPrincipal Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-        var token = reader.GetString();
-
+    protected override bool TryParse(string? candidate, out WorldPrincipal value, out string reason) {
         if (
-            (token is null) ||
-            !WorldPrincipal.TryParse(
-            principal: out var principal,
-            token: token
+            (candidate is not null) &&
+            WorldPrincipal.TryParse(
+            principal: out value,
+            token: candidate
         )
         ) {
-            throw new JsonException(message: $"principal '{token}' must be 'seat1'..'seat4', 'console', 'addon:<name>', 'peer:<n>:<generation>', or 'document:<id>'.");
+            reason = string.Empty;
+
+            return true;
         }
 
-        return principal;
+        value = default;
+        reason = "must be 'seat1'..'seat4', 'console', 'addon:<name>', 'peer:<n>:<generation>', or 'document:<id>'";
+
+        return false;
     }
     /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, WorldPrincipal value, JsonSerializerOptions options) {
-        writer.WriteStringValue(value: value.Describe());
-    }
+    protected override string ToValue(WorldPrincipal value) => value.Describe();
 }
 /// <summary>
 /// Bridges an embedded <see cref="Puck.World.Authoring.CreationDocument"/> (a <see cref="WorldPrototype.Document"/>) through

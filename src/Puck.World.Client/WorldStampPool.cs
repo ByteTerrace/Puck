@@ -1527,37 +1527,6 @@ public sealed partial class WorldStampPool {
 
         return true;
     }
-    /// <summary>Resolves a body-rooted creation look's authored part pose from a list-backed packed transform buffer.</summary>
-    /// <param name="bodyIndex">The population entity index.</param>
-    /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>
-    /// <param name="transforms">The current composed transform buffer.</param>
-    /// <param name="pose">The live part pose, or default when unresolved.</param>
-    /// <returns><see langword="true"/> when the live creation look publishes a packed part pose.</returns>
-    public bool TryBodyPartPose(int bodyIndex, string partId, IReadOnlyList<DynamicTransform> transforms, out SdfAnchor pose) {
-        ArgumentNullException.ThrowIfNull(argument: transforms);
-
-        if (
-            !TryBodyPartTransformSlot(
-            bodyIndex: bodyIndex,
-            partId: partId,
-            transformSlot: out var transformSlot
-        ) ||
-            (((uint)transformSlot) >= ((uint)transforms.Count))
-        ) {
-            pose = default;
-
-            return false;
-        }
-
-        var transform = transforms[transformSlot];
-
-        pose = new SdfAnchor(
-            Position: transform.Position,
-            Orientation: transform.Orientation
-        );
-
-        return true;
-    }
     /// <summary>Resolves a body-rooted creation look's authored part id to its absolute packed transform slot.</summary>
     /// <param name="bodyIndex">The population entity index.</param>
     /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>

@@ -656,50 +656,6 @@ public static class WorldRigCatalog {
 
         return true;
     }
-    /// <summary>Resolves a published part's live pose from a list-backed packed dynamic-transform buffer.</summary>
-    /// <param name="avatar">The avatar index.</param>
-    /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>
-    /// <param name="rig">The resolved catalog rig, or -1 for the body's default catalog pick. Pass a carried rig explicitly.</param>
-    /// <param name="transforms">The frame's packed dynamic-transform buffer.</param>
-    /// <param name="pose">The live part pose, or default when unresolved.</param>
-    /// <param name="scale">The body's uniform look scale, used to reconstruct a coarse body's published rest anchor.</param>
-    /// <returns><see langword="true"/> when the procedural look publishes <paramref name="partId"/> and the slot is packed.</returns>
-    public static bool TryPartPose(int avatar, string partId, int rig, IReadOnlyList<DynamicTransform> transforms, out SdfAnchor pose, float scale = 1f) {
-        ArgumentNullException.ThrowIfNull(transforms);
-
-        if (!Parts.TryResolve(
-            partId: partId,
-            transformSlot: out var relativeSlot
-        )) {
-            pose = default;
-
-            return false;
-        }
-
-        var transformSlot = checked(BodySlotBase(avatar) + (IsDetailed(avatar) ? relativeSlot : 0));
-
-        if (((uint)transformSlot) >= ((uint)transforms.Count)) {
-            pose = default;
-
-            return false;
-        }
-
-        var packed = transforms[transformSlot];
-        var rigRange = Ranges[((rig < 0)
-            ? WorldLookSource.Catalog.DefaultIndex(avatar)
-            : rig)];
-        var leaf = Leaves[rigRange.First + relativeSlot];
-
-        pose = IsDetailed(avatar)
-            ? new SdfAnchor(
-                Position: packed.Position + Vector3.Transform(leaf.AuthoredOffset, packed.Orientation),
-                Orientation: packed.Orientation)
-            : new SdfAnchor(
-                Position: packed.Position + Vector3.Transform(leaf.Anchor * scale + leaf.AuthoredOffset, packed.Orientation),
-                Orientation: packed.Orientation);
-
-        return true;
-    }
     /// <summary>Resolves a published part id to the avatar's stable packed transform slot.</summary>
     /// <param name="avatar">The avatar index.</param>
     /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>

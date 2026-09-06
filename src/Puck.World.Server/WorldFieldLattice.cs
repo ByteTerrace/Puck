@@ -333,14 +333,6 @@ public sealed class WorldFieldLattice {
         m_program = program;
     }
 
-    private static bool Holds(WorldFieldComparison comparison, FixedQ4816 value, FixedQ4816 expected) => comparison switch {
-        WorldFieldComparison.Equal => (value == expected),
-        WorldFieldComparison.NotEqual => (value != expected),
-        WorldFieldComparison.Less => (value < expected),
-        WorldFieldComparison.LessOrEqual => (value <= expected),
-        WorldFieldComparison.Greater => (value > expected),
-        _ => (value >= expected),
-    };
     private int CellIndex(int x, int y, int z) => ((((z * m_layers) + y) * m_width) + x);
     private FixedQ4816 Clamp(int field, FixedQ4816 value) => FixedQ4816.Clamp(
         maximum: m_max[field],
@@ -738,8 +730,7 @@ public sealed class WorldFieldLattice {
     /// <param name="comparison">The comparison.</param>
     /// <param name="expected">The scalar compared against (literal or state-row reference).</param>
     /// <param name="readScalar">Reads a scalar state row's slot cell for <paramref name="expected"/>'s row form.</param>
-    public bool Holds(int field, int cell, WorldFieldComparison comparison, WorldLatticeScalar expected, Func<string, FixedQ4816> readScalar) => Holds(
-        comparison: comparison,
+    public bool Holds(int field, int cell, ActionStateComparison comparison, WorldLatticeScalar expected, Func<string, FixedQ4816> readScalar) => comparison.Holds(
         value: Value(cell: cell, field: field),
         expected: CompiledScalar.Compile(scalar: expected).Resolve(readScalar: readScalar)
     );
@@ -1085,8 +1076,7 @@ public sealed class WorldFieldLattice {
                         var exposed = (TryBodyCellOf(
                             cell: out var cell,
                             position: in position
-                        ) && Holds(
-                            comparison: expose.Comparison,
+                        ) && expose.Comparison.Holds(
                             expected: Resolve(host: host, input: expose.Value, tick: tick),
                             value: m_values[expose.Field.Ordinal][cell]
                         ));
@@ -1189,8 +1179,7 @@ public sealed class WorldFieldLattice {
             for (var index = 0; (index < reaction.When.Length); index++) {
                 var condition = reaction.When[index];
 
-                if (!Holds(
-                    comparison: condition.Comparison,
+                if (!condition.Comparison.Holds(
                     expected: whenValues[index],
                     value: m_values[condition.Field.Ordinal][cell]
                 )) {

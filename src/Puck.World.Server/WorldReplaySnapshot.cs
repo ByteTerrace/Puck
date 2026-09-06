@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using Puck.Abstractions.Machines;
 using Puck.Hosting;
@@ -355,15 +354,10 @@ public sealed class WorldReplaySnapshot {
     }
     // The rate as a readable decimal beside its exact raw lane. The decimal is for the operator; the raw is the number
     // the comparison actually ran on, printed so a drift the decimal rounds away is still legible in the report.
-    private static string Describe(FixedQ4816? rate) {
-        return ((rate is { } value)
-            ? string.Create(
-                provider: CultureInfo.InvariantCulture,
-                handler: $"{((double)value):0.####} (raw {value.Value})"
-            )
-            : "kit (no claimed rate)"
-        );
-    }
+    private static string Describe(FixedQ4816? rate) => WorldReplayInspector.DescribeRate(
+        absent: "kit (no claimed rate)",
+        rate: rate
+    );
     // Shared by VerifyMountedAddons for BOTH sides it compares (recorded and fresh) — see its call site's remarks for
     // why an in-process Drive needs this even though Read already guards its own copy of "recorded". Quadratic in the
     // mounted count deliberately, matching VerifyMountedAddons' own posture: a handful of rows, checked once per drive.

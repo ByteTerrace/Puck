@@ -112,7 +112,7 @@ public sealed class PlacementResponseValidationLawTests {
         Scale: 1f,
         Respond: [
             new WorldPlacementResponse(
-                When: new WorldFieldCondition(Comparison: WorldFieldComparison.GreaterOrEqual, Field: FieldName, Value: 0.5f),
+                When: new WorldFieldCondition(Comparison: ActionStateComparison.GreaterOrEqual, Field: FieldName, Value: 0.5f),
                 PrototypeId: TargetCreation
             ),
         ]
@@ -136,7 +136,7 @@ public sealed class PlacementResponseValidationLawTests {
         AssertRefusedNaming(
             definition: With(placement: (WellFormed() with {
                 Respond = [new WorldPlacementResponse(
-                    When: new WorldFieldCondition(Comparison: WorldFieldComparison.GreaterOrEqual, Field: "no-such-field", Value: 0.5f),
+                    When: new WorldFieldCondition(Comparison: ActionStateComparison.GreaterOrEqual, Field: "no-such-field", Value: 0.5f),
                     PrototypeId: TargetCreation
                 )],
             })),
@@ -151,7 +151,7 @@ public sealed class PlacementResponseValidationLawTests {
         AssertRefusedNaming(
             definition: With(placement: (WellFormed() with {
                 Respond = [new WorldPlacementResponse(
-                    When: new WorldFieldCondition(Comparison: ((WorldFieldComparison)byte.MaxValue), Field: FieldName, Value: 0.5f),
+                    When: new WorldFieldCondition(Comparison: ((ActionStateComparison)byte.MaxValue), Field: FieldName, Value: 0.5f),
                     PrototypeId: TargetCreation
                 )],
             })),

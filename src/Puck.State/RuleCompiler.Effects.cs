@@ -441,6 +441,9 @@ public static partial class RuleCompiler {
                         throw Invalid("random transfer requires a redrawable integer streamDraw site");
                     }
                 }
+                if (transfer.Key is { } key && TryResolveDynamicKey(key, ruleName, context, "transfer", "key", out var selectedKey)) {
+                    return new TransformStateEffect(transform, $"transformState Transfer {transfer.From} to {transfer.To}", selectedKey);
+                }
                 break;
             case StateTransform.SetRay ray:
                 var row = Row(ray.Row);

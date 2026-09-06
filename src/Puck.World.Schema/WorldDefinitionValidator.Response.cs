@@ -2,7 +2,7 @@ namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
     // The response facet (see WorldPlacementResponse): an ordered set of lattice-field-condition-gated prototype
-    // swaps. Reuses the fields.reactions condition grammar (WorldFieldCondition/WorldFieldComparison/
+    // swaps. Reuses the fields.reactions condition grammar (WorldFieldCondition/ActionStateComparison/
     // WorldLatticeScalar) rather than a parallel one, so this pass checks a condition exactly like ValidateFields
     // checks a Transform/Expose condition.
     private static void ValidatePlacementResponse(WorldPlacement placement, WorldDefinition definition, HashSet<string> prototypeIds, string placementPath, List<string> errors) {

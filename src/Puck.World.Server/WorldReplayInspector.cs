@@ -88,13 +88,17 @@ public sealed class WorldReplayInspector {
     }
     // A pinned rate as the operator reads it beside the raw lane the re-drive actually integrates with; 'kit' for an
     // identity that claimed none (the re-drive falls back to the kit's rate the same way the live run did).
-    private static string DescribeRate(FixedQ4816? rate) {
+    /// <summary>Spells a pinned profile rate the way every replay read-back prints one — the decimal beside its raw
+    /// fixed-point lane — or <paramref name="absent"/> for a seat riding its kit's own tuning.</summary>
+    /// <param name="rate">The pinned rate, or <see langword="null"/>.</param>
+    /// <param name="absent">The spelling for an unpinned rate.</param>
+    internal static string DescribeRate(FixedQ4816? rate, string absent = "kit") {
         return ((rate is { } value)
             ? string.Create(
                 provider: CultureInfo.InvariantCulture,
                 handler: $"{((double)value):0.####} (raw {value.Value})"
             )
-            : "kit"
+            : absent
         );
     }
 

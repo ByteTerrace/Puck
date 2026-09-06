@@ -148,7 +148,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // stashed alongside so a runtime screen.source <index> view can register against the same envelope.
     private ViewStack? m_viewStack;
 
-    private IReadOnlyList<DynamicTransform> m_viewTransforms = [];
+    private DynamicTransform[] m_viewTransforms = [];
     private readonly Dictionary<int, ScreenSlot> m_slots = new();
     // The screen indices declared at BOOT (construction) — the render engine's frozen provider key set, copied
     // ONCE and never grown. Distinct from m_slots.Keys, which shrinks/grows as ReconcileScreens removes/recreates

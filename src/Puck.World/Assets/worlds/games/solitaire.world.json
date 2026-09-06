@@ -1,0 +1,22 @@
+{
+  "imports": [
+    "klondike.world.json",
+    "spider.world.json",
+    "freecell.world.json"
+  ],
+  "state": {
+    "world": [
+      {
+        "name": "solitaire",
+        "kind": "int",
+        "capacity": 1,
+        "cells": [
+          {
+            "key": "table",
+            "value": 0
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -40,8 +40,6 @@ public sealed class WorldCatalogAllocationLawTests {
         WorldRigCatalog.PackTransforms(lastBody, origin, orientation, 0.7f, true, transforms, rig, 1.5f);
         Assert.True(WorldRigCatalog.TryPartPose(lastBody, "head", rig, transforms.AsSpan(), out var high, 1.5f));
         Assert.Equal(low, high);
-        Assert.True(WorldRigCatalog.TryPartPose(lastBody, "head", rig, (IReadOnlyList<DynamicTransform>)transforms, out var listPose, 1.5f));
-        Assert.Equal(high, listPose);
         var program = Emit(lastBody + 1, rig, index => index == lastBody);
         Assert.Equal(4, program.Instructions.Count);
         Assert.Single(program.Instances);

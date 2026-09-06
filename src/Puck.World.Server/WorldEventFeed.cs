@@ -786,89 +786,12 @@ public sealed class WorldEventFeed {
         return (Start: start, End: end);
     }
     private static FixedQ4816 SegmentDistanceSquared(FixedVector3 p1, FixedVector3 q1, FixedVector3 p2, FixedVector3 q2) {
-        var d1 = (q1 - p1);
-        var d2 = (q2 - p2);
-        var r = (p1 - p2);
-        var a = FixedVector3.Dot(
-            left: d1,
-            right: d1
+        var closest = FixedDynamicBodyContacts.ClosestDelta(
+            p1: p1,
+            q1: q1,
+            p2: p2,
+            q2: q2
         );
-        var e = FixedVector3.Dot(
-            left: d2,
-            right: d2
-        );
-        var f = FixedVector3.Dot(
-            left: d2,
-            right: r
-        );
-        FixedQ4816 s;
-        FixedQ4816 t;
-
-        if (
-            (a <= FixedQ4816.Zero) &&
-            (e <= FixedQ4816.Zero)
-        ) {
-            return FixedVector3.Dot(
-                left: r,
-                right: r
-            );
-        }
-
-        if (a <= FixedQ4816.Zero) {
-            s = FixedQ4816.Zero;
-            t = FixedQ4816.Clamp(
-                value: (f / e),
-                minimum: FixedQ4816.Zero,
-                maximum: FixedQ4816.One
-            );
-        } else {
-            var c = FixedVector3.Dot(
-                left: d1,
-                right: r
-            );
-
-            if (e <= FixedQ4816.Zero) {
-                t = FixedQ4816.Zero;
-                s = FixedQ4816.Clamp(
-                    value: (-c / a),
-                    minimum: FixedQ4816.Zero,
-                    maximum: FixedQ4816.One
-                );
-            } else {
-                var b = FixedVector3.Dot(
-                    left: d1,
-                    right: d2
-                );
-                var denominator = ((a * e) - (b * b));
-
-                s = ((denominator > FixedQ4816.Zero)
-                    ? FixedQ4816.Clamp(
-                        value: (((b * f) - (c * e)) / denominator),
-                        minimum: FixedQ4816.Zero,
-                        maximum: FixedQ4816.One
-                    )
-                    : FixedQ4816.Zero
-                );
-                t = (((b * s) + f) / e);
-                if (t < FixedQ4816.Zero) {
-                    t = FixedQ4816.Zero;
-                    s = FixedQ4816.Clamp(
-                        value: (-c / a),
-                        minimum: FixedQ4816.Zero,
-                        maximum: FixedQ4816.One
-                    );
-                } else if (t > FixedQ4816.One) {
-                    t = FixedQ4816.One;
-                    s = FixedQ4816.Clamp(
-                        value: ((b - c) / a),
-                        minimum: FixedQ4816.Zero,
-                        maximum: FixedQ4816.One
-                    );
-                }
-            }
-        }
-
-        var closest = ((p1 + (d1 * s)) - (p2 + (d2 * t)));
 
         return FixedVector3.Dot(
             left: closest,

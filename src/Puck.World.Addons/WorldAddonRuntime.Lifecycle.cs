@@ -728,38 +728,17 @@ public sealed partial class WorldAddonRuntime {
         (a.Fuel == b.Fuel) &&
         (a.Enabled == b.Enabled) &&
         (a.Revision == b.Revision) &&
-        CapabilityRequestsEqual(
+        ListsEqual(
             a: a.Requests,
             b: b.Requests
         ) &&
-        MemoryWatchesEqual(
+        ListsEqual(
             a: a.MemoryWatches,
             b: b.MemoryWatches
         )));
-    private static bool CapabilityRequestsEqual(IReadOnlyList<WorldCapabilityRequest>? a, IReadOnlyList<WorldCapabilityRequest>? b) {
-        if (ReferenceEquals(
-            objA: a,
-            objB: b
-        )) {
-            return true;
-        }
-
-        var aCount = (a?.Count ?? 0);
-        var bCount = (b?.Count ?? 0);
-
-        if (aCount != bCount) {
-            return false;
-        }
-
-        for (var index = 0; (index < aCount); index++) {
-            if (!a![index].Equals(other: b![index])) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-    private static bool MemoryWatchesEqual(IReadOnlyList<WorldAddonMemoryWatch>? a, IReadOnlyList<WorldAddonMemoryWatch>? b) {
+    // Element-wise row equality, null and empty reading alike, without the enumerator allocation SequenceEqual
+    // would spend on an interface-typed list.
+    private static bool ListsEqual<T>(IReadOnlyList<T>? a, IReadOnlyList<T>? b) where T : IEquatable<T> {
         if (ReferenceEquals(
             objA: a,
             objB: b

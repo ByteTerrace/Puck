@@ -64,11 +64,12 @@ public enum BoardCombineOp : byte {
 public abstract record StateTransform {
     /// <summary>Refreshes a knowledge board from its declared source and visibility mask; authority only.</summary>
     public sealed record Observe(string Row) : StateTransform;
-    /// <summary>Moves one token, preserving identity. A random draw advances only when the whole transfer commits.</summary>
+    /// <summary>Moves selected tokens, preserving identity. A random draw advances only when the whole transfer commits.</summary>
     /// <param name="From">The source zone.</param>
     /// <param name="To">The destination zone.</param>
     /// <param name="Selector">The source selector.</param>
-    /// <param name="Key">The token key for key selection.</param>
+    /// <param name="Key">The token key for key or slice selection. In an authored rule this may be a dynamic
+    /// key, resolved from the active store before each transfer; direct mutations carry the resolved literal.</param>
     /// <param name="InsertFirst">Insert at the first position rather than the last.</param>
     /// <param name="Draw">A streamDraw site for random selection; absent for other selectors.</param>
     /// <param name="Count">How many tokens move in this one transfer, 1..<c>MaxTransferCount</c>,

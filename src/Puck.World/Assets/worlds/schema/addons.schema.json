@@ -51,7 +51,8 @@
               ]
             },
             "subject": {
-              "description": "The subject requested."
+              "description": "The subject requested.",
+              "type": "string"
             }
           },
           "additionalProperties": false

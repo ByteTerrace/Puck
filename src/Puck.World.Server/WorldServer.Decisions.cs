@@ -77,7 +77,7 @@ public sealed partial class WorldServer {
         try {
             foreach (var key in runtime.Keys) {
                 m_evaluator.BoundEach = key;
-                m_evaluator.BoundEachKey = (key >= 0) ? WorldBodyKeyCache.Get(index: key) : null;
+                m_evaluator.BoundEachKey = (key >= 0) ? IndexKeyCache.Get(index: key) : null;
                 applied |= EvaluateDecisionBinding(runtime, key, tick, stepTicks);
             }
             m_evaluator.BoundEachKey = null;

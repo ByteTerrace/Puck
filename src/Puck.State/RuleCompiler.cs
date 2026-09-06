@@ -507,7 +507,7 @@ public static partial class RuleCompiler {
     }
 
     /// <summary>Resolves a dynamic key spelling — a binding token, a registered key family's spelling, or a
-    /// <c>$cell:</c> indirection. A literal key returns <see langword="false"/>.</summary>
+    /// <c>$cell:</c> indirection or <c>$zone:</c> endpoint. A literal key returns <see langword="false"/>.</summary>
     /// <param name="key">The authored key.</param>
     /// <param name="ruleName">The rule being compiled.</param>
     /// <param name="context">The compile context.</param>
@@ -529,6 +529,17 @@ public static partial class RuleCompiler {
                 if (family.TryCompile(key: key, ruleName: ruleName, verb: verb, keyFieldLabel: keyFieldLabel, context: context, cell: out cell)) {
                     return true;
                 }
+            }
+            if (key.StartsWith(RuleFacts.ZoneKeyPrefix, StringComparison.Ordinal)) {
+                var parts = key.Split(':');
+                if (parts.Length != 3 || parts[2] is not ("first" or "last") ||
+                    context.FindRow(parts[1])?.EffectiveDomain is not StateDomain.KeysOf { Ordered: true }) {
+                    throw new RuleException(RuleRefusal.StateCellUnaddressable, ruleName,
+                        $"'{verb}' {keyFieldLabel} '{key}' must spell '$zone:<ordered-zone>:<first|last>'");
+                }
+                cell = new CompiledCellRef(string.Empty, string.Empty,
+                    Custom: new ZoneEndKey(parts[1], ResolveHandle(context: context, name: parts[1]), parts[2] == "last"));
+                return true;
             }
         }
 

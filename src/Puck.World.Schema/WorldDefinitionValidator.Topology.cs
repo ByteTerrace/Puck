@@ -524,12 +524,6 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        static bool FitsFixed(float value) => (
-            float.IsFinite(f: value) &&
-            (value >= (((double)long.MinValue) / 65536.0)) &&
-            (value <= (((double)long.MaxValue) / 65536.0))
-        );
-
         var lattice = fields.Lattice;
 
         if (lattice is null) {
@@ -547,25 +541,25 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (
-            !FitsFixed(value: lattice.CellSize) ||
+            !TopologyCompilation.FitsFixed(value: lattice.CellSize) ||
             (FixedQ4816.FromDouble(value: lattice.CellSize) <= FixedQ4816.Zero)
         ) {
             errors.Add(item: $"fields.lattice.cellSize must quantize to a positive Q48.16 value (was {lattice.CellSize}).");
         }
 
         if (
-            !FitsFixed(value: lattice.Origin.X) ||
-            !FitsFixed(value: lattice.Origin.Y) ||
-            !FitsFixed(value: lattice.Origin.Z)
+            !TopologyCompilation.FitsFixed(value: lattice.Origin.X) ||
+            !TopologyCompilation.FitsFixed(value: lattice.Origin.Y) ||
+            !TopologyCompilation.FitsFixed(value: lattice.Origin.Z)
         ) {
             errors.Add(item: "fields.lattice.origin must fit Q48.16.");
         } else if (
-            FitsFixed(value: lattice.CellSize) &&
+            TopologyCompilation.FitsFixed(value: lattice.CellSize) &&
             (lattice.CellSize > 0f) &&
             (
-                !FitsFixed(value: ((float)(((double)lattice.Origin.X) + (((double)lattice.CellSize) * lattice.Width)))) ||
-                !FitsFixed(value: ((float)(((double)lattice.Origin.Y) + (((double)lattice.CellSize) * lattice.Layers)))) ||
-                !FitsFixed(value: ((float)(((double)lattice.Origin.Z) + (((double)lattice.CellSize) * lattice.Depth))))
+                !TopologyCompilation.FitsFixed(value: ((float)(((double)lattice.Origin.X) + (((double)lattice.CellSize) * lattice.Width)))) ||
+                !TopologyCompilation.FitsFixed(value: ((float)(((double)lattice.Origin.Y) + (((double)lattice.CellSize) * lattice.Layers)))) ||
+                !TopologyCompilation.FitsFixed(value: ((float)(((double)lattice.Origin.Z) + (((double)lattice.CellSize) * lattice.Depth))))
             )
         ) {
             errors.Add(item: "fields.lattice extent must fit Q48.16.");
@@ -631,13 +625,13 @@ public static partial class WorldDefinitionValidator {
             }
 
             if (
-                !FitsFixed(value: row.Min) ||
-                !FitsFixed(value: row.Max) ||
+                !TopologyCompilation.FitsFixed(value: row.Min) ||
+                !TopologyCompilation.FitsFixed(value: row.Max) ||
                 (FixedQ4816.FromDouble(value: row.Min) >= FixedQ4816.FromDouble(value: row.Max))
             ) {
                 errors.Add(item: $"{path} must declare Q48.16-representable min < max after quantization (was {row.Min}..{row.Max}).");
             } else if (
-                !FitsFixed(value: row.Initial) ||
+                !TopologyCompilation.FitsFixed(value: row.Initial) ||
                 (row.Initial < row.Min) ||
                 (row.Initial > row.Max)
             ) {
@@ -645,7 +639,7 @@ public static partial class WorldDefinitionValidator {
             }
 
             if (
-                !FitsFixed(value: row.HeightScale) ||
+                !TopologyCompilation.FitsFixed(value: row.HeightScale) ||
                 (row.HeightScale < 0f)
             ) {
                 errors.Add(item: $"{path}.heightScale must be finite and non-negative (was {row.HeightScale}).");
@@ -753,7 +747,7 @@ public static partial class WorldDefinitionValidator {
                 return;
             }
 
-            if (!FitsFixed(value: (value.Literal ?? 0f))) {
+            if (!TopologyCompilation.FitsFixed(value: (value.Literal ?? 0f))) {
                 errors.Add(item: $"{path} must carry a finite Q48.16 value.");
             }
         }
@@ -958,11 +952,11 @@ public static partial class WorldDefinitionValidator {
             switch (row) {
                 case WorldLatticeFill.Rect rect:
                     if (
-                        !FitsFixed(value: rect.Value) ||
-                        !FitsFixed(value: rect.MinX) ||
-                        !FitsFixed(value: rect.MinZ) ||
-                        !FitsFixed(value: rect.MaxX) ||
-                        !FitsFixed(value: rect.MaxZ) ||
+                        !TopologyCompilation.FitsFixed(value: rect.Value) ||
+                        !TopologyCompilation.FitsFixed(value: rect.MinX) ||
+                        !TopologyCompilation.FitsFixed(value: rect.MinZ) ||
+                        !TopologyCompilation.FitsFixed(value: rect.MaxX) ||
+                        !TopologyCompilation.FitsFixed(value: rect.MaxZ) ||
                         (rect.MinX > rect.MaxX) ||
                         (rect.MinZ > rect.MaxZ)
                     ) {
@@ -972,7 +966,7 @@ public static partial class WorldDefinitionValidator {
                     break;
                 case WorldLatticeFill.Noise noise:
                     if (
-                        !FitsFixed(value: noise.Value) ||
+                        !TopologyCompilation.FitsFixed(value: noise.Value) ||
                         !float.IsFinite(f: noise.Threshold) ||
                         (noise.Threshold < 0f) ||
                         (noise.Threshold >= 1f)
@@ -1046,7 +1040,7 @@ public static partial class WorldDefinitionValidator {
 
                     break;
                 case WorldLatticeFill.Scatter scatter:
-                    if (!FitsFixed(value: scatter.Value)) {
+                    if (!TopologyCompilation.FitsFixed(value: scatter.Value)) {
                         errors.Add(item: $"{path} must carry a finite value.");
                     }
                     if (scatter.Spacing < 2) {

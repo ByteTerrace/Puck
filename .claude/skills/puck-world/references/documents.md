@@ -243,7 +243,16 @@ value at every read/firing (effect `key`/`fromKey`, `compareState`
 body-reference token `cell:<row>:<key>` does the same inside
 `$distance:`/`$los:`/`$nearest:`; `placement:<id>` and (over a forEach row
 keyed by placement ids) `placement:$each` name the body inhabiting a
-placement. A placement's `parent` composes its frame over another's, and a
+placement. `$zone:<ordered-zone>:first|last` resolves an endpoint's original
+string key from the active store, including a scratch frame. Empty zones
+resolve an absent read and cannot address a write: guard endpoint writes with
+a positive count. Rule-authored transfers resolve their `key` through the same
+dynamic-key compiler before each transaction step; direct mutations use literal
+keys. Pattern costs use the declared source capacity and actual token-expression
+cost, and pattern read sets include attribute and expression dependencies.
+The [Solitaire guide](../../../../src/Puck.World/Assets/worlds/games/README.md)
+owns the collection's table selector, pile IDs, and request protocol.
+A placement's `parent` composes its frame over another's, and a
 `board`-named Grid topology anchors its origin to that placement. `$bind:<name>` reads a value the
 enclosing rule's `bindings` list computed for this evaluation (feed-forward,
 declared order, never stored). Any `expression`/`left`/`right`/`score`/affinity

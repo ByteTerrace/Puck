@@ -50,21 +50,6 @@ public abstract class EffectFact {
     /// <summary>Returns whether a key indirection resolves through the document host.</summary>
     /// <param name="reference">The indirection, or <see langword="null"/>.</param>
     protected static bool ReferenceReadsHost(CompiledCellRef? reference) => (reference is { Custom: { HostOnly: true } });
-    /// <summary>Returns whether any operand of a compiled expression is host-only.</summary>
-    /// <param name="tokens">The postfix program, or <see langword="null"/>.</param>
-    protected static bool ExpressionReadsHost(CompiledExpressionToken[]? tokens) {
-        if (tokens is null) {
-            return false;
-        }
-
-        foreach (var token in tokens) {
-            if (token.Operand is { HostOnly: true }) {
-                return true;
-            }
-        }
-
-        return false;
-    }
 }
 
 /// <summary>Shared shape for the case types whose firing path addresses a state cell through a (row, key-or-indirection)
@@ -153,7 +138,7 @@ public sealed class WriteEffect : EffectFact, IStateWriteEffect, IValueSourcedEf
     /// <inheritdoc/>
     public override void CollectWrites(List<RuleAccess> into) => into.Add(item: new RuleAccess(Row: Row, Key: ((KeyFrom is null) ? Key : null), IsSet: (Write == StateWriteKind.Set)));
     /// <inheritdoc/>
-    public override bool ReadsHost => ((From is { HostOnly: true }) || ReferenceReadsHost(reference: KeyFrom) || ExpressionReadsHost(tokens: Expression));
+    public override bool ReadsHost => ((From is { HostOnly: true }) || ReferenceReadsHost(reference: KeyFrom) || RuleDataflow.ExpressionReadsHost(tokens: Expression));
 }
 
 /// <summary>Consumes a non-negative integer countdown by the simulation step's engine-tick width.</summary>
@@ -296,10 +281,10 @@ public sealed class TransactionEffect : EffectFact {
         var mainCost = EffectCosts.Sum(effects: Effects, context: context);
         var failureCost = EffectCosts.Sum(effects: OnFailure, context: context);
         // Success preflights and applies main. Refusal may inspect all of main, then preflight and apply failure.
-        var success = EffectCosts.SaturatingMultiply(left: 2L, right: mainCost);
-        var refusal = EffectCosts.SaturatingAdd(left: mainCost, right: EffectCosts.SaturatingMultiply(left: 2L, right: failureCost));
+        var success = RuleWorkBudget.SaturatingMultiply(left: 2L, right: mainCost);
+        var refusal = RuleWorkBudget.SaturatingAdd(left: mainCost, right: RuleWorkBudget.SaturatingMultiply(left: 2L, right: failureCost));
 
-        return EffectCosts.SaturatingAdd(left: 1L, right: Math.Max(val1: success, val2: refusal));
+        return RuleWorkBudget.SaturatingAdd(left: 1L, right: Math.Max(val1: success, val2: refusal));
     }
     /// <inheritdoc/>
     public override void CollectReads(List<RuleAccess> into) {
@@ -327,7 +312,8 @@ public sealed class TransformStateEffect : EffectFact {
     /// <param name="transform">The discrete state transform.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
     /// <param name="keyRef">The live key indirection a <see cref="StateTransform.ClearEnclosed"/>'s <c>from</c> or a
-    /// <see cref="StateTransform.WriteSet"/>'s <c>setKey</c> spelled, or <see langword="null"/> for a literal cell.</param>
+    /// <see cref="StateTransform.WriteSet"/>'s <c>setKey</c> or a <see cref="StateTransform.Transfer"/>'s <c>key</c>
+    /// spelled, or <see langword="null"/> for a literal cell.</param>
     public TransformStateEffect(StateTransform transform, string describe, CompiledCellRef? keyRef = null) : base(describe) {
         Transform = transform;
         KeyRef = keyRef;
@@ -473,21 +459,12 @@ public sealed class PushStateEffect : EffectFact, IValueSourcedEffect {
     /// <inheritdoc/>
     public override void CollectWrites(List<RuleAccess> into) => into.Add(item: new RuleAccess(Row: Row, Key: null, IsSet: true));
     /// <inheritdoc/>
-    public override bool ReadsHost => ((From is { HostOnly: true }) || ExpressionReadsHost(tokens: Expression));
+    public override bool ReadsHost => ((From is { HostOnly: true }) || RuleDataflow.ExpressionReadsHost(tokens: Expression));
 }
 
-/// <summary>The saturating arithmetic every cost sheet sums with, and the shared pricing of a live value source.</summary>
+/// <summary>The shared pricing of a live value source; the saturating arithmetic every cost sheet sums with is
+/// <see cref="RuleWorkBudget.SaturatingAdd"/>/<see cref="RuleWorkBudget.SaturatingMultiply"/>.</summary>
 public static class EffectCosts {
-    /// <summary>Returns <paramref name="left"/> + <paramref name="right"/>, saturating at <see cref="long.MaxValue"/>.</summary>
-    /// <param name="left">The first addend.</param>
-    /// <param name="right">The second addend.</param>
-    public static long SaturatingAdd(long left, long right) => ((left > (long.MaxValue - right)) ? long.MaxValue : (left + right));
-    /// <summary>Returns <paramref name="left"/> × <paramref name="right"/>, saturating at <see cref="long.MaxValue"/>.</summary>
-    /// <param name="left">The first factor.</param>
-    /// <param name="right">The second factor.</param>
-    public static long SaturatingMultiply(long left, long right) => ((left == 0L) || (right == 0L))
-        ? 0L
-        : ((left > (long.MaxValue / right)) ? long.MaxValue : (left * right));
     /// <summary>Counts operations and conservative state-candidate visits for a compiled expression.</summary>
     /// <param name="tokens">The compiled postfix expression.</param>
     /// <param name="context">The compile context whose capacities bound indirect reads and reductions.</param>
@@ -499,7 +476,7 @@ public static class EffectCosts {
     public static long Sum(EffectFact[] effects, RuleCompileContext context) {
         var cost = 0L;
         foreach (var effect in effects) {
-            cost = SaturatingAdd(left: cost, right: effect.Cost(context: context));
+            cost = RuleWorkBudget.SaturatingAdd(left: cost, right: effect.Cost(context: context));
         }
         return cost;
     }
@@ -510,10 +487,10 @@ public static class EffectCosts {
     public static long Sourced(long baseCost, IValueSourcedEffect effect, RuleCompileContext context) {
         var cost = baseCost;
         if (effect.From is { } source) {
-            cost = SaturatingAdd(left: cost, right: source.Cost(context: context));
+            cost = RuleWorkBudget.SaturatingAdd(left: cost, right: source.Cost(context: context));
         }
         if (effect.Expression is { } expression) {
-            cost = SaturatingAdd(left: cost, right: Expression(tokens: expression, context: context));
+            cost = RuleWorkBudget.SaturatingAdd(left: cost, right: Expression(tokens: expression, context: context));
         }
         return cost;
     }

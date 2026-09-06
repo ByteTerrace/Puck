@@ -34,7 +34,7 @@ public interface IWorldScreenPresenter {
     /// <param name="time">The frame's content clock (seconds).</param>
     /// <param name="authoritativeTick">The latest authoritative simulation tick available to presentation.</param>
     /// <param name="hostFrame">The frame the room is rendering this frame.</param>
-    void RenderViews(in Puck.Hosting.FrameContext context, SdfProgram program, int revision, IReadOnlyList<DynamicTransform> transforms, float time, ulong authoritativeTick, SdfFrame hostFrame);
+    void RenderViews(in Puck.Hosting.FrameContext context, SdfProgram program, int revision, DynamicTransform[] transforms, float time, ulong authoritativeTick, SdfFrame hostFrame);
     /// <summary>Gets the live decal-text source at a screen index, or <see langword="null"/> when the slot's current
     /// source is not text.</summary>
     /// <param name="index">The engine screen-surface index.</param>

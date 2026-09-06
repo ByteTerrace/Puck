@@ -238,7 +238,7 @@ public sealed class WorldFieldProgramLawTests {
     [Fact]
     public void Compile_StateWriteToReadCreatesAnEdgeBetweenOtherwiseIndependentFields() {
         var state = BuildState(reactions: [
-            new WorldReaction.Expose(Comparison: WorldFieldComparison.Greater, Field: "heat", Row: "burning", Value: 1f),
+            new WorldReaction.Expose(Comparison: ActionStateComparison.Greater, Field: "heat", Row: "burning", Value: 1f),
             new WorldReaction.Emit(Amount: 1f, Field: "cold", Tag: "burning"),
         ]);
 
@@ -328,8 +328,8 @@ public sealed class WorldFieldProgramLawTests {
     public void Compile_DoesNotInventAnOrderingEdgeBetweenIndependentBodyOutputs() {
         var state = BuildState(
             reactions: [
-                new WorldReaction.Expose(Comparison: WorldFieldComparison.Greater, Field: "heat", Row: "burning", Value: 1f),
-                new WorldReaction.Expose(Comparison: WorldFieldComparison.Greater, Field: "heat", Row: "exposed", Value: 2f),
+                new WorldReaction.Expose(Comparison: ActionStateComparison.Greater, Field: "heat", Row: "burning", Value: 1f),
+                new WorldReaction.Expose(Comparison: ActionStateComparison.Greater, Field: "heat", Row: "exposed", Value: 2f),
             ]
         );
         var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
@@ -391,14 +391,14 @@ public sealed class WorldFieldProgramLawTests {
             Reactions: (reactions ?? [
                 new WorldReaction.Diffuse(Field: fieldName, Rate: new WorldLatticeScalar(Row: "season")),
                 new WorldReaction.Transform(
-                    When: [new WorldFieldCondition(Field: fieldName, Comparison: WorldFieldComparison.Greater, Value: new WorldLatticeScalar(Row: "season"))],
+                    When: [new WorldFieldCondition(Field: fieldName, Comparison: ActionStateComparison.Greater, Value: new WorldLatticeScalar(Row: "season"))],
                     Then: [
                         new WorldFieldWrite(Field: fieldName, Op: WorldFieldWriteOp.Add, Value: 1f),
                         new WorldFieldWrite(Field: fieldName, Op: WorldFieldWriteOp.Add, Value: new WorldLatticeScalar(Row: "season")),
                     ]
                 ),
                 new WorldReaction.Emit(Tag: "burning", Field: fieldName, Amount: new WorldLatticeScalar(Row: "season")),
-                new WorldReaction.Expose(Comparison: WorldFieldComparison.Greater, Field: fieldName, Row: "exposed", Value: 5f),
+                new WorldReaction.Expose(Comparison: ActionStateComparison.Greater, Field: fieldName, Row: "exposed", Value: 5f),
             ])
         )],
         World: [

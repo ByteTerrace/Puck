@@ -495,6 +495,21 @@ public sealed partial class WorldBody {
         }
         return -1;
     }
+    // The All/Any reduction both postfix gate evaluators (the action gate and the shaping gate) apply: pops the
+    // group's arity of operands and pushes their conjunction/disjunction — one fold, so the two gates cannot drift.
+    private static void FoldGroup(in CompiledPredicate predicate, Span<bool> stack, ref int top) {
+        var start = (top - predicate.Arity);
+        var holdsGroup = (predicate.Kind == CompiledPredicateKind.All);
+
+        for (var index = start; index < top; index++) {
+            holdsGroup = ((predicate.Kind == CompiledPredicateKind.All)
+                ? (holdsGroup && stack[index])
+                : (holdsGroup || stack[index]));
+        }
+
+        top = start;
+        stack[top++] = holdsGroup;
+    }
     private bool GateOpen(CompiledPredicate[] gate, in LaneActionRuntime state) {
         if (gate.Length == 0) {
             return true;
@@ -509,17 +524,11 @@ public sealed partial class WorldBody {
                 continue;
             }
             if (predicate.Kind is CompiledPredicateKind.All or CompiledPredicateKind.Any) {
-                var start = (top - predicate.Arity);
-                var holdsGroup = (predicate.Kind == CompiledPredicateKind.All);
-
-                for (var index = start; index < top; index++) {
-                    holdsGroup = ((predicate.Kind == CompiledPredicateKind.All)
-                        ? (holdsGroup && stack[index])
-                        : (holdsGroup || stack[index]));
-                }
-
-                top = start;
-                stack[top++] = holdsGroup;
+                FoldGroup(
+                    predicate: in predicate,
+                    stack: stack,
+                    top: ref top
+                );
                 continue;
             }
 
@@ -614,17 +623,11 @@ public sealed partial class WorldBody {
                 continue;
             }
             if (predicate.Kind is CompiledPredicateKind.All or CompiledPredicateKind.Any) {
-                var start = (top - predicate.Arity);
-                var holdsGroup = (predicate.Kind == CompiledPredicateKind.All);
-
-                for (var index = start; index < top; index++) {
-                    holdsGroup = ((predicate.Kind == CompiledPredicateKind.All)
-                        ? (holdsGroup && stack[index])
-                        : (holdsGroup || stack[index]));
-                }
-
-                top = start;
-                stack[top++] = holdsGroup;
+                FoldGroup(
+                    predicate: in predicate,
+                    stack: stack,
+                    top: ref top
+                );
                 continue;
             }
 

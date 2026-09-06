@@ -230,8 +230,7 @@ internal sealed partial class WorldNavigationRuntime {
             private const int HashBlockSize = 64;
             private readonly int[] m_cost;
             private readonly int[] m_next;
-            private readonly int[] m_heap;
-            private readonly int[] m_position;
+            private readonly NodeHeap m_open;
             private readonly int[] m_stamp;
             private readonly bool[] m_pending;
             private readonly int[] m_pendingList;
@@ -244,17 +243,16 @@ internal sealed partial class WorldNavigationRuntime {
             private ulong m_pendingHash;
             private int m_pendingLength;
             private int m_generation;
-            private int m_heapCount;
             public int Goal { get; private set; } = -1;
             public int Age { get; set; }
             public int PendingCount { get; private set; }
             // Tick-local reservation, overwritten before body reads; not independent checkpoint/hash state.
             public bool PinnedForStep { get; set; }
-            public bool NeedsWork => PendingCount != 0 && m_heapCount != 0;
+            public bool NeedsWork => PendingCount != 0 && m_open.Count != 0;
 
             public SharedTree(int cells) {
-                m_cost = new int[cells]; m_next = new int[cells]; m_heap = new int[cells];
-                m_position = new int[cells]; m_stamp = new int[cells]; m_pending = new bool[cells];
+                m_cost = new int[cells]; m_next = new int[cells]; m_open = new NodeHeap(cells);
+                m_stamp = new int[cells]; m_pending = new bool[cells];
                 m_pendingList = new int[Math.Min(cells, WorldBodiesLimits.CapacityCeiling)];
                 m_pendingOrdered = new int[m_pendingList.Length];
                 m_blockHashes = new ulong[HashBlockCount(cells)];
@@ -266,7 +264,7 @@ internal sealed partial class WorldNavigationRuntime {
             public void Reset(int goal) {
                 ClearPending();
                 if (++m_generation == int.MaxValue) { Array.Clear(m_stamp); m_generation = 1; }
-                Goal = goal; Age = 0; m_heapCount = 0; PinnedForStep = false;
+                Goal = goal; Age = 0; m_open.Clear(); PinnedForStep = false;
                 // Every undiscovered block has the same empty digest. Do not scan all cells just because a
                 // new goal reused this slot; Open/Restore mark only blocks that acquire discovered nodes.
                 Array.Fill(m_blockHashes, Fnv1aHash.Create().Value);
@@ -281,7 +279,8 @@ internal sealed partial class WorldNavigationRuntime {
                 m_pendingDirty = true;
             }
 
-            private bool Settled(int node) => m_stamp[node] == m_generation && m_position[node] == -2;
+            // Discovered this generation and no longer queued: popped by Expand, or restored as settled.
+            private bool Settled(int node) => m_stamp[node] == m_generation && !m_open.Contains(node);
 
             private void Queue(int node) {
                 if (m_pending[node]) { return; }
@@ -294,7 +293,7 @@ internal sealed partial class WorldNavigationRuntime {
             public WorldNavigationStatus ReadPath(int start, Span<int> path, out int length) {
                 length = 0;
                 if (!Settled(start)) {
-                    if (m_heapCount == 0) { return WorldNavigationStatus.Unreachable; }
+                    if (m_open.Count == 0) { return WorldNavigationStatus.Unreachable; }
                     Queue(start);
                     return WorldNavigationStatus.Pending;
                 }
@@ -306,9 +305,8 @@ internal sealed partial class WorldNavigationRuntime {
             }
 
             public bool Expand(Domain domain) {
-                if (m_heapCount == 0) { return false; }
-                var node = Pop();
-                m_position[node] = -2;
+                if (m_open.Count == 0) { return false; }
+                var node = m_open.Pop(new CostOrder(m_cost));
                 InvalidateNodeHash(node);
                 if (m_pending[node]) { m_pending[node] = false; PendingCount--; m_pendingDirty = true; }
                 Span<SharedEdge> edges = stackalloc SharedEdge[26];
@@ -323,45 +321,22 @@ internal sealed partial class WorldNavigationRuntime {
                 return true;
             }
 
-            private int Compare(int left, int right) {
-                var cost = m_cost[left].CompareTo(m_cost[right]);
-                return cost != 0 ? cost : left.CompareTo(right);
+            // Reverse Dijkstra from the goal: cost, then the lower index — a total order, so the heap never breaks
+            // a tie itself.
+            private readonly struct CostOrder(int[] cost) : INodeOrder {
+                public int Compare(int left, int right) {
+                    var byCost = cost[left].CompareTo(cost[right]);
+                    return byCost != 0 ? byCost : left.CompareTo(right);
+                }
             }
 
             private void Open(int node, int cost, int next) {
                 m_cost[node] = cost; m_next[node] = next;
                 InvalidateNodeHash(node);
+                var order = new CostOrder(m_cost);
                 if (m_stamp[node] != m_generation) {
-                    m_stamp[node] = m_generation; m_position[node] = m_heapCount; m_heap[m_heapCount++] = node;
-                }
-                var index = m_position[node];
-                while (index > 0) {
-                    var parent = (index - 1) / 2;
-                    if (Compare(m_heap[parent], node) <= 0) { break; }
-                    Swap(index, parent); index = parent;
-                }
-            }
-
-            private int Pop() {
-                var result = m_heap[0];
-                var last = m_heap[--m_heapCount];
-                if (m_heapCount == 0) { return result; }
-                m_heap[0] = last; m_position[last] = 0;
-                var index = 0;
-                while (true) {
-                    var left = index * 2 + 1;
-                    if (left >= m_heapCount) { break; }
-                    var right = left + 1;
-                    var best = right < m_heapCount && Compare(m_heap[right], m_heap[left]) < 0 ? right : left;
-                    if (Compare(m_heap[index], m_heap[best]) <= 0) { break; }
-                    Swap(index, best); index = best;
-                }
-                return result;
-            }
-
-            private void Swap(int a, int b) {
-                (m_heap[a], m_heap[b]) = (m_heap[b], m_heap[a]);
-                m_position[m_heap[a]] = a; m_position[m_heap[b]] = b;
+                    m_stamp[node] = m_generation; m_open.Push(node, order);
+                } else { m_open.Decrease(node, order); }
             }
 
             public WorldNavigationTreeCheckpoint Capture() {
@@ -381,7 +356,7 @@ internal sealed partial class WorldNavigationRuntime {
                 Goal = state.Goal; Age = state.Age;
                 foreach (var node in state.Nodes) {
                     if (node.Settled) {
-                        m_stamp[node.Node] = m_generation; m_position[node.Node] = -2;
+                        m_stamp[node.Node] = m_generation; m_open.Forget(node.Node);
                         m_cost[node.Node] = node.Cost; m_next[node.Node] = node.Next;
                         InvalidateNodeHash(node.Node);
                     } else { Open(node.Node, node.Cost, node.Next); }

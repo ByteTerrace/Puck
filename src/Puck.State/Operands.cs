@@ -479,11 +479,14 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
     /// <inheritdoc/>
     public override long Cost(RuleCompileContext context) => ((Board is { } board)
         ? (board.Topology.CellCount + board.Visits)
-        : (PatternCapacity.MaxWord * (1L + (TokenExpression?.Length ?? 0))));
+        : RuleWorkBudget.SaturatingMultiply(context.RowCapacity(Row),
+            RuleWorkBudget.SaturatingAdd(1L, RuleWorkBudget.ExpressionCost(TokenExpression ?? [], context))));
     /// <inheritdoc/>
     public override void CollectReads(List<RuleAccess> into) {
         into.Add(item: new RuleAccess(Row: Row, Key: null));
         RuleAccess.CollectReference(reference: KeyFrom, into: into);
+        if (FilterRow is not null) { into.Add(new RuleAccess(FilterRow, null)); }
+        if (TokenExpression is { } expression) { RuleDataflow.CollectExpression(expression, into); }
     }
 
     private long ReadMatch(IRuleReader reader) {
@@ -653,12 +656,14 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
     /// <param name="start">The token the word starts at, or <see langword="null"/> to read the whole row.</param>
     public static int ReadTupleWord(IRuleReader reader, StateRow row, CompiledExpressionToken[] expression, CellKind kind, Span<long> word, string? start = null) {
         var length = 0;
-        var cells = (row.Cells ?? []);
+        var store = reader.Store;
+        var count = store.CellCount(row);
 
         try {
-            for (var index = StartIndex(cells: cells, start: start); index < cells.Count; index++) {
-                reader.BoundTokenKey = cells[index].Key.Value;
-                reader.BoundPreviousKey = ((index > 0) ? cells[index - 1].Key.Value : null);
+            for (var index = StartIndex(store: store, row: row, start: start); index < count; index++) {
+                if (!store.TryKeyAt(row, index, out var key)) { continue; }
+                reader.BoundTokenKey = key.Value;
+                reader.BoundPreviousKey = index > 0 && store.TryKeyAt(row, index - 1, out var previous) ? previous.Value : null;
                 word[length++] = RuleEvaluation.TryEvaluateExpression(reader: reader, program: expression, kind: kind, value: out var raw) ? raw : 0L;
             }
         } finally {

@@ -82,7 +82,7 @@ public readonly record struct WorldFieldDescriptor(
 /// <param name="Value">The fixed literal or typed state input compared against.</param>
 public readonly record struct WorldFieldProgramCondition(
     WorldFieldHandle Field,
-    WorldFieldComparison Comparison,
+    ActionStateComparison Comparison,
     WorldFieldScalarInput Value
 );
 /// <summary>One typed write in a compiled <see cref="WorldFieldNode.Transform"/> node.</summary>
@@ -173,7 +173,7 @@ public abstract record WorldFieldNode(
     public sealed record Expose(
         WorldFieldNodeHandle Handle,
         WorldFieldHandle Field,
-        WorldFieldComparison Comparison,
+        ActionStateComparison Comparison,
         WorldFieldScalarInput Value,
         StateHandle Row,
         ImmutableArray<StateHandle> StateReads

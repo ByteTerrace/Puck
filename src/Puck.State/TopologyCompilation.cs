@@ -307,7 +307,11 @@ public static class TopologyCompilation {
         return true;
     }
 
-    private static bool FitsFixed(float value) => (
+    /// <summary>Returns whether an authored <see langword="float"/> is finite and lies inside the Q48.16 range
+    /// <see cref="Puck.Maths.FixedQ4816.FromDouble"/> converts without saturating — the one representability door
+    /// every validator asks before it hands an authored coordinate, edge, or scalar to the fixed-point simulation.</summary>
+    /// <param name="value">The authored value.</param>
+    public static bool FitsFixed(float value) => (
         float.IsFinite(f: value) &&
         (value >= (((double)long.MinValue) / 65536.0)) &&
         (value <= (((double)long.MaxValue) / 65536.0))

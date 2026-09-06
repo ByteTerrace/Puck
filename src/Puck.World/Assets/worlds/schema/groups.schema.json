@@ -186,7 +186,11 @@
                 ]
               },
               "principal": {
-                "description": "The owning principal for Principal; null otherwise. Never Group \u2014 a group owner is spelled through GroupId, not this field, so the two branches never overlap."
+                "description": "The owning principal for Principal; null otherwise. Never Group \u2014 a group owner is spelled through GroupId, not this field, so the two branches never overlap.",
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "groupId": {
                 "description": "The owning group\u0027s id for Group; null otherwise.",
@@ -203,10 +207,12 @@
                 ],
                 "properties": {
                   "offerer": {
-                    "description": "The principal that placed the subject into escrow \u2014 the sole reclaim beneficiary."
+                    "description": "The principal that placed the subject into escrow \u2014 the sole reclaim beneficiary.",
+                    "type": "string"
                   },
                   "recipient": {
-                    "description": "The principal named to accept the subject \u2014 the sole accept beneficiary. Never equal to Offerer (refused by name \u2014 an offer to oneself is not a trade)."
+                    "description": "The principal named to accept the subject \u2014 the sole accept beneficiary. Never equal to Offerer (refused by name \u2014 an offer to oneself is not a trade).",
+                    "type": "string"
                   },
                   "deadlineTick": {
                     "description": "The server tick at or after which WorldMutation.SettleOwnership\u0027s reclaim admits \u2014 the same tick unit EpochTick already rides. Before this tick, only an accept by Recipient can resolve the escrow.",

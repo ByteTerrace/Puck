@@ -241,14 +241,18 @@ Facts a script needs:
   never composed together.
 - `WorldSimulation.cs` / `HeadlessWorldSimulation.cs` — the two boot shapes'
   `IFixedStepSimulation`s. Windowed: per exact tick, the client submits seat
-  intents, the shared server-step shell runs, then the client post-step
-  (screens). Headless: the shared server-step
-  shell alone — no `WorldClient`, no screens.
-  `Puck.World.Server.WorldServerStepShell.Step` (not in this project) is the
-  shared step both wrap: `WorldServer.Step`, then the replay tape's `NoteTick`
-  and a caller-supplied `Action<ulong>` — here, the console wait gate's
-  `PublishTick` — one shared step so a boot-shape swap can never fork tape/
-  wait-gate semantics. `Puck.Launcher.FixedStepPump` (not in this project)
+  intents, the boot stepper runs, then the client post-step (screens).
+  Headless: the boot stepper alone — no `WorldClient`, no screens.
+- `WorldBootStepper.cs` — the boot instance's step and host clock both shapes
+  hold: when boot is due it runs
+  `Puck.World.Server.WorldServerStepShell.Step` (not in this project) —
+  `WorldServer.Step`, then the replay tape's `NoteTick` and a caller-supplied
+  `Action<ulong>`, here the console wait gate's and capture scheduler's
+  `PublishTick` — and counts the host work a `world.wait` is clocked by; when
+  it is not (paused, rate 0) it drains an administrative mutation and releases
+  a stalled wait. One stepper, so a boot-shape swap can never fork tape/
+  wait-gate/capture semantics. It is also the `IWorldSimulationClock` the
+  frame producer reads. `Puck.Launcher.FixedStepPump` (not in this project)
   owns the accumulator both boot shapes' hosted services drive it through.
 - `WorldInstanceHost.cs` / `WorldInstance.cs` — the process's running world
   instances. The boot world is one entry (name `boot`) beside every instance
@@ -669,6 +673,11 @@ eight-line chunks (the 64-token expression ceiling bounds how many lines one
 expression ORs together) into `tttWinner` (0 none, 1 X, 2 O, 3 draw at 64
 moves). `world.state tttBoard`/`tttWinner` is the read-back; there is no
 dedicated verb, since the generic one already answers it.
+
+The garden's [Solitaire collection](Assets/worlds/games/README.md) adds Klondike
+draw-one/draw-three, Spider with one/two/four suits, and FreeCell through authored
+state and rules. Its guide covers table selection, card identities, pile IDs,
+and the console request protocol.
 
 World-space creation text uses the document's optional `text` catalog. Every
 font row has a stable name, a path relative to the world document, a

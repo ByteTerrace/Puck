@@ -17,17 +17,33 @@ public static class FixedTickConversion {
     /// <c>Puck.World</c>'s fixed simulation step runs at.</summary>
     public const ulong TicksPerSecond = 50400UL;
 
-    /// <summary>Converts a duration to the smallest whole tick count no less than its exact value, so a positive
-    /// duration always advances by at least one tick. Non-positive durations convert to zero.</summary>
+    /// <summary>Converts a duration to the smallest whole engine-tick count no less than its exact value — see
+    /// <see cref="DurationTicks(FixedQ4816, ulong)"/> at <see cref="TicksPerSecond"/>.</summary>
     /// <param name="seconds">The duration to convert.</param>
     /// <returns><paramref name="seconds"/> in engine ticks, rounded up; <c>0</c> when <paramref name="seconds"/> is
     /// zero or negative.</returns>
-    public static ulong DurationEngineTicks(FixedQ4816 seconds) {
+    public static ulong DurationEngineTicks(FixedQ4816 seconds) => DurationTicks(
+        ratePerSecond: TicksPerSecond,
+        seconds: seconds
+    );
+    /// <summary>Converts a duration to the smallest whole tick count no less than its exact value at
+    /// <paramref name="ratePerSecond"/> ticks per second, so a positive duration always advances by at least one tick;
+    /// a non-positive duration converts to zero. The one rounding rule every tick clock in the engine shares — the
+    /// fixed engine tick (<see cref="DurationEngineTicks"/>) and a document's authored simulation rate alike — so two
+    /// clocks can never round the same authored seconds differently. <see cref="Int128"/> intermediate arithmetic keeps
+    /// the product exact for every raw value and rate, so a duration that divides the rate evenly always round-trips
+    /// to the same tick count.</summary>
+    /// <param name="seconds">The duration to convert.</param>
+    /// <param name="ratePerSecond">The ticks in one second; <c>0</c> converts every duration to zero ticks.</param>
+    /// <returns><paramref name="seconds"/> in ticks, rounded up; <c>0</c> when <paramref name="seconds"/> is zero or
+    /// negative.</returns>
+    /// <exception cref="OverflowException">The rounded tick count exceeds <see cref="ulong.MaxValue"/>.</exception>
+    public static ulong DurationTicks(FixedQ4816 seconds, ulong ratePerSecond) {
         if (seconds <= FixedQ4816.Zero) {
             return 0UL;
         }
 
-        var scaled = (((Int128)seconds.Value) * TicksPerSecond);
+        var scaled = (((Int128)seconds.Value) * ratePerSecond);
 
         return checked((ulong)scaled.CeilingDivide(divisor: ((Int128)(1L << FixedQ4816.FractionBitCount))));
     }

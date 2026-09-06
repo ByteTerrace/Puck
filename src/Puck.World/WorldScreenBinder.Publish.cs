@@ -280,7 +280,7 @@ internal sealed partial class WorldScreenBinder {
     /// <param name="hostFrame">The frame the room is rendering this frame. Offscreen content derives its own
     /// submission from this rather than building one beside it, so every per-frame lever reaches a jumbotron by
     /// construction (see <c>SdfCameraView.Resolve</c>).</param>
-    public void RenderViews(in FrameContext context, SdfProgram program, int revision, IReadOnlyList<DynamicTransform> transforms, float time, ulong authoritativeTick, SdfFrame hostFrame) {
+    public void RenderViews(in FrameContext context, SdfProgram program, int revision, DynamicTransform[] transforms, float time, ulong authoritativeTick, SdfFrame hostFrame) {
         if (
             m_disposed ||
             (m_viewStack is not { } stack)

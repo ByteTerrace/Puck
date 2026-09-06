@@ -28,23 +28,10 @@ public sealed class WorldDynamicsCommandModule(IWorldConsoleAuthority authority)
         };
     }
 
-    // One pass over the whole document, grouped by the referenced row name — every row's census then looks itself up
-    // rather than each re-walking the document.
-    private static Dictionary<string, ReferenceCounts> CountReferencesByRow(WorldDefinition definition) {
-        var counts = new Dictionary<string, ReferenceCounts>(comparer: StringComparer.Ordinal);
-
-        foreach (var reference in WorldDefinitionRows.EnumerateDynamicsReferences(definition: definition)) {
-            counts[reference.RowName] = (counts.TryGetValue(
-                key: reference.RowName,
-                value: out var existing
-            )
-                ? existing
-                : default
-            ).Increment(section: reference.Section);
-        }
-
-        return counts;
-    }
+    private static Dictionary<string, ReferenceCounts> CountReferencesByRow(WorldDefinition definition) => WorldReferenceCensus.CountByRow(
+        references: WorldDefinitionRows.EnumerateDynamicsReferences(definition: definition),
+        increment: static (ReferenceCounts counts, string section) => counts.Increment(section: section)
+    );
     private static string FormatRaw32(long raw) => (raw / 4294967296.0).ToString(
         format: "0.###",
         provider: CultureInfo.InvariantCulture

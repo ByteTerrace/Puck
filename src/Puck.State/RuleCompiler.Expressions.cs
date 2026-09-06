@@ -209,48 +209,29 @@ public static partial class RuleCompiler {
             RequireKind(operation, depth - 1, CellKind.Int);
             return new CompiledExpressionToken(Operation: operation);
         }
-        CompiledExpressionToken ResolveBoardShift(ValueToken.BoardShift shift) {
-            if (kind != CellKind.Int) { throw Malformed("token 'BoardShift' is admitted in kind=int expressions only"); }
-            if (context.FindTopology(name: (shift.Topology ?? string.Empty)) is not { } topology) {
-                throw Malformed($"token 'BoardShift' names no discrete topology '{shift.Topology}'");
+        // The one door every board token (BoardShift/BoardFill/BoardImage) enters through: kind=int only, a declared
+        // discrete topology whose mask fits, then the token's own direction/element lookup (resolveIndex answers -1
+        // for an unknown name) folded into the same neighbour query — three tokens, one refusal vocabulary.
+        CompiledExpressionToken ResolveBoard(ExpressionOp operation, string? topologyName, string verbPhrase, string indexKind, string? indexName, Func<CompiledTopology, string, int> resolveIndex) {
+            if (kind != CellKind.Int) { throw Malformed($"token '{operation}' is admitted in kind=int expressions only"); }
+            if (context.FindTopology(name: (topologyName ?? string.Empty)) is not { } topology) {
+                throw Malformed($"token '{operation}' names no discrete topology '{topologyName}'");
             }
             if (topology.CellCount > BoardMask.MaxCells) {
-                throw Malformed($"token 'BoardShift' shifts a mask of at most {BoardMask.MaxCells} cells; '{shift.Topology}' has {topology.CellCount}");
+                throw Malformed($"token '{operation}' {verbPhrase} a mask of at most {BoardMask.MaxCells} cells; '{topologyName}' has {topology.CellCount}");
             }
-            var direction = topology.Direction(token: (shift.Direction ?? string.Empty));
-            if (direction < 0) { throw Malformed($"token 'BoardShift' names no direction '{shift.Direction}' of '{shift.Topology}'"); }
-            Require(ExpressionOp.BoardShift, 1);
-            RequireKind(ExpressionOp.BoardShift, depth - 1, CellKind.Int);
-            return new CompiledExpressionToken(Operation: ExpressionOp.BoardShift, Board: new BoardNeighbourQuery(topology: topology, direction: direction));
+            var index = resolveIndex(topology, (indexName ?? string.Empty));
+            if (index < 0) { throw Malformed($"token '{operation}' names no {indexKind} '{indexName}' of '{topologyName}'"); }
+            Require(operation, 1);
+            RequireKind(operation, depth - 1, CellKind.Int);
+            return new CompiledExpressionToken(Operation: operation, Board: new BoardNeighbourQuery(topology: topology, direction: index));
         }
-        CompiledExpressionToken ResolveBoardFill(ValueToken.BoardFill fill) {
-            if (kind != CellKind.Int) { throw Malformed("token 'BoardFill' is admitted in kind=int expressions only"); }
-            if (context.FindTopology(name: (fill.Topology ?? string.Empty)) is not { } topology) {
-                throw Malformed($"token 'BoardFill' names no discrete topology '{fill.Topology}'");
-            }
-            if (topology.CellCount > BoardMask.MaxCells) {
-                throw Malformed($"token 'BoardFill' fills a mask of at most {BoardMask.MaxCells} cells; '{fill.Topology}' has {topology.CellCount}");
-            }
-            var direction = topology.Direction(token: (fill.Direction ?? string.Empty));
-            if (direction < 0) { throw Malformed($"token 'BoardFill' names no direction '{fill.Direction}' of '{fill.Topology}'"); }
-            Require(ExpressionOp.BoardFill, 1);
-            RequireKind(ExpressionOp.BoardFill, depth - 1, CellKind.Int);
-            return new CompiledExpressionToken(Operation: ExpressionOp.BoardFill, Board: new BoardNeighbourQuery(topology: topology, direction: direction));
-        }
-        CompiledExpressionToken ResolveBoardImage(ValueToken.BoardImage image) {
-            if (kind != CellKind.Int) { throw Malformed("token 'BoardImage' is admitted in kind=int expressions only"); }
-            if (context.FindTopology(name: (image.Topology ?? string.Empty)) is not { } topology) {
-                throw Malformed($"token 'BoardImage' names no discrete topology '{image.Topology}'");
-            }
-            if (topology.CellCount > BoardMask.MaxCells) {
-                throw Malformed($"token 'BoardImage' carries a mask of at most {BoardMask.MaxCells} cells; '{image.Topology}' has {topology.CellCount}");
-            }
-            var element = topology.Element(name: (image.Element ?? string.Empty));
-            if (element < 0) { throw Malformed($"token 'BoardImage' names no symmetry element '{image.Element}' of '{image.Topology}'"); }
-            Require(ExpressionOp.BoardImage, 1);
-            RequireKind(ExpressionOp.BoardImage, depth - 1, CellKind.Int);
-            return new CompiledExpressionToken(Operation: ExpressionOp.BoardImage, Board: new BoardNeighbourQuery(topology: topology, direction: element));
-        }
+        CompiledExpressionToken ResolveBoardShift(ValueToken.BoardShift shift) =>
+            ResolveBoard(ExpressionOp.BoardShift, shift.Topology, "shifts", "direction", shift.Direction, static (topology, token) => topology.Direction(token: token));
+        CompiledExpressionToken ResolveBoardFill(ValueToken.BoardFill fill) =>
+            ResolveBoard(ExpressionOp.BoardFill, fill.Topology, "fills", "direction", fill.Direction, static (topology, token) => topology.Direction(token: token));
+        CompiledExpressionToken ResolveBoardImage(ValueToken.BoardImage image) =>
+            ResolveBoard(ExpressionOp.BoardImage, image.Topology, "carries", "symmetry element", image.Element, static (topology, name) => topology.Element(name: name));
         CompiledExpressionToken IntArity(ExpressionOp operation, int arity) {
             if (kind != CellKind.Int) { throw Malformed($"token '{operation}' is admitted in kind=int expressions only"); }
             Require(operation, arity);

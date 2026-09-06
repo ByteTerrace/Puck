@@ -181,7 +181,11 @@ Nothing here carries a `World` name — a state library names no world.
   the cells it reads and writes (`CollectReads`/`CollectWrites` into
   `RuleAccess` lists). `CompiledCellRef` is the one key-indirection carrier
   (`$cell:`, a bound key, an `$expr:` key that compiles to an implicit binding
-  read back through `BindingKeyFact`, or a document project's `KeyFact`).
+  read back through `BindingKeyFact`, a `$zone:` endpoint, or a document project's `KeyFact`).
+  `$zone:<ordered-zone>:first|last` preserves the member's original string key
+  and reads the active store, including uncommitted frame transfers. An empty
+  zone resolves to the empty key: reads are absent and writes refuse. Gate a
+  top-card write on a nonempty pile.
 - *Evaluation:* `RuleEvaluator` runs a compiled family over an `IRuleHost` —
   gates in array order, bindings before the gate, Edge/Level latching per
   binding in a `RuleLatch` (simulation state: it hashes, flattens to a
@@ -227,7 +231,11 @@ Nothing here carries a `World` name — a state library names no world.
   (the write-after-read and write-after-write pairs document order decides,
   skipping pairs whose gates pin one cell to disjoint ranges), and
   `RuleWorkBudget` (the pinned-cell exclusion trie, contributor lines, writer
-  counts, gate/expression/effect costs) over the facts' own answers.
+  counts, gate/expression/effect costs) over the facts' own answers. A non-board
+  pattern is priced by its source row's declared capacity times one match step
+  plus the actual per-token expression cost, with saturating arithmetic.
+  Its read set includes the source, attribute row, key indirection, and token
+  expression dependencies.
 - *Tables:* `TableDocument` (`puck.table.v1`), `TableEntryDocument`, and
   `TableCanonicalizer` (validate → normalize → canonicalize), with
   `TableRow` as the name/source/hash reference a document pins one by and
@@ -236,7 +244,7 @@ Nothing here carries a `World` name — a state library names no world.
   `shuffle`, `sortZone`, `sortKeyed`, `writeSet`, `boardCombine`, `arrange`,
   `push`, `clearEnclosed`, `observe`),
   `ZoneSelector`, and `SortKey`. `clearEnclosed`'s `from` and `writeSet`'s
-  `setKey` each accept a dynamic key (`TransformStateEffect.KeyRef`,
+  `setKey`, and a transfer's `key` accept a dynamic key (`TransformStateEffect.KeyRef`,
   resolved live in `RuleEvaluator.Effects.Fire` before the mutation
   submits) alongside a literal cell: a rule gated on the held token paints
   `plan` from `legal[$cell:held:token]` after a `boardCombine clear`.

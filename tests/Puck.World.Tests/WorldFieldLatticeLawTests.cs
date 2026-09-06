@@ -206,7 +206,7 @@ public sealed class WorldFieldLatticeLawTests {
     public void ARowReferencedReactionScalarModulatesChemistryOnlyWhileTheRowIsNonzero() {
         var lattice = Fixtures.BuildLattice(document: (FilledFields(fill: new WorldLatticeFill.Rect(MaxX: 32f, MaxZ: 32f, MinX: 0f, MinZ: 0f, Value: 1f), width: 4, depth: 4) with {
             Reactions = [new WorldReaction.Transform(
-                When: [new WorldFieldCondition(Comparison: WorldFieldComparison.Greater, Field: "grass", Value: 0f)],
+                When: [new WorldFieldCondition(Comparison: ActionStateComparison.Greater, Field: "grass", Value: 0f)],
                 Then: [new WorldFieldWrite(Field: "grass", Op: WorldFieldWriteOp.Add, Value: new WorldLatticeScalar(Row: "season"))]
             )],
         }), state: [new WorldStateRow(Name: CellName.Parse(candidate: "season"), Kind: CellKind.Fixed)]);
@@ -368,7 +368,7 @@ public sealed class WorldFieldLatticeLawTests {
     [Fact]
     public void ExposureWritesTheCompiledStateHandle() {
         var document = Fields(reactions: [new WorldReaction.Expose(
-            Comparison: WorldFieldComparison.Greater,
+            Comparison: ActionStateComparison.Greater,
             Field: "heat",
             Row: "exposed",
             Value: 1f
@@ -533,7 +533,7 @@ public sealed class WorldFieldLatticeLawTests {
                 When: [],
                 Then: [new WorldFieldWrite(Field: "heat", Op: WorldFieldWriteOp.Add, Value: 1f)]
             ),
-            new WorldReaction.Expose(Comparison: WorldFieldComparison.Greater, Field: "heat", Row: "exposed", Value: 1f),
+            new WorldReaction.Expose(Comparison: ActionStateComparison.Greater, Field: "heat", Row: "exposed", Value: 1f),
         ]);
         var lattice = Fixtures.BuildLattice(
             document: document,
@@ -663,7 +663,7 @@ public sealed class WorldFieldLatticeLawTests {
         var tinyCell = Fixtures.WithLattice(definition: Fixtures.BuildDocument(), composite: Fields(cellSize: 0.000001f));
         var invalidComparison = Fixtures.WithLattice(definition: Fixtures.BuildDocument(), composite: Fields(reactions: [
             new WorldReaction.Transform(
-                When: [new WorldFieldCondition(Comparison: ((WorldFieldComparison)byte.MaxValue), Field: "heat", Value: 0f)],
+                When: [new WorldFieldCondition(Comparison: ((ActionStateComparison)byte.MaxValue), Field: "heat", Value: 0f)],
                 Then: [new WorldFieldWrite(Field: "heat", Op: WorldFieldWriteOp.Set, Value: 1f)]
             ),
         ]));

@@ -25,6 +25,10 @@ public static class RuleFacts {
     /// on a <c>compareState</c> <c>key</c>/<c>comparandKey</c> and on a world-scope effect's <c>key</c>/<c>fromKey</c>;
     /// a body-reference token spells the same indirection as <c>cell:&lt;row&gt;:&lt;key&gt;</c>.</summary>
     public const string CellKeyPrefix = "$cell:";
+    /// <summary>The dynamic key prefix; <c>$zone:&lt;row&gt;:first|last</c> returns the endpoint member's
+    /// original string key from an ordered zone in the active store. An empty zone resolves to the empty key,
+    /// which reads absent and cannot address a write.</summary>
+    public const string ZoneKeyPrefix = "$zone:";
     /// <summary>The prefix of a key computed by an expression — <c>row[from + 1]</c> in the infix spelling — which
     /// compiles to an implicit rule binding evaluated before the gate and read back as the cell key; the text after
     /// the prefix is the expression's canonical infix spelling.</summary>

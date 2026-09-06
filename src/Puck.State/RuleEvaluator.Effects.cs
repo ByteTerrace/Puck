@@ -40,6 +40,7 @@ public sealed partial class RuleEvaluator {
                 var transform = transformState.Transform;
                 if (transformState.KeyRef is { } keyRef) {
                     transform = transform switch {
+                        StateTransform.Transfer transfer => transfer with { Key = ResolveKey(key: transfer.Key, keyFrom: keyRef, tick: tick) },
                         StateTransform.ClearEnclosed enclosed => enclosed with { From = ResolveKey(key: enclosed.From, keyFrom: keyRef, tick: tick) },
                         StateTransform.WriteSet writeSet => writeSet with { SetKey = ResolveKey(key: writeSet.SetKey, keyFrom: keyRef, tick: tick) },
                         _ => transform,

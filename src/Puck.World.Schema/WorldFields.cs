@@ -520,7 +520,7 @@ public sealed class WorldLatticeScalarJsonConverter : System.Text.Json.Serializa
 /// <param name="Comparison">The comparison.</param>
 /// <param name="Value">The scalar compared against (literal or state-row reference).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldFieldCondition(string Field, WorldFieldComparison Comparison, WorldLatticeScalar Value);
+public sealed record WorldFieldCondition(string Field, ActionStateComparison Comparison, WorldLatticeScalar Value);
 /// <summary>One per-cell write of a <see cref="WorldReaction.Transform"/>.</summary>
 /// <param name="Field">The field written at the cell.</param>
 /// <param name="Op">Set or add.</param>
@@ -566,7 +566,7 @@ public abstract record WorldReaction {
     /// <param name="Comparison">The comparison.</param>
     /// <param name="Value">The constant compared against.</param>
     /// <param name="Row">The keyed int state row written, keyed by body index.</param>
-    public sealed record Expose(string Field, WorldFieldComparison Comparison, WorldLatticeScalar Value, string Row) : WorldReaction;
+    public sealed record Expose(string Field, ActionStateComparison Comparison, WorldLatticeScalar Value, string Row) : WorldReaction;
     /// <summary>Moves <paramref name="Field"/> downhill, cell to cell, over the combined surface height of
     /// <paramref name="Over"/> plus <paramref name="Field"/>'s own value -- mass-conserving except where a cell's
     /// clamp to its declared [min, max] binds. Every cell donates an equal share of its previous-step value to each
@@ -581,22 +581,6 @@ public abstract record WorldReaction {
     /// <param name="SpillRow">The scalar <c>fixed</c>-kind state row an edge cell's outward share accumulates into
     /// each step (a clamped add), or <see langword="null"/> to treat every lattice edge as a wall.</param>
     public sealed record Flow(string Field, WorldLatticeScalar Rate, IReadOnlyList<string>? Over = null, string? SpillRow = null) : WorldReaction;
-}
-/// <summary>How a field value compares against a constant.</summary>
-[JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldFieldComparison>))]
-public enum WorldFieldComparison : byte {
-    /// <summary>Equal.</summary>
-    Equal,
-    /// <summary>Not equal.</summary>
-    NotEqual,
-    /// <summary>Less than.</summary>
-    Less,
-    /// <summary>Less than or equal.</summary>
-    LessOrEqual,
-    /// <summary>Greater than.</summary>
-    Greater,
-    /// <summary>Greater than or equal.</summary>
-    GreaterOrEqual,
 }
 /// <summary>How a transform writes a field cell.</summary>
 [JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldFieldWriteOp>))]
