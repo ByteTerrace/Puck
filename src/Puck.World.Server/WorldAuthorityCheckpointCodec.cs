@@ -7,7 +7,7 @@ namespace Puck.World.Server;
 /// <see cref="WireWriter"/>/<see cref="WireReader"/> discipline every peer decoder in this engine follows: a
 /// <c>"PCKP"</c> magic, a fail-closed <c>u16</c> version (refuses any value other than the current one by name — a checkpoint
 /// carries no compat path), a <c>sha256-64</c> content pin of the whole framed body, then that body — itself a
-/// <c>sha256-64</c> pin of the captured definition JSON followed by the checkpoint's nine sections in the record's
+/// <c>sha256-64</c> pin of the captured definition JSON followed by the checkpoint's ten sections in the record's
 /// own declared order, each its own length-prefixed block. Journal entries and a buffered
 /// <see cref="WorldPendingOpCheckpoint.Mutate"/> op reuse <see cref="WorldSubmissionCodec"/>'s own mutation leaf.
 /// Committed journal entries permit the canonical world actor through the trusted-storage entry point; pending
@@ -25,7 +25,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     private const int MaxStringBytes = WireLimits.MaxStringBytes;
     // The first format is still under development. Change its shape directly; no compatibility reader or
     // development-only version sequence is maintained.
-    private const ushort SupportedVersion = 2;
+    private const ushort SupportedVersion = 3;
 
     private delegate T ReadItem<T>(ref WireReader reader);
     private delegate T ReadStructItem<T>(ref WireReader reader) where T : struct;
@@ -51,6 +51,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         body.WriteBlock(value: EncodeHostRow(section: checkpoint.HostRow));
         body.WriteBlock(value: EncodeFields(section: checkpoint.Fields));
         body.WriteBlock(value: EncodeSearch(section: (checkpoint.Search ?? WorldSearchCheckpoint.Empty)));
+        body.WriteBlock(value: EncodeBoardEnforcement(section: (checkpoint.BoardEnforcement ?? WorldBoardEnforcementCheckpoint.Empty)));
 
         var bodyBytes = body.ToArray();
         var writer = new WireWriter();
@@ -173,6 +174,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "search section",
             maxBytes: MaxSectionBytes
         );
+        var boardEnforcementBytes = body.ReadBlock(
+            field: "board enforcement section",
+            maxBytes: MaxSectionBytes
+        );
 
         if (!body.TryFinish(failure: out var bodyFailure)) {
             reason = $"checkpoint body: {bodyFailure}";
@@ -267,6 +272,13 @@ public static partial class WorldAuthorityCheckpointCodec {
         )) {
             return false;
         }
+        if (!TryDecodeBoardEnforcement(
+            bytes: boardEnforcementBytes,
+            reason: out reason,
+            section: out var boardEnforcement
+        )) {
+            return false;
+        }
 
         checkpoint = new WorldAuthorityCheckpoint(
             Escrow: escrow,
@@ -278,7 +290,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             OwnedWorlds: ownedWorlds,
             Population: population,
             Server: server,
-            Search: search
+            Search: search,
+            BoardEnforcement: boardEnforcement
         );
         reason = string.Empty;
 

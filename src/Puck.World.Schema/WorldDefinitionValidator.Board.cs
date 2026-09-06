@@ -39,5 +39,9 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.board.plan '{plan}' must name a board row over topology '{board.Topology}'.");
             }
         }
+
+        if ((board.Enforcement == WorldBoardEnforcement.Return) && ((board.Move is null) || (board.Verdict is null))) {
+            errors.Add(item: $"{path}.board.enforcement 'Return' requires both board.move and board.verdict.");
+        }
     }
 }

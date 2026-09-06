@@ -676,6 +676,7 @@ public sealed partial class WorldServer {
 
         m_ruleGateHeld.Prune(compiled: m_rules);
         m_interactionGateHeld.Prune(compiled: m_interactions);
+        PruneBoardEnforcement(definition: definition);
         ReconcileDecisions();
         ReconcilePatterns(definition);
         m_search.Rebuild(definition: definition, rules: m_rules, patterns: m_patterns, tables: m_tables);
@@ -928,6 +929,7 @@ public sealed partial class WorldServer {
             tick: tick,
             stepTicks: context.StepTicks
         );
+        StepBoardEnforcement(tick: tick);
         StepSearch(tick: tick);
         StepFields(tick: tick);
         // Escrow recovery evaluates on the SAME terms, right beside rules — see ReclaimExpiredEscrows' own remarks.

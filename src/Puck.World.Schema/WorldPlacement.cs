@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Text.Json.Serialization;
 using Puck.World.Authoring;
 using Puck.Maths;
+using Puck.Abstractions.Documents;
 
 namespace Puck.World;
 
@@ -96,6 +97,20 @@ public sealed record WorldPlacementFace(
 /// sphere follows the carrier, and an inactive carrier senses nobody rather than sensing at a stale point.</summary>
 /// <param name="Radius">The sensing radius, world units. Must be finite and positive (validated).</param>
 public sealed record WorldPlacementRegion(float Radius);
+/// <summary>How a tabletop board binding treats an illegal move — the author's choice per table, engine-side and
+/// game-agnostic: the judge that computes <see cref="WorldPlacementBoard.Verdict"/> is authored per world, and this
+/// field only decides what the engine itself does once that verdict refuses.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldBoardEnforcement>))]
+public enum WorldBoardEnforcement : byte {
+    /// <summary>An illegal move is recorded and the physical piece is left where it settled — the diegetic
+    /// tabletop, unchanged from today's behaviour.</summary>
+    Record,
+
+    /// <summary>An illegal move is recorded, and the engine also poses the piece that moved back onto the move's
+    /// declared origin cell — a teaching table that refuses the move rather than letting the players fix the
+    /// board.</summary>
+    Return,
+}
 /// <summary>A placement's board facet — the tabletop primitive. Anchors a <c>state.lattices</c> Grid topology
 /// (which already carries its own world-space <c>origin</c>/<c>cellSize</c> frame) to this placement, so a chess
 /// set, a checkers board, or a card table is one placement/body carrying one topology — carriable as a unit once an
@@ -107,12 +122,17 @@ public sealed record WorldPlacementRegion(float Radius);
 /// <param name="Topology">The state.lattices Grid topology this placement anchors.</param>
 /// <param name="Occupancy">The board-typed row over <paramref name="Topology"/> holding current occupant codes.</param>
 /// <param name="Turn">An optional phase row read back beside the frame.</param>
-/// <param name="Verdict">An optional row read back beside the frame (a ruling on the last recorded change).</param>
-/// <param name="Move">An optional keyed row (conventionally cells "from"/"to") read back beside the frame.</param>
+/// <param name="Verdict">An optional row read back beside the frame (a ruling on the last recorded change). Required
+/// when <paramref name="Enforcement"/> is <see cref="WorldBoardEnforcement.Return"/> (validated).</param>
+/// <param name="Move">An optional keyed row (conventionally cells "from"/"to") read back beside the frame. Required
+/// when <paramref name="Enforcement"/> is <see cref="WorldBoardEnforcement.Return"/> (validated).</param>
 /// <param name="Plan">An optional board-typed row over <paramref name="Topology"/> a future addon paints candidate
 /// cells into for highlight rendering — the seam, not the addon.</param>
+/// <param name="Enforcement">What the engine itself does once <paramref name="Verdict"/> refuses a move.</param>
+/// <param name="Accept">The <paramref name="Verdict"/> value the judge writes to accept a move — any other value is
+/// a refusal.</param>
 public sealed record WorldPlacementBoard(string Topology, string Occupancy, string? Turn = null, string? Verdict = null,
-    string? Move = null, string? Plan = null);
+    string? Move = null, string? Plan = null, WorldBoardEnforcement Enforcement = WorldBoardEnforcement.Record, long Accept = 1L);
 /// <summary>A placement's grip facet — overrides the world's <see cref="WorldCollision.DefaultHold"/> hold
 /// policy for every collider this row compiles, composing as the tighter authoring layer: present, it decides;
 /// absent, the row's colliders fall back to the world default. Requires <see cref="WorldPlacement.Solid"/> (nothing

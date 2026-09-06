@@ -411,6 +411,24 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         Assert.Contains(actualString: reason, expectedSubstring: "version 1");
     }
     [Fact]
+    public void Version_two_envelope_refuses_by_name() {
+        var checkpoint = CapturedCheckpoint();
+        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
+        var downgraded = ((byte[])encoded.Clone());
+
+        // Version 2 predates the board-enforcement latch section. Refuse that shorter layout rather than reading
+        // a checkpoint that carries no remembered verdicts as though it always carried none.
+        downgraded[4] = 2;
+        downgraded[5] = 0;
+
+        Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
+            bytes: downgraded,
+            checkpoint: out _,
+            reason: out var reason
+        ));
+        Assert.Contains(actualString: reason, expectedSubstring: "version 2");
+    }
+    [Fact]
     public void Version_four_envelope_refuses_by_name() {
         var checkpoint = CapturedCheckpoint();
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
