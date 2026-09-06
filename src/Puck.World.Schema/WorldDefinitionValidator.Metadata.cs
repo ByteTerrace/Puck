@@ -1537,8 +1537,8 @@ public static partial class WorldDefinitionValidator {
     // a positive rate (0 divides nothing).
     private static void ValidateSimulation(WorldSimulationDefaults? simulation, List<string> errors) {
         if (simulation is null) {
-            // Unauthored — WorldDefinition.SimulationRateHz reads 0 (a resident, non-stepping world; the standard
-            // 240 Hz is authored in standard.world.json). Nothing to check.
+            // Unauthored — WorldDefinition.SimulationRateHz reads UnauthoredSimulationRateHz, a valid divisor by
+            // construction. Nothing to check.
             return;
         }
 

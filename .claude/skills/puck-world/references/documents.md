@@ -161,9 +161,9 @@ mutates them in session and no grant subject names them:
 - **`Simulation`** (`WorldSimulationDefaults`, `WorldDefinition.cs`) — one
   field, `RateHz` (required in an authored section), the authoritative
   server's fixed step rate in Hz. Read through
-  `WorldDefinition.SimulationRateHz` (`Simulation?.RateHz ?? 0` — absence is
-  a rate-0 resident world; the standard 240 Hz is authored in
-  `standard.world.json`) — never `Simulation` directly, since every consumer
+  `WorldDefinition.SimulationRateHz` (`Simulation?.RateHz ?? UnauthoredSimulationRateHz` —
+  absence runs the shipped rate, 30 Hz; the distinct rate-0 resident world is
+  reached only by authoring `rateHz` 0 by name) — never `Simulation` directly, since every consumer
   wants the resolved value, not the presence/absence of
   the section. MUST be 0 or a positive divisor of
   `Puck.Maths.FixedTickConversion.TicksPerSecond` (50400) exactly, refused

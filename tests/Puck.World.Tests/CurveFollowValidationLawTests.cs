@@ -104,7 +104,7 @@ public sealed class CurveFollowValidationLawTests {
     public void RateAtResidentSimulationRateRefusesWhileASteppingRatePasses() {
         var withTarget = WithFollowTarget(curve: "path", rate: 2f);
 
-        var denied = (withTarget with { Simulation = null }); // rate-0, resident, non-stepping
+        var denied = (withTarget with { Simulation = new WorldSimulationDefaults(RateHz: 0) }); // resident, non-stepping
         var admitted = withTarget;
 
         Assert.False(condition: TryValidate(definition: denied, reason: out var deniedReason));

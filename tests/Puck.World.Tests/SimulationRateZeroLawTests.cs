@@ -30,6 +30,27 @@ namespace Puck.World.Tests;
 /// check would otherwise reopen on every rate-0 world.
 /// </summary>
 public sealed class SimulationRateZeroLawTests {
+    /// <summary>An unauthored <c>simulation</c> section is a distinct case from an authored rate-0: it runs at
+    /// <see cref="WorldDefinition.UnauthoredSimulationRateHz"/>, not the resident, non-stepping rate, and still
+    /// validates as an ordinary stepping world.</summary>
+    [Fact]
+    public void UnauthoredSimulation_RunsAtTheShippedRate_NotResidentZero() {
+        var unauthored = (Fixtures.BuildDocument() with { Simulation = null });
+
+        Assert.Equal(expected: WorldDefinition.UnauthoredSimulationRateHz, actual: unauthored.SimulationRateHz);
+        Assert.NotEqual(expected: 0, actual: unauthored.SimulationRateHz);
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: unauthored, neighbours: null, reason: out var reason), userMessage: $"an unauthored simulation section was expected to validate; refused: {reason}");
+
+        // 30 Hz, the fixture's own 3-second authored grace: a finite 90-tick deadline, never the rate-0 NEVER
+        // (null) a resident world would park with.
+        var population = new WorldPopulation(definition: unauthored);
+
+        population.ActivateSeat(profile: null, slot: 0);
+        population.DeactivateSeat(slot: 0, tick: 0UL);
+
+        Assert.True(condition: population.IsSeatParked(slot: 0));
+        Assert.Equal(expected: ((long?)90L), actual: population.ParkedRemainingTicks(index: 0, tick: 0UL));
+    }
     [Fact]
     public void ValidatorAdmitsRateZero_RefusesNegativeRate() {
         var zeroRate = (Fixtures.BuildDocument() with { Simulation = new WorldSimulationDefaults(RateHz: 0) });

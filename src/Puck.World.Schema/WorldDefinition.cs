@@ -87,6 +87,10 @@ public sealed record WorldDefinition(
 ) {
     /// <summary>The document schema version. A loader rejects any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.def.v1";
+    /// <summary>The rate a world with no <see cref="Simulation"/> section runs at. Distinct from the resident,
+    /// non-stepping rate, which a world reaches only by authoring <c>simulation: {"rateHz": 0}</c> explicitly. See
+    /// <see cref="SimulationRateHz"/>.</summary>
+    public const int UnauthoredSimulationRateHz = 30;
 
     /// <summary>Gets the data-side addon descriptors — ABSENT resolves to none.</summary>
     [JsonIgnore]
@@ -395,8 +399,9 @@ public sealed record WorldDefinition(
     [JsonIgnore]
     public IReadOnlyList<WorldProbe> Probes => (ProbesRaw ?? []);
     /// <summary>Gets the effective simulation rate in Hz — <see cref="Simulation"/>'s authored
-    /// <see cref="WorldSimulationDefaults.RateHz"/>, or <c>0</c> (a resident, non-stepping world) when this world
-    /// authors no <see cref="Simulation"/> section; the standard 240 Hz is authored in <c>standard.world.json</c>.
+    /// <see cref="WorldSimulationDefaults.RateHz"/>, or <see cref="UnauthoredSimulationRateHz"/> when this world
+    /// authors no <see cref="Simulation"/> section at all; a world that wants the resident, non-stepping rate
+    /// instead authors <c>simulation: {"rateHz": 0}</c> by name.
     /// The seam every simulation-tick-scoped duration on this
     /// document compiles through (see <see cref="PopulationReconnectGraceTicks"/>, <see cref="CompiledInputHold"/>):
     /// computed here, on the fully-parsed aggregate, rather than threaded as a parameter to each sub-section's own
@@ -406,7 +411,7 @@ public sealed record WorldDefinition(
     /// caller that already holds a <see cref="WorldDefinition"/> reads this property directly; nothing threads a raw
     /// rate parameter by hand.</summary>
     [JsonIgnore]
-    public int SimulationRateHz => (Simulation?.RateHz ?? 0);
+    public int SimulationRateHz => (Simulation?.RateHz ?? UnauthoredSimulationRateHz);
     /// <summary>Gets the named spawn poses seats and population policies reference — ABSENT resolves to empty,
     /// EXCEPT that a spawn-point id of <see cref="WorldSpawnPointDefaults.ImplicitOriginId"/> is always resolvable:
     /// when this document authors no <c>spawnPoints</c> section at all, one implicit point at world-space zero is

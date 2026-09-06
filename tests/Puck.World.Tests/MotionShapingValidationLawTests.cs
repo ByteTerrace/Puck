@@ -86,7 +86,7 @@ public sealed class MotionShapingValidationLawTests {
         var row = motion.Shaping![0];
         var withDynamics = document with { KitRowsRaw = [kit with { Motion = motion with { Shaping = [row with { Along = null, Dynamics = "chase" }] } }] };
 
-        var denied = withDynamics with { Simulation = null }; // rate-0, resident, non-stepping
+        var denied = withDynamics with { Simulation = new WorldSimulationDefaults(RateHz: 0) }; // resident, non-stepping
         var admitted = withDynamics;
 
         Assert.False(condition: TryValidate(definition: denied, reason: out var deniedReason));

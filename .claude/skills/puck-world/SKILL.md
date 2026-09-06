@@ -118,8 +118,11 @@ deliberately does not duplicate.
 use fixed point from `Puck.Maths` and exact engine-tick durations throughout; the
 simulation rate is an authored per-world document field
 (`WorldDefinition.Simulation.RateHz`, MUST divide `FixedTickConversion.TicksPerSecond`
-50400 exactly), defaulting to 240 Hz — the fixed rate every world ran before
-that field existed — for a world that authors none. Every entity is advanced on the server from
+50400 exactly), defaulting to 30 Hz, the shipped game's own rate, for a world
+that authors no `simulation` section; a world that wants the distinct
+resident, non-stepping rate authors `rateHz: 0` by name, and a fixture or law
+that needs a higher stress rate authors its own `rateHz` (240 was the ceiling
+every primitive had to survive, never a default). Every entity is advanced on the server from
 a `PlayerIntent` — poses are never accepted from outside the simulation;
 drivers only produce inputs, poses flow out through the tick snapshot. The
 guarantee pins the MAPPING, not the values: a deliberate correction to math

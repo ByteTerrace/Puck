@@ -173,9 +173,9 @@ public enum WorldBackendPreference : byte {
 /// truncated, never remainder-carried (<see cref="WorldDefinitionValidator"/> refuses a non-divisor, naming the
 /// nearest valid rates; a negative rate is refused outright, at any magnitude). 45 and 90 Hz — Steam Deck OLED's
 /// two refresh rates — both divide 50400 exactly (1120 and 560 engine ticks per step). The engine holds no rate of
-/// its own: an authored section states its rate, the standard 240 Hz is authored in
-/// <c>Assets/worlds/standard.world.json</c>, and a world authoring no <c>simulation</c> section is a rate-0
-/// resident world.
+/// its own: an authored section states its rate, and a world authoring no <c>simulation</c> section runs at
+/// <see cref="WorldDefinition.UnauthoredSimulationRateHz"/> — the distinct rate-0 resident world is reached only
+/// by authoring <c>rateHz</c> 0 by name.
 /// <para><b>The derived-floor seam.</b> This record is deliberately the one place a follow-on validation pass adds
 /// the physics floor (from body size/speed), the interactivity floor (from input latency), the substep-derived
 /// contact clamp (<c>contactHertz &lt;= RateHz * n / 8</c> at substep count <c>n</c> — it coincides with
