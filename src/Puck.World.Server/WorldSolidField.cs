@@ -35,6 +35,9 @@ namespace Puck.World.Server;
 /// constructor throw at install time.</para>
 /// </remarks>
 public sealed class WorldSolidField : IContactField {
+    // The same float-safety margin the client stamper adds around a placement's render reach, in world units.
+    private const float InstanceBoundMargin = 0.4f;
+
     private static readonly FixedVector3 UnitY = new(
         X: FixedQ4816.Zero,
         Y: FixedQ4816.One,
@@ -236,6 +239,12 @@ public sealed class WorldSolidField : IContactField {
                 CreationStampEmitter.ComposesInternally(document: creation.EngineDocument)
             );
 
+            // Each placed copy is one program instance carrying a conservative world-space bound: the creation's
+            // render reach at the placement's scale, plus the contact margin the shapes are dilated by. The
+            // evaluator's exact cull skips a hard-union instance the bound proves cannot win a query, so the bound
+            // decides only which work runs, never what distance results; a plane is never culled whatever its bound.
+            var reach = (CreationStampEmitter.RenderReach(document: creation.EngineDocument, scale: placement.Scale, fontFor: null) + (solid.Margin > 0f ? solid.Margin : 0f) + InstanceBoundMargin);
+
             CreationStampLattice.ForEachFixedInstance(
                 origin: FixedVector3.FromVector3(value: resolvedFrame.Position),
                 rotation: fixedRotation,
@@ -243,6 +252,8 @@ public sealed class WorldSolidField : IContactField {
                 sampledOffsets: WorldPlacementStamp.SampledFixedOffsetsFor(placement: placement, worldSeed: worldSeed),
                 mirror: WorldPlacementStamp.MirrorFor(placement: placement),
                 visitor: instance => {
+                    _ = builder.BeginInstance(boundCenter: instance.Origin.ToVector3(), boundRadius: reach);
+
                     if (scoped) {
                         _ = builder.PushField(compose: SdfBlendOp.Union);
                     }
@@ -264,6 +275,7 @@ public sealed class WorldSolidField : IContactField {
                         _ = builder.PopField();
                     }
 
+                    _ = builder.EndInstance();
                     placementShapeCount += (creation.Document.Shapes?.Count ?? 0);
                 }
             );

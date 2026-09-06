@@ -348,8 +348,11 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         for (var index = 0; (index < instances.Count); index++) {
             var instance = instances[index];
 
+            // A plane, or any compose the program itself marks as reaching every tile, has no finite bound however
+            // small the instance declared; the program's own test is the one the GPU prepass trusts.
             if (
                 instance.IsDynamic ||
+                program.HasUnmaskableInfluence(first: instance.First, end: instance.End) ||
                 !IsPureUnionInstance(
                     instance: instance,
                     instructions: instructions

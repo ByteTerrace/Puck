@@ -1319,7 +1319,7 @@ public sealed partial class SdfProgram {
     /// <param name="first">The instance's first instruction index (inclusive).</param>
     /// <param name="end">The instance's instruction end index (exclusive).</param>
     /// <returns><see langword="true"/> when the slice has unbounded influence.</returns>
-    private bool HasUnmaskableInfluence(int first, int end) {
+    internal bool HasUnmaskableInfluence(int first, int end) {
         var scopeDepth = 0;
 
         for (var index = first; (index < end); index++) {

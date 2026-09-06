@@ -140,6 +140,54 @@ public sealed class SdfFieldEvaluatorCullLawTests {
     }
 
     [Fact]
+    public void APlaneInsideASmallInstanceBoundIsNeverCulled() {
+        var culledBuilder = new SdfProgramBuilder();
+        var unwrappedBuilder = new SdfProgramBuilder();
+        var material = culledBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = unwrappedBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        // The sphere comes first so a running best exists when the plane's turn comes; the plane's declared bound is
+        // a unit sphere at its origin, while its influence is the whole space.
+        foreach (var builder in (SdfProgramBuilder[])[culledBuilder, unwrappedBuilder,]) {
+            var far = new Vector3(60f, 0f, 0f);
+            var declares = ReferenceEquals(builder, culledBuilder);
+
+            if (declares) {
+                _ = builder.BeginInstance(boundCenter: far, boundRadius: 1f);
+            }
+
+            _ = builder.ResetPoint();
+            _ = builder.Translate(offset: far);
+            _ = builder.Sphere(material: material, radius: 0.75f);
+
+            if (declares) {
+                _ = builder.EndInstance();
+                _ = builder.BeginInstance(boundCenter: new Vector3(0f, 2f, 0f), boundRadius: 1f);
+            }
+
+            _ = builder.ResetPoint();
+            _ = builder.Plane(material: material, normal: Vector3.UnitY, offset: 2f);
+
+            if (declares) {
+                _ = builder.EndInstance();
+            }
+        }
+
+        var culled = new SdfFieldEvaluator(program: culledBuilder.Build(buildInstanceGrid: false));
+        var unwrapped = new SdfFieldEvaluator(program: unwrappedBuilder.Build(buildInstanceGrid: false));
+
+        foreach (var x in (double[])[-80.0, -20.0, 0.0, 20.0, 57.0, 80.0,]) {
+            var position = Position(x: x, y: 0.0, z: 0.0);
+
+            Assert.True(condition: unwrapped.TryDistance(distance: out var expected, material: out var expectedMaterial, position: position));
+            Assert.True(condition: culled.TryDistance(distance: out var actual, material: out var actualMaterial, position: position));
+            Assert.Equal(expected: expected, actual: actual);
+            Assert.Equal(expected: expectedMaterial, actual: actualMaterial);
+        }
+    }
+
+    [Fact]
     public void CullMatchesTheUncalledReferenceAcrossALatticeOfDistancesGradientsAndCasts() {
         var (culled, unwrapped) = BuildFixture();
         var samples = 0;
