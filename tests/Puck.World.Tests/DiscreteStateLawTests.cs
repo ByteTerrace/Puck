@@ -322,4 +322,38 @@ public sealed class DiscreteStateLawTests {
         blocked[origin + 1] = 9;
         Assert.Equal(0, BoardQueries.Evaluate(attacksEast, blocked, 0, origin));
     }
+
+    // No chess-specific code: a search job's per-token legal mask (an int row keyed by token index) paints a plan
+    // board through the general writeSet transform, addressed by a $cell: indirection naming whichever token index
+    // is held. A boardCombine clear ahead of it keeps the paint current rather than additive.
+    [Fact]
+    public void WriteSetPaintsFromACellIndirectionAndRepaintsWhenTheIndirectionChanges() {
+        var definition = Document(
+            new(Name("board"), CellKind.Int, Domain: new StateDomain.CellsOf("map")),
+            new(Name("held"), CellKind.Int, Cells: [Cell("token", 0)]),
+            new(Name("legal"), CellKind.Int, Cells: [Cell("0", 0b0011L), Cell("1", 0b1100L)])
+        ) with {
+            Rules = [new WorldRule(Name("paint"), [
+                new ActionEffect.TransformState(new StateTransform.BoardCombine("board", BoardCombineOp.Clear)),
+                new ActionEffect.TransformState(new StateTransform.WriteSet("board", "legal", SetKey: "$cell:held:token", Value: 9)),
+            ])],
+        };
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        fixture.Step();
+        var painted = Find(fixture.Server.Definition, "board").Cells!;
+        Assert.Equal(9L, StateRows.FindCell(painted, Name("0"))!.Value);
+        Assert.Equal(9L, StateRows.FindCell(painted, Name("1"))!.Value);
+        Assert.Null(StateRows.FindCell(painted, Name("2")));
+        Assert.Null(StateRows.FindCell(painted, Name("3")));
+
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
+            Principal: WorldPrincipal.Console, Row: "held", Key: "token", Value: 1, Kind: WorldDocumentWriteKind.Set
+        ));
+        fixture.Step();
+        var repainted = Find(fixture.Server.Definition, "board").Cells!;
+        Assert.Equal(9L, StateRows.FindCell(repainted, Name("2"))!.Value);
+        Assert.Equal(9L, StateRows.FindCell(repainted, Name("3"))!.Value);
+        Assert.Null(StateRows.FindCell(repainted, Name("0")));
+        Assert.Null(StateRows.FindCell(repainted, Name("1")));
+    }
 }
