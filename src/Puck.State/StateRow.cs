@@ -124,6 +124,9 @@ public sealed record StateCell(CellName Key, long Value = 0, string? Text = null
 /// <param name="ValuesFrom">The discrete topology whose cell ordinals this row's integer values name — a
 /// value-typing trait, independent of <see cref="Domain"/> (legitimate only alongside a
 /// <see cref="StateDomain.KeysOf"/> domain over <see cref="CellKind.Int"/> cells).</param>
+/// <param name="Inverse">Declares this row a board derived from a token row's current cells rather than authored
+/// directly — see <see cref="StateInverse"/>. Legitimate only alongside a <see cref="StateDomain.CellsOf"/> domain
+/// over <see cref="CellKind.Int"/> cells.</param>
 /// <param name="Phase">A finite participant phase protocol and its persisted progression.</param>
 /// <param name="Visibility">An opt-in observation policy; empty readers retains the row at the authority.</param>
 /// <param name="Knowledge">The source and visibility mask of a remembered board layer.</param>
@@ -148,6 +151,7 @@ public record StateRow(
     StateCycle? Cycle = null,
     StateDomain? Domain = null,
     string? ValuesFrom = null,
+    StateInverse? Inverse = null,
     StatePhase? Phase = null, StateVisibility? Visibility = null, StateKnowledge? Knowledge = null, string? PhaseOf = null,
     long HistoryCursor = 0
 ) {

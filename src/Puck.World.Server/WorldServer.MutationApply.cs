@@ -825,7 +825,7 @@ public sealed partial class WorldServer {
     private void Install(WorldDefinition definition, bool rebuildPopulation) {
         m_definition = definition;
         m_inputHold.Reconfigure(settings: definition.CompiledInputHold);
-        RecompileRules(definition: definition);
+        definition = RecompileRules(definition: definition);
         // Unconditional, like RecompileRules above: a group/member count is capacity-bounded, so a full resync costs
         // nothing on the ticks that never touch the groups section, and unconditional is what keeps membership
         // expansion CHECK-TIME correct without a bespoke "did this mutation touch Groups" classification to maintain.

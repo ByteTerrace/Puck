@@ -39,6 +39,14 @@ public static partial class WorldRuntimeStateHash {
         }
         AppendString(ref hash, row.ValuesFrom);
         AppendString(ref hash, row.PhaseOf);
+
+        if (row.Inverse is { } inverse) {
+            AppendString(ref hash, inverse.Tokens.Value);
+            AppendString(ref hash, inverse.Codes.Value);
+        } else {
+            AppendString(ref hash, null);
+            AppendString(ref hash, null);
+        }
         AppendString(ref hash, row.Knowledge?.Source);
         AppendString(ref hash, row.Knowledge?.Mask);
         AppendVisibility(ref hash, row.Visibility);
