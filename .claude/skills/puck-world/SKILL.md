@@ -152,7 +152,7 @@ Client code never mutates local state before the server's verdict
 **Rule writes land on a frame; the document installs once per tick.** During
 `EvaluateWorldRules` every state effect writes the host's `StateFrame`
 (`WorldServer.RuleFrame.cs`) and rules read through it; what the frame
-accumulated folds into ONE mutation through the ordinary door at the end of the
+accumulated folds into one mutation through the ordinary door at the end of the
 tick, so every other reader (bodies, fields, search, the console) sees a rule's
 write only after that fold. Row versions on the frame drive the rule scheduler
 and memoized bindings (`RuleSchedule`, `IRuleReader.TryRowVersion`); a rule
