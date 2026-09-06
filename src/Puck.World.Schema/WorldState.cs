@@ -54,6 +54,7 @@ public sealed record WorldStateSection(
 /// <param name="Cycle">See <see cref="StateRow.Cycle"/>.</param>
 /// <param name="Domain">See <see cref="StateRow.Domain"/>.</param>
 /// <param name="ValuesFrom">See <see cref="StateRow.ValuesFrom"/>.</param>
+/// <param name="Inverse">See <see cref="StateRow.Inverse"/>.</param>
 /// <param name="Phase">See <see cref="StateRow.Phase"/>.</param>
 /// <param name="Visibility">See <see cref="StateRow.Visibility"/>.</param>
 /// <param name="Knowledge">See <see cref="StateRow.Knowledge"/>.</param>
@@ -78,9 +79,10 @@ public sealed record WorldStateRow(
     StateCycle? Cycle = null,
     StateDomain? Domain = null,
     string? ValuesFrom = null,
+    StateInverse? Inverse = null,
     StatePhase? Phase = null, StateVisibility? Visibility = null, StateKnowledge? Knowledge = null, string? PhaseOf = null,
     long HistoryCursor = 0
-) : StateRow(Name, Kind, Min, Max, Capacity, NonNegative, Evicts, Cells, Advance, Draw, DrawCursor, DrawnMasks, Dynamics, Cycle, Domain, ValuesFrom, Phase, Visibility, Knowledge, PhaseOf, HistoryCursor) {
+) : StateRow(Name, Kind, Min, Max, Capacity, NonNegative, Evicts, Cells, Advance, Draw, DrawCursor, DrawnMasks, Dynamics, Cycle, Domain, ValuesFrom, Inverse, Phase, Visibility, Knowledge, PhaseOf, HistoryCursor) {
     /// <summary>Initializes a document row over an engine row, adding the two world-only traits.</summary>
     /// <param name="row">The engine row.</param>
     /// <param name="gatesDrive">Whether the row is a drive-admission gate.</param>
@@ -104,6 +106,7 @@ public sealed record WorldStateRow(
         Cycle: row.Cycle,
         Domain: row.Domain,
         ValuesFrom: row.ValuesFrom,
+        Inverse: row.Inverse,
         Phase: row.Phase,
         Visibility: row.Visibility,
         Knowledge: row.Knowledge,

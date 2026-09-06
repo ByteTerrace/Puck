@@ -219,6 +219,9 @@ namespace Puck.World;
 // ordinary strict-parsed nested object" split the generator table above already uses, at either grain.
 [JsonSerializable(typeof(StateAdvance))]
 [JsonSerializable(typeof(StateCycle))]
+// The derived-board trait a CellsOf-domain row may declare — same "hand-written row, ordinary strict-parsed nested
+// object" split.
+[JsonSerializable(typeof(StateInverse))]
 // The rules section rows (the world.row.set rules payload shape). Also reachable from WorldDefinition already; this entry
 // exposes the typed WorldJsonContext.Default.WorldRule accessor the verb deserializes through.
 [JsonSerializable(typeof(WorldRule))]
@@ -598,7 +601,7 @@ internal sealed class DocumentWriteMaskJsonConverter : NameListMaskJsonConverter
 /// only a world reads, <c>gatesDrive</c> beside the flags and <c>field</c> beside the traits.</summary>
 internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldStateRow> {
     /// <inheritdoc/>
-    protected override string Shape => "{\"name\":…,\"kind\":\"int\"|\"fixed\"|\"bool\"|\"text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…},\"field\":{\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"markov\"|\"uniformRange\"|\"weightedNumeric\"|\"streamDraw\"|\"symmetryOrbit\",…},\"timing\":\"boot\"|\"tickPeriod\"|\"event\"},\"drawCursor\":…,\"drawnMasks\":[…],\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…}}";
+    protected override string Shape => "{\"name\":…,\"kind\":\"int\"|\"fixed\"|\"bool\"|\"text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…},\"field\":{\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"markov\"|\"uniformRange\"|\"weightedNumeric\"|\"streamDraw\"|\"symmetryOrbit\",…},\"timing\":\"boot\"|\"tickPeriod\"|\"event\"},\"drawCursor\":…,\"drawnMasks\":[…],\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…}}";
 
     /// <inheritdoc/>
     protected override bool ClaimsMember(string name) => (name is "gatesDrive" or "field");

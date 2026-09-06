@@ -2418,7 +2418,13 @@ Validate HUD document changes by running the app — see [hud.md](hud.md)'s
 Discrete state shares `state.lattices`: only `Field` creates physical storage;
 `Grid`, `Ring`, and `Hex` compile bounded adjacency. Keep token identity domains,
 ordered zone membership, position attributes, phase progression, and knowledge
-stamps inside the canonical state row converter and authoritative hash. The
+stamps inside the canonical state row converter and authoritative hash. A
+`cellsOf` row's `inverse` trait (`Puck.State.StateInverse`) declares it derived
+from a keyed token row and a codes row rather than authored — the board is
+refused by name at the mutation door and the validator alike, and the engine
+recomposes it from `tokens`/`codes` at compose and install
+(`Puck.State.DerivedBoards.Compose`); a frame recomputes only the moved
+token's two cells. The
 closed transform union is shared by mutations and rule transactions. Readers,
 secret draws, and observation payloads have separate authority/presentation
 semantics; see the owning contract in

@@ -20,7 +20,15 @@ public enum FrameRowKind : byte {
 /// <param name="Length">How many values the row occupies; a ring's includes its cursor.</param>
 /// <param name="Topology">A board row's topology.</param>
 /// <param name="Empty">A board or ring row's empty value.</param>
-public readonly record struct FrameRowLayout(FrameRowKind Kind, int Offset, int Length, CompiledTopology? Topology, long Empty);
+/// <param name="InverseTokensOrdinal">A derived board's <see cref="StateInverse.Tokens"/> row ordinal, or -1 for a
+/// board that carries no <see cref="StateRow.Inverse"/> (or whose declared tokens row does not resolve).</param>
+/// <param name="InverseCodesOrdinal">A derived board's <see cref="StateInverse.Codes"/> row ordinal, or -1 on the
+/// same terms as <see cref="InverseTokensOrdinal"/>.</param>
+public readonly record struct FrameRowLayout(FrameRowKind Kind, int Offset, int Length, CompiledTopology? Topology, long Empty, int InverseTokensOrdinal = -1, int InverseCodesOrdinal = -1) {
+    /// <summary>Gets a value indicating whether this board's cells are derived from a token row rather than
+    /// authored — <see cref="InverseTokensOrdinal"/> and <see cref="InverseCodesOrdinal"/> both resolved.</summary>
+    public bool IsDerivedBoard => ((InverseTokensOrdinal >= 0) && (InverseCodesOrdinal >= 0));
+}
 
 /// <summary>The layout every frame over one section shares: each row's kind, offset, and length, computed once from
 /// the rows' structure. Frames built on one layout copy into one another as a single span copy.</summary>
@@ -28,6 +36,9 @@ public sealed class FrameLayout {
     private readonly FrameRowLayout[] m_rows;
     private readonly Dictionary<string, int> m_ordinals = new(comparer: StringComparer.Ordinal);
     private readonly Func<string, CompiledTopology?> m_topology;
+    // A tokens row ordinal -> the derived board ordinals it feeds, so a keyed write can find what to recompute
+    // without a per-write scan of every row. Absent for a row that feeds none.
+    private readonly Dictionary<int, int[]> m_dependents = [];
 
     /// <summary>Lays out a section's rows.</summary>
     /// <param name="rows">The rows.</param>
@@ -37,19 +48,42 @@ public sealed class FrameLayout {
         ArgumentNullException.ThrowIfNull(argument: topology);
         m_rows = new FrameRowLayout[rows.Count];
         m_topology = topology;
+
+        for (var index = 0; index < rows.Count; index++) {
+            m_ordinals[rows[index].Name.Value] = index;
+        }
+
         var offset = 0;
+        var dependents = new Dictionary<int, List<int>>();
 
         for (var index = 0; index < rows.Count; index++) {
             var row = rows[index];
-            var layout = Layout(row: row, topology: topology, offset: offset);
+            var layout = Layout(row: row, topology: topology, offset: offset, ordinals: m_ordinals);
 
             m_rows[index] = layout;
-            m_ordinals[row.Name.Value] = index;
             offset += layout.Length;
+
+            if (layout.IsDerivedBoard) {
+                if (!dependents.TryGetValue(key: layout.InverseTokensOrdinal, value: out var fed)) {
+                    fed = [];
+                    dependents[layout.InverseTokensOrdinal] = fed;
+                }
+
+                fed.Add(item: index);
+            }
+        }
+
+        foreach (var (tokensOrdinal, boards) in dependents) {
+            m_dependents[tokensOrdinal] = [.. boards];
         }
 
         Length = offset;
     }
+
+    /// <summary>Gets the derived board ordinals whose cells recompute from a write to the row at
+    /// <paramref name="tokensOrdinal"/>, or <see langword="null"/> when that row feeds none.</summary>
+    /// <param name="tokensOrdinal">The candidate tokens row's ordinal.</param>
+    public int[]? DependentBoards(int tokensOrdinal) => (m_dependents.TryGetValue(key: tokensOrdinal, value: out var boards) ? boards : null);
 
     /// <summary>Gets how many values a frame on this layout holds.</summary>
     public int Length { get; }
@@ -81,9 +115,13 @@ public sealed class FrameLayout {
                 return false;
             }
 
-            var candidate = Layout(row: row, topology: m_topology, offset: m_rows[index].Offset);
+            var candidate = Layout(row: row, topology: m_topology, offset: m_rows[index].Offset, ordinals: m_ordinals);
 
-            if ((candidate.Kind != m_rows[index].Kind) || (candidate.Length != m_rows[index].Length) || (candidate.Empty != m_rows[index].Empty) || !ReferenceEquals(objA: candidate.Topology, objB: m_rows[index].Topology)) {
+            if (
+                (candidate.Kind != m_rows[index].Kind) || (candidate.Length != m_rows[index].Length) || (candidate.Empty != m_rows[index].Empty) ||
+                !ReferenceEquals(objA: candidate.Topology, objB: m_rows[index].Topology) ||
+                (candidate.InverseTokensOrdinal != m_rows[index].InverseTokensOrdinal) || (candidate.InverseCodesOrdinal != m_rows[index].InverseCodesOrdinal)
+            ) {
                 return false;
             }
         }
@@ -91,7 +129,7 @@ public sealed class FrameLayout {
         return true;
     }
 
-    private static FrameRowLayout Layout(StateRow row, Func<string, CompiledTopology?> topology, int offset) {
+    private static FrameRowLayout Layout(StateRow row, Func<string, CompiledTopology?> topology, int offset, Dictionary<string, int> ordinals) {
         if (row.Kind == CellKind.Text) {
             return new FrameRowLayout(Kind: FrameRowKind.Unframed, Offset: offset, Length: 0, Topology: null, Empty: 0L);
         }
@@ -102,9 +140,19 @@ public sealed class FrameLayout {
             case StateDomain.CellsOf board:
                 var compiled = topology(board.Topology);
 
-                return ((compiled is null) || (row.Kind == CellKind.Fixed))
-                    ? new FrameRowLayout(Kind: FrameRowKind.Unframed, Offset: offset, Length: 0, Topology: null, Empty: 0L)
-                    : new FrameRowLayout(Kind: FrameRowKind.Board, Offset: offset, Length: compiled.CellCount, Topology: compiled, Empty: board.Empty);
+                if ((compiled is null) || (row.Kind == CellKind.Fixed)) {
+                    return new FrameRowLayout(Kind: FrameRowKind.Unframed, Offset: offset, Length: 0, Topology: null, Empty: 0L);
+                }
+
+                var tokensOrdinal = -1;
+                var codesOrdinal = -1;
+
+                if (row.Inverse is { } inverse) {
+                    tokensOrdinal = (ordinals.TryGetValue(key: inverse.Tokens.Value, value: out var tokens) ? tokens : -1);
+                    codesOrdinal = (ordinals.TryGetValue(key: inverse.Codes.Value, value: out var codes) ? codes : -1);
+                }
+
+                return new FrameRowLayout(Kind: FrameRowKind.Board, Offset: offset, Length: compiled.CellCount, Topology: compiled, Empty: board.Empty, InverseTokensOrdinal: tokensOrdinal, InverseCodesOrdinal: codesOrdinal);
             case StateDomain.Ring ring:
                 return new FrameRowLayout(Kind: FrameRowKind.Ring, Offset: offset, Length: (ring.Capacity + 1), Topology: null, Empty: ring.Empty);
             default:
@@ -308,8 +356,8 @@ public sealed class StateFrame : StateStore {
         BoardQueries.Read(row: row, topology: topology, values: values);
     }
 
-    /// <summary>Writes one cell the row already holds, refusing a key the row lacks, a text row, a ring, or a value
-    /// outside the row's envelope.</summary>
+    /// <summary>Writes one cell the row already holds, refusing a key the row lacks, a text row, a ring, a derived
+    /// board, or a value outside the row's envelope.</summary>
     /// <param name="row">The row.</param>
     /// <param name="key">The cell key.</param>
     /// <param name="value">The operand, in the row's encoding.</param>
@@ -323,6 +371,13 @@ public sealed class StateFrame : StateStore {
         }
 
         var layout = Layout[ordinal];
+
+        if (layout.IsDerivedBoard) {
+            reason = $"row '{row.Name}' is a derived board (inverse) — write its token row instead";
+
+            return false;
+        }
+
         var index = layout.Kind switch {
             FrameRowKind.Slot => ((key == StateRow.SlotKey) ? 0 : -1),
             FrameRowKind.Keyed => IndexOf(cells: row.Cells, key: key),
@@ -350,10 +405,54 @@ public sealed class StateFrame : StateStore {
             return false;
         }
 
+        var previous = slot;
+
         slot = next;
         reason = string.Empty;
 
+        // A tokens-row relocation recomputes every derived board it feeds — cheap: only the moved token's old and
+        // new cells can have changed, so this touches at most two cells of each dependent board rather than
+        // recomputing the whole thing.
+        if ((layout.Kind == FrameRowKind.Keyed) && (Layout.DependentBoards(ordinal) is { } boards)) {
+            foreach (var boardOrdinal in boards) {
+                RecomputeDerivedBoard(boardOrdinal: boardOrdinal, previousCell: previous, currentCell: next);
+            }
+        }
+
         return true;
+    }
+    // Rewrites at most the two board cells a token's relocation could have changed: the cell it left (whose winner
+    // may now be a different, still-resident token) and the cell it entered (whose winner may now be this token, or
+    // whichever other token also names it and sits later in row order).
+    private void RecomputeDerivedBoard(int boardOrdinal, long previousCell, long currentCell) {
+        var boardLayout = Layout[boardOrdinal];
+        var tokensLayout = Layout[boardLayout.InverseTokensOrdinal];
+        var codesLayout = Layout[boardLayout.InverseCodesOrdinal];
+        var topology = boardLayout.Topology!;
+
+        if (previousCell != currentCell) {
+            RecomputeDerivedCell(boardLayout: boardLayout, tokensLayout: tokensLayout, codesLayout: codesLayout, cellCount: topology.CellCount, cell: previousCell);
+        }
+
+        RecomputeDerivedCell(boardLayout: boardLayout, tokensLayout: tokensLayout, codesLayout: codesLayout, cellCount: topology.CellCount, cell: currentCell);
+    }
+    private void RecomputeDerivedCell(FrameRowLayout boardLayout, FrameRowLayout tokensLayout, FrameRowLayout codesLayout, int cellCount, long cell) {
+        if ((cell < 0) || (cell >= cellCount)) {
+            return;
+        }
+
+        var tokens = m_values.AsSpan(start: tokensLayout.Offset, length: tokensLayout.Length);
+        var winner = -1;
+
+        for (var index = 0; (index < tokens.Length); index++) {
+            if (tokens[index] == cell) {
+                winner = index;
+            }
+        }
+
+        m_values[boardLayout.Offset + (int)cell] = ((winner >= 0) && (winner < codesLayout.Length))
+            ? m_values[codesLayout.Offset + winner]
+            : boardLayout.Empty;
     }
     /// <summary>Pushes one value onto a ring row, overwriting the oldest slot once the ring is full.</summary>
     /// <param name="row">The ring row.</param>
@@ -388,6 +487,11 @@ public sealed class StateFrame : StateStore {
 
         if (!Layout.TryOrdinal(name: enclosed.Row, ordinal: out var ordinal) || (Layout[ordinal] is not { Kind: FrameRowKind.Board } layout) || (Rows[ordinal].Kind != CellKind.Int)) {
             reason = $"clearEnclosed row '{enclosed.Row}' is not an integer board in the frame";
+
+            return false;
+        }
+        if (layout.IsDerivedBoard) {
+            reason = $"clearEnclosed row '{enclosed.Row}' is a derived board — write its token row instead";
 
             return false;
         }
@@ -465,6 +569,11 @@ public sealed class StateFrame : StateStore {
 
         if (!Layout.TryOrdinal(name: combine.Row, ordinal: out var ordinal) || (Layout[ordinal] is not { Kind: FrameRowKind.Board } layout)) {
             reason = $"boardCombine row '{combine.Row}' is not a board in the frame";
+
+            return false;
+        }
+        if (layout.IsDerivedBoard) {
+            reason = $"boardCombine row '{combine.Row}' is a derived board — write its token row instead";
 
             return false;
         }

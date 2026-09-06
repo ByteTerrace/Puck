@@ -1376,8 +1376,13 @@ without allocating, so every read goes through one value indirection first
 — the operand-union refactor's "handles first", brought forward. Tokens on
 a cell is the frame seen from the other side, and chess already carries
 both mappings — `pieceCell` (token to cell) and `board` (cell to code) —
-kept consistent by two rules; a row trait declaring one the inverse of the
-other lets the engine keep them, and a count is already a value. Refused: a
+which the shipped world still keeps consistent by hand with two rules; the
+engine now carries the general primitive (`Puck.State.StateInverse`, a
+`cellsOf` row's `inverse: {tokens, codes}`): the board is refused a direct
+write, by name, at the mutation door and the validator, and is derived from
+`tokens`/`codes` at every compose and install, with a frame recomputing only
+a moved token's two cells — adopting it in `chess.world.json` is a follow-on,
+not this landing. A count is already a value. Refused: a
 mate detector unrolled into per-piece rules, a privileged bot mutation, a
 search that blocks a tick, a frame that materializes row objects.
 

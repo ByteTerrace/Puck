@@ -720,7 +720,7 @@ public sealed partial class WorldServer : IWorldServerHost {
 
         // Same reasoning as the cable links above: a rules row authored in the BOOT document needs its own compile
         // call here, since Install never runs at construction.
-        RecompileRules(definition: definition);
+        definition = RecompileRules(definition: definition);
         // The lattice exists (the population allocated it) and the instance identity is known only from here on, so
         // this is the first point a lattice row's draw fill can be seeded through the site ladder and painted.
         PaintLatticeDraws(definition: definition);

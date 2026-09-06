@@ -29,6 +29,17 @@ at most one physical field topology. Each discrete topology admits 4096 cells;
 boards together admit 65536 cells, and all declared state storage admits
 262144 cells; a row of any domain may author a capacity up to 4096 cells, and a slot or keys row that authors none gets 128.
 
+A `cellsOf` row may declare itself derived rather than authored:
+`inverse: { "tokens": "pieceCell", "codes": "pieceCode" }` (`Puck.State.StateInverse`) names a keyed
+integer row whose values name cells of the board's own topology and a row of the same shape giving each
+token's code. The board's cell at `c` is the code of the LAST token — in `tokens`'s own cell order — whose
+value names `c`; two tokens naming the same cell is not an authoring error, the later one in row order simply
+wins and the earlier one's code is absent from the board. The board is never written directly — an
+`UpsertStateCell`/`UpsertStateRow` targeting it, live or authored, is refused by name; write `tokens`/`codes`
+instead, and the engine recomputes the board's cells (`Puck.State.DerivedBoards.Compose`) at every compose and
+install, so the journaled document already carries them. A hypothetical frame keeps the same answer through a
+cheaper incremental path: a write to `tokens` rewrites only the moved token's own two board cells.
+
 Grid keys are decimal `y * width + x` ordinals. Directions are `N`, `NE`, `E`,
 `SE`, `S`, `SW`, `W`, `NW`; `wrap` is `None`, `X`, `Y`, or `Both`. Rings use
 `width` cells, `depth: 1`, and `forward`/`backward`, with implicit wrapping.

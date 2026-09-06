@@ -475,6 +475,7 @@ public abstract class StateRowJsonConverter<TRow> : JsonConverter<TRow> where TR
         JsonElement? drawnMasks = null;
         JsonElement? historyCursor = null;
         JsonElement? domain = null;
+        JsonElement? inverse = null;
         string? phaseOf = null;
         string? valuesFrom = null;
         JsonElement? phase = null, visibility = null, knowledge = null;
@@ -548,6 +549,9 @@ public abstract class StateRowJsonConverter<TRow> : JsonConverter<TRow> where TR
                 case "phaseOf": phaseOf = reader.GetString(); break;
                 case "domain":
                     domain = JsonElement.ParseValue(reader: ref reader);
+                    break;
+                case "inverse":
+                    inverse = JsonElement.ParseValue(reader: ref reader);
                     break;
                 case "drawnMasks":
                     drawnMasks = JsonElement.ParseValue(reader: ref reader);
@@ -772,6 +776,9 @@ public abstract class StateRowJsonConverter<TRow> : JsonConverter<TRow> where TR
             Domain: ((domain is { } domainElement)
             ? ReadNested<StateDomain>(element: domainElement, options: options, context: $"state row '{name}'.domain")
             : null),
+            Inverse: ((inverse is { } inverseElement)
+            ? ReadNested<StateInverse>(element: inverseElement, options: options, context: $"state row '{name}'.inverse")
+            : null),
             DrawnMasks: ((drawnMasks is { } drawnMasksElement)
             ? ReadDrawnMasks(
                     element: drawnMasksElement,
@@ -955,6 +962,9 @@ public abstract class StateRowJsonConverter<TRow> : JsonConverter<TRow> where TR
         if (value.Domain is { } domain) {
             WriteNested(writer: writer, propertyName: "domain", value: domain, options: options);
         }
+        if (value.Inverse is { } inverse) {
+            WriteNested(writer: writer, propertyName: "inverse", value: inverse, options: options);
+        }
         if (value.DrawnMasks is { Count: > 0 } drawnMasks) {
             writer.WritePropertyName(propertyName: "drawnMasks");
             writer.WriteStartArray();
@@ -972,7 +982,7 @@ public abstract class StateRowJsonConverter<TRow> : JsonConverter<TRow> where TR
 /// <summary>The row converter of the standalone state document — the shared shape and nothing more.</summary>
 public sealed class StateRowJsonConverter : StateRowJsonConverter<StateRow> {
     /// <inheritdoc/>
-    protected override string Shape => "{\"name\":…,\"kind\":\"int\"|\"fixed\"|\"bool\"|\"text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"evicts\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"draw\":{…},\"drawCursor\":…,\"drawnMasks\":[…],\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…}}";
+    protected override string Shape => "{\"name\":…,\"kind\":\"int\"|\"fixed\"|\"bool\"|\"text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"evicts\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"draw\":{…},\"drawCursor\":…,\"drawnMasks\":[…],\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…}}";
 
     /// <inheritdoc/>
     protected override StateRow Create(StateRow row, RowMembers members, JsonSerializerOptions options) => row;

@@ -47,10 +47,75 @@ public static partial class WorldDefinitionValidator {
                     errors.Add($"state row '{row.Name}': board cells require canonical topology keys and literal values.");
                 }
             }
+            if (row.Inverse is { } inverse) {
+                ValidateDerivedBoard(definition, row, inverse, compiled, errors);
+            }
         }
         if (totalCells > TopologyCompilation.MaxTotalCells) {
             errors.Add($"state board storage exceeds the {TopologyCompilation.MaxTotalCells}-cell world budget.");
         }
+    }
+
+    // A derived board's tokens/codes both resolve to keyed integer rows, codes carries exactly the tokens row's own
+    // keys in the same order (so the two rows' cell lists correspond by index — see DerivedBoards.Compose), and the
+    // board's own authored cells (if any) are exactly what the derivation would produce today — an authored
+    // mismatch is refused rather than silently overwritten, since the mutation door and the live compose step both
+    // refuse a direct write to a derived board's cells and this is the door a hand-authored or foreign document
+    // passes through instead.
+    private static void ValidateDerivedBoard(WorldDefinition definition, WorldStateRow row, StateInverse inverse, CompiledTopology topology, List<string> errors) {
+        var tokens = WorldDefinitionRows.FindStateRow(definition.State, inverse.Tokens.Value);
+        var codes = WorldDefinitionRows.FindStateRow(definition.State, inverse.Codes.Value);
+
+        if (tokens is null || tokens.Kind != CellKind.Int || tokens.EffectiveDomain is StateDomain.Slot) {
+            errors.Add($"state row '{row.Name}': inverse.tokens '{inverse.Tokens}' names no keyed integer row.");
+        }
+        if (codes is null || codes.Kind != CellKind.Int) {
+            errors.Add($"state row '{row.Name}': inverse.codes '{inverse.Codes}' names no integer row.");
+        }
+        if (tokens is null || codes is null) {
+            return;
+        }
+
+        var tokenCells = (tokens.Cells ?? []);
+        var codeCells = (codes.Cells ?? []);
+        var sameShape = (tokenCells.Count == codeCells.Count);
+
+        for (var index = 0; sameShape && (index < tokenCells.Count); index++) {
+            sameShape = (tokenCells[index]?.Key == codeCells[index]?.Key);
+        }
+        if (!sameShape) {
+            errors.Add($"state row '{row.Name}': inverse.codes '{inverse.Codes}' must carry the same keys, in the same order, as inverse.tokens '{inverse.Tokens}'.");
+
+            return;
+        }
+
+        var derived = DerivedBoards.Compose(definition.State, inverse, topology);
+        var authored = (row.Cells ?? []);
+
+        if ((authored.Count > 0) && !MatchesDerivation(authored, derived)) {
+            errors.Add($"state row '{row.Name}': authored cells must be empty or match its inverse's derivation — the board is never authored, only derived.");
+        }
+    }
+    // Set comparison, not order-sensitive: an authored board's cell order is whatever the author or a prior save
+    // wrote, while the derivation always walks cell order — the same board, spelled either way, must match.
+    private static bool MatchesDerivation(IReadOnlyList<StateCell> authored, IReadOnlyList<StateCell> derived) {
+        if (authored.Count != derived.Count) {
+            return false;
+        }
+
+        var byKey = new Dictionary<CellName, long>(derived.Count);
+
+        foreach (var cell in derived) {
+            byKey[cell.Key] = cell.Value;
+        }
+
+        foreach (var cell in authored) {
+            if (cell is null || !byKey.TryGetValue(cell.Key, out var value) || (value != cell.Value)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static void ValidateTokenAndPhaseRows(WorldDefinition definition, List<string> errors) {
@@ -65,6 +130,9 @@ public static partial class WorldDefinitionValidator {
             var isPhysicalField = ((row.Domain is StateDomain.CellsOf) && (row.Field is not null));
             if (domainTraits > 1 || (domainTraits > 0 && !isPhysicalField && (row.Field is not null || row.Draw is not null || row.Advance is not null || row.Dynamics is not null || row.Cycle is not null || row.Evicts || row.GatesDrive))) {
                 errors.Add($"state row '{row.Name}': discrete storage traits are mutually exclusive and cannot carry continuous or draw traits.");
+            }
+            if (row.Inverse is not null && ((row.EffectiveDomain is not StateDomain.CellsOf) || (row.Field is not null) || (row.Kind != CellKind.Int))) {
+                errors.Add($"state row '{row.Name}': inverse requires an integer board — a cellsOf domain over int cells with no field trait.");
             }
             var domainName = (row.EffectiveDomain is StateDomain.KeysOf keysOf ? keysOf.Row.Value : null);
             if (row.ValuesFrom is { } topologyName) {
