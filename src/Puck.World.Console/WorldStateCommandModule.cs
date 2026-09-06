@@ -494,7 +494,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.search",
-            description: "Lists every search job's progress (Immediate): world.search. Each line carries whether the job is running or done, the token and target cell its walk is at, how many relocations the rules accepted so far, how many it has judged, its per-tick node quota, the work units one judge run costs, and how many rules the frame evaluates. A job restarts whenever a framed cell other than its own outputs changes.",
+            description: "Lists every search job's progress (Immediate): world.search. Each line carries whether the job is running or done, the token and target cell its walk is at, how many relocations the rules accepted so far, how many it has judged, its per-tick node quota, the work units one judge run costs, and how many rules the frame evaluates; a job authoring a depth past one and a score also carries the depth it is iterative-deepening through and the negamax answer (token, target cell, score) the deepest completed pass found. A job restarts whenever a framed cell other than its own outputs changes.",
             handler: (context, args) => {
                 if (!authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.search")) {
                     return error;
@@ -505,7 +505,8 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 var jobs = server.SearchStatus();
                 var output = new List<string>(capacity: jobs.Count + 1) { $"[world.search: {jobs.Count} job(s)]" };
                 foreach (var job in jobs) {
-                    output.Add(item: $"[world.search {job.Name} {(job.Done ? "done" : (job.Running ? "running" : "idle"))} token={job.Token}/{job.Tokens} target={job.Target}/{job.Cells} accepted={job.Count} judged={job.Nodes} nodesPerTick={job.NodesPerTick} judgeCost={job.JudgeCost} judgeRules={job.JudgeRules}]");
+                    var depth = (job.HasScore ? $" depth={job.PassDepth}/{job.Depth} best=(token={job.BestToken} to={job.BestTarget} score={job.BestScore})" : string.Empty);
+                    output.Add(item: $"[world.search {job.Name} {(job.Done ? "done" : (job.Running ? "running" : "idle"))} token={job.Token}/{job.Tokens} target={job.Target}/{job.Cells} accepted={job.Count} judged={job.Nodes} nodesPerTick={job.NodesPerTick} judgeCost={job.JudgeCost} judgeRules={job.JudgeRules}{depth}]");
                 }
                 return new CommandResult(Output: string.Join(separator: Environment.NewLine, values: output));
             },

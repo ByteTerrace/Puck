@@ -3,6 +3,46 @@ using Puck.Networking;
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
+    private static void WriteSearchLevel(WireWriter writer, WorldSearchLevelCheckpoint level) {
+        writer.WriteInt32(value: level.Token);
+        writer.WriteInt32(value: level.Target);
+        writer.WriteInt64(value: level.Alpha);
+        writer.WriteInt64(value: level.Beta);
+        writer.WriteInt64(value: level.Best);
+        writer.WriteInt32(value: level.BestToken);
+        writer.WriteInt32(value: level.BestTarget);
+        writer.WriteInt64(value: level.BaseTurn);
+        WriteLongArray(
+            writer: writer,
+            values: level.Values
+        );
+    }
+    private static WorldSearchLevelCheckpoint ReadSearchLevel(ref WireReader reader) {
+        var token = reader.ReadInt32();
+        var target = reader.ReadInt32();
+        var alpha = reader.ReadInt64();
+        var beta = reader.ReadInt64();
+        var best = reader.ReadInt64();
+        var bestToken = reader.ReadInt32();
+        var bestTarget = reader.ReadInt32();
+        var baseTurn = reader.ReadInt64();
+        var values = ReadLongArray(
+            reader: ref reader,
+            field: "search level values"
+        );
+
+        return new WorldSearchLevelCheckpoint(
+            Token: token,
+            Target: target,
+            Alpha: alpha,
+            Beta: beta,
+            Best: best,
+            BestToken: bestToken,
+            BestTarget: bestTarget,
+            BaseTurn: baseTurn,
+            Values: values
+        );
+    }
     private static void WriteSearchJob(WireWriter writer, WorldSearchJobCheckpoint job) {
         writer.WriteString(value: job.Name);
         writer.WriteUInt64(value: job.Stamp);
@@ -17,6 +57,18 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         writer.WriteInt64(value: job.Nodes);
         writer.WriteInt64(value: job.BaseTurn);
+        writer.WriteInt32(value: job.PassDepth);
+        writer.WriteInt32(value: job.Active);
+        writer.WriteInt64(value: job.Best);
+        writer.WriteInt32(value: job.BestToken);
+        writer.WriteInt32(value: job.BestTarget);
+        writer.WriteInt64(value: job.Alpha);
+        writer.WriteInt64(value: job.Beta);
+        WriteArray(
+            writer: writer,
+            items: job.Levels,
+            writeItem: WriteSearchLevel
+        );
     }
     private static WorldSearchJobCheckpoint ReadSearchJob(ref WireReader reader) {
         var name = reader.ReadRequiredString(
@@ -35,6 +87,18 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         var nodes = reader.ReadInt64();
         var baseTurn = reader.ReadInt64();
+        var passDepth = reader.ReadInt32();
+        var active = reader.ReadInt32();
+        var best = reader.ReadInt64();
+        var bestToken = reader.ReadInt32();
+        var bestTarget = reader.ReadInt32();
+        var alpha = reader.ReadInt64();
+        var beta = reader.ReadInt64();
+        var levels = ReadArray(
+            reader: ref reader,
+            field: "search job levels",
+            readItem: static (ref WireReader r) => ReadSearchLevel(reader: ref r)
+        );
 
         return new WorldSearchJobCheckpoint(
             Name: name,
@@ -46,7 +110,15 @@ public static partial class WorldAuthorityCheckpointCodec {
             Count: count,
             Legal: legal,
             Nodes: nodes,
-            BaseTurn: baseTurn
+            BaseTurn: baseTurn,
+            PassDepth: passDepth,
+            Active: active,
+            Best: best,
+            BestToken: bestToken,
+            BestTarget: bestTarget,
+            Alpha: alpha,
+            Beta: beta,
+            Levels: levels
         );
     }
     private static byte[] EncodeSearch(WorldSearchCheckpoint section) {

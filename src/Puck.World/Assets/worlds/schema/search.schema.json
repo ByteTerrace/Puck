@@ -73,6 +73,27 @@
               "null"
             ],
             "default": null
+          },
+          "depth": {
+            "description": "How many plies the job searches ahead; the depth-one walk this section always ran. A depth past one asks what the position is worth after the ply, not merely whether it is legal, and requires Score.",
+            "type": "integer",
+            "default": 1
+          },
+          "score": {
+            "description": "An infix expression, in the rule expression grammar, evaluated over the frame after a ply from the perspective of the side that made it; iterative-deepening negamax with alpha-beta compares it across plies. Required when Depth exceeds one, or Best is authored.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "best": {
+            "description": "A keyed integer row receiving the deepest completed depth\u0027s answer: token (the mover\u0027s ordinal in Tokens), to (its destination cell), and score (the negamax value).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
           }
         },
         "required": [

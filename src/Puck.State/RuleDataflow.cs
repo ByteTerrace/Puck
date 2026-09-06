@@ -53,7 +53,11 @@ public static class RuleDataflow {
         return false;
     }
 
-    private static bool ExpressionReadsHost(CompiledExpressionToken[]? tokens) {
+    /// <summary>Returns whether an expression program reads a fact only the document host answers — the same
+    /// primitive <see cref="ReadsHost"/> applies to a rule's gate, bindings, and effects, exposed for a document
+    /// project compiling a bare expression outside a rule (a search job's score).</summary>
+    /// <param name="tokens">The compiled postfix program, or <see langword="null"/>.</param>
+    public static bool ExpressionReadsHost(CompiledExpressionToken[]? tokens) {
         if (tokens is null) {
             return false;
         }

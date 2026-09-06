@@ -35,7 +35,7 @@ public static partial class WorldDefinitionValidator {
                 return;
             }
 
-            foreach (var (output, label) in new[] { (row.Legal, "legal"), (row.Count, "count") }) {
+            foreach (var (output, label) in new[] { (row.Legal, "legal"), (row.Count, "count"), (row.Best, "best") }) {
                 if ((output is not null) && (string.Equals(a: output, b: row.Tokens, comparisonType: StringComparison.Ordinal) || string.Equals(a: output, b: row.Board, comparisonType: StringComparison.Ordinal))) {
                     errors.Add(item: $"search '{row.Name}' {label} '{output}' is one of the rows the job searches over; an output row is never an input.");
 

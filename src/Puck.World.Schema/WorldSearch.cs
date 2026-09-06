@@ -30,6 +30,14 @@ public sealed record WorldSearchSection(IReadOnlyList<WorldSearchRow>? Jobs = nu
 /// requires a board of at most 64 cells.</param>
 /// <param name="Count">A slot row receiving how many relocations were accepted.</param>
 /// <param name="Nodes">The relocations judged per tick, at most what the work sheet leaves; absent derives that.</param>
+/// <param name="Depth">How many plies the job searches ahead; the depth-one walk this section always ran. A depth
+/// past one asks what the position is worth after the ply, not merely whether it is legal, and requires
+/// <paramref name="Score"/>.</param>
+/// <param name="Score">An infix expression, in the rule expression grammar, evaluated over the frame after a ply from
+/// the perspective of the side that made it; iterative-deepening negamax with alpha-beta compares it across plies.
+/// Required when <paramref name="Depth"/> exceeds one, or <paramref name="Best"/> is authored.</param>
+/// <param name="Best">A keyed integer row receiving the deepest completed depth's answer: <c>token</c> (the mover's
+/// ordinal in <paramref name="Tokens"/>), <c>to</c> (its destination cell), and <c>score</c> (the negamax value).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldSearchRow(
     string Name,
@@ -40,7 +48,10 @@ public sealed record WorldSearchRow(
     long Accept = 1L,
     string? Legal = null,
     string? Count = null,
-    int? Nodes = null
+    int? Nodes = null,
+    int Depth = 1,
+    string? Score = null,
+    string? Best = null
 );
 
 /// <summary>Hard bounds for the search section.</summary>
@@ -49,6 +60,12 @@ public static class WorldSearchCapacity {
     public const int MaxJobs = 8;
     /// <summary>The most relocations one job judges per tick, whatever the work sheet leaves.</summary>
     public const int MaxNodesPerTick = 4_096;
+    /// <summary>The most plies one job searches ahead.</summary>
+    public const int MaxDepth = 32;
+    /// <summary>The magnitude a terminal position (no accepted relocation) scores for the side to move, and the
+    /// negamax search window's width — shifted down from <see cref="long.MaxValue"/> so a value repeatedly negated
+    /// and compared across the deepest authored search never overflows.</summary>
+    public const long MateScore = (long.MaxValue >> 2);
 }
 
 /// <summary>One job's derived plan: every row resolved, the off-board value, and the per-tick node quota.</summary>
@@ -59,7 +76,10 @@ public static class WorldSearchCapacity {
 /// <param name="Off">The token value meaning off the board.</param>
 /// <param name="Nodes">The relocations judged per tick.</param>
 /// <param name="JudgeCost">The work units one judge run costs.</param>
-public sealed record WorldSearchPlan(WorldSearchRow Row, CompiledTopology Topology, string Turn, string Verdict, long Off, int Nodes, long JudgeCost);
+/// <param name="Depth">How many plies the job searches ahead.</param>
+/// <param name="Score">The compiled score program, or <see langword="null"/> when the job carries none.</param>
+/// <param name="Best">The best-move output row, or <see langword="null"/>.</param>
+public sealed record WorldSearchPlan(WorldSearchRow Row, CompiledTopology Topology, string Turn, string Verdict, long Off, int Nodes, long JudgeCost, int Depth, CompiledExpressionToken[]? Score, string? Best);
 
 /// <summary>Derives what a search job needs from the document: the rules a frame can evaluate, their cost, and each
 /// job's plan.</summary>
@@ -104,11 +124,13 @@ public static class WorldSearchCompilation {
     /// <param name="row">The job.</param>
     /// <param name="judgeCost">The work units one judge run costs.</param>
     /// <param name="leftover">The work units the sheet leaves per tick, shared by every job.</param>
+    /// <param name="context">The rule compile context, for compiling <see cref="WorldSearchRow.Score"/>.</param>
     /// <param name="plan">The plan.</param>
     /// <param name="reason">Why the job cannot run, or empty.</param>
-    public static bool TryPlan(WorldDefinition definition, WorldSearchRow row, long judgeCost, long leftover, out WorldSearchPlan? plan, out string reason) {
+    public static bool TryPlan(WorldDefinition definition, WorldSearchRow row, long judgeCost, long leftover, WorldRuleCompileContext context, out WorldSearchPlan? plan, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: row);
+        ArgumentNullException.ThrowIfNull(argument: context);
         plan = null;
 
         var tokens = WorldDefinitionRows.FindStateRow(rows: definition.State, name: row.Tokens);
@@ -178,6 +200,54 @@ public static class WorldSearchCompilation {
 
             return false;
         }
+        if ((row.Depth < 1) || (row.Depth > WorldSearchCapacity.MaxDepth)) {
+            reason = $"search '{row.Name}' depth {row.Depth} must lie in 1..{WorldSearchCapacity.MaxDepth}";
+
+            return false;
+        }
+        if (((row.Depth > 1) || (row.Best is not null)) && (row.Score is null)) {
+            reason = $"search '{row.Name}' names no score — a depth past one, or a best row, needs one to compare plies by";
+
+            return false;
+        }
+
+        CompiledExpressionToken[]? score = null;
+
+        if (row.Score is { } scoreText) {
+            if (!ExpressionSpelling.TryParse(text: scoreText, tokens: out var scoreTokens, error: out var parseError)) {
+                reason = $"search '{row.Name}' score '{scoreText}' does not parse: {parseError}";
+
+                return false;
+            }
+
+            try {
+                score = RuleCompiler.CompileExpression(expression: new ValueExpression(Tokens: scoreTokens), kind: CellKind.Int, ruleName: row.Name, verb: "search score", context: context);
+            } catch (RuleException exception) {
+                reason = exception.Message;
+
+                return false;
+            }
+            if (RuleDataflow.ExpressionReadsHost(tokens: score)) {
+                reason = $"search '{row.Name}' score reads a fact only the world host answers; a frame cannot evaluate it";
+
+                return false;
+            }
+        }
+        if (row.Best is { } bestName) {
+            if (WorldDefinitionRows.FindStateRow(rows: definition.State, name: bestName) is not { IsKeyed: true, Kind: CellKind.Int } bestRow) {
+                reason = $"search '{row.Name}' best '{bestName}' must be a keyed integer row";
+
+                return false;
+            }
+
+            foreach (var cell in new[] { "token", "to", "score" }) {
+                if (!bestRow.HasCell(key: cell)) {
+                    reason = $"search '{row.Name}' best '{bestName}' must declare cells 'token', 'to', and 'score'";
+
+                    return false;
+                }
+            }
+        }
 
         var derived = (int)Math.Min(val1: (leftover / judgeCost), val2: WorldSearchCapacity.MaxNodesPerTick);
 
@@ -192,7 +262,7 @@ public static class WorldSearchCompilation {
             return false;
         }
 
-        plan = new WorldSearchPlan(Row: row, Topology: topology, Turn: turnName, Verdict: verdictName, Off: off, Nodes: (row.Nodes ?? derived), JudgeCost: judgeCost);
+        plan = new WorldSearchPlan(Row: row, Topology: topology, Turn: turnName, Verdict: verdictName, Off: off, Nodes: (row.Nodes ?? derived), JudgeCost: judgeCost, Depth: row.Depth, Score: score, Best: row.Best);
         reason = string.Empty;
 
         return true;
@@ -224,7 +294,7 @@ public static class WorldSearchCompilation {
         var leftover = (Math.Max(val1: 0L, val2: (RuleCapacity.MaxWorkUnitsPerTick - sheet)) / rows.Count);
 
         for (var index = 0; index < rows.Count; index++) {
-            if (!TryPlan(definition: definition, row: rows[index], judgeCost: judgeCost, leftover: leftover, plan: out var plan, reason: out reason)) {
+            if (!TryPlan(definition: definition, row: rows[index], judgeCost: judgeCost, leftover: leftover, context: context, plan: out var plan, reason: out reason)) {
                 return false;
             }
 
