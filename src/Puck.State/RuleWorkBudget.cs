@@ -303,6 +303,8 @@ public static class RuleWorkBudget {
 
         // Tier 12: Topology shifts & transforms
         ExpressionOp.BoardShift or ExpressionOp.BoardImage => (board is { } b ? (b.Topology.CellCount / 2 + b.Visits) : 24L),
+        // A fill is at most one shift per cell before the frontier empties.
+        ExpressionOp.BoardFill => (board is { } fill ? ((long)fill.Topology.CellCount * (fill.Topology.CellCount / 2 + fill.Visits)) : 1_536L),
 
         _ => 1L,
     };

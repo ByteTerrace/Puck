@@ -1329,69 +1329,57 @@ the graph path with edge normals as its directions — boot-time geometry in
 doubles whose vertex merge quantizes to a fine grid, so the graph is the same
 on every machine. The two snub tilings wait on a vertex-configuration grower.
 
-**A rule can ask what a board would be; the `search` section is that question,
-chartered.** The one gap the four-brick-walls critique found that a rule
-cannot close is the hypothetical: checkmate, stalemate, a legal-square plan,
-and a CPU opponent all need a board that is not the document's. The shipped
-chess world fixes the shape: it has no move interactions — bodies move, and
-the rules snapshot the settled pieces into `board`, diff it against
-the accepted `lastLegal`, construct and exactly match `move`, judge it into `verdict`,
-and flip `turn`. A game is a *judge*, and a ply is a candidate state the
-judge accepts and that changes the turn key; an interaction-shaped world fits
-the same definition with its gates as the judge. The design is a value-typed
-*frame* — every integer cell of the section laid out once from the catalog,
-so a copy is one memcpy and a judge's fifty scratch scalars cost nothing;
-the bit planes the board queries derive stay read scratch — and a second
-`IRuleHost` over such a frame, so the document's own rules run unchanged on
-the hypothetical board and no second rule language exists for the bot. Which
-rules a frame can run derives from the dataflow: a rule reading a world
-operand (a body's cell, its uprightness, quiescence) is host-only, and the
-candidate is applied where those rules sit, which is where the physical move
-enters the sequence; a world with something specific in mind names the rule
-the candidate follows. Candidates derive as authored shapes, walked in a fixed
-order ahead of token and target/direction: `relocate` (one own piece to any
-other cell, evicting or not whatever stood there), `drop` (a token off the
-board into an empty cell — a supply piece, a hand), `jump` (two cells along a
-direction, over an occupied intermediate that leaves the board — the
-en-passant clearing's shape, not its exact geometry), and `pair` (two tokens
-relocating together by the same offset — the castle's minimal primitive, not
-a general rule for every pair's own reach); an authored per-element reach mask
-prunes before the judge where strength matters. A token's own code changing
-(promotion) is out of this section's scope. Legality is written once, as the
-judge: *enforcement* is the author's choice per table — the diegetic
-tabletop records an illegal move and lets the players fix the board, a
-teaching world refuses it or paints the `plan` row from the search's
-per-token `legal` masks — the first consumer: the legal squares of every
-piece are the depth-one search. The search is a *job* across ticks, never
-a query that must answer in its tick: the job spends a node quota derived
-from what the work sheet leaves of the tick budget divided by the judge's
-own cost, runs its recursion on an explicit stack the checkpoint captures
-and the state hash folds (the shared navigation trees are the precedent),
-and lands its verdict as a state fact; a bot body then issues the same
-command a human would through the player command path, and a dog may knock
-the table while it thinks. Two algorithms, on the general-game precedent
-(Ludii ships both and picks per game): iterative-deepening alpha-beta with a
-transposition table for a world with an authored score expression, and UCT
-for one with only a terminal outcome, its playouts drawn from a hash of tick
-and node — never an RNG in sim state. Checkmate is the job at depth one with
-no accepted candidate and the check row set. The judge-per-node cost is the
-strength ceiling of this design — depth one in ticks, depth two or three
-over seconds — and a plane-native make/unmake for strength beyond that is a
-later decision, not this one. The prerequisite is the read path: operands
-read cells through row objects today, and a frame host cannot present those
-without allocating, so every read goes through one value indirection first
-— the operand-union refactor's "handles first", brought forward. Tokens on
-a cell is the frame seen from the other side, and chess already carries
-both mappings — `pieceCell` (token to cell) and `board` (cell to code) —
-which the shipped world still keeps consistent by hand with two rules; the
-engine now carries the general primitive (`Puck.State.StateInverse`, a
-`cellsOf` row's `inverse: {tokens, codes}`): the board is refused a direct
-write, by name, at the mutation door and the validator, and is derived from
-`tokens`/`codes` at every compose and install, with a frame recomputing only
-a moved token's two cells — adopting it in `chess.world.json` is a follow-on,
-not this landing. A count is already a value. Refused: a
-mate detector unrolled into per-piece rules, a privileged bot mutation, a
-search that blocks a tick, a frame that materializes row objects.
+**A rule can ask what a board would be; the `search` section is that
+question.** The one gap a rule cannot close alone is the hypothetical:
+checkmate, stalemate, a legal-square plan, and a CPU opponent all need a
+board that is not the document's. The shipped chess world fixes the shape:
+it has no move interactions — bodies move, and the rules snapshot the
+settled pieces into `board`, diff it against the accepted `lastLegal`,
+construct and exactly match `move`, judge it into `verdict`, and flip
+`turn`. A game is a *judge*, and a ply is a candidate state the judge
+accepts and that changes the turn key; an interaction-shaped world fits the
+same definition with its gates as the judge. What runs: a value-typed
+*frame* (`Puck.State.StateFrame`) lays every integer cell of the section out
+once from the rows, so a copy is one span copy and a judge's fifty scratch
+scalars cost nothing, and a second `IRuleHost` (`FrameHost`) runs the
+document's own rules over it unchanged, so no second rule language exists
+for the bot. Which rules a frame runs derives from the dataflow: a rule
+reading a world operand (a body's cell, its uprightness, quiescence) is
+host-only and skipped (`RuleDataflow.ReadsHost`); the candidate is written
+into the token row those rules would have written, and every other rule
+judges it. Candidates are authored shapes walked in a fixed order ahead of
+token and target: `relocate` (evicting or not what stood there), `drop` (a
+token off the board into an empty cell), `jump` (two cells along a direction
+over an occupied intermediate that leaves the board), and `pair` (two tokens
+by the same offset — the castle's minimal primitive). A token's code changing
+(promotion) is not a shape yet. Outputs land as ordinary rows through the
+mutation door: `legal` masks for boards to 64 cells, `reach` for the token a
+`held` slot names on any board, per-token `counts`, `count`, and — with an
+authored `score` — `best`, from an iterative-deepening negamax with
+alpha-beta on an explicit frame stack that a tick boundary suspends anywhere
+and the checkpoint carries. The search is a *job* across ticks, never a
+query that must answer in its tick: its node quota derives from what the
+work sheet leaves of the tick budget divided by the judge's own cost, it
+restarts when any framed cell other than its outputs changes, and a bot body
+then issues the same command a human would through the player command path,
+so a dog may knock the table while it thinks. Checkmate is the job at depth
+one with no accepted candidate and the check row set. Legality is written
+once, as the judge; *enforcement* is the author's choice per table (the
+board binding's `enforcement`): `record` lets the players fix the board, the
+diegetic default; `return` poses the piece back onto its `from` cell on the
+verdict's refuse edge. Tokens on a cell is the frame seen from the other
+side: a `cellsOf` row declaring `inverse: {tokens, codes}` is derived from
+its token row at every compose and install and refused a direct write, and
+a frame recomputes only a moved token's two cells; a count is already a
+value. Remaining, in order: UCT for a job with only a terminal outcome, its
+playouts drawn from a hash of tick and node; a transposition table; the
+promotion shape; searching zone-to-zone transfers; the shipped chess world
+adopting `inverse`, `boardShift`, and `boardFill` in place of its hand-kept
+rows and wrap constants. The judge-per-node cost is the strength ceiling —
+depth one in ticks, depth two or three over seconds — and a plane-native
+make/unmake for strength beyond that is a later decision. Refused: a mate
+detector unrolled into per-piece rules, a privileged bot mutation, a search
+that blocks a tick, a frame that materializes row objects.
 
 **Placements compose, and a game addresses its bodies by placement.** A
 placement may name a `parent`: its position and yaw become a local offset and
