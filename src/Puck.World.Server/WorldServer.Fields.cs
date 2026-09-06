@@ -111,20 +111,17 @@ public sealed partial class WorldServer : IWorldFieldLatticeHost {
         );
         m_output.DeliverDefinition(definition: m_definition);
     }
-    // Placement response traits are authored outside the field reaction program and therefore retain their named
-    // scalar seam; reaction execution itself always uses the typed overload above.
-    private FixedQ4816 ReadScalarSlot(string row, ulong tick) => ((WorldStateReader.TryRead(
-        definition: m_definition,
-        key: WorldStateRow.SlotKey,
-        rawValue: out var raw,
-        row: out _,
-        rowName: row,
-        text: out _,
-        tick: tick
-    ) && (raw is { } value))
-        ? FixedQ4816.FromRawBits(value: value)
-        : FixedQ4816.Zero
-    );
+    // Placement response traits are authored outside the field reaction program and therefore name their row rather
+    // than carrying a compiled handle; resolves through the document catalog's name -> handle dictionary and then the
+    // same handle-based read the typed overload above uses, so this seam costs a dictionary lookup, not a row scan.
+    private FixedQ4816 ReadScalarSlot(string row, ulong tick) {
+        var catalog = m_definition.StateCatalog;
+
+        return (catalog.TryResolve(lane: StateLane.Document, name: row, handle: out var handle)
+            ? ReadScalarSlot(catalog: catalog, row: handle, tick: tick)
+            : FixedQ4816.Zero
+        );
+    }
     private long ReadTagCell(StateCatalog catalog, StateHandle row, int body, ulong tick) => ((WorldStateReader.TryReadHandle(
         catalog: catalog,
         definition: m_definition,

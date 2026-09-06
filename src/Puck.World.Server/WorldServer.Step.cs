@@ -276,7 +276,7 @@ public sealed partial class WorldServer {
     }
     // Resolves a document row once through the catalog's name -> handle dictionary (StateCatalog.TryResolve) and the
     // handle's own LaneOrdinal as a direct row-array index, instead of WorldDefinitionRows.FindStateRow's linear scan
-    // over every declared row. Shared by every tick-path reader that starts from a row NAME (Carriers/CarrierKeys
+    // over every declared row. Shared by every tick-path reader that starts from a row name (Carriers/CarrierKeys
     // below, WorldServer.BoardEnforcement.cs) — the handle is handed back too, so a caller that walks the row's own
     // cells afterward reads each one through it rather than resolving the row by name again per cell.
     private bool TryResolveDocumentRow(string name, out StateHandle handle, out WorldStateRow? row) {

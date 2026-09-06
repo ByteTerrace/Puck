@@ -74,11 +74,11 @@ public sealed partial class WorldServer {
     }
     // Every apply and every undo preserves the live lattice allocation and reaction state. Repaint only rows whose
     // persisted draw position or draw fill actually moved, so an unrelated mutation cannot erase evolved cells.
-    // Pairs a current row with its previous self by INDEX (a name compare, not a scan) whenever both row lists carry
-    // the same count — the common case, since almost every mutation kind that reaches here changes a row's own
-    // cursor/masks/field rather than adding, removing, or reordering rows — and falls back to a name-keyed map, built
-    // once and reused for the rest of this call, only for a row an index pairing did not resolve. Either path is
-    // O(rows) total; a per-row WorldDefinitionRows.FindStateRow scan against the whole previous list would be
+    // Pairs a current row with its previous self by array position (a name compare, not a scan) whenever both row
+    // lists carry the same count — the common case, since almost every mutation kind that reaches here changes a
+    // row's own cursor/masks/field rather than adding, removing, or reordering rows — and falls back to a name-keyed
+    // map, built once and reused for the rest of this call, only for a row a position pairing did not resolve. Either
+    // path is O(rows) total; a per-row WorldDefinitionRows.FindStateRow scan against the whole previous list would be
     // O(rows squared).
     private void RepaintChangedLatticeDraws(WorldDefinition previous, WorldDefinition current) {
         if (ReferenceEquals(objA: previous.State, objB: current.State)) {

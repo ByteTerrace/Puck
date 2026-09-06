@@ -2,15 +2,10 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Steady-state allocation over the shipped world's idle tick. The tick path this law covers (carrier
-/// rows, the drive-gate index, board-enforcement rows) resolves through a compiled <see cref="StateHandle"/> rather
-/// than a per-tick linear name scan, but a linear scan over rows already allocates nothing (see
-/// <see cref="StateRows.FindStateRow{TRow}"/>'s own remarks) — so this bar is not a before/after delta on THIS
-/// change. It guards the shipped world's whole idle-tick pipeline (population, physics, event collection, none of
-/// them this task's files) against a FUTURE regression that adds real per-tick allocation; measured against
-/// <c>phase0-base</c> before this change with the identical fixture and tick counts, the growth was byte-for-byte
-/// the same (384,960 bytes over 120 ticks) — proving every byte counted here already existed outside this task's
-/// five files.</summary>
+/// <summary>Guards the shipped world's idle-tick pipeline against added per-tick allocation. The tick-path readers
+/// that resolve a state row (carrier rows, the drive-gate index, board-enforcement rows) go through a compiled
+/// <see cref="StateHandle"/> rather than a per-tick linear name scan; the bound here covers the whole idle-tick
+/// pipeline (population, physics, event collection included), not those readers alone.</summary>
 public sealed class HandleTickPathLawTests(ITestOutputHelper output) {
     [Fact]
     public void ShippedWorldIdleTicksStaySteadyStateAllocation() {
