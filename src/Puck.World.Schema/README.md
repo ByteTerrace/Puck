@@ -374,8 +374,10 @@ unrelated rigid body still settling elsewhere holds every board's derive at
 bay too.
 
 The shipped chess module uses `$board:mask` to locate a candidate's source and
-destination, then constructs the expected resulting piece code at every cell.
-An exact comparison catches changes that occupancy masks alone cannot see.
+destination. A union of piece-code mask differences detects every changed cell;
+the candidate's at most four affected cells are then checked directly, with all
+changes outside that footprint counted as mismatches. The result catches changes
+that occupancy masks alone cannot see.
 Local bindings hold geometry and attack intermediates; empty-ray patterns and
 board attack queries supply slider reach. Accepted state is distinct from the
 physical observation, so incomplete or rejected arrangements never replace the

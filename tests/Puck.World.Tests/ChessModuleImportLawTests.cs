@@ -83,16 +83,8 @@ public sealed class ChessModuleImportLawTests {
         }
     }
 
-    // 32 tightly-packed rigid pieces settling FROM SPAWN — never a real move — can cross $physics:quiescent's edge
-    // more than once before every piece has finished its own physical settle (a body still mid-shove reads resting
-    // for a moment, opens the population-wide gate, then keeps moving). The document itself debounces this: a
-    // `settleHold` counter (`tabletop-settle-hold`) only reaches its margin once quiescence has held continuously,
-    // and every tabletop rule gates on THAT rather than the raw edge, so a mid-settle wobble never opens the
-    // classifier at all. The first genuine settle (`gameStarted == 0`) is further routed through
-    // `tabletop-game-start`, which snapshots `previousBoard` from the just-derived `board` before any classifier
-    // reads it — the SAME reasoning that makes every later move's own `tabletop-board-snapshot` correct, applied
-    // once at boot instead of assuming `previousBoard`'s all-zero row default already matches an empty board. No
-    // row here is written by hand: this is real settle time, nothing else.
+    // The first stable physical position seeds accepted state. Later settles are judged
+    // against lastLegal; rejected or incomplete observations never replace that baseline.
     private static void SettleFromSpawn(WorldFixture fixture) {
         for (var tick = 0; (tick < 400); tick++) {
             fixture.Step();
@@ -146,11 +138,8 @@ public sealed class ChessModuleImportLawTests {
         Assert.Equal(0, Slot(fixture, "verdict"));
         Assert.Equal((illegalBefore + 1), Slot(fixture, "illegalCount"));
 
-        // Control: the SAME knight making an ACTUALLY legal jump records legal — proving the illegal verdict above
-        // discriminates a real geometry failure rather than the knight always losing. Illegal moves are recorded,
-        // never undone (the world never repositions a physical piece), so the knight PHYSICALLY sits at g3 (where
-        // the refused move above left it) — the next jump is FROM g3, not g1.
-        MoveTo(fixture, knight, file: 4, rank: 3); // e4 (dx=-2,dz=1 from g3) — a genuine L-shape onto an empty square.
+        // The rejected g3 observation never replaces the accepted g1 origin.
+        MoveTo(fixture, knight, file: 5, rank: 2); // g1 -> f3 is legal.
         Assert.Equal(1, Slot(fixture, "verdict"));
     }
 
@@ -158,23 +147,18 @@ public sealed class ChessModuleImportLawTests {
     public void CaptureRecordsMoveKindTwo() {
         using var fixture = Fixtures.FreshServer(definition: LoadMinimalHost());
 
-        SettleFromSpawn(fixture: fixture);
-
         var blackPawn = Piece(fixture, "piece16"); // a7
 
-        MoveTo(fixture, blackPawn, file: 2, rank: 2); // c3 — an arbitrary reposition, setting up the capture below.
+        MoveTo(fixture, blackPawn, file: 2, rank: 2); // c3 — the initial position, before the first settle.
 
         var knight = Piece(fixture, "piece1"); // b1
 
-        // A capture is ONE physical action, not two: the defender is lifted clear of the board (onto the tabletop's
-        // own margin beyond the 8x8 grid — $board:cellOf reads no cell there, so it stops contributing to `board`
-        // at all) in the SAME settle window the attacker lands in c3's now-vacated space. Posing both bodies before
-        // stepping means the population never re-quiesces in between, so the classifier sees one settle: black's
-        // own vacate at c3 with no matching occupy (a piece removed), white's vacate at b1 paired with occupy at
-        // c3 — the capture shape. Settling them separately would record two ordinary quiet moves instead, and
-        // dropping the knight directly onto the still-resting pawn leaves both bodies permanently interpenetrating,
-        // never quiescent again.
+        // Remove the defender and land the attacker in the same observation. A separate
+        // removal settle is also safe: accepted chess state waits for the complete capture.
         blackPawn.Pose(x: (OriginX + 1.7f), y: SpawnHeight, z: (OriginZ + 0.5f), yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        SettleFromSpawn(fixture); // A removal-only observation must not lose the accepted defender.
+        Assert.Equal(0, Slot(fixture, "turn"));
+        Assert.Equal(-1, Cell(Row(fixture, "lastLegal"), "18"));
         MoveTo(fixture, knight, file: 2, rank: 2); // c3 — a legal knight jump from b1, capturing the black pawn.
 
         Assert.Equal(1, Slot(fixture, "verdict"));
@@ -186,12 +170,10 @@ public sealed class ChessModuleImportLawTests {
     public void PawnCaptureRecordsLegal() {
         using var fixture = Fixtures.FreshServer(definition: LoadMinimalHost());
 
-        SettleFromSpawn(fixture: fixture);
-
         var whitePawn = Piece(fixture, "piece12"); // e2 (cell 12)
         var blackPawn = Piece(fixture, "piece19"); // d7 (cell 51)
 
-        // Reposition black pawn to d3 (file 3, rank 2 = cell 19) while it's white's turn (an illegal settle, so turn stays 0)
+        // Seat the initial black pawn on d3 before the first accepted snapshot.
         MoveTo(fixture, blackPawn, file: 3, rank: 2);
 
         // In one settle window, black pawn is lifted to the margin and white pawn lands on d3 (diagonal capture from e2)
@@ -273,28 +255,24 @@ public sealed class ChessModuleImportLawTests {
     public void WhiteKingsideCastleRecordsLegal() {
         using var fixture = Fixtures.FreshServer(definition: LoadMinimalHost());
 
-        SettleFromSpawn(fixture: fixture);
-
         var whiteBishop = Piece(fixture, "piece5"); // f1
         var whiteKnight = Piece(fixture, "piece6"); // g1
         var whiteKing = Piece(fixture, "piece4"); // e1
         var whiteRook = Piece(fixture, "piece7"); // h1
 
-        // Clear transit squares f1 and g1 by moving bishop and knight off-board onto margin
-        whiteBishop.Pose(x: (OriginX + 1.7f), y: SpawnHeight, z: (OriginZ + 0.1f), yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
-        MoveTo(fixture, whiteKnight, file: 6, rank: 2); // off transit square
-        // In the next settle window, move knight off-board as well
-        whiteKnight.Pose(x: (OriginX + 1.7f), y: SpawnHeight, z: (OriginZ + 0.3f), yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
-        for (var tick = 0; tick < 400; tick++) {
-            fixture.Step();
-        }
+        // Configure the initial position before its first accepted settle.
+        whiteBishop.Pose(x: OriginX + 1.7f, y: SpawnHeight, z: OriginZ + 0.1f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        whiteKnight.Pose(x: OriginX + 1.7f, y: SpawnHeight, z: OriginZ + 0.3f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        SettleFromSpawn(fixture);
 
-        // Reposition King back to e1 and Rook back to h1 to ensure starting home cells before castling
-        whiteKing.Pose(x: (OriginX + 4.5f * CellSize), y: SpawnHeight, z: (OriginZ + 0.5f * CellSize), yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
-        whiteRook.Pose(x: (OriginX + 7.5f * CellSize), y: SpawnHeight, z: (OriginZ + 0.5f * CellSize), yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
-        for (var tick = 0; tick < 400; tick++) {
-            fixture.Step();
-        }
+        // A lifted rook may settle off-board and return without consuming legal rights.
+        whiteRook.Pose(x: OriginX + 1.7f, y: SpawnHeight, z: OriginZ + 0.5f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        SettleFromSpawn(fixture);
+        Assert.Equal(0, Slot(fixture, "castleRights"));
+        Assert.Equal(4, Cell(Row(fixture, "lastLegal"), "7"));
+        MoveTo(fixture, whiteRook, file: 7, rank: 0);
+        Assert.Equal(0, Slot(fixture, "castleRights"));
+        Assert.Equal(0, Slot(fixture, "turn"));
 
         // Execute Kingside Castle: King e1 -> g1 (cell 4 -> 6), Rook h1 -> f1 (cell 7 -> 5)
         whiteKing.Pose(x: (OriginX + 6.5f * CellSize), y: SpawnHeight, z: (OriginZ + 0.5f * CellSize), yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
@@ -341,6 +319,6 @@ public sealed class ChessModuleImportLawTests {
         Assert.Equal(attacked ? 0 : 1, Slot(fixture, "verdict"));
         Assert.Equal(attacked ? 0 : 1, Slot(fixture, "turn"));
         Assert.Equal(attacked ? 6 : 0, Cell(Row(fixture, "lastLegal"), "4"));
-        Assert.Equal(5, Slot(fixture, "castleRights")); // both departing home pieces stay remembered, even on refusal.
+        Assert.Equal(attacked ? 0 : 3, Slot(fixture, "castleRights")); // only accepted moves consume rights.
     }
 }

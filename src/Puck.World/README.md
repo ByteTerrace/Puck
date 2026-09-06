@@ -446,6 +446,11 @@ re-enters the solver with the carrier's own velocity. `body.where` echoes
 `carrying=`/`carriedBy=` while the relationship holds. The garden's `walker`
 kit (Wren) is the worked example — see the [server reference](../Puck.World.Server/README.md#carry-as-attachment-worldbodycarrycs-worldpopulationcarrycs).
 
+The garden's hound witness rules read body IDs from its own `houndIdentity`
+row. Its six cells correspond to the `hound` carrier's keys (90-95), and
+`boneHolder` and `reporter` admit the garden's full body-index range. This
+identity data belongs to the garden rather than an imported game.
+
 The `tabletop` placement carries a `board` facet (the tabletop primitive —
 see the [schema reference](../Puck.World.Schema/README.md#discrete-boards-cards-and-turns))
 anchoring an 8x8 `chessBoard` Grid topology, and 32 `piece`-kit rigid bodies
@@ -454,11 +459,11 @@ regions, now sited clear of the table's own footprint so the shrink and the
 approach never jostle a resting piece) prove it: two `pieceCode`-forEach
 rules (upright/tilted, gated on the `$upright:each` reserved channel so a
 knocked-over piece reads as displaced) derive each piece's live cell, then
-one PER-PIECE `board`-write rule (never a single rule spanning every piece)
-commits that piece's own code at its own cell — a piece whose body has left
-the frame (captured, knocked clear) refuses only its own write; it never
-costs its neighbours theirs, since every top-level state effect preflights
-and applies on its own (only a `transaction` groups effects atomically). A `body.pose`
+one `forEach` rule writes each observed cell, marking duplicate occupancy.
+A piece outside the board (captured or knocked clear) closes its own write
+gate; it does not prevent its neighbours from writing. Every top-level state
+effect preflights and applies on its own; only a `transaction` groups effects
+atomically. A `body.pose`
 teleport clears the piece's rest latch (`WorldBody.Pose`), so a bare pose at
 the piece's resting height already un-rests it and re-settles it, crossing
 `$physics:quiescent`'s Edge on the settle with no impulse at all; a pose
@@ -474,95 +479,74 @@ settling (a just-released `carry` target tumbling, say) holds every board's
 own Edge-gated rules at bay too, so a board proof run alongside unrelated
 rigid activity can see two moves land on the same settle.
 
-Legality is authorable, and the shipped garden's default is everything short
-of adjudication: movement geometry for all six piece kinds, captures, check,
-castling, en passant, and promotion. A settle's mover is found by reading
-each side's occupancy as a `$board:mask` bitboard rather than comparing any
-one piece's own cell: `popCount`/`lowestSetBit` size and locate the XOR of
-two settles, and the shape of that delta (one square vacated and occupied, a
-second side's square vacated too, two-and-two on one side) sorts it into a
-quiet move, a capture, an en passant, a castle, or a perturbation — recorded
-into `move` (`from`, `to`, `mover`, `captured`, `kind`) once per settle. A
-paired signature stores the four counts as
-`pair(pair(ownVacated, ownOccupied), pair(otherVacated, otherOccupied))`;
-`pairSwap` gives the other side's view of the same delta. This replaces
-separate count and per-shape flag rows without losing either side's counts.
-The four chess boards declare a 64-cell capacity. `boardCombine` copies or
-clears each whole board in one mutation, and empty squares may be absent
-from storage. Home-square reads use the `self` identity row for indirect
-keys, so they remain valid when a board copy omits those cells. The startup
-snapshot and flag form one transaction; a legal move's turn change,
-`lastLegal` copy, and en passant target form another.
+The chess rules judge each stable physical observation against the last accepted
+position, `lastLegal`; `board` remains the physical observation. Rejected
+moves and unfinished captures leave accepted state intact, so a player can
+restore the board or finish the move without teaching the judge a new origin.
+The first collision-free settle seeds the initial position, allowing a host to
+set up a different position before play begins.
 
-A capture whose defending vacate lands anywhere but the destination reads as
-en passant only when that square is also adjacent to the destination behind
-the mover's approach and the landed piece carries the pawn code; either test
-failing reads as a perturbation, not a forged capture — an unrelated
-other-side piece leaving the board in the same settle as an ordinary quiet
-move must never mint a bogus en passant record. A pawn's own diagonal-move
-legality then requires the settle's classified `kind` to match which capture
-it claims (2 for an ordinary capture, 3 for en passant) rather than trusting
-the target-square geometry alone — a diagonal hop onto the en passant target
-with the passed pawn left standing classifies as a quiet move (kind 1, since
-nothing was actually removed) and is refused. A settle whose own side only
-occupies or only vacates clamps its empty half to `-1` rather than writing
-the mask's own bit width into a row that refuses it. Movement legality and
-check read outward from the move's own squares: a slider's reach is "walking
-`$match:<emptyRun>:…:cell` from the destination back toward the origin lands on the
-origin" (no coordinate arithmetic), a leaper's is `$board:offset` matching
-the destination over its fixed jumps, and a king's square is attacked
-exactly the same way, probed for an enemy piece. A
-king-shaped (two-and-two) settle is judged by the castle legality check
-alone, never the single-step king check beside it — the classifier's own
-`from` is always the king's own home cell, read directly off the pre-move
-board's king mask rather than sorted from the two vacated cells, so it can
-never coincide with a single king step on either side of the board. Castling
-rights are a one-way bitfield set whenever a home square loses its king or
-rook between settled boards, including a capture or removal with no classified
-mover, legal or not — a capacity-bounded history ring
-answering "has this piece ever moved" can forget a departure once it scrolls
-out, reviving a right a long game never regains; a castle event vacates the
-king's own home cell, so it burns that king's bit on both sides at once. The
-legality check itself re-reads the physical squares: the king/rook homes
-held the right pieces immediately before this settle and hold neither
-immediately after, the transit squares were empty, and the rook's own
-landing square now holds it. Two checks close the remaining gap that leaves
-open: the king must not already be in check on the position before this
-settle — read from a one-tick-old snapshot of the check verdict, since the
-board a rule reads mid-settle already reflects the physical move — and the
-square the king crosses must not be attacked either, via a
-`$board:attacks:<row>:<min>:<max>:<directions>` query that walks a short
-authored ray list from a fixed cell and reports whether the first occupied
-cell on any of them falls in an authored value range (a slider's reach at
-one square, one query call instead of one rule per direction). Pawn, knight,
-and king attacks intersect the enemy piece masks with the fixed source-square
-sets for f1, d1, f8, and d8. These sets contain square ordinals; attack tests
-read the pieces occupying them. A piece that resolves to no cell,
-before or after (captured, lifted off, knocked clear), never itself
-qualifies as the mover, so its disappearance never registers a verdict, a
-turn change, or a `lastLegal` write under its own color. Illegal moves are
-recorded — `illegalCount` counts them, `verdict` names the last ruling — and
-never rejected, undone, or repositioned. Promotion is a same-cell piece
-swap the mask classifier cannot see as a move at all (an occupied cell whose
-value changes stays out of both sides' vacated/occupied masks): reaching the
-last rank on an ordinary settle marks `promotionPending`, and it stays
-pending across the pawn being lifted off — an empty cell settles nothing,
-since it is not a promoted piece either — until a later settle where that
-cell holds a knight, bishop, rook, or queen of the mover's own color,
-which clears it directly. A hand promotion is ordinarily two settles (lift,
-then place); neither one needs to itself be a legal move for the clearing to
-land correctly.
-`world.tabletop` reads the frame, live occupancy, and the bound convenience
-rows back. `boardSquareLight`/`boardSquareDark` placements (paired one to a
-cell, colors from the `boardColors` text row) render the board itself; the
-`plan` row is echoed and console-writable but unrendered — reserved for an
-addon to paint move highlights, per the lane's own scope. One known limit
-carries from the per-body scale primitive's own contract: two pieces landing
-on one cell in the same settle (an ordinary capture, an en passant) need the
-captured piece physically removed in that SAME settle — the world never
-depicts two bodies resting on one cell, so a capture that leaves the
-defender's body sitting on the destination square reads as the defender's
-own code winning the write, not the capturing piece's.
+The matcher constructs a candidate from the side-to-move's vacated source and
+new destination. When the king moved, its own source and destination resolve
+the pair even during castling. Empty masks resolve to `-1`. Ordinary moves
+clear the source and write the mover at the destination; en passant also clears
+the passed pawn's square; castling relocates the rook. A pawn reaching the last
+rank uses the observed replacement code. The matcher unions the XOR of each
+piece-code mask in `board` and `lastLegal`, including the observation's collision
+code. This is an exact set of changed cells: unlike an occupancy XOR, it sees
+same-colour substitutions too. A candidate's footprint contains its source,
+destination, and at most two extra cells. Any changed cell outside that footprint
+is a mismatch; direct reads compare the expected values inside it. Missing and
+overlapping addresses are counted only once, even for malformed candidates.
+This preserves a full-board comparison without a state-writing loop over 64 cells.
+`boardMismatch` counts differences from the constructed candidate and
+`boardChanged` counts differences from accepted state.
+`boardCollisions` counts cells with duplicate upright occupants.
+The observation uses code 7 for such a cell; accepted boards never contain it.
+Any collision prevents acceptance regardless of which body last wrote the cell.
+
+Geometry then judges that candidate. Empty-ray patterns handle bishops, rooks,
+and queens; coordinate differences handle knights and single king steps; one
+relative-rank pawn expression serves both colours. Attack calculations use
+rule-local bindings instead of persistent intermediate rows. The observed
+position must retain exactly one king of each colour and leave the mover's
+king unattacked. Castling additionally requires the home rook, a clear path,
+an unspent right, and safe origin and transit squares. Fixed source-square
+masks handle pawn, knight, and king transit attacks; board attack queries handle
+sliders. `castleRights` records four consumed rights: white queenside 1,
+white kingside 2, black queenside 4, black kingside 8. Only an accepted move
+consumes rights, including a capture of a home rook. A king move consumes both
+of its side's rights; restoring a displaced or illegally moved piece consumes
+neither.
+
+Acceptance commits the new `lastLegal`, turn, rights, en passant target, accepted
+check values, and promotion completion in one transaction. Board copies use
+`boardCombine` with capacity 64; empty cells can be absent from storage, so
+home-square reads use computed keys such as `lastLegal[(4)]`.
+The accepted board declares the closed piece-code range -6 through 6. The ring of canonical board
+fingerprints and `repetitionCount` remain a diagnostic, updated after the
+transaction: symmetry reduction, hash collisions, omitted rights and en passant
+state, and the short history make them unsuitable for adjudicating repetition.
+There is no checkmate, stalemate, draw adjudication, or CPU player in this module.
+
+Promotion is one chess move even if physical replacement takes several settles.
+A pawn on the last rank marks `promotionPending`; its origin and turn remain
+uncommitted until a friendly knight, bishop, rook, or queen completes the exact
+candidate. Lifting the pawn does not commit or clear the pending choice. Restoring
+the accepted board cancels the pending marker. `move` records the candidate
+(`from`, `to`, `mover`, `captured`, `kind`); the mover remains the original pawn
+when it promotes. Kinds 1–4 mean quiet, capture, en passant, and castle; 0 means
+no candidate pair. `verdict` is 1 only for a complete accepted candidate, otherwise
+0. `illegalCount` counts exact, completed-looking candidates that fail legality,
+excluding a pending promotion; unmatched arrangements carry no assertion about
+player intent. The rules never reposition bodies. Castling both pieces within
+one settle remains necessary: a rook move that settles first can itself be a
+complete legal move.
+
+`world.tabletop` reads the frame, observation, and bound convenience rows;
+`world.state` reads the remaining diagnostics. `boardSquareLight` and
+`boardSquareDark` placements render the board using `boardColors`.
+The `plan` row remains writable and echoed but unrendered.
 
 The garden also carries a hidden-hand poker table, state only — no card
 bodies — beside the chess set: a `cards` token domain (52 identities, `rank`

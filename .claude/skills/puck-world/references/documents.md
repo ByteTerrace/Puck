@@ -1234,12 +1234,15 @@ threshold scale with it too (`WorldBody.ScaleRigid`). Only the adjacency sweep's
 neighbour authority's own entities) still reads an unscaled collider, since no delivered snapshot yet
 carries a remote entity's live Scale.
 
-The tabletop's `chessBoard` Grid topology (8x8, 0.2 m cells) carries 32 `piece`-kit rigid bodies and is
-classified by a nested `pair` of the two sides' vacated/occupied counts (`pairSwap` exchanges sides).
-Its four board rows declare capacity 64; `boardCombine` copies/clears sparse rows, so fixed home-square
-reads go through `self` identity keys rather than requiring stored empty cells. Legal-move bookkeeping
-is one transaction. Castling rights compare home pieces across both boards even without a mover;
-transit attacks combine slider queries with pawn/knight/king source-square masks. The board is
+The tabletop's `chessBoard` Grid topology (8x8, 0.2 m cells) carries 32 `piece`-kit rigid bodies.
+Its candidate matcher unions exact piece-code mask differences, rejects changes outside the move
+footprint, and directly compares the at most four affected cells. Every pre-move read uses `lastLegal`, never a refused observation.
+Local bindings hold attack and geometry intermediates. A legal move commits turn, board, four
+castling rights, en passant target, accepted check values, and promotion completion together.
+Unfinished promotion does not advance turn. `boardCollisions` prevents duplicate occupants from
+being accepted; board-history fingerprints remain diagnostic, not repetition adjudication.
+The [chess authoring notes](../../../../src/Puck.World/README.md#the-world-as-data) own these contracts.
+The board is
 rendered as 64 `boardSquareLight`/`boardSquareDark` placements, one per cell, colors from the
 `boardColors` text row (the SAME `state.<row>.<key>` palette binding the piece prototypes use for
 `pieceSetColors`) — the tabletop otherwise renders as a bare top with no board pattern. A body's walker

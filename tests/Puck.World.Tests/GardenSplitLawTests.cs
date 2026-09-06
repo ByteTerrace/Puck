@@ -60,6 +60,24 @@ public sealed class GardenSplitLawTests {
         return definition!;
     }
 
+    [Fact]
+    public void HoundIdentitiesBelongToTheGardenAndFitTheirDestinationRows() {
+        var garden = JsonNode.Parse(File.ReadAllText(Path.Combine(RepoRoot(), "src/Puck.World/Assets/worlds/puck.world.json")))!;
+        var rows = garden["state"]!["world"]!.AsArray();
+        var identities = Assert.Single(rows, r => r?["name"]?.GetValue<string>() == "houndIdentity")!;
+        var hounds = Assert.Single(rows, r => r?["name"]?.GetValue<string>() == "hound")!;
+        foreach (var hound in hounds["cells"]!.AsArray()) {
+            var key = hound!["key"]!.GetValue<string>();
+            var cell = Assert.Single(identities["cells"]!.AsArray(), c => c!["key"]!.GetValue<string>() == key)!;
+            var id = cell["value"]!.GetValue<int>();
+            Assert.Equal(int.Parse(key), id);
+            foreach (var name in new[] { "boneHolder", "reporter" }) {
+                var destination = Assert.Single(rows, r => r?["name"]?.GetValue<string>() == name)!;
+                Assert.InRange(id, destination["min"]!.GetValue<int>(), destination["max"]!.GetValue<int>());
+            }
+        }
+    }
+
     private static HashSet<string> KeysAsPlacementIds(WorldDefinition definition, string rowName) {
         var row = WorldDefinitionRows.FindStateRow(definition.State, rowName)!;
 

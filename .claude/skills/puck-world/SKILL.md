@@ -402,8 +402,8 @@ choosing fixed-point primitives on sim value paths.
   own; only the `transaction` effect groups effects atomically
   (`WorldServer.Step`'s `FireWorldRuleTransaction`). A piece resolving to no
   cell of its own (captured, lifted off) never itself registers as the mover
-  on either side of a settle. A classify rule's scratch cells (a settle's
-  vacated/occupied `trailingZeroCount`) clamp an empty mask to `-1` rather
+  on either side of a settle. Chess's candidate source and destination
+  (`trailingZeroCount` of a mask) clamp an empty mask to `-1` rather
   than writing the mask's own bit width (64), which the cell's envelope
   refuses. `$upright:<bodyRef>` (a body's own up
   axis dotted against gravity-up) is the reserved channel a piece's own

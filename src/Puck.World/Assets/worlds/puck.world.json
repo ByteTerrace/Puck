@@ -475,7 +475,7 @@
         "effects": [
           {
             "$type": "setState",
-            "expression": "self[$left]",
+            "expression": "houndIdentity[$left]",
             "key": "0",
             "state": "boneHolder"
           },
@@ -6927,7 +6927,7 @@
             "comparandState": "boneHolder",
             "comparison": "NotEqual",
             "key": "$each",
-            "state": "self"
+            "state": "houndIdentity"
           },
           {
             "$type": "compareState",
@@ -6950,7 +6950,7 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": "self[$each]",
+          "expression": "houndIdentity[$each]",
           "key": "0",
           "state": "reporter"
         }
@@ -6972,7 +6972,7 @@
             "comparandState": "boneHolder",
             "comparison": "NotEqual",
             "key": "$each",
-            "state": "self"
+            "state": "houndIdentity"
           },
           {
             "$type": "compareState",
@@ -7030,7 +7030,7 @@
             "comparandState": "boneHolder",
             "comparison": "NotEqual",
             "key": "$each",
-            "state": "self"
+            "state": "houndIdentity"
           },
           {
             "$type": "compareState",
@@ -7038,7 +7038,7 @@
             "comparandState": "reporter",
             "comparison": "NotEqual",
             "key": "$each",
-            "state": "self"
+            "state": "houndIdentity"
           },
           {
             "$type": "compareState",
@@ -7423,6 +7423,37 @@
     ],
     "world": [
       {
+        "name": "houndIdentity",
+        "kind": "int",
+        "capacity": 6,
+        "cells": [
+          {
+            "key": "90",
+            "value": 90
+          },
+          {
+            "key": "91",
+            "value": 91
+          },
+          {
+            "key": "92",
+            "value": 92
+          },
+          {
+            "key": "93",
+            "value": 93
+          },
+          {
+            "key": "94",
+            "value": 94
+          },
+          {
+            "key": "95",
+            "value": 95
+          }
+        ]
+      },
+      {
         "cells": [
           {
             "key": "behind",
@@ -7652,7 +7683,7 @@
           }
         ],
         "kind": "int",
-        "max": 63,
+        "max": 127,
         "min": -1,
         "name": "boneHolder"
       },
@@ -7665,7 +7696,7 @@
           }
         ],
         "kind": "int",
-        "max": 63,
+        "max": 127,
         "min": -1,
         "name": "reporter"
       },

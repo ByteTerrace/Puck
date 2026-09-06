@@ -108,8 +108,8 @@ public sealed class AuthoredBoardRulesLawTests {
 
     private static WorldDefinition CastlePosition(long[] before, long[] after, string ruleName, int moveKind = 4) => Fixtures.BuildDocument() with {
         StateRaw = new WorldStateSection(World: [.. Garden.State.Where(r => r.Name.Value is
-            "board" or "previousBoard" or "self" or "move" or "settleHold" or "castleRights" or "castleTransitAttacked").Select(r => r.Name.Value switch {
-                "board" => Seed(r, after), "previousBoard" => Seed(r, before), "settleHold" => Seed(r, 60),
+            "board" or "lastLegal" or "self" or "move" or "settleHold" or "castleRights" or "castleTransitAttacked").Select(r => r.Name.Value switch {
+                "board" => Seed(r, after), "lastLegal" => Seed(r, before), "settleHold" => Seed(r, 60),
                 "move" => r with { Cells = [.. r.Cells!.Select(c => c with { Value = c.Key.Value == "kind" ? moveKind : -1 })] },
                 _ => r,
             })], Lattices: [Garden.StateRaw!.Lattices!.Single(t => t.Name == "chessBoard")]),
@@ -144,45 +144,6 @@ public sealed class AuthoredBoardRulesLawTests {
         Check(blocked);
         blocked[transit + step] = -sign;
         Check(blocked);
-    }
-
-    [Theory]
-    [InlineData(4, 6, 1)]
-    [InlineData(0, 4, 2)]
-    [InlineData(7, 4, 4)]
-    [InlineData(60, -6, 8)]
-    [InlineData(56, -4, 16)]
-    [InlineData(63, -4, 32)]
-    public void CastleRightsRememberHomePieceRemovalEvenWithoutAClassifiedMover(int home, int piece, int bit) {
-        var before = new long[64];
-        before[home] = piece;
-        using var fixture = Fixtures.FreshServer(definition: CastlePosition(before, new long[64], "tabletop-track-castle-rights", moveKind: 0));
-        fixture.Step();
-        Assert.Equal(bit, WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, "castleRights")!.Cells!.Single().Value);
-        using var control = Fixtures.FreshServer(definition: CastlePosition(before, before, "tabletop-track-castle-rights", moveKind: 0));
-        control.Step();
-        Assert.Equal(0L, WorldDefinitionRows.FindStateRow(control.Server.Definition.State, "castleRights")!.Cells!.Single().Value);
-    }
-
-    [Theory]
-    [InlineData(0, 56, 1, "white")]
-    [InlineData(1, 7, -1, "black")]
-    public void PromotionAcceptsOnlyAFriendlyKnightBishopRookOrQueen(int side, int square, int sign, string color) {
-        for (var piece = -6; piece <= 6; piece++) {
-            var board = new long[64];
-            board[square] = sign * piece;
-            var definition = Fixtures.BuildDocument() with {
-                StateRaw = new WorldStateSection(World: [.. Garden.State.Where(r => r.Name.Value is "board" or "promotionPending" or "settleHold").Select(r => r.Name.Value switch {
-                    "board" => Seed(r, board), "settleHold" => Seed(r, 60),
-                    _ => r with { Cells = [.. r.Cells!.Select(c => c with { Value = c.Key.Value == side.ToString() ? square : -1 })] },
-                })], Lattices: [Garden.StateRaw!.Lattices!.Single(t => t.Name == "chessBoard")]),
-                Rules = [Garden.Rules!.Single(r => r.Name.Value == $"tabletop-settle-promotion-{color}")],
-            };
-            using var fixture = Fixtures.FreshServer(definition);
-            fixture.Step();
-            var pending = WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, "promotionPending")!;
-            Assert.Equal(piece is >= 2 and <= 5 ? -1L : square, pending.Cells!.Single(c => c.Key.Value == side.ToString()).Value);
-        }
     }
 
     private static IEnumerable<int[]> Lines() {

@@ -1007,8 +1007,10 @@ displaced rather than occupying its last resting cell. Legality is
 authorable, not engine-adjudicated, and the shipped garden's default set is
 everything short of adjudication: movement geometry for all six piece kinds,
 captures, check, castling, en passant, and promotion. The judge now constructs a candidate from the side-to-move's source and
-destination, then compares all 64 expected piece codes with the physical
-observation. Ordinary moves, en passant, and castling are three small board
+destination, then exactly matches its expected board against the physical
+observation. Piece-code mask differences detect every changed square; direct
+comparisons check the candidate's at most four affected cells, while a mask
+rejects every change outside them. Ordinary moves, en passant, and castling are three small board
 patches; promotion chooses the ordinary patch's replacement. The king's own
 mask identifies its pair during castling. Local bindings hold attack and
 geometry intermediates, and relative ranks share pawn geometry between colours.
