@@ -1480,6 +1480,12 @@ uses with its default namespace.
 
 ## Deterministic replay (`WorldReplayTape.cs`, `WorldReplayTape.Drive.cs`, `WorldReplaySnapshot.cs`)
 
+The `replay.*` verb surface (`WorldReplayCommandModule`) lives in
+[`Puck.World.Console`](../Puck.World.Console/README.md); it holds this
+project's `WorldReplayTape`, `WorldReplayInspector`, and
+`WorldReplayEntryDescriber` by their public surface, the same way every other
+moved module reaches a Server type it does not own.
+
 `replay.drive <name> [to <tick>]` re-drives a saved tape into the running
 session: a forced `world.load` of the embedded definition plus the complete
 boot authority checkpoint from a shadow server the recorded seats joined reset

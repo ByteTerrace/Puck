@@ -5,7 +5,7 @@ namespace Puck.World;
 
 /// <summary>The <c>replay.inspect</c> half of the replay console surface — the tape's read-back (see
 /// <see cref="WorldReplayInspector"/>).</summary>
-internal sealed partial class WorldReplayCommandModule {
+public sealed partial class WorldReplayCommandModule {
     private const string InspectUsage = "[replay.inspect: usage — replay.inspect <name> [<from>-<to>] [--all] [--poses]]";
 
     private CommandResult Inspect(WireArgs args) {

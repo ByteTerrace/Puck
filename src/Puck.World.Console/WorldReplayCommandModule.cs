@@ -18,7 +18,7 @@ namespace Puck.World;
 /// verification runs offline over an isolated shadow world, so it never re-injects into the live session and its verdict
 /// is readable the instant the verb returns. A SEPARATE module to keep each class under its analyzer ceilings.
 /// </summary>
-internal sealed partial class WorldReplayCommandModule(WorldReplayTape tape, WorldReplayInspector inspector, WorldInstanceHost instances) : ICommandModule {
+public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, WorldReplayInspector inspector, WorldInstanceHost instances) : ICommandModule {
     private readonly WorldReplayInspector m_inspector = inspector;
     private readonly WorldInstanceHost m_instances = instances;
     private readonly WorldReplayTape m_tape = tape;

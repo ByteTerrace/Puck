@@ -4,7 +4,7 @@ using Puck.Commands;
 namespace Puck.World;
 
 // replay.drive / replay.fork — the live-drive half of the replay surface, plus replay.cancel's drive arm.
-internal sealed partial class WorldReplayCommandModule {
+public sealed partial class WorldReplayCommandModule {
     private CommandResult BeginDrive(string verb, string name, int? toTick, string? forkName) {
         try {
             if (!m_tape.TryBeginDrive(

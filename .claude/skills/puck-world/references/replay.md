@@ -10,9 +10,10 @@ from there into a standalone child. Files (all in
 `WorldReplayTape.Drive.cs` (the live drive), `WorldReplaySnapshot.cs`,
 `WorldReplayRefusal.cs`, `WorldReplayVerdict.cs`,
 `WorldReplayCodecException.cs`, the read-back in `WorldReplayInspector.cs` +
-`WorldReplayEntryDescriber.cs`; verbs in
-`src/Puck.World/WorldReplayCommandModule.cs`,
-`WorldReplayCommandModule.Drive.cs`, and `WorldReplayCommandModule.Inspect.cs`.
+`WorldReplayEntryDescriber.cs`; the verb surface (`WorldReplayCommandModule.cs`,
+`.Drive.cs`, `.Inspect.cs`) lives in `src/Puck.World.Console/` instead — it
+reaches the tape and the read-back by their public surface, the same way
+every other module moved out of `Puck.World`.
 
 ## Contents
 
