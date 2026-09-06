@@ -79,7 +79,10 @@ public sealed partial class WorldInstanceHost {
                         // A contradictory peer verdict cannot authorize another body or crash unrelated worlds.
                         // Keep recovery and report once; only an eventual consistent non-commit may restore it.
                         if (!pending.ConflictingCommitReported) {
-                            Console.Error.WriteLine($"[world.transfer: transfer={transfer.TransferId} inconsistent destination status — commit reported after confirmed rollback; recovery retained]");
+                            m_narration.Narrate(
+                                channel: "world.transfer",
+                                format: () => $"[world.transfer: transfer={transfer.TransferId} inconsistent destination status — commit reported after confirmed rollback; recovery retained]"
+                            );
                             m_inDoubtTransfers[index] = pending with { ConflictingCommitReported = true };
                         }
                         index++;
@@ -113,7 +116,10 @@ public sealed partial class WorldInstanceHost {
                     }
 
                     m_inDoubtTransfers.RemoveAt(index: index);
-                    Console.Error.WriteLine(value: $"[world.transfer: transfer={pending.Transfer.TransferId} RESOLVED absent at '{pending.TargetName}' — every member restored to '{pending.Transfer.SourceInstance}' from retained recovery state]");
+                    m_narration.Narrate(
+                        channel: "world.transfer",
+                        format: () => $"[world.transfer: transfer={pending.Transfer.TransferId} RESOLVED absent at '{pending.TargetName}' — every member restored to '{pending.Transfer.SourceInstance}' from retained recovery state]"
+                    );
                     if (pending.Spawned) { ReapIfEmpty(name: pending.TargetName); }
                     NoteResolvedTransferOutcome(
                         transfer: in transfer,
@@ -145,7 +151,10 @@ public sealed partial class WorldInstanceHost {
                 destinations: instance.Server.Definition.Destinations,
                 name: hit.Portal.Destination
             ) is not { } destination) {
-                Console.Error.WriteLine(value: $"[world.portal: '{instance.Name}'/{hit.Placement.Id}/{hit.Face.Face} refused (destination '{hit.Portal.Destination}' names no destinations row)]");
+                instance.Server.Output.Narrate(
+                    channel: "world.portal",
+                    format: () => $"[world.portal: '{instance.Name}'/{hit.Placement.Id}/{hit.Face.Face} refused (destination '{hit.Portal.Destination}' names no destinations row)]"
+                );
 
                 continue;
             }
@@ -154,7 +163,10 @@ public sealed partial class WorldInstanceHost {
                 references: instance.Server.Definition.References,
                 name: destination.Reference
             ) is not { } reference) {
-                Console.Error.WriteLine(value: $"[world.portal: '{instance.Name}'/{hit.Placement.Id}/{hit.Face.Face} refused (destination '{hit.Portal.Destination}' names references row '{destination.Reference}', which does not exist)]");
+                instance.Server.Output.Narrate(
+                    channel: "world.portal",
+                    format: () => $"[world.portal: '{instance.Name}'/{hit.Placement.Id}/{hit.Face.Face} refused (destination '{hit.Portal.Destination}' names references row '{destination.Reference}', which does not exist)]"
+                );
 
                 continue;
             }
@@ -188,7 +200,10 @@ public sealed partial class WorldInstanceHost {
                 scopeKey: out var scopeKey,
                 reason: out var scopeReason
             )) {
-                Console.Error.WriteLine(value: $"[world.portal: '{instance.Name}'/{hit.Placement.Id}/{hit.Face.Face} refused (destination '{hit.Portal.Destination}' — {scopeReason})]");
+                instance.Server.Output.Narrate(
+                    channel: "world.portal",
+                    format: () => $"[world.portal: '{instance.Name}'/{hit.Placement.Id}/{hit.Face.Face} refused (destination '{hit.Portal.Destination}' — {scopeReason})]"
+                );
 
                 continue;
             }
@@ -565,7 +580,8 @@ public sealed partial class WorldInstanceHost {
                             security: source.Federation.Authenticator,
                             network: source.Federation.Network,
                             observerAuthority: source.Federation.Subject,
-                            applicationStopping: m_applicationStopping
+                            applicationStopping: m_applicationStopping,
+                            narrationHub: m_narration
                         );
                         m_remoteAuthorities[resolvedName] = remote;
                     }
@@ -877,7 +893,8 @@ public sealed partial class WorldInstanceHost {
                     security: source.Federation.Authenticator,
                     network: source.Federation.Network,
                     observerAuthority: source.Federation.Subject,
-                    applicationStopping: m_applicationStopping
+                    applicationStopping: m_applicationStopping,
+                    narrationHub: m_narration
                 );
 
                 m_remoteAuthorities[instanceName] = remote;

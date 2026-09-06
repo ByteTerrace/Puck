@@ -71,7 +71,10 @@ public sealed partial class WorldServer {
             holder: out var possessor,
             placementId: placement.Id
         )) {
-            Console.Error.WriteLine(value: $"[world.contribution: retraction deferred ({WorldRuleEffectRefusal.CarrierPossessed}) — slot '{placement.Id}' carries inhabitant body:{possessedBody}, possessed by {possessor.Describe()}; the deadline stands and the sweep retries next tick]");
+            m_output.Narrate(
+                channel: "world.contribution",
+                format: () => $"[world.contribution: retraction deferred ({WorldRuleEffectRefusal.CarrierPossessed}) — slot '{placement.Id}' carries inhabitant body:{possessedBody}, possessed by {possessor.Describe()}; the deadline stands and the sweep retries next tick]"
+            );
 
             return;
         }
@@ -95,7 +98,10 @@ public sealed partial class WorldServer {
             return;
         }
 
-        Console.Error.WriteLine(value: $"[world.contribution: retracted '{placement.Id}' — tenure=presence link={(contribution.Link?.Value ?? "(none)")} contributor={(contributor?.Describe() ?? "(none)")} creation '{retired}' released, slot shows '{contribution.SlotCreationId}']");
+        m_output.Narrate(
+            channel: "world.contribution",
+            format: () => $"[world.contribution: retracted '{placement.Id}' — tenure=presence link={(contribution.Link?.Value ?? "(none)")} contributor={(contributor?.Describe() ?? "(none)")} creation '{retired}' released, slot shows '{contribution.SlotCreationId}']"
+        );
 
         if (
             string.Equals(

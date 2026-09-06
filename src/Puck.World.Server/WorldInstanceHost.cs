@@ -132,6 +132,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // call wrapped by the given decorator instead of calling straight through to its own server — see
     // SetPeerCallFault. Empty in every production path; nothing here reads from it unless a caller sets an entry.
     private readonly Dictionary<string, IWorldPeerCall> m_peerCallFaults = new(comparer: StringComparer.Ordinal);
+    // This host's own narration hub — for the lines a cross-instance operation (a transfer, an adjacency crossing,
+    // a federation lane) writes on the host's own behalf, never on one instance's tick, plus the lines a lookup
+    // failure writes before any instance is even resolved.
+    private readonly WorldOutputHub m_narration = new();
 
     // The onward authority is transport-neutral: a colocated destination forwards through the same interface a
     // socket one does, so a traveler that leaves over an in-process adjacency keeps the control its client already
@@ -259,7 +263,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             ),
             completion: reply => {
                 if (!reply.Accepted) {
-                    Console.Error.WriteLine(value: $"[player.leave denied: '{locationEndpoint.Identity}' seat {(locationEntity.Index + 1)} — {reply.Reason}]");
+                    m_narration.Narrate(
+                        channel: "player.leave denied",
+                        format: () => $"[player.leave denied: '{locationEndpoint.Identity}' seat {(locationEntity.Index + 1)} — {reply.Reason}]"
+                    );
 
                     return;
                 }
@@ -312,6 +319,19 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         return true;
     }
+
+    /// <summary>Attaches a sink that receives this host's own narration — a cross-instance transfer/adjacency/
+    /// federation line, or a lookup failure ahead of any instance being resolved — until the process ends or the
+    /// returned lease is disposed. Distinct from an individual instance's own <see cref="Server.WorldServer.AttachNarrationSink"/>,
+    /// which carries only that one instance's tick-local narration.</summary>
+    /// <param name="sink">The sink to add.</param>
+    /// <returns>A lease that detaches <paramref name="sink"/> when disposed.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="sink"/> is <see langword="null"/>.</exception>
+    public IDisposable AttachNarrationSink(IWorldNarrationSink sink) => m_narration.AttachNarrationSink(sink: sink);
+
+    /// <summary>Gets this host's own narration hub — for a sibling component this host constructs (an adjacency
+    /// field, an owned-world catalog) to narrate through, rather than each carrying its own.</summary>
+    internal WorldOutputHub Narration => m_narration;
 
     /// <summary>Disposes every instance this host owns. The boot instance's own graph belongs to the container and
     /// is untouched.</summary>
@@ -935,7 +955,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         var machines = new WorldMachineHost(
             screens: [],
-            engines: []
+            engines: [],
+            narrationHub: m_narration
         );
         WorldInstance started;
 
@@ -951,7 +972,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                     template: definition!,
                     directory: ownedWorlds,
                     machineId: m_machineId,
-                    neighbours: new WorldFileNeighbourResolver(baseDirectory: () => ownedWorlds)
+                    neighbours: new WorldFileNeighbourResolver(baseDirectory: () => ownedWorlds),
+                    narrationHub: m_narration
                 ),
                 envelope: new WorldRenderEnvelope(),
                 machines: machines,

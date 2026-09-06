@@ -53,7 +53,10 @@ internal sealed partial class WorldSearchRuntime {
             return true;
         }
 
-        Console.Error.WriteLine(value: $"[world.search: job '{plan.Row.Name}' finished but its outputs were refused by the mutation door; world.search shows the count it found]");
+        m_narrationHub?.Narrate(
+            channel: "world.search",
+            format: () => $"[world.search: job '{plan.Row.Name}' finished but its outputs were refused by the mutation door; world.search shows the count it found]"
+        );
 
         return false;
     }

@@ -54,6 +54,7 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
     private readonly Dictionary<int, MachineSlot> m_slots = new();
     private readonly Dictionary<string, LinkEntry> m_links = new(comparer: StringComparer.Ordinal);
     private readonly List<int> m_reconcileRemovals = new();
+    private readonly WorldOutputHub? m_narrationHub;
 
     /// <summary>Initializes the host over the world's declared screens: a booted machine for each declared machine
     /// screen whose content file exists and whose engine resolves (a missing file or unknown engine leaves the slot
@@ -62,12 +63,16 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
     /// <param name="engines">The registered screen-machine engines (DI-collected) a declared or inserted machine
     /// resolves against.</param>
     /// <param name="documentPath">The world document path used to resolve declared relative content paths.</param>
+    /// <param name="narrationHub">The hub this host's narration is delivered through, or <see langword="null"/> to
+    /// leave it undelivered — this host carries no single owning server of its own.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Two engines register one id — a composition-root error, thrown at boot
     /// rather than resolved last-writer-wins.</exception>
-    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, IEnumerable<IScreenMachineEngine> engines, string? documentPath = null) {
+    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, IEnumerable<IScreenMachineEngine> engines, string? documentPath = null, WorldOutputHub? narrationHub = null) {
         ArgumentNullException.ThrowIfNull(argument: screens);
         ArgumentNullException.ThrowIfNull(argument: engines);
+
+        m_narrationHub = narrationHub;
 
         // The same registry the load-time key check reads through WorldExtensionVocabularyHook, so a key that
         // validated is a key this host can resolve.
@@ -97,7 +102,10 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
             extension: out var engine
         )) {
             slot.DeclaredFault = $"no screen-machine engine '{machine.Engine}'";
-            Console.Error.WriteLine(value: $"[world.screen: {slot.Index} {slot.DeclaredFault}]");
+            m_narrationHub?.Narrate(
+                channel: "world.screen",
+                format: () => $"[world.screen: {slot.Index} {slot.DeclaredFault}]"
+            );
 
             return;
         }
@@ -109,7 +117,10 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
             fault: out var fault
         )) {
             slot.DeclaredFault = fault;
-            Console.Error.WriteLine(value: $"[world.screen: {slot.Index} {slot.DeclaredFault}]");
+            m_narrationHub?.Narrate(
+                channel: "world.screen",
+                format: () => $"[world.screen: {slot.Index} {slot.DeclaredFault}]"
+            );
 
             return;
         }
@@ -128,7 +139,10 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
             slot.MachineContentHash = WorldDefinitionFileSource.ComputeContentHash(content: content);
         } catch (ArgumentException exception) {
             slot.DeclaredFault = exception.Message;
-            Console.Error.WriteLine(value: $"[world.screen: {slot.Index} {slot.DeclaredFault}]");
+            m_narrationHub?.Narrate(
+                channel: "world.screen",
+                format: () => $"[world.screen: {slot.Index} {slot.DeclaredFault}]"
+            );
         }
     }
     private static bool DeclaresIndex(IReadOnlyList<WorldScreen> screens, int index) {
@@ -763,7 +777,10 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
             // outcome never reaches m_links, so screen.links would otherwise show nothing for a link the document
             // still declares, with no sign anything went wrong.
             if (!ok) {
-                Console.Error.WriteLine(value: $"[world.link: '{link.Name}' failed to establish — {message}]");
+                m_narrationHub?.Narrate(
+                    channel: "world.link",
+                    format: () => $"[world.link: '{link.Name}' failed to establish — {message}]"
+                );
             }
         }
     }
@@ -858,9 +875,12 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
                         documentRelative: true
                     );
 
-                    Console.Error.WriteLine(value: $"[world.screen: {(ok
-                        ? message
-                        : $"{screen.Index} {message}")}]");
+                    m_narrationHub?.Narrate(
+                        channel: "world.screen",
+                        format: () => $"[world.screen: {(ok
+                            ? message
+                            : $"{screen.Index} {message}")}]"
+                    );
 
                     break;
                 case WorldScreenSource.Machine:
@@ -873,9 +893,12 @@ public sealed class WorldMachineHost : IWorldMachineMemoryPeek, IDisposable {
                     if (slot.Machine is not null) {
                         var (ejectOk, ejectMessage) = TryEject(index: screen.Index);
 
-                        Console.Error.WriteLine(value: $"[world.screen: {(ejectOk
-                            ? ejectMessage
-                            : $"{screen.Index} {ejectMessage}")}]");
+                        m_narrationHub?.Narrate(
+                            channel: "world.screen",
+                            format: () => $"[world.screen: {(ejectOk
+                                ? ejectMessage
+                                : $"{screen.Index} {ejectMessage}")}]"
+                        );
                     }
 
                     break;

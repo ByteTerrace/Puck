@@ -97,6 +97,10 @@ builder.UseOrleans(configureDelegate: siloBuilder => {
 Console.SetOut(newOut: new SiloNarrationWriter(inner: Console.Out));
 Console.SetError(newError: new SiloNarrationWriter(inner: Console.Error));
 var host = builder.Build();
+// The silo's own boot-free WorldInstanceHost carries every row this silo ever admits, so one attach here reaches
+// its cross-row/host-level narration for the run's whole lifetime — each admitted row's own WorldServer.Output
+// still narrates unbound (a row activates well after this point; see WorldGrain).
+host.Services.GetRequiredService<WorldSiloHost>().Instances.AttachNarrationSink(sink: new WorldConsoleNarrationSink());
 try {
     await host.RunAsync();
 } catch (Orleans.Runtime.OrleansLifecycleCanceledException) {

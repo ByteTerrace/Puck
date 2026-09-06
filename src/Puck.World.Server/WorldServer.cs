@@ -582,15 +582,22 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// rung (see <c>GeneratorEngine.ComputeSeedState</c> in <c>Puck.World.Schema</c>). Defaults to the boot
     /// instance's own constant name (<c>Puck.World.WorldInstanceHost.BootInstanceName</c>, not referenced directly —
     /// this project sits below <c>Puck.World</c> in the layering).</param>
+    /// <param name="narrationSink">A sink attached to this server's narration before construction narrates anything
+    /// of its own (the document's authored grants, seeded here) — a composition root that only attaches after
+    /// construction returns would miss every line construction itself writes.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="instanceIdentity"/> is empty.</exception>
-    public WorldServer(WorldDefinition definition, WorldPopulation population, WorldOwnedWorlds profiles, WorldRenderEnvelope envelope, WorldMachineHost machines, string instanceIdentity = "boot") {
+    public WorldServer(WorldDefinition definition, WorldPopulation population, WorldOwnedWorlds profiles, WorldRenderEnvelope envelope, WorldMachineHost machines, string instanceIdentity = "boot", IWorldNarrationSink? narrationSink = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: population);
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: envelope);
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
+
+        if (narrationSink is not null) {
+            _ = m_output.AttachNarrationSink(sink: narrationSink);
+        }
 
         InstanceIdentity = instanceIdentity;
         AuthorityIdentity = ((definition.Host.Authority is { Length: > 0 } authority)
@@ -607,7 +614,7 @@ public sealed partial class WorldServer : IWorldServerHost {
 
         m_tables = CompileTables(definition: definition);
         m_evaluator = new RuleEvaluator(host: this);
-        m_search = new WorldSearchRuntime(live: () => m_definition!.State);
+        m_search = new WorldSearchRuntime(live: () => m_definition!.State, narrationHub: m_output);
         m_searchApply = mutation => TryApplyMutation(mutation: mutation, tick: m_searchTick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false);
 
         if ((definition.Music is { Count: > 0 } music) && (music[0] is { } row)) {

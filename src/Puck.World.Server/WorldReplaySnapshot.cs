@@ -809,18 +809,23 @@ public sealed class WorldReplaySnapshot {
         if (profiles.Find(name: pin.Name) is not { } live) {
             // Drift all the way to absent. The re-drive is unaffected — the pinned handle needs no catalog entry — but
             // an operator reading a MATCH for a profile that no longer exists deserves to be told why it still ran.
-            Console.Error.WriteLine(value: $"[replay.profile: '{pin.Name}' is pinned by this recording but is no longer in the live catalog; the replay used the pinned rates (move {Describe(rate: pin.MoveSpeed)}, turn {Describe(rate: pin.TurnSpeed)})]");
+            profiles.NarrationHub?.Narrate(
+                channel: "replay.profile",
+                format: () => $"[replay.profile: '{pin.Name}' is pinned by this recording but is no longer in the live catalog; the replay used the pinned rates (move {Describe(rate: pin.MoveSpeed)}, turn {Describe(rate: pin.TurnSpeed)})]"
+            );
 
             return;
         }
 
         ReportRateDrift(
+            narrationHub: profiles.NarrationHub,
             name: pin.Name,
             field: "move-speed",
             pinned: pin.MoveSpeed,
             live: live.FixedMoveSpeed
         );
         ReportRateDrift(
+            narrationHub: profiles.NarrationHub,
             name: pin.Name,
             field: "turn-speed",
             pinned: pin.TurnSpeed,
@@ -829,12 +834,15 @@ public sealed class WorldReplaySnapshot {
     }
     // Compared on the RAW fixed lane, never on the rendered decimal: a drift too small to show in four places is still
     // a different trajectory, and a comparison that reads the display string would miss exactly those.
-    private static void ReportRateDrift(string name, string field, FixedQ4816? pinned, FixedQ4816? live) {
+    private static void ReportRateDrift(WorldOutputHub? narrationHub, string name, string field, FixedQ4816? pinned, FixedQ4816? live) {
         if (pinned?.Value == live?.Value) {
             return;
         }
 
-        Console.Error.WriteLine(value: $"[replay.profile: '{name}' {field} drifted since record-start — pinned {Describe(rate: pinned)}, live {Describe(rate: live)}; the replay used the PINNED value, so this verdict reports the recording, not the edit]");
+        narrationHub?.Narrate(
+            channel: "replay.profile",
+            format: () => $"[replay.profile: '{name}' {field} drifted since record-start — pinned {Describe(rate: pinned)}, live {Describe(rate: live)}; the replay used the PINNED value, so this verdict reports the recording, not the edit]"
+        );
     }
     // The mount pin compares index-by-index: mount order is document order, and the recording pins the whole receipt
     // sequence — name, hash, and fuel, at each position — never merely the set of names. Position is load-bearing
@@ -1366,8 +1374,13 @@ public sealed class WorldReplaySnapshot {
         // Replay verification is side-effect-free: a rule's 'save' effect re-derives deterministically like any
         // other rule effect, but writing the world's own file is engine I/O. Wire an explicit narration-only tap
         // (rather than leaving it null implicitly) so a verify run reports why no file write happened; the population hash
-        // this drive compares never depends on whether the write occurred.
-        server.SaveEffectTap = tick => Console.Error.WriteLine(value: $"[replay: save effect suppressed (tick {tick}) — replay verification is side-effect-free]");
+        // this drive compares never depends on whether the write occurred. This shadow server carries no other
+        // attached sink, so bind one here for this one narration.
+        _ = server.AttachNarrationSink(sink: new WorldConsoleNarrationSink());
+        server.SaveEffectTap = tick => server.Output.Narrate(
+            channel: "replay",
+            format: () => $"[replay: save effect suppressed (tick {tick}) — replay verification is side-effect-free]"
+        );
 
         SeatRecordedSeats(
             definition: definition,

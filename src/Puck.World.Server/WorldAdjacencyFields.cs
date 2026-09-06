@@ -258,7 +258,8 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                 mirror: mirror,
                 lease: attach(mirror),
                 sourceDefinition: () => intermediate.Definition,
-                sourceDescription: $"{m_sourceInstanceName}/{key}"
+                sourceDescription: $"{m_sourceInstanceName}/{key}",
+                narrationHub: m_instances.Narration
             );
             m_handles[key] = existing;
         }
@@ -406,7 +407,8 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                 mirror: mirror,
                 lease: lease,
                 sourceDefinition: () => source.Server.Definition,
-                sourceDescription: $"{m_sourceInstanceName}/{adjacencyName}"
+                sourceDescription: $"{m_sourceInstanceName}/{adjacencyName}",
+                narrationHub: m_instances.Narration
             );
             m_handles[adjacencyName] = handle;
         }
@@ -425,7 +427,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
     // One adjacency's held observation: the mirror (kept live for the row's lifetime), the attach lease, and the
     // counterpart frame/solid field cache — refreshed only when the mirror's own delivery revision moves.
     private readonly record struct HandleIdentity(string Destination, string InstanceName, ulong GenerationId, string Counterpart, WorldFaceFrame SourceFrame);
-    private sealed class Handle(HandleIdentity identity, WorldSessionMirror mirror, IDisposable lease, Func<WorldDefinition> sourceDefinition, string sourceDescription) : IWorldAdjacencyNeighbourContact, IDisposable {
+    private sealed class Handle(HandleIdentity identity, WorldSessionMirror mirror, IDisposable lease, Func<WorldDefinition> sourceDefinition, string sourceDescription, WorldOutputHub narrationHub) : IWorldAdjacencyNeighbourContact, IDisposable {
         private readonly bool[] m_active = new bool[WorldBodiesLimits.CapacityCeiling];
         private readonly Protocol.WorldEntityAddress[] m_addresses = new Protocol.WorldEntityAddress[WorldBodiesLimits.CapacityCeiling];
         private readonly System.Numerics.Vector3[] m_previousPositions = new System.Numerics.Vector3[WorldBodiesLimits.CapacityCeiling];
@@ -529,7 +531,10 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                     );
 
                     if (selection.Truncated) {
-                        Console.Error.WriteLine(value: $"[world.adjacency: '{sourceDescription}' neighbour geometry truncated identically for collision and rendering at {WorldAdjacencyGeometry.MaximumPlacementsPerBand} solid placements]");
+                        narrationHub.Narrate(
+                            channel: "world.adjacency",
+                            format: () => $"[world.adjacency: '{sourceDescription}' neighbour geometry truncated identically for collision and rendering at {WorldAdjacencyGeometry.MaximumPlacementsPerBand} solid placements]"
+                        );
                     }
                 } else {
                     m_frameResolved = false;

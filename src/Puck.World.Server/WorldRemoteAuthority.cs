@@ -175,8 +175,12 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
     // The physical entry stays fixed even when a traveler's logical destination changes.
     private readonly PublishedRoute m_route;
     private int m_unconfiguredNoted;
+    // The local instance's own hub, so this lane's narration reaches whatever sink is attached to it — null for a
+    // caller with no local server (leaves this lane's narration undelivered, never a fallback to Console.Error).
+    private readonly WorldOutputHub? m_narrationHub;
 
-    public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder, IAuthenticator security, string observerAuthority, WorldRemoteAuthority? submissionAuthority = null, WorldRemoteRouteCredential? submissionCredential = null, WorldAuthorityRouteDescription? initialRoute = null, Action<WorldAuthorityRouteDescription>? routeChanged = null, CancellationToken applicationStopping = default, string? expectedAuthority = null, WorldPeerNetwork? network = null) {
+    public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder, IAuthenticator security, string observerAuthority, WorldRemoteAuthority? submissionAuthority = null, WorldRemoteRouteCredential? submissionCredential = null, WorldAuthorityRouteDescription? initialRoute = null, Action<WorldAuthorityRouteDescription>? routeChanged = null, CancellationToken applicationStopping = default, string? expectedAuthority = null, WorldPeerNetwork? network = null, WorldOutputHub? narrationHub = null) {
+        m_narrationHub = narrationHub ?? submissionAuthority?.m_narrationHub;
         if (!IPEndPoint.TryParse(
             result: out var parsed,
             s: endpoint
@@ -208,6 +212,11 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
         }
         m_link = new WorldFederatedServerLink(authority: this);
     }
+
+    /// <summary>Gets the hub this authority's narration is delivered through, or <see langword="null"/> when none
+    /// was attached — the seam its own <see cref="WorldFederatedServerLink"/> narrates a held credential through
+    /// too, rather than carrying a second hub reference.</summary>
+    internal WorldOutputHub? NarrationHub => m_narrationHub;
 
     public string Authority => Volatile.Read(ref m_authority) is { Length: > 0 } observed ? observed : PeerAuthority;
     /// <summary>Gets the pinned first-hop transaction namespace, or an empty string before the first handshake.
@@ -574,7 +583,10 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
             location1: ref m_unconfiguredNoted,
             value: 1
         ) == 0) {
-            Console.Error.WriteLine(value: $"[world.authority unavailable: federation to '{Endpoint}' is refused ({UnconfiguredDetail})]");
+            m_narrationHub?.Narrate(
+                channel: "world.authority unavailable",
+                format: () => $"[world.authority unavailable: federation to '{Endpoint}' is refused ({UnconfiguredDetail})]"
+            );
         }
 
         return true;
@@ -586,7 +598,10 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
                 connect: m_network.ConnectAsync,
                 connectRetryDelay: ConnectRetryDelay,
                 lifetime: m_lifetime.Token,
-                onUnavailable: exception => Console.Error.WriteLine(value: $"[world.authority unavailable: federation lane to '{Endpoint}' is reconnecting ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")})]"),
+                onUnavailable: exception => m_narrationHub?.Narrate(
+                    channel: "world.authority unavailable",
+                    format: () => $"[world.authority unavailable: federation lane to '{Endpoint}' is reconnecting ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")})]"
+                ),
                 protocol: new WorldFederationLaneProtocol(owner: this),
                 requestTimeout: LaneRequestTimeout,
                 route: CurrentRoute,
@@ -636,7 +651,17 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
                 case WorldFederationResponse.ProjectionInvalidated:
                     return m_submissionCredential.HasValue;
                 case WorldFederationResponse.Refusal:
-                    Console.Error.WriteLine($"[world.projection: remote observer '{Endpoint}' refused ({Encoding.UTF8.GetString(frame.Body.Span)})]");
+                    // The frame's body is a span over pooled memory that will not outlive this scope, so — unlike
+                    // every other site here — the sink check comes first and the decode happens only behind it,
+                    // rather than being captured into Narrate's own deferred formatter.
+                    if (m_narrationHub is { } hub) {
+                        var refusalReason = Encoding.UTF8.GetString(frame.Body.Span);
+
+                        hub.Narrate(
+                            channel: "world.projection",
+                            format: () => $"[world.projection: remote observer '{Endpoint}' refused ({refusalReason})]"
+                        );
+                    }
                     return false;
                 case WorldFederationResponse.Route:
                     if (!m_submissionCredential.HasValue || !WorldFederationCodec.TryDecodeRoute(frame.Body.Span, out var route, out _)) {
@@ -654,14 +679,20 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
                         ) ||
                             (definition is null)
                         ) {
-                            Console.Error.WriteLine(value: $"[world.projection: remote observer '{Endpoint}' refused a definition record ({definitionFailure})]");
+                            m_narrationHub?.Narrate(
+                                channel: "world.projection",
+                                format: () => $"[world.projection: remote observer '{Endpoint}' refused a definition record ({definitionFailure})]"
+                            );
 
                             return false;
                         }
 
                         if (definitionTier != m_observedTier) {
                             m_observedTier = definitionTier;
-                            Console.Error.WriteLine(value: $"[world.projection: remote observer '{Endpoint}' receives documents at tier {definitionTier}]");
+                            m_narrationHub?.Narrate(
+                                channel: "world.projection",
+                                format: () => $"[world.projection: remote observer '{Endpoint}' receives documents at tier {definitionTier}]"
+                            );
                         }
 
                         Volatile.Write(
@@ -677,7 +708,10 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
                             snapshot: out var snapshot,
                             failure: out var snapshotFailure
                         )) {
-                            Console.Error.WriteLine(value: $"[world.projection: remote observer '{Endpoint}' refused a snapshot record ({snapshotFailure})]");
+                            m_narrationHub?.Narrate(
+                                channel: "world.projection",
+                                format: () => $"[world.projection: remote observer '{Endpoint}' refused a snapshot record ({snapshotFailure})]"
+                            );
 
                             return false;
                         }
@@ -721,7 +755,10 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
             } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
                 return;
             } catch (Exception exception) when ((exception is IOException or SocketException or OperationCanceledException)) {
-                Console.Error.WriteLine(value: $"[world.projection: remote observer '{Endpoint}' unavailable ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")}); retrying]");
+                m_narrationHub?.Narrate(
+                    channel: "world.projection",
+                    format: () => $"[world.projection: remote observer '{Endpoint}' unavailable ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")}); retrying]"
+                );
             }
 
             try {
@@ -1212,7 +1249,10 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
                         value: 1
                     ) == 0)
                     ) {
-                        Console.Error.WriteLine(value: $"[world.authority unavailable: intent stream to '{m_owner.Endpoint}' is reconnecting ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")})]");
+                        m_owner.m_narrationHub?.Narrate(
+                            channel: "world.authority unavailable",
+                            format: () => $"[world.authority unavailable: intent stream to '{m_owner.Endpoint}' is reconnecting ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")})]"
+                        );
                     }
 
                     try {

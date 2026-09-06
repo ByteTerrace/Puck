@@ -19,6 +19,10 @@ public sealed partial class WorldInstanceHost {
         // same transfer id submitted again) refuses by name rather than double-landing. A diegetic crossing
         // can never collide here on its own (it always mints a fresh id); only an explicitly-supplied id
         // (the verification seam) can.
+        // Narrate's deferred formatter cannot capture an `in` parameter, so this transfer's id and source name are
+        // copied to ordinary locals once, up front, for every narration below to close over.
+        var transferId = transfer.TransferId;
+        var sourceInstanceName = transfer.SourceInstance;
         var appliedKey = (transfer.SourceInstance, transfer.TransferId);
         var hadAppliedHighWater = m_appliedTransferHighWater.TryGetValue(
             key: transfer.SourceInstance,
@@ -29,7 +33,10 @@ public sealed partial class WorldInstanceHost {
             (hadAppliedHighWater && (transfer.TransferId <= previousAppliedHighWater)) ||
             !m_appliedTransferIds.Add(item: appliedKey)
         ) {
-            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused (already applied — refused rather than double-landing)]");
+            m_narration.Narrate(
+                channel: "world.transfer",
+                format: () => $"[world.transfer: transfer={transferId} refused (already applied — refused rather than double-landing)]"
+            );
 
             return;
         }
@@ -49,7 +56,10 @@ public sealed partial class WorldInstanceHost {
             key: transfer.SourceInstance,
             value: out var source
         )) {
-            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused (no instance named '{transfer.SourceInstance}')]");
+            m_narration.Narrate(
+                channel: "world.transfer",
+                format: () => $"[world.transfer: transfer={transferId} refused (no instance named '{sourceInstanceName}')]"
+            );
 
             return;
         }
@@ -100,7 +110,10 @@ public sealed partial class WorldInstanceHost {
             }
 
             if (driftReason.Length > 0) {
-                Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused (membership drifted between scan and drain in '{transfer.SourceInstance}' — the cohort no longer proves scope key '{frozenScopeKey}': {driftReason})]");
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    format: () => $"[world.transfer: transfer={transferId} refused (membership drifted between scan and drain in '{sourceInstanceName}' — the cohort no longer proves scope key '{frozenScopeKey}': {driftReason})]"
+                );
 
                 return;
             }
@@ -124,7 +137,10 @@ public sealed partial class WorldInstanceHost {
         }
 
         if (members.Length == 0) {
-            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused (no active local seat in '{transfer.SourceInstance}' to party-transfer)]");
+            m_narration.Narrate(
+                channel: "world.transfer",
+                format: () => $"[world.transfer: transfer={transferId} refused (no active local seat in '{sourceInstanceName}' to party-transfer)]"
+            );
 
             return;
         }
@@ -140,7 +156,10 @@ public sealed partial class WorldInstanceHost {
             comparisonType: StringComparison.Ordinal
         )
         ) {
-            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused ('{transfer.SourceInstance}' names both the source and the target)]");
+            m_narration.Narrate(
+                channel: "world.transfer",
+                format: () => $"[world.transfer: transfer={transferId} refused ('{sourceInstanceName}' names both the source and the target)]"
+            );
 
             return;
         }
@@ -153,7 +172,10 @@ public sealed partial class WorldInstanceHost {
             spawned: out var spawned,
             transfer: in transfer
         )) {
-            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused ({destinationReason})]");
+            m_narration.Narrate(
+                channel: "world.transfer",
+                format: () => $"[world.transfer: transfer={transferId} refused ({destinationReason})]"
+            );
 
             // A resolve minted this generation's cache entry before this drain ever attempted to start or
             // reuse the instance it names; that attempt just failed outright (an unstartable reference
@@ -218,7 +240,10 @@ public sealed partial class WorldInstanceHost {
             ticks: out var holdEngineTicks
         )
         ) {
-            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused (source lease cannot be expressed exactly across the {FixedTickConversion.TicksPerSecond} engine-tick bridge)]");
+            m_narration.Narrate(
+                channel: "world.transfer",
+                format: () => $"[world.transfer: transfer={transferId} refused (source lease cannot be expressed exactly across the {FixedTickConversion.TicksPerSecond} engine-tick bridge)]"
+            );
 
             if (spawned) {
                 ReapIfEmpty(name: targetName);
@@ -296,7 +321,10 @@ public sealed partial class WorldInstanceHost {
             );
             var reserveReason = $"'{targetName}' refused reservation ({reservation.Reason}; {retryText})";
 
-            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused ({reserveReason}) — the whole transfer is held, no reservation leaked]");
+            m_narration.Narrate(
+                channel: "world.transfer",
+                format: () => $"[world.transfer: transfer={transferId} refused ({reserveReason}) — the whole transfer is held, no reservation leaked]"
+            );
 
             if (spawned) {
                 ReapIfEmpty(name: targetName);
@@ -343,7 +371,10 @@ public sealed partial class WorldInstanceHost {
 
             var malformedReason = $"'{targetName}' returned a malformed accepted reservation (expected {members.Length} body indices and a destination definition)";
 
-            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused ({malformedReason}) — every source member remains attached]");
+            m_narration.Narrate(
+                channel: "world.transfer",
+                format: () => $"[world.transfer: transfer={transferId} refused ({malformedReason}) — every source member remains attached]"
+            );
             if (spawned) { ReapIfEmpty(name: targetName); }
             NoteResolvedTransferOutcome(
                 transfer: in transfer,
@@ -389,7 +420,10 @@ public sealed partial class WorldInstanceHost {
                     sourceAuthority: sourceAuthority,
                     transferId: transfer.TransferId
                 );
-                Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused ({standingPrincipal.Describe()} cannot leave '{transfer.SourceInstance}' seat {(slot + 1)} — {standing.Denial}); the whole transfer is held]");
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    format: () => $"[world.transfer: transfer={transferId} refused ({standingPrincipal.Describe()} cannot leave '{sourceInstanceName}' seat {(slot + 1)} — {standing.Denial}); the whole transfer is held]"
+                );
 
                 if (spawned) {
                     ReapIfEmpty(name: targetName);
@@ -612,7 +646,10 @@ public sealed partial class WorldInstanceHost {
                     CommitMembers: commitMembers,
                     MemberCount: members.Length
                 ));
-                Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} IN-DOUBT ('{targetName}' commit acknowledgement was lost: {commitReason}) — recovery state retained for status reconciliation]");
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    format: () => $"[world.transfer: transfer={transferId} IN-DOUBT ('{targetName}' commit acknowledgement was lost: {commitReason}) — recovery state retained for status reconciliation]"
+                );
                 return;
             }
 
@@ -633,11 +670,17 @@ public sealed partial class WorldInstanceHost {
             if (!RestoreDetachedMembers(source, landed, commitMembers)) {
                 m_inDoubtTransfers.Add(new(transfer with { FrozenCohortSlots = [.. members] }, targetAuthority, sourceAuthority, targetName, spawned,
                     reservationRequest.DeadlineSourceTick, landed, commitMembers, members.Length, RollbackOnly: true));
-                Console.Error.WriteLine($"[world.transfer: transfer={transfer.TransferId} ROLLBACK-PENDING ({abortReason}) — {landed.Count} source member(s) retain recovery state]");
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    format: () => $"[world.transfer: transfer={transferId} ROLLBACK-PENDING ({abortReason}) — {landed.Count} source member(s) retain recovery state]"
+                );
                 return;
             }
 
-            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} ABORTED ({abortReason}) — every landed member returned to '{transfer.SourceInstance}' at its exact source pose]");
+            m_narration.Narrate(
+                channel: "world.transfer",
+                format: () => $"[world.transfer: transfer={transferId} ABORTED ({abortReason}) — every landed member returned to '{sourceInstanceName}' at its exact source pose]"
+            );
 
             if (spawned) {
                 ReapIfEmpty(name: targetName);
@@ -897,13 +940,16 @@ public sealed partial class WorldInstanceHost {
                     reason: out _
                 );
             } else if (ambiguousNames is { Count: > 1 }) {
-                Console.Error.WriteLine(value: $"[world.portal: '{instance.Name}' {string.Join(
-                    separator: ", ",
-                    values: group.Descriptions
-                )} refused (destination '{group.Destination.Name}' resolves document '{group.ReferenceDocument}', matching {ambiguousNames.Count} running instances [{string.Join(
-                    separator: ",",
-                    values: ambiguousNames
-                )}] by origin — ambiguous, refused rather than adopting one arbitrarily)]");
+                m_narration.Narrate(
+                    channel: "world.portal",
+                    format: () => $"[world.portal: '{instance.Name}' {string.Join(
+                        separator: ", ",
+                        values: group.Descriptions
+                    )} refused (destination '{group.Destination.Name}' resolves document '{group.ReferenceDocument}', matching {ambiguousNames.Count} running instances [{string.Join(
+                        separator: ",",
+                        values: ambiguousNames
+                    )}] by origin — ambiguous, refused rather than adopting one arbitrarily)]"
+                );
 
                 return;
             }
@@ -917,10 +963,13 @@ public sealed partial class WorldInstanceHost {
             resolved: out var resolvedSession,
             reason: out var resolveReason
         )) {
-            Console.Error.WriteLine(value: $"[world.portal: '{instance.Name}' {string.Join(
-                separator: ", ",
-                values: group.Descriptions
-            )} refused (destination '{group.Destination.Name}' — {resolveReason})]");
+            m_narration.Narrate(
+                channel: "world.portal",
+                format: () => $"[world.portal: '{instance.Name}' {string.Join(
+                    separator: ", ",
+                    values: group.Descriptions
+                )} refused (destination '{group.Destination.Name}' — {resolveReason})]"
+            );
 
             return;
         }
@@ -971,6 +1020,9 @@ public sealed partial class WorldInstanceHost {
         )}])]");
     }
     private void PublishCommittedTransfer(in PendingTransfer transfer, WorldPeerCall targetAuthority, string targetName, List<LandedMember> landed) {
+        // Copied for the same reason ApplyTransfer copies it — an `in` parameter cannot be captured into Narrate's
+        // deferred formatter.
+        var transferId = transfer.TransferId;
 
         _ = m_instances.TryGetValue(
             key: transfer.SourceInstance,
@@ -1089,10 +1141,16 @@ public sealed partial class WorldInstanceHost {
                         )) {
                             initialRoute = describedRoute;
                         } else {
-                            Console.Error.WriteLine(value: $"[world.continuum: committed transfer={transfer.TransferId} route seed unavailable for body:{member.TargetSlot} ({routeReason})]");
+                            m_narration.Narrate(
+                                channel: "world.continuum",
+                                format: () => $"[world.continuum: committed transfer={transferId} route seed unavailable for body:{member.TargetSlot} ({routeReason})]"
+                            );
                         }
                     } catch (Exception exception) when ((exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException)) {
-                        Console.Error.WriteLine(value: $"[world.continuum: committed transfer={transfer.TransferId} route seed transport failed for body:{member.TargetSlot} ({exception.GetType().Name}: {exception.Message})]");
+                        m_narration.Narrate(
+                            channel: "world.continuum",
+                            format: () => $"[world.continuum: committed transfer={transferId} route seed transport failed for body:{member.TargetSlot} ({exception.GetType().Name}: {exception.Message})]"
+                        );
                     }
 
                     var trackedSlot = followedSlot;
@@ -1117,6 +1175,7 @@ public sealed partial class WorldInstanceHost {
                             submissionCredential: routeCredential,
                             initialRoute: initialRoute,
                             applicationStopping: m_applicationStopping,
+                            narrationHub: m_narration,
                             routeChanged: route => {
                                 if (
                                     (publishedEndpoint is not null) &&
@@ -1257,7 +1316,10 @@ public sealed partial class WorldInstanceHost {
                 transferId: transfer.TransferId
             );
         } catch (Exception exception) when ((exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException)) {
-            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} cleanup acknowledgement deferred ({exception.GetType().Name}: {exception.Message})]");
+            m_narration.Narrate(
+                channel: "world.transfer",
+                format: () => $"[world.transfer: transfer={transfer.TransferId} cleanup acknowledgement deferred ({exception.GetType().Name}: {exception.Message})]"
+            );
         }
 
         // A SOURCE that this transfer just emptied is reaped by the SAME rule as any other departure.
@@ -1687,7 +1749,10 @@ public sealed partial class WorldInstanceHost {
         sourceGrants = [];
 
         if (((uint)sourceSlot) >= ((uint)source.Server.Population.Capacity)) {
-            Console.Error.WriteLine(value: $"[world.transfer: refused (body:{sourceSlot} out of range in '{sourceName}')]");
+            source.Server.Output.Narrate(
+                channel: "world.transfer",
+                format: () => $"[world.transfer: refused (body:{sourceSlot} out of range in '{sourceName}')]"
+            );
 
             return false;
         }
@@ -1696,7 +1761,10 @@ public sealed partial class WorldInstanceHost {
             !source.Server.Population.IsActive(index: sourceSlot) ||
             (source.Server.Population.EntryBody(index: sourceSlot) is not { } body)
         ) {
-            Console.Error.WriteLine(value: $"[world.transfer: refused (seat {(sourceSlot + 1)} is not active in '{sourceName}')]");
+            source.Server.Output.Narrate(
+                channel: "world.transfer",
+                format: () => $"[world.transfer: refused (seat {(sourceSlot + 1)} is not active in '{sourceName}')]"
+            );
 
             return false;
         }
@@ -1705,7 +1773,10 @@ public sealed partial class WorldInstanceHost {
         // and manifold state; carrying one across is out of scope, refused by name here rather than transferred
         // silently as an inert avatar.
         if (body.IsRigid) {
-            Console.Error.WriteLine(value: $"[world.transfer: refused (seat {(sourceSlot + 1)} in '{sourceName}' wears a rigid kit — cross-world transfer of a rigid body is not supported)]");
+            source.Server.Output.Narrate(
+                channel: "world.transfer",
+                format: () => $"[world.transfer: refused (seat {(sourceSlot + 1)} in '{sourceName}' wears a rigid kit — cross-world transfer of a rigid body is not supported)]"
+            );
 
             return false;
         }
@@ -1715,7 +1786,10 @@ public sealed partial class WorldInstanceHost {
         // rigid-kit refusal above already blocks transferring the passenger directly. Refuse the carrier's own
         // transfer instead of silently dropping or orphaning what it holds.
         if (body.Carrying is not null) {
-            Console.Error.WriteLine(value: $"[world.transfer: refused (seat {(sourceSlot + 1)} in '{sourceName}' is carrying body:{body.Carrying} — cross-world transfer while carrying is not supported)]");
+            source.Server.Output.Narrate(
+                channel: "world.transfer",
+                format: () => $"[world.transfer: refused (seat {(sourceSlot + 1)} in '{sourceName}' is carrying body:{body.Carrying} — cross-world transfer while carrying is not supported)]"
+            );
 
             return false;
         }
@@ -1726,7 +1800,10 @@ public sealed partial class WorldInstanceHost {
             slot: sourceSlot,
             denial: out var leaveDenial
         )) {
-            Console.Error.WriteLine(value: $"[world.transfer: refused ({actingPrincipal.Describe()} cannot leave '{sourceName}' seat {(sourceSlot + 1)} — {leaveDenial})]");
+            source.Server.Output.Narrate(
+                channel: "world.transfer",
+                format: () => $"[world.transfer: refused ({actingPrincipal.Describe()} cannot leave '{sourceName}' seat {(sourceSlot + 1)} — {leaveDenial})]"
+            );
 
             return false;
         }
@@ -1755,7 +1832,10 @@ public sealed partial class WorldInstanceHost {
             profile: out profile,
             slot: sourceSlot
         )) {
-            Console.Error.WriteLine(value: $"[world.transfer: refused (seat {(sourceSlot + 1)} in '{sourceName}' has no body to transfer)]");
+            source.Server.Output.Narrate(
+                channel: "world.transfer",
+                format: () => $"[world.transfer: refused (seat {(sourceSlot + 1)} in '{sourceName}' has no body to transfer)]"
+            );
 
             return false;
         }

@@ -296,7 +296,10 @@ public sealed class WorldPeerHost : IDisposable {
         // (no crypto, no tick-thread hop) and observably (stderr line, never a silent drop).
         if (Interlocked.Increment(location: ref m_pendingHandshakes) > MaxConcurrentHandshakes) {
             Interlocked.Decrement(location: ref m_pendingHandshakes);
-            Console.Error.WriteLine(value: $"[world.listen: refused connection from {remoteEndpoint} — {MaxConcurrentHandshakes} concurrent unauthenticated handshakes already in flight]");
+            m_server.Output.Narrate(
+                channel: "world.listen",
+                format: () => $"[world.listen: refused connection from {remoteEndpoint} — {MaxConcurrentHandshakes} concurrent unauthenticated handshakes already in flight]"
+            );
 
             try {
                 await WorldPeerWireFormat.WriteHelloRefusedAsync(
@@ -561,7 +564,10 @@ public sealed class WorldPeerHost : IDisposable {
             Interlocked.Decrement(location: ref m_pendingHandshakes);
 
             try {
-                Console.Error.WriteLine(value: $"[world.listen: admitted connection {connectionId} as {connection.Principal.Describe()} identity domain:{connection.IdentityDomain} subject:{connection.IdentitySubject} grants:{(outcome.Grants?.Count ?? 0)} from {remoteEndpoint}]");
+                m_server.Output.Narrate(
+                    channel: "world.listen",
+                    format: () => $"[world.listen: admitted connection {connectionId} as {connection.Principal.Describe()} identity domain:{connection.IdentityDomain} subject:{connection.IdentitySubject} grants:{(outcome.Grants?.Count ?? 0)} from {remoteEndpoint}]"
+                );
                 await WorldPeerWireFormat.WriteHelloAcceptedAsync(
                     stream: stream,
                     peerIndex: connection.PeerIndex,
@@ -584,13 +590,19 @@ public sealed class WorldPeerHost : IDisposable {
 
                     return true;
                 }).ConfigureAwait(continueOnCapturedContext: false);
-                Console.Error.WriteLine(value: $"[world.listen: disconnected connection {connectionId} ({connection.Principal.Describe()})]");
+                m_server.Output.Narrate(
+                    channel: "world.listen",
+                    format: () => $"[world.listen: disconnected connection {connectionId} ({connection.Principal.Describe()})]"
+                );
             }
         } catch (OperationCanceledException) when (!ct.IsCancellationRequested) {
             // The accept loop was not cancelled — HandshakeDeadline fired on a connection that never finished the
             // pre-admission handshake in time (slowloris, or a genuinely dead peer). Observable by name, never a
             // silent drop.
-            Console.Error.WriteLine(value: $"[world.listen: handshake from {remoteEndpoint} exceeded the {HandshakeDeadline.TotalSeconds:0}s deadline — connection refused]");
+            m_server.Output.Narrate(
+                channel: "world.listen",
+                format: () => $"[world.listen: handshake from {remoteEndpoint} exceeded the {HandshakeDeadline.TotalSeconds:0}s deadline — connection refused]"
+            );
         } catch (Exception ex) when ((ex is IOException or SocketException or ObjectDisposedException)) {
             // Pre-admission socket death (during the hello exchange, before m_connections.Add above) admitted
             // nothing, so there is nothing to revoke here. A post-admission death is already revoked by the
@@ -1419,7 +1431,10 @@ public sealed class WorldPeerHost : IDisposable {
                     source: m_server,
                     submission: in released
                 )) {
-                    Console.Error.WriteLine(value: $"[world.authority unavailable: traveler {mobility.Incarnation} release could not follow its committed route ({reason})]");
+                    m_server.Output.Narrate(
+                        channel: "world.authority unavailable",
+                        format: () => $"[world.authority unavailable: traveler {mobility.Incarnation} release could not follow its committed route ({reason})]"
+                    );
                 }
             }
         }
@@ -1525,7 +1540,10 @@ public sealed class WorldPeerHost : IDisposable {
         var lifetime = m_cts.Token;
         ListenEndpoint = m_network.Peer.ListenAsync(endpoint, lifetime).GetAwaiter().GetResult().ToString();
         m_acceptLoop = Task.Run(function: () => AcceptLoopAsync(ct: lifetime));
-        Console.Error.WriteLine(value: $"[world.listen: bound {ListenEndpoint} transport=quic peer={m_network.Peer.Id.Domain}]");
+        m_server.Output.Narrate(
+            channel: "world.listen",
+            format: () => $"[world.listen: bound {ListenEndpoint} transport=quic peer={m_network.Peer.Id.Domain}]"
+        );
     }
 
     private sealed class Connection(int id, int peerIndex, int generation, PeerStream client, Stream stream, string remoteEndpoint, string identityDomain, string identitySubject, WorldDisclosureTier tier) {

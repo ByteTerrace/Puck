@@ -34,11 +34,21 @@ public sealed class OwnedWorldDisposalLawTests {
             text: node.ToJsonString()
         );
     }
-    private static WorldOwnedWorlds Open(TempWorldDirectory dir) => new(
-        directory: dir.RootPath,
-        machineId: Guid.NewGuid(),
-        template: Fixtures.BuildDocument()
-    );
+    // A throwaway hub bound to stderr, so this catalog's narration reaches Console.Error exactly as it would through
+    // a composition root's own AttachNarrationSink — the same mechanism WorldOutputHub.Narrate now uses in place of
+    // an unconditional Console.Error.WriteLine.
+    private static WorldOwnedWorlds Open(TempWorldDirectory dir) {
+        var hub = new WorldOutputHub();
+
+        _ = hub.AttachNarrationSink(sink: new WorldConsoleNarrationSink());
+
+        return new WorldOwnedWorlds(
+            directory: dir.RootPath,
+            machineId: Guid.NewGuid(),
+            narrationHub: hub,
+            template: Fixtures.BuildDocument()
+        );
+    }
     private static string[] Populate(TempWorldDirectory dir) {
         var seeded = Open(dir: dir);
 

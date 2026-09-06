@@ -222,7 +222,10 @@ public sealed partial class WorldServer {
 
         m_journal.Clear();
         m_journal.AddRange(collection: kept);
-        Console.Error.WriteLine(value: $"[world.undo: dropped {drop}, {m_journal.Count} remaining]");
+        m_output.Narrate(
+            channel: "world.undo",
+            format: () => $"[world.undo: dropped {drop}, {m_journal.Count} remaining]"
+        );
 
         if (addonPlanCommitted) {
             m_addons!.Finish(plan: addonPlan!);
@@ -238,7 +241,10 @@ public sealed partial class WorldServer {
     // live mutation reaches, and false to the caller. logged overrides the stderr body for the one gate whose line
     // predates the echo's own "undo refused:" prefix.
     private bool RefuseUndo(string refusal, int connectionId, long correlationId, string? logged = null) {
-        Console.Error.WriteLine(value: $"[world.undo: {(logged ?? refusal)}]");
+        m_output.Narrate(
+            channel: "world.undo",
+            format: () => $"[world.undo: {(logged ?? refusal)}]"
+        );
         EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: refusal,
             Rejected: true,

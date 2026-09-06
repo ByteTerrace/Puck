@@ -931,6 +931,40 @@ writes to `Console.Out`/`Console.Error` by which row wrote it, without
 threading a row identity through every write site. Unset (and unread) on the
 desktop.
 
+## Engine narration (`WorldNarration.cs`, `WorldOutputHub.Narration.cs`)
+
+A `WorldServer`/`WorldPeerHost`/`WorldRemoteAuthority`/`WorldReplayTape`/
+`WorldInstanceHost`/`WorldOwnedWorlds`/`WorldMachineHost`/`WorldSearchRuntime`
+line that would otherwise write straight to `Console.Error` instead calls
+`WorldOutputHub.Narrate(channel, format)` — `channel` is the bracketed tag the
+line opens with (`world.grant`, `world.mutation`, `replay.drive`, …), `format`
+a `Func<string>` invoked at most once and only while a sink is attached
+(`HasNarrationSink`), so a quiet run pays for neither the interpolation nor
+the write. `WorldServer.AttachNarrationSink`/`WorldInstanceHost.AttachNarrationSink`
+attach an `IWorldNarrationSink`; `WorldConsoleNarrationSink` (`WorldNarration.cs`)
+is the one every composition root binds, so a headless script or canary reads
+byte-identical lines to a direct `Console.Error` write. A server's own
+narration must be attached from its constructor's `narrationSink` parameter,
+not after — the document's own authored grants narrate during construction,
+before any post-build wiring step could reach them. `WorldMachineHost` and
+`WorldSearchRuntime` take an optional `WorldOutputHub`/narration sink because
+neither owns a single server of its own to share (`WorldMachineHost` is a peer
+singleton to `WorldServer`, constructed first; `WorldOwnedWorlds`,
+`WorldRemoteAuthority`, and `WorldFederatedServerLink` carry the same shape
+for the identical reason). A narration site inside a loop that assigns any of
+the format closure's captured locals before a possible early exit must gate
+on `HasNarrationSink` first and re-bind what the line needs into locals scoped
+to that one branch — the compiler hoists a captured loop-body variable into a
+display class allocated at its own declaration, not at the closure literal, so
+an unguarded capture allocates every iteration regardless of whether a sink is
+attached (`WorldServer.Responses.cs`'s `SweepPlacementResponses` is the worked
+example). A handful of `Console.Error` sites remain in `WorldServer.MutationApply.cs`,
+`WorldServer.RuleHost.cs`, `WorldServer.Step.cs`, and `WorldPopulation.Admission.cs`,
+owned by other in-flight work; `build/Architecture.props`'s
+`PuckArchitectureDeniedApi` lane states the eventual destination (no
+`System.Console` reference under this project) and stays disabled until those
+land.
+
 ### One admission entry, every ingress
 
 `WorldServer.TryAdmitVerifiedParticipant` is the only path from an ingress to a

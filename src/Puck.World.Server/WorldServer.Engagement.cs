@@ -134,7 +134,10 @@ public sealed partial class WorldServer {
 
             if (m_tickWrittenPrincipal[index] != principal) {
                 if (!m_contended[entityIndex]) {
-                    Console.Error.WriteLine(value: $"[world.grant: body:{entityIndex} driven by both {m_tickWrittenPrincipal[index].Describe()} and {principal.Describe()} this tick — {principal.Describe()}'s intent applies]");
+                    m_output.Narrate(
+                        channel: "world.grant",
+                        format: () => $"[world.grant: body:{entityIndex} driven by both {m_tickWrittenPrincipal[index].Describe()} and {principal.Describe()} this tick — {principal.Describe()}'s intent applies]"
+                    );
                 }
 
                 m_tickCollided[index] = true;

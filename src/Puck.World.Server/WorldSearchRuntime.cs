@@ -191,6 +191,7 @@ internal sealed partial class WorldSearchRuntime {
 
     private readonly Func<IReadOnlyList<StateRow>> m_live;
     private readonly RowStore m_store;
+    private readonly WorldOutputHub? m_narrationHub;
     private readonly List<WorldMutation> m_outputs = [];
     private WorldDefinition m_definition = null!;
     private Job[] m_jobs = [];
@@ -202,9 +203,12 @@ internal sealed partial class WorldSearchRuntime {
 
     /// <summary>Initializes the runtime over a live row source.</summary>
     /// <param name="live">Returns the installed section's rows.</param>
-    public WorldSearchRuntime(Func<IReadOnlyList<StateRow>> live) {
+    /// <param name="narrationHub">The hub this runtime's narration is delivered through, or <see langword="null"/>
+    /// to leave it undelivered.</param>
+    public WorldSearchRuntime(Func<IReadOnlyList<StateRow>> live, WorldOutputHub? narrationHub = null) {
         ArgumentNullException.ThrowIfNull(argument: live);
         m_live = live;
+        m_narrationHub = narrationHub;
         m_store = new RowStore(rows: live);
     }
 

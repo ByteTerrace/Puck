@@ -3,6 +3,17 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
+    /// <summary>Gets the hub other Server-family components (a peer host, a replay tape, an instance host's row)
+    /// narrate and attach client sinks through.</summary>
+    internal WorldOutputHub Output => m_output;
+
+    /// <summary>Attaches a sink that receives this server's narration — the same lines it would otherwise write
+    /// straight to <see cref="Console.Error"/> — until the process ends or the returned lease is disposed.</summary>
+    /// <param name="sink">The sink to add.</param>
+    /// <returns>A lease that detaches <paramref name="sink"/> when disposed.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="sink"/> is <see langword="null"/>.</exception>
+    public IDisposable AttachNarrationSink(IWorldNarrationSink sink) => m_output.AttachNarrationSink(sink: sink);
+
     // The ordinary public door intentionally remains void: callers submit an authority operation and observe its
     // attributed echo. Admission re-authorization additionally needs to know whether the row ACTUALLY reached the
     // live table so a conflict refusal is not later misclassified as an explicit revoke; it uses this identical
@@ -43,9 +54,12 @@ public sealed partial class WorldServer {
             grant: grant,
             reason: out var reason
         )) {
-            Console.Error.WriteLine(value: $"[world.grant: {label}{(grant.Exclusive
-                ? " exclusive"
-                : string.Empty)}]");
+            m_output.Narrate(
+                channel: "world.grant",
+                format: () => $"[world.grant: {label}{(grant.Exclusive
+                    ? " exclusive"
+                    : string.Empty)}]"
+            );
 
             // THE JOIN: the grant's channel mask was validated against the WORLD's channel table, and the guest's own
             // channel names were resolved against that same table at its handshake — and until now nothing compared the
@@ -58,7 +72,10 @@ public sealed partial class WorldServer {
                 reach: grant.Reach,
                 channels: m_population.Channels
             ) is { } undeclared) {
-                Console.Error.WriteLine(value: $"[world.grant: {grant.Principal.Describe()} is granted channel(s) it never declares — inert until it does: {undeclared}]");
+                m_output.Narrate(
+                    channel: "world.grant",
+                    format: () => $"[world.grant: {grant.Principal.Describe()} is granted channel(s) it never declares — inert until it does: {undeclared}]"
+                );
             }
 
             EchoTap?.Invoke(obj: new WorldEditEcho(
@@ -73,7 +90,10 @@ public sealed partial class WorldServer {
 
             return true;
         } else {
-            Console.Error.WriteLine(value: $"[world.grant rejected: {label} — {reason}]");
+            m_output.Narrate(
+                channel: "world.grant rejected",
+                format: () => $"[world.grant rejected: {label} — {reason}]"
+            );
             EchoTap?.Invoke(obj: new WorldEditEcho(
                 Message: $"grant {label} rejected: {reason}",
                 Rejected: true,
@@ -100,12 +120,15 @@ public sealed partial class WorldServer {
     // no additional safety, since a reach with no ceiling already folds nothing.
     //
     // The withholding is LOUD: a silently-narrowed row would read, in world.grants, as a document that never asked.
-    private static WorldGrant WithoutAuthoredConsent(WorldGrant grant) {
+    private WorldGrant WithoutAuthoredConsent(WorldGrant grant) {
         if (grant.Ceiling is null) {
             return grant;
         }
 
-        Console.Error.WriteLine(value: $"[world.grant: {grant.Principal.Describe()} drive {grant.Subject.Describe()} — the document's ceiling is WITHHELD (a pooled ceiling is consent, and consent is authored live by the seated human on its own body, never shipped in a world document); the row applies with no pool]");
+        m_output.Narrate(
+            channel: "world.grant",
+            format: () => $"[world.grant: {grant.Principal.Describe()} drive {grant.Subject.Describe()} — the document's ceiling is WITHHELD (a pooled ceiling is consent, and consent is authored live by the seated human on its own body, never shipped in a world document); the row applies with no pool]"
+        );
 
         // The mask travels with the ceiling on a seat's own gesture and means nothing without it, so both go.
         return (grant with { Reach = null, Consent = null, Ceiling = null });
@@ -176,9 +199,12 @@ public sealed partial class WorldServer {
             subject: grant.Subject
         );
 
-        Console.Error.WriteLine(value: (removed
-            ? $"[world.revoke: {label}]"
-            : $"[world.revoke: {grant.Principal.Describe()} held no {grant.Capability.ToString().ToLowerInvariant()} over {grant.Subject.Describe()}]"));
+        m_output.Narrate(
+            channel: "world.revoke",
+            format: () => (removed
+                ? $"[world.revoke: {label}]"
+                : $"[world.revoke: {grant.Principal.Describe()} held no {grant.Capability.ToString().ToLowerInvariant()} over {grant.Subject.Describe()}]")
+        );
         EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: (removed
             ? $"revoke {label}"

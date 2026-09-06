@@ -100,7 +100,10 @@ public sealed partial class WorldInstanceHost {
             );
             binding = $"channel:{channel}";
         }
-        Console.Error.WriteLine(value: $"[world.adjacency: '{instance.Name}/{adjacencyName}' seat {(seat + 1)} CLOSED ({reason}); response={binding}]");
+        instance.Server.Output.Narrate(
+            channel: "world.adjacency",
+            format: () => $"[world.adjacency: '{instance.Name}/{adjacencyName}' seat {(seat + 1)} CLOSED ({reason}); response={binding}]"
+        );
     }
     private WorldAuthorityEndpoint EndpointFor(WorldInstance instance) {
         if (m_authorityEndpoints.TryGetValue(
@@ -201,7 +204,10 @@ public sealed partial class WorldInstanceHost {
                 (announcedTransferId != heldTransferId)
             ) {
                 m_announcedCrossingHolds[(instance.Name, seat)] = heldTransferId;
-                Console.Error.WriteLine(value: $"[world.adjacency: '{instance.Name}' seat {(seat + 1)} crossing HELD (transfer={heldTransferId} is queued or in flight); no further crossing is minted until it resolves]");
+                instance.Server.Output.Narrate(
+                    channel: "world.adjacency",
+                    format: () => $"[world.adjacency: '{instance.Name}' seat {(seat + 1)} crossing HELD (transfer={heldTransferId} is queued or in flight); no further crossing is minted until it resolves]"
+                );
             }
         }
 
@@ -343,7 +349,10 @@ public sealed partial class WorldInstanceHost {
                     seamU: winner.SeamU,
                     seamV: winner.SeamV
                 );
-                Console.Error.WriteLine(value: $"[world.adjacency: '{instance.Name}/{winner.Adjacency.Name}' body:{seat} continuum safety-clamped after {pending.BoundaryEvents} boundary events]");
+                instance.Server.Output.Narrate(
+                    channel: "world.adjacency",
+                    format: () => $"[world.adjacency: '{instance.Name}/{winner.Adjacency.Name}' body:{seat} continuum safety-clamped after {pending.BoundaryEvents} boundary events]"
+                );
                 continue;
             }
 

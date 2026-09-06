@@ -55,7 +55,7 @@ public readonly record struct WorldSinkDisclosure(WorldObserverDisclosure Policy
 /// narrated on stderr by its concrete type, and detached — never retried, and never allowed to unwind into the tick
 /// loop and take every other subscriber (and the tick itself) down with it. A broken observer stays broken; it does
 /// not get a second chance to corrupt delivery to the healthy ones.</para></remarks>
-public sealed class WorldOutputHub {
+public sealed partial class WorldOutputHub {
     // One typed-lane slot. Active starts true and is flipped exactly once, either by the lease's own Dispose or by a
     // fault caught during delivery — both routes are equivalent from the subscriber's point of view (detached,
     // compacted out, never delivered to again). Kept as a class (not a struct) because the lease Subscribe returns IS
@@ -114,7 +114,10 @@ public sealed class WorldOutputHub {
     // that HasTypedSubscribers reads false while healthy subscribers remain — silently starving them of every
     // subsequent snapshot the server then skips building.
     private void Detach(Subscription subscription, string callSite, Exception exception) {
-        Console.Error.WriteLine(value: $"[world.output: {subscription.Sink.GetType().Name} threw in {callSite} — detached] {exception}");
+        Narrate(
+            channel: "world.output",
+            format: () => $"[world.output: {subscription.Sink.GetType().Name} threw in {callSite} — detached] {exception}"
+        );
 
         if (subscription.Active) {
             subscription.Active = false;

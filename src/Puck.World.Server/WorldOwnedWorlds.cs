@@ -33,13 +33,21 @@ public sealed class WorldOwnedWorlds {
 
     private WorldDocumentSubmissionReceipt? m_lastReceipt;
     private long m_revision = 1;
+    private readonly WorldOutputHub? m_narrationHub;
 
     /// <summary>Loads owned worlds from a directory, seeding authored identities when it is empty.</summary>
+    /// <param name="template">The document every seeded identity derives from.</param>
+    /// <param name="directory">The catalog's own directory.</param>
+    /// <param name="machineId">The persisted id of the machine or process running this catalog.</param>
+    /// <param name="neighbours">Resolves a document reference relative to this catalog's own directory.</param>
+    /// <param name="narrationHub">The hub this catalog's narration is delivered through, or <see langword="null"/>
+    /// to leave it undelivered — this catalog carries no single owning server of its own.</param>
     /// <exception cref="ArgumentNullException"><paramref name="template"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="directory"/> is <see langword="null"/> or whitespace.</exception>
-    public WorldOwnedWorlds(WorldDefinition template, string directory, Guid machineId, IWorldNeighbourResolver? neighbours = null) {
+    public WorldOwnedWorlds(WorldDefinition template, string directory, Guid machineId, IWorldNeighbourResolver? neighbours = null, WorldOutputHub? narrationHub = null) {
         ArgumentNullException.ThrowIfNull(argument: template);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
+        m_narrationHub = narrationHub;
         m_template = IdentityBase(fallback: template);
         m_directory = directory;
         MachineId = machineId;
@@ -124,7 +132,10 @@ public sealed class WorldOwnedWorlds {
                 );
 
                 if (File.Exists(path: occupied) || Directory.Exists(path: occupied)) {
-                    Console.Error.WriteLine(value: $"[identity] seed '{seed.Id}' skipped: the catalog path '{Path.GetFileName(path: occupied)}' is already occupied, and a seed never writes over an entry that is already there");
+                    m_narrationHub?.Narrate(
+                        channel: "identity",
+                        format: () => $"[identity] seed '{seed.Id}' skipped: the catalog path '{Path.GetFileName(path: occupied)}' is already occupied, and a seed never writes over an entry that is already there"
+                    );
 
                     continue;
                 }
@@ -142,6 +153,11 @@ public sealed class WorldOwnedWorlds {
             }
         }
     }
+
+    /// <summary>Gets the hub this catalog's narration is delivered through, or <see langword="null"/> when none was
+    /// attached — the seam a sibling component (a sync engine spun up over this same catalog) narrates through too,
+    /// rather than each carrying its own.</summary>
+    internal WorldOutputHub? NarrationHub => m_narrationHub;
 
     /// <summary>Gets the identities, one per owned world.</summary>
     public IReadOnlyList<WorldIdentity> All => m_identities;
@@ -505,14 +521,20 @@ public sealed class WorldOwnedWorlds {
         }
 
         if (retained.Count > 0) {
-            Console.Error.WriteLine(value: $"[identity] refused {retained.Count} owned world(s) this boot could not read, left where they are for the next one: {Narrate(
-                entries: retained
-            )}");
+            m_narrationHub?.Narrate(
+                channel: "identity",
+                format: () => $"[identity] refused {retained.Count} owned world(s) this boot could not read, left where they are for the next one: {Narrate(
+                    entries: retained
+                )}"
+            );
         }
         if (m_discarded.Count > 0) {
-            Console.Error.WriteLine(value: $"[identity] discarded {m_discarded.Count} unloadable owned world(s) into '{quarantine}' — a document shape this catalog no longer reads is disposed of, never migrated: {Narrate(
-                entries: [.. m_discarded.Select(selector: entry => (entry.FileName, entry.Reason))]
-            )}");
+            m_narrationHub?.Narrate(
+                channel: "identity",
+                format: () => $"[identity] discarded {m_discarded.Count} unloadable owned world(s) into '{quarantine}' — a document shape this catalog no longer reads is disposed of, never migrated: {Narrate(
+                    entries: [.. m_discarded.Select(selector: entry => (entry.FileName, entry.Reason))]
+                )}"
+            );
         }
     }
     // Every shipped world is a full arena, so the booted world's own template is the only base and this always
@@ -583,7 +605,10 @@ public sealed class WorldOwnedWorlds {
             FileName: fileName,
             Reason: reason
         ));
-        Console.Error.WriteLine(value: $"[identity] owned world refused: '{fileName}' {reason}");
+        m_narrationHub?.Narrate(
+            channel: "identity",
+            format: () => $"[identity] owned world refused: '{fileName}' {reason}"
+        );
     }
     // A fresh identity claims NO locomotion rates: the two rate slots are named but their rows are absent, so the
     // kit's own authored rate drives the seat until identity.motion mints an override row deliberately.
@@ -874,7 +899,10 @@ public sealed class WorldOwnedWorlds {
         );
 
         if (note.Length > 0) {
-            Console.Error.WriteLine(value: $"[identity] {note}");
+            m_narrationHub?.Narrate(
+                channel: "identity",
+                format: () => $"[identity] {note}"
+            );
         }
         if (
             (before is null) ||

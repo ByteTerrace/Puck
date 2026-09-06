@@ -138,6 +138,10 @@ internal static class WorldBootComposition {
         services.AddSingleton<WorldRenderEnvelope>();
         services.AddSingleton<WorldTextCatalog>();
 
+        // Bound to stderr, and registered so the WorldServer constructor below resolves it as its own optional
+        // narrationSink parameter — attached before construction narrates the document's own authored grants,
+        // which a sink only attached after the container finishes building the server would otherwise miss.
+        services.AddSingleton<IWorldNarrationSink, WorldConsoleNarrationSink>();
         // The authoritative world server and the in-process loopback fronting it: the client submits intents,
         // commands, session requests, and buffered live edits (mutations, definition swaps, journal undo) over
         // IServerLink; the server applies them at its step boundary, answers queries, and pushes each tick's snapshot
@@ -264,6 +268,20 @@ internal static class WorldBootComposition {
                     derivedFaceScreens: definition.Authoring.DerivedFaceScreens
                 )];
 
+        // WorldMachineHost's own narration hub: it is a PEER singleton to WorldServer (constructed before it, as its
+        // own constructor parameter — see the remarks below), so it cannot share WorldServer's hub without a
+        // circular dependency; this one is its own. Bound to stderr in the SAME factory that constructs it, before
+        // anything resolves it — WorldMachineHost narrates from inside its own constructor (a declared machine's
+        // boot fault), so attaching only after the container finishes building the host, the way
+        // WorldPostBuildWiring.Install attaches WorldInstanceHost's, would miss those lines.
+        services.AddSingleton(implementationFactory: static sp => {
+            var hub = new WorldOutputHub();
+
+            _ = hub.AttachNarrationSink(sink: new WorldConsoleNarrationSink());
+
+            return hub;
+        });
+
         // The authoritative screen-machine host — owns every booted IScreenMachine, in EVERY boot shape: registered
         // here (not under AddWorldPresentation) so a headless boot's cabinets run exactly like a windowed one's. A
         // PEER singleton to WorldServer (which takes it as a constructor parameter), never a private field WorldServer
@@ -271,7 +289,8 @@ internal static class WorldBootComposition {
         services.AddSingleton(implementationFactory: static sp => new WorldMachineHost(
             screens: ExpandedScreens(definition: sp.GetRequiredService<WorldDefinition>()),
             engines: sp.GetServices<IScreenMachineEngine>(),
-            documentPath: sp.GetRequiredService<WorldDefinitionSource>().SourcePath
+            documentPath: sp.GetRequiredService<WorldDefinitionSource>().SourcePath,
+            narrationHub: sp.GetRequiredService<WorldOutputHub>()
         ));
 
         // The screen binder — owns the declared screens' CPU-fed GPU sources (test patterns, the shared webcam,

@@ -88,7 +88,24 @@ public sealed partial class WorldServer {
                 continue;
             }
 
-            Console.Error.WriteLine(value: $"[world.respond: '{placement.Id}' {previous} -> {target} (entry {matchedIndex}: {responses[matchedIndex].When.Field} {responses[matchedIndex].When.Comparison})]");
+            // A closure that captures this loop's own locals would be hoisted into a display class allocated on
+            // every iteration reaching this far — regardless of whether a sink is attached — because the compiler
+            // must ready that storage before the earlier writes to previous/target/matchedIndex above. Gating on
+            // HasNarrationSink first, and re-binding what the line needs into locals scoped to this block alone,
+            // keeps the format closure (and its allocation) inside the one branch that ever runs it.
+            if (m_output.HasNarrationSink) {
+                var respondId = placement.Id;
+                var respondPrevious = previous;
+                var respondTarget = target;
+                var respondEntry = matchedIndex;
+                var respondField = responses[matchedIndex].When.Field;
+                var respondComparison = responses[matchedIndex].When.Comparison;
+
+                m_output.Narrate(
+                    channel: "world.respond",
+                    format: () => $"[world.respond: '{respondId}' {respondPrevious} -> {respondTarget} (entry {respondEntry}: {respondField} {respondComparison})]"
+                );
+            }
         }
     }
     // The first authored entry whose condition holds at the placement's coupled cell, or -1 when none do (or the

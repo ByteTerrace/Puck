@@ -357,12 +357,18 @@ public sealed partial class WorldReplayTape {
         if (liveRateHz != m_recordRateHz) {
             var recordedRateHz = m_recordRateHz;
 
-            Console.Error.WriteLine(value: $"[replay.record: stopped — a rebuild changed the simulation rate mid-capture ({recordedRateHz} Hz -> {liveRateHz} Hz); a recording spans exactly one rate, so this tape ends at the tick the rebuild landed rather than silently mixing rates]");
+            m_liveServer.Output.Narrate(
+                channel: "replay.record",
+                format: () => $"[replay.record: stopped — a rebuild changed the simulation rate mid-capture ({recordedRateHz} Hz -> {liveRateHz} Hz); a recording spans exactly one rate, so this tape ends at the tick the rebuild landed rather than silently mixing rates]"
+            );
 
             try {
                 _ = StopRecording();
             } catch (Exception exception) {
-                Console.Error.WriteLine(value: $"[replay.record: the forced stop above failed to complete ({exception.Message})]");
+                m_liveServer.Output.Narrate(
+                    channel: "replay.record",
+                    format: () => $"[replay.record: the forced stop above failed to complete ({exception.Message})]"
+                );
             }
         }
     }
@@ -478,16 +484,22 @@ public sealed partial class WorldReplayTape {
             // loudly here rather than silently. Both side-channel notes carry the [replay.tape: prefix, never
             // [replay.stop: — the canary runner accounts exactly one "[<verb>:" line per submitted command, so a
             // second line under the verb's own prefix makes a leg unaccountable.
-            Console.Error.WriteLine(value: $"[replay.tape: '{name}' recorded zero ticks — {pendingLevers.Count} pending rate-lever event(s) have no closed tick to attach to and are dropped by design (a zero-tick tape cannot carry one)]");
+            m_liveServer.Output.Narrate(
+                channel: "replay.tape",
+                format: () => $"[replay.tape: '{name}' recorded zero ticks — {pendingLevers.Count} pending rate-lever event(s) have no closed tick to attach to and are dropped by design (a zero-tick tape cannot carry one)]"
+            );
         }
 
         if (
             (discardedAuthorityCount > 0) ||
             (discardedIntentCount > 0)
         ) {
-            Console.Error.WriteLine(value: $"[replay.tape: '{name}' discarded {discardedAuthorityCount} pending authority entr{((discardedAuthorityCount == 1)
-                ? "y"
-                : "ies")} and {discardedIntentCount} pending intent submission(s) that never closed onto a tick — recording them would have claimed they ran on a tick they did not]");
+            m_liveServer.Output.Narrate(
+                channel: "replay.tape",
+                format: () => $"[replay.tape: '{name}' discarded {discardedAuthorityCount} pending authority entr{((discardedAuthorityCount == 1)
+                    ? "y"
+                    : "ies")} and {discardedIntentCount} pending intent submission(s) that never closed onto a tick — recording them would have claimed they ran on a tick they did not]"
+            );
         }
 
         // Persist under the LIVE tail hash — the state the running session actually reached at the last recorded tick.

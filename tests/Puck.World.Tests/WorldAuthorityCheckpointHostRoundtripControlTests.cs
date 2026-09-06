@@ -320,6 +320,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
 
         var originalError = Console.Error;
         using var captured = new StringWriter();
+        using var narrationLease = restoredHost.AttachNarrationSink(sink: new WorldConsoleNarrationSink());
 
         Console.SetError(newError: captured);
 
