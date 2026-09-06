@@ -109,7 +109,14 @@ public static class RuleEvaluation {
     /// <param name="value">The raw result.</param>
     /// <param name="fault">Why the expression failed, or <see cref="ExpressionFault.None"/>.</param>
     /// <returns><see langword="true"/> when the expression evaluated.</returns>
-    public static bool TryEvaluateExpression(IRuleReader reader, CompiledExpressionToken[] program, CellKind kind, out long value, out ExpressionFault fault) {
+    public static bool TryEvaluateExpression(IRuleReader reader, CompiledExpressionToken[] program, CellKind kind, out long value, out ExpressionFault fault) =>
+        TryEvaluateProgram(reader, program, kind, out value, out fault);
+
+    // The compiler uses the same evaluator for constant subtrees. A live operand refuses without a reader.
+    internal static bool TryEvaluateConstantExpression(ReadOnlySpan<CompiledExpressionToken> program, CellKind kind, out long value) =>
+        TryEvaluateProgram(null, program, kind, out value, out _);
+
+    private static bool TryEvaluateProgram(IRuleReader? reader, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind, out long value, out ExpressionFault fault) {
         fault = ExpressionFault.Domain;
         Span<long> stack = stackalloc long[RuleCapacity.MaxExpressionTokens];
         var top = 0;
@@ -121,6 +128,7 @@ public static class RuleEvaluation {
                     continue;
                 }
                 if (token.Operation == ExpressionOp.Operand) {
+                    if (reader is null) { value = 0L; return false; }
                     var fact = token.Operand!.Read(reader: reader);
                     if (reader.TableKeyMissing) {
                         reader.TableKeyMissing = false;

@@ -97,6 +97,15 @@ Nothing here carries a `World` name — a state library names no world.
 - *Patterns:* `PatternRow`/`PatternSymbol`/`PatternNode`/`PatternCapacity`
   and `CompiledPattern`/`CompiledPatterns` (a Brzozowski-derivative machine
   inside a state budget).
+- *Reductions:* `$reduce:<max|min|sum|count>:<row>` aggregates a row's cells.
+  Append `:between:<lower>:<upper>` to admit only live values within an inclusive
+  range, for example `$reduce:count:pieceCell:between:0:63`. Bounds use the source
+  row's units and normal numeric-literal rounding; `count` still returns an Int.
+  The existing `:where:<filterRow>` admits keys with nonzero filter values. Both
+  filters may appear once, in either order, and their conditions intersect.
+  Missing filter keys are excluded; an empty result is zero. Bounds must be
+  representable and ordered. `arrangementRank` takes neither filter. A range
+  reduction costs three work units per candidate capacity (read and two comparisons).
 - *Expressions:* `ValueExpression` and its `ValueToken` postfix vocabulary,
   `ExpressionSpelling` (the infix spelling and its inverse — syntax only, no
   second evaluator), `ValueExpressionJsonConverter` (reads either spelling,
@@ -110,8 +119,12 @@ Nothing here carries a `World` name — a state library names no world.
   calls are Int-only and accept live expressions. For example,
   `replicationMask(8)` is `0x0101010101010101`, `repeatBits(127, 8)` is
   `0x7F7F7F7F7F7F7F7F`, and `repeatBits(3, 4)` is the Fermat-style mask
-  `0x3333333333333333`. Calls are evaluated and priced at runtime, including
-  those with literal arguments. Beside arithmetic, comparison, bit and board operations,
+  `0x3333333333333333`. After validating every authored token, the compiler
+  evaluates successful constant subexpressions once using the runtime evaluator.
+  This includes calls with literal arguments and immutable topology operations.
+  Live reads remain live; invalid constant subexpressions still refuse at runtime,
+  even in an unselected conditional branch. Work budgets price the resulting
+  program, while serialization retains the authored expression. Beside arithmetic, comparison, bit and board operations,
   and `select`, the call vocabulary carries one family per prefix over
   `Puck.Maths`: `pair`/`pairX`/`pairY` and the Szudzik algebra (`pairSwap`,
   `pairMax`, `pairMin`, `pairSum`, `pairDifference`, `pairTranslate`,
@@ -192,9 +205,14 @@ Nothing here carries a `World` name — a state library names no world.
   stored value beneath the rows' structure — `RowStore` over a section's own
   cells (`IRuleReader.Store`), or `StateFrame`, every integer cell of a section
   laid out once by a `FrameLayout` (slot, keyed, board by cell ordinal, ring
-  with its cursor; text and field rows read through to their cells). A frame
-  copies as one span copy, refuses a key its row lacks, and applies `boardCombine`,
-  `writeSet`, `push`, and `clearEnclosed` densely. A board declaring `Inverse` is derived,
+  with its cursor, an ordered zone by capacity — count, member ordinals in pile
+  order, member values — so a `transfer` changes membership inside the frame;
+  text and field rows read through to their cells). `StateStore.CellCount` and
+  `TryKeyAt` enumerate a row's live members, which is how a count, an
+  arrangement rank, a filtered reduce, and a `$match` word read a moved pile.
+  A frame copies as one span copy, refuses a key its row lacks, and applies `boardCombine`,
+  `writeSet`, `push`, `clearEnclosed`, and `transfer` (first, last, or key; never a draw) densely.
+  A board declaring `Inverse` is derived,
   never written directly: `FrameLayout` resolves its tokens/codes row ordinals
   once, and a frame write to the tokens row recomputes only the moved token's
   old and new board cells (`DerivedBoards.Compose` is the equivalent

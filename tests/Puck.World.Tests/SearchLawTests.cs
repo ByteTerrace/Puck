@@ -813,4 +813,185 @@ public sealed class SearchLawTests {
         Assert.Equal(Cell(interrupted, "legal", "a"), Cell(resumed, "legal", "a"));
         Assert.Equal(Cell(interrupted, "legal", "b"), Cell(resumed, "legal", "b"));
     }
+
+    // Pair fixture over any lattice: two tokens, an accept-all judge, and the companion carried by the walked token's
+    // own translation — the topology decides what a translation is.
+    private static WorldDefinition PairWorld(LatticeTopology topology, long a, long b) {
+        var state = new WorldStateSection(
+            World: [
+                new WorldStateRow(CellName.Parse("board"), CellKind.Int, Domain: new StateDomain.CellsOf(topology.Name)),
+                new WorldStateRow(CellName.Parse("pieceCell"), CellKind.Int, Cells: [new StateCell(CellName.Parse("a"), a), new StateCell(CellName.Parse("b"), b)]),
+                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
+                new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
+            ],
+            Lattices: [topology]
+        );
+        var definition = Fixtures.BuildDocument() with {
+            StateRaw = state,
+            Rules = [
+                new WorldRule(Name: CellName.Parse("accept"), Effects: [
+                    new ActionEffect.SetState(State: "verdict", Value: 1),
+                    new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                ]),
+            ],
+            SearchRaw = new WorldSearchSection(Jobs: [
+                new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict",
+                    Shapes: [new WorldSearchShape.Paired(With: "b")], Legal: "legal", Counts: "counts"),
+            ]),
+        };
+
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+
+        return definition;
+    }
+
+    [Fact]
+    public void APairOnAHexCarriesTheCompanionByTheSameTranslationAndTheNeighbourTableIsTheOracle() {
+        // a at the centre, b on the ring: every step a takes is one hex direction, and b's own step in that direction
+        // exists only where the disk still holds it — the adjacency table says so without any translation code.
+        var hex = new LatticeTopology.Hex(Name: "board", Origin: new DocumentVector3(0, 0, 0), CellSize: 1, Radius: 1);
+        var definition = PairWorld(hex, a: 0L, b: 1L);
+        var topology = WorldTopologyCompilation.Find(definition, "board")!;
+        var oracle = 0;
+
+        for (var direction = 0; direction < topology.DirectionCount; direction++) {
+            if (topology.Neighbour(cell: 1, direction: direction) >= 0) {
+                oracle++;
+            }
+        }
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+
+        var status = RunToCompletion(fixture);
+
+        Assert.True(status.Done, status.ToString());
+        Assert.Equal(3, oracle);
+        Assert.Equal((long)oracle, status.Count);
+        Assert.Equal((long)oracle, Cell(fixture, "counts", "a"));
+        Assert.Equal(0L, Cell(fixture, "counts", "b"));
+    }
+
+    [Fact]
+    public void APairOnARingWrapsTheCompanionAroundWithTheWalkedToken() {
+        var ring = new LatticeTopology.Ring(Name: "board", Origin: new DocumentVector3(0, 0, 0), CellSize: 1, Width: 6);
+        using var fixture = Fixtures.FreshServer(definition: PairWorld(ring, a: 0L, b: 3L));
+
+        var status = RunToCompletion(fixture);
+
+        Assert.True(status.Done, status.ToString());
+        // a may step to any other cell; b always lands three further round, never on a's own target.
+        Assert.Equal(5L, status.Count);
+        Assert.Equal(0b111110L, Cell(fixture, "legal", "a"));
+    }
+
+    // Pile fixture: three cards standing in a deck, in order, two empty piles beside it, and an accept-all judge that
+    // also counts the hand through the frame. Pile order is the zones' own: only the deck's end card may move.
+    private static WorldDefinition PileWorld(ZoneSelector selector = ZoneSelector.Last, bool best = false, WorldSearchShape? shape = null) {
+        var zone = new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true);
+        StateCell[] Members(string keys) => [.. keys.Select(static key => new StateCell(CellName.Parse(key.ToString()), 1L))];
+        var state = new WorldStateSection(
+            World: [
+                new WorldStateRow(CellName.Parse("cards"), CellKind.Bool, Capacity: 3, Cells: Members("abc")),
+                new WorldStateRow(CellName.Parse("deck"), CellKind.Bool, Capacity: 3, Domain: zone, Cells: Members("abc")),
+                new WorldStateRow(CellName.Parse("hand"), CellKind.Bool, Capacity: 3, Domain: zone),
+                new WorldStateRow(CellName.Parse("discard"), CellKind.Bool, Capacity: 3, Domain: zone),
+                new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("handCount"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("cards"))),
+                new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("cards"))),
+                new WorldStateRow(CellName.Parse("best"), CellKind.Int, Cells: [new StateCell(CellName.Parse("token"), 0L), new StateCell(CellName.Parse("to"), 0L), new StateCell(CellName.Parse("score"), 0L)]),
+            ]
+        );
+        var definition = Fixtures.BuildDocument() with {
+            StateRaw = state,
+            Rules = [
+                new WorldRule(Name: CellName.Parse("accept"), Effects: [
+                    new ActionEffect.SetState(State: "handCount", FromState: "$reduce:count:hand"),
+                    new ActionEffect.SetState(State: "verdict", Value: 1),
+                    new ActionEffect.SetState(State: "turn", Expression: ValueExpression.Parse("1 - turn")),
+                ]),
+            ],
+            SearchRaw = new WorldSearchSection(Jobs: [
+                new WorldSearchRow(Name: "search", Tokens: "cards", Zones: ["deck", "hand", "discard"], Turn: "turn", Verdict: "verdict",
+                    Shapes: [shape ?? new WorldSearchShape.Transferred(Selector: selector)], Legal: "legal", Counts: "counts",
+                    Score: (best ? "handCount" : null), Best: (best ? "best" : null)),
+            ]),
+        };
+
+        return definition;
+    }
+
+    [Fact]
+    public void OnlyTheTopOfAPileMayMoveAndItMayMoveOntoEitherOtherPile() {
+        var definition = PileWorld();
+
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+
+        var status = RunToCompletion(fixture);
+
+        Assert.True(status.Done, status.ToString());
+        Assert.Equal(3, status.Cells);
+        Assert.Equal(2L, status.Count);
+        Assert.Equal(0L, Cell(fixture, "counts", "a"));
+        Assert.Equal(0L, Cell(fixture, "counts", "b"));
+        Assert.Equal(2L, Cell(fixture, "counts", "c"));
+        Assert.Equal((1L << 1) | (1L << 2), Cell(fixture, "legal", "c"));
+        // The section's piles never moved: the frame took every transfer.
+        Assert.Equal("abc", string.Concat(Row(fixture, "deck").Cells!.Select(c => c.Key.Value)));
+        Assert.Empty(Row(fixture, "hand").Cells ?? []);
+    }
+
+    [Fact]
+    public void TheFirstEndOfAPileMovesWhenTheShapeSaysSo() {
+        var definition = PileWorld(selector: ZoneSelector.First);
+
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+
+        var status = RunToCompletion(fixture);
+
+        Assert.True(status.Done, status.ToString());
+        Assert.Equal(2L, Cell(fixture, "counts", "a"));
+        Assert.Equal(0L, Cell(fixture, "counts", "c"));
+    }
+
+    [Fact]
+    public void TheJudgeReadsThePileTheTransferLandedOnAndBestNamesThatZone() {
+        var definition = PileWorld(best: true);
+
+        Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+
+        var status = RunToCompletion(fixture);
+
+        Assert.True(status.Done, status.ToString());
+        // Moving c onto the hand makes the hand count one through the frame; onto the discard it stays zero.
+        Assert.Equal(2, status.BestToken);
+        Assert.Equal(1, status.BestTarget);
+        Assert.Equal(1L, status.BestScore);
+        Assert.Equal(1L, Cell(fixture, "best", "to"));
+        Assert.Equal(0L, Cell(fixture, "handCount", WorldStateRow.SlotKey.Value));
+    }
+
+    [Fact]
+    public void AZoneJobRefusesABoardShapeAndABoardJobRefusesATransfer() {
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(PileWorld(shape: new WorldSearchShape.Relocate()), out var zoneReason));
+        Assert.Contains("transfer", zoneReason);
+
+        var ring = new LatticeTopology.Ring(Name: "board", Origin: new DocumentVector3(0, 0, 0), CellSize: 1, Width: 6);
+        var board = PairWorld(ring, a: 0L, b: 3L);
+        var mixed = board with {
+            SearchRaw = new WorldSearchSection(Jobs: [board.SearchRaw!.Jobs![0] with { Shapes = [new WorldSearchShape.Transferred()] }]),
+        };
+
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(mixed, out var boardReason));
+        Assert.Contains("zones", boardReason);
+    }
 }

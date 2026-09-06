@@ -133,19 +133,31 @@ public static class BoardQueries {
     /// <param name="mask">Bit c set for cell ordinal c.</param>
     /// <returns>The image mask.</returns>
     public static long ImageOfMask(CompiledTopology topology, int element, long mask) {
-        var bits = (ulong)mask;
-        var image = 0UL;
-        while (bits != 0UL) {
-            var cell = System.Numerics.BitOperations.TrailingZeroCount(bits);
-            bits &= bits - 1UL;
+        if (mask == 0L) {
+            return 0L;
+        }
+        if (topology.TryGetImageMasks(element, out var masks)) {
+            var bits = (ulong)mask;
+            var image = 0UL;
+            while (bits != 0UL) {
+                image |= masks[System.Numerics.BitOperations.TrailingZeroCount(bits)];
+                bits &= bits - 1UL;
+            }
+            return (long)image;
+        }
+        var remaining = (ulong)mask;
+        var fallback = 0UL;
+        while (remaining != 0UL) {
+            var cell = System.Numerics.BitOperations.TrailingZeroCount(remaining);
+            remaining &= remaining - 1UL;
             if (cell < topology.CellCount) {
                 var carried = topology.Image(element, cell);
                 if (carried < BoardMask.MaxCells) {
-                    image |= 1UL << carried;
+                    fallback |= 1UL << carried;
                 }
             }
         }
-        return (long)image;
+        return (long)fallback;
     }
 
     /// <summary>Returns the union of a mask and every repeated shift of it in the query's direction until no bit
@@ -169,21 +181,33 @@ public static class BoardQueries {
     /// <param name="mask">Bit c set for cell ordinal c.</param>
     /// <returns>The shifted mask.</returns>
     public static long ShiftMask(BoardNeighbourQuery query, long mask) {
+        if (mask == 0L) {
+            return 0L;
+        }
         var topology = query.Topology;
-        var bits = (ulong)mask;
-        var shifted = 0UL;
-        while (bits != 0UL) {
-            var cell = System.Numerics.BitOperations.TrailingZeroCount(bits);
-            bits &= bits - 1UL;
+        if (topology.TryGetShiftMasks(query.Direction, out var masks)) {
+            var bits = (ulong)mask;
+            var shifted = 0UL;
+            while (bits != 0UL) {
+                shifted |= masks[System.Numerics.BitOperations.TrailingZeroCount(bits)];
+                bits &= bits - 1UL;
+            }
+            return (long)shifted;
+        }
+        var remaining = (ulong)mask;
+        var fallback = 0UL;
+        while (remaining != 0UL) {
+            var cell = System.Numerics.BitOperations.TrailingZeroCount(remaining);
+            remaining &= remaining - 1UL;
             if (cell >= topology.CellCount) {
                 continue;
             }
             var neighbour = topology.Neighbour(cell, query.Direction);
             if (neighbour >= 0 && neighbour < BoardMask.MaxCells) {
-                shifted |= 1UL << neighbour;
+                fallback |= 1UL << neighbour;
             }
         }
-        return (long)shifted;
+        return (long)fallback;
     }
 
     // A flood along the topology's directions from the key cell over in-range cells; every settled member is one

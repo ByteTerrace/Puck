@@ -24,11 +24,24 @@ public sealed partial class CompiledTopology {
     private readonly FixedQ4816 m_band;
     // Authored centres relative to the origin, present for a Graph alone; every other kind derives its centres.
     private readonly FixedVector3[]? m_cellCentres;
+    // Each cell's axial coordinate — (x, z, layer) on a grid, ring, or box, (q, r, 0) on a hex — and its inverse, present
+    // for the lattice kinds alone: what makes a translation between two cells carriable to a third.
+    private readonly (int X, int Y, int Z)[]? m_coordinates;
+    private readonly Dictionary<(int, int, int), int>? m_coordinateIndex;
+    private readonly ulong[]? m_directionShiftMasks;
 
     internal CompiledTopology(TopologyKind kind, int count, int directions, int[] neighbours, int[] opposite,
         int width, int depth, int radius, TopologyWrap wrap, FixedVector3 origin, FixedQ4816 cellSize, FixedQ4816 band,
-        int[][] images, string[] elementNames, int layers, FixedQ4816 layerHeight, string[] directionNames, FixedVector3[]? cellCentres = null) {
+        int[][] images, string[] elementNames, int layers, FixedQ4816 layerHeight, string[] directionNames, FixedVector3[]? cellCentres = null,
+        (int X, int Y, int Z)[]? coordinates = null) {
         m_cellCentres = cellCentres;
+        m_coordinates = coordinates;
+        if (coordinates is not null) {
+            m_coordinateIndex = new Dictionary<(int, int, int), int>(capacity: coordinates.Length);
+            for (var cell = 0; cell < coordinates.Length; cell++) {
+                m_coordinateIndex[coordinates[cell]] = cell;
+            }
+        }
         m_band = band;
         m_layers = layers;
         m_layerHeight = layerHeight;
@@ -51,6 +64,33 @@ public sealed partial class CompiledTopology {
         for (var cell = 0; cell < count; cell++) {
             m_keys[cell] = cell.ToString(CultureInfo.InvariantCulture);
             m_names[cell] = CellName.Parse(m_keys[cell]);
+        }
+        if (count <= BoardMask.MaxCells && directions > 0) {
+            var shiftMasks = new ulong[directions * BoardMask.MaxCells];
+            for (var d = 0; d < directions; d++) {
+                var offset = d * BoardMask.MaxCells;
+                for (var cell = 0; cell < count; cell++) {
+                    var neighbour = neighbours[cell * directions + d];
+                    if (neighbour >= 0 && neighbour < BoardMask.MaxCells) {
+                        shiftMasks[offset + cell] = 1UL << neighbour;
+                    }
+                }
+            }
+            m_directionShiftMasks = shiftMasks;
+        }
+        if (count <= BoardMask.MaxCells && images is { Length: > 0 }) {
+            var imageMasks = new ulong[images.Length * BoardMask.MaxCells];
+            for (var elem = 0; elem < images.Length; elem++) {
+                var offset = elem * BoardMask.MaxCells;
+                var elemImages = images[elem];
+                for (var cell = 0; cell < count && cell < elemImages.Length; cell++) {
+                    var carried = elemImages[cell];
+                    if (carried >= 0 && carried < BoardMask.MaxCells) {
+                        imageMasks[offset + cell] = 1UL << carried;
+                    }
+                }
+            }
+            m_elementImageMasks = imageMasks;
         }
     }
 
@@ -206,40 +246,62 @@ public sealed partial class CompiledTopology {
         return true;
     }
 
-    /// <summary>Returns the cell an axial step away — (dx, dz) on a grid, (dq, dr) on a hex — or <see langword="false"/>
-    /// off the board.</summary>
+    /// <summary>Gets whether the topology is a lattice with translations — a grid, ring, hex, or box, whose cells
+    /// carry axial coordinates — so the step carrying one cell to another can be carried to a third
+    /// (<see cref="TryTranslation"/>, <see cref="TryOffset"/>). A graph or tiling has adjacency alone.</summary>
+    public bool HasTranslations => (m_coordinates is not null);
+
+    /// <summary>Returns the lattice translation carrying <paramref name="from"/> to <paramref name="to"/> — the
+    /// coordinate difference along the topology's own axes: (dx, dz) on a grid or ring, (dq, dr) on a hex, plus the
+    /// layer step on a box — or <see langword="false"/> on a topology without translations or for an invalid cell.
+    /// On a wrapping axis the difference is the raw one; <see cref="TryOffset"/> wraps it back.</summary>
+    /// <param name="from">The source cell ordinal.</param>
+    /// <param name="to">The destination cell ordinal.</param>
+    /// <param name="dx">The signed step along +X, or +q.</param>
+    /// <param name="dz">The signed step along +Z (the depth axis), or +r.</param>
+    /// <param name="dy">The signed layer step; zero on every kind but a box.</param>
+    public bool TryTranslation(int from, int to, out int dx, out int dz, out int dy) {
+        dx = 0;
+        dz = 0;
+        dy = 0;
+        if ((m_coordinates is null) || ((uint)from >= (uint)CellCount) || ((uint)to >= (uint)CellCount)) {
+            return false;
+        }
+        var source = m_coordinates[from];
+        var target = m_coordinates[to];
+        dx = (target.X - source.X);
+        dz = (target.Y - source.Y);
+        dy = (target.Z - source.Z);
+        return true;
+    }
+
+    /// <summary>Returns the cell a lattice translation away — (dx, dz) on a grid or ring, (dq, dr) on a hex, with
+    /// <paramref name="dy"/> the layer step on a box — or <see langword="false"/> off the board or on a topology
+    /// without translations. A wrapping axis (a ring, a grid declaring <c>wrap</c>) folds the step back.</summary>
     /// <param name="cell">The source cell ordinal.</param>
     /// <param name="dx">The signed step along +X, or +q.</param>
     /// <param name="dz">The signed step along +Z, or +r.</param>
     /// <param name="result">The resolved cell ordinal.</param>
-    public bool TryOffset(int cell, int dx, int dz, out int result) {
+    /// <param name="dy">The signed layer step; must be zero on every kind but a box.</param>
+    public bool TryOffset(int cell, int dx, int dz, out int result, int dy = 0) {
         result = -1;
-        if ((uint)cell >= (uint)CellCount) {
+        if ((m_coordinates is null) || (m_coordinateIndex is null) || ((uint)cell >= (uint)CellCount)) {
             return false;
         }
-        if (Kind == TopologyKind.Hex) {
-            var moved = new HexagonalIndex(value: cell).Translate(displacement: new HexagonalCoordinate(Q: dx, R: dz));
-            if (moved.Radius > m_radius) {
-                return false;
-            }
-            result = ((int)moved.Value);
-            return true;
-        }
-        if (Kind != TopologyKind.Grid) {
-            return false;
-        }
-        var x = (cell % m_width) + dx;
-        var z = (cell / m_width) + dz;
-        if (m_wrap is TopologyWrap.X or TopologyWrap.Both) {
-            x = ((x % m_width) + m_width) % m_width;
+        var source = m_coordinates[cell];
+        var x = (source.X + dx);
+        var y = (source.Y + dz);
+        var z = (source.Z + dy);
+        if ((Kind == TopologyKind.Ring) || (m_wrap is TopologyWrap.X or TopologyWrap.Both)) {
+            x = (((x % m_width) + m_width) % m_width);
         }
         if (m_wrap is TopologyWrap.Y or TopologyWrap.Both) {
-            z = ((z % m_depth) + m_depth) % m_depth;
+            y = (((y % m_depth) + m_depth) % m_depth);
         }
-        if ((uint)x >= (uint)m_width || (uint)z >= (uint)m_depth) {
+        if (!m_coordinateIndex.TryGetValue((x, y, z), out result)) {
+            result = -1;
             return false;
         }
-        result = (z * m_width) + x;
         return true;
     }
     /// <summary>Reads one precomputed neighbour.</summary>
@@ -277,12 +339,39 @@ public sealed partial class CompiledTopology {
     /// <param name="direction">The direction ordinal.</param>
     /// <returns>The name, or <see langword="null"/> for an invalid ordinal.</returns>
     public string? DirectionName(int direction) => ((uint)direction < (uint)m_directionNames.Length) ? m_directionNames[direction] : null;
+
+    /// <summary>Attempts to read precomputed 64-bit shift masks for a direction when the topology has at most 64 cells.</summary>
+    /// <param name="direction">The direction ordinal.</param>
+    /// <param name="masks">The 64-element span of destination bitmasks indexed by source cell ordinal.</param>
+    /// <returns><see langword="true"/> when precomputed masks are available; otherwise <see langword="false"/>.</returns>
+    public bool TryGetShiftMasks(int direction, out ReadOnlySpan<ulong> masks) {
+        if (m_directionShiftMasks is not null && (uint)direction < (uint)DirectionCount) {
+            masks = m_directionShiftMasks.AsSpan(direction * BoardMask.MaxCells, BoardMask.MaxCells);
+            return true;
+        }
+        masks = default;
+        return false;
+    }
 }
 
 public sealed partial class CompiledTopology {
     private readonly int[][] m_images = [];
     private readonly string[] m_elementNames = [];
     private readonly Dictionary<string, int> m_elementAliases = new(StringComparer.Ordinal);
+    private readonly ulong[]? m_elementImageMasks;
+
+    /// <summary>Attempts to read precomputed 64-bit image masks for a point-group element when the topology has at most 64 cells.</summary>
+    /// <param name="element">The element ordinal.</param>
+    /// <param name="masks">The 64-element span of destination bitmasks indexed by source cell ordinal.</param>
+    /// <returns><see langword="true"/> when precomputed masks are available; otherwise <see langword="false"/>.</returns>
+    public bool TryGetImageMasks(int element, out ReadOnlySpan<ulong> masks) {
+        if (m_elementImageMasks is not null && (uint)element < (uint)ElementCount) {
+            masks = m_elementImageMasks.AsSpan(element * BoardMask.MaxCells, BoardMask.MaxCells);
+            return true;
+        }
+        masks = default;
+        return false;
+    }
 
     /// <summary>Gets the number of elements in the topology's point group, the identity included: 8 for a square
     /// grid, 4 for a rectangle, 12 for a hex board, 1 for a ring.</summary>

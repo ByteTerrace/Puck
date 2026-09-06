@@ -168,28 +168,23 @@
         },
         {
           "$type": "setState",
-          "state": "tttChunkX0",
+          "state": "tttXWin",
           "expression": "((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L0), tttCube, L0), tttCube, L0)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L1), tttCube, L1), tttCube, L1)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L2), tttCube, L2), tttCube, L2)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L3), tttCube, L3), tttCube, L3)) != 0)"
         },
         {
           "$type": "setState",
-          "state": "tttChunkX1",
-          "expression": "((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L4), tttCube, L4), tttCube, L4)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L5), tttCube, L5), tttCube, L5)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L6), tttCube, L6), tttCube, L6)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L7), tttCube, L7), tttCube, L7)) != 0)"
-        },
-        {
-          "$type": "setState",
-          "state": "tttChunkX2",
-          "expression": "((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L8), tttCube, L8), tttCube, L8)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L9), tttCube, L9), tttCube, L9)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L10), tttCube, L10), tttCube, L10)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L11), tttCube, L11), tttCube, L11)) != 0)"
-        },
-        {
-          "$type": "setState",
-          "state": "tttChunkX3",
-          "expression": "((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L12), tttCube, L12), tttCube, L12)) != 0)"
+          "state": "tttXWin",
+          "expression": "tttXWin | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L4), tttCube, L4), tttCube, L4)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L5), tttCube, L5), tttCube, L5)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L6), tttCube, L6), tttCube, L6)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L7), tttCube, L7), tttCube, L7)) != 0)"
         },
         {
           "$type": "setState",
           "state": "tttXWin",
-          "expression": "tttChunkX0 | tttChunkX1 | tttChunkX2 | tttChunkX3"
+          "expression": "tttXWin | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L8), tttCube, L8), tttCube, L8)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L9), tttCube, L9), tttCube, L9)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L10), tttCube, L10), tttCube, L10)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L11), tttCube, L11), tttCube, L11)) != 0)"
+        },
+        {
+          "$type": "setState",
+          "state": "tttXWin",
+          "expression": "tttXWin | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L12), tttCube, L12), tttCube, L12)) != 0)"
         },
         {
           "$type": "setState",
@@ -198,28 +193,23 @@
         },
         {
           "$type": "setState",
-          "state": "tttChunkO0",
+          "state": "tttOWin",
           "expression": "((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L0), tttCube, L0), tttCube, L0)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L1), tttCube, L1), tttCube, L1)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L2), tttCube, L2), tttCube, L2)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L3), tttCube, L3), tttCube, L3)) != 0)"
         },
         {
           "$type": "setState",
-          "state": "tttChunkO1",
-          "expression": "((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L4), tttCube, L4), tttCube, L4)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L5), tttCube, L5), tttCube, L5)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L6), tttCube, L6), tttCube, L6)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L7), tttCube, L7), tttCube, L7)) != 0)"
-        },
-        {
-          "$type": "setState",
-          "state": "tttChunkO2",
-          "expression": "((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L8), tttCube, L8), tttCube, L8)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L9), tttCube, L9), tttCube, L9)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L10), tttCube, L10), tttCube, L10)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L11), tttCube, L11), tttCube, L11)) != 0)"
-        },
-        {
-          "$type": "setState",
-          "state": "tttChunkO3",
-          "expression": "((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L12), tttCube, L12), tttCube, L12)) != 0)"
+          "state": "tttOWin",
+          "expression": "tttOWin | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L4), tttCube, L4), tttCube, L4)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L5), tttCube, L5), tttCube, L5)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L6), tttCube, L6), tttCube, L6)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L7), tttCube, L7), tttCube, L7)) != 0)"
         },
         {
           "$type": "setState",
           "state": "tttOWin",
-          "expression": "tttChunkO0 | tttChunkO1 | tttChunkO2 | tttChunkO3"
+          "expression": "tttOWin | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L8), tttCube, L8), tttCube, L8)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L9), tttCube, L9), tttCube, L9)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L10), tttCube, L10), tttCube, L10)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L11), tttCube, L11), tttCube, L11)) != 0)"
+        },
+        {
+          "$type": "setState",
+          "state": "tttOWin",
+          "expression": "tttOWin | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L12), tttCube, L12), tttCube, L12)) != 0)"
         },
         {
           "$type": "setState",
@@ -476,62 +466,6 @@
         "max": 64,
         "min": 0,
         "name": "tttMoveCount",
-        "value": 0
-      },
-      {
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "tttChunkX0",
-        "value": 0
-      },
-      {
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "tttChunkX1",
-        "value": 0
-      },
-      {
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "tttChunkX2",
-        "value": 0
-      },
-      {
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "tttChunkX3",
-        "value": 0
-      },
-      {
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "tttChunkO0",
-        "value": 0
-      },
-      {
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "tttChunkO1",
-        "value": 0
-      },
-      {
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "tttChunkO2",
-        "value": 0
-      },
-      {
-        "kind": "int",
-        "max": 1,
-        "min": 0,
-        "name": "tttChunkO3",
         "value": 0
       },
       {

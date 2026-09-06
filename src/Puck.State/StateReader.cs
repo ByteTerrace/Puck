@@ -352,8 +352,15 @@ public static class StateReader {
     /// <param name="zone">The ordered zone.</param>
     public static long ArrangementRank(StateStore store, StateRow zone) {
         ArgumentNullException.ThrowIfNull(argument: store);
-
-        return ArrangementRank(rows: store.Rows, zone: zone);
+        ArgumentNullException.ThrowIfNull(argument: zone);
+        Span<int> ordinals = stackalloc int[MaxArrangementTokens];
+        var count = DomainOrdinals(rows: store.Rows, store: store, zone: zone, ordinals: ordinals);
+        if (count < 0) {
+            return -1L;
+        }
+        Span<int> relative = stackalloc int[MaxArrangementTokens];
+        RelativeOrder(ordinals: ordinals[..count], relative: relative[..count]);
+        return unchecked((long)Puck.Maths.Combinatorics.PermutationRank(permutation: relative[..count]));
     }
     /// <summary>Returns the Lehmer rank of an ordered zone's token order relative to its token domain's cell order —
     /// over k! for k tokens — or -1 when the zone is not an ordered zone, holds more than
@@ -378,16 +385,24 @@ public static class StateReader {
     /// <param name="rows">The section's rows.</param>
     /// <param name="zone">The ordered zone.</param>
     /// <param name="ordinals">Scratch of at least <see cref="MaxArrangementTokens"/>.</param>
-    public static int DomainOrdinals(IReadOnlyList<StateRow>? rows, StateRow zone, Span<int> ordinals) {
+    public static int DomainOrdinals(IReadOnlyList<StateRow>? rows, StateRow zone, Span<int> ordinals) => DomainOrdinals(rows: rows, store: null, zone: zone, ordinals: ordinals);
+
+    // The zone's members come from the store when one is given (a frame that has transferred them), else from the row.
+    private static int DomainOrdinals(IReadOnlyList<StateRow>? rows, StateStore? store, StateRow zone, Span<int> ordinals) {
         var cells = (zone.Cells ?? []);
-        if (zone.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } keysOf || cells.Count > MaxArrangementTokens ||
+        var count = ((store is not null) ? store.CellCount(row: zone) : cells.Count);
+        if (zone.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } keysOf || count > MaxArrangementTokens ||
             StateRows.FindStateRow(rows: rows, name: keysOf.Row.Value) is not { Cells: { } domain }) {
             return -1;
         }
-        for (var index = 0; index < cells.Count; index++) {
+        for (var index = 0; index < count; index++) {
+            var key = cells.Count > index ? cells[index].Key : default;
+            if ((store is not null) && !store.TryKeyAt(row: zone, index: index, key: out key)) {
+                return -1;
+            }
             var ordinal = -1;
             for (var candidate = 0; candidate < domain.Count; candidate++) {
-                if (domain[candidate].Key == cells[index].Key) {
+                if (domain[candidate].Key == key) {
                     ordinal = candidate;
                     break;
                 }
@@ -397,7 +412,7 @@ public static class StateReader {
             }
             ordinals[index] = ordinal;
         }
-        return cells.Count;
+        return count;
     }
 
     /// <summary>Maps distinct ordinals to their ranks among themselves — 0 for the smallest — so a subset's order is
@@ -442,9 +457,10 @@ public static class StateReader {
     public static long ReduceRaw(StateStore? store, StateRow row, StateReduceOp op, ulong tick) {
         ArgumentNullException.ThrowIfNull(argument: row);
         var cells = (row.Cells ?? []);
+        var count = ((store is not null) ? store.CellCount(row: row) : cells.Count);
 
         if (op == StateReduceOp.Count) {
-            return cells.Count;
+            return count;
         }
         if (op == StateReduceOp.ArrangementRank) {
             // The rank needs the token domain's order, which only the section holds (ArrangementRank).
@@ -454,10 +470,8 @@ public static class StateReader {
         var hasAcc = false;
         var acc = 0L;
 
-        for (var index = 0; index < cells.Count; index++) {
-            var cell = cells[index];
-            var stored = (((store is not null) && store.TryStoredAt(row: row, index: index, value: out var framed)) ? framed : cell.Value);
-            var value = Live(row: row, cell: cell, baseValue: stored, tick: tick);
+        for (var index = 0; index < count; index++) {
+            var value = LiveAt(store, row, index, tick);
             acc = (!hasAcc
                 ? value
                 : (op switch {
@@ -469,6 +483,13 @@ public static class StateReader {
         }
 
         return acc;
+    }
+    // Known-cell reads share advancing-value semantics and use the store's ordinal path, including scratch frames.
+    internal static long LiveAt(StateStore? store, StateRow row, int index, ulong tick) {
+        // A frame's zone may hold a member past the row's own cells; the value then has no cell trait to advance.
+        var cell = ((index < (row.Cells?.Count ?? 0)) ? row.Cells![index] : null);
+        var stored = store is not null && store.TryStoredAt(row, index, out var framed) ? framed : (cell?.Value ?? 0L);
+        return Live(row, cell, stored, tick);
     }
     /// <summary>Resolves one (row, key) pair against a store, on <see cref="TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/>'s terms.</summary>
     /// <param name="store">Where the cell's stored value is read.</param>

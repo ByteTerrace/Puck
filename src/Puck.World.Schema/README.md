@@ -1735,7 +1735,9 @@ channel — `$tick` (the completed-tick counter), `$population` (the live
 active-entry count), `$region:<placementId>` (that region's live occupant count),
 `$machine:<screen>:<address>` (one live byte off a screen's booted machine),
 `$reduce:<max|min|sum|count|arrangementRank>:<row>` (an aggregate over a row's cells; append
-`:where:<filterRow>` to admit only keys whose numeric filter cell is nonzero;
+`:where:<filterRow>` to admit only keys whose numeric filter cell is nonzero, or
+`:between:<lower>:<upper>` to filter live values by inclusive bounds; both compose
+on the [state reduction contract](../Puck.State/README.md), and neither applies to `arrangementRank`;
 `arrangementRank` is an ordered zone's order as one integer — the Lehmer rank
 relative to its token domain's order, over k! for k ≤ 20 tokens, -1 past that —
 and the `arrange` transform is its inverse),
@@ -1827,7 +1829,8 @@ object. The string is syntax only: it parses to exactly the tokens an author
 could have written by hand (`ExpressionSpelling`, which lives with the
 token vocabulary, the opcode enum, the arithmetic, and the state transforms in
 `Puck.State`), the compiler proves and
-prices the tokens the same way, and the document writes back whichever
+folds successful constant subexpressions and prices the remaining program the
+same way for both spellings, and the document writes back whichever
 spelling it read. Expressions are
 postfix token lists with a 64-token ceiling; they provide constants, state or
 reserved-channel reads, `add`, `subtract`, `multiply`, `divide`, `modulo`
@@ -2347,22 +2350,33 @@ on the intermediate cell, which leaves the board, onto an empty destination;
 a direction with no such occupied intermediate, or whose destination is not
 empty, is not a candidate), and `pair` (`with`, a cell key of `tokens` — the
 walked token relocates to the target and the named companion relocates by the
-same grid offset, provided its own destination is empty; grid topologies
-only, and no eviction of its own — the minimal two-token primitive a castle's
-rook needs, not a general rule for every pair's own reach). `relocate` with
+same lattice translation, `CompiledTopology.TryTranslation`: the axial step on
+a grid, ring, hex, or box, provided its own destination is empty; a graph or
+tiling has no translations and refuses the shape; no eviction of its own — the
+minimal two-token primitive a castle's rook needs, not a general rule for every
+pair's own reach). `relocate` with
 `displace: false` leaves the standing token in place, so a judge rule that
 reads two tokens sharing a cell decides the candidate itself. `promote`
 (`codes`, an integer row keyed by the tokens; `to`, up to eight codes) relocates
 the walked token onto any other cell, evicting what stood there, with its code
 in `codes` changed to each offered value in turn — one candidate per (cell,
-code); the judge decides where a code may change. A card game searches the
-same way: a topology whose cells are the zones, a token row of cards valued by
-zone, and `relocate` with `displace: false`, so a transfer is a relocation and
-a pile is several tokens on one cell — pile order is not searched.
+code); the judge decides where a code may change.
+
+A job over piles names `zones` instead of `board`: ordered zones (`keysOf`
+rows with `ordered`) over the token domain `tokens` names, whose ordinals are
+the job's cells — a token's cell is the zone it stands in, `legal` masks and
+`best.to` name zones, and the one shape is `transfer` (`selector`, `last` by
+default or `first`: the end of its zone a token must stand at to move;
+`insertFirst`, whether it lands first rather than last). Pile order is the
+zones' own, so nothing but an end token ever moves and the judge reads the
+pile a transfer landed on through the frame — `$reduce:count`, a key read,
+`$reduce:arrangementRank`, a `$match` word — exactly as it reads the section.
+A zone job authors `turn` and `verdict` itself (no board binding supplies
+them), and paints no `reach`.
 
 Outputs are ordinary rows the job writes when it finishes: `legal`, an integer
 row keyed by the tokens receiving per token the mask of cells it may reach
-(boards of at most 64 cells). `reach` and `counts` work for a board of any size:
+(at most 64 cells or zones). `reach` and `counts` work for a board of any size:
 `reach`, an integer board over the same topology as `board`, is painted with 1
 at every cell the token `held` names (its ordinal in `tokens`) may reach and
 its own empty value everywhere else — a value of `held` out of range paints

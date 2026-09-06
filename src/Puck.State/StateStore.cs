@@ -23,6 +23,30 @@ public abstract class StateStore {
     /// <returns><see langword="true"/> when the store holds a cell at that position.</returns>
     public abstract bool TryStoredAt(StateRow row, int index, out long value);
 
+    /// <summary>Returns how many cells a row holds through this store: an ordered zone's live membership inside a
+    /// frame, else the row's own cell count.</summary>
+    /// <param name="row">The row.</param>
+    public virtual int CellCount(StateRow row) => (row?.Cells?.Count ?? 0);
+
+    /// <summary>Reads the key of a row's cell by position — the ordinal that <see cref="TryStoredAt"/> reads the
+    /// value of, so a zone's members enumerate in pile order through a frame that has moved them.</summary>
+    /// <param name="row">The row.</param>
+    /// <param name="index">The cell's position.</param>
+    /// <param name="key">The cell's key.</param>
+    public virtual bool TryKeyAt(StateRow row, int index, out CellName key) {
+        var cells = row?.Cells;
+
+        if ((cells is null) || (((uint)index) >= ((uint)cells.Count))) {
+            key = default;
+
+            return false;
+        }
+
+        key = cells[index].Key;
+
+        return true;
+    }
+
     /// <summary>Returns how many values a ring row has ever been pushed.</summary>
     /// <param name="row">The ring row.</param>
     public abstract long HistoryCursor(StateRow row);

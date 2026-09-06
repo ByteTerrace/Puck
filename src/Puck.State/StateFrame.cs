@@ -12,6 +12,10 @@ public enum FrameRowKind : byte {
     Board,
     /// <summary>One value per ring slot followed by the cursor.</summary>
     Ring,
+    /// <summary>An ordered zone (<see cref="StateDomain.KeysOf"/> with <c>ordered</c>): its member count, then each
+    /// member's ordinal in the token domain in pile order, then each member's value — so a transfer inside a frame
+    /// changes membership without minting a row.</summary>
+    Zone,
 }
 
 /// <summary>One row's place in a frame.</summary>
@@ -24,7 +28,11 @@ public enum FrameRowKind : byte {
 /// board that carries no <see cref="StateRow.Inverse"/> (or whose declared tokens row does not resolve).</param>
 /// <param name="InverseCodesOrdinal">A derived board's <see cref="StateInverse.Codes"/> row ordinal, or -1 on the
 /// same terms as <see cref="InverseTokensOrdinal"/>.</param>
-public readonly record struct FrameRowLayout(FrameRowKind Kind, int Offset, int Length, CompiledTopology? Topology, long Empty, int InverseTokensOrdinal = -1, int InverseCodesOrdinal = -1) {
+/// <param name="DomainOrdinal">For a <see cref="FrameRowKind.Zone"/>, the ordinal of the token domain row its member
+/// ordinals index; -1 on every other kind.</param>
+public readonly record struct FrameRowLayout(FrameRowKind Kind, int Offset, int Length, CompiledTopology? Topology, long Empty, int InverseTokensOrdinal = -1, int InverseCodesOrdinal = -1, int DomainOrdinal = -1) {
+    /// <summary>Gets how many members a <see cref="FrameRowKind.Zone"/> row can hold.</summary>
+    public int ZoneCapacity => ((Kind == FrameRowKind.Zone) ? ((Length - 1) / 2) : 0);
     /// <summary>Gets a value indicating whether this board's cells are derived from a token row rather than
     /// authored — <see cref="InverseTokensOrdinal"/> and <see cref="InverseCodesOrdinal"/> both resolved.</summary>
     public bool IsDerivedBoard => ((InverseTokensOrdinal >= 0) && (InverseCodesOrdinal >= 0));
@@ -61,7 +69,7 @@ public sealed class FrameLayout {
 
         for (var index = 0; index < rows.Count; index++) {
             var row = rows[index];
-            var layout = Layout(row: row, topology: topology, offset: offset, ordinals: m_ordinals);
+            var layout = Layout(row: row, rows: rows, topology: topology, offset: offset, ordinals: m_ordinals);
 
             m_rows[index] = layout;
             offset += layout.Length;
@@ -131,12 +139,13 @@ public sealed class FrameLayout {
                 return false;
             }
 
-            var candidate = Layout(row: row, topology: m_topology, offset: m_rows[index].Offset, ordinals: m_ordinals);
+            var candidate = Layout(row: row, rows: rows, topology: m_topology, offset: m_rows[index].Offset, ordinals: m_ordinals);
 
             if (
                 (candidate.Kind != m_rows[index].Kind) || (candidate.Length != m_rows[index].Length) || (candidate.Empty != m_rows[index].Empty) ||
                 !ReferenceEquals(objA: candidate.Topology, objB: m_rows[index].Topology) ||
-                (candidate.InverseTokensOrdinal != m_rows[index].InverseTokensOrdinal) || (candidate.InverseCodesOrdinal != m_rows[index].InverseCodesOrdinal)
+                (candidate.InverseTokensOrdinal != m_rows[index].InverseTokensOrdinal) || (candidate.InverseCodesOrdinal != m_rows[index].InverseCodesOrdinal) ||
+                (candidate.DomainOrdinal != m_rows[index].DomainOrdinal)
             ) {
                 return false;
             }
@@ -145,7 +154,7 @@ public sealed class FrameLayout {
         return true;
     }
 
-    private static FrameRowLayout Layout(StateRow row, Func<string, CompiledTopology?> topology, int offset, Dictionary<string, int> ordinals) {
+    private static FrameRowLayout Layout(StateRow row, IReadOnlyList<StateRow> rows, Func<string, CompiledTopology?> topology, int offset, Dictionary<string, int> ordinals) {
         if (row.Kind == CellKind.Text) {
             return new FrameRowLayout(Kind: FrameRowKind.Unframed, Offset: offset, Length: 0, Topology: null, Empty: 0L);
         }
@@ -171,6 +180,17 @@ public sealed class FrameLayout {
                 return new FrameRowLayout(Kind: FrameRowKind.Board, Offset: offset, Length: compiled.CellCount, Topology: compiled, Empty: board.Empty, InverseTokensOrdinal: tokensOrdinal, InverseCodesOrdinal: codesOrdinal);
             case StateDomain.Ring ring:
                 return new FrameRowLayout(Kind: FrameRowKind.Ring, Offset: offset, Length: (ring.Capacity + 1), Topology: null, Empty: ring.Empty);
+            case StateDomain.KeysOf { Ordered: true } zone: {
+                // A zone holds at most every token of its domain, and at most its own declared capacity: the frame
+                // sizes it by the smaller, so membership can change without the layout changing.
+                if (!ordinals.TryGetValue(key: zone.Row.Value, value: out var domainOrdinal)) {
+                    return new FrameRowLayout(Kind: FrameRowKind.Unframed, Offset: offset, Length: 0, Topology: null, Empty: 0L);
+                }
+
+                var capacity = Math.Min(val1: (rows[domainOrdinal].Cells?.Count ?? 0), val2: (row.Capacity ?? StateCapacity.MaxCellsPerRow));
+
+                return new FrameRowLayout(Kind: FrameRowKind.Zone, Offset: offset, Length: (1 + (2 * capacity)), Topology: null, Empty: 0L, DomainOrdinal: domainOrdinal);
+            }
             default:
                 return new FrameRowLayout(Kind: FrameRowKind.Keyed, Offset: offset, Length: (row.Cells?.Count ?? 0), Topology: null, Empty: 0L);
         }
@@ -239,6 +259,26 @@ public sealed class StateFrame : StateStore {
                     }
                     values[layout.Length - 1] = source.HistoryCursor(row: row);
                     break;
+                case FrameRowKind.Zone: {
+                    var capacity = layout.ZoneCapacity;
+                    var domain = Rows[layout.DomainOrdinal].Cells;
+                    var members = Math.Min(val1: source.CellCount(row: row), val2: capacity);
+                    var count = 0;
+
+                    values.Clear();
+
+                    for (var index = 0; index < members; index++) {
+                        // A member its domain does not declare has no ordinal to frame; the frame holds what it can name.
+                        if (source.TryKeyAt(row: row, index: index, key: out var key) && (IndexOf(cells: domain, key: key) is >= 0 and var tokenOrdinal)) {
+                            values[1 + count] = tokenOrdinal;
+                            values[1 + capacity + count] = (source.TryStoredAt(row: row, index: index, value: out var member) ? member : 0L);
+                            count++;
+                        }
+                    }
+
+                    values[0] = count;
+                    break;
+                }
                 default:
                     break;
             }
@@ -302,11 +342,56 @@ public sealed class StateFrame : StateStore {
 
                 return true;
             }
+            case FrameRowKind.Zone: {
+                var position = ZonePosition(layout: layout, key: key);
+
+                value = ((position >= 0) ? m_values[layout.Offset + 1 + layout.ZoneCapacity + position] : 0L);
+
+                return (position >= 0);
+            }
             default:
                 value = 0L;
 
                 return false;
         }
+    }
+    /// <inheritdoc/>
+    public override int CellCount(StateRow row) =>
+        ((Layout.TryOrdinal(name: row.Name.Value, ordinal: out var ordinal) && (Layout[ordinal] is { Kind: FrameRowKind.Zone } layout))
+            ? (int)m_values[layout.Offset]
+            : base.CellCount(row: row));
+    /// <inheritdoc/>
+    public override bool TryKeyAt(StateRow row, int index, out CellName key) {
+        if (!Layout.TryOrdinal(name: row.Name.Value, ordinal: out var ordinal) || (Layout[ordinal] is not { Kind: FrameRowKind.Zone } layout)) {
+            return base.TryKeyAt(row: row, index: index, key: out key);
+        }
+        if (((uint)index) >= ((uint)m_values[layout.Offset])) {
+            key = default;
+
+            return false;
+        }
+
+        key = Rows[layout.DomainOrdinal].Cells![(int)m_values[layout.Offset + 1 + index]].Key;
+
+        return true;
+    }
+    // A member's position in a zone's pile order, or -1 when the key is no member (or no token of the domain).
+    private int ZonePosition(FrameRowLayout layout, CellName key) {
+        var ordinal = IndexOf(cells: Rows[layout.DomainOrdinal].Cells, key: key);
+
+        if (ordinal < 0) {
+            return -1;
+        }
+
+        var count = (int)m_values[layout.Offset];
+
+        for (var position = 0; position < count; position++) {
+            if (m_values[layout.Offset + 1 + position] == ordinal) {
+                return position;
+            }
+        }
+
+        return -1;
     }
     /// <inheritdoc/>
     public override bool TryStoredAt(StateRow row, int index, out long value) {
@@ -344,6 +429,13 @@ public sealed class StateFrame : StateStore {
             case FrameRowKind.Ring:
                 if (((uint)index) < ((uint)(layout.Length - 1))) {
                     value = m_values[layout.Offset + index];
+
+                    return true;
+                }
+                break;
+            case FrameRowKind.Zone:
+                if (((uint)index) < ((uint)m_values[layout.Offset])) {
+                    value = m_values[layout.Offset + 1 + layout.ZoneCapacity + index];
 
                     return true;
                 }
@@ -398,6 +490,8 @@ public sealed class StateFrame : StateStore {
             FrameRowKind.Slot => ((key == StateRow.SlotKey) ? 0 : -1),
             FrameRowKind.Keyed => IndexOf(cells: row.Cells, key: key),
             FrameRowKind.Board => (layout.Topology!.TryCell(key: key.Value, cell: out var cell) ? cell : -1),
+            // A zone member's value slot; membership itself changes only through a transfer.
+            FrameRowKind.Zone => ((ZonePosition(layout: layout, key: key) is >= 0 and var position) ? (1 + layout.ZoneCapacity + position) : -1),
             _ => -1,
         };
 
@@ -691,6 +785,142 @@ public sealed class StateFrame : StateStore {
         return true;
     }
 
+    /// <summary>Applies a <c>transfer</c> between two ordered zones of the frame — <see cref="ZoneSelector.First"/>,
+    /// <see cref="ZoneSelector.Last"/>, or <see cref="ZoneSelector.Key"/>, <see cref="StateTransform.Transfer.Count"/>
+    /// tokens each selected afresh from what remains, landing last (or first with <c>insertFirst</c>) — on the
+    /// section host's own terms. A frame never draws, so a random or slice selection is refused.</summary>
+    /// <param name="transfer">The transfer.</param>
+    /// <param name="reason">Why the transfer was refused, or empty.</param>
+    public bool TryTransfer(StateTransform.Transfer transfer, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: transfer);
+
+        if (transfer.Selector is not (ZoneSelector.First or ZoneSelector.Last or ZoneSelector.Key)) {
+            reason = "a frame transfers by first, last, or key alone; it never draws";
+
+            return false;
+        }
+        if ((Find(name: transfer.From) is not { } from) || (Find(name: transfer.To) is not { } to)) {
+            reason = "transfer names a zone that is not in the frame";
+
+            return false;
+        }
+        if ((transfer.Selector == ZoneSelector.Key) != (transfer.Key is not null)) {
+            reason = "key selection takes a key; first and last take none";
+
+            return false;
+        }
+
+        var count = ((transfer.Selector == ZoneSelector.Key) ? 1 : transfer.Count);
+
+        for (var moved = 0; moved < count; moved++) {
+            var members = CellCount(row: from);
+            var position = transfer.Selector switch {
+                ZoneSelector.First => 0,
+                ZoneSelector.Last => (members - 1),
+                _ => ((TryZoneLayout(row: from, layout: out var fromLayout) && CellName.TryParse(candidate: transfer.Key!, name: out var named, reason: out _)) ? ZonePosition(layout: fromLayout, key: named) : -1),
+            };
+
+            if ((position < 0) || (position >= members) || !TryKeyAt(row: from, index: position, key: out var key)) {
+                reason = ((members == 0) ? "source zone is empty" : "source zone does not contain the selected token");
+
+                return false;
+            }
+            if (!TryTransferToken(from: from, to: to, key: key, insertFirst: transfer.InsertFirst, reason: out reason)) {
+                return false;
+            }
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
+    /// <summary>Moves one token from one ordered zone of the frame to another, landing last (the top of the pile)
+    /// or first: the primitive every transfer a frame applies reduces to. Refuses a token the source does not hold,
+    /// a destination that already holds it, or a full destination.</summary>
+    /// <param name="from">The source zone.</param>
+    /// <param name="to">The destination zone, over the same token domain.</param>
+    /// <param name="key">The token.</param>
+    /// <param name="insertFirst">Whether the token lands first rather than last.</param>
+    /// <param name="reason">Why the move was refused, or empty.</param>
+    public bool TryTransferToken(StateRow from, StateRow to, CellName key, bool insertFirst, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: from);
+        ArgumentNullException.ThrowIfNull(argument: to);
+
+        if (!TryZoneLayout(row: from, layout: out var source) || !TryZoneLayout(row: to, layout: out var target) || (source.DomainOrdinal != target.DomainOrdinal)) {
+            reason = "transfer requires two ordered zones of the frame over one token domain";
+
+            return false;
+        }
+
+        var position = ZonePosition(layout: source, key: key);
+
+        if (position < 0) {
+            reason = "source zone does not contain the selected token";
+
+            return false;
+        }
+        if (ReferenceEquals(objA: from, objB: to) || (source.Offset == target.Offset)) {
+            reason = "transfer names one zone as both source and destination";
+
+            return false;
+        }
+        if (ZonePosition(layout: target, key: key) >= 0) {
+            reason = "destination already contains the token";
+
+            return false;
+        }
+
+        var targetCount = (int)m_values[target.Offset];
+
+        if (targetCount >= target.ZoneCapacity) {
+            reason = "destination zone is full";
+
+            return false;
+        }
+
+        var sourceCount = (int)m_values[source.Offset];
+        var sourceCapacity = source.ZoneCapacity;
+        var ordinal = m_values[source.Offset + 1 + position];
+        var value = m_values[source.Offset + 1 + sourceCapacity + position];
+
+        // Close the gap the token leaves; the pile stays contiguous from position zero.
+        for (var index = position; index < (sourceCount - 1); index++) {
+            m_values[source.Offset + 1 + index] = m_values[source.Offset + 2 + index];
+            m_values[source.Offset + 1 + sourceCapacity + index] = m_values[source.Offset + 2 + sourceCapacity + index];
+        }
+
+        m_values[source.Offset] = (sourceCount - 1);
+
+        var landing = (insertFirst ? 0 : targetCount);
+        var targetCapacity = target.ZoneCapacity;
+
+        for (var index = targetCount; index > landing; index--) {
+            m_values[target.Offset + 1 + index] = m_values[target.Offset + index];
+            m_values[target.Offset + 1 + targetCapacity + index] = m_values[target.Offset + targetCapacity + index];
+        }
+
+        m_values[target.Offset + 1 + landing] = ordinal;
+        m_values[target.Offset + 1 + targetCapacity + landing] = value;
+        m_values[target.Offset] = (targetCount + 1);
+        reason = string.Empty;
+
+        return true;
+    }
+    /// <summary>Returns whether a zone has room for one more member.</summary>
+    /// <param name="row">The zone.</param>
+    public bool ZoneHasRoom(StateRow row) => (TryZoneLayout(row: row, layout: out var layout) && (m_values[layout.Offset] < layout.ZoneCapacity));
+
+    private bool TryZoneLayout(StateRow row, out FrameRowLayout layout) {
+        if (Layout.TryOrdinal(name: row.Name.Value, ordinal: out var ordinal) && (Layout[ordinal] is { Kind: FrameRowKind.Zone } found)) {
+            layout = found;
+
+            return true;
+        }
+
+        layout = default;
+
+        return false;
+    }
     private bool TryBoard(string name, CompiledTopology topology, out FrameRowLayout layout) {
         if (Layout.TryOrdinal(name: name, ordinal: out var ordinal) && (Layout[ordinal] is { Kind: FrameRowKind.Board } found) && ReferenceEquals(objA: found.Topology, objB: topology)) {
             layout = found;

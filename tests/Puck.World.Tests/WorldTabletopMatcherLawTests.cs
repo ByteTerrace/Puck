@@ -15,6 +15,44 @@ public sealed class WorldTabletopMatcherLawTests {
         return result!;
     }
 
+    [Theory]
+    [InlineData(false, false, false, 0L)]
+    [InlineData(true, false, false, 1L)]
+    [InlineData(true, true, false, 1L)]
+    [InlineData(true, false, true, 2L)]
+    public void SamplingCountsExcessOccupantsEvenWhenTheirCodesAreIdentical(bool overlap, bool mixedCodes, bool triple, long expected) {
+        var keys = new[] { "piece0", "piece1", "piece2", "piece3" };
+        StateCell[] Keyed(params long[] values) => [.. keys.Select((key, i) => new StateCell(CellName.Parse(key), values[i]))];
+        var locations = Keyed(0, overlap ? 0 : 7, triple ? 0 : 63, 8);
+        var code = Garden.State.Single(r => r.Name.Value == "pieceCode") with { Cells = Keyed(1, mixedCodes ? -1 : 1, 1, 4) };
+        var cell = Garden.State.Single(r => r.Name.Value == "pieceCell") with { Cells = Keyed(-1, -1, -1, -1) };
+        var upright = new ActionPredicate.CompareState(State: "sampleUpright", Key: "$each", Comparison: ActionStateComparison.Equal, Value: 1);
+        // Substitute only the physical input boundary. Keep the shipped sampling effects and their rule order.
+        var rules = Garden.Rules!.Where(r => r.Name.Value is
+            "tabletop-derive-cell-upright" or "tabletop-derive-cell-tilted" or "tabletop-board-collisions")
+            .Select(r => r.Name.Value switch {
+                "tabletop-derive-cell-upright" => r with {
+                    Gate = upright,
+                    Effects = [.. r.Effects.Select(e => e is ActionEffect.SetState s && s.State == "pieceCell"
+                        ? s with { FromState = "sampleCell", FromKey = "$each" } : e)],
+                },
+                "tabletop-derive-cell-tilted" => r with { Gate = new ActionPredicate.Not(upright) },
+                _ => r,
+            }).ToArray();
+        var definition = Fixtures.BuildDocument() with {
+            StateRaw = new WorldStateSection(World: [.. Garden.State.Select(r => r.Name.Value switch {
+                "pieceCode" => code, "pieceCell" => cell, "settleHold" => Slot(r, 60), _ => r,
+            }), cell with { Name = CellName.Parse("sampleCell"), Cells = locations },
+                cell with { Name = CellName.Parse("sampleUpright"), Cells = Keyed(1, 1, 1, 0) }],
+                Lattices: Garden.StateRaw!.Lattices),
+            Rules = rules,
+        };
+        using var fixture = Fixtures.FreshServer(definition);
+        fixture.Step();
+        Assert.Equal(expected, Read(fixture, "boardCollisions"));
+        Assert.Equal(-1, Read(fixture, "pieceCell", "piece3"));
+    }
+
     private static StateCell[] Cells(long[] board) => [.. board.Select((v, i) => new StateCell(CellName.Parse(i.ToString()), v))];
     // The board is derived from its token rows (inverse), so a position is seeded as tokens: one token per occupied
     // cell in cell order, the rest off the board.
@@ -54,7 +92,7 @@ public sealed class WorldTabletopMatcherLawTests {
     private static WorldDefinition Judge(long[] before, long[] after, int turn = 0, int ep = -1, int rights = 0, int collisions = 0) {
         string[] sampled = ["tabletop-settle-hold-advance", "tabletop-settle-hold-reset",
             "tabletop-derive-cell-upright", "tabletop-derive-cell-tilted",
-            "tabletop-game-start-snapshot", "tabletop-game-start-check", "tabletop-board-collisions-reset", "tabletop-board-collisions"];
+            "tabletop-game-start-snapshot", "tabletop-game-start-check", "tabletop-board-collisions"];
         var (tokenCells, tokenCodes) = Tokens(after);
         return Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [.. Garden.State.Select(row => row.Name.Value switch {
@@ -261,11 +299,13 @@ public sealed class WorldTabletopMatcherLawTests {
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void DuplicatePhysicalOccupantsCannotBeHiddenByWriteOrder(bool reverse) {
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void DuplicatePhysicalOccupantsCannotBeHiddenByWriteOrder(bool reverse, bool sameCode) {
         var source = Judge(Position(), new long[64]);
-        var codes = new[] { new StateCell(CellName.Parse("piece1"), 2), new StateCell(CellName.Parse("piece8"), 1) };
+        var codes = new[] { new StateCell(CellName.Parse("piece1"), sameCode ? 1 : 2), new StateCell(CellName.Parse("piece8"), 1) };
         if (reverse) { Array.Reverse(codes); }
         var definition = source with {
             StateRaw = source.StateRaw! with { World = [.. source.State.Select(row => row.Name.Value switch {
@@ -273,11 +313,11 @@ public sealed class WorldTabletopMatcherLawTests {
                 "pieceCell" => row with { Cells = [.. codes.Select(c => c with { Value = 28 })] },
                 _ => row,
             })] },
-            Rules = [.. Garden.Rules!.Where(r => r.Name.Value is "tabletop-board-collisions-reset" or "tabletop-board-collisions")],
+            Rules = [.. Garden.Rules!.Where(r => r.Name.Value == "tabletop-board-collisions")],
         };
         using var fixture = Fixtures.FreshServer(definition);
         fixture.Step();
-        // The derived board shows the later token in row order; the earlier one reads as a collision.
+        // The inverse keeps the last token; the census still detects the excess occupant with either code.
         Assert.Equal(codes[^1].Value, Read(fixture, "board", "28"));
         Assert.Equal(1, Read(fixture, "boardCollisions"));
     }

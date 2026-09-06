@@ -145,13 +145,15 @@ public sealed class ReductionOperand : OperandFact {
     /// <param name="filterRow">The optional keyed row whose nonzero cells admit candidates.</param>
     /// <param name="filterHandle">The compiled handle for <paramref name="filterRow"/>.</param>
     /// <param name="valueKind">Int for <see cref="StateReduceOp.Count"/>, else the aggregated row's own kind.</param>
-    public ReductionOperand(string row, StateHandle stateHandle, StateReduceOp reduce, string? filterRow, StateHandle filterHandle, CellKind valueKind)
+    /// <param name="range">Optional inclusive bounds in the source row's raw numeric encoding.</param>
+    public ReductionOperand(string row, StateHandle stateHandle, StateReduceOp reduce, string? filterRow, StateHandle filterHandle, CellKind valueKind, (long Lower, long Upper)? range = null)
         : base(valueKind) {
         Row = row;
         StateHandle = stateHandle;
         Reduce = reduce;
         FilterRow = filterRow;
         FilterHandle = filterHandle;
+        Range = range;
     }
 
     /// <summary>Gets the aggregated row.</summary>
@@ -164,6 +166,8 @@ public sealed class ReductionOperand : OperandFact {
     public string? FilterRow { get; }
     /// <summary>Gets the compiled handle for <see cref="FilterRow"/>.</summary>
     public StateHandle FilterHandle { get; }
+    /// <summary>Gets the optional inclusive bounds applied to each candidate's live raw value.</summary>
+    public (long Lower, long Upper)? Range { get; }
 
     /// <inheritdoc/>
     public override RuleFact Read(IRuleReader reader) {
@@ -173,33 +177,38 @@ public sealed class ReductionOperand : OperandFact {
         if (Reduce == StateReduceOp.ArrangementRank) {
             return RuleFact.Finite(value: StateReader.ArrangementRank(store: reader.Store, zone: declared), kind: ValueKind);
         }
-        if (FilterRow is null) {
+        if (FilterRow is null && Range is null) {
             return RuleFact.Finite(value: StateReader.ReduceRaw(store: reader.Store, row: declared, op: Reduce, tick: reader.Tick), kind: ValueKind);
         }
 
         var hasValue = false;
         var accumulator = 0L;
-        foreach (var cell in (declared.Cells ?? [])) {
-            if (
-                !StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: FilterHandle, key: cell.Key.Value, tick: reader.Tick, row: out _, rawValue: out var filterRaw, text: out _) ||
+        var count = reader.Store.CellCount(row: declared);
+        for (var index = 0; index < count; index++) {
+            if (!reader.Store.TryKeyAt(row: declared, index: index, key: out var key)) {
+                continue;
+            }
+            if (FilterRow is not null && (
+                !StateReader.TryReadHandle(store: reader.Store, catalog: reader.Catalog, handle: FilterHandle, key: key.Value, tick: reader.Tick, row: out _, rawValue: out var filterRaw, text: out _) ||
                 (filterRaw.GetValueOrDefault() == 0L)
-            ) {
+            )) {
+                continue;
+            }
+            var raw = Range is not null || Reduce != StateReduceOp.Count
+                ? StateReader.LiveAt(reader.Store, declared, index, reader.Tick) : 0L;
+            if (Range is { } range && (raw < range.Lower || raw > range.Upper)) {
                 continue;
             }
             if (Reduce == StateReduceOp.Count) {
                 accumulator++;
                 continue;
             }
-            if (!StateReader.TryRead(store: reader.Store, rowName: declared.Name, key: cell.Key.Value, tick: reader.Tick, row: out _, rawValue: out var raw, text: out _) || raw is null) {
-                continue;
-            }
-
             accumulator = (!hasValue
-                ? raw.Value
+                ? raw
                 : Reduce switch {
-                    StateReduceOp.Sum => unchecked(accumulator + raw.Value),
-                    StateReduceOp.Max => Math.Max(accumulator, raw.Value),
-                    _ => Math.Min(accumulator, raw.Value),
+                    StateReduceOp.Sum => unchecked(accumulator + raw),
+                    StateReduceOp.Max => Math.Max(accumulator, raw),
+                    _ => Math.Min(accumulator, raw),
                 }
             );
             hasValue = true;
@@ -207,9 +216,12 @@ public sealed class ReductionOperand : OperandFact {
         return RuleFact.Finite(value: accumulator, kind: ValueKind);
     }
     /// <inheritdoc/>
-    public override long Cost(RuleCompileContext context) => context.RowCapacity(name: Row);
+    public override long Cost(RuleCompileContext context) => context.RowCapacity(name: Row) * (Range is null ? 1L : 3L);
     /// <inheritdoc/>
-    public override void CollectReads(List<RuleAccess> into) => into.Add(item: new RuleAccess(Row: Row, Key: null));
+    public override void CollectReads(List<RuleAccess> into) {
+        into.Add(item: new RuleAccess(Row: Row, Key: null));
+        if (FilterRow is not null) { into.Add(item: new RuleAccess(Row: FilterRow, Key: null)); }
+    }
 }
 
 /// <summary>A <see cref="RuleFacts.SymmetryPrefix"/> read: a cell's node through one symmetry-lattice map. The source
@@ -578,13 +590,38 @@ public sealed class PatternOperand : OperandFact, IStateAddressedOperand {
             return length;
         }
 
-        var cells = (row.Cells ?? []);
-        for (var index = StartIndex(cells: cells, start: start); index < cells.Count; index++) {
-            StateReader.ReadCell(store: store, row: source, key: cells[index].Key.Value, tick: tick, rawValue: out var raw, text: out _);
+        var members = store.CellCount(row: row);
+        for (var index = StartIndex(store: store, row: row, start: start); index < members; index++) {
+            if (!store.TryKeyAt(row: row, index: index, key: out var key)) {
+                continue;
+            }
+            StateReader.ReadCell(store: store, row: source, key: key.Value, tick: tick, rawValue: out var raw, text: out _);
             word[length++] = raw ?? 0L;
         }
 
         return length;
+    }
+
+    /// <summary>Returns the index the word starts at through a store — a frame's zone enumerates its live members —
+    /// on <see cref="StartIndex(IReadOnlyList{StateCell}, string?)"/>'s terms.</summary>
+    /// <param name="store">Where the row's members are read.</param>
+    /// <param name="row">The row.</param>
+    /// <param name="start">The start token's key, or <see langword="null"/>.</param>
+    public static int StartIndex(StateStore store, StateRow row, string? start) {
+        ArgumentNullException.ThrowIfNull(argument: store);
+        var count = store.CellCount(row: row);
+
+        if (start is null) {
+            return 0;
+        }
+
+        for (var index = 0; index < count; index++) {
+            if (store.TryKeyAt(row: row, index: index, key: out var key) && string.Equals(a: key.Value, b: start, comparisonType: StringComparison.Ordinal)) {
+                return index;
+            }
+        }
+
+        return count;
     }
 
     /// <summary>Returns the index the word starts at: 0 for a whole word, the named token's position, or the row's

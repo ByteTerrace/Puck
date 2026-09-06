@@ -692,7 +692,12 @@ or box — never `fromCreation`) and `bodyContact: solid`.
 `WorldSearch.cs` owns `search.jobs`. A job names `tokens` (keyed int row, values
 are cells of `board`; a non-cell value is off the board) and `board`; `turn`/
 `verdict` derive from the tabletop board binding over `board` unless authored, as does the
-accepting verdict value (the binding's `accept`, else 1).
+accepting verdict value (the binding's `accept`, else 1). A job over piles names `zones` (ordered `keysOf` rows
+over the token domain `tokens` names) instead of `board`: the zones are its cells, `tokens` is the domain row,
+the one shape is `transfer` (`selector`: `last`/`first`, the zone end a token must stand at; `insertFirst`), and
+`turn`/`verdict` are authored (no binding, no `reach`). Pile order is the zones' own: only an end token moves, and
+the judge reads the moved pile through the frame (`StateFrame` lays an ordered zone out by capacity —
+`FrameRowKind.Zone` — and `TryTransferToken` moves membership without a row).
 
 `shapes` names the candidate shapes the walk enumerates, ahead of token and
 target/direction; absent, the one default `relocate` (`displace: true`) this
@@ -700,12 +705,12 @@ section always ran. `drop` (a token off the board enters an empty cell),
 `jump` (`over`: a direction-name list, or `["any"]` for every direction the
 topology declares — two cells along one, over an occupied intermediate that
 leaves the board, onto an empty destination), and `pair` (`with`: a cell key
-of `tokens` — the companion relocates by the same grid offset, its own
-destination empty; grid topologies only), and `promote` (`codes`: an int row keyed
+of `tokens` — the companion relocates by the same lattice translation, `CompiledTopology.TryTranslation`
+carried by `TryOffset`: grid, ring, hex, or box; a graph or tiling refuses it; its own
+destination empty), and `promote` (`codes`: an int row keyed
 by the tokens; `to`: up to eight codes — relocate and change the token's code to each in turn) are the other
-arms. `relocate` with `displace: false` leaves the standing token in place rather than evicting it; over a
-topology whose cells are zones that is a card transfer, piles being several tokens on one cell (pile order is
-not searched). A job with a score keeps a transposition table (`WorldSearchCapacity.TranspositionEntries`
+arms. `relocate` with `displace: false` leaves the standing token in place rather than evicting it. A job
+with a score keeps a transposition table (`WorldSearchCapacity.TranspositionEntries`
 slots keyed by the frame hash) that rides the checkpoint and hash.
 
 Outputs: `legal` (int row keyed by the tokens, a per-token destination mask,
@@ -1284,7 +1289,12 @@ footprint, and directly compares the at most four affected cells. Every pre-move
 Local bindings hold attack and geometry intermediates. A legal move commits turn, board, four
 castling rights, en passant target, accepted check values, and promotion completion together.
 Unfinished promotion does not advance turn. `boardCollisions` prevents duplicate occupants from
-being accepted; board-history fingerprints remain diagnostic, not repetition adjudication.
+being accepted, including identical-code overlaps: it is the sampled on-board
+piece count minus occupied squares. A `:between:0:63` count reduction over
+`pieceCell` supplies the census without sampling writes; the occupied count is
+64 minus the empty-square mask's population. The [state reduction contract](../../../../src/Puck.State/README.md)
+owns range bounds, `:where:` composition, live reads, and pricing.
+Board-history fingerprints remain diagnostic, not repetition adjudication.
 The [chess authoring notes](../../../../src/Puck.World/README.md#the-world-as-data) own these contracts.
 They also own the closed -6..7 encoding, the topology shifts, and the bit-extract/deposit
 projection of home-piece losses into castling rights. The existing two-rule settle counter
@@ -1292,6 +1302,8 @@ avoids per-moving-tick epoch writes; `$physics:quiescent` is bool-kind, so an in
 conditional expression cannot combine its gates.
 Periodic expression masks use `replicationMask(width)` and `repeatBits(pattern, width)`;
 [Puck.State](../../../../src/Puck.State/README.md) owns their Int-only domain and refusal contract.
+The compiler folds successful constant subexpressions after full validation,
+using the runtime evaluator; never elide a live read or a refusing conditional branch.
 Chess's fixed transit masks use hexadecimal base patterns and `byteSwap` for rank reflection.
 The board is
 rendered as 64 `boardSquareLight`/`boardSquareDark` placements, one per cell, colors from the

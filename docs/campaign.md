@@ -1351,9 +1351,11 @@ judges it. Candidates are authored shapes walked in a fixed order ahead of
 token and target: `relocate` (evicting or not what stood there), `drop` (a
 token off the board into an empty cell), `jump` (two cells along a direction
 over an occupied intermediate that leaves the board), and `pair` (two tokens
-by the same offset — the castle's minimal primitive), and `promote` (a
-relocation whose code changes to one of an authored list). A card transfer is
-a relocation on a topology whose cells are zones. Outputs land as ordinary
+by the same lattice translation on any grid, ring, hex, or box — the castle's
+minimal primitive), and `promote` (a relocation whose code changes to one of
+an authored list). A job over piles names ordered `zones` instead of a board
+and searches `transfer`: only an end token moves, and the frame carries the
+piles themselves, so pile order is searched as the zones hold it. Outputs land as ordinary
 rows through the mutation door: `legal` masks for boards to 64 cells, `reach` for the token a
 `held` slot names on any board, per-token `counts`, and — with an
 authored `score` — `best`, from an iterative-deepening negamax with
@@ -1377,8 +1379,7 @@ bounded node pool, playouts drawn from a SplitMix64 stream the job's stamp
 seeds, the score folded back with alternating sign; a negamax job keeps a
 transposition table keyed by the frame hash. The shipped chess
 world derives `board` through `inverse` and shifts with `boardShift`; its
-laws seed positions as tokens. Remaining: pile order inside a zone search.
-The judge-per-node cost is the strength ceiling —
+laws seed positions as tokens. The judge-per-node cost is the strength ceiling —
 depth one in ticks, depth two or three over seconds — and a plane-native
 make/unmake for strength beyond that is a later decision. Refused: a mate
 detector unrolled into per-piece rules, a privileged bot mutation, a search

@@ -4,7 +4,8 @@ public static partial class RuleCompiler {
     /// <summary>Compiles a postfix value expression into its evaluated token program, proving it with a typed stack:
     /// every slot's kind is known at compile time, so an Int comparison result can feed a select inside a Fixed
     /// expression while never reaching an arithmetic operator of the wrong kind. The program leaves exactly one value
-    /// of <paramref name="kind"/>.</summary>
+    /// of <paramref name="kind"/>. After validation, successful constant subtrees fold through the runtime
+    /// evaluator; live reads and domain refusals remain in the evaluated program.</summary>
     /// <param name="expression">The authored expression.</param>
     /// <param name="kind">The kind the expression must produce — the destination cell's, or the binding's.</param>
     /// <param name="ruleName">The rule being compiled.</param>
@@ -163,7 +164,7 @@ public static partial class RuleCompiler {
             throw Malformed($"leaves a kind={DescribeCellKind(kind: kinds[0])} value where kind={DescribeCellKind(kind: kind)} is required");
         }
 
-        return tokens;
+        return FoldConstants(tokens, kind);
 
         CompiledExpressionToken ResolveState(ValueToken.State state) {
             var site = new OperandSite(RuleName: ruleName, Verb: verb, FieldLabel: "expression.state.name", KeyFieldLabel: "expression.state.key");

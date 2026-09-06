@@ -26,8 +26,26 @@
             "type": "string"
           },
           "board": {
-            "description": "The board row over the topology the token values index.",
-            "type": "string"
+            "description": "The board row over the topology the token values index; absent for a job over Zones.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "zones": {
+            "description": "For a job over piles: the ordered zones (keysOf rows with ordered, all over the token domain Tokens names) whose ordinals are the job\u0027s cells \u2014 a token\u0027s cell is the zone it stands in, legal masks and best.to name zones, and the one shape is transfer. Exactly one of Board and Zones is authored.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "default": null
           },
           "turn": {
             "description": "The slot row whose change marks an accepted relocation; absent, the tabletop board binding anchoring Board supplies it.",
@@ -107,7 +125,7 @@
                   "additionalProperties": false
                 },
                 {
-                  "description": "The walked token relocates to the target cell and a second, fixed token \u2014 named by With, a cell key of Tokens \u2014 relocates by the same (dx, dz) grid offset, provided its own destination is empty. Grid topologies only: the minimal two-token primitive a castle\u0027s rook needs, not a general rule for every pair\u0027s own reach (see the schema README\u0027s search section for the reasoning).",
+                  "description": "The walked token relocates to the target cell and a second, fixed token \u2014 named by With, a cell key of Tokens \u2014 relocates by the same lattice translation (CompiledTopology.TryTranslation: the axial step on a grid, ring, hex, or box), provided its own destination is empty. A graph or tiling has no translations and refuses the shape. The minimal two-token primitive a castle\u0027s rook needs, not a general rule for every pair\u0027s own reach (see the schema README\u0027s search section for the reasoning).",
                   "properties": {
                     "$type": {
                       "const": "pair"
@@ -144,6 +162,31 @@
                     "codes",
                     "to"
                   ],
+                  "additionalProperties": false
+                },
+                {
+                  "description": "The walked token \u2014 standing at the Selector end of one of the job\u0027s Zones \u2014 moves onto any other of them, landing last (the top of the pile) or, with InsertFirst, first: the transfer transform as a candidate, so pile order is what the zones already hold. A token anywhere but the selected end, or a full destination, is not a candidate. The only shape a zone job enumerates, and refused by a board job.",
+                  "properties": {
+                    "$type": {
+                      "const": "transfer"
+                    },
+                    "selector": {
+                      "description": "Which end of its zone a token must stand at to move: Last (default, the top of the pile) or First.",
+                      "enum": [
+                        "Key",
+                        "First",
+                        "Last",
+                        "Random",
+                        "Slice"
+                      ],
+                      "default": "Last"
+                    },
+                    "insertFirst": {
+                      "description": "Whether the token lands first in the destination rather than last.",
+                      "type": "boolean",
+                      "default": false
+                    }
+                  },
                   "additionalProperties": false
                 }
               ]
@@ -227,8 +270,7 @@
         },
         "required": [
           "name",
-          "tokens",
-          "board"
+          "tokens"
         ],
         "additionalProperties": false
       },

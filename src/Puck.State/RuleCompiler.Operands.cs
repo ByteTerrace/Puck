@@ -156,18 +156,26 @@ public static partial class RuleCompiler {
             );
         }
 
-        var rowAndFilter = suffix[(separator + 1)..];
-        const string WhereMarker = ":where:";
-        var where = rowAndFilter.IndexOf(value: WhereMarker, comparisonType: StringComparison.Ordinal);
-        var rowName = ((where < 0) ? rowAndFilter : rowAndFilter[..where]);
-        var filterRowName = ((where < 0) ? null : rowAndFilter[(where + WhereMarker.Length)..]);
-
-        if ((where >= 0) && string.IsNullOrEmpty(value: filterRowName)) {
-            throw new RuleException(refusal: RuleRefusal.ReduceChannelMalformed, ruleName: ruleName, detail: $"'{name}' carries ':where:' without a filter row");
+        var parts = suffix[(separator + 1)..].Split(':');
+        var rowName = parts[0];
+        string? filterRowName = null;
+        (decimal Lower, decimal Upper)? bounds = null;
+        for (var index = 1; index < parts.Length;) {
+            if (parts[index] == "where" && filterRowName is null && index + 1 < parts.Length && parts[index + 1].Length > 0) {
+                filterRowName = parts[index + 1];
+                index += 2;
+            } else if (parts[index] == "between" && bounds is null && index + 2 < parts.Length &&
+                decimal.TryParse(parts[index + 1], NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var lower) &&
+                decimal.TryParse(parts[index + 2], NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var upper) && lower <= upper) {
+                bounds = (lower, upper);
+                index += 3;
+            } else {
+                throw new RuleException(refusal: RuleRefusal.ReduceChannelMalformed, ruleName: ruleName, detail: $"'{name}' takes optional ':where:<filterRow>' and ':between:<lower>:<upper>' filters once each, with lower <= upper");
+            }
         }
         var reduceRow = ResolveNumericRow(channel: name, context: context, malformed: RuleRefusal.ReduceChannelMalformed, name: rowName, requireKeyed: false, ruleName: ruleName);
-        if (op == StateReduceOp.ArrangementRank && (reduceRow.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } || filterRowName is not null)) {
-            throw new RuleException(refusal: RuleRefusal.ReduceChannelMalformed, ruleName: ruleName, detail: $"'{name}' ranks an ordered zone's arrangement and takes no ':where:' filter");
+        if (op == StateReduceOp.ArrangementRank && (reduceRow.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } || filterRowName is not null || bounds is not null)) {
+            throw new RuleException(refusal: RuleRefusal.ReduceChannelMalformed, ruleName: ruleName, detail: $"'{name}' ranks an ordered zone's arrangement and takes no filters");
         }
         StateHandle filterHandle = default;
         if (filterRowName is not null) {
@@ -180,7 +188,8 @@ public static partial class RuleCompiler {
         var reduceValueKind = ((op is StateReduceOp.Count or StateReduceOp.ArrangementRank) ? CellKind.Int : reduceRow.Kind);
 
         return new ResolvedOperand(
-            operand: new ReductionOperand(row: rowName, stateHandle: ResolveHandle(context: context, name: rowName), reduce: op, filterRow: filterRowName, filterHandle: filterHandle, valueKind: reduceValueKind),
+            operand: new ReductionOperand(row: rowName, stateHandle: ResolveHandle(context: context, name: rowName), reduce: op, filterRow: filterRowName, filterHandle: filterHandle, valueKind: reduceValueKind,
+                range: bounds is { } range ? (LiteralToRaw(reduceRow.Kind, range.Lower, ruleName, "reduce"), LiteralToRaw(reduceRow.Kind, range.Upper, ruleName, "reduce")) : null),
             describe: describe
         );
     }

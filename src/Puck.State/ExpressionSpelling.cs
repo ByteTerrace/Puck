@@ -6,8 +6,8 @@ namespace Puck.State;
 /// <summary>
 /// The infix spelling of a <see cref="ValueExpression"/> — <c>"min(damage, hp) * 2 - armor[$each]"</c> — and
 /// its inverse. It is SYNTAX ONLY: a spelling parses to exactly the postfix <see cref="ValueToken"/> list an
-/// author could have written by hand, and the compiler proves, prices, and evaluates that list exactly as before,
-/// so the infix form adds no semantics, no cost, and no second evaluator. Every token kind has one spelling:
+/// author could have written by hand. Both spellings share the compiler's validation, constant folding, pricing,
+/// and evaluator, so the infix form adds no semantics, no cost, and no second evaluator. Every token kind has one spelling:
 /// <list type="bullet">
 /// <item><c>+ - * / %</c>, <c>&amp; | ^ ~</c>, <c>&lt;&lt; &gt;&gt; &gt;&gt;&gt;</c>, <c>== != &lt; &lt;= &gt; &gt;=</c>,
 /// unary <c>-</c>, and <c>condition ? whenTrue : whenFalse</c> (<c>select</c>), with C precedence.</item>

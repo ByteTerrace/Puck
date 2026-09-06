@@ -2534,27 +2534,9 @@
         {
           "$type": "setState",
           "state": "boardCollisions",
-          "value": 0
+          "expression": "$reduce:count:pieceCell:between:0:63 + popCount($board:mask:board:0:0) - 64"
         }
       ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-board-collisions-reset"
-    },
-    {
-      "effects": [
-        {
-          "$type": "addState",
-          "expression": "(pieceCell[$each] >= 0) * (board[pieceCell[$each]] != pieceCode[$each])",
-          "state": "boardCollisions"
-        }
-      ],
-      "forEach": "pieceCode",
       "gate": {
         "$type": "compareState",
         "comparison": "Equal",
@@ -2953,7 +2935,7 @@
           "name": "nearFiles"
         },
         {
-          "expression": "boardShift(boardShift($bind:kingMask, chessBoard, E), chessBoard, E) | boardShift(boardShift($bind:kingMask, chessBoard, W), chessBoard, W)",
+          "expression": "(boardShift($bind:nearFiles, chessBoard, E) | boardShift($bind:nearFiles, chessBoard, W)) & ~$bind:kingMask",
           "kind": "int",
           "name": "farFiles"
         },
@@ -3013,7 +2995,7 @@
           "name": "nearFiles"
         },
         {
-          "expression": "boardShift(boardShift($bind:kingMask, chessBoard, E), chessBoard, E) | boardShift(boardShift($bind:kingMask, chessBoard, W), chessBoard, W)",
+          "expression": "(boardShift($bind:nearFiles, chessBoard, E) | boardShift($bind:nearFiles, chessBoard, W)) & ~$bind:kingMask",
           "kind": "int",
           "name": "farFiles"
         },

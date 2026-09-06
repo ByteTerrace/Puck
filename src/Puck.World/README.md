@@ -458,14 +458,18 @@ anchoring an 8x8 `chessBoard` Grid topology, and 32 `piece`-kit rigid bodies
 regions, now sited clear of the table's own footprint so the shrink and the
 approach never jostle a resting piece) prove it: two `pieceCode`-forEach
 rules (upright/tilted, gated on the `$upright:each` reserved channel so a
-knocked-over piece reads as displaced) derive each piece's live cell, then
-one `forEach` rule writes each observed cell, marking duplicate occupancy.
+knocked-over piece reads as displaced) derive each piece's live cell. The
+board's inverse trait supplies the last occupant's piece code at each square.
+A range-filtered reduction counts sampled pieces in cells 0..63; subtracting
+the occupied-square count detects excess occupants without another sampling
+effect or a separate per-piece rule. The census uses one empty-square mask:
+`$reduce:count:pieceCell:between:0:63 + popCount($board:mask:board:0:0) - 64`.
 The sampling edge is `settleHold == 60`. The counter's separate increment and
 reset gates write only when its value changes. An advancing clock would need
 to rebase its epoch on every moving tick; an integer conditional expression
 cannot read the bool-kind `$physics:quiescent` channel.
-A piece outside the board (captured or knocked clear) closes its own write
-gate; it does not prevent its neighbours from writing. Every top-level state
+A piece outside the board (captured or knocked clear) receives cell -1;
+it does not prevent its neighbours from being sampled. Every top-level state
 effect preflights and applies on its own; only a `transaction` groups effects
 atomically. A `body.pose`
 teleport clears the piece's rest latch (`WorldBody.Pose`), so a bare pose at
@@ -505,9 +509,11 @@ overlapping addresses are counted only once, even for malformed candidates.
 This preserves a full-board comparison without a state-writing loop over 64 cells.
 `boardMismatch` counts differences from the constructed candidate and
 `boardChanged` counts differences from accepted state.
-`boardCollisions` counts cells with duplicate upright occupants.
-The observation uses code 7 for such a cell; accepted boards never contain it.
-Any collision prevents acceptance regardless of which body last wrote the cell.
+`boardCollisions` counts excess upright occupants: two pieces on one square
+contribute one, and three contribute two. It detects identical piece codes too,
+even though the inverse board shows only the last occupant. Any collision
+prevents acceptance regardless of token order. The observation's declared range
+still reserves code 7, which the exact matcher distinguishes from every piece code.
 
 Each bit plane is a union of value ranges read through `$board:mask`:
 
@@ -522,14 +528,15 @@ For values -6 through 7, these memberships give the distinct labels
 `0, 2, 6, 7, 5, 4, 12, 13, 15, 14, 10, 11, 9, 8`. This Gray-code ordering
 needs only seven intervals per board, or 14 mask queries for the comparison.
 The closed alphabet makes the encoding lossless: equality of all four bits
-means equality of the original value, including empty and collision cells.
+means equality of the original value, including empty cells and reserved code 7.
 
 Geometry then judges that candidate. Empty-ray patterns handle bishops, rooks,
 and queens; coordinate differences handle knights and single king steps; one
 relative-rank pawn expression serves both colours. Attack calculations use
 rule-local bindings instead of persistent intermediate rows. A king mask's
 lowest set bit supplies its local square. Topology shifts form the adjacent
-and two-files-away sets; vertical shifts produce pawn, king, and knight attack
+and two-files-away sets; shifting the adjacent set left and right again and
+removing the origin shares the two-file calculation. Vertical shifts produce pawn, king, and knight attack
 neighbourhoods. The topology drops shifts that leave the board, including at
 the sign-bit corner. Only the eight ray directions
 remain in the topology. The observed

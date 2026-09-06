@@ -42,7 +42,10 @@ public static class RuleFacts {
     /// the compiler's ordinary (row, key) pair rule: a reduction addresses the whole row rather
     /// than one cell, so it is the one place a keyed row is read with no key at all — admitted deliberately, not a
     /// hole in the pair rule (the compiler's reduce branch). The optional suffix
-    /// <c>:where:&lt;filterRow&gt;</c> restricts the aggregate to matching keys whose numeric filter cell is nonzero.</summary>
+    /// <c>:where:&lt;filterRow&gt;</c> restricts the aggregate to matching keys whose numeric filter cell is nonzero.
+    /// <c>:between:&lt;lower&gt;:&lt;upper&gt;</c> restricts it to live values within inclusive bounds, lowered as
+    /// numeric literals in the source row's kind. Both suffixes may appear once, in either order; arrangementRank
+    /// admits neither filter.</summary>
     public const string ReducePrefix = "$reduce:";
     /// <summary>The prefix; <c>$symmetry:&lt;function&gt;[:&lt;argument&gt;]:&lt;row&gt;</c> reads a cell holding a
     /// symmetry-lattice node (0..239, <c>Puck.Maths.SymmetryLattice</c>) through one of the lattice's own maps — the

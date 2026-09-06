@@ -73,8 +73,9 @@ internal sealed partial class WorldSearchRuntime {
             Plan = plan;
             Legal = new long[tokenCapacity];
             Counts = new long[tokenCapacity];
-            Wide = ((plan.Row.Reach is not null) ? new long[tokenCapacity * WideWordsPerToken(cellCount: plan.Topology.CellCount)] : null);
+            Wide = ((plan.Row.Reach is not null) ? new long[tokenCapacity * WideWordsPerToken(cellCount: plan.CellCount)] : null);
             Levels = BuildLevels(depth: plan.Depth, layout: layout, rows: rows);
+            ZoneRows = ResolveZones(plan: plan, rows: rows);
 
             if ((plan.Score is not null) && (plan.Method == WorldSearchMethod.Negamax)) {
                 TtKey = new ulong[WorldSearchCapacity.TranspositionEntries];
@@ -133,6 +134,9 @@ internal sealed partial class WorldSearchRuntime {
         public long[]? TtMeta { get; set; }
 
         public WorldSearchPlan Plan { get; set; }
+        // A zone job's zones as rows of the bound section, in plan order — the cells a token's value is the index of.
+        // Null for a board job. Rebound with the rows.
+        public StateRow[]? ZoneRows { get; set; }
         public ulong Stamp { get; set; }
         public bool Running { get; set; }
         public bool Done { get; set; }
@@ -161,6 +165,19 @@ internal sealed partial class WorldSearchRuntime {
         public long Beta { get; set; } = WorldSearchCapacity.MateScore;
         public Level[] Levels { get; set; }
 
+        public static StateRow[]? ResolveZones(WorldSearchPlan plan, IReadOnlyList<StateRow> rows) {
+            if (plan.Zones.Length == 0) {
+                return null;
+            }
+
+            var zones = new StateRow[plan.Zones.Length];
+
+            for (var index = 0; index < zones.Length; index++) {
+                zones[index] = (StateRows.FindStateRow(rows: rows, name: plan.Zones[index]) ?? throw new InvalidOperationException(message: $"search '{plan.Row.Name}' zone '{plan.Zones[index]}' vanished after planning"));
+            }
+
+            return zones;
+        }
         public static Level[] BuildLevels(int depth, FrameLayout layout, IReadOnlyList<StateRow> rows) {
             var levels = new Level[Math.Max(val1: 0, val2: (depth - 1))];
 
@@ -247,11 +264,12 @@ internal sealed partial class WorldSearchRuntime {
             var plan = plans[index];
             var tokens = (StateRows.FindStateRow(rows: rows, name: plan.Row.Tokens)?.Cells?.Count ?? 0);
             var levelCount = Math.Max(val1: 0, val2: (plan.Depth - 1));
-            var expectedWide = ((plan.Row.Reach is not null) ? (tokens * WideWordsPerToken(cellCount: plan.Topology.CellCount)) : 0);
+            var expectedWide = ((plan.Row.Reach is not null) ? (tokens * WideWordsPerToken(cellCount: plan.CellCount)) : 0);
             var kept = Array.Find(array: m_jobs, match: job => string.Equals(a: job.Plan.Row.Name, b: plan.Row.Name, comparisonType: StringComparison.Ordinal));
 
             if ((kept is not null) && (kept.Legal.Length == tokens) && ((kept.Wide?.Length ?? 0) == expectedWide)) {
                 kept.Plan = plan;
+                kept.ZoneRows = Job.ResolveZones(plan: plan, rows: rows);
 
                 if (layoutRebuilt || (kept.Levels.Length != levelCount)) {
                     kept.Levels = Job.BuildLevels(depth: plan.Depth, layout: m_layout, rows: rows);
@@ -607,7 +625,7 @@ internal sealed partial class WorldSearchRuntime {
 
             status[index] = new WorldSearchStatus(
                 Name: job.Plan.Row.Name, Running: job.Running, Done: job.Done, Token: job.Token, Tokens: job.Legal.Length, Target: job.Target,
-                Cells: job.Plan.Topology.CellCount, Count: job.Count, Nodes: job.Nodes, NodesPerTick: job.Plan.Nodes, JudgeCost: job.Plan.JudgeCost, JudgeRules: m_judge.Length,
+                Cells: job.Plan.CellCount, Count: job.Count, Nodes: job.Nodes, NodesPerTick: job.Plan.Nodes, JudgeCost: job.Plan.JudgeCost, JudgeRules: m_judge.Length,
                 HasScore: ((job.Plan.Score is not null) && (job.Plan.Method == WorldSearchMethod.Negamax)), Depth: job.Plan.Depth, PassDepth: job.PassDepth, BestScore: job.Best, BestToken: job.BestToken, BestTarget: job.BestTarget,
                 HasOutcome: (job.Plan.Method == WorldSearchMethod.Tree), Iteration: job.Iteration, Iterations: job.Plan.Iterations
             );

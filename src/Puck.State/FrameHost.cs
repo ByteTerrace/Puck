@@ -106,6 +106,7 @@ public sealed class FrameHost : IRuleHost {
             StateMutation.Apply { Transform: StateTransform.WriteSet writeSet } => Frame.TryWriteSet(writeSet: writeSet, reason: out reason),
             StateMutation.Apply { Transform: StateTransform.Push push } => ((Frame.Find(name: push.Row) is { } ring) ? Frame.TryPush(row: ring, value: push.Value, reason: out reason) : Refuse(message: $"row '{push.Row}' is not in the frame", reason: out reason)),
             StateMutation.Apply { Transform: StateTransform.ClearEnclosed enclosed } => Frame.TryClearEnclosed(enclosed: enclosed, reason: out reason),
+            StateMutation.Apply { Transform: StateTransform.Transfer transfer } => Frame.TryTransfer(transfer: transfer, reason: out reason),
             StateMutation.Apply apply => Refuse(message: $"a frame does not apply a {apply.Transform.GetType().Name} transform", reason: out reason),
             StateMutation.RemoveCell => Refuse(message: "a frame never removes a cell", reason: out reason),
             StateMutation.Generate => Refuse(message: "a frame never draws", reason: out reason),

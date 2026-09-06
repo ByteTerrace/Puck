@@ -455,7 +455,8 @@ public static class TopologyCompilation {
             elementNames,
             layers,
             FixedQ4816.FromDouble(layerHeight),
-            directionNames);
+            directionNames,
+            coordinates: [.. coordinates]);
         compiled.InstallElementAliases(elementAliases);
         return compiled;
     }

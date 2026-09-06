@@ -23,21 +23,21 @@ internal sealed partial class WorldSearchRuntime {
         return (z ^ (z >> 31));
     }
 
-    private static int TotalCandidates(WorldSearchShapePlan[] shapes, CompiledTopology topology, int tokenCount) {
+    private static int TotalCandidates(WorldSearchShapePlan[] shapes, int cellCount, int tokenCount) {
         var total = 0;
 
         foreach (var shape in shapes) {
-            total += (tokenCount * shape.CandidateCount(topology: topology));
+            total += (tokenCount * shape.CandidateCount(cellCount: cellCount));
         }
 
         return total;
     }
-    private static void DecodeCandidate(WorldSearchShapePlan[] shapes, CompiledTopology topology, int tokenCount, int flat, out int shape, out int token, out int candidate) {
+    private static void DecodeCandidate(WorldSearchShapePlan[] shapes, int cellCount, int tokenCount, int flat, out int shape, out int token, out int candidate) {
         for (shape = 0; shape < shapes.Length; shape++) {
-            var span = (tokenCount * shapes[shape].CandidateCount(topology: topology));
+            var span = (tokenCount * shapes[shape].CandidateCount(cellCount: cellCount));
 
             if (flat < span) {
-                var per = shapes[shape].CandidateCount(topology: topology);
+                var per = shapes[shape].CandidateCount(cellCount: cellCount);
                 token = (flat / per);
                 candidate = (flat % per);
 
@@ -55,9 +55,9 @@ internal sealed partial class WorldSearchRuntime {
     // judge accepted it (verdict at accept, turn changed).
     private bool TryJudgeCandidate(Job job, StateFrame from, WorldSearchShapePlan shape, int token, int candidateIndex, StateRow tokens, IReadOnlyList<StateCell> tokenCells, IReadOnlyList<StateRow> rows, ulong tick, out int target, out long code) {
         var plan = job.Plan;
-        var cells = plan.Topology.CellCount;
+        var cells = plan.CellCount;
         var scratch = m_host!.Frame;
-        var fromCell = (from.TryStoredAt(row: tokens, index: token, value: out var stored) ? stored : plan.Off);
+        var fromCell = TokenCell(job: job, frame: from, tokens: tokens, tokenCells: tokenCells, token: token);
         var onBoard = ((fromCell >= 0L) && (fromCell < cells));
 
         if (onBoard != (shape.Kind != WorldSearchShapeKind.Drop)) {
@@ -66,35 +66,14 @@ internal sealed partial class WorldSearchRuntime {
 
             return false;
         }
-        if (!TryResolveCandidate(shape: shape, plan: plan, frame: from, tokens: tokens, tokenCells: tokenCells, token: token, from: fromCell, candidateIndex: candidateIndex, cells: cells,
+        if (!TryResolveCandidate(shape: shape, plan: plan, zones: job.ZoneRows, frame: from, tokens: tokens, tokenCells: tokenCells, token: token, from: fromCell, candidateIndex: candidateIndex, cells: cells,
             target: out target, mid: out var mid, companionIndex: out var companionIndex, companionTarget: out var companionTarget, code: out code)) {
             return false;
         }
 
         scratch.CopyFrom(other: from);
-        _ = scratch.TryWrite(row: tokens, key: tokenCells[token].Key, value: target, write: StateWriteKind.Set, reason: out _);
-
-        switch (shape.Kind) {
-            case WorldSearchShapeKind.Relocate when shape.Displace:
-            case WorldSearchShapeKind.Promote:
-                EvictAt(frame: from, scratch: scratch, tokens: tokens, tokenCells: tokenCells, cell: target, exclude: token, off: plan.Off);
-
-                if ((shape.Kind == WorldSearchShapeKind.Promote) && (StateRows.FindStateRow(rows: rows, name: shape.Codes!) is { } codes)) {
-                    _ = scratch.TryWrite(row: codes, key: tokenCells[token].Key, value: code, write: StateWriteKind.Set, reason: out _);
-                }
-
-                break;
-            case WorldSearchShapeKind.Jump:
-                EvictAt(frame: from, scratch: scratch, tokens: tokens, tokenCells: tokenCells, cell: mid, exclude: token, off: plan.Off);
-
-                break;
-            case WorldSearchShapeKind.Pair:
-                _ = scratch.TryWrite(row: tokens, key: tokenCells[companionIndex].Key, value: companionTarget, write: StateWriteKind.Set, reason: out _);
-
-                break;
-            default:
-                break;
-        }
+        ApplyCandidate(shape: shape, plan: plan, zones: job.ZoneRows, frame: from, scratch: scratch, rows: rows, tokens: tokens, tokenCells: tokenCells, token: token, from: fromCell,
+            target: target, mid: mid, companionIndex: companionIndex, companionTarget: companionTarget, code: code);
 
         var mover = Slot(store: from, name: plan.Turn);
 
@@ -142,7 +121,7 @@ internal sealed partial class WorldSearchRuntime {
     private void StepUct(Job job, ulong tick, StateRow tokens, IReadOnlyList<StateCell> tokenCells, IReadOnlyList<StateRow> rows) {
         var plan = job.Plan;
         var shapes = plan.Shapes;
-        var topology = plan.Topology;
+        var cells = plan.CellCount;
         var node = job.Path![job.PathLength - 1];
 
         switch (job.Phase) {
@@ -198,7 +177,7 @@ internal sealed partial class WorldSearchRuntime {
                         job.PlayoutPlies = 1;
                         job.Phase = UctPlayout;
                         job.UScan = 0;
-                        job.UStart = (int)(Next(ref job.Seed) % (ulong)Math.Max(val1: 1, val2: TotalCandidates(shapes: shapes, topology: topology, tokenCount: tokenCells.Count)));
+                        job.UStart = (int)(Next(ref job.Seed) % (ulong)Math.Max(val1: 1, val2: TotalCandidates(shapes: shapes, cellCount: cells, tokenCount: tokenCells.Count)));
                     } else {
                         Backpropagate(job: job, value: EvaluateOutcome(plan: plan, position: job.UctFrame!, tick: tick));
                     }
@@ -215,7 +194,7 @@ internal sealed partial class WorldSearchRuntime {
 
                     return;
                 }
-                if (job.UTarget >= shape.CandidateCount(topology: topology)) {
+                if (job.UTarget >= shape.CandidateCount(cellCount: cells)) {
                     job.UToken++;
                     job.UTarget = 0;
 
@@ -253,7 +232,7 @@ internal sealed partial class WorldSearchRuntime {
                     return;
                 }
 
-                var total = TotalCandidates(shapes: shapes, topology: topology, tokenCount: tokenCells.Count);
+                var total = TotalCandidates(shapes: shapes, cellCount: cells, tokenCount: tokenCells.Count);
 
                 if (job.UScan >= total) {
                     // No candidate of this position is accepted: terminal for the side to move, whose opponent
@@ -265,7 +244,7 @@ internal sealed partial class WorldSearchRuntime {
 
                 var flat = ((job.UStart + job.UScan++) % total);
 
-                DecodeCandidate(shapes: shapes, topology: topology, tokenCount: tokenCells.Count, flat: flat, shape: out var shapeIndex, token: out var token, candidate: out var candidateIndex);
+                DecodeCandidate(shapes: shapes, cellCount: cells, tokenCount: tokenCells.Count, flat: flat, shape: out var shapeIndex, token: out var token, candidate: out var candidateIndex);
 
                 if (TryJudgeCandidate(job: job, from: job.PlayFrame!, shape: shapes[shapeIndex], token: token, candidateIndex: candidateIndex, tokens: tokens, tokenCells: tokenCells, rows: rows, tick: tick, target: out _, code: out _)) {
                     job.PlayFrame!.CopyFrom(other: m_host!.Frame);
@@ -368,7 +347,7 @@ internal sealed partial class WorldSearchRuntime {
             return -1;
         }
 
-        var mid = job.Plan.Topology.Neighbour(cell: (int)from, direction: shape.Directions[candidate]);
+        var mid = job.Plan.Topology!.Neighbour(cell: (int)from, direction: shape.Directions[candidate]);
 
         return ((mid < 0) ? -1 : job.Plan.Topology.Neighbour(cell: mid, direction: shape.Directions[candidate]));
     }

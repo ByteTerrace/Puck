@@ -73,24 +73,23 @@ public sealed class ExpressionCostLawTests {
         Assert.True(hilbert < isPrime);
     }
 
+    [Theory]
+    [InlineData("1 + 2")]
+    [InlineData("3 * 4 / 2")]
+    [InlineData("isPrime(17)")]
+    [InlineData("gcd(12, 18)")]
+    [InlineData("replicationMask(8)")]
+    [InlineData("repeatBits(127, 8)")]
+    public void SuccessfulConstantExpressionsCostOneConstant(string text) {
+        Assert.Equal(1L, RuleWorkBudget.ExpressionCost(tokens: Compile(text), context: s_context));
+    }
+
     [Fact]
-    public void CompiledExpressionsAccountForTheSumOfTheirOperations() {
-        // "1 + 2": Constant (1) + Constant (1) + Add (1) = 3
-        var simple = Compile("1 + 2");
-        Assert.Equal(3L, RuleWorkBudget.ExpressionCost(tokens: simple, context: s_context));
-
-        // "3 * 4 / 2": Constant (1) + Constant (1) + Mul (3) + Constant (1) + Div (16) = 22
-        var arithmetic = Compile("3 * 4 / 2");
-        Assert.Equal(1L + 1L + 3L + 1L + 16L, RuleWorkBudget.ExpressionCost(tokens: arithmetic, context: s_context));
-
-        // "isPrime(17)": Constant (1) + IsPrime (200) = 201
-        var prime = Compile("isPrime(17)");
-        Assert.Equal(1L + 200L, RuleWorkBudget.ExpressionCost(tokens: prime, context: s_context));
-
-        // "gcd(12, 18)": Constant (1) + Constant (1) + GCD (40) = 42
-        var gcdExpr = Compile("gcd(12, 18)");
-        Assert.Equal(1L + 1L + 40L, RuleWorkBudget.ExpressionCost(tokens: gcdExpr, context: s_context));
-        Assert.Equal(41L, RuleWorkBudget.ExpressionCost(tokens: Compile("replicationMask(8)"), context: s_context));
-        Assert.Equal(62L, RuleWorkBudget.ExpressionCost(tokens: Compile("repeatBits(127, 8)"), context: s_context));
+    public void RuntimeProgramsStillAccountForEveryOperation() {
+        CompiledExpressionToken[] program = [
+            new(ExpressionOp.Constant, Constant: 3), new(ExpressionOp.Constant, Constant: 4), new(ExpressionOp.Multiply),
+            new(ExpressionOp.Constant, Constant: 2), new(ExpressionOp.Divide),
+        ];
+        Assert.Equal(22L, RuleWorkBudget.ExpressionCost(tokens: program, context: s_context));
     }
 }

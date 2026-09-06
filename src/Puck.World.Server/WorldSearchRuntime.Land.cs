@@ -25,7 +25,7 @@ internal sealed partial class WorldSearchRuntime {
             m_outputs.Add(item: new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.World, Row: best, Key: "to", Value: job.BestTarget, Kind: WorldDocumentWriteKind.Set));
             m_outputs.Add(item: new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.World, Row: best, Key: "score", Value: job.Best, Kind: WorldDocumentWriteKind.Set));
         }
-        if ((plan.Row.Reach is { } reach) && (job.Wide is { } wide)) {
+        if ((plan.Row.Reach is { } reach) && (job.Wide is { } wide) && (plan.Topology is { } topology)) {
             // Every reach cell resets through the same clear-then-paint door a boardCombine authors — the ordinary
             // mutation path already writes a sparse board of any size, so a wide board needs no dedicated kind.
             m_outputs.Add(item: new WorldMutation.TransformState(Principal: WorldPrincipal.World, Transform: new StateTransform.BoardCombine(Row: reach, Operation: BoardCombineOp.Clear)));
@@ -34,11 +34,11 @@ internal sealed partial class WorldSearchRuntime {
 
             if ((held >= 0L) && (held < job.Legal.Length)) {
                 var token = (int)held;
-                var words = WideWordsPerToken(cellCount: plan.Topology.CellCount);
+                var words = WideWordsPerToken(cellCount: plan.CellCount);
 
-                for (var cell = 0; cell < plan.Topology.CellCount; cell++) {
+                for (var cell = 0; cell < plan.CellCount; cell++) {
                     if (WideBit(wide: wide, token: token, cell: cell, words: words)) {
-                        m_outputs.Add(item: new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.World, Row: reach, Key: plan.Topology.Key(cell), Value: 1L, Kind: WorldDocumentWriteKind.Set));
+                        m_outputs.Add(item: new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.World, Row: reach, Key: topology.Key(cell), Value: 1L, Kind: WorldDocumentWriteKind.Set));
                     }
                 }
             }
