@@ -202,7 +202,14 @@ public sealed class FrameLayout {
 /// frame never changes structure — it refuses a key its row does not hold — and a text row reads through to the
 /// row's own cells.</summary>
 public sealed class StateFrame : StateStore {
+    // One overwritten value the journal can restore, recorded before the write it undoes.
+    private readonly record struct JournalEntry(int Index, long Previous);
+
     private readonly long[] m_values;
+    private JournalEntry[] m_journal = new JournalEntry[64];
+    private int m_journalLength;
+    private int m_journalScopes;
+    private long m_journalTouches;
 
     /// <summary>Initializes an all-zero frame.</summary>
     /// <param name="layout">The layout.</param>
@@ -213,6 +220,62 @@ public sealed class StateFrame : StateStore {
         Layout = layout;
         m_rows = rows;
         m_values = new long[layout.Length];
+    }
+
+    /// <summary>Opens an undo-journal scope: every write this frame makes until the matching
+    /// <see cref="RewindJournalScope"/> or <see cref="CommitJournalScope"/> records what it overwrote, so a rewind
+    /// restores exactly those cells without copying the frame. Scopes nest; close the innermost first.</summary>
+    /// <returns>The mark to close this scope with.</returns>
+    public int BeginJournalScope() {
+        m_journalScopes++;
+
+        return m_journalLength;
+    }
+    /// <summary>Closes the innermost open scope, restoring every cell it wrote to what it overwrote, most recent
+    /// write first (a cell written twice in the scope returns to its value from before the first write).</summary>
+    /// <param name="mark">The mark <see cref="BeginJournalScope"/> returned for this scope.</param>
+    public void RewindJournalScope(int mark) {
+        for (var index = (m_journalLength - 1); index >= mark; index--) {
+            m_values[m_journal[index].Index] = m_journal[index].Previous;
+        }
+
+        m_journalLength = mark;
+        m_journalScopes--;
+    }
+    /// <summary>Closes the innermost open scope, keeping every write it made. Once no scope remains open, the
+    /// journal is reclaimed: a committed write no ancestor scope could still roll back needs no further record.</summary>
+    public void CommitJournalScope() {
+        m_journalScopes--;
+
+        if (m_journalScopes == 0) {
+            m_journalLength = 0;
+        }
+    }
+    /// <summary>Gets how many cell writes the journal has recorded across this frame's whole lifetime, reclaimed
+    /// scope or not — a test hook for a preflight's write cost, since the running length itself resets to the mark
+    /// as each scope closes.</summary>
+    public long JournalTouches => m_journalTouches;
+
+    // Writes one value, journaling the cell it overwrites while a scope is open; a scope always closes by undoing
+    // in reverse or by discarding the record, never by reading it, so the journal never allocates once its buffer
+    // has grown to the largest scope this frame has evaluated.
+    private void Write(int index, long value) {
+        if (m_journalScopes > 0) {
+            RecordJournal(index: index, previous: m_values[index]);
+        }
+
+        m_values[index] = value;
+    }
+    // Journals a value already overwritten by a caller that writes a whole span itself (a board transform this
+    // frame does not own the writing of): the caller diffs against a before-snapshot and reports only what changed.
+    private void RecordJournal(int index, long previous) {
+        if (m_journalLength == m_journal.Length) {
+            Array.Resize(array: ref m_journal, newSize: (m_journal.Length * 2));
+        }
+
+        m_journal[m_journalLength] = new JournalEntry(Index: index, Previous: previous);
+        m_journalLength++;
+        m_journalTouches++;
     }
 
     /// <summary>Gets the layout.</summary>
@@ -516,8 +579,9 @@ public sealed class StateFrame : StateStore {
             return false;
         }
 
-        ref var slot = ref m_values[layout.Offset + index];
-        var next = ((write == StateWriteKind.Add) ? unchecked(slot + value) : value);
+        var absolute = (layout.Offset + index);
+        var previous = m_values[absolute];
+        var next = ((write == StateWriteKind.Add) ? unchecked(previous + value) : value);
 
         if ((row.ClampToEnvelope(value: next) != next) || ((row.Kind == CellKind.Bool) && (next is not (0L or 1L)))) {
             reason = $"row '{row.Name}' cell '{key}' would leave the row's envelope";
@@ -525,9 +589,7 @@ public sealed class StateFrame : StateStore {
             return false;
         }
 
-        var previous = slot;
-
-        slot = next;
+        Write(index: absolute, value: next);
         reason = string.Empty;
 
         // A tokens-row relocation recomputes every derived board it feeds — cheap: only the moved token's old and
@@ -581,9 +643,10 @@ public sealed class StateFrame : StateStore {
             }
         }
 
-        m_values[boardLayout.Offset + (int)cell] = ((winner >= 0) && (winner < codesLayout.Length))
-            ? m_values[codesLayout.Offset + winner]
-            : boardLayout.Empty;
+        Write(
+            index: (boardLayout.Offset + (int)cell),
+            value: (((winner >= 0) && (winner < codesLayout.Length)) ? m_values[codesLayout.Offset + winner] : boardLayout.Empty)
+        );
     }
     /// <summary>Pushes one value onto a ring row, overwriting the oldest slot once the ring is full.</summary>
     /// <param name="row">The ring row.</param>
@@ -602,10 +665,11 @@ public sealed class StateFrame : StateStore {
         }
 
         var capacity = (layout.Length - 1);
-        ref var cursor = ref m_values[layout.Offset + capacity];
+        var cursorIndex = (layout.Offset + capacity);
+        var cursor = m_values[cursorIndex];
 
-        m_values[layout.Offset + (int)(cursor % capacity)] = value;
-        cursor++;
+        Write(index: (layout.Offset + (int)(cursor % capacity)), value: value);
+        Write(index: cursorIndex, value: (cursor + 1));
         reason = string.Empty;
 
         return true;
@@ -637,7 +701,25 @@ public sealed class StateFrame : StateStore {
             return false;
         }
 
-        _ = BoardQueries.ClearEnclosed(topology: layout.Topology, values: m_values.AsSpan(start: layout.Offset, length: layout.Length), source: source, lower: enclosed.Lower, upper: enclosed.Upper, empty: layout.Empty);
+        var target = m_values.AsSpan(start: layout.Offset, length: layout.Length);
+
+        if (m_journalScopes > 0) {
+            // clearEnclosed writes through BoardQueries, which owns the whole board span; journal what it changed
+            // by comparing against a snapshot rather than intercepting each of its writes.
+            Span<long> before = stackalloc long[layout.Length];
+
+            target.CopyTo(destination: before);
+            _ = BoardQueries.ClearEnclosed(topology: layout.Topology, values: target, source: source, lower: enclosed.Lower, upper: enclosed.Upper, empty: layout.Empty);
+
+            for (var cell = 0; cell < before.Length; cell++) {
+                if (before[cell] != target[cell]) {
+                    RecordJournal(index: (layout.Offset + cell), previous: before[cell]);
+                }
+            }
+        } else {
+            _ = BoardQueries.ClearEnclosed(topology: layout.Topology, values: target, source: source, lower: enclosed.Lower, upper: enclosed.Upper, empty: layout.Empty);
+        }
+
         reason = string.Empty;
 
         return true;
@@ -681,15 +763,14 @@ public sealed class StateFrame : StateStore {
         }
 
         var mask = unchecked((ulong)bits);
-        var target = m_values.AsSpan(start: layout.Offset, length: layout.Length);
 
         while (mask != 0UL) {
             var cell = System.Numerics.BitOperations.TrailingZeroCount(value: mask);
 
             mask &= (mask - 1UL);
 
-            if (cell < target.Length) {
-                target[cell] = writeSet.Value;
+            if (cell < layout.Length) {
+                Write(index: (layout.Offset + cell), value: writeSet.Value);
             }
         }
         reason = string.Empty;
@@ -744,7 +825,23 @@ public sealed class StateFrame : StateStore {
         }
 
         var target = m_values.AsSpan(start: layout.Offset, length: topology.CellCount);
-        BoardCombination.Write(combine, topology, left, leftEmpty, right, rightEmpty, target, layout.Empty, direction, element);
+
+        if (m_journalScopes > 0) {
+            // boardCombine writes through BoardCombination, which owns the whole board span; journal what it
+            // changed by comparing against a snapshot rather than intercepting each of its writes.
+            Span<long> before = stackalloc long[topology.CellCount];
+
+            target.CopyTo(destination: before);
+            BoardCombination.Write(combine, topology, left, leftEmpty, right, rightEmpty, target, layout.Empty, direction, element);
+
+            for (var cell = 0; cell < before.Length; cell++) {
+                if (before[cell] != target[cell]) {
+                    RecordJournal(index: (layout.Offset + cell), previous: before[cell]);
+                }
+            }
+        } else {
+            BoardCombination.Write(combine, topology, left, leftEmpty, right, rightEmpty, target, layout.Empty, direction, element);
+        }
 
         reason = string.Empty;
 
@@ -851,23 +948,23 @@ public sealed class StateFrame : StateStore {
 
         // Close the gap the token leaves; the pile stays contiguous from position zero.
         for (var index = position; index < (sourceCount - 1); index++) {
-            m_values[source.Offset + 1 + index] = m_values[source.Offset + 2 + index];
-            m_values[source.Offset + 1 + sourceCapacity + index] = m_values[source.Offset + 2 + sourceCapacity + index];
+            Write(index: (source.Offset + 1 + index), value: m_values[source.Offset + 2 + index]);
+            Write(index: (source.Offset + 1 + sourceCapacity + index), value: m_values[source.Offset + 2 + sourceCapacity + index]);
         }
 
-        m_values[source.Offset] = (sourceCount - 1);
+        Write(index: source.Offset, value: (sourceCount - 1));
 
         var landing = (insertFirst ? 0 : targetCount);
         var targetCapacity = target.ZoneCapacity;
 
         for (var index = targetCount; index > landing; index--) {
-            m_values[target.Offset + 1 + index] = m_values[target.Offset + index];
-            m_values[target.Offset + 1 + targetCapacity + index] = m_values[target.Offset + targetCapacity + index];
+            Write(index: (target.Offset + 1 + index), value: m_values[target.Offset + index]);
+            Write(index: (target.Offset + 1 + targetCapacity + index), value: m_values[target.Offset + targetCapacity + index]);
         }
 
-        m_values[target.Offset + 1 + landing] = ordinal;
-        m_values[target.Offset + 1 + targetCapacity + landing] = value;
-        m_values[target.Offset] = (targetCount + 1);
+        Write(index: (target.Offset + 1 + landing), value: ordinal);
+        Write(index: (target.Offset + 1 + targetCapacity + landing), value: value);
+        Write(index: target.Offset, value: (targetCount + 1));
         reason = string.Empty;
 
         return true;

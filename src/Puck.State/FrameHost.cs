@@ -1,14 +1,14 @@
 namespace Puck.State;
 
 /// <summary>A rule host over a <see cref="StateFrame"/>: the document's own rules evaluate against a hypothetical
-/// board, every state effect writes the frame, and nothing reaches an installed section. A preflight scope is a
-/// frame copy restored on <see cref="IRuleHost.EndPreflight"/>; an effect arm the library does not own is skipped,
-/// never fired; a rule kind only a document host understands is refused back to the library's own evaluation. The
-/// host owns its evaluator and latch, so a judge run starts every edge closed.</summary>
+/// board, every state effect writes the frame, and nothing reaches an installed section. A preflight scope is the
+/// frame's own undo journal, restored on <see cref="IRuleHost.EndPreflight"/>; an effect arm the library does not
+/// own is skipped, never fired; a rule kind only a document host understands is refused back to the library's own
+/// evaluation. The host owns its evaluator and latch, so a judge run starts every edge closed.</summary>
 public sealed class FrameHost : IRuleHost {
     private readonly IReadOnlyList<CompiledTable> m_tables;
     private readonly long[] m_patternWord = new long[PatternCapacity.MaxWord];
-    private readonly List<StateFrame> m_scopes = [];
+    private readonly List<int> m_scopeMarks = [];
     private readonly List<int> m_scopeWrites = [];
     private long[] m_boardScratch = new long[BoardMask.MaxCells];
     private int m_depth;
@@ -78,15 +78,9 @@ public sealed class FrameHost : IRuleHost {
         return m_boardScratch.AsSpan(start: 0, length: cells);
     }
 
-    /// <summary>Rebinds the frame and every scope to rows the layout fits.</summary>
+    /// <summary>Rebinds the frame to rows the layout fits.</summary>
     /// <param name="rows">The rows.</param>
-    public void Rebind(IReadOnlyList<StateRow> rows) {
-        Frame.Rebind(rows: rows);
-
-        foreach (var scope in m_scopes) {
-            scope.Rebind(rows: rows);
-        }
-    }
+    public void Rebind(IReadOnlyList<StateRow> rows) => Frame.Rebind(rows: rows);
 
     /// <summary>Evaluates rules over the frame in array order with every edge closed, as one tick.</summary>
     /// <param name="rules">The rules, already restricted to what a frame can evaluate.</param>
@@ -121,24 +115,25 @@ public sealed class FrameHost : IRuleHost {
     }
     /// <inheritdoc/>
     public void BeginPreflight() {
-        if (m_scopes.Count == m_depth) {
-            m_scopes.Add(item: new StateFrame(layout: Frame.Layout, rows: Frame.Rows));
+        if (m_scopeMarks.Count == m_depth) {
+            m_scopeMarks.Add(item: 0);
             m_scopeWrites.Add(item: 0);
         }
 
-        m_scopes[m_depth].CopyFrom(other: Frame);
+        m_scopeMarks[m_depth] = Frame.BeginJournalScope();
         m_scopeWrites[m_depth] = m_writes;
         m_depth++;
     }
     /// <inheritdoc/>
     public void EndPreflight() {
         m_depth--;
-        Frame.CopyFrom(other: m_scopes[m_depth]);
+        Frame.RewindJournalScope(mark: m_scopeMarks[m_depth]);
         m_writes = m_scopeWrites[m_depth];
     }
     /// <inheritdoc/>
     public bool TryCommitPreflight(ulong tick, out string reason) {
         m_depth--;
+        Frame.CommitJournalScope();
         reason = string.Empty;
 
         return (m_writes != m_scopeWrites[m_depth]);

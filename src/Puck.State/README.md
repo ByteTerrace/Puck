@@ -250,9 +250,13 @@ Nothing here carries a `World` name — a state library names no world.
   old and new board cells (`DerivedBoards.Compose` is the equivalent
   whole-document answer a host composes into the candidate at install, so the
   two never disagree). `FrameHost` is an `IRuleHost` over a
-  frame with its own evaluator and latch: a preflight scope is a frame copy,
-  an effect arm the library does not own is skipped, and `Judge` evaluates a
-  rule array as one tick with every edge closed. `OperandFact.HostOnly`,
+  frame with its own evaluator and latch: a preflight scope is an undo
+  journal the frame itself owns (`BeginJournalScope`/`RewindJournalScope`/
+  `CommitJournalScope`), recording only the cells a scope actually writes so
+  a rewind touches and allocates nothing beyond what the scope wrote, never a
+  copy of the whole frame; an effect arm the library does not own is skipped,
+  and `Judge` evaluates a rule array as one tick with every edge closed.
+  `OperandFact.HostOnly`,
   `KeyFact.HostOnly`, `EffectFact.ReadsHost`, and `RuleDataflow.ReadsHost`
   name what a frame cannot evaluate.
 - *Analyses:* `RuleDataflow` (a rule's read and write sets), `RuleHazards`
