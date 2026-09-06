@@ -1,0 +1,52 @@
+{
+  "description": "Gets the surface this document offers a host that imports it (WorldExports): the names the host may read, drive, and bind to. Every other name the document declares is private to it. Consumed where the document is imported (WorldModuleExports), so a live document always carries null here and the validator refuses anything else.",
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "reads": {
+      "description": "The names a host may read: gates, comparands, expression operands, key indirections, domain and zone references, a board facet\u0027s topology and read-back rows.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "default": null
+    },
+    "actions": {
+      "description": "The names a host may drive: the rows a kit action, a host rule, or a placement\u0027s board facet writes into.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "default": null
+    },
+    "bindings": {
+      "description": "The names a host\u0027s presentation may bind: HUD elements and templates, overlay predicates, camera program scalars, binding wheels and bars.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "default": null
+    }
+  },
+  "additionalProperties": false
+}

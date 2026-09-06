@@ -191,6 +191,9 @@
     "imports": {
       "$ref": "./schema/imports.schema.json"
     },
+    "exports": {
+      "$ref": "./schema/exports.schema.json"
+    },
     "documentId": {
       "$ref": "./schema/documentId.schema.json"
     },

@@ -156,9 +156,8 @@ over a plain record or a parameter the caller supplies:
 (`WorldMobilityIdentity`, `WorldTransferReservationRequest`, and the several
 `World*Checkpoint` shapes) that is itself declared nested inside a `Server`
 runtime class or beside one (`WorldTransferEscrow.cs`, `WorldServer.cs`,
-`WorldPopulation.cs`, `WorldGrants.cs`, `WorldFieldLattice.cs`,
-`WorldOwnedWorlds.cs`, `WorldInputHoldRuntime.cs`, `WorldEventFeed.cs`,
-`WorldSearchRuntime.cs`). Moving one of those codecs here without first
+`WorldPopulation.cs`, `WorldGrants.cs`, `WorldOwnedWorlds.cs`,
+`WorldInputHoldRuntime.cs`, `WorldEventFeed.cs`). Moving one of those codecs here without first
 un-nesting the record types it encodes would need this project to reference
 `Puck.World.Server`, which the architecture gate denies for good reason: a
 codec that reaches back into the runtime it serializes is no longer just
