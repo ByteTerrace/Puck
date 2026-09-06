@@ -1,4 +1,3 @@
-# Modules
 # The island's districts
 
 Every district of the one world is a module in this directory: a `puck.world.def.v1` fragment with no
@@ -31,12 +30,21 @@ and `granaries` at (-10, -0.5, 40); the market hall, the proving ground, and the
 districts under `marketCourt`, `provingCourt`, and `gardenCourt`. `world.imports` prints every layer with its
 alias and exports; `body.pose spawn:<alias>-arrival` stands a seat in a district.
 
-## The partition granaries
+## What the island's derived limits decided
 
-A module is a `puck.world.def.v1` fragment the island imports under an alias
-(`imports: [{"document": "modules/<name>.world.json", "as": "<alias>"}]`),
-rooted under one court placement named `<alias>Court` at local origin and
-exporting only its control rows.
+A document composes under ceilings the engine derives from its guarantees, and the first composition of every
+district met three of them. The arena's `autoAttack` channel is gone: sixteen drive-reach ordinals is the
+wire's ceiling and the island's eleven channels plus two target registers left room for three; flip the
+arena's `autoAttackToggle` row with `player.state.cell.toggle` instead. The arena's body-pair `heat-ignites`
+and `cold-spreads` interactions are gone: a pair interaction costs capacity squared against the two-million
+work-unit rule budget, so elemental spread between bodies waits for a region-scoped pair primitive; the
+pit and pool still ignite and chill a body that enters them. The dive district's pool is the island's one
+water: a document admits one physical field topology, so the garden's own pond lattice, its `water` row, and
+its fish left with it. The quilt shards under `../shards/` and the file neighbour resolver are landed but the
+island authors no `adjacencies` yet: the seams were sited at the old island's edge and its shards refuse the
+gravity areas and cameras they inherit as basis deltas; re-siting them to the crown's extent is the next step.
+
+## The partition granaries
 
 ## granaries
 
@@ -163,7 +171,7 @@ See [service composition](../../../../Puck.World.Server/ExtensionConfiguration.m
 for projection authority and lifecycle, and the
 [Azure adapter](../../../../Puck.World.Azure/README.md) for query settings and bounds.
 
-# The kart district (`kart.world.json`, alias `kart`)
+## The kart district (`kart.world.json`, alias `kart`)
 
 A closed racing loop: a `curves` row (`kartTrack`, eight knots, constant curvature — an
 exact circle, never control points) traces the lap direction, and `kartCourt` carries a
@@ -229,7 +237,7 @@ discriminating leg negates only the steer sign (`body.fly 1 0 0 1 0 0 5`): the k
 drives the opposite way around the SAME loop, in the SAME time, and never opens even the
 first gate — `kart_gateStage` stays 0 and `kart_lap` never reaches 1 — proving the gates
 discriminate on ORDER, not mere proximity.
-# The jump district
+## The jump district
 
 `modules/jump.world.json` is a course of platforms rising from a starting deck: `jumpCourt` (the one root
 placement every other row parents under, so the island moves the whole district by restating that row's
@@ -307,7 +315,7 @@ then reads `value=1`. A LEFT-Z convention note for whoever authors the next cour
 channel at `yaw=0` moves the body toward WORLD -Z (observed directly with `body.where`, not assumed), so this
 course runs from the arrival deck at `z=+3` out to the trophy at `z=-10` — a course authored the opposite way
 around would need its `forward` sign flipped in any driving script, never the channel itself.
-# The studio district
+## The studio district
 
 `studio.world.json` is a flat stage for character work: a lit floor, a turntable a
 body stands on, a mirror wall that shows the stage's own camera, and a counter a
@@ -371,7 +379,7 @@ island already does) and a `placements.policy.derivedFaceScreens` reservation of
 least 1 for the mirror's face to bind; a host authoring neither still boots the rest
 of the district, but the counter never advances and the mirror shows the no-signal
 card.
-# The arcade
+## The arcade
 
 `modules/arcade.world.json` is the arcade district: two cabinets and a handheld
 on a stand, each booting an authored `puck.cartridge.v1` document from

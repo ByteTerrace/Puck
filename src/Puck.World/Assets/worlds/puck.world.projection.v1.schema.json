@@ -898,7 +898,7 @@
                     "type": "string"
                   },
                   "contentPath": {
-                    "description": "The content file (a cartridge ROM) the machine boots, or empty when the screen is unconfigured \u2014 the binder faults the slot gracefully (no crash, no-signal card) rather than booting.",
+                    "description": "The content the machine boots, resolved against the document\u0027s own directory: a ROM image, or \u2014 when the path ends in CartridgeDocumentSuffix \u2014 an authored puck.cartridge.v1 document the host compiles through the engine\u0027s own forge at bind (Puck.World.WorldScreenMachineEngines.CartridgeCompilers), booting the compiled bytes exactly as it boots a ROM file; the source\u0027s canonical hash and the compiled image\u0027s hash ride the slot beside the file\u0027s own content pin, and screen.state echoes them. A cartridge path on an engine that compiles none refuses at validation by name; a document the forge refuses faults the bind with the forge\u0027s own message. Empty when the screen is unconfigured \u2014 the binder faults the slot gracefully (no crash, no-signal card) rather than booting.",
                     "type": "string"
                   },
                   "options": {
@@ -1490,7 +1490,7 @@
                           "type": "string"
                         },
                         "contentPath": {
-                          "description": "The content file (a cartridge ROM) the machine boots, or empty when the screen is unconfigured \u2014 the binder faults the slot gracefully (no crash, no-signal card) rather than booting.",
+                          "description": "The content the machine boots, resolved against the document\u0027s own directory: a ROM image, or \u2014 when the path ends in CartridgeDocumentSuffix \u2014 an authored puck.cartridge.v1 document the host compiles through the engine\u0027s own forge at bind (Puck.World.WorldScreenMachineEngines.CartridgeCompilers), booting the compiled bytes exactly as it boots a ROM file; the source\u0027s canonical hash and the compiled image\u0027s hash ride the slot beside the file\u0027s own content pin, and screen.state echoes them. A cartridge path on an engine that compiles none refuses at validation by name; a document the forge refuses faults the bind with the forge\u0027s own message. Empty when the screen is unconfigured \u2014 the binder faults the slot gracefully (no crash, no-signal card) rather than booting.",
                           "type": "string"
                         },
                         "options": {
@@ -8493,7 +8493,7 @@
                           "type": "string"
                         },
                         "contentPath": {
-                          "description": "The content file (a cartridge ROM) the machine boots, or empty when the screen is unconfigured \u2014 the binder faults the slot gracefully (no crash, no-signal card) rather than booting.",
+                          "description": "The content the machine boots, resolved against the document\u0027s own directory: a ROM image, or \u2014 when the path ends in CartridgeDocumentSuffix \u2014 an authored puck.cartridge.v1 document the host compiles through the engine\u0027s own forge at bind (Puck.World.WorldScreenMachineEngines.CartridgeCompilers), booting the compiled bytes exactly as it boots a ROM file; the source\u0027s canonical hash and the compiled image\u0027s hash ride the slot beside the file\u0027s own content pin, and screen.state echoes them. A cartridge path on an engine that compiles none refuses at validation by name; a document the forge refuses faults the bind with the forge\u0027s own message. Empty when the screen is unconfigured \u2014 the binder faults the slot gracefully (no crash, no-signal card) rather than booting.",
                           "type": "string"
                         },
                         "options": {
@@ -8923,41 +8923,112 @@
               "null"
             ],
             "items": {
-              "description": "One entry of a placement\u0027s response trait: while When holds against the lattice field at the placement\u0027s own coupled cell, the row\u0027s rendered/collided prototype becomes PrototypeId instead of its currently authored one \u2014 the bridge that lets a placement react to the lattice chemistry under it (a burning tree becomes a charred stump). Absent Respond is today\u0027s behavior exactly: the placement always shows its own authored PrototypeId.",
+              "description": "One entry of a placement\u0027s response trait: while When holds, the row\u0027s rendered/collided prototype becomes PrototypeId instead of its currently authored one \u2014 the bridge that lets a placement react to live simulation state (a burning tree becomes a charred stump; a filled account swaps a granary\u0027s face). Absent Respond is today\u0027s behavior exactly: the placement always shows its own authored PrototypeId.",
               "type": [
                 "object",
                 "null"
               ],
               "properties": {
                 "when": {
-                  "description": "The lattice condition, tested at the placement\u0027s coupled cell.",
+                  "description": "The condition tested every sweep \u2014 a lattice-field read or a state-cell read.",
                   "type": "object",
-                  "properties": {
-                    "field": {
-                      "description": "The field read at the cell.",
-                      "type": "string"
-                    },
-                    "comparison": {
-                      "description": "The comparison.",
-                      "enum": [
-                        "Equal",
-                        "NotEqual",
-                        "Less",
-                        "LessOrEqual",
-                        "Greater",
-                        "GreaterOrEqual"
-                      ]
-                    },
-                    "value": {
-                      "description": "The scalar compared against (literal or state-row reference)."
-                    }
-                  },
                   "required": [
-                    "field",
-                    "comparison",
-                    "value"
+                    "$type"
                   ],
-                  "additionalProperties": false
+                  "anyOf": [
+                    {
+                      "description": "The original lattice-field condition, unchanged from before this union existed: the named field read at the placement\u0027s own coupled cell, compared against a literal or another row\u0027s slot cell.",
+                      "properties": {
+                        "$type": {
+                          "const": "field"
+                        },
+                        "field": {
+                          "description": "The field read at the cell.",
+                          "type": "string"
+                        },
+                        "comparison": {
+                          "description": "The comparison.",
+                          "enum": [
+                            "Equal",
+                            "NotEqual",
+                            "Less",
+                            "LessOrEqual",
+                            "Greater",
+                            "GreaterOrEqual"
+                          ]
+                        },
+                        "value": {
+                          "description": "The scalar compared against (literal or state-row reference) \u2014 the same WorldLatticeScalar grammar a fields.reactions Transform/Expose condition already uses."
+                        }
+                      },
+                      "required": [
+                        "field",
+                        "comparison",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "A state-cell condition: compares State\u0027s cell (its slot cell when Key is absent, else the cell at Key) against Value, or \u2014 when ComparandState is authored instead \u2014 against another declared row\u0027s cell, read live at the same evaluation. Exactly one of Value and ComparandState may be present, the same one-comparand rule CompareState already enforces for a rule\u0027s own gate \u2014 this facet reuses that field convention rather than inventing a second reading of \u0022compare a state cell.\u0022 Independent of the placement\u0027s position, and of whether the document declares a fields section at all.",
+                      "properties": {
+                        "$type": {
+                          "const": "state"
+                        },
+                        "state": {
+                          "description": "The state row compared \u2014 any declared state.world row of a numeric kind (never Text).",
+                          "type": "string"
+                        },
+                        "comparison": {
+                          "description": "The comparison.",
+                          "enum": [
+                            "Equal",
+                            "NotEqual",
+                            "Less",
+                            "LessOrEqual",
+                            "Greater",
+                            "GreaterOrEqual"
+                          ]
+                        },
+                        "value": {
+                          "description": "The literal comparand, or null when ComparandState spells the comparand instead.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "key": {
+                          "description": "The cell inside State, or null for its slot cell. Refused when State is keyed and this is absent, or unkeyed and this is present.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "comparandState": {
+                          "description": "Another declared state.world row, read live and compared instead of Value. Must share State\u0027s cell kind (refused by name otherwise).",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "comparandKey": {
+                          "description": "The cell inside ComparandState, on the same terms as Key. Refused when ComparandState is absent.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "comparison"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
                 },
                 "prototypeId": {
                   "description": "The creation the placement shows/collides as while When holds. Must resolve to a declared, non-animated creation row.",
@@ -9064,6 +9135,53 @@
               "string",
               "null"
             ],
+            "default": null
+          },
+          "deal": {
+            "description": "The placement\u0027s deal facet (see WorldPlacementDeal) \u2014 the row is a template whose instances are dealt from a keyed state row as child placements over its own Distribution region, or null for an ordinary placement. A template renders nothing and collides with nothing itself. Omitted from the wire when null. Requires Distribution; refused together with Inhabit, Attach, Respond, Mirror, and FaceSources.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "row": {
+                "description": "The keyed state.world row whose cells are dealt, of any cell kind. One child per cell, keyed by the cell\u0027s key.",
+                "type": "string"
+              },
+              "variants": {
+                "description": "The optional variant selection: a second keyed row read at the same key, whose cell text (an integer cell spelled as text) selects a prototype from Map; a cell with no entry, or no cell at all, deals the template\u0027s own prototype.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "row": {
+                    "description": "The keyed state.world row read at the dealt cell\u0027s key. May be the dealt row itself.",
+                    "type": "string"
+                  },
+                  "map": {
+                    "description": "Cell text (an integer cell\u0027s value spelled as text) to the Id the child shows. Every value must resolve to a declared, non-animated creation.",
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "row",
+                  "map"
+                ],
+                "additionalProperties": false,
+                "default": null
+              }
+            },
+            "required": [
+              "row"
+            ],
+            "additionalProperties": false,
             "default": null
           }
         },
@@ -12222,7 +12340,7 @@
       ],
       "properties": {
         "rateHz": {
-          "description": "The simulation rate in Hz. Zero is a legal, distinct rate: a resident, non-stepping world \u2014 a static diorama the authoritative server never advances a fixed step for, though it still applies ordered submissions (mutations, session requests, connects/disconnects) through the administrative drain, so a rate-0 world can accept the very write that revives it. At rate 0, a simulation-tick duration authored as a positive value means never \u2014 not zero and not \u0022already expired\u0022 \u2014 since there is no tick mapping for a world that never advances (see CompiledTickDuration, PopulationReconnectGraceTicks). A positive rate must be a divisor of TicksPerSecond (50400) exactly, so Puck.Hosting.EngineTicks.PerRate always derives a whole engine-tick step width \u2014 never truncated, never remainder-carried (WorldDefinitionValidator refuses a non-divisor, naming the nearest valid rates; a negative rate is refused outright, at any magnitude). 45 and 90 Hz \u2014 Steam Deck OLED\u0027s two refresh rates \u2014 both divide 50400 exactly (1120 and 560 engine ticks per step). The engine holds no rate of its own: an authored section states its rate, the standard 240 Hz is authored in Assets/worlds/standard.world.json, and a world authoring no simulation section is a rate-0 resident world. The derived-floor seam. This record is deliberately the one place a follow-on validation pass adds the physics floor (from body size/speed), the interactivity floor (from input latency), the substep-derived contact clamp (contactHertz \u003C= RateHz * n / 8 at substep count n \u2014 it coincides with RateHz / 4 only at n = 2), and the representable band \u2014 none of which is built yet. The clamp\u0027s n is a solver parameter, so its validator arrives with the solver landing that introduces it. A derived floor belongs here, beside the rate it constrains, never as a second section.",
+          "description": "The simulation rate in Hz. Zero is a legal, distinct rate: a resident, non-stepping world \u2014 a static diorama the authoritative server never advances a fixed step for, though it still applies ordered submissions (mutations, session requests, connects/disconnects) through the administrative drain, so a rate-0 world can accept the very write that revives it. At rate 0, a simulation-tick duration authored as a positive value means never \u2014 not zero and not \u0022already expired\u0022 \u2014 since there is no tick mapping for a world that never advances (see CompiledTickDuration, PopulationReconnectGraceTicks). A positive rate must be a divisor of TicksPerSecond (50400) exactly, so Puck.Hosting.EngineTicks.PerRate always derives a whole engine-tick step width \u2014 never truncated, never remainder-carried (WorldDefinitionValidator refuses a non-divisor, naming the nearest valid rates; a negative rate is refused outright, at any magnitude). 45 and 90 Hz \u2014 Steam Deck OLED\u0027s two refresh rates \u2014 both divide 50400 exactly (1120 and 560 engine ticks per step). The engine holds no rate of its own: an authored section states its rate, and a world authoring no simulation section runs at UnauthoredSimulationRateHz \u2014 the distinct rate-0 resident world is reached only by authoring rateHz 0 by name. The derived-floor seam. This record is deliberately the one place a follow-on validation pass adds the physics floor (from body size/speed), the interactivity floor (from input latency), the substep-derived contact clamp (contactHertz \u003C= RateHz * n / 8 at substep count n \u2014 it coincides with RateHz / 4 only at n = 2), and the representable band \u2014 none of which is built yet. The clamp\u0027s n is a solver parameter, so its validator arrives with the solver landing that introduces it. A derived floor belongs here, beside the rate it constrains, never as a second section.",
           "type": "integer"
         }
       },
@@ -13480,6 +13598,10 @@
                                 "null"
                               ],
                               "default": null
+                            },
+                            "deal": {
+                              "$ref": "#/properties/placements/items/properties/deal",
+                              "default": null
                             }
                           },
                           "required": [
@@ -13555,6 +13677,50 @@
                       },
                       "required": [
                         "key"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Writes one fact on the identity a world-addressed body drives under: the body\u0027s cell in the world\u0027s reserved WorldIdentityFactLane row and the identity\u0027s own persisted facts row, together. Exactly one of Value and Expression is authored; a body driving under no owned identity refuses the write rather than minting one.",
+                      "properties": {
+                        "$type": {
+                          "const": "setIdentityFact"
+                        },
+                        "key": {
+                          "description": "The body \u2014 an index, a $cell: indirection, or a bound key.",
+                          "type": "string"
+                        },
+                        "fact": {
+                          "description": "The fact key on the identity\u0027s row.",
+                          "type": "string"
+                        },
+                        "value": {
+                          "description": "The integer literal.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "expression": {
+                          "description": "A bounded integer expression evaluated at fire time.",
+                          "default": null,
+                          "anyOf": [
+                            {
+                              "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, replicationMask(width), repeatBits(pattern, width), rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 4096
+                            },
+                            {
+                              "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/1/properties/left/anyOf/1"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "fact"
                       ],
                       "additionalProperties": false
                     }

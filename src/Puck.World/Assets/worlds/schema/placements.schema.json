@@ -103,6 +103,11 @@
               "null"
             ],
             "default": null
+          },
+          "deal": {
+            "$ref": "./common.schema.json#/$defs/WorldPlacementDeal",
+            "description": "The placement\u0027s deal facet (see WorldPlacementDeal) \u2014 the row is a template whose instances are dealt from a keyed state row as child placements over its own Distribution region, or null for an ordinary placement. A template renders nothing and collides with nothing itself. Omitted from the wire when null. Requires Distribution; refused together with Inhabit, Attach, Respond, Mirror, and FaceSources.",
+            "default": null
           }
         },
         "required": [

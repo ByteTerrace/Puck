@@ -80,6 +80,29 @@
       },
       "additionalProperties": false,
       "default": null
+    },
+    "facts": {
+      "description": "The facts row this identity carries and its capacity, or null for Default.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "state": {
+          "description": "The keyed Int row on the identity\u0027s document holding the facts.",
+          "type": "string"
+        },
+        "capacity": {
+          "description": "How many distinct facts the row holds; a write past it refuses by name.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "state",
+        "capacity"
+      ],
+      "additionalProperties": false,
+      "default": null
     }
   },
   "required": [

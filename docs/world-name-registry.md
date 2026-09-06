@@ -142,15 +142,28 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
-| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.respond[].when.field` | Field | Names | Read | `WorldFieldCondition.Field` |
-| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.respond[].when.value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.respond[].when[state].key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.respond[].when[state].comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.respond[].when[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.board.topology` | Topology | Names | Read | `WorldPlacementBoard.Topology` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.board.occupancy` | State | Names | Action | `WorldPlacementBoard.Occupancy` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.board.turn` | State | Names | Read | `WorldPlacementBoard.Turn` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.board.verdict` | State | Names | Read | `WorldPlacementBoard.Verdict` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.board.move` | State | Names | Read | `WorldPlacementBoard.Move` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.board.plan` | State | Names | Read | `WorldPlacementBoard.Plan` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.deal.row` | State | Names | Read | `WorldPlacementDeal.Row` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `kits.rows[].actions{*}.onPress.effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
 | `kits.rows[].actions{*}.onPress.gate[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
 | `kits.rows[].actions{*}.onPress.gate[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
 | `kits.rows[].actions{*}.onPress.gate[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
@@ -251,15 +264,28 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
-| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.respond[].when.field` | Field | Names | Read | `WorldFieldCondition.Field` |
-| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.respond[].when.value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.respond[].when[state].key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.respond[].when[state].comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.respond[].when[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.board.topology` | Topology | Names | Read | `WorldPlacementBoard.Topology` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.board.occupancy` | State | Names | Action | `WorldPlacementBoard.Occupancy` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.board.turn` | State | Names | Read | `WorldPlacementBoard.Turn` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.board.verdict` | State | Names | Read | `WorldPlacementBoard.Verdict` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.board.move` | State | Names | Read | `WorldPlacementBoard.Move` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.board.plan` | State | Names | Read | `WorldPlacementBoard.Plan` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.deal.row` | State | Names | Read | `WorldPlacementDeal.Row` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `kits.rows[].actions{*}.onRelease.effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
 | `kits.rows[].actions{*}.onRelease.gate[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
 | `kits.rows[].actions{*}.onRelease.gate[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
 | `kits.rows[].actions{*}.onRelease.gate[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
@@ -360,15 +386,28 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
-| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.respond[].when.field` | Field | Names | Read | `WorldFieldCondition.Field` |
-| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.respond[].when.value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.respond[].when[state].key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.respond[].when[state].comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.respond[].when[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.board.topology` | Topology | Names | Read | `WorldPlacementBoard.Topology` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.board.occupancy` | State | Names | Action | `WorldPlacementBoard.Occupancy` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.board.turn` | State | Names | Read | `WorldPlacementBoard.Turn` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.board.verdict` | State | Names | Read | `WorldPlacementBoard.Verdict` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.board.move` | State | Names | Read | `WorldPlacementBoard.Move` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.board.plan` | State | Names | Read | `WorldPlacementBoard.Plan` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.deal.row` | State | Names | Read | `WorldPlacementDeal.Row` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `kits.rows[].actions{*}.onFact[].effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
 | `kits.rows[].actions{*}.onFact[].gate[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
 | `kits.rows[].actions{*}.onFact[].gate[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
 | `kits.rows[].actions{*}.onFact[].gate[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
@@ -395,14 +434,20 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `bindingOverlays[].bindingBar.visible[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `bindingOverlays[].bindingBar.visible[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `bindingOverlays[].bindingBar.visible[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
-| `placements.rows[].respond[].when.field` | Field | Names | Read | `WorldFieldCondition.Field` |
-| `placements.rows[].respond[].when.value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `placements.rows[].respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
+| `placements.rows[].respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `placements.rows[].respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
+| `placements.rows[].respond[].when[state].key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
+| `placements.rows[].respond[].when[state].comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
+| `placements.rows[].respond[].when[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `placements.rows[].board.topology` | Topology | Names | Read | `WorldPlacementBoard.Topology` |
 | `placements.rows[].board.occupancy` | State | Names | Action | `WorldPlacementBoard.Occupancy` |
 | `placements.rows[].board.turn` | State | Names | Read | `WorldPlacementBoard.Turn` |
 | `placements.rows[].board.verdict` | State | Names | Read | `WorldPlacementBoard.Verdict` |
 | `placements.rows[].board.move` | State | Names | Read | `WorldPlacementBoard.Move` |
 | `placements.rows[].board.plan` | State | Names | Read | `WorldPlacementBoard.Plan` |
+| `placements.rows[].deal.row` | State | Names | Read | `WorldPlacementDeal.Row` |
+| `placements.rows[].deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `host.backendRow` | State | Names | Read | `WorldHostDefaults.BackendRow` |
 | `views.seatRig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
 | `views.seatRig.operations[][orbit].pitch` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Pitch` |
@@ -623,15 +668,28 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `rules[].effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `rules[].effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
-| `rules[].effects[][upsertPlacement].placement.respond[].when.field` | Field | Names | Read | `WorldFieldCondition.Field` |
-| `rules[].effects[][upsertPlacement].placement.respond[].when.value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `rules[].effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
+| `rules[].effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `rules[].effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
+| `rules[].effects[][upsertPlacement].placement.respond[].when[state].key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
+| `rules[].effects[][upsertPlacement].placement.respond[].when[state].comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
+| `rules[].effects[][upsertPlacement].placement.respond[].when[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `rules[].effects[][upsertPlacement].placement.board.topology` | Topology | Names | Read | `WorldPlacementBoard.Topology` |
 | `rules[].effects[][upsertPlacement].placement.board.occupancy` | State | Names | Action | `WorldPlacementBoard.Occupancy` |
 | `rules[].effects[][upsertPlacement].placement.board.turn` | State | Names | Read | `WorldPlacementBoard.Turn` |
 | `rules[].effects[][upsertPlacement].placement.board.verdict` | State | Names | Read | `WorldPlacementBoard.Verdict` |
 | `rules[].effects[][upsertPlacement].placement.board.move` | State | Names | Read | `WorldPlacementBoard.Move` |
 | `rules[].effects[][upsertPlacement].placement.board.plan` | State | Names | Read | `WorldPlacementBoard.Plan` |
+| `rules[].effects[][upsertPlacement].placement.deal.row` | State | Names | Read | `WorldPlacementDeal.Row` |
+| `rules[].effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `rules[].effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `rules[].effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
+| `rules[].effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
+| `rules[].effects[][setIdentityFact].expression{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `rules[].effects[][setIdentityFact].expression{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `rules[].effects[][setIdentityFact].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `rules[].effects[][setIdentityFact].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `rules[].effects[][setIdentityFact].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
 | `rules[].gate[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
 | `rules[].gate[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
 | `rules[].gate[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
@@ -739,15 +797,28 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
-| `rules[].decision.options[].effects[][upsertPlacement].placement.respond[].when.field` | Field | Names | Read | `WorldFieldCondition.Field` |
-| `rules[].decision.options[].effects[][upsertPlacement].placement.respond[].when.value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.respond[].when[state].key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.respond[].when[state].comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.respond[].when[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.board.topology` | Topology | Names | Read | `WorldPlacementBoard.Topology` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.board.occupancy` | State | Names | Action | `WorldPlacementBoard.Occupancy` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.board.turn` | State | Names | Read | `WorldPlacementBoard.Turn` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.board.verdict` | State | Names | Read | `WorldPlacementBoard.Verdict` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.board.move` | State | Names | Read | `WorldPlacementBoard.Move` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.board.plan` | State | Names | Read | `WorldPlacementBoard.Plan` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.deal.row` | State | Names | Read | `WorldPlacementDeal.Row` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `rules[].decision.options[].effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `rules[].decision.options[].effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
+| `rules[].decision.options[].effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
+| `rules[].decision.options[].effects[][setIdentityFact].expression{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `rules[].decision.options[].effects[][setIdentityFact].expression{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `rules[].decision.options[].effects[][setIdentityFact].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `rules[].decision.options[].effects[][setIdentityFact].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `rules[].decision.options[].effects[][setIdentityFact].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
 | `rules[].decision.options[].gate[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
 | `rules[].decision.options[].gate[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
 | `rules[].decision.options[].gate[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
@@ -867,15 +938,28 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
-| `rules[].decision.onNoChoice[][upsertPlacement].placement.respond[].when.field` | Field | Names | Read | `WorldFieldCondition.Field` |
-| `rules[].decision.onNoChoice[][upsertPlacement].placement.respond[].when.value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.respond[].when[state].key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.respond[].when[state].comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.respond[].when[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.board.topology` | Topology | Names | Read | `WorldPlacementBoard.Topology` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.board.occupancy` | State | Names | Action | `WorldPlacementBoard.Occupancy` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.board.turn` | State | Names | Read | `WorldPlacementBoard.Turn` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.board.verdict` | State | Names | Read | `WorldPlacementBoard.Verdict` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.board.move` | State | Names | Read | `WorldPlacementBoard.Move` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.board.plan` | State | Names | Read | `WorldPlacementBoard.Plan` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.deal.row` | State | Names | Read | `WorldPlacementDeal.Row` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `rules[].decision.onNoChoice[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `rules[].decision.onNoChoice[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
+| `rules[].decision.onNoChoice[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
+| `rules[].decision.onNoChoice[][setIdentityFact].expression{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `rules[].decision.onNoChoice[][setIdentityFact].expression{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `rules[].decision.onNoChoice[][setIdentityFact].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `rules[].decision.onNoChoice[][setIdentityFact].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `rules[].decision.onNoChoice[][setIdentityFact].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
 | `rules[].bindings[].expression` | State | Expression | Read | `RuleBinding.Expression` |
 | `rules[].bindings[].expression{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
 | `rules[].bindings[].expression{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
@@ -966,15 +1050,28 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
-| `interactions.interactions[].effects[][upsertPlacement].placement.respond[].when.field` | Field | Names | Read | `WorldFieldCondition.Field` |
-| `interactions.interactions[].effects[][upsertPlacement].placement.respond[].when.value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.respond[].when[state].key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.respond[].when[state].comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.respond[].when[state].comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.board.topology` | Topology | Names | Read | `WorldPlacementBoard.Topology` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.board.occupancy` | State | Names | Action | `WorldPlacementBoard.Occupancy` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.board.turn` | State | Names | Read | `WorldPlacementBoard.Turn` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.board.verdict` | State | Names | Read | `WorldPlacementBoard.Verdict` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.board.move` | State | Names | Read | `WorldPlacementBoard.Move` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.board.plan` | State | Names | Read | `WorldPlacementBoard.Plan` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.deal.row` | State | Names | Read | `WorldPlacementDeal.Row` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `interactions.interactions[].effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
+| `interactions.interactions[].effects[][setIdentityFact].key` | State | Key | Read | `WorldEffect.SetIdentityFact.Key` |
+| `interactions.interactions[].effects[][setIdentityFact].expression` | State | Expression | Read | `WorldEffect.SetIdentityFact.Expression` |
+| `interactions.interactions[].effects[][setIdentityFact].expression{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `interactions.interactions[].effects[][setIdentityFact].expression{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `interactions.interactions[].effects[][setIdentityFact].expression{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `interactions.interactions[].effects[][setIdentityFact].expression{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `interactions.interactions[].effects[][setIdentityFact].expression{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
 | `generators[].name` | Generator | Declares |  | `GeneratorRow.Name` |
 | `navigation.domains[].medium` | Field | Names | Read | `WorldNavigationDomain.Medium` |
 | `patterns[].name` | Pattern | Declares |  | `PatternRow.Name` |
@@ -1064,6 +1161,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onPress.effects[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
+| `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `kits.rows[].actions{*}.onPress.gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `kits.rows[].actions{*}.onRelease.effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `kits.rows[].actions{*}.onRelease.effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
@@ -1081,6 +1179,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onRelease.effects[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
+| `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `kits.rows[].actions{*}.onRelease.gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `kits.rows[].actions{*}.onFact[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `kits.rows[].actions{*}.onFact[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
@@ -1098,6 +1197,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onFact[].effects[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
+| `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `kits.rows[].actions{*}.onFact[].gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `kits.rows[].tether.modeState` | `WorldTether.ModeState` | a per-body slot name |
 | `kits.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
@@ -1195,6 +1295,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].effects[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
+| `rules[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `rules[].gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `rules[].decision.options[].name` | `WorldDecisionOption.Name` | an option name is local to its decision |
 | `rules[].decision.options[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
@@ -1213,6 +1314,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].decision.options[].effects[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
+| `rules[].decision.options[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `rules[].decision.options[].gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `rules[].decision.interrupt[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `rules[].decision.onNoChoice[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
@@ -1231,12 +1333,14 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].decision.onNoChoice[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
+| `rules[].decision.onNoChoice[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `rules[].bindings[].name` | `RuleBinding.Name` | a binding name is local to its rule, read as $bind:<name> |
 | `identity.name` | `WorldIdentityDefinition.Name` | an identity display name |
 | `identity.moveSpeedState` | `WorldIdentityDefinition.MoveSpeedState` | an identity-lane slot name |
 | `identity.turnSpeedState` | `WorldIdentityDefinition.TurnSpeedState` | an identity-lane slot name |
 | `identity.controllers[].machineState` | `WorldControllerStateSlots.MachineState` | an identity-lane slot name |
 | `identity.controllers[].deviceState` | `WorldControllerStateSlots.DeviceState` | an identity-lane slot name |
+| `identity.facts.state` | `WorldIdentityFacts.State` | an identity-lane row name |
 | `groups.kinds[].name` | `WorldGroupKind.Name` | a group kind name |
 | `groups.kinds[].roles[].name` | `WorldGroupRole.Name` | a group role name |
 | `groups.kinds[].sharedStateScope` | `WorldGroupKind.SharedStateScope` | a group scope token |
@@ -1259,6 +1363,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `interactions.interactions[].effects[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
+| `interactions.interactions[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `generators[].generator.start` | `StateGenerator.Start` | a context key is local to its generator |
 | `generators[].generator.contexts[].key` | `GeneratorContext.Key` | a context key is local to its generator |
 | `generators[].generator.contexts[].alternatives[].next` | `GeneratorAlternative.Next` | a context key is local to its generator |

@@ -385,7 +385,7 @@
           "type": "string"
         },
         "contentPath": {
-          "description": "The content file (a cartridge ROM) the machine boots, or empty when the screen is unconfigured \u2014 the binder faults the slot gracefully (no crash, no-signal card) rather than booting.",
+          "description": "The content the machine boots, resolved against the document\u0027s own directory: a ROM image, or \u2014 when the path ends in CartridgeDocumentSuffix \u2014 an authored puck.cartridge.v1 document the host compiles through the engine\u0027s own forge at bind (Puck.World.WorldScreenMachineEngines.CartridgeCompilers), booting the compiled bytes exactly as it boots a ROM file; the source\u0027s canonical hash and the compiled image\u0027s hash ride the slot beside the file\u0027s own content pin, and screen.state echoes them. A cartridge path on an engine that compiles none refuses at validation by name; a document the forge refuses faults the bind with the forge\u0027s own message. Empty when the screen is unconfigured \u2014 the binder faults the slot gracefully (no crash, no-signal card) rather than booting.",
           "type": "string"
         },
         "options": {
@@ -6097,10 +6097,12 @@
       ],
       "additionalProperties": false
     },
-    "WorldFieldCondition": {
-      "description": "One per-cell condition of a Transform.",
-      "type": "object",
+    "WorldPlacementResponseConditionFieldCondition": {
+      "description": "The original lattice-field condition, unchanged from before this union existed: the named field read at the placement\u0027s own coupled cell, compared against a literal or another row\u0027s slot cell.",
       "properties": {
+        "$type": {
+          "const": "field"
+        },
         "field": {
           "description": "The field read at the cell.",
           "type": "string"
@@ -6110,7 +6112,7 @@
           "description": "The comparison."
         },
         "value": {
-          "description": "The scalar compared against (literal or state-row reference)."
+          "description": "The scalar compared against (literal or state-row reference) \u2014 the same WorldLatticeScalar grammar a fields.reactions Transform/Expose condition already uses."
         }
       },
       "required": [
@@ -6120,16 +6122,84 @@
       ],
       "additionalProperties": false
     },
+    "WorldPlacementResponseConditionStateCondition": {
+      "description": "A state-cell condition: compares State\u0027s cell (its slot cell when Key is absent, else the cell at Key) against Value, or \u2014 when ComparandState is authored instead \u2014 against another declared row\u0027s cell, read live at the same evaluation. Exactly one of Value and ComparandState may be present, the same one-comparand rule CompareState already enforces for a rule\u0027s own gate \u2014 this facet reuses that field convention rather than inventing a second reading of \u0022compare a state cell.\u0022 Independent of the placement\u0027s position, and of whether the document declares a fields section at all.",
+      "properties": {
+        "$type": {
+          "const": "state"
+        },
+        "state": {
+          "description": "The state row compared \u2014 any declared state.world row of a numeric kind (never Text).",
+          "type": "string"
+        },
+        "comparison": {
+          "$ref": "#/$defs/ActionStateComparison",
+          "description": "The comparison."
+        },
+        "value": {
+          "description": "The literal comparand, or null when ComparandState spells the comparand instead.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "key": {
+          "description": "The cell inside State, or null for its slot cell. Refused when State is keyed and this is absent, or unkeyed and this is present.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "comparandState": {
+          "description": "Another declared state.world row, read live and compared instead of Value. Must share State\u0027s cell kind (refused by name otherwise).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "comparandKey": {
+          "description": "The cell inside ComparandState, on the same terms as Key. Refused when ComparandState is absent.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "state",
+        "comparison"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPlacementResponseCondition": {
+      "description": "The closed union a response entry\u0027s When speaks. Both arms evaluate against the SAME per-tick document the rule frame folds a rule\u0027s writes into before this sweep runs (Server.WorldServer.SweepPlacementResponses runs after EvaluateWorldRules\u0027 own end-of-tick fold), so a cell a rule wrote this tick already reads through StateCondition on the same tick\u0027s sweep.",
+      "type": "object",
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorldPlacementResponseConditionFieldCondition"
+        },
+        {
+          "$ref": "#/$defs/WorldPlacementResponseConditionStateCondition"
+        }
+      ]
+    },
     "WorldPlacementResponse": {
-      "description": "One entry of a placement\u0027s response trait: while When holds against the lattice field at the placement\u0027s own coupled cell, the row\u0027s rendered/collided prototype becomes PrototypeId instead of its currently authored one \u2014 the bridge that lets a placement react to the lattice chemistry under it (a burning tree becomes a charred stump). Absent Respond is today\u0027s behavior exactly: the placement always shows its own authored PrototypeId.",
+      "description": "One entry of a placement\u0027s response trait: while When holds, the row\u0027s rendered/collided prototype becomes PrototypeId instead of its currently authored one \u2014 the bridge that lets a placement react to live simulation state (a burning tree becomes a charred stump; a filled account swaps a granary\u0027s face). Absent Respond is today\u0027s behavior exactly: the placement always shows its own authored PrototypeId.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
         "when": {
-          "$ref": "#/$defs/WorldFieldCondition",
-          "description": "The lattice condition, tested at the placement\u0027s coupled cell."
+          "$ref": "#/$defs/WorldPlacementResponseCondition",
+          "description": "The condition tested every sweep \u2014 a lattice-field read or a state-cell read."
         },
         "prototypeId": {
           "description": "The creation the placement shows/collides as while When holds. Must resolve to a declared, non-animated creation row.",
@@ -6235,6 +6305,56 @@
       ],
       "additionalProperties": false
     },
+    "WorldPlacementDealVariants": {
+      "description": "A deal facet\u0027s variant selection: a keyed row read at the dealt cell\u0027s key, and the map from that cell\u0027s text to the prototype the child is dealt with.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "row": {
+          "description": "The keyed state.world row read at the dealt cell\u0027s key. May be the dealt row itself.",
+          "type": "string"
+        },
+        "map": {
+          "description": "Cell text (an integer cell\u0027s value spelled as text) to the Id the child shows. Every value must resolve to a declared, non-animated creation.",
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "required": [
+        "row",
+        "map"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPlacementDeal": {
+      "description": "A placement\u0027s deal facet: the row is a template whose instances are dealt from a keyed state row, one child placement per cell, laid out over the template\u0027s own Distribution region in cell order. The template itself renders nothing and collides with nothing; its prototype and its Solid/Grip/Region/ Emission facets are what every child is stamped with. A child is an ordinary placement row named \u003Ctemplate\u003E/\u003CcellKey\u003E (ChildId) with Parent naming the template and the region\u0027s dealt offset as its local position, written and removed through ordinary UpsertPlacement/RemovePlacement mutations under WorldPrincipal.World by the per-tick sweep (Server.WorldServer.SweepPlacementDeals), so a dealt instance journals, undoes, replays, and rebuilds colliders through the one placement door.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "row": {
+          "description": "The keyed state.world row whose cells are dealt, of any cell kind. One child per cell, keyed by the cell\u0027s key.",
+          "type": "string"
+        },
+        "variants": {
+          "$ref": "#/$defs/WorldPlacementDealVariants",
+          "description": "The optional variant selection: a second keyed row read at the same key, whose cell text (an integer cell spelled as text) selects a prototype from Map; a cell with no entry, or no cell at all, deals the template\u0027s own prototype.",
+          "default": null
+        }
+      },
+      "required": [
+        "row"
+      ],
+      "additionalProperties": false
+    },
     "WorldPlacement": {
       "description": "One placement instance row \u2014 a creation asset stamped into the world by reference: transform \u002B facets as data, addressed by its stable Id. A placement whose creation carries timeline frames is animated: it replays client-side on the render clock through the reserved dynamic-transform pool (distribution/mirror facets are static-stamp-only and reject on an animated row). A placement carrying an Inhabit facet is a live population body rather than furniture (see WorldPlacementInhabit); its declared creation eyes derive WorldCamera feeds and its declared faces derive screens (both at the delivery boundary, never written to the document).",
       "type": "object",
@@ -6325,6 +6445,11 @@
             "null"
           ],
           "default": null
+        },
+        "deal": {
+          "$ref": "#/$defs/WorldPlacementDeal",
+          "description": "The placement\u0027s deal facet (see WorldPlacementDeal) \u2014 the row is a template whose instances are dealt from a keyed state row as child placements over its own Distribution region, or null for an ordinary placement. A template renders nothing and collides with nothing itself. Omitted from the wire when null. Requires Distribution; refused together with Inhabit, Attach, Respond, Mirror, and FaceSources.",
+          "default": null
         }
       },
       "required": [
@@ -6409,6 +6534,40 @@
       },
       "required": [
         "key"
+      ],
+      "additionalProperties": false
+    },
+    "WorldEffectSetIdentityFact": {
+      "description": "Writes one fact on the identity a world-addressed body drives under: the body\u0027s cell in the world\u0027s reserved WorldIdentityFactLane row and the identity\u0027s own persisted facts row, together. Exactly one of Value and Expression is authored; a body driving under no owned identity refuses the write rather than minting one.",
+      "properties": {
+        "$type": {
+          "const": "setIdentityFact"
+        },
+        "key": {
+          "description": "The body \u2014 an index, a $cell: indirection, or a bound key.",
+          "type": "string"
+        },
+        "fact": {
+          "description": "The fact key on the identity\u0027s row.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The integer literal.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "expression": {
+          "$ref": "#/$defs/ValueExpression",
+          "description": "A bounded integer expression evaluated at fire time.",
+          "default": null
+        }
+      },
+      "required": [
+        "key",
+        "fact"
       ],
       "additionalProperties": false
     },
@@ -6499,6 +6658,9 @@
         },
         {
           "$ref": "#/$defs/WorldEffectPose"
+        },
+        {
+          "$ref": "#/$defs/WorldEffectSetIdentityFact"
         }
       ]
     },
