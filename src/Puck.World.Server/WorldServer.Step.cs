@@ -669,7 +669,14 @@ public sealed partial class WorldServer {
     // Recompiles the rules section and prunes the edge latch to the surviving names. The compiler is called here
     // UNWRAPPED because WorldDefinitionValidator already compiled this exact candidate and refused it if it could
     // not — the same trusted-second-call shape every other derived-state rebuild in Install has.
-    private void RecompileRules(WorldDefinition definition) {
+    //
+    // This is also every install's one derived-board fix-up point: boot, Install, and checkpoint restore all call
+    // this before anything else reads the document, so a hand-authored or restored definition whose derived boards
+    // have drifted from their tokens/codes rows never survives past this call — RecomposeDerivedBoards is a no-op
+    // for the ordinary case where the live mutation pipeline already composed them correctly.
+    private WorldDefinition RecompileRules(WorldDefinition definition) {
+        definition = RecomposeDerivedBoards(definition: definition);
+        m_definition = definition;
         m_tables = CompileTables(definition: definition);
         m_rules = WorldRuleCompiler.CompileAll(definition: definition);
         m_interactions = WorldRuleCompiler.CompileAllInteractions(definition: definition);
@@ -681,6 +688,8 @@ public sealed partial class WorldServer {
         ReconcilePatterns(definition);
         m_search.Rebuild(definition: definition, rules: m_rules, patterns: m_patterns, tables: m_tables);
         m_population.BindFlockAffinities(definition, EvaluateFlockAffinity);
+
+        return definition;
     }
     // The search jobs advance right after the rules, so a job judges the position this tick's rules settled and a
     // finished job's outputs are delivered with the same tick.

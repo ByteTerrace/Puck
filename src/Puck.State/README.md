@@ -55,7 +55,9 @@ Nothing here carries a `World` name — a state library names no world.
   (a second-order follower over a `DynamicsRow`), `StateCycle`/`CycleOutput`
   (a tick-indexed rotation through a symmetry-lattice word), `StateVisibility`/
   `HiddenCells`/`StateKnowledge`/`StateObservation` (observation policy),
-  `StatePhase`/`PhaseGuard` (a guarded submission generation).
+  `StatePhase`/`PhaseGuard` (a guarded submission generation), `StateInverse`
+  (a `cellsOf` row declaring itself the inverse of a keyed token row — see
+  `DerivedBoards`).
 - *Domains:* the `StateDomain` union (`slot`, `keys`, `keysOf`, `cellsOf`,
   `ring`), closed over `Union.cs`' `[Union]` marker.
 - *Topologies:* `LatticeTopology` (`grid`, `ring`, `hex`, `box`, `graph`, `tiling`
@@ -183,7 +185,12 @@ Nothing here carries a `World` name — a state library names no world.
   laid out once by a `FrameLayout` (slot, keyed, board by cell ordinal, ring
   with its cursor; text and field rows read through to their cells). A frame
   copies as one span copy, refuses a key its row lacks, and applies `boardCombine`,
-  `writeSet`, `push`, and `clearEnclosed` densely. `FrameHost` is an `IRuleHost` over a
+  `writeSet`, `push`, and `clearEnclosed` densely. A board declaring `Inverse` is derived,
+  never written directly: `FrameLayout` resolves its tokens/codes row ordinals
+  once, and a frame write to the tokens row recomputes only the moved token's
+  old and new board cells (`DerivedBoards.Compose` is the equivalent
+  whole-document answer a host composes into the candidate at install, so the
+  two never disagree). `FrameHost` is an `IRuleHost` over a
   frame with its own evaluator and latch: a preflight scope is a frame copy,
   an effect arm the library does not own is skipped, and `Judge` evaluates a
   rule array as one tick with every edge closed. `OperandFact.HostOnly`,

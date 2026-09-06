@@ -626,15 +626,69 @@ public sealed partial class WorldServer {
 
         var stateRow = StateRowOf(mutation: mutation);
 
-        return (
-            (stateRow is null) ||
-            WorldStateDocumentValues.TryRefresh(
+        if (
+            (stateRow is not null) &&
+            !WorldStateDocumentValues.TryRefresh(
                 definition: candidate,
                 reason: out reason,
                 refreshed: out candidate,
                 rowName: stateRow
             )
-        );
+        ) {
+            return false;
+        }
+
+        // Every accepted mutation recomposes a derived board's cells from its tokens/codes rows' CURRENT values, so
+        // the candidate this call hands back — the one validation checks and the journal records — already carries
+        // them; a hypothetical evaluation's own frame recomputes the identical answer incrementally instead (see
+        // StateFrame), never through this whole-document pass.
+        candidate = RecomposeDerivedBoards(definition: candidate);
+
+        return true;
+    }
+    // The one recompute a document-level derived board gets: for every CellsOf row declaring Inverse, its cells
+    // become exactly DerivedBoards.Compose's answer over the candidate's OWN current tokens/codes rows — so a
+    // mutation that moves a token, and one that never touches either row, both leave every derived board correct.
+    private static WorldDefinition RecomposeDerivedBoards(WorldDefinition definition) {
+        var rows = definition.State;
+        List<WorldStateRow>? recomposed = null;
+
+        for (var index = 0; (index < rows.Count); index++) {
+            var row = rows[index];
+
+            if ((row.EffectiveDomain is not StateDomain.CellsOf board) || (row.Inverse is not { } inverse)) {
+                continue;
+            }
+            if (WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology) {
+                continue;
+            }
+
+            var derived = DerivedBoards.Compose(rows: rows, inverse: inverse, topology: topology);
+
+            if (SameCells(left: row.Cells, right: derived)) {
+                continue;
+            }
+
+            recomposed ??= new List<WorldStateRow>(collection: rows);
+            recomposed[index] = (row with { Cells = derived });
+        }
+
+        return ((recomposed is null) ? definition : definition.WithWorldState(rows: recomposed));
+    }
+    private static bool SameCells(IReadOnlyList<StateCell>? left, IReadOnlyList<StateCell> right) {
+        var leftCells = (left ?? []);
+
+        if (leftCells.Count != right.Count) {
+            return false;
+        }
+
+        for (var index = 0; (index < leftCells.Count); index++) {
+            if ((leftCells[index].Key != right[index].Key) || (leftCells[index].Value != right[index].Value)) {
+                return false;
+            }
+        }
+
+        return true;
     }
     // The state row a state mutation writes, or null for every other kind — the row whose bound document values
     // TryRefresh re-resolves.
@@ -1384,6 +1438,13 @@ public sealed partial class WorldServer {
                 }
                 return true;
             case WorldMutation.UpsertStateRow m:
+                if (WorldDefinitionRows.FindStateRow(rows: current.State, name: m.Row.Name.Value) is { Inverse: { } existingInverse }) {
+                    candidate = current;
+                    reason = $"state row '{m.Row.Name}' is a derived board (inverse names '{existingInverse.Tokens}'/'{existingInverse.Codes}') — write those rows instead; the engine recomputes '{m.Row.Name}' on install";
+
+                    return false;
+                }
+
                 candidate = current.WithWorldState(rows: Upsert(
                     list: current.State,
                     item: m.Row,
@@ -1418,6 +1479,13 @@ public sealed partial class WorldServer {
                     ) is not { } row) {
                         candidate = current;
                         reason = $"no state row named '{m.Row}' — declare it first with world.row.set state <json>";
+
+                        return false;
+                    }
+
+                    if (row.Inverse is { } inverse) {
+                        candidate = current;
+                        reason = $"state row '{m.Row}' is a derived board (inverse names '{inverse.Tokens}'/'{inverse.Codes}') — write those rows instead; the engine recomputes '{m.Row}' on install";
 
                         return false;
                     }
@@ -1703,6 +1771,13 @@ public sealed partial class WorldServer {
                     ) is not { } row) {
                         candidate = current;
                         reason = $"no state row named '{m.Row}'";
+
+                        return false;
+                    }
+
+                    if (row.Inverse is { } inverse) {
+                        candidate = current;
+                        reason = $"state row '{m.Row}' is a derived board (inverse names '{inverse.Tokens}'/'{inverse.Codes}') — write those rows instead; the engine recomputes '{m.Row}' on install";
 
                         return false;
                     }

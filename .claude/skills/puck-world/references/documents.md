@@ -697,11 +697,27 @@ the tokens, a per-token destination mask, boards ≤ 64 cells) and `count` (slot
 The job relocates every token to every other cell in a `StateFrame` copy of the
 section, judges it with the rules a frame can evaluate (no interaction, no
 decision, no world-only read — `RuleDataflow.ReadsHost`), and accepts when the
-verdict reads `accept` and the turn changed. It restarts when any framed cell
-other than its outputs changes. Quota derives from what the work sheet leaves
-divided by the judge's cost (`nodes` may only lower it); progress hashes and
-checkpoints. `world.search` narrates each job. Sharp edge: a token row whose
-`min` is a cell ordinal is refused — the off-board value must be no cell.
+verdict reads `accept` and the turn changed. This root walk never prunes and
+never skips a candidate, so `legal`/`count` are unaffected by `depth`/`score`.
+It restarts when any framed cell other than its outputs changes. Quota derives
+from what the work sheet leaves divided by the judge's cost (`nodes` may only
+lower it, and a deeper search spends the same quota over more ticks); progress
+hashes and checkpoints. `world.search` narrates each job. Sharp edge: a token
+row whose `min` is a cell ordinal is refused — the off-board value must be no
+cell.
+
+`depth` (default 1) and `score` search deeper: `score` is an infix expression
+(the rule expression grammar, compiled like a rule binding, refused if it
+reads a host-only fact) required once `depth` exceeds one or `best` is
+authored. `best` is a keyed int row receiving `token`/`to`/`score` — the
+deepest completed depth's answer. Iterative-deepening negamax with alpha-beta:
+each accepted root candidate recurses one more ply (negated — the value is
+from the perspective of the side that just moved) while plies remain, else
+`score` evaluates directly; a position with no accepted relocation scores
+`-WorldSearchCapacity.MateScore`. Alpha-beta prunes every ply past the root
+only. The recursion is an explicit stack (one `StateFrame` per ply beyond the
+root), not the call stack, so it suspends at any node across a tick boundary
+and checkpoints byte-for-byte.
 
 ### `navigation` — bounded surface, flight, and medium routes
 
@@ -2418,7 +2434,13 @@ Validate HUD document changes by running the app — see [hud.md](hud.md)'s
 Discrete state shares `state.lattices`: only `Field` creates physical storage;
 `Grid`, `Ring`, and `Hex` compile bounded adjacency. Keep token identity domains,
 ordered zone membership, position attributes, phase progression, and knowledge
-stamps inside the canonical state row converter and authoritative hash. The
+stamps inside the canonical state row converter and authoritative hash. A
+`cellsOf` row's `inverse` trait (`Puck.State.StateInverse`) declares it derived
+from a keyed token row and a codes row rather than authored — the board is
+refused by name at the mutation door and the validator alike, and the engine
+recomposes it from `tokens`/`codes` at compose and install
+(`Puck.State.DerivedBoards.Compose`); a frame recomputes only the moved
+token's two cells. The
 closed transform union is shared by mutations and rule transactions. Readers,
 secret draws, and observation payloads have separate authority/presentation
 semantics; see the owning contract in
