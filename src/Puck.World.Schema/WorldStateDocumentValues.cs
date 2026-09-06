@@ -25,6 +25,10 @@ public static class WorldStateDocumentValues {
     private const int MaxShapeDepth = 64;
     private static readonly ConcurrentDictionary<Type, PropertyInfo[]> PropertyCache = new();
     private static readonly ConcurrentDictionary<Type, Traversal> TraversalCache = new();
+    // The visited set one walk on this thread reuses; a walk takes it out while it runs, so a walk started from
+    // inside another (a resolver that parses a nested document) allocates its own rather than sharing one.
+    [ThreadStatic]
+    private static HashSet<object>? t_seen;
 
     private sealed record Traversal(bool Skip, PropertyInfo[] Properties);
 
@@ -34,6 +38,9 @@ public static class WorldStateDocumentValues {
         Resolve,
         // Report whether a reference is present (any reference, or one naming a sought row), touching nothing.
         Find,
+        // Add every referenced row's name to a set, touching nothing and never stopping early: the one walk a
+        // batch of state writes runs so each member asks a set membership instead of walking the graph again.
+        Collect,
         // Resolve, then drop the reference: the flattening an egress document performs so a receiver that was never
         // handed the state table holds a literal rather than a dangling pointer.
         Flatten,
@@ -64,6 +71,9 @@ public static class WorldStateDocumentValues {
         (type == typeof(DateTimeOffset)) ||
         (type == typeof(Guid)) ||
         (type == typeof(JsonElement)));
+    // Only a walk that can name a refusal builds the diagnostic path; a search or a collection touches nothing and
+    // reports no path, so it never formats one.
+    private static bool BuildsPath(Walk walk) => (walk is Walk.Resolve or Walk.Flatten);
     private static PropertyInfo[] Properties(Type type) => PropertyCache.GetOrAdd(key: type, valueFactory: static type =>
         [.. type.GetProperties(bindingAttr: BindingFlags.Instance | BindingFlags.Public)
             .Where(predicate: static property => (property.CanRead && (property.GetIndexParameters().Length == 0) && !IsDerived(property: property)))]);
@@ -109,6 +119,21 @@ public static class WorldStateDocumentValues {
         }
     }
 
+    private static HashSet<object> RentSeen() {
+        var seen = t_seen;
+
+        if (seen is null) {
+            return new HashSet<object>(comparer: ReferenceEqualityComparer.Instance);
+        }
+
+        t_seen = null;
+
+        return seen;
+    }
+    private static void ReturnSeen(HashSet<object> seen) {
+        seen.Clear();
+        t_seen = seen;
+    }
     private static Traversal Plan(Type type) => TraversalCache.GetOrAdd(key: type, valueFactory: static type => {
         if (!CanContainValue(type: type, path: [], exactType: true)) {
             return new Traversal(Skip: true, Properties: []);
@@ -117,7 +142,7 @@ public static class WorldStateDocumentValues {
             ? []
             : [.. Properties(type: type).Where(predicate: static property => CanContainValue(type: property.PropertyType, path: []))]);
     });
-    private static bool TryVisit(object? value, string path, WorldDefinition definition, Walk walk, string? soughtRow, HashSet<object> seen, bool deferDrawSites, out bool found, out string reason) {
+    private static bool TryVisit(object? value, string path, WorldDefinition definition, Walk walk, string? soughtRow, ISet<string>? collected, HashSet<object> seen, bool deferDrawSites, out bool found, out string reason) {
         found = false;
         reason = string.Empty;
 
@@ -145,6 +170,11 @@ public static class WorldStateDocumentValues {
                     b: soughtRow,
                     comparisonType: StringComparison.Ordinal
                 ));
+                return true;
+            }
+
+            if (walk == Walk.Collect) {
+                collected!.Add(item: row);
                 return true;
             }
 
@@ -228,11 +258,12 @@ public static class WorldStateDocumentValues {
                 if (!TryVisit(
                     definition: definition,
                     found: out var itemFound,
-                    path: walk == Walk.Find ? string.Empty : $"{path}[{index}]",
+                    path: (BuildsPath(walk: walk) ? $"{path}[{index}]" : string.Empty),
                     reason: out reason,
                     seen: seen,
                     deferDrawSites: deferDrawSites,
                     soughtRow: soughtRow,
+                    collected: collected,
                     value: item,
                     walk: walk
                 )) {
@@ -255,9 +286,10 @@ public static class WorldStateDocumentValues {
             }
             if (!TryVisit(
                 value: child,
-                path: walk == Walk.Find ? string.Empty : $"{path}.{char.ToLowerInvariant(c: property.Name[0])}{property.Name[1..]}",
+                path: (BuildsPath(walk: walk) ? $"{path}.{char.ToLowerInvariant(c: property.Name[0])}{property.Name[1..]}" : string.Empty),
                 definition: definition,
                 soughtRow: soughtRow,
+                collected: collected,
                 seen: seen,
                 deferDrawSites: deferDrawSites,
                 found: out var propertyFound,
@@ -281,20 +313,28 @@ public static class WorldStateDocumentValues {
     /// <returns><see langword="true"/> when at least one bound value is present.</returns>
     public static bool HasReference(object graph) {
         ArgumentNullException.ThrowIfNull(argument: graph);
-        return (
-            TryVisit(
-            value: graph,
-            path: "document",
-            definition: null!,
-            walk: Walk.Find,
-            soughtRow: null,
-            seen: new HashSet<object>(comparer: ReferenceEqualityComparer.Instance),
-            deferDrawSites: false,
-            found: out var found,
-            reason: out _
-        ) &&
-            found
-        );
+
+        var seen = RentSeen();
+
+        try {
+            return (
+                TryVisit(
+                value: graph,
+                path: "document",
+                definition: null!,
+                walk: Walk.Find,
+                soughtRow: null,
+                collected: null,
+                seen: seen,
+                deferDrawSites: false,
+                found: out var found,
+                reason: out _
+            ) &&
+                found
+            );
+        } finally {
+            ReturnSeen(seen: seen);
+        }
     }
     /// <summary>Reports whether any retained document-value reference reads <paramref name="rowName"/>.</summary>
     public static bool ReferencesRow(WorldDefinition definition, string rowName) =>
@@ -313,20 +353,28 @@ public static class WorldStateDocumentValues {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: graph);
         ArgumentException.ThrowIfNullOrEmpty(argument: rowName);
-        return (
-            TryVisit(
-            value: graph,
-            path: "definition",
-            definition: definition,
-            walk: Walk.Find,
-            soughtRow: rowName,
-            seen: new HashSet<object>(comparer: ReferenceEqualityComparer.Instance),
-            deferDrawSites: false,
-            found: out var found,
-            reason: out _
-        ) &&
-            found
-        );
+
+        var seen = RentSeen();
+
+        try {
+            return (
+                TryVisit(
+                value: graph,
+                path: "definition",
+                definition: definition,
+                walk: Walk.Find,
+                soughtRow: rowName,
+                collected: null,
+                seen: seen,
+                deferDrawSites: false,
+                found: out var found,
+                reason: out _
+            ) &&
+                found
+            );
+        } finally {
+            ReturnSeen(seen: seen);
+        }
     }
     /// <summary>
     /// Resolves every document-value reference in <paramref name="graph"/> against <paramref name="source"/>'s Text
@@ -344,23 +392,73 @@ public static class WorldStateDocumentValues {
     public static bool TryFlatten(WorldDefinition source, object graph, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: graph);
         ArgumentNullException.ThrowIfNull(argument: source);
-        return TryVisit(
-            value: graph,
-            path: "document",
-            definition: source,
-            walk: Walk.Flatten,
-            soughtRow: null,
-            seen: new HashSet<object>(comparer: ReferenceEqualityComparer.Instance),
-            deferDrawSites: false,
-            found: out _,
-            reason: out reason
+
+        var seen = RentSeen();
+
+        try {
+            return TryVisit(
+                value: graph,
+                path: "document",
+                definition: source,
+                walk: Walk.Flatten,
+                soughtRow: null,
+                collected: null,
+                seen: seen,
+                deferDrawSites: false,
+                found: out _,
+                reason: out reason
+            );
+        } finally {
+            ReturnSeen(seen: seen);
+        }
+    }
+    /// <summary>Adds the name of every state row a retained document-value reference in <paramref name="definition"/>
+    /// names to <paramref name="rows"/>, in one walk.</summary>
+    /// <remarks>A cell write carries a value, never a reference, and references live in the sections around the
+    /// state table, so a batch of cell writes collects this set once and asks each member's row against it, where
+    /// <see cref="ReferencesRow(WorldDefinition, string)"/> would walk the whole graph per member. A member that
+    /// re-declares a row or edits any other section is where the set can change; the caller collects again after
+    /// one.</remarks>
+    /// <param name="definition">The document to walk.</param>
+    /// <param name="rows">The set every referenced row name is added to; existing members are kept.</param>
+    public static void CollectReferencedRows(WorldDefinition definition, ISet<string> rows) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        CollectReferencedRows(
+            graph: definition,
+            rows: rows
         );
+    }
+    /// <summary>Adds the name of every state row a retained document-value reference in <paramref name="graph"/>
+    /// — one section or value holder of a definition — names to <paramref name="rows"/>, in one walk.</summary>
+    /// <param name="graph">The sub-graph to walk.</param>
+    /// <param name="rows">The set every referenced row name is added to; existing members are kept.</param>
+    public static void CollectReferencedRows(object graph, ISet<string> rows) {
+        ArgumentNullException.ThrowIfNull(argument: graph);
+        ArgumentNullException.ThrowIfNull(argument: rows);
+
+        var seen = RentSeen();
+
+        try {
+            _ = TryVisit(
+                value: graph,
+                path: "definition",
+                definition: null!,
+                walk: Walk.Collect,
+                soughtRow: null,
+                collected: rows,
+                seen: seen,
+                deferDrawSites: false,
+                found: out _,
+                reason: out _
+            );
+        } finally {
+            ReturnSeen(seen: seen);
+        }
     }
     /// <summary>
     /// Rehydrates and resolves a fresh candidate after a referenced state row changes, retaining the input object
-    /// unchanged when the row has no consumers. Rehydration is intentional: record <c>with</c> composition shares
-    /// unchanged embedded documents with the live definition, so resolving the candidate's mutable value holders in
-    /// place would leak a rejected mutation into the live world.
+    /// unchanged when the row has no consumers: <see cref="ReferencesRow(WorldDefinition, string)"/> decides, and
+    /// <see cref="TryRehydrate"/> does the work.
     /// </summary>
     public static bool TryRefresh(WorldDefinition definition, string rowName, out WorldDefinition refreshed, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: definition);
@@ -374,6 +472,25 @@ public static class WorldStateDocumentValues {
             reason = string.Empty;
             return true;
         }
+
+        return TryRehydrate(
+            definition: definition,
+            refreshed: out refreshed,
+            reason: out reason
+        );
+    }
+    /// <summary>
+    /// Rehydrates <paramref name="definition"/> through its own serialization and resolves every retained
+    /// document-value reference in the copy against the copy's state cells. Rehydration is intentional: record
+    /// <c>with</c> composition shares unchanged embedded documents with the live definition, so resolving the
+    /// candidate's mutable value holders in place would leak a rejected mutation into the live world.
+    /// </summary>
+    /// <param name="definition">The candidate whose references read a changed row.</param>
+    /// <param name="refreshed">The resolved copy, or <paramref name="definition"/> itself on failure.</param>
+    /// <param name="reason">Why the copy could not be parsed or resolved, on failure.</param>
+    /// <returns><see langword="true"/> when every reference in the copy resolved.</returns>
+    public static bool TryRehydrate(WorldDefinition definition, out WorldDefinition refreshed, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
 
         try {
             refreshed = (JsonSerializer.Deserialize(
@@ -405,16 +522,24 @@ public static class WorldStateDocumentValues {
     /// site.</param>
     public static bool TryResolve(WorldDefinition definition, out string reason, bool deferDrawSites = false) {
         ArgumentNullException.ThrowIfNull(argument: definition);
-        return TryVisit(
-            value: definition,
-            path: "definition",
-            definition: definition,
-            walk: Walk.Resolve,
-            soughtRow: null,
-            seen: new HashSet<object>(comparer: ReferenceEqualityComparer.Instance),
-            deferDrawSites: deferDrawSites,
-            found: out _,
-            reason: out reason
-        );
+
+        var seen = RentSeen();
+
+        try {
+            return TryVisit(
+                value: definition,
+                path: "definition",
+                definition: definition,
+                walk: Walk.Resolve,
+                soughtRow: null,
+                collected: null,
+                seen: seen,
+                deferDrawSites: deferDrawSites,
+                found: out _,
+                reason: out reason
+            );
+        } finally {
+            ReturnSeen(seen: seen);
+        }
     }
 }

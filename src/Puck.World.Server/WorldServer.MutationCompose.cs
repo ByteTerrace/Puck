@@ -189,10 +189,33 @@ public sealed partial class WorldServer {
             return candidate;
         }
 
-        var originalRow = WorldDefinitionRows.FindStateRow(
-            rows: original.State,
-            name: rowName
+        var rebasedRow = RebaseCellTraits(
+            cellKey: cellKey,
+            original: original,
+            originalRow: WorldDefinitionRows.FindStateRow(
+                rows: original.State,
+                name: rowName
+            ),
+            row: row,
+            tick: tick
         );
+
+        return (ReferenceEquals(
+            objA: rebasedRow,
+            objB: row
+        )
+            ? candidate
+            : candidate.WithWorldState(rows: Upsert(
+                list: candidate.State,
+                item: rebasedRow,
+                keyOf: static (WorldStateRow r) => r.Name
+            ))
+        );
+    }
+    // The row-level rebase the mutation-level overload and a batch's workspace share: `row` is the written row as
+    // composed, `originalRow` the same row before the write (null when the write declared it), `cellKey` null for
+    // a whole-row write. Returns `row` itself when nothing it carries needed re-basing.
+    private static WorldStateRow RebaseCellTraits(WorldDefinition original, WorldStateRow? originalRow, WorldStateRow row, string? cellKey, ulong tick) {
         var epoch = unchecked((long)tick);
         var rebasedRow = row;
         var addressesSlot = ((cellKey is null) || string.Equals(
@@ -260,17 +283,7 @@ public sealed partial class WorldServer {
             rebasedRow = (rebasedRow with { Cells = rebasedCells });
         }
 
-        return (ReferenceEquals(
-            objA: rebasedRow,
-            objB: row
-        )
-            ? candidate
-            : candidate.WithWorldState(rows: Upsert(
-                list: candidate.State,
-                item: rebasedRow,
-                keyOf: static (WorldStateRow r) => r.Name
-            ))
-        );
+        return rebasedRow;
     }
     // Rebases ONE cell's Advance/Dynamics trait to `tick`, against the PRE-write `row`/`definition` — the shared
     // body RebaseCellTraits' per-cell loop and RebaseKeyedCellTraits' single-cell arm both perform. Returns null
@@ -715,21 +728,31 @@ public sealed partial class WorldServer {
             return WorldStateDocumentValues.ReferencesRow(definition: candidate, graph: candidate.LookAssignment, rowName: row);
         }
 
-        // A transform, a draw, or a batch touches the rows it names; any one of them bound into the look graph refreshes it.
+        // A transform, a draw, or a batch touches the rows it names; any one of them bound into the look graph
+        // refreshes it. One walk collects what the look graph binds; the touched rows are then set lookups.
         m_touchedRows.Clear();
 
-        if (!TryCollectStateMutationRowNames(mutation: mutation, names: m_touchedRows, reason: out _)) {
+        if (!TryCollectStateMutationRowNames(mutation: mutation, names: m_touchedRows, reason: out _) || (m_touchedRows.Count == 0)) {
+            return false;
+        }
+
+        m_lookReferencedRows.Clear();
+        WorldStateDocumentValues.CollectReferencedRows(graph: candidate.LookAssignment, rows: m_lookReferencedRows);
+
+        if (m_lookReferencedRows.Count == 0) {
             return false;
         }
 
         foreach (var name in m_touchedRows) {
-            if (WorldStateDocumentValues.ReferencesRow(definition: candidate, graph: candidate.LookAssignment, rowName: name)) {
+            if (m_lookReferencedRows.Contains(item: name)) {
                 return true;
             }
         }
 
         return false;
     }
+    // Scratch for the rows the look graph binds; the step is single-threaded, so one set serves every door.
+    private readonly HashSet<string> m_lookReferencedRows = new(comparer: StringComparer.Ordinal);
     private static bool TryComposeCore(WorldDefinition current, WorldMutation mutation, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, CompiledPatterns? patterns = null) {
         reason = string.Empty;
         evictedKey = null;
@@ -833,22 +856,17 @@ public sealed partial class WorldServer {
                 candidate = (current with { PopulationRaw = m.Population });
 
                 return true;
-            // Members compose in order against the running candidate, each re-basing its own cell traits as it would
-            // alone, so a batch installs exactly the document its members would have reached one by one.
-            case WorldMutation.Batch batch: {
-                var folded = current;
-                for (var index = 0; index < batch.Mutations.Count; index++) {
-                    var member = batch.Mutations[index];
-                    if (!TryCompose(current: folded, mutation: member, tick: tick, instanceIdentity: instanceIdentity, candidate: out var next, reason: out reason, evictedKey: out evictedKey, patterns: patterns)) {
-                        candidate = current;
-                        return false;
-                    }
-                    folded = RebaseCellTraits(candidate: next, mutation: member, original: folded, tick: tick);
-                }
-                candidate = folded;
-
-                return true;
-            }
+            case WorldMutation.Batch batch:
+                return TryComposeBatch(
+                    batch: batch,
+                    candidate: out candidate,
+                    current: current,
+                    evictedKey: out evictedKey,
+                    instanceIdentity: instanceIdentity,
+                    reason: out reason,
+                    tick: tick,
+                    patterns: patterns
+                );
             // The field-scoped population and views edits compose against the row AS IT STANDS HERE — the pending
             // candidate — so two console verbs queued in one tick each keep the other's field.
             case WorldMutation.SetPopulationDistribution m:
@@ -1488,340 +1506,46 @@ public sealed partial class WorldServer {
                 candidate = current.WithWorldState(rows: stateRows);
 
                 return true;
-            case WorldMutation.UpsertStateCell m: {
-                    // The ONE door: every row-existence and row-KIND decision this write depends on is asked here, against
-                    // the CANDIDATE this batch has built so far — never at the console verb, which cannot know whether a
-                    // same-batch UpsertStateRow ahead of this one has already declared (or redeclared the kind of) the row
-                    // it names.
-                    if (WorldDefinitionRows.FindStateRow(
-                        rows: current.State,
-                        name: m.Row
-                    ) is not { } row) {
-                        candidate = current;
-                        reason = $"no state row named '{m.Row}' — declare it first with world.row.set state <json>";
+            case WorldMutation.UpsertStateCell m:
+                if (!TryComposeCellUpsert(
+                    composed: out var upsertedRow,
+                    current: current,
+                    evictedKey: out evictedKey,
+                    mutation: m,
+                    reason: out reason,
+                    tick: tick
+                )) {
+                    candidate = current;
 
-                        return false;
-                    }
-
-                    if (row.Inverse is { } inverse) {
-                        candidate = current;
-                        reason = $"state row '{m.Row}' is a derived board (inverse names '{inverse.Tokens}'/'{inverse.Codes}') — write those rows instead; the engine recomputes '{m.Row}' on install";
-
-                        return false;
-                    }
-
-                    if (!CellName.TryParse(
-                        candidate: m.Key,
-                        name: out var cellKey,
-                        reason: out var keyReason
-                    )) {
-                        candidate = current;
-                        reason = $"state row '{m.Row}' cell key '{m.Key}' {keyReason}";
-
-                        return false;
-                    }
-
-                    // Whether THIS write is a text write is a fact of the WRITE, not the row — a text write always
-                    // carries a non-null Text (even ""), a numeric one never does. Asking it this way
-                    // (rather than switching on row.Kind) is what lets a kind-mismatched write refuse BY NAME instead of
-                    // silently composing against the wrong field: a numeric write against a text row would
-                    // otherwise fall into this arm with Text null and overwrite the cell with an empty string.
-                    var isTextWrite = (m.Text is not null);
-
-                    // A TEXT row's cell carries a literal string, never a numeric operand: world.state.cell.set's text
-                    // arm is this shape's ONE ingress, always submitting Kind=Set, so the Add/advance machinery below never applies.
-                    // The whole upsert-or-append-plus-eviction composition (including the reserved-key rule — a text row
-                    // is never a generator, so its only legitimate reserved key is the slot cell) delegates to
-                    // StateCellWriter — the SHARED pure function an owned-identity document write (which has no
-                    // ordered mutation domain of its own) also runs, so the two can never disagree about a victim or a
-                    // reserved-cell refusal. TryComposeTextCell itself refuses BY NAME when row.Kind is not Text, which is
-                    // this arm's ONE check for "a text operand against a numeric/bool row".
-                    // A cycle on a TEXT row: the next token after the one the live cell reads, wrapping; the write
-                    // is then an ordinary text set of that token.
-                    var isTextCycle = ((row.Kind == CellKind.Text) && (m.CycleTokens is { Count: >= 2 }));
-
-                    if (isTextCycle && (m.Kind != WorldDocumentWriteKind.Set)) {
-                        candidate = current;
-                        reason = $"state row '{m.Row}' cell '{m.Key}' cycle needs a set write";
-
-                        return false;
-                    }
-
-                    if (isTextWrite || isTextCycle) {
-                        var textToWrite = m.Text!;
-
-                        if (isTextCycle) {
-                            _ = WorldStateReader.TryRead(
-                                definition: current,
-                                rowName: m.Row,
-                                key: m.Key,
-                                tick: tick,
-                                row: out _,
-                                rawValue: out _,
-                                text: out var currentText
-                            );
-                            textToWrite = NextInCycle(
-                                tokens: m.CycleTokens!,
-                                matches: token => string.Equals(a: token, b: currentText, comparisonType: StringComparison.Ordinal)
-                            );
-                        }
-
-                        if (!StateCellWriter.TryComposeTextCell(
-                            cells: out var textCells,
-                            evictedKey: out evictedKey,
-                            key: cellKey,
-                            reason: out var composeTextReason,
-                            row: row,
-                            text: textToWrite
-                        )) {
-                            candidate = current;
-                            reason = $"state row '{m.Row}' cell '{m.Key}' {composeTextReason}";
-
-                            return false;
-                        }
-
-                        candidate = current.WithWorldState(rows: Upsert(
-                            list: current.State,
-                            item: (row with { Cells = textCells }),
-                            keyOf: static row => row.Name
-                        ));
-
-                        return true;
-                    }
-
-                    // The reverse kind mismatch: a numeric operand against a Text-kind row. This, and the bool+add
-                    // refusal below, are the two kind-dependent REFUSALS the console verb used to ask before submitting —
-                    // moved here so they see the same candidate row the existence check above just resolved, rather than
-                    // whatever the live definition happened to hold at text-submit time.
-                    if (row.Kind == CellKind.Text) {
-                        candidate = current;
-                        reason = $"state row '{m.Row}' cell '{m.Key}' is text-kind and takes a text operand, never a numeric one";
-
-                        return false;
-                    }
-
-                    if (
-                        (m.Kind == WorldDocumentWriteKind.Add) &&
-                        (row.Kind == CellKind.Bool)
-                    ) {
-                        candidate = current;
-                        reason = $"state row '{m.Row}' cell '{m.Key}' — 'add' is refused on a bool-kind row";
-
-                        return false;
-                    }
-
-                    if (
-                        (m.CycleTokens is not null) &&
-                        ((m.CycleTokens.Count < 2) || (m.Kind != WorldDocumentWriteKind.Set))
-                    ) {
-                        candidate = current;
-                        reason = $"state row '{m.Row}' cell '{m.Key}' cycle needs at least two tokens and a set write";
-
-                        return false;
-                    }
-
-                    // The honest encoding for a payload whose SHAPE depends on the row's kind: a console write carries
-                    // the un-interpreted wire token (RawToken) because it cannot know Fixed-vs-Int-vs-Bool before this
-                    // row's kind resolves against the candidate; a caller that already knows the kind (the rule-effect
-                    // engine, which reads the destination row itself before submitting) carries the resolved Value
-                    // directly. See WorldMutation.UpsertStateCell.RawToken's remarks.
-                    long operand;
-
-                    if (m.CycleTokens is { Count: >= 2 } cycleTokens) {
-                        // A cycle on a numeric row: every token must parse against THIS row's kind; the operand is the
-                        // token after the one the live value equals (wrapping), else the first. The live value is the
-                        // same read every gate and binding runs, so an advancing row cycles from what a reader sees.
-                        var parsed = new long[cycleTokens.Count];
-
-                        for (var index = 0; (index < parsed.Length); index++) {
-                            if (!StateCellWriter.TryParseNumericToken(
-                                kind: row.Kind,
-                                token: cycleTokens[index],
-                                value: out parsed[index],
-                                reason: out var cycleReason
-                            )) {
-                                candidate = current;
-                                reason = $"state row '{m.Row}' cell '{m.Key}' {cycleReason}";
-
-                                return false;
-                            }
-                        }
-
-                        _ = WorldStateReader.TryRead(
-                            definition: current,
-                            rowName: m.Row,
-                            key: m.Key,
-                            tick: tick,
-                            row: out _,
-                            rawValue: out var live,
-                            text: out _
-                        );
-                        var at = Array.IndexOf(
-                            array: parsed,
-                            value: (live ?? long.MinValue)
-                        );
-
-                        operand = parsed[((at < 0)
-                            ? 0
-                            : ((at + 1) % parsed.Length))];
-                    } else if (m.RawToken is { } rawToken) {
-                        if (!StateCellWriter.TryParseNumericToken(
-                            kind: row.Kind,
-                            token: rawToken,
-                            value: out operand,
-                            reason: out var tokenReason
-                        )) {
-                            candidate = current;
-                            reason = $"state row '{m.Row}' cell '{m.Key}' {tokenReason}";
-
-                            return false;
-                        }
-                    } else {
-                        operand = m.Value;
-                    }
-
-                    // The Add operand comes from WorldStateReader — the SAME read every gate, binding and read-back runs —
-                    // rather than from the stored cell. On an ORDINARY row the two are the same value, so this arm keeps
-                    // the read-modify-write-onto-the-base behaviour it always had. On an ADVANCING row they differ, and
-                    // the live value is the right operand: the stored cell there is a BASE the row has been accumulating
-                    // away from, so adding to it would silently discard every unit gained since the epoch (a regen row
-                    // sitting at a live 41 taking a -10 would land on -10, not 31). Add means "add to what a reader
-                    // sees"; RebaseCellTraits then makes that sum the new base and starts the accumulation again from
-                    // this tick, so the row keeps advancing from the value the author just composed.
-                    _ = WorldStateReader.TryRead(
-                        definition: current,
-                        rowName: m.Row,
-                        key: m.Key,
-                        tick: tick,
-                        row: out var addendRow,
-                        rawValue: out var addend,
-                        text: out _
-                    );
-
-                    // A cycling cell is the one exception: its stored value is a PHASE and its live value the rotation
-                    // the trait carried that phase to, so an add turns the phase by the operand rather than baking the
-                    // tick's rotation into it (which would double the turn on the next read).
-                    if (
-                        (addendRow is not null) &&
-                        CellName.TryParse(candidate: m.Key, name: out var addendKey, reason: out _) &&
-                        (StateRows.FindCell(cells: addendRow.Cells, key: addendKey) is { } phaseCell) &&
-                        ((phaseCell.Cycle is not null) || ((phaseCell.Key == WorldStateRow.SlotKey) && (addendRow.Cycle is not null)))
-                    ) {
-                        addend = phaseCell.Value;
-                    }
-
-                    long value;
-
-                    try {
-                        value = ((m.Kind == WorldDocumentWriteKind.Add)
-                            ? checked(((addend ?? 0L) + operand))
-                            : operand
-                        );
-                    } catch (OverflowException) {
-                        candidate = current;
-                        reason = $"state row '{m.Row}' cell '{m.Key}' overflowed";
-
-                        return false;
-                    }
-
-                    // The engine-minted-cell rule, asked at the VERB so the operator reads why the cell they just typed
-                    // was refused rather than a whole-document validation error. Same code, not a second reading: the
-                    // document walk (boot, every mutation, every undo-replay entry) calls the identical
-                    // StateReservedCells rule, so the two can never disagree about which reserved keys a row mints.
-                    if (!StateReservedCells.TryValidateReservedCell(
-                        key: cellKey,
-                        reason: out var reservedReason,
-                        row: row
-                    )) {
-                        candidate = current;
-                        reason = $"state row '{m.Row}' cell '{m.Key}' {reservedReason}";
-
-                        return false;
-                    }
-
-                    // UpsertStateCell carries only a scalar VALUE — a cell's own advance rate, dynamics reference or
-                    // cycle are authored only through a whole-row UpsertStateRow — so a base-value write here
-                    // preserves whatever the existing cell already declared rather than silently deleting it;
-                    // RebaseCellTraits (below TryCompose) then re-bases the preserved advance/dynamics trait to this
-                    // tick, exactly as it already does for a row-level trait's slot cell. A cycle is never rebased:
-                    // its stored value is the phase, so the write itself is the whole operation.
-                    var existingCell = StateRows.FindCell(
-                        cells: row.Cells,
-                        key: cellKey
-                    );
-                    var existingAdvance = existingCell?.Advance;
-                    var existingDynamics = existingCell?.Dynamics;
-                    var existingCycle = existingCell?.Cycle;
-                    var isNewKey = !StateCellWriter.ContainsKey(
-                        cells: (row.Cells ?? []),
-                        key: cellKey
-                    );
-                    var cells = Upsert(
-                        list: (row.Cells ?? []),
-                        item: new StateCell(
-                            Key: cellKey,
-                            Value: value,
-                            Advance: existingAdvance,
-                            Dynamics: existingDynamics,
-                            Cycle: existingCycle,
-                            Visibility: existingCell?.Visibility,
-                            Observation: existingCell?.Observation
-                        ),
-                        keyOf: static (StateCell cell) => cell.Key
-                    );
-
-                    cells = StateCellWriter.ApplyEviction(
-                        addedNewKey: isNewKey,
-                        cells: cells,
-                        evictedKey: out evictedKey,
-                        row: row
-                    );
-                    candidate = current.WithWorldState(rows: Upsert(
-                        list: current.State,
-                        item: (row with { Cells = cells }),
-                        keyOf: static row => row.Name
-                    ));
-
-                    return true;
+                    return false;
                 }
-            case WorldMutation.RemoveStateCell m: {
-                    if (WorldDefinitionRows.FindStateRow(
-                        rows: current.State,
-                        name: m.Row
-                    ) is not { } row) {
-                        candidate = current;
-                        reason = $"no state row named '{m.Row}'";
 
-                        return false;
-                    }
+                candidate = current.WithWorldState(rows: Upsert(
+                    list: current.State,
+                    item: upsertedRow,
+                    keyOf: static row => row.Name
+                ));
 
-                    if (row.Inverse is { } inverse) {
-                        candidate = current;
-                        reason = $"state row '{m.Row}' is a derived board (inverse names '{inverse.Tokens}'/'{inverse.Codes}') — write those rows instead; the engine recomputes '{m.Row}' on install";
+                return true;
+            case WorldMutation.RemoveStateCell m:
+                if (!TryComposeCellRemove(
+                    composed: out var trimmedRow,
+                    current: current,
+                    mutation: m,
+                    reason: out reason
+                )) {
+                    candidate = current;
 
-                        return false;
-                    }
-
-                    if (!Remove(
-                        list: (row.Cells ?? []),
-                        key: m.Key,
-                        keyOf: static (StateCell cell) => cell.Key,
-                        result: out var cells
-                    )) {
-                        candidate = current;
-                        reason = $"state row '{m.Row}' has no cell keyed '{m.Key}'";
-
-                        return false;
-                    }
-
-                    candidate = current.WithWorldState(rows: Upsert(
-                        list: current.State,
-                        item: (row with { Cells = cells }),
-                        keyOf: static row => row.Name
-                    ));
-
-                    return true;
+                    return false;
                 }
+
+                candidate = current.WithWorldState(rows: Upsert(
+                    list: current.State,
+                    item: trimmedRow,
+                    keyOf: static row => row.Name
+                ));
+
+                return true;
             case WorldMutation.SetInputHold m:
                 // The mutation's own wire shape is the COMPILED (ticks) form — the addon-mutation ABI's raw-ticks
                 // contract, unchanged — but InputHold itself stores the AUTHORED (seconds) shape (see its remarks), so

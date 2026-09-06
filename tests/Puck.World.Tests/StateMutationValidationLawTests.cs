@@ -118,14 +118,12 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
         Assert.Contains(expectedSubstring: "is duplicated", actualString: wholeDocumentReason);
     }
     // Charges the calling thread only: the suite runs tests in parallel, so a process-wide counter would fold a
-    // sibling test into this window. The bound sits well under whole-document validation (about 970 KiB per
-    // mutation on this fixture) and above what the compose, journal, and echo of one mutation cost today. The
-    // denominator is rule-written CELLS, not journal entries, so a tick that folds many effects into one entry
-    // does not divide by a shrinking count and hide the improvement this law pins. A real deal spends most of its
-    // ticks on ONE or TWO cells apiece (a card-by-card sequence, not a burst), so the per-install pipeline's own
-    // fixed cost for a document this size still dominates the average — CellsFoldIntoOneInstallUnderFourKiBPerCell
-    // below isolates the fold's OWN saving on a tick that writes many cells at once, where that fixed cost is
-    // amortized across enough cells to reach the tighter bound.
+    // sibling test into this window. The denominator is rule-written cells, not journal entries, so a tick that
+    // folds many effects into one entry does not divide by a shrinking count and hide what this law pins. A real
+    // deal spends most of its ticks on one or two cells apiece, and its transfers take the cross-row path, which
+    // replays the tick's queued members one by one for every cross-row effect, so the per-install pipeline's own
+    // fixed cost for a document this size still dominates the average — CellsFoldIntoOneInstallWithBoundedPerCellCost
+    // below isolates the batch compose's own cost on a tick that writes many cells at once.
     [Fact]
     public void KlondikeDealAllocatesFarLessThanWholeDocumentValidation() {
         using var fixture = Fixtures.FreshServer(definition: Game(game: "solitaireKlondike"));
@@ -147,19 +145,13 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
 
         output.WriteLine(message: $"solitaireKlondike deal: {cells} rule-written cells, {allocated} bytes allocated, {perCell:F0} bytes/cell");
 
-        Assert.True(condition: (perCell < (56 * 1024)), userMessage: $"expected under 56 KiB per rule-written cell; measured {perCell:F0} bytes/cell over {cells} cells");
+        Assert.True(condition: (perCell < (20 * 1024)), userMessage: $"expected under 20 KiB per rule-written cell; measured {perCell:F0} bytes/cell over {cells} cells");
     }
     // A tick whose rule writes many independent cells through separate top-level effects (never a transaction —
-    // proving the fold applies to ordinary standalone effects too) folds into ONE install: one admission, one
-    // touched-row validation, one journal entry, one delivery. The per-cell cost still exceeds the 4 KiB the
-    // frame's own write path costs, because WorldMutation.Batch's compose (WorldServer.MutationCompose.cs, off
-    // limits to this task) folds its own way — one WorldServer.TryCompose per member — and TryCompose's wrapper
-    // calls WorldStateDocumentValues.TryRefresh (Puck.World.Schema, outside this task's file list) once per
-    // member; TryRefresh's own reflection walk over the whole document graph, checking whether ANYTHING is bound
-    // to the touched row, costs about 19.5 KiB regardless of the answer — paid per BATCH MEMBER, not per tick.
-    // Closing that gap needs TryRefresh (or a sibling) to check a SET of touched rows in one walk, which is its
-    // own change against a shared, reflection-based, everything-consumes-it traversal — correctly out of scope
-    // here. The bound below is the honest, measured result of Task A's own fold (one install, not thirty-two).
+    // proving the fold applies to ordinary standalone effects too) folds into one install: one admission, one
+    // touched-row validation, one journal entry, one delivery, and one batch compose that copies the row list and
+    // the definition once and walks the document graph once for the rows anything is bound to. The bound holds
+    // the whole tick — rule evaluation, the frame, the fold, validation, journal, echo — to under 4 KiB per cell.
     [Fact]
     public void CellsFoldIntoOneInstallWithBoundedPerCellCost() {
         const int rowCount = 32;
@@ -189,7 +181,7 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
 
         output.WriteLine(message: $"{rowCount} independent cells, one tick: {installs} install, {allocated} bytes allocated, {perCell:F0} bytes/cell");
 
-        Assert.True(condition: (perCell < (40 * 1024)), userMessage: $"expected under 40 KiB per rule-written cell; measured {perCell:F0} bytes/cell over {cells} cells");
+        Assert.True(condition: (perCell < (4 * 1024)), userMessage: $"expected under 4 KiB per rule-written cell; measured {perCell:F0} bytes/cell over {cells} cells");
     }
     private static int CountCells(WorldMutation mutation) => (mutation is WorldMutation.Batch batch ? batch.Mutations.Sum(selector: CountCells) : 1);
 

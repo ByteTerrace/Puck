@@ -1412,7 +1412,11 @@ The resolver caches traversal metadata by runtime type and omits branches whose
 sealed types cannot contain bound values. It still reads current document contents
 on every walk, including mutable collections and polymorphic members. Reference
 searches do not construct diagnostic paths; resolution and flattening retain their
-named error paths. The traversal cases live in
+named error paths. Every walk reuses one visited set per thread.
+`CollectReferencedRows` names every referenced row in one walk, and
+`TryRehydrate` is the rehydrate-and-resolve half of `TryRefresh`, so a server
+batch walks once and rehydrates only the members whose rows the walk named. The
+traversal cases live in
 `tests/Puck.World.Schema.Tests/WorldStateDocumentValuesLawTests.cs`.
 
 **Reserved `$` names are ENGINE-MINTED ONLY.** A `$`-prefixed ROW name is refused

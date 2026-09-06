@@ -114,16 +114,20 @@ removal inside one transaction; the tick's own installed result is correct
 either way, since the fold always replays the full ordered list from the
 tick's true starting document.
 
-`WorldMutation.Batch`'s own compose still runs one `TryCompose` per member
-(unchanged, `WorldServer.MutationCompose.cs`), and `TryCompose`'s wrapper
-calls `WorldStateDocumentValues.TryRefresh` (`Puck.World.Schema`) once per
-member — a reflection walk over the whole document graph checking whether
-anything is bound to the touched row, costing several KiB regardless of the
-answer. That is why a tick's fold reaches one journal entry and one
-delivery, but not the theoretical floor of one document compose: closing
-that remaining gap needs `TryRefresh` (or a sibling) to check a set of
-touched rows in one walk, a change against a shared traversal every document
-load and save also runs, correctly out of scope here.
+`WorldMutation.Batch` composes as one edit
+(`WorldServer.MutationCompose.Batch.cs`). A cell write or removal lands in a
+workspace — one copy of the row list under one definition, which every such
+member writes in place — while a member of any other kind composes through
+its own arm and the next cell write opens a fresh workspace over its result.
+The document-value refresh runs against one referenced-row set per batch
+(`WorldStateDocumentValues.CollectReferencedRows`), collected on the first
+state member and reused until a member that can add or drop a reference (a
+whole-row write, an edit to another section) drops it; a member whose row is
+in the set rehydrates (`WorldStateDocumentValues.TryRehydrate`) exactly where
+a one-by-one compose would. A batch installs the same document its members
+reach one by one, a member that reads a row an earlier member wrote included
+(`tests/Puck.World.Tests/BatchComposeLawTests.cs`), and one refused member
+refuses the whole batch.
 
 ## Local flock steering
 
