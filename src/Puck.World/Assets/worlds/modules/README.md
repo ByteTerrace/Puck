@@ -196,3 +196,81 @@ discriminating leg negates only the steer sign (`body.fly 1 0 0 1 0 0 5`): the k
 drives the opposite way around the SAME loop, in the SAME time, and never opens even the
 first gate — `kart_gateStage` stays 0 and `kart_lap` never reaches 1 — proving the gates
 discriminate on ORDER, not mere proximity.
+# The jump district
+
+`modules/jump.world.json` is a course of platforms rising from a starting deck: `jumpCourt` (the one root
+placement every other row parents under, so the island moves the whole district by restating that row's
+position and yaw alone), four stepped platforms and a wall panel climbing away from it, a trophy floating
+in open air off to one side, and a wide catch net well below the whole course. The `vaulter` kit is the
+district's own move-set on today's holds vocabulary (`Puck.World.Schema.WorldHold`): a `ledge` hold (a
+steep overhang band, cone `[112, 150]`) and a `wall` hold (cone `[65, 110]`, narrower than the walker's
+`[60, 120]` at the island level) both release on the `jump` channel exactly as the walker's own wall hold
+does; `ground` and `air` holds carry the walker's fall/rise arc, and BOTH additionally carry `thrust: 0.6`
+on the `MoveUp` role — a hover-assist a plain walker does not have, present so a seat (or `body.fly`, the
+canary's own verification path) can climb the course under sustained vertical input instead of chaining
+jumps, and left in for play as the district's own feel. `jump` (a double-jump, `jumpCounter` capped at 2,
+resetting on `Grounded`) is bound the same way the shipped walker's own jump is.
+
+## What a district module CANNOT do today — properties do not survive an aliased import
+
+The brief's own wording called for "a trophy placement with a region and an interaction whose Edge effect
+writes `reached`" — the generalized `properties` + `interactions` (`WorldInteractionCoOccurrence.Region`)
+primitive `puck.world.json`'s own `wren`/`hound` rows already use. That primitive DOES NOT survive
+composition under a NON-EMPTY import alias, and this module is always imported aliased (`{"document": "…",
+"as": "jump"}` — the island does this for every district). The mechanism (`WorldNameRegistry.cs`,
+`WorldModuleNamespace.cs`) prefixes a module's OWN declared `state` row names with `<alias>_` on import and
+rewrites every registered reference to match — including `WorldInteraction.Left`/`Right` — but
+`WorldPropertyRegistrySection.Names` is one of the many members `WorldNameRegistry.Exclusions` deliberately
+leaves unprefixed ("property names are the properties section's own namespace"). A property's own backing
+row (a keyed `int` `state` row of the identical name, per `WorldPropertyRegistrySection`'s own contract) DOES
+get the alias prefix like any other declared state row, so after import the declared row is named
+`jump_vaulter` while `properties.names` still reads `["vaulter"]` and the interaction's `left` reference has
+followed the row to `jump_vaulter` too — three spellings that no longer agree, and
+`WorldDefinitionValidator`'s `ValidateProperties`/interaction PropertyUnknown checks correctly refuse the
+mismatch. This was reproduced directly (`puck registry`/`WorldNameRegistry.cs` need no edit to see it —
+author the property + interaction exactly as `puck.world.json` does, import the module under any alias, and
+the composed document is refused at boot) and is a genuine gap in the module system, not a mistake in this
+district's authoring — every future district that wants a property-tagged region interaction on an
+ALIASED import hits the identical refusal. It is out of this module's file list to fix (`WorldNameRegistry.cs`
+is shared, edited by other tasks for their own new name sites) and is recorded here so the next district
+that reaches for `properties` under an alias does not re-derive it from a boot refusal.
+
+`reached` and `falls` are therefore plain (non-keyed) `int` rows, each written by an ordinary `rules` entry
+reading the reserved `$region:<placementId>` occupancy count directly (`Puck.World.Schema.WorldRuleFacts.RegionPrefix`
+— no `properties` section, no `interactions` section, entirely self-contained under any alias): `jumpTrophyReached`
+sets `reached` to `1` the tick the trophy's region count crosses above zero (`mode: "Edge"`), and
+`jumpFallsCounter` adds one to `falls` the same way whenever a body enters the wide net below the course.
+Neither is keyed by which body triggered it — the region-occupancy read is an aggregate count, not a
+per-body attribution — so "reached" answers "has ANY body reached the trophy", not "which seat's". A design
+that needs the latter needs the `properties` gap above closed first.
+
+## Kit and placement names are NOT alias-prefixed either
+
+Unlike `state`/`rules`/`tables`/`patterns`/`topologies`/`generators`/`fields`/`dynamics` row names, a kit's
+own name (`WorldKit.Name`), a placement's id (`WorldPlacement.Id`), a spawn point's id (`WorldSpawnPoint.Id`),
+and a navigation domain's name are ALSO in `WorldNameRegistry.Exclusions` — composing this module under an
+alias leaves `vaulter`, `jumpCourt`, `jump-arrival`, and `jumpSurface` exactly as authored, never
+`jump_vaulter`/`jump_jumpCourt`/etc. This is why the module contract's own naming convention
+(`<alias>Court`, `<alias>-arrival`) is a hand-authored discipline rather than something the engine derives:
+these names are a global flat namespace across every import, and a host references them bare regardless of
+which alias it imported the module under. A host's own `bodies.seatSpawns`/`defaultSeatKit` therefore name
+`jump-arrival`/`vaulter` verbatim; only a `world.state`/rule/exports reference to `reached`/`falls` needs the
+alias prefix (`jump_reached`/`jump_falls`).
+
+## Verifying headless
+
+`tests/Puck.World.Canaries/jump-trophy/host.world.json` is a minimal `standard.basis.json`-based world that
+imports `modules/jump.world.json` under alias `jump` and spawns its one local seat on `jump-arrival` with
+the `vaulter` kit — the same shape a future island import uses. Drive it directly:
+
+```text
+dotnet run --project src/Puck.World -c Release -- --headless --state-dir <tmp> \
+  --world tests/Puck.World.Canaries/jump-trophy/host.world.json < tests/Puck.World.Canaries/jump-trophy/positive.script.txt
+```
+
+`body.fly 0.65 0.30 0.22 0 0 0 4.5` (forward/strafe/up channels, no yaw/pitch/roll, 4.5 simulated seconds)
+carries the seat clear of every platform's solid geometry into the trophy's region; `world.state jump_reached`
+then reads `value=1`. A LEFT-Z convention note for whoever authors the next course: a Bipolar `forward`
+channel at `yaw=0` moves the body toward WORLD -Z (observed directly with `body.where`, not assumed), so this
+course runs from the arrival deck at `z=+3` out to the trophy at `z=-10` — a course authored the opposite way
+around would need its `forward` sign flipped in any driving script, never the channel itself.

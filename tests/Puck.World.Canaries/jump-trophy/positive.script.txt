@@ -1,0 +1,7 @@
+# Positive leg: a seat starts on the jump district's deck (bodies.seatSpawns places it at jump_jump-arrival) and
+# flies a diagonal course clear of the platform geometry straight to the trophy's region — proving the district's
+# jumpTrophyReached rule (an Edge-triggered $region:jumpTrophy read) writes jump_reached to 1.
+world.wait 5
+body.fly 0.65 0.30 0.22 0 0 0 4.5
+world.wait 150
+world.state jump_reached

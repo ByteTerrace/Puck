@@ -1,0 +1,6 @@
+# Discriminating leg: the SAME course, SAME heading, but the flight ends well short of the trophy's region — proving
+# jump_reached is not a spuriously-always-set echo: a flight that never enters the trophy's region never sets it.
+world.wait 5
+body.fly 0.65 0.30 0.22 0 0 0 1.5
+world.wait 60
+world.state jump_reached

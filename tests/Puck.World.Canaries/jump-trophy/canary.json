@@ -1,0 +1,34 @@
+{
+  "id": "jump-trophy",
+  "title": "The jump district's trophy region writes jump.reached for the body that touches it",
+  "binding": "Both legs boot a minimal host that imports modules/jump.world.json under alias 'jump' and spawns the local seat on jump_jump-arrival with the jump_vaulter kit. The positive leg flies the seat on a straight diagonal clear of every platform's solid geometry into the trophy's region and reads jump_reached, which the jumpTrophyReached rule (an Edge-mode compareState over the reserved $region:jumpTrophy occupancy read) sets to 1 the tick the region's occupancy crosses zero. The discriminating leg drives the identical heading for a third of the flight time, well short of the trophy's 1.2-unit region, and reads jump_reached again — proving the flag is written on actual contact rather than echoed unconditionally.",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 8,
+  "timeoutSeconds": 30,
+  "fixtures": [],
+  "positive": {
+    "world": "host.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "body.fly", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "trophy-touched", "stream": "stdout", "match": "contains", "text": "'jump_reached' kind=int nonNegative=true value=1", "present": true },
+      { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  },
+  "discriminating": {
+    "world": "host.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "body.fly", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "trophy-not-touched", "stream": "stdout", "match": "contains", "text": "'jump_reached' kind=int nonNegative=true value=0", "present": true },
+      { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  }
+}
