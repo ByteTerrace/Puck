@@ -111,7 +111,13 @@ slice is skipped entirely — bit-identical to evaluating it, never an
 approximation. Smooth/chamfer/subtraction/intersection/Xor blends, and any
 instance holding `PushField`/`PopField` or a bare `Onion`/`Dilate`, are never
 culled, since their compose can depend on a candidate farther than the current
-best. The cull needs no opt-in: it inspects whatever instances the caller
+best. Nor is an instance culled unless the instruction right after it (if any)
+is `ResetPoint`: skipping an instance also skips its own point-transform
+chain, so the interpreter's local position and distance scale would otherwise
+carry through unchanged from before the instance instead of what the
+instance's own transforms would have left them as — safe only when a
+following `ResetPoint` discards that value before anything reads it. The cull
+needs no opt-in: it inspects whatever instances the caller
 declared, and does nothing when there are none — `WorldSolidField`, below, does
 not currently call `BeginInstance`/`Instance` for its placements, so today it
 declares zero instances and this cull has no effect on the shipped world's

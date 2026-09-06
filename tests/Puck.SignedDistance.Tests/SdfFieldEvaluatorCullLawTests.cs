@@ -298,6 +298,101 @@ public sealed class SdfFieldEvaluatorCullLawTests {
         return new SdfFieldEvaluator(program: builder.Build());
     }
 
+    // Reproduces the case IsPureUnionInstance alone does not exclude: an instance whose body carries no leading
+    // ResetPoint (legal — BeginInstance imposes no such requirement), immediately followed by a world-set
+    // instruction that also has no leading ResetPoint and so depends on whatever local position/scale the
+    // instance's own Translate would have left behind. Builds the identical instruction sequence two ways: `culled`
+    // opens the far instance with BeginInstance/EndInstance so the evaluator's cull may act on it, `unwrapped` emits
+    // the same instructions with no instance metadata at all, so nothing is ever skipped. A cull that fires here
+    // without accounting for the point-state carry would leave `culled`'s trailing sphere reading a stale local
+    // position and answer differently from `unwrapped`.
+    private static (SdfFieldEvaluator Culled, SdfFieldEvaluator Unwrapped) BuildLeakyFrameFixture() {
+        var culledBuilder = new SdfProgramBuilder();
+        var unwrappedBuilder = new SdfProgramBuilder();
+        var material = culledBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = unwrappedBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        void EmitNear(SdfProgramBuilder builder) {
+            _ = builder.ResetPoint();
+            _ = builder.Translate(offset: new Vector3(5f, 0f, 0f));
+            _ = builder.Sphere(
+                blend: SdfBlendOp.Union,
+                material: material,
+                radius: 0.1f
+            );
+        }
+
+        EmitNear(builder: culledBuilder);
+        EmitNear(builder: unwrappedBuilder);
+
+        void EmitFarBodyNoReset(SdfProgramBuilder builder) {
+            _ = builder.Translate(offset: new Vector3(1f, 0f, 0f));
+            _ = builder.Sphere(
+                blend: SdfBlendOp.Union,
+                material: material,
+                radius: 0.5f
+            );
+        }
+
+        _ = culledBuilder.BeginInstance(
+            boundCenter: new Vector3(100f, 0f, 0f),
+            boundRadius: 1f
+        );
+        EmitFarBodyNoReset(builder: culledBuilder);
+        _ = culledBuilder.EndInstance();
+        EmitFarBodyNoReset(builder: unwrappedBuilder);
+
+        void EmitTrailingNoReset(SdfProgramBuilder builder) {
+            _ = builder.Sphere(
+                blend: SdfBlendOp.Union,
+                material: material,
+                radius: 0.5f
+            );
+        }
+
+        EmitTrailingNoReset(builder: culledBuilder);
+        EmitTrailingNoReset(builder: unwrappedBuilder);
+
+        return (
+            new SdfFieldEvaluator(program: culledBuilder.Build()),
+            new SdfFieldEvaluator(program: unwrappedBuilder.Build())
+        );
+    }
+
+    [Fact]
+    public void CullNeverFiresWhenTheFollowingInstructionIsNotAResetPoint() {
+        var (culled, unwrapped) = BuildLeakyFrameFixture();
+        var position = Position(
+            x: 5.0,
+            y: 0.0,
+            z: 0.0
+        );
+        var culledFound = culled.TryDistance(
+            distance: out var culledDistance,
+            material: out var culledMaterial,
+            position: position
+        );
+        var unwrappedFound = unwrapped.TryDistance(
+            distance: out var unwrappedDistance,
+            material: out var unwrappedMaterial,
+            position: position
+        );
+
+        Assert.Equal(
+            expected: unwrappedFound,
+            actual: culledFound
+        );
+        Assert.Equal(
+            expected: unwrappedDistance,
+            actual: culledDistance
+        );
+        Assert.Equal(
+            expected: unwrappedMaterial,
+            actual: culledMaterial
+        );
+    }
+
     [Fact]
     public void CullSkipsFarInstancesInsteadOfEvaluatingEveryShapeInThem() {
         const int InstanceCount = 4000;

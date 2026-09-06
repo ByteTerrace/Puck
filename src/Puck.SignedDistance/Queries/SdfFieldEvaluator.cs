@@ -29,14 +29,17 @@ namespace Puck.SignedDistance.Queries;
 // disqualifying instruction's op or shape, rather than silently constructing an evaluator that would answer wrong
 // for part of the program.
 //
-// THE INSTANCE CULL (TryDistance, BuildCullBounds/IsPureUnionInstance/CanCullInstance): a program instance whose
-// whole compose chain is a plain SdfBlendOp.Union carries a conservative world-space sphere bound (SdfInstanceRange,
-// the same bound the GPU beam prepass tile-culls with); TryDistance skips such an instance's instruction slice
-// whenever that bound proves it cannot beat the running best-so-far distance. Exact-by-construction — the skip
-// changes no returned distance, material, or gradient — because a hard union can only ever lower the accumulator,
-// never raise it. Smooth/chamfer/subtraction/intersection/Xor blends, and any instance containing a PushField/
-// PopField or a bare Onion/Dilate, are never culled: their compose can depend on a candidate farther than the
-// current best, which a bound-only skip cannot reproduce bit-for-bit.
+// THE INSTANCE CULL (TryDistance, BuildCullBounds/IsPureUnionInstance/LeavesLocalFrameClean/CanCullInstance): a
+// program instance whose whole compose chain is a plain SdfBlendOp.Union carries a conservative world-space sphere
+// bound (SdfInstanceRange, the same bound the GPU beam prepass tile-culls with); TryDistance skips such an
+// instance's instruction slice whenever that bound proves it cannot beat the running best-so-far distance.
+// Exact-by-construction — the skip changes no returned distance, material, or gradient — because a hard union can
+// only ever lower the accumulator, never raise it. Smooth/chamfer/subtraction/intersection/Xor blends, and any
+// instance containing a PushField/PopField or a bare Onion/Dilate, are never culled: their compose can depend on a
+// candidate farther than the current best, which a bound-only skip cannot reproduce bit-for-bit. Nor is an instance
+// culled unless the instruction right after it (if any) is ResetPoint: skipping an instance also skips its own
+// point-transform chain, so localPosition/distanceScale carry through unchanged from before the instance, and only
+// a following ResetPoint discards that carried-through value before anything reads it.
 public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // SDF_FAR_DISTANCE (sdf-vm.hlsli): the accumulator's seed value — "nothing found yet," farther than any real
     // program's geometry, so the first SHAPE candidate always wins the initial compose.
@@ -334,8 +337,9 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         return compiled;
     }
     // Builds this evaluator's exact cull table: one conservative world-space bound per instance whose whole compose
-    // chain is a hard union (IsPureUnionInstance) — the only shape a bound-only skip is provably bit-identical to
-    // full evaluation for (see CanCullInstance's remarks). A program with no such instance yields an empty table.
+    // chain is a hard union (IsPureUnionInstance) AND whose skip cannot corrupt what runs after it
+    // (LeavesLocalFrameClean) — the only shape a bound-only skip is provably bit-identical to full evaluation for
+    // (see CanCullInstance's remarks). A program with no such instance yields an empty table.
     private static CullBound[] BuildCullBounds(SdfProgram program) {
         var instances = program.Instances;
         var instructions = program.Instructions;
@@ -347,6 +351,10 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             if (
                 instance.IsDynamic ||
                 !IsPureUnionInstance(
+                    instance: instance,
+                    instructions: instructions
+                ) ||
+                !LeavesLocalFrameClean(
                     instance: instance,
                     instructions: instructions
                 )
@@ -417,6 +425,15 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
         return true;
     }
+    // Skipping an instance's slice skips its own ResetPoint/Translate/Rotate/Scale/Repeat/... chain too, so
+    // localPosition and distanceScale carry through the skip exactly as they stood before the instance, not as the
+    // instance's own transforms would have left them. That is harmless to the instance's own candidates (never the
+    // union's winner, by CanCullInstance's bound), but only safe for whatever runs after the skip when the very next
+    // instruction is SdfOp.ResetPoint: it is the only op that overwrites localPosition/distanceScale outright rather
+    // than folding the carried-through value in, so it is the only op that can absorb an arbitrary skip. An instance
+    // ending at the program's own end has no following instruction to see the wrong local frame.
+    private static bool LeavesLocalFrameClean(SdfInstanceRange instance, IReadOnlyList<SdfInstruction> instructions) =>
+        ((instance.End >= instructions.Count) || (instructions[instance.End].Op == SdfOp.ResetPoint));
     // === The blend accumulator (KEEP IN SYNC with mapCore's shared blend tail + blendShape/blendSmoothUnion) ===========
     // Mirrors the shader's semantics EXACTLY, including op order effects: the material winner is resolved from the
     // PRE-blend (current, candidate) pair using the SAME strict compares a SHAPE or a POP_FIELD candidate gets, then
