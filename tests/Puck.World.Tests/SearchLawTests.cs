@@ -31,11 +31,11 @@ public sealed class SearchLawTests {
         var state = loaded!.StateRaw!;
         var rows = new List<WorldStateRow>(state.World ?? []) {
             new(CellName.Parse("legal"), CellKind.Int, Capacity: 32, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
-            new(CellName.Parse("legalCount"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+            new(CellName.Parse("counts"), CellKind.Int, Capacity: 32, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
         };
         var definition = loaded with {
             StateRaw = state with { World = rows },
-            SearchRaw = new WorldSearchSection(Jobs: [new WorldSearchRow(Name: "moves", Tokens: "pieceCell", Board: "board", Legal: "legal", Count: "legalCount")]),
+            SearchRaw = new WorldSearchSection(Jobs: [new WorldSearchRow(Name: "moves", Tokens: "pieceCell", Board: "board", Legal: "legal", Counts: "counts")]),
         };
 
         Assert.True(WorldDefinitionValidator.TryValidateLocally(definition, out var invalid), invalid);
@@ -71,7 +71,7 @@ public sealed class SearchLawTests {
         Assert.True(status.Done, $"the job did not finish: {status}");
         Assert.True(status.NodesPerTick >= 1, status.ToString());
         Assert.Equal(20L, status.Count);
-        Assert.Equal(20L, Cell(fixture, "legalCount", WorldStateRow.SlotKey.Value));
+        Assert.Equal(20L, Row(fixture, "counts").Cells!.Sum(c => c.Value));
 
         var codes = Row(fixture, "pieceCode").Cells!;
         var total = 0;
@@ -345,7 +345,7 @@ public sealed class SearchLawTests {
                 new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
                 new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
                 new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
-                new WorldStateRow(CellName.Parse("count"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
             ],
             Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 3, Depth: 1)]
         );
@@ -359,7 +359,7 @@ public sealed class SearchLawTests {
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
                 new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict",
-                    Shapes: [new WorldSearchShape.Promote(Codes: "pieceCode", To: [2L, 3L])], Legal: "legal", Count: "count"),
+                    Shapes: [new WorldSearchShape.Promote(Codes: "pieceCode", To: [2L, 3L])], Legal: "legal", Counts: "counts"),
             ]),
         };
 
@@ -392,7 +392,7 @@ public sealed class SearchLawTests {
                 new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
                 new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
                 new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("cardZone"))),
-                new WorldStateRow(CellName.Parse("count"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("cardZone"))),
             ],
             Lattices: [new LatticeTopology.Grid("zones", new DocumentVector3(0, 0, 0), 1, Width: 3, Depth: 1)]
         );
@@ -406,7 +406,7 @@ public sealed class SearchLawTests {
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
                 new WorldSearchRow(Name: "search", Tokens: "cardZone", Board: "pile", Turn: "turn", Verdict: "verdict",
-                    Shapes: [new WorldSearchShape.Relocate(Displace: false)], Legal: "legal", Count: "count"),
+                    Shapes: [new WorldSearchShape.Relocate(Displace: false)], Legal: "legal", Counts: "counts"),
             ]),
         };
 
@@ -451,7 +451,7 @@ public sealed class SearchLawTests {
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
                 new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict", Depth: 1,
-                    Outcome: "pieceCell[a] == 3 ? 1000 : (pieceCell[a] == 1 ? -1000 : 0)", Best: "best", Iterations: iterations, Nodes: nodes),
+                    Score: "pieceCell[a] == 3 ? 1000 : (pieceCell[a] == 1 ? -1000 : 0)", Method: WorldSearchMethod.Tree, Best: "best", Iterations: iterations, Nodes: nodes),
             ]),
         };
 
@@ -534,7 +534,7 @@ public sealed class SearchLawTests {
                 new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
                 new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
                 new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
-                new WorldStateRow(CellName.Parse("count"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
             ],
             Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 4, Depth: 1)]
         );
@@ -548,7 +548,7 @@ public sealed class SearchLawTests {
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
                 new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict",
-                    Shapes: [new WorldSearchShape.Drop()], Legal: "legal", Count: "count"),
+                    Shapes: [new WorldSearchShape.Drop()], Legal: "legal", Counts: "counts"),
             ]),
         };
 
@@ -565,7 +565,7 @@ public sealed class SearchLawTests {
 
         Assert.True(status.Done, status.ToString());
         Assert.Equal(3L, status.Count);
-        Assert.Equal(3L, Cell(fixture, "count", WorldStateRow.SlotKey.Value));
+        Assert.Equal(3L, Cell(fixture, "counts", "a"));
         Assert.Equal((1L << 0) | (1L << 1) | (1L << 3), Cell(fixture, "legal", "a"));
         Assert.Equal(0L, Cell(fixture, "legal", "b"));
     }
@@ -581,7 +581,7 @@ public sealed class SearchLawTests {
                 new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
                 new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
                 new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
-                new WorldStateRow(CellName.Parse("count"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
             ],
             Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 5, Depth: 1)]
         );
@@ -599,7 +599,7 @@ public sealed class SearchLawTests {
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
                 new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict",
-                    Shapes: [new WorldSearchShape.Jump(Over: ["E"])], Legal: "legal", Count: "count"),
+                    Shapes: [new WorldSearchShape.Jump(Over: ["E"])], Legal: "legal", Counts: "counts"),
             ]),
         };
 
@@ -631,7 +631,7 @@ public sealed class SearchLawTests {
                 new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
                 new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
                 new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
-                new WorldStateRow(CellName.Parse("count"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
             ],
             Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 4, Depth: 1)]
         );
@@ -649,7 +649,7 @@ public sealed class SearchLawTests {
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
                 new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict",
-                    Shapes: [new WorldSearchShape.Relocate(Displace: displace)], Legal: "legal", Count: "count"),
+                    Shapes: [new WorldSearchShape.Relocate(Displace: displace)], Legal: "legal", Counts: "counts"),
             ]),
         };
 
@@ -747,7 +747,7 @@ public sealed class SearchLawTests {
                 new WorldStateRow(CellName.Parse("turn"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
                 new WorldStateRow(CellName.Parse("verdict"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
                 new WorldStateRow(CellName.Parse("legal"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
-                new WorldStateRow(CellName.Parse("count"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 0L)]),
+                new WorldStateRow(CellName.Parse("counts"), CellKind.Int, Capacity: 4, Domain: new StateDomain.KeysOf(CellName.Parse("pieceCell"))),
             ],
             Lattices: [new LatticeTopology.Grid("board", new DocumentVector3(0, 0, 0), 1, Width: 4, Depth: 1)]
         );
@@ -761,7 +761,7 @@ public sealed class SearchLawTests {
             ],
             SearchRaw = new WorldSearchSection(Jobs: [
                 new WorldSearchRow(Name: "search", Tokens: "pieceCell", Board: "board", Turn: "turn", Verdict: "verdict",
-                    Shapes: [new WorldSearchShape.Relocate(Displace: true), new WorldSearchShape.Drop()], Legal: "legal", Count: "count", Nodes: nodes),
+                    Shapes: [new WorldSearchShape.Relocate(Displace: true), new WorldSearchShape.Drop()], Legal: "legal", Counts: "counts", Nodes: nodes),
             ]),
         };
 

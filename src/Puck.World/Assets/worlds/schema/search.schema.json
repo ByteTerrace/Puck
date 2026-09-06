@@ -45,11 +45,6 @@
             ],
             "default": null
           },
-          "accept": {
-            "description": "The verdict value that accepts a relocation.",
-            "type": "integer",
-            "default": 1
-          },
           "shapes": {
             "description": "The candidate shapes the walk enumerates, in declared order, ahead of token and target/direction; absent or empty, the one default shape (Relocate, displace: true).",
             "type": [
@@ -163,14 +158,6 @@
             ],
             "default": null
           },
-          "count": {
-            "description": "A slot row receiving how many relocations were accepted.",
-            "type": [
-              "string",
-              "null"
-            ],
-            "default": null
-          },
           "reach": {
             "description": "An integer board row over the same topology as Board receiving, at 1, the cells Held\u0027s named token may reach and, at its own empty value, every other cell; unlike Legal, works for a board of any size. Authored together with Held.",
             "type": [
@@ -224,16 +211,16 @@
             ],
             "default": null
           },
-          "outcome": {
-            "description": "An infix expression read at a position no candidate leaves or at the depth cap, from the perspective of the side that just moved; a job with one tree-searches (UCB1 selection, one judge per node, playouts drawn from the job\u0027s own seed) instead of negamaxing a score, and the two exclude each other.",
-            "type": [
-              "string",
-              "null"
+          "method": {
+            "description": "How plies are compared by the score: Negamax to the depth cap, or Tree, which reads the score where no candidate is accepted or at the cap.",
+            "enum": [
+              "Negamax",
+              "Tree"
             ],
-            "default": null
+            "default": "Negamax"
           },
           "iterations": {
-            "description": "How many tree iterations an outcome job runs before it lands the most-visited root move.",
+            "description": "How many tree iterations a Tree job runs before it lands.",
             "type": "integer",
             "default": 256
           }

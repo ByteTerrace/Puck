@@ -76,12 +76,12 @@ internal sealed partial class WorldSearchRuntime {
             Wide = ((plan.Row.Reach is not null) ? new long[tokenCapacity * WideWordsPerToken(cellCount: plan.Topology.CellCount)] : null);
             Levels = BuildLevels(depth: plan.Depth, layout: layout, rows: rows);
 
-            if (plan.Score is not null) {
+            if ((plan.Score is not null) && (plan.Method == WorldSearchMethod.Negamax)) {
                 TtKey = new ulong[WorldSearchCapacity.TranspositionEntries];
                 TtValue = new long[WorldSearchCapacity.TranspositionEntries];
                 TtMeta = new long[WorldSearchCapacity.TranspositionEntries];
             }
-            if (plan.Outcome is not null) {
+            if (plan.Method == WorldSearchMethod.Tree) {
                 var nodes = WorldSearchCapacity.TreeNodes;
 
                 TreeParent = new int[nodes];
@@ -608,8 +608,8 @@ internal sealed partial class WorldSearchRuntime {
             status[index] = new WorldSearchStatus(
                 Name: job.Plan.Row.Name, Running: job.Running, Done: job.Done, Token: job.Token, Tokens: job.Legal.Length, Target: job.Target,
                 Cells: job.Plan.Topology.CellCount, Count: job.Count, Nodes: job.Nodes, NodesPerTick: job.Plan.Nodes, JudgeCost: job.Plan.JudgeCost, JudgeRules: m_judge.Length,
-                HasScore: (job.Plan.Score is not null), Depth: job.Plan.Depth, PassDepth: job.PassDepth, BestScore: job.Best, BestToken: job.BestToken, BestTarget: job.BestTarget,
-                HasOutcome: (job.Plan.Outcome is not null), Iteration: job.Iteration, Iterations: job.Plan.Iterations
+                HasScore: ((job.Plan.Score is not null) && (job.Plan.Method == WorldSearchMethod.Negamax)), Depth: job.Plan.Depth, PassDepth: job.PassDepth, BestScore: job.Best, BestToken: job.BestToken, BestTarget: job.BestTarget,
+                HasOutcome: (job.Plan.Method == WorldSearchMethod.Tree), Iteration: job.Iteration, Iterations: job.Plan.Iterations
             );
         }
 
@@ -640,7 +640,6 @@ internal sealed partial class WorldSearchRuntime {
         foreach (var job in m_jobs) {
             if (
                 string.Equals(a: job.Plan.Row.Legal, b: name, comparisonType: StringComparison.Ordinal) ||
-                string.Equals(a: job.Plan.Row.Count, b: name, comparisonType: StringComparison.Ordinal) ||
                 string.Equals(a: job.Plan.Row.Reach, b: name, comparisonType: StringComparison.Ordinal) ||
                 string.Equals(a: job.Plan.Row.Counts, b: name, comparisonType: StringComparison.Ordinal) ||
                 string.Equals(a: job.Plan.Best, b: name, comparisonType: StringComparison.Ordinal)

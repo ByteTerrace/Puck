@@ -20,9 +20,6 @@ internal sealed partial class WorldSearchRuntime {
                 m_outputs.Add(item: new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.World, Row: counts, Key: tokenCells[index].Key.Value, Value: job.Counts[index], Kind: WorldDocumentWriteKind.Set));
             }
         }
-        if (plan.Row.Count is { } count) {
-            m_outputs.Add(item: new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.World, Row: count, Key: StateRow.SlotKey.Value, Value: job.Count, Kind: WorldDocumentWriteKind.Set));
-        }
         if (plan.Row.Best is { } best) {
             m_outputs.Add(item: new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.World, Row: best, Key: "token", Value: job.BestToken, Kind: WorldDocumentWriteKind.Set));
             m_outputs.Add(item: new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.World, Row: best, Key: "to", Value: job.BestTarget, Kind: WorldDocumentWriteKind.Set));

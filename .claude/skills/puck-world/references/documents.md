@@ -691,8 +691,8 @@ or box — never `fromCreation`) and `bodyContact: solid`.
 
 `WorldSearch.cs` owns `search.jobs`. A job names `tokens` (keyed int row, values
 are cells of `board`; a non-cell value is off the board) and `board`; `turn`/
-`verdict` derive from the tabletop board binding over `board` unless authored;
-`accept` is the accepting verdict value (1).
+`verdict` derive from the tabletop board binding over `board` unless authored, as does the
+accepting verdict value (the binding's `accept`, else 1).
 
 `shapes` names the candidate shapes the walk enumerates, ahead of token and
 target/direction; absent, the one default `relocate` (`displace: true`) this
@@ -709,7 +709,7 @@ not searched). A job with a score keeps a transposition table (`WorldSearchCapac
 slots keyed by the frame hash) that rides the checkpoint and hash.
 
 Outputs: `legal` (int row keyed by the tokens, a per-token destination mask,
-boards ≤ 64 cells) and `count` (slot). `reach`/`held`/`counts` work for a board
+boards ≤ 64 cells). `reach`/`held`/`counts` work for a board
 of any size: `reach` (int board over `board`'s topology) is painted 1 at every
 cell `held` (int slot, the token's ordinal in `tokens`) may reach, empty
 elsewhere — out of range paints nothing — and `counts` (int row keyed by the
@@ -738,9 +738,9 @@ each accepted root candidate recurses one more ply (negated — the value is
 from the perspective of the side that just moved) while plies remain, else
 `score` evaluates directly; a position with no accepted relocation scores
 `-WorldSearchCapacity.MateScore`. Alpha-beta prunes every ply past the root
-only. `outcome` (exclusive with `score`) tree-searches instead: `iterations` rounds of UCB1 over a
+only. `method: tree` searches the same `score` by UCB1 instead: `iterations` rounds over a
 `WorldSearchCapacity.TreeNodes` pool, playouts drawn from a SplitMix64 stream seeded by the job's stamp, the
-outcome read from the mover's side at a dead end or the `depth` cap, landing the most-visited root move. The recursion is an explicit stack (one `StateFrame` per ply beyond the
+score read from the mover's side at a dead end or the `depth` cap, landing the most-visited root move. The recursion is an explicit stack (one `StateFrame` per ply beyond the
 root), not the call stack, so it suspends at any node across a tick boundary
 and checkpoints byte-for-byte.
 

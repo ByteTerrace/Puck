@@ -2331,8 +2331,9 @@ document's own rules. A job names `tokens` (a keyed integer row whose values
 are the cells of `board` its tokens stand on; a value that is no cell is a
 token off the board, which the job leaves alone) and `board` (an integer board
 over a discrete topology). Its `turn` and `verdict` slot rows derive from the
-tabletop board binding anchoring `board` unless authored; `accept` (default 1)
-is the verdict value that accepts a candidate.
+tabletop board binding anchoring `board` unless authored, and so does the
+verdict value that accepts a candidate — the binding's `accept`, or 1 without
+one.
 
 `shapes` declares the candidate shapes the walk enumerates, ahead of token and
 target/direction — absent or empty, the one default `relocate` shape with
@@ -2361,8 +2362,7 @@ a pile is several tokens on one cell — pile order is not searched.
 
 Outputs are ordinary rows the job writes when it finishes: `legal`, an integer
 row keyed by the tokens receiving per token the mask of cells it may reach
-(boards of at most 64 cells), and `count`, a slot receiving how many
-candidates were accepted. `reach` and `counts` work for a board of any size:
+(boards of at most 64 cells). `reach` and `counts` work for a board of any size:
 `reach`, an integer board over the same topology as `board`, is painted with 1
 at every cell the token `held` names (its ordinal in `tokens`) may reach and
 its own empty value everywhere else — a value of `held` out of range paints
@@ -2383,8 +2383,8 @@ uprightness, quiescence). A candidate is accepted when the verdict reads
 section. The job restarts whenever any framed cell other than its own outputs
 changes, so a settling piece restarts it every tick until the board rests.
 This root walk is unconditional and exhaustive — it never prunes and never
-skips a candidate whose geometry is valid — so `legal`/`count`/`reach`/`counts`
-are the same whether or not the job searches deeper.
+skips a candidate whose geometry is valid — so `legal`/`reach`/`counts` are the
+same whether or not the job searches deeper.
 
 `depth` (default 1) and `score` ask what a position beyond the immediate ply is
 worth. `score` is an infix expression, in the rule expression grammar,
@@ -2414,19 +2414,18 @@ cursor, window, and best-so-far, plus the ply's own frame values). Depth
 completes before landing: the running best is overwritten every pass, so
 whatever it holds when the final depth finishes is that depth's answer.
 
-`outcome` is the other algorithm, for a game with no score to compare plies
-by: an infix expression read at a position no candidate leaves, or at the
-`depth` cap, from the perspective of the side that just moved. A job with an
-outcome tree-searches after its root walk: `iterations` (default 256) rounds of
-UCB1 selection from the root, expansion that judges every candidate of the
-leaf once and keeps the accepted ones as children (a pool of
+`method` picks how plies are compared by the one `score`: `negamax` (the
+default, above) or `tree`, for a game whose score is only a terminal outcome.
+A `tree` job tree-searches after its root walk: `iterations` (default 256)
+rounds of UCB1 selection from the root, expansion that judges every candidate
+of the leaf once and keeps the accepted ones as children (a pool of
 `WorldSearchCapacity.TreeNodes`), a playout that draws candidates from the
 job's own SplitMix64 stream seeded by its stamp — never an RNG in simulation
-state — until nothing is accepted or the depth cap, and a fold of the outcome
-back along the path with alternating sign; it lands the most-visited root
-move in `best` with the mean outcome as `score`. One judge is one node of the
-quota here too, and the whole tree, path, frames, and seed ride the checkpoint
-and hash. `score` and `outcome` exclude each other.
+state — until nothing is accepted or the depth cap, then the score read there
+from the side that just moved and folded back along the path with alternating
+sign; it lands the most-visited root move in `best` with the mean score. One
+judge is one node of the quota here too, and the whole tree, path, frames, and
+seed ride the checkpoint and hash.
 
 Work derives: one judge run costs the sum of the frame-evaluable rules'
 work-sheet lines, and the per-tick node quota is what `RuleCapacity.

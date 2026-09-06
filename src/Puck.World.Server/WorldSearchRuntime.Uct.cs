@@ -3,12 +3,12 @@ using Puck.Maths;
 namespace Puck.World.Server;
 
 internal sealed partial class WorldSearchRuntime {
-    // The tree search a job with an outcome runs once its root walk has landed legal/count: a bounded node pool over
+    // The tree search a job with the tree method runs once its root walk has landed: a bounded node pool over
     // the base position, one judge per node of budget, resumable at any phase. Selection descends by UCB1 from the
     // root, expansion judges every candidate of the leaf once and keeps the accepted ones as children, a playout
     // draws candidates by a hash-seeded sequence until no candidate is accepted or the depth cap is reached, and the
-    // outcome is folded back along the path with alternating sign. Values are from the perspective of the side that
-    // moved into the position they describe, as the score is.
+    // score is folded back along the path with alternating sign, read from the perspective of the side that moved
+    // into the position it describes.
     private const int UctSelect = 0;
     private const int UctExpand = 1;
     private const int UctPlayout = 2;
@@ -100,7 +100,7 @@ internal sealed partial class WorldSearchRuntime {
 
         _ = m_host.Judge(rules: m_judge, tick: tick);
 
-        return ((Slot(store: scratch, name: plan.Verdict) == plan.Row.Accept) && (Slot(store: scratch, name: plan.Turn) != mover));
+        return ((Slot(store: scratch, name: plan.Verdict) == plan.Accept) && (Slot(store: scratch, name: plan.Turn) != mover));
     }
 
     private long EvaluateOutcome(WorldSearchPlan plan, StateFrame position, ulong tick) {
@@ -111,7 +111,7 @@ internal sealed partial class WorldSearchRuntime {
             scratch.CopyFrom(other: position);
         }
 
-        return (m_host.Evaluator.TryEvaluateExpression(program: plan.Outcome!, kind: CellKind.Int, tick: tick, value: out var value) ? value : 0L);
+        return (m_host.Evaluator.TryEvaluateExpression(program: plan.Score!, kind: CellKind.Int, tick: tick, value: out var value) ? value : 0L);
     }
 
     private void StartUct(Job job) {

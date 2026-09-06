@@ -1355,7 +1355,7 @@ by the same offset — the castle's minimal primitive), and `promote` (a
 relocation whose code changes to one of an authored list). A card transfer is
 a relocation on a topology whose cells are zones. Outputs land as ordinary
 rows through the mutation door: `legal` masks for boards to 64 cells, `reach` for the token a
-`held` slot names on any board, per-token `counts`, `count`, and — with an
+`held` slot names on any board, per-token `counts`, and — with an
 authored `score` — `best`, from an iterative-deepening negamax with
 alpha-beta on an explicit frame stack that a tick boundary suspends anywhere
 and the checkpoint carries. The search is a *job* across ticks, never a
@@ -1372,10 +1372,10 @@ verdict's refuse edge. Tokens on a cell is the frame seen from the other
 side: a `cellsOf` row declaring `inverse: {tokens, codes}` is derived from
 its token row at every compose and install and refused a direct write, and
 a frame recomputes only a moved token's two cells; a count is already a
-value. A job with an authored `outcome` and no score tree-searches instead: UCB1
-over a bounded node pool, playouts drawn from a SplitMix64 stream the job's
-stamp seeds, the outcome folded back with alternating sign; a job with a
-score keeps a transposition table keyed by the frame hash. The shipped chess
+value. A job whose `method` is `tree` searches the same score by UCB1 instead: a
+bounded node pool, playouts drawn from a SplitMix64 stream the job's stamp
+seeds, the score folded back with alternating sign; a negamax job keeps a
+transposition table keyed by the frame hash. The shipped chess
 world derives `board` through `inverse` and shifts with `boardShift`; its
 laws seed positions as tokens. Remaining: pile order inside a zone search.
 The judge-per-node cost is the strength ceiling —

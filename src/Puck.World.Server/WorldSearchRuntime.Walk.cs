@@ -39,7 +39,7 @@ internal sealed partial class WorldSearchRuntime {
             return;
         }
 
-        var hasScore = (plan.Score is not null);
+        var hasScore = ((plan.Score is not null) && (plan.Method == WorldSearchMethod.Negamax));
         var wideWords = ((job.Wide is not null) ? WideWordsPerToken(cellCount: cells) : 0);
         var budget = plan.Nodes;
 
@@ -59,7 +59,7 @@ internal sealed partial class WorldSearchRuntime {
             if (shapeIndex >= shapes.Length) {
                 if (p == 0) {
                     if (!hasScore || (job.PassDepth >= plan.Depth)) {
-                        if (plan.Outcome is not null) {
+                        if (plan.Method == WorldSearchMethod.Tree) {
                             StartUct(job: job);
                         } else {
                             job.Running = false;
@@ -153,7 +153,7 @@ internal sealed partial class WorldSearchRuntime {
             _ = host.Judge(rules: m_judge, tick: tick);
 
             var mover = CursorBaseTurn(job: job, p: p);
-            var accepted = ((Slot(store: scratch, name: plan.Verdict) == plan.Row.Accept) && (Slot(store: scratch, name: plan.Turn) != mover));
+            var accepted = ((Slot(store: scratch, name: plan.Verdict) == plan.Accept) && (Slot(store: scratch, name: plan.Turn) != mover));
 
             if ((p == 0) && accepted) {
                 job.Count++;

@@ -102,13 +102,10 @@ public sealed record WorldPlacementRegion(float Radius);
 /// field only decides what the engine itself does once that verdict refuses.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldBoardEnforcement>))]
 public enum WorldBoardEnforcement : byte {
-    /// <summary>An illegal move is recorded and the physical piece is left where it settled — the diegetic
-    /// tabletop, unchanged from today's behaviour.</summary>
+    /// <summary>An illegal move is recorded; the body that moved stays where it settled.</summary>
     Record,
 
-    /// <summary>An illegal move is recorded, and the engine also poses the piece that moved back onto the move's
-    /// declared origin cell — a teaching table that refuses the move rather than letting the players fix the
-    /// board.</summary>
+    /// <summary>An illegal move is recorded and the body that moved is posed back onto the move's origin cell.</summary>
     Return,
 }
 /// <summary>A placement's board facet — the tabletop primitive. Anchors a <c>state.lattices</c> Grid topology
