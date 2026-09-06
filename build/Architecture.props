@@ -333,15 +333,12 @@
     </ItemGroup>
 
     <!--
-        The System.Console denial for Puck.World.Server — declared, not yet armed.
+        The System.Console denial for Puck.World.Server: declared, not yet armed.
 
-        Every reachable Console.Error.WriteLine under Puck.World.Server is now a typed WorldNarration delivered
-        through WorldOutputHub, formatted only when a sink is attached (see WorldNarration.cs,
-        WorldOutputHub.Narration.cs), except four sites in WorldServer.MutationApply.cs, WorldServer.RuleHost.cs,
-        WorldServer.Step.cs, and WorldPopulation.Admission.cs. This lane states the destination —
-        Puck.World.Server holds no reference to System.Console — but PuckArchitectureDenyConsoleEnabled stays
-        false until those four files land their own conversion; arming it now would fail the build on the
-        remaining sites. No PuckArchitectureGate.cs check reads this item yet.
+        Every narration line under Puck.World.Server is a WorldNarration delivered through WorldOutputHub; the one
+        console writer is the sink a composition root binds (WorldNarration.cs). No PuckArchitectureGate.cs check
+        reads a denied-API item yet, so the flag stays false and tests/Puck.World.Tests/ServerConsoleLawTests.cs
+        holds the tree to that sink until the check exists.
     -->
     <PropertyGroup>
         <PuckArchitectureDenyConsoleEnabled Condition="'$(PuckArchitectureDenyConsoleEnabled)' == ''">false</PuckArchitectureDenyConsoleEnabled>
