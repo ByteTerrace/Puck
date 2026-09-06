@@ -96,17 +96,17 @@ public sealed class WorldAuthorityCheckpointLawTests {
     }
 
     [Fact]
-    public void CurrentContractsRemainVersionOneAndRejectAnotherCheckpointVersion() {
+    public void CurrentContractsRemainVersionTwoAndRejectAnotherCheckpointVersion() {
         using var fixture = Fixtures.FreshServer();
         Assert.True(fixture.Server.TryCaptureCheckpoint(checkpoint: out var checkpoint, reason: out var reason, hostRow: EmptyHostRow()), reason);
         var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint!);
-        Assert.Equal((ushort)1, System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(4)));
+        Assert.Equal((ushort)2, System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(4)));
         Assert.Equal(0x314C52574B435550UL, WorldProtocol.WireProtocolKey);
         Assert.Equal(0x314445464B435550UL, WorldFederationCodec.WireKey);
         Assert.True(WorldAuthorityCheckpointCodec.TryDecode(bytes, out _, out reason), reason);
-        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(4), 2);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(4), 3);
         Assert.False(WorldAuthorityCheckpointCodec.TryDecode(bytes, out _, out reason));
-        Assert.Contains("version 2", reason);
+        Assert.Contains("version 3", reason);
     }
 
     private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(

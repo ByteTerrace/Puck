@@ -392,15 +392,15 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         );
     }
     [Fact]
-    public void Version_two_envelope_refuses_by_name() {
+    public void Version_one_envelope_refuses_by_name() {
         var checkpoint = CapturedCheckpoint();
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
         var downgraded = ((byte[])encoded.Clone());
 
-        // The version u16 sits immediately after the 4-byte "PCKP" magic — pin the PRE-follower-state version
-        // literally (2), not an arbitrary corrupt value, to prove the specific old wire shape is refused rather than
-        // silently tolerated by a reader that skips the new fields.
-        downgraded[4] = 2;
+        // The version u16 sits immediately after the 4-byte "PCKP" magic — pin the version before the search block
+        // literally (1), not an arbitrary corrupt value, to prove the specific old wire shape is refused rather than
+        // silently tolerated by a reader that skips the new block.
+        downgraded[4] = 1;
         downgraded[5] = 0;
 
         Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
@@ -408,7 +408,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
             checkpoint: out _,
             reason: out var reason
         ));
-        Assert.Contains(actualString: reason, expectedSubstring: "version 2");
+        Assert.Contains(actualString: reason, expectedSubstring: "version 1");
     }
     [Fact]
     public void Version_four_envelope_refuses_by_name() {

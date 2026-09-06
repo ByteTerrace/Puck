@@ -443,7 +443,8 @@ public sealed partial class WorldServer {
                 EventFeed: m_events.Capture(),
                 OwnedWorlds: m_profiles.Capture(),
                 HostRow: hostRow,
-                Fields: m_population.Fields?.Capture()
+                Fields: m_population.Fields?.Capture(),
+                Search: m_search.Capture()
             );
             reason = string.Empty;
 
@@ -570,6 +571,7 @@ public sealed partial class WorldServer {
         m_profiles.Restore(checkpoint: checkpoint.OwnedWorlds);
         RecompileRules(definition: m_definition);
         RestoreDecisions(server.Decisions);
+        m_search.Restore(checkpoint: (checkpoint.Search ?? WorldSearchCheckpoint.Empty));
     }
     /// <summary>Re-applies one mutation from a hosted row's persisted journal tail — the mutations recorded after
     /// the checkpoint <see cref="FromCheckpoint"/> restored from, replayed in order to bring the server current. Runs

@@ -348,8 +348,8 @@ bridge from rigid bodies to this row is authored, not built
 in: a world rule reads each piece's `$board:cellOf:<occupancy row>:body:<n>`
 on `$physics:quiescent`'s rising edge (a settle, never every tick) and writes
 its code into the occupancy row at that resolved cell — see the garden's own
-`games/chess.world.json` tabletop rules for the worked pattern (snapshot the prior
-board before clearing, derive fresh occupancy, detect which single piece
+`games/chess.world.json` tabletop rules for the worked pattern (retain the accepted
+board while clearing and deriving fresh occupancy, detect which single piece
 moved between two occupied board cells — a piece whose cell resolves to no
 cell, before or after (captured, lifted off, knocked clear), never itself
 qualifies as the mover, so its own disappearance is never ruled legal or
@@ -373,46 +373,15 @@ before the census re-quiesces. The quiescent census is population-wide: an
 unrelated rigid body still settling elsewhere holds every board's derive at
 bay too.
 
-Classifying WHICH piece moved need not compare each piece's own cell before and
-after: `$board:mask:<row>:<min>:<max>` reads a whole side's occupancy as a
-64-bit board straight off the occupancy row (min/max select a value range,
-e.g. positive codes for one color), and `popCount`/`lowestSetBit`/
-`clearLowestSetBit` size and walk the XOR of two settles' masks — one square
-vacated and occupied is a quiet move, a second side's square vacated too is a
-capture (the same square) or, when that square is instead adjacent to the
-destination behind the mover's approach AND the landed piece carries the pawn
-code, an en passant — either test failing reads as a perturbation rather than
-a forged capture, closing the loophole an unrelated other-side vacate in the
-same settle would otherwise open. Two-and-two on one side is a castle-shaped
-settle, judged only by the castle legality check (never a single-step check
-beside it, since the classifier's own "from" is always the king's own home
-cell, read directly off the pre-move board's king mask, so it can never
-coincidentally read as an adjacent king step). A capture reads legal only
-when the same classifier already agrees a piece was removed (kind 2 for an
-ordinary capture, kind 3 for en passant); the target-square geometry alone
-is not enough, so a diagonal hop onto the en passant square with the passed
-pawn left standing classifies as a quiet move and stays refused. Movement
-legality and check read outward from the move's
-own squares rather than walking coordinates: a slider's reach is "does
-`$match:<emptyRun>:…:cell` from the destination back toward the origin land on the
-origin" (the origin is always the ray's own first-blocker answer when the
-path is clear, so no coordinate arithmetic decides direction), a leaper's is
-`$board:offset` from the origin matching the destination over its fixed set
-of jumps, and a king's square is attacked exactly the same way, probed
-outward for an enemy piece. Castling additionally reads a
-one-tick-old snapshot of the check verdict (the king must not already have
-been in check before this settle) and, for the square the king crosses,
-`$board:attacks:<row>:<min>:<max>:<directions>` — walk a short authored
-direction list from a fixed cell and answer whether the first occupied cell
-on any of them falls in an authored value range, the same
-first-blocker-stops-the-walk contract as `$match:…:cell`, unioned over several
-directions and filtered to a range in one call rather than one rule per
-direction. The garden's `games/chess.world.json` combines these slider queries
-with piece-mask intersections for pawn, knight, and king attacks at each
-transit square. Its `forEach` bridge gates each piece's write separately;
-its successful-move bookkeeping uses an explicit transaction. The
-[chess authoring notes](../Puck.World/README.md#the-world-as-data)
-describe the paired delta signature and sparse board snapshots.
+The shipped chess module uses `$board:mask` to locate a candidate's source and
+destination, then constructs the expected resulting piece code at every cell.
+An exact comparison catches changes that occupancy masks alone cannot see.
+Local bindings hold geometry and attack intermediates; empty-ray patterns and
+board attack queries supply slider reach. Accepted state is distinct from the
+physical observation, so incomplete or rejected arrangements never replace the
+legal baseline. Acceptance commits its bookkeeping in one transaction. See the
+[chess authoring notes](../Puck.World/README.md#the-world-as-data) for promotion,
+castling rights, duplicate occupancy, and diagnostic limitations.
 
 The [tabletop state fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.world.json)
 and its [positive script](../../tests/Puck.World.Canaries/tabletop-state/positive.script.txt)
@@ -2317,6 +2286,40 @@ reports route status/waypoint/search work; `$nav:<bodyRef>:<hasPath|active|
 arrived|unreachable|remaining>` exposes the same status to rules. Navigation
 is withheld from presentation projections with the other authoritative AI and
 motion-program declarations.
+
+## The `search` section — what the board would be
+
+`search.jobs` declares jobs that judge hypothetical positions with the
+document's own rules. A job names `tokens` (a keyed integer row whose values
+are the cells of `board` its tokens stand on; a value that is no cell is a
+token off the board, which the job leaves alone) and `board` (an integer board
+over a discrete topology). Its `turn` and `verdict` slot rows derive from the
+tabletop board binding anchoring `board` unless authored; `accept` (default 1)
+is the verdict value that accepts a position. Outputs are ordinary rows the
+job writes when it finishes: `legal`, an integer row keyed by the tokens
+receiving per token the mask of cells it may relocate to (boards of at most 64
+cells), and `count`, a slot receiving how many relocations were accepted.
+
+The job walks every (token, target cell) pair: it copies the installed section
+into a value frame (`Puck.State.StateFrame`, every integer cell laid out once),
+writes the relocation into the frame — the token to the target, whatever stood
+there off the board — and evaluates the frame-evaluable rules over it through
+a `FrameHost`: every rule that is neither an interaction nor a decision and
+reads no world-only fact (`RuleDataflow.ReadsHost`; a body's cell, its
+uprightness, quiescence). A relocation is accepted when the verdict reads
+`accept` and the turn changed. Nothing hypothetical reaches the installed
+section. The job restarts whenever any framed cell other than its own outputs
+changes, so a settling piece restarts it every tick until the board rests.
+
+Work derives: one judge run costs the sum of the frame-evaluable rules'
+work-sheet lines, and the per-tick node quota is what `RuleCapacity.
+MaxWorkUnitsPerTick` leaves after the sheet, shared by the jobs and divided by
+that cost (at most `WorldSearchCapacity.MaxNodesPerTick`); a document whose
+rules leave no room for one judge run is refused. `nodes` may lower the quota
+for a job with something specific in mind, never raise it. Job progress is
+simulation state — it hashes and rides the checkpoint — and `world.search`
+lists each job's phase, walk position, accepted count, judged count, quota,
+judge cost, and rule count.
 
 ## The egress documents — what leaves an authority
 

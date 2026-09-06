@@ -177,6 +177,18 @@ Nothing here carries a `World` name — a state library names no world.
   holding; `ExpressionFault` names why. `IRuleReader` is what a fact reads
   through; `RuleEvaluation` holds `GateHolds`, `TryEvaluateExpression`,
   `ResolveKey`, and the state reads they share.
+- *The store and the frame:* `StateStore` is where a read finds a cell's
+  stored value beneath the rows' structure — `RowStore` over a section's own
+  cells (`IRuleReader.Store`), or `StateFrame`, every integer cell of a section
+  laid out once by a `FrameLayout` (slot, keyed, board by cell ordinal, ring
+  with its cursor; text and field rows read through to their cells). A frame
+  copies as one span copy, refuses a key its row lacks, and applies `boardCombine`,
+  `push`, and `clearEnclosed` densely. `FrameHost` is an `IRuleHost` over a
+  frame with its own evaluator and latch: a preflight scope is a frame copy,
+  an effect arm the library does not own is skipped, and `Judge` evaluates a
+  rule array as one tick with every edge closed. `OperandFact.HostOnly`,
+  `KeyFact.HostOnly`, `EffectFact.ReadsHost`, and `RuleDataflow.ReadsHost`
+  name what a frame cannot evaluate.
 - *Analyses:* `RuleDataflow` (a rule's read and write sets), `RuleHazards`
   (the write-after-read and write-after-write pairs document order decides,
   skipping pairs whose gates pin one cell to disjoint ranges), and

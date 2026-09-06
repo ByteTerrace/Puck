@@ -838,7 +838,9 @@ A solitaire cascade is a `slice` transfer: the keyed token and every token
 after it, moved in order as one run. A connected group is `$board:component` and its
 boundary `$board:boundary`: a flood from the key cell along the topology's
 directions under a settled-cell budget, priced by that budget like `pathCost`,
-reading -2 when the budget runs out rather than ever running unbounded. A
+reading -2 when the budget runs out rather than ever running unbounded; what
+a placement encloses is `$board:enclosedAt` before it lands and the
+`clearEnclosed` transform after, so a group's removal is one effect. A
 transaction journals once: the host commits the preflight scope as one `Batch`
 mutation — one admission, validation, journal entry, and delivery — so the
 three transforms of a large-board capture cost the journal what one write does.
@@ -1004,91 +1006,26 @@ against the world up its gravity opposes) so a knocked-over piece reads as
 displaced rather than occupying its last resting cell. Legality is
 authorable, not engine-adjudicated, and the shipped garden's default set is
 everything short of adjudication: movement geometry for all six piece kinds,
-captures, check, castling, en passant, and promotion. The classifier that
-finds which piece moved works over the WHOLE board rather than per piece —
-`$board:mask` reads each side's occupancy as a 64-bit board straight off the
-`board`/`previousBoard` rows, `popCount`/`lowestSetBit` size and locate the
-vacated/occupied deltas, and the shape of those deltas (one square vacated
-and occupied, a second side's square vacated too, two-and-two for castling)
-sorts a settle into a quiet move, a capture, an en passant, a castle, or a
-perturbation — the world program's own record, not a per-piece rule. The four
-counts share one nested `pair`, with `pairSwap` exchanging the two sides;
-there is no need to persist a separate row for every count and shape flag.
-Board snapshots and clearing use `boardCombine` over explicitly bounded
-64-cell boards. The successful move's turn, saved legal board, and en passant
-target commit together, so one journal entry owns that bookkeeping. A
-capture whose vacated defending square sits anywhere but the destination is
-en passant ONLY when that square is also adjacent to the destination behind
-the mover's own approach AND the piece that landed carries the pawn code;
-either test failing (an unrelated other-side vacate landing on the settle by
-coincidence) reads as a perturbation instead of a forged capture. Movement
-legality asks the SAME small vocabulary outward from the move's own squares:
-a slider's reach is "walking `$match:chessRayEmpty:…:cell` from the
-destination back toward the origin finds the origin itself" (no coordinate
-arithmetic — an occupied origin is always the ray's own answer when the path
-is clear), a
-leaper's is the `$board:offset` cell matching the destination over its fixed
-set of jumps, and check is the mover's king square read the same way,
-attacked or not by an enemy pawn/knight/king/slider probed outward from it.
-A king-shaped settle (two-and-two, the same mask shape castling has) is
-judged ONLY by the castle legality check, never by the single-step king
-check beside it — the classifier's own "from" is always the king's own home
-cell (read directly off the pre-move board's king mask, never the lower of
-the two vacated cells), so it never coincides with a single king step by
-construction, on either side of the board. Castling rights are a
-one-way bitfield (`castleRights`, one bit per king/rook home square) a rule
-sets when the previous board held that square's king or rook and the current
-board no longer does, even on capture or a removal with no classified mover —
-legally or not, since
-"has this piece ever left home" cannot un-happen and a capacity-bounded
-history ring answering the same question can forget it once the departure
-scrolls out, reviving rights a long game never truly regains; a castle event
-itself always departs the king's own home cell, so it burns that king's bit
-on both sides at once, exactly as a king move must. Castle legality also
-re-reads the physical squares this exact settle: the home cells held the
-king and rook immediately before it and hold neither immediately after, the
-transit squares were empty, and the rook's own landing square now holds it —
-a right can be intact and the physical board still refuse the move. Two
-more checks close the same gate: the king must not already have been in
-check on the position before this settle (a one-tick snapshot of the prior
-settle's own check verdict, since the board a rule reads mid-settle is
-already the post-move board) and the square the king crosses must not be
-attacked either, read via a `$board:attacks:<row>:<min>:<max>:<directions>`
-query that walks a short authored ray list from a fixed cell and answers
-whether the first occupied cell on any of them falls in an authored value
-range — a slider's reach at one square in one call, instead of one rule per
-direction. Pawn, knight, and king attacks use the enemy piece masks
-intersected with the source-square sets for the four fixed transit squares.
-A piece that leaves the board entirely
-(captured, knocked clear, tilted) never itself registers as a mover, since
-it has no destination cell to rule on. A settle that only occupies (nothing
-of that side's own vacates) or only vacates clamps its empty half to -1
-rather than writing the mask's own bit width (64) into a row that refuses
-it, which would otherwise leave that settle's record silently stale for
-every rule reading it afterward. A capture only reads legal when the
-settle's own delta classifier already agrees a piece was removed (kind 2 for
-an ordinary capture, kind 3 for en passant specifically) — geometry alone
-(landing on the en passant target square) is not enough, so a diagonal hop
-onto that square with the passed pawn left standing classifies as a quiet
-move and is refused rather than silently completing the capture for the
-hand that forgot to lift the other piece. Illegal moves are recorded —
-`illegalCount` counts them, `verdict` names the last ruling — and never
-rejected, undone, or repositioned; the table remembers the last legal
-position (`lastLegal`) for a human or a future AI body to act on. Promotion
-is a same-cell piece swap — the pawn lifted off and a chosen piece set down
-on the SAME square, ordinarily two separate settles — which the mask
-classifier cannot see at all (a cell whose occupant changes value but stays
-occupied never enters either side's vacated or occupied mask), so it is not
-a move kind: reaching the last rank on an ordinary quiet or capture settle
-marks `promotionPending`, and it stays pending across the pawn being lifted
-off (an empty cell is not a promoted piece either) until a later settle
-where that cell holds a knight, bishop, rook, or queen of the mover's own
-color, which clears it directly, independent of whatever move kind (if any)
-that settle classifies as. `plan` is
-the addon seam for candidate-highlight rendering: an ordinary board-typed row
-nothing in the engine writes, proved from the console
-(`world.state.cell.set plan <cell> 1`) rather than built. Boards are a
-primitive the catalog reuses (checkers, go, cards on a table), never a
+captures, check, castling, en passant, and promotion. The judge now constructs a candidate from the side-to-move's source and
+destination, then compares all 64 expected piece codes with the physical
+observation. Ordinary moves, en passant, and castling are three small board
+patches; promotion chooses the ordinary patch's replacement. The king's own
+mask identifies its pair during castling. Local bindings hold attack and
+geometry intermediates, and relative ranks share pawn geometry between colours.
+
+`lastLegal` anchors accepted state and supplies every pre-move read. An incomplete or refused observation cannot become the next
+move's starting position. Only acceptance commits the board, turn, en passant
+target, check state, four castling rights, and promotion completion. Rights
+survive a physical displacement that the players repair; a completed legal king
+move or home-rook departure/capture consumes them permanently. Promotion waits
+for the replacement before advancing the turn. Duplicate occupants and unrelated
+piece-code changes prevent acceptance. The canonical-history counter remains a
+diagnostic, not a repetition adjudicator. Checkmate, stalemate, full draws, and a
+CPU opponent remain beyond this module. The
+[chess authoring notes](../src/Puck.World/README.md#the-world-as-data) own the
+matcher, diagnostics, and physical settle contracts. `plan` is an ordinary,
+unrendered board row that the console can write for candidate highlights.
+Boards are a primitive the catalog reuses (checkers, go, cards on a table), never a
 chess-specific engine feature, and a topology is carried by at most one
 placement. The shipped `body.carry` facet is a separate primitive: it picks
 up a rigid body, never a placement or board. See
@@ -1395,7 +1332,7 @@ cannot close is the hypothetical: checkmate, stalemate, a legal-square plan,
 and a CPU opponent all need a board that is not the document's. The shipped
 chess world fixes the shape: it has no move interactions — bodies move, and
 the rules snapshot the settled pieces into `board`, diff it against
-`previousBoard`, classify the change into `move`, judge it into `verdict`,
+the accepted `lastLegal`, construct and exactly match `move`, judge it into `verdict`,
 and flip `turn`. A game is a *judge*, and a ply is a candidate state the
 judge accepts and that changes the turn key; an interaction-shaped world fits
 the same definition with its gates as the judge. The design is a value-typed
@@ -1414,9 +1351,9 @@ authored candidate shapes, and an authored per-element reach mask prunes
 before the judge where strength matters. Legality is written once, as the
 judge: *enforcement* is the author's choice per table — the diegetic
 tabletop records an illegal move and lets the players fix the board, a
-teaching world refuses it or paints the `plan` row — and the plan row is
-the search's first consumer: the legal squares of one picked piece are a
-depth-one search over one `from`. The search is a *job* across ticks, never
+teaching world refuses it or paints the `plan` row from the search's
+per-token `legal` masks — the first consumer: the legal squares of every
+piece are the depth-one search. The search is a *job* across ticks, never
 a query that must answer in its tick: the job spends a node quota derived
 from what the work sheet leaves of the tick budget divided by the judge's
 own cost, runs its recursion on an explicit stack the checkpoint captures
@@ -1456,9 +1393,8 @@ itself be `$each`. Chess is re-authored as a self-contained module on those
 primitives: pieces keyed by placement id, one forEach rule where thirty-two
 were; dominoes, billiards, and bowling anchor to marker placements of their
 own. The boot settle is the document's, not a test's: every tabletop rule
-gates on a held-quiescence counter and a one-time snapshot seeds the previous
-board before any classifier reads it, which also surfaced and fixed two
-legality bugs (white's turn value, the pawn pick's inverted branch). The
+gates on a held-quiescence counter and a one-time snapshot seeds the accepted
+board before the candidate matcher reads it. The
 garden's passive replay hash moves with the content; the frozen world's does
 not.
 

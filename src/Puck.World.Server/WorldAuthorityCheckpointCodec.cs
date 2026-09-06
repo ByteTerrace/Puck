@@ -25,7 +25,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     private const int MaxStringBytes = WireLimits.MaxStringBytes;
     // The first format is still under development. Change its shape directly; no compatibility reader or
     // development-only version sequence is maintained.
-    private const ushort SupportedVersion = 1;
+    private const ushort SupportedVersion = 2;
 
     private delegate T ReadItem<T>(ref WireReader reader);
     private delegate T ReadStructItem<T>(ref WireReader reader) where T : struct;
@@ -50,6 +50,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         body.WriteBlock(value: EncodeOwnedWorlds(section: checkpoint.OwnedWorlds));
         body.WriteBlock(value: EncodeHostRow(section: checkpoint.HostRow));
         body.WriteBlock(value: EncodeFields(section: checkpoint.Fields));
+        body.WriteBlock(value: EncodeSearch(section: (checkpoint.Search ?? WorldSearchCheckpoint.Empty)));
 
         var bodyBytes = body.ToArray();
         var writer = new WireWriter();
@@ -168,6 +169,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "fields section",
             maxBytes: MaxSectionBytes
         );
+        var searchBytes = body.ReadBlock(
+            field: "search section",
+            maxBytes: MaxSectionBytes
+        );
 
         if (!body.TryFinish(failure: out var bodyFailure)) {
             reason = $"checkpoint body: {bodyFailure}";
@@ -255,6 +260,13 @@ public static partial class WorldAuthorityCheckpointCodec {
         )) {
             return false;
         }
+        if (!TryDecodeSearch(
+            bytes: searchBytes,
+            reason: out reason,
+            section: out var search
+        )) {
+            return false;
+        }
 
         checkpoint = new WorldAuthorityCheckpoint(
             Escrow: escrow,
@@ -265,7 +277,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             InputHold: inputHold,
             OwnedWorlds: ownedWorlds,
             Population: population,
-            Server: server
+            Server: server,
+            Search: search
         );
         reason = string.Empty;
 

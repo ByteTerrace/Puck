@@ -82,7 +82,8 @@ public sealed record WorldDefinition(
     [property: JsonPropertyName("curves"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCurveRow>? CurvesRaw = null,
     [property: JsonPropertyName("navigation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldNavigationSection? NavigationRaw = null,
     [property: JsonPropertyName("patterns"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<PatternRow>? PatternsRaw = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TableRow>? Tables = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TableRow>? Tables = null,
+    [property: JsonPropertyName("search"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSearchSection? SearchRaw = null
 ) {
     /// <summary>The document schema version. A loader rejects any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.def.v1";
@@ -424,6 +425,9 @@ public sealed record WorldDefinition(
     /// <summary>Gets the bounded surface, free-volume, and live-medium navigation authoring — ABSENT resolves to no domains.</summary>
     [JsonIgnore]
     public WorldNavigationSection Navigation => (NavigationRaw ?? WorldNavigationSection.Absent);
+    /// <summary>Gets the <c>search</c> section — ABSENT resolves to no jobs.</summary>
+    [JsonIgnore]
+    public WorldSearchSection Search => (SearchRaw ?? WorldSearchSection.Absent);
     /// <summary>Gets the <c>theme</c> section — ABSENT resolves to <see cref="WorldThemeSection.Absent"/> (a zeroed
     /// token block, no chrome); the standard "Instrument + grafts" recipe is authored in
     /// <c>standard.world.json</c>.</summary>

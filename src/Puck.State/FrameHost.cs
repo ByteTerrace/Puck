@@ -78,6 +78,16 @@ public sealed class FrameHost : IRuleHost {
         return m_boardScratch.AsSpan(start: 0, length: cells);
     }
 
+    /// <summary>Rebinds the frame and every scope to rows the layout fits.</summary>
+    /// <param name="rows">The rows.</param>
+    public void Rebind(IReadOnlyList<StateRow> rows) {
+        Frame.Rebind(rows: rows);
+
+        foreach (var scope in m_scopes) {
+            scope.Rebind(rows: rows);
+        }
+    }
+
     /// <summary>Evaluates rules over the frame in array order with every edge closed, as one tick.</summary>
     /// <param name="rules">The rules, already restricted to what a frame can evaluate.</param>
     /// <param name="tick">The tick the reads answer as of.</param>

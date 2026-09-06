@@ -678,8 +678,21 @@ public sealed partial class WorldServer {
         m_interactionGateHeld.Prune(compiled: m_interactions);
         ReconcileDecisions();
         ReconcilePatterns(definition);
+        m_search.Rebuild(definition: definition, rules: m_rules, patterns: m_patterns, tables: m_tables);
         m_population.BindFlockAffinities(definition, EvaluateFlockAffinity);
     }
+    // The search jobs advance right after the rules, so a job judges the position this tick's rules settled and a
+    // finished job's outputs are delivered with the same tick.
+    private ulong m_searchTick;
+    private void StepSearch(ulong tick) {
+        m_searchTick = tick;
+
+        if (m_search.Step(tick: tick, apply: m_searchApply)) {
+            m_output.DeliverDefinition(definition: m_definition);
+        }
+    }
+    /// <summary>Lists every search job's progress.</summary>
+    public IReadOnlyList<WorldSearchStatus> SearchStatus() => m_search.Status();
     // The live half of link liveness: each DIRECT projection in the tick's frozen graph whose delivered snapshot tick
     // advanced is one refresh. An authored row the source could not resolve contributes no projection at all, which
     // is exactly "nothing was delivered" — the staleness count rises and the grace comparison decides. Replay drives
@@ -915,6 +928,7 @@ public sealed partial class WorldServer {
             tick: tick,
             stepTicks: context.StepTicks
         );
+        StepSearch(tick: tick);
         StepFields(tick: tick);
         // Escrow recovery evaluates on the SAME terms, right beside rules — see ReclaimExpiredEscrows' own remarks.
         ReclaimExpiredEscrows(tick: tick);

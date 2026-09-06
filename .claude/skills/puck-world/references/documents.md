@@ -687,6 +687,22 @@ instead of a locomotion program — see
 decay rates, never per-tick fractions. Requires `collider` (sphere, capsule,
 or box — never `fromCreation`) and `bodyContact: solid`.
 
+### `search` — what the board would be
+
+`WorldSearch.cs` owns `search.jobs`. A job names `tokens` (keyed int row, values
+are cells of `board`; a non-cell value is off the board) and `board`; `turn`/
+`verdict` derive from the tabletop board binding over `board` unless authored;
+`accept` is the accepting verdict value (1). Outputs: `legal` (int row keyed by
+the tokens, a per-token destination mask, boards ≤ 64 cells) and `count` (slot).
+The job relocates every token to every other cell in a `StateFrame` copy of the
+section, judges it with the rules a frame can evaluate (no interaction, no
+decision, no world-only read — `RuleDataflow.ReadsHost`), and accepts when the
+verdict reads `accept` and the turn changed. It restarts when any framed cell
+other than its outputs changes. Quota derives from what the work sheet leaves
+divided by the judge's cost (`nodes` may only lower it); progress hashes and
+checkpoints. `world.search` narrates each job. Sharp edge: a token row whose
+`min` is a cell ordinal is refused — the off-board value must be no cell.
+
 ### `navigation` — bounded surface, flight, and medium routes
 
 `WorldNavigation.cs` owns named finite domains. `surface` samples SDF ground,

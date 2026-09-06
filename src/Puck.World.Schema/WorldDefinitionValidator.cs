@@ -1364,6 +1364,12 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"rules/interactions/flock affinities derive {ruleBudget.WorkUnitsPerTick} worst-case work units per tick, exceeding the maximum of {RuleCapacity.MaxWorkUnitsPerTick}; costliest: {costliest} (a forEach line's multiplier is its row's capacity, so author the capacity the row needs; world.budget.rules lists every line).");
             }
         }
+        if (errors.Count == 0) {
+            ValidateSearch(
+                definition: definition,
+                errors: errors
+            );
+        }
 
         // Called early — the host section references no other section. Only an AUTHORED section validates: absence
         // reads the inert WorldHostDefaults.Absent (no presentation), whose zero extent is the meaning of "no

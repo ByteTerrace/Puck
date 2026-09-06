@@ -182,6 +182,9 @@
     "tables": {
       "$ref": "./schema/tables.schema.json"
     },
+    "search": {
+      "$ref": "./schema/search.schema.json"
+    },
     "basis": {
       "$ref": "./schema/basis.schema.json"
     },

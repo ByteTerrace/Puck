@@ -27,6 +27,7 @@ public readonly record struct FrameRowLayout(FrameRowKind Kind, int Offset, int 
 public sealed class FrameLayout {
     private readonly FrameRowLayout[] m_rows;
     private readonly Dictionary<string, int> m_ordinals = new(comparer: StringComparer.Ordinal);
+    private readonly Func<string, CompiledTopology?> m_topology;
 
     /// <summary>Lays out a section's rows.</summary>
     /// <param name="rows">The rows.</param>
@@ -35,6 +36,7 @@ public sealed class FrameLayout {
         ArgumentNullException.ThrowIfNull(argument: rows);
         ArgumentNullException.ThrowIfNull(argument: topology);
         m_rows = new FrameRowLayout[rows.Count];
+        m_topology = topology;
         var offset = 0;
 
         for (var index = 0; index < rows.Count; index++) {
@@ -61,6 +63,33 @@ public sealed class FrameLayout {
     /// <param name="name">The row name.</param>
     /// <param name="ordinal">The ordinal.</param>
     public bool TryOrdinal(string name, out int ordinal) => m_ordinals.TryGetValue(key: name, value: out ordinal);
+
+    /// <summary>Returns whether other rows would lay out identically — the same names in the same order, each with
+    /// the same kind and length — so a frame on this layout can be rebound to them without a new layout.</summary>
+    /// <param name="rows">The candidate rows.</param>
+    public bool Fits(IReadOnlyList<StateRow> rows) {
+        ArgumentNullException.ThrowIfNull(argument: rows);
+
+        if (rows.Count != m_rows.Length) {
+            return false;
+        }
+
+        for (var index = 0; index < rows.Count; index++) {
+            var row = rows[index];
+
+            if (!m_ordinals.TryGetValue(key: row.Name.Value, value: out var ordinal) || (ordinal != index)) {
+                return false;
+            }
+
+            var candidate = Layout(row: row, topology: m_topology, offset: m_rows[index].Offset);
+
+            if ((candidate.Kind != m_rows[index].Kind) || (candidate.Length != m_rows[index].Length) || (candidate.Empty != m_rows[index].Empty) || !ReferenceEquals(objA: candidate.Topology, objB: m_rows[index].Topology)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private static FrameRowLayout Layout(StateRow row, Func<string, CompiledTopology?> topology, int offset) {
         if (row.Kind == CellKind.Text) {
@@ -98,14 +127,23 @@ public sealed class StateFrame : StateStore {
         ArgumentNullException.ThrowIfNull(argument: layout);
         ArgumentNullException.ThrowIfNull(argument: rows);
         Layout = layout;
-        Rows = rows;
+        m_rows = rows;
         m_values = new long[layout.Length];
     }
 
     /// <summary>Gets the layout.</summary>
     public FrameLayout Layout { get; }
+    private IReadOnlyList<StateRow> m_rows;
+
     /// <inheritdoc/>
-    public override IReadOnlyList<StateRow> Rows { get; }
+    public override IReadOnlyList<StateRow> Rows => m_rows;
+
+    /// <summary>Rebinds the frame's structure to rows the layout <see cref="FrameLayout.Fits"/>; the values stay.</summary>
+    /// <param name="rows">The rows.</param>
+    public void Rebind(IReadOnlyList<StateRow> rows) {
+        ArgumentNullException.ThrowIfNull(argument: rows);
+        m_rows = rows;
+    }
     /// <summary>Gets the frame's values, in layout order.</summary>
     public Span<long> Values => m_values;
 

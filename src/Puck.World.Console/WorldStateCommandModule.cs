@@ -493,6 +493,26 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.search",
+            description: "Lists every search job's progress (Immediate): world.search. Each line carries whether the job is running or done, the token and target cell its walk is at, how many relocations the rules accepted so far, how many it has judged, its per-tick node quota, the work units one judge run costs, and how many rules the frame evaluates. A job restarts whenever a framed cell other than its own outputs changes.",
+            handler: (context, args) => {
+                if (!authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.search")) {
+                    return error;
+                }
+                if (args.Count != 0) {
+                    return CommandResult.Usage(form: string.Empty, verb: "world.search");
+                }
+                var jobs = server.SearchStatus();
+                var output = new List<string>(capacity: jobs.Count + 1) { $"[world.search: {jobs.Count} job(s)]" };
+                foreach (var job in jobs) {
+                    output.Add(item: $"[world.search {job.Name} {(job.Done ? "done" : (job.Running ? "running" : "idle"))} token={job.Token}/{job.Tokens} target={job.Target}/{job.Cells} accepted={job.Count} judged={job.Nodes} nodesPerTick={job.NodesPerTick} judgeCost={job.JudgeCost} judgeRules={job.JudgeRules}]");
+                }
+                return new CommandResult(Output: string.Join(separator: Environment.NewLine, values: output));
+            },
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.rule.hazards",
             description: "Lists what the rules' document order decides silently (Immediate): world.rule.hazards [top]. A write-after-read hazard is an earlier rule reading a cell a later rule writes, so the reader sees the previous tick's value; a write-after-write hazard is two rules writing one cell in a tick with at least one setting it, so the later wins (or a set discards an earlier add). A pair whose gates pin one literal cell to disjoint ranges never fires on one tick and is not listed. Rules run once per tick in document order with effects applying immediately, so reorder the rules to change the answer.",
             handler: (context, args) => {

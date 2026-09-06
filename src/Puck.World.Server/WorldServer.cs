@@ -217,6 +217,9 @@ public sealed partial class WorldServer : IWorldServerHost {
     // The state library's evaluator over this server as its host (WorldServer.RuleHost.cs): the loop, the edge
     // latching, the trace, the refusal ledger, and every state-neutral effect's firing.
     private readonly RuleEvaluator m_evaluator;
+    // The `search` jobs over a frame of the installed section, rebuilt with the rules on every install.
+    private readonly WorldSearchRuntime m_search;
+    private readonly Func<WorldMutation, bool> m_searchApply;
     // The installed documents a preflight scope remembers, innermost last (IRuleHost.BeginPreflight/EndPreflight).
     private readonly Stack<WorldDefinition> m_preflightScopes = new();
     // The mutations each open preflight scope composed, innermost last — what TryCommitPreflight installs as one Batch.
@@ -604,6 +607,8 @@ public sealed partial class WorldServer : IWorldServerHost {
 
         m_tables = CompileTables(definition: definition);
         m_evaluator = new RuleEvaluator(host: this);
+        m_search = new WorldSearchRuntime(live: () => m_definition!.State);
+        m_searchApply = mutation => TryApplyMutation(mutation: mutation, tick: m_searchTick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false);
 
         if ((definition.Music is { Count: > 0 } music) && (music[0] is { } row)) {
             // The row's Source/Hash were already proven to load, canonicalize, and pin-verify by

@@ -1,0 +1,90 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "jobs": {
+      "description": "The declared jobs.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One search job.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The stable job name.",
+            "type": "string"
+          },
+          "tokens": {
+            "description": "The keyed integer row whose cells are the tokens and whose values are the board cells they stand on; a value that is no cell is a token off the board, which the job leaves alone.",
+            "type": "string"
+          },
+          "board": {
+            "description": "The board row over the topology the token values index.",
+            "type": "string"
+          },
+          "turn": {
+            "description": "The slot row whose change marks an accepted relocation; absent, the tabletop board binding anchoring Board supplies it.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "verdict": {
+            "description": "The slot row the rules judge a relocation into; absent, the same board binding supplies it.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "accept": {
+            "description": "The verdict value that accepts a relocation.",
+            "type": "integer",
+            "default": 1
+          },
+          "legal": {
+            "description": "An integer row keyed by the tokens receiving, per token, the mask of cells it may relocate to; requires a board of at most 64 cells.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "count": {
+            "description": "A slot row receiving how many relocations were accepted.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "nodes": {
+            "description": "The relocations judged per tick, at most what the work sheet leaves; absent derives that.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "name",
+          "tokens",
+          "board"
+        ],
+        "additionalProperties": false
+      },
+      "default": null
+    }
+  },
+  "additionalProperties": false,
+  "default": null
+}
