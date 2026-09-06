@@ -1,0 +1,52 @@
+{
+  "id": "kart-lap",
+  "title": "The kart district's three gates fire in order and the lap row counts a completed circuit",
+  "binding": "A minimal host imports modules/kart.world.json under alias 'kart' and seats one local body at kart-arrival. The positive leg drives the seat's own kart kit with a scripted tape (body.fly forward=1, turn=-1, 5 seconds), the steering sign that traces the authored curve's own direction of travel: it crosses gate0, then gate1, then gate2 in that order, each an Edge-mode rule gated on kart_gateStage equalling the gate's ordinal AND the gate's own $region: occupancy, advancing the stage; the third gate additionally increments kart_lap and resets the stage. The discriminating leg drives the SAME host and the SAME duration with the steering sign negated (turn=+1): the kart travels the opposite way around the loop, the gate order never opens (kart_gateStage stays 0), and kart_lap never advances off 0 — the gate rules discriminate on ORDER, not mere proximity, which a lap counter gated on proximity alone would not.",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 8,
+  "timeoutSeconds": 20,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/kart-lap/host.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.imports", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.where", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.fly", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.where", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 3, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "imports-name-kart-alias", "stream": "stdout", "match": "contains", "text": "modules/kart.world.json as kart", "present": true },
+      { "type": "line", "name": "gate-stage-reset-after-third-gate", "stream": "stdout", "match": "contains", "text": "[world.state.row 'kart_gateStage' kind=int nonNegative=true value=0", "present": true },
+      { "type": "line", "name": "lap-completed", "stream": "stdout", "match": "contains", "text": "[world.state.row 'kart_lap' kind=int nonNegative=true value=1", "present": true },
+      { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false },
+      { "type": "line", "name": "no-refusal", "stream": "stderr", "match": "contains", "text": "refused", "present": false }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/kart-lap/host.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.imports", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.where", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.fly", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.where", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 3, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "gate-stage-never-opened", "stream": "stdout", "match": "contains", "text": "[world.state.row 'kart_gateStage' kind=int nonNegative=true value=0", "present": true },
+      { "type": "line", "name": "lap-never-completed", "stream": "stdout", "match": "contains", "text": "[world.state.row 'kart_lap' kind=int nonNegative=true value=1", "present": false },
+      { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  }
+}

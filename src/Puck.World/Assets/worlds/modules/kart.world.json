@@ -1,0 +1,349 @@
+{
+  "exports": {
+    "actions": [],
+    "bindings": [
+      "lap"
+    ],
+    "reads": [
+      "lap",
+      "lapTicks"
+    ]
+  },
+  "bodyMotionPrograms": [
+    {
+      "kind": "Motion",
+      "name": "kartDrive",
+      "operations": [
+        "ResolveDriveFrame",
+        "ResolveHold",
+        "ComputePlanarTargetVelocity",
+        "ShapeVelocity",
+        "RunActionTriggers",
+        "ApplyHold",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ],
+      "version": "puck.body-motion.v1"
+    }
+  ],
+  "curves": [
+    {
+      "closed": true,
+      "name": "kartTrack",
+      "knots": [
+        { "position": [7.0, 0.0, 0.0], "tangentYaw": 1.570796, "curvature": 0.1428571 },
+        { "position": [4.949747, 0.0, 4.949747], "tangentYaw": 2.356194, "curvature": 0.1428571 },
+        { "position": [0.0, 0.0, 7.0], "tangentYaw": 3.141593, "curvature": 0.1428571 },
+        { "position": [-4.949747, 0.0, 4.949747], "tangentYaw": -2.356194, "curvature": 0.1428571 },
+        { "position": [-7.0, 0.0, 0.0], "tangentYaw": -1.570796, "curvature": 0.1428571 },
+        { "position": [-4.949747, 0.0, -4.949747], "tangentYaw": -0.785398, "curvature": 0.1428571 },
+        { "position": [0.0, 0.0, -7.0], "tangentYaw": 0.0, "curvature": 0.1428571 },
+        { "position": [4.949747, 0.0, -4.949747], "tangentYaw": 0.785398, "curvature": 0.1428571 }
+      ]
+    }
+  ],
+  "kits": {
+    "rows": [
+      {
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "kartDrive",
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [0, 0.5, 0],
+          "radius": 0.5
+        },
+        "motion": {
+          "holds": [
+            {
+              "bond": "Surface",
+              "cone": [0, 60],
+              "envelope": { "sinkSpeed": 40 },
+              "gravity": { "fall": 46, "rise": 28 },
+              "hold": "Gravity",
+              "name": "ground",
+              "reach": 1.2
+            },
+            {
+              "bond": "Free",
+              "envelope": { "sinkSpeed": 40 },
+              "gravity": { "fall": 46, "rise": 28 },
+              "hold": "Gravity",
+              "name": "air"
+            }
+          ],
+          "shaping": [
+            {
+              "along": {
+                "engage": 40,
+                "release": 30,
+                "reversalRate": 20,
+                "backwardSpeed": 3
+              },
+              "across": {
+                "lateral": 40
+              }
+            }
+          ],
+          "speed": { "value": 8 },
+          "turn": { "rate": 1.2 }
+        },
+        "name": "kart"
+      }
+    ]
+  },
+  "navigation": {
+    "domains": [
+      {
+        "agentHeight": 1.0,
+        "agentRadius": 0.5,
+        "arrivalDistance": 0.9,
+        "cellSize": 1,
+        "depth": 40,
+        "kind": "Surface",
+        "layers": 1,
+        "maxExpandedNodes": 1600,
+        "maxPathNodes": 64,
+        "maxSlopeDegrees": 60,
+        "maxStepHeight": 0.5,
+        "name": "kartSurface",
+        "origin": [-20, -1, -20],
+        "probeDown": 3,
+        "probeUp": 2.5,
+        "width": 40
+      }
+    ]
+  },
+  "placements": {
+    "rows": [
+      {
+        "id": "kartCourt",
+        "prototypeId": "trackFloor",
+        "position": [0, 0, 0],
+        "yawDegrees": 0,
+        "scale": 1,
+        "solid": { "margin": 0 }
+      },
+      {
+        "id": "gate0",
+        "parent": "kartCourt",
+        "prototypeId": "gateMarker",
+        "position": [0.0, 0.0, 7.0],
+        "yawDegrees": 90,
+        "scale": 1,
+        "region": { "radius": 3.5 }
+      },
+      {
+        "id": "gate1",
+        "parent": "kartCourt",
+        "prototypeId": "gateMarker",
+        "position": [-7.0, 0.0, 0.0],
+        "yawDegrees": 0,
+        "scale": 1,
+        "region": { "radius": 3.5 }
+      },
+      {
+        "id": "gate2",
+        "parent": "kartCourt",
+        "prototypeId": "gateMarker",
+        "position": [0.0, 0.0, -7.0],
+        "yawDegrees": 90,
+        "scale": 1,
+        "region": { "radius": 3.5 }
+      },
+      {
+        "id": "kartBank0",
+        "parent": "kartCourt",
+        "prototypeId": "bankWall",
+        "position": [7.07, 0.0, -7.07],
+        "yawDegrees": 45,
+        "scale": 1,
+        "solid": { "margin": 0 }
+      },
+      {
+        "id": "kartBank1",
+        "parent": "kartCourt",
+        "prototypeId": "bankWall",
+        "position": [-7.07, 0.0, 7.07],
+        "yawDegrees": -135,
+        "scale": 1,
+        "solid": { "margin": 0 }
+      },
+      {
+        "id": "kartRamp0",
+        "parent": "kartCourt",
+        "prototypeId": "ramp",
+        "position": [10.0, 0.0, 0.0],
+        "yawDegrees": 0,
+        "scale": 1,
+        "solid": { "margin": 0 }
+      }
+    ]
+  },
+  "prototypes": [
+    {
+      "id": "trackFloor",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "trackFloor",
+        "palette": [
+          { "color": "#5A6B57" }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "floor",
+            "type": "Box",
+            "position": [0, -0.2, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [20, 0.2, 20],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "bankWall",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "bankWall",
+        "palette": [
+          { "color": "#8A6F4C" }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "wall",
+            "type": "Box",
+            "position": [0, 1.0, 0],
+            "rotation": [0, 0, 0.2164396, 0.9762961],
+            "scale": [0.15, 1.0, 3.0],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "ramp",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "ramp",
+        "palette": [
+          { "color": "#79807F" }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "incline",
+            "type": "Box",
+            "position": [0, 0.3, 0],
+            "rotation": [0.1736482, 0, 0, 0.9848078],
+            "scale": [2.0, 0.15, 3.0],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "gateMarker",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "gateMarker",
+        "palette": [
+          { "color": "#D8A23E" }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "post-left",
+            "type": "Box",
+            "position": [-2.0, 1.0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.1, 1.0, 0.1],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 1,
+            "name": "post-right",
+            "type": "Box",
+            "position": [2.0, 1.0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.1, 1.0, 0.1],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    }
+  ],
+  "rules": [
+    {
+      "name": "kart-gate-0",
+      "mode": "Edge",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          { "$type": "compareState", "state": "gateStage", "comparison": "Equal", "value": 0 },
+          { "$type": "compareState", "state": "$region:gate0", "comparison": "Greater", "value": 0 }
+        ]
+      },
+      "effects": [
+        { "$type": "addState", "state": "gateStage", "value": 1 }
+      ]
+    },
+    {
+      "name": "kart-gate-1",
+      "mode": "Edge",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          { "$type": "compareState", "state": "gateStage", "comparison": "Equal", "value": 1 },
+          { "$type": "compareState", "state": "$region:gate1", "comparison": "Greater", "value": 0 }
+        ]
+      },
+      "effects": [
+        { "$type": "addState", "state": "gateStage", "value": 1 }
+      ]
+    },
+    {
+      "name": "kart-gate-2",
+      "mode": "Edge",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          { "$type": "compareState", "state": "gateStage", "comparison": "Equal", "value": 2 },
+          { "$type": "compareState", "state": "$region:gate2", "comparison": "Greater", "value": 0 }
+        ]
+      },
+      "effects": [
+        { "$type": "addState", "state": "lap", "value": 1 },
+        { "$type": "setState", "state": "gateStage", "value": 0 }
+      ]
+    },
+    {
+      "name": "kart-lap-clock",
+      "mode": "Level",
+      "effects": [
+        { "$type": "setState", "state": "lapTicks", "expression": "$tick" }
+      ]
+    }
+  ],
+  "spawnPoints": [
+    { "id": "kart-arrival", "position": [7.0, 0.6, 0.0], "yawDegrees": 180 }
+  ],
+  "state": {
+    "world": [
+      { "kind": "int", "name": "gateStage", "nonNegative": true, "value": 0 },
+      { "kind": "int", "name": "lap", "nonNegative": true, "value": 0 },
+      { "kind": "int", "name": "lapTicks", "nonNegative": true, "value": 0 }
+    ]
+  }
+}
