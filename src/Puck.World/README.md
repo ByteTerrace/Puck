@@ -460,6 +460,10 @@ approach never jostle a resting piece) prove it: two `pieceCode`-forEach
 rules (upright/tilted, gated on the `$upright:each` reserved channel so a
 knocked-over piece reads as displaced) derive each piece's live cell, then
 one `forEach` rule writes each observed cell, marking duplicate occupancy.
+The sampling edge is `settleHold == 60`. The counter's separate increment and
+reset gates write only when its value changes. An advancing clock would need
+to rebase its epoch on every moving tick; an integer conditional expression
+cannot read the bool-kind `$physics:quiescent` channel.
 A piece outside the board (captured or knocked clear) closes its own write
 gate; it does not prevent its neighbours from writing. Every top-level state
 effect preflights and applies on its own; only a `transaction` groups effects
@@ -491,10 +495,10 @@ new destination. When the king moved, its own source and destination resolve
 the pair even during castling. Empty masks resolve to `-1`. Ordinary moves
 clear the source and write the mover at the destination; en passant also clears
 the passed pawn's square; castling relocates the rook. A pawn reaching the last
-rank uses the observed replacement code. The matcher unions the XOR of each
-piece-code mask in `board` and `lastLegal`, including the observation's collision
-code. This is an exact set of changed cells: unlike an occupancy XOR, it sees
-same-colour substitutions too. A candidate's footprint contains its source,
+rank uses the observed replacement code. The matcher encodes all 14 possible
+cell values in four bit planes, then unions the planes' before/after XORs.
+This is an exact set of changed cells, including same-colour substitutions.
+A candidate's footprint contains its source,
 destination, and at most two extra cells. Any changed cell outside that footprint
 is a mismatch; direct reads compare the expected values inside it. Missing and
 overlapping addresses are counted only once, even for malformed candidates.
@@ -505,10 +509,30 @@ This preserves a full-board comparison without a state-writing loop over 64 cell
 The observation uses code 7 for such a cell; accepted boards never contain it.
 Any collision prevents acceptance regardless of which body last wrote the cell.
 
+Each bit plane is a union of value ranges read through `$board:mask`:
+
+| Label bit | Value ranges setting that bit |
+|---|---|
+| 0 | -3..-2, 1..2, 5..6 |
+| 1 | -5..-3, 2..5 |
+| 2 | -4..3 |
+| 3 | 0..7 |
+
+For values -6 through 7, these memberships give the distinct labels
+`0, 2, 6, 7, 5, 4, 12, 13, 15, 14, 10, 11, 9, 8`. This Gray-code ordering
+needs only seven intervals per board, or 14 mask queries for the comparison.
+The closed alphabet makes the encoding lossless: equality of all four bits
+means equality of the original value, including empty and collision cells.
+
 Geometry then judges that candidate. Empty-ray patterns handle bishops, rooks,
 and queens; coordinate differences handle knights and single king steps; one
 relative-rank pawn expression serves both colours. Attack calculations use
-rule-local bindings instead of persistent intermediate rows. The observed
+rule-local bindings instead of persistent intermediate rows. A king mask's
+lowest set bit supplies its local square. On this fixed 8x8 layout, masked
+horizontal shifts form the adjacent and two-files-away sets; vertical shifts
+produce pawn, king, and knight attack neighbourhoods. Logical right shifts
+preserve bit 63, and file masks prevent wraparound. Only the eight ray directions
+remain in the topology. The observed
 position must retain exactly one king of each colour and leave the mover's
 king unattacked. Castling additionally requires the home rook, a clear path,
 an unspent right, and safe origin and transit squares. Fixed source-square
@@ -520,9 +544,14 @@ of its side's rights; restoring a displaced or illegally moved piece consumes
 neither.
 
 Acceptance commits the new `lastLegal`, turn, rights, en passant target, accepted
-check values, and promotion completion in one transaction. Board copies use
-`boardCombine` with capacity 64; empty cells can be absent from storage, so
-home-square reads use computed keys such as `lastLegal[(4)]`.
+check values, and promotion completion in one transaction. Lost home occupants
+project directly into rights: `parallelBitExtract` gathers rook losses at
+0, 7, 56, and 63 into the four right bits. King losses at 4 and 60 are extracted,
+deposited into bits 0 and 2, and multiplied by three to consume each king's pair.
+The masks are computed before the transaction; one write merges them with the
+already consumed rights. Board copies use `boardCombine` with capacity 64;
+empty cells can be absent from storage. Judging reads the current `turn`
+directly, which remains unchanged until acceptance commits.
 The accepted board declares the closed piece-code range -6 through 6. The ring of canonical board
 fingerprints and `repetitionCount` remain a diagnostic, updated after the
 transaction: symmetry reduction, hash collisions, omitted rights and en passant

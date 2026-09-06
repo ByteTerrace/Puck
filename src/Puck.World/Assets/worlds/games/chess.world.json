@@ -2636,30 +2636,6 @@
       "name": "tabletop-game-start-snapshot"
     },
     {
-      "effects": [
-        {
-          "$type": "setState",
-          "expression": "popCount($board:mask:board:6:6) == 0 ? -1 : trailingZeroCount($board:mask:board:6:6)",
-          "key": "0",
-          "state": "kingCell"
-        },
-        {
-          "$type": "setState",
-          "expression": "popCount($board:mask:board:-6:-6) == 0 ? -1 : trailingZeroCount($board:mask:board:-6:-6)",
-          "key": "1",
-          "state": "kingCell"
-        }
-      ],
-      "gate": {
-        "$type": "compareState",
-        "comparison": "Equal",
-        "state": "settleHold",
-        "value": 60
-      },
-      "mode": "Edge",
-      "name": "tabletop-king-cell"
-    },
-    {
       "bindings": [
         {
           "expression": "turn == 0 ? $board:mask:lastLegal:1:6 : $board:mask:lastLegal:-6:-1",
@@ -2709,11 +2685,6 @@
           "expression": "$bind:target == 0 ? -1 : trailingZeroCount($bind:target)",
           "key": "to",
           "state": "move"
-        },
-        {
-          "$type": "setState",
-          "expression": "turn",
-          "state": "moverColor"
         }
       ],
       "gate": {
@@ -2733,7 +2704,7 @@
           "name": "mover"
         },
         {
-          "expression": "(move[from] < 0) | (move[to] < 0) | (move[to] > 63) ? 0 : (abs($bind:mover) == 6) * (abs(move[to] - move[from]) == 2) ? 4 : (abs($bind:mover) == 1) * (move[from] % 8 != move[to] % 8) * (lastLegal[move[to]] == 0) ? 3 : lastLegal[move[to]] != 0 ? 2 : 1",
+          "expression": "(move[from] < 0) | (move[to] < 0) | (move[to] > 63) ? 0 : (abs($bind:mover) == 6) & (abs(move[to] - move[from]) == 2) ? 4 : (abs($bind:mover) == 1) & (((move[from] ^ move[to]) & 7) != 0) & (lastLegal[move[to]] == 0) ? 3 : lastLegal[move[to]] != 0 ? 2 : 1",
           "kind": "int",
           "name": "kind"
         }
@@ -2770,7 +2741,7 @@
     {
       "bindings": [
         {
-          "expression": "($board:mask:board:-6:-6 ^ $board:mask:lastLegal:-6:-6) | ($board:mask:board:-5:-5 ^ $board:mask:lastLegal:-5:-5) | ($board:mask:board:-4:-4 ^ $board:mask:lastLegal:-4:-4) | ($board:mask:board:-3:-3 ^ $board:mask:lastLegal:-3:-3) | ($board:mask:board:-2:-2 ^ $board:mask:lastLegal:-2:-2) | ($board:mask:board:-1:-1 ^ $board:mask:lastLegal:-1:-1) | ($board:mask:board:1:1 ^ $board:mask:lastLegal:1:1) | ($board:mask:board:2:2 ^ $board:mask:lastLegal:2:2) | ($board:mask:board:3:3 ^ $board:mask:lastLegal:3:3) | ($board:mask:board:4:4 ^ $board:mask:lastLegal:4:4) | ($board:mask:board:5:5 ^ $board:mask:lastLegal:5:5) | ($board:mask:board:6:6 ^ $board:mask:lastLegal:6:6) | $board:mask:board:7:7",
+          "expression": "(($board:mask:board:-3:-2 | $board:mask:board:1:2 | $board:mask:board:5:6) ^ ($board:mask:lastLegal:-3:-2 | $board:mask:lastLegal:1:2 | $board:mask:lastLegal:5:6)) | (($board:mask:board:-5:-3 | $board:mask:board:2:5) ^ ($board:mask:lastLegal:-5:-3 | $board:mask:lastLegal:2:5)) | (($board:mask:board:-4:3) ^ ($board:mask:lastLegal:-4:3)) | (($board:mask:board:0:7) ^ ($board:mask:lastLegal:0:7))",
           "kind": "int",
           "name": "changed"
         },
@@ -2790,22 +2761,22 @@
           "name": "sign"
         },
         {
-          "expression": "move[kind] == 4 ? ($bind:from / 8) * 8 + ($bind:to > $bind:from ? 7 : 0) : move[kind] == 3 ? $bind:to - 8 * $bind:sign : -1",
+          "expression": "move[kind] == 4 ? ($bind:from & 56) + ($bind:to > $bind:from ? 7 : 0) : move[kind] == 3 ? $bind:to - 8 * $bind:sign : -1",
           "kind": "int",
           "name": "clear"
         },
         {
-          "expression": "move[kind] == 4 ? ($bind:from + $bind:to) / 2 : -1",
+          "expression": "move[kind] == 4 ? (($bind:from + $bind:to) >> 1) : -1",
           "kind": "int",
           "name": "rook"
         },
         {
-          "expression": "($bind:clear >= 0) * ($bind:clear < 64) * ($bind:clear != $bind:from) * ($bind:clear != $bind:to)",
+          "expression": "($bind:clear >= 0) & ($bind:clear < 64) & ($bind:clear != $bind:from) & ($bind:clear != $bind:to)",
           "kind": "int",
           "name": "clearUnique"
         },
         {
-          "expression": "($bind:rook >= 0) * ($bind:rook < 64) * ($bind:rook != $bind:from) * ($bind:rook != $bind:to) * ($bind:rook != $bind:clear)",
+          "expression": "($bind:rook >= 0) & ($bind:rook < 64) & ($bind:rook != $bind:from) & ($bind:rook != $bind:to) & ($bind:rook != $bind:clear)",
           "kind": "int",
           "name": "rookUnique"
         },
@@ -2815,7 +2786,7 @@
           "name": "footprint"
         },
         {
-          "expression": "(abs(move[mover]) == 1) * ($bind:to / 8 == (turn == 0 ? 7 : 0)) ? board[move[to]] : move[mover]",
+          "expression": "(abs(move[mover]) == 1) & ($bind:to / 8 == (turn == 0 ? 7 : 0)) ? board[move[to]] : move[mover]",
           "kind": "int",
           "name": "landed"
         }
@@ -2930,7 +2901,7 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": "(move[kind] == 4) * (move[from] == $bind:home) * (move[to] == $bind:home + 2 * $bind:direction) * ((castleRights & $bind:right) == 0) * (lastLegal[($bind:rook)] == 4 * $bind:sign) * ($bind:path == $bind:rook) * (previousInCheck[moverColor[$value]] == 0) * ($bind:attacked == 0)",
+          "expression": "(move[kind] == 4) & (move[from] == $bind:home) & (move[to] == $bind:home + 2 * $bind:direction) & ((castleRights & $bind:right) == 0) & (lastLegal[($bind:rook)] == 4 * $bind:sign) & ($bind:path == $bind:rook) & (previousInCheck[turn[$value]] == 0) & ($bind:attacked == 0)",
           "state": "castleLegal"
         }
       ],
@@ -2976,7 +2947,7 @@
           "name": "middle"
         },
         {
-          "expression": "($bind:dx == 0) * (lastLegal[move[to]] == 0) * max($bind:dy == 1, ($bind:dy == 2) * (move[from] / 8 == (turn == 0 ? 1 : 6)) * (lastLegal[($bind:middle)] == 0)) | ($bind:dx == 1) * ($bind:dy == 1) * max(move[kind] == 2, (move[kind] == 3) * (move[to] == enPassantTarget) * (move[captured] == 2 * turn - 1))",
+          "expression": "($bind:dx == 0) & (lastLegal[move[to]] == 0) & max($bind:dy == 1, ($bind:dy == 2) & (move[from] / 8 == (turn == 0 ? 1 : 6)) & (lastLegal[($bind:middle)] == 0)) | ($bind:dx == 1) & ($bind:dy == 1) & max(move[kind] == 2, (move[kind] == 3) & (move[to] == enPassantTarget) & (move[captured] == 2 * turn - 1))",
           "kind": "int",
           "name": "pawn"
         }
@@ -2984,7 +2955,7 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": "$bind:piece == 1 ? $bind:pawn : $bind:piece == 2 ? $bind:dx * $bind:dx + $bind:dy * $bind:dy == 5 : $bind:piece == 3 ? $bind:diagonal : $bind:piece == 4 ? $bind:straight : $bind:piece == 5 ? max($bind:diagonal, $bind:straight) : $bind:piece == 6 ? max((max($bind:dx, abs($bind:dy)) == 1) * (move[kind] != 4), castleLegal) : 0",
+          "expression": "$bind:piece == 1 ? $bind:pawn : $bind:piece == 2 ? $bind:dx * abs($bind:dy) == 2 : $bind:piece == 3 ? $bind:diagonal : $bind:piece == 4 ? $bind:straight : $bind:piece == 5 ? max($bind:diagonal, $bind:straight) : $bind:piece == 6 ? max((max($bind:dx, abs($bind:dy)) == 1) & (move[kind] != 4), castleLegal) : 0",
           "state": "shapeLegal"
         }
       ],
@@ -3000,40 +2971,50 @@
     {
       "bindings": [
         {
-          "expression": "(kingCell[0] >= 0) * (1 << max(kingCell[0], 0))",
+          "expression": "lowestSetBit($board:mask:board:6:6)",
           "kind": "int",
-          "name": "kingMaskWhite"
+          "name": "kingMask"
         },
         {
-          "expression": "$bind:kingMaskWhite | boardShift($bind:kingMaskWhite, chessBoard, E) | boardShift($bind:kingMaskWhite, chessBoard, W)",
+          "expression": "$bind:kingMask == 0 ? -1 : trailingZeroCount($bind:kingMask)",
+          "kind": "int",
+          "name": "kingSquare"
+        },
+        {
+          "expression": "(($bind:kingMask << 1) & ~0x0101010101010101) | (($bind:kingMask >>> 1) & 0x7F7F7F7F7F7F7F7F)",
+          "kind": "int",
+          "name": "nearFiles"
+        },
+        {
+          "expression": "(($bind:kingMask << 2) & ~0x0303030303030303) | (($bind:kingMask >>> 2) & 0x3F3F3F3F3F3F3F3F)",
+          "kind": "int",
+          "name": "farFiles"
+        },
+        {
+          "expression": "$bind:kingMask | $bind:nearFiles",
           "kind": "int",
           "name": "kingBand"
         },
         {
-          "expression": "(((boardShift($bind:kingMaskWhite, chessBoard, SE) | boardShift($bind:kingMaskWhite, chessBoard, SW)) & $board:mask:board:-1:-1) | (($bind:kingBand | boardShift($bind:kingBand, chessBoard, N) | boardShift($bind:kingBand, chessBoard, S)) & $board:mask:board:-6:-6)) != 0",
+          "expression": "((($bind:nearFiles << 8) & $board:mask:board:-1:-1) | (($bind:kingBand | ($bind:kingBand << 8) | ($bind:kingBand >>> 8)) & $board:mask:board:-6:-6)) != 0",
           "kind": "int",
-          "name": "closeCheckWhite"
+          "name": "closeHit"
         },
         {
-          "expression": "((boardShift($bind:kingMaskWhite, chessBoard, K0) | boardShift($bind:kingMaskWhite, chessBoard, K1) | boardShift($bind:kingMaskWhite, chessBoard, K2) | boardShift($bind:kingMaskWhite, chessBoard, K3) | boardShift($bind:kingMaskWhite, chessBoard, K4) | boardShift($bind:kingMaskWhite, chessBoard, K5) | boardShift($bind:kingMaskWhite, chessBoard, K6) | boardShift($bind:kingMaskWhite, chessBoard, K7)) & $board:mask:board:-2:-2) != 0",
+          "expression": "((($bind:nearFiles << 16) | ($bind:nearFiles >>> 16) | ($bind:farFiles << 8) | ($bind:farFiles >>> 8)) & $board:mask:board:-2:-2) != 0",
           "kind": "int",
-          "name": "knightHitWhite"
+          "name": "knightHit"
         },
         {
-          "expression": "(kingCell[0] >= 0) * max(`$board:attacks:board:-5:-4:N,S,E,W`[kingCell[0]], max(`$board:attacks:board:-3:-3:NE,SE,SW,NW`[kingCell[0]], `$board:attacks:board:-5:-5:NE,SE,SW,NW`[kingCell[0]]))",
+          "expression": "($bind:kingMask != 0) & (`$board:attacks:board:-5:-4:N,S,E,W`[($bind:kingSquare)] | `$board:attacks:board:-3:-3:NE,SE,SW,NW`[($bind:kingSquare)] | `$board:attacks:board:-5:-5:NE,SE,SW,NW`[($bind:kingSquare)])",
           "kind": "int",
-          "name": "slideHitWhite"
-        },
-        {
-          "expression": "max($bind:closeCheckWhite, max($bind:knightHitWhite, $bind:slideHitWhite))",
-          "kind": "int",
-          "name": "inCheckCombineWhite"
+          "name": "slideHit"
         }
       ],
       "effects": [
         {
           "$type": "setState",
-          "expression": "$bind:inCheckCombineWhite",
+          "expression": "$bind:closeHit | $bind:knightHit | $bind:slideHit",
           "key": "0",
           "state": "inCheck"
         }
@@ -3050,40 +3031,50 @@
     {
       "bindings": [
         {
-          "expression": "(kingCell[1] >= 0) * (1 << max(kingCell[1], 0))",
+          "expression": "lowestSetBit($board:mask:board:-6:-6)",
           "kind": "int",
-          "name": "kingMaskBlack"
+          "name": "kingMask"
         },
         {
-          "expression": "$bind:kingMaskBlack | boardShift($bind:kingMaskBlack, chessBoard, E) | boardShift($bind:kingMaskBlack, chessBoard, W)",
+          "expression": "$bind:kingMask == 0 ? -1 : trailingZeroCount($bind:kingMask)",
+          "kind": "int",
+          "name": "kingSquare"
+        },
+        {
+          "expression": "(($bind:kingMask << 1) & ~0x0101010101010101) | (($bind:kingMask >>> 1) & 0x7F7F7F7F7F7F7F7F)",
+          "kind": "int",
+          "name": "nearFiles"
+        },
+        {
+          "expression": "(($bind:kingMask << 2) & ~0x0303030303030303) | (($bind:kingMask >>> 2) & 0x3F3F3F3F3F3F3F3F)",
+          "kind": "int",
+          "name": "farFiles"
+        },
+        {
+          "expression": "$bind:kingMask | $bind:nearFiles",
           "kind": "int",
           "name": "kingBand"
         },
         {
-          "expression": "(((boardShift($bind:kingMaskBlack, chessBoard, NE) | boardShift($bind:kingMaskBlack, chessBoard, NW)) & $board:mask:board:1:1) | (($bind:kingBand | boardShift($bind:kingBand, chessBoard, N) | boardShift($bind:kingBand, chessBoard, S)) & $board:mask:board:6:6)) != 0",
+          "expression": "((($bind:nearFiles >>> 8) & $board:mask:board:1:1) | (($bind:kingBand | ($bind:kingBand << 8) | ($bind:kingBand >>> 8)) & $board:mask:board:6:6)) != 0",
           "kind": "int",
-          "name": "closeCheckBlack"
+          "name": "closeHit"
         },
         {
-          "expression": "((boardShift($bind:kingMaskBlack, chessBoard, K0) | boardShift($bind:kingMaskBlack, chessBoard, K1) | boardShift($bind:kingMaskBlack, chessBoard, K2) | boardShift($bind:kingMaskBlack, chessBoard, K3) | boardShift($bind:kingMaskBlack, chessBoard, K4) | boardShift($bind:kingMaskBlack, chessBoard, K5) | boardShift($bind:kingMaskBlack, chessBoard, K6) | boardShift($bind:kingMaskBlack, chessBoard, K7)) & $board:mask:board:2:2) != 0",
+          "expression": "((($bind:nearFiles << 16) | ($bind:nearFiles >>> 16) | ($bind:farFiles << 8) | ($bind:farFiles >>> 8)) & $board:mask:board:2:2) != 0",
           "kind": "int",
-          "name": "knightHitBlack"
+          "name": "knightHit"
         },
         {
-          "expression": "(kingCell[1] >= 0) * max(`$board:attacks:board:4:5:N,S,E,W`[kingCell[1]], max(`$board:attacks:board:3:3:NE,SE,SW,NW`[kingCell[1]], `$board:attacks:board:5:5:NE,SE,SW,NW`[kingCell[1]]))",
+          "expression": "($bind:kingMask != 0) & (`$board:attacks:board:4:5:N,S,E,W`[($bind:kingSquare)] | `$board:attacks:board:3:3:NE,SE,SW,NW`[($bind:kingSquare)] | `$board:attacks:board:5:5:NE,SE,SW,NW`[($bind:kingSquare)])",
           "kind": "int",
-          "name": "slideHitBlack"
-        },
-        {
-          "expression": "max($bind:closeCheckBlack, max($bind:knightHitBlack, $bind:slideHitBlack))",
-          "kind": "int",
-          "name": "inCheckCombineBlack"
+          "name": "slideHit"
         }
       ],
       "effects": [
         {
           "$type": "setState",
-          "expression": "$bind:inCheckCombineBlack",
+          "expression": "$bind:closeHit | $bind:knightHit | $bind:slideHit",
           "key": "1",
           "state": "inCheck"
         }
@@ -3151,17 +3142,17 @@
           "name": "sign"
         },
         {
-          "expression": "(abs(move[mover]) == 1) * (move[to] / 8 == (turn == 0 ? 7 : 0))",
+          "expression": "(abs(move[mover]) == 1) & (move[to] / 8 == (turn == 0 ? 7 : 0))",
           "kind": "int",
           "name": "promotes"
         },
         {
-          "expression": "$bind:promotes ? (board[move[to]] * $bind:sign >= 2) * (board[move[to]] * $bind:sign <= 5) : board[move[to]] == move[mover]",
+          "expression": "$bind:promotes ? (board[move[to]] * $bind:sign >= 2) & (board[move[to]] * $bind:sign <= 5) : board[move[to]] == move[mover]",
           "kind": "int",
           "name": "replacement"
         },
         {
-          "expression": "(popCount($board:mask:board:6:6) == 1) * (popCount($board:mask:board:-6:-6) == 1)",
+          "expression": "(popCount($board:mask:board:6:6) == 1) & (popCount($board:mask:board:-6:-6) == 1)",
           "kind": "int",
           "name": "kings"
         }
@@ -3169,7 +3160,7 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": "(move[kind] >= 1) * (move[kind] <= 4) * (boardMismatch == 0) * (boardCollisions == 0) * shapeLegal * $bind:replacement * (move[mover] * $bind:sign > 0) * (move[captured] * $bind:sign <= 0) * (inCheck[moverColor[$value]] == 0) * $bind:kings",
+          "expression": "(move[kind] >= 1) & (move[kind] <= 4) & (boardMismatch == 0) & (boardCollisions == 0) & shapeLegal & $bind:replacement & (move[mover] * $bind:sign > 0) & (move[captured] * $bind:sign <= 0) & (inCheck[turn[$value]] == 0) & $bind:kings",
           "state": "verdict"
         },
         {
@@ -3199,7 +3190,7 @@
         {
           "$type": "setState",
           "expression": "move[to]",
-          "key": "$cell:moverColor:$value",
+          "key": "$cell:turn:$value",
           "state": "promotionPending"
         }
       ],
@@ -3222,7 +3213,7 @@
             "$type": "compareValue",
             "comparison": "Equal",
             "kind": "int",
-            "left": "(abs(move[mover]) == 1) * (move[to] / 8 == (moverColor == 0 ? 7 : 0)) * (board[move[to]] == move[mover]) * shapeLegal * (boardMismatch == 0) * (boardCollisions == 0) * (inCheck[moverColor[$value]] == 0) * (popCount($board:mask:board:6:6) == 1) * (popCount($board:mask:board:-6:-6) == 1)",
+            "left": "(abs(move[mover]) == 1) & (move[to] / 8 == (turn == 0 ? 7 : 0)) & (board[move[to]] == move[mover]) & shapeLegal & (boardMismatch == 0) & (boardCollisions == 0) & (inCheck[turn[$value]] == 0) & (popCount($board:mask:board:6:6) == 1) & (popCount($board:mask:board:-6:-6) == 1)",
             "right": "1"
           }
         ]
@@ -3237,13 +3228,8 @@
           "effects": [
             {
               "$type": "setState",
-              "expression": "castleRights | ((lastLegal[(4)] == 6) * (board[(4)] != 6) * 3) | ((lastLegal[(0)] == 4) * (board[(0)] != 4) * 1) | ((lastLegal[(7)] == 4) * (board[(7)] != 4) * 2)",
-              "state": "castleRights"
-            },
-            {
-              "$type": "setState",
-              "expression": "castleRights | ((lastLegal[(60)] == -6) * (board[(60)] != -6) * 12) | ((lastLegal[(56)] == -4) * (board[(56)] != -4) * 4) | ((lastLegal[(63)] == -4) * (board[(63)] != -4) * 8)",
-              "state": "castleRights"
+              "state": "castleRights",
+              "expression": "castleRights | parallelBitExtract($bind:lostRooks, 0x81 | (0x81 << 56)) | (parallelBitDeposit(parallelBitExtract($bind:lostKings, (1 << 4) | (1 << 60)), 5) * 3)"
             },
             {
               "$type": "transformState",
@@ -3268,7 +3254,7 @@
             },
             {
               "$type": "setState",
-              "expression": "(abs(move[mover]) == 1) * (abs(move[to] - move[from]) == 16) ? (move[from] + move[to]) / 2 : -1",
+              "expression": "(abs(move[mover]) == 1) & (abs(move[to] - move[from]) == 16) ? ((move[from] + move[to]) >> 1) : -1",
               "state": "enPassantTarget"
             },
             {
@@ -3316,7 +3302,19 @@
         ]
       },
       "mode": "Edge",
-      "name": "tabletop-advance-turn"
+      "name": "tabletop-advance-turn",
+      "bindings": [
+        {
+          "expression": "(($board:mask:lastLegal:4:4 & ~$board:mask:board:4:4) & 0x81) | (($board:mask:lastLegal:-4:-4 & ~$board:mask:board:-4:-4) & (0x81 << 56))",
+          "kind": "int",
+          "name": "lostRooks"
+        },
+        {
+          "expression": "(($board:mask:lastLegal:6:6 & ~$board:mask:board:6:6) & (1 << 4)) | (($board:mask:lastLegal:-6:-6 & ~$board:mask:board:-6:-6) & (1 << 60))",
+          "kind": "int",
+          "name": "lostKings"
+        }
+      ]
     },
     {
       "effects": [
@@ -3468,54 +3466,6 @@
             "name": "NW",
             "x": -1,
             "y": -1,
-            "z": 0
-          },
-          {
-            "name": "K0",
-            "x": 1,
-            "y": 2,
-            "z": 0
-          },
-          {
-            "name": "K1",
-            "x": 2,
-            "y": 1,
-            "z": 0
-          },
-          {
-            "name": "K2",
-            "x": 2,
-            "y": -1,
-            "z": 0
-          },
-          {
-            "name": "K3",
-            "x": 1,
-            "y": -2,
-            "z": 0
-          },
-          {
-            "name": "K4",
-            "x": -1,
-            "y": -2,
-            "z": 0
-          },
-          {
-            "name": "K5",
-            "x": -2,
-            "y": -1,
-            "z": 0
-          },
-          {
-            "name": "K6",
-            "x": -2,
-            "y": 1,
-            "z": 0
-          },
-          {
-            "name": "K7",
-            "x": -1,
-            "y": 2,
             "z": 0
           }
         ],
@@ -4294,18 +4244,6 @@
         "name": "pieceCode"
       },
       {
-        "cells": [
-          {
-            "key": "$value",
-            "value": 0
-          }
-        ],
-        "kind": "int",
-        "max": 1,
-        "min": -1,
-        "name": "moverColor"
-      },
-      {
         "capacity": 32,
         "cells": [
           {
@@ -4470,23 +4408,6 @@
         "max": 63,
         "min": -1,
         "name": "enPassantTarget"
-      },
-      {
-        "capacity": 2,
-        "cells": [
-          {
-            "key": "0",
-            "value": 4
-          },
-          {
-            "key": "1",
-            "value": 60
-          }
-        ],
-        "kind": "int",
-        "max": 63,
-        "min": -1,
-        "name": "kingCell"
       },
       {
         "capacity": 2,

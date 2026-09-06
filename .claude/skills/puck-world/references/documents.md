@@ -1254,13 +1254,17 @@ neighbour authority's own entities) still reads an unscaled collider, since no d
 carries a remote entity's live Scale.
 
 The tabletop's `chessBoard` Grid topology (8x8, 0.2 m cells) carries 32 `piece`-kit rigid bodies.
-Its candidate matcher unions exact piece-code mask differences, rejects changes outside the move
+Its candidate matcher unions four lossless bit-plane differences, rejects changes outside the move
 footprint, and directly compares the at most four affected cells. Every pre-move read uses `lastLegal`, never a refused observation.
 Local bindings hold attack and geometry intermediates. A legal move commits turn, board, four
 castling rights, en passant target, accepted check values, and promotion completion together.
 Unfinished promotion does not advance turn. `boardCollisions` prevents duplicate occupants from
 being accepted; board-history fingerprints remain diagnostic, not repetition adjudication.
 The [chess authoring notes](../../../../src/Puck.World/README.md#the-world-as-data) own these contracts.
+They also own the closed -6..7 encoding, the fixed 8x8 masked shifts, and the bit-extract/deposit
+projection of home-piece losses into castling rights. The existing two-rule settle counter
+avoids per-moving-tick epoch writes; `$physics:quiescent` is bool-kind, so an integer
+conditional expression cannot combine its gates.
 The board is
 rendered as 64 `boardSquareLight`/`boardSquareDark` placements, one per cell, colors from the
 `boardColors` text row (the SAME `state.<row>.<key>` palette binding the piece prototypes use for

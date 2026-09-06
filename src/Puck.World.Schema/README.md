@@ -402,7 +402,8 @@ unrelated rigid body still settling elsewhere holds every board's derive at
 bay too.
 
 The shipped chess module uses `$board:mask` to locate a candidate's source and
-destination. A union of piece-code mask differences detects every changed cell;
+destination. Four lossless bit planes encode the cell alphabet; their before/after
+mask differences detect every changed cell;
 the candidate's at most four affected cells are then checked directly, with all
 changes outside that footprint counted as mismatches. The result catches changes
 that occupancy masks alone cannot see.

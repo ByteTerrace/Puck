@@ -5,15 +5,17 @@ namespace Puck.World.Tests;
 /// <summary>Checks the shipped board programs against coordinate arithmetic, independent of their bitboards,
 /// direction names, shifts, and attack queries. The physical chess import is covered by ChessModuleImportLawTests.</summary>
 public sealed class AuthoredBoardRulesLawTests {
-    private static readonly WorldDefinition Garden = LoadGarden();
+    private static readonly Lazy<WorldDefinition> GardenSource = new(() => Load("src/Puck.World/Assets/worlds/puck.world.json"));
+    private static WorldDefinition Garden => GardenSource.Value;
+    private static readonly WorldDefinition ChessModule = Load("tests/Puck.World.Tests/Fixtures/minimal-chess-host.world.json");
 
-    private static WorldDefinition LoadGarden() {
+    private static WorldDefinition Load(string relativePath) {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Puck.slnx"))) {
             directory = directory.Parent;
         }
         Assert.NotNull(directory);
-        var path = Path.Combine(directory.FullName, "src/Puck.World/Assets/worlds/puck.world.json");
+        var path = Path.Combine(directory.FullName, relativePath);
         Assert.True(WorldDefinitionFileSource.TryLoad(path, out var definition, out _, out var reason), reason);
         return definition!;
     }
@@ -24,16 +26,16 @@ public sealed class AuthoredBoardRulesLawTests {
     };
 
     private static WorldDefinition Chess(long[] board) {
-        var rules = Garden.Rules!.Where(r => r.Name.Value is "tabletop-king-cell" or
-            "tabletop-check-white" or "tabletop-check-black" or "tabletop-check-combine").ToArray();
-        var names = new HashSet<string> { "board", "kingCell", "settleHold", "inCheck" };
+        var rules = ChessModule.Rules!.Where(r => r.Name.Value is
+            "tabletop-check-white" or "tabletop-check-black").ToArray();
+        var names = new HashSet<string> { "board", "settleHold", "inCheck" };
         foreach (var effect in rules.SelectMany(r => r.Effects).OfType<ActionEffect.SetState>()) {
             names.Add(effect.State);
         }
         return Fixtures.BuildDocument() with {
-            StateRaw = new WorldStateSection(World: [.. Garden.State.Where(r => names.Contains(r.Name.Value)).Select(r =>
+            StateRaw = new WorldStateSection(World: [.. ChessModule.State.Where(r => names.Contains(r.Name.Value)).Select(r =>
                 r.Name.Value switch { "board" => Seed(r, board), "settleHold" => Seed(r, 60), _ => r })],
-                Lattices: [Garden.StateRaw!.Lattices!.Single(t => t.Name == "chessBoard")]),
+                Lattices: [ChessModule.StateRaw!.Lattices!.Single(t => t.Name == "chessBoard")]),
             Rules = rules,
         };
     }
@@ -91,6 +93,43 @@ public sealed class AuthoredBoardRulesLawTests {
     }
 
     [Fact]
+    public void ChessAttacksAgreeWithCoordinatesForEveryPairOfSquares() {
+        var board = new long[64];
+        var definition = Chess(board);
+        var rows = definition.State;
+        var layout = new FrameLayout(rows, name => WorldTopologyCompilation.Find(definition, name));
+        var host = new FrameHost(layout, rows, definition.StateCatalog, CompiledPatterns.Empty, []);
+        host.Frame.Load(new RowStore(rows));
+        var rules = WorldRuleCompiler.CompileAll(definition);
+        var occupancy = WorldDefinitionRows.FindStateRow(rows, "board")!;
+        var check = WorldDefinitionRows.FindStateRow(rows, "inCheck")!;
+        void Put(int square, long code) {
+            board[square] = code;
+            Assert.True(host.Frame.TryWrite(occupancy, CellName.Parse(square.ToString()), code, StateWriteKind.Set, out var reason), reason);
+        }
+        // Compile the shipped judge once, then exhaust every origin/target/piece/colour
+        // through its real frame evaluator. The expected answer uses coordinate rays.
+        for (var side = 0; side < 2; side++) {
+            var sign = side == 0 ? -1 : 1;
+            for (var king = 0; king < 64; king++) {
+                Put(king, -sign * 6);
+                for (var piece = 1; piece <= 6; piece++) {
+                    for (var target = 0; target < 64; target++) {
+                        if (target == king) { continue; }
+                        Put(target, sign * piece);
+                        host.Judge(rules, 1);
+                        Assert.True(host.Frame.TryStored(check, CellName.Parse(side.ToString()), out var actual, out _));
+                        Assert.Equal(Attacked(board, king, sign) ? 1L : 0L, actual);
+                        Put(target, 0);
+                    }
+                }
+                Put(king, 0);
+            }
+        }
+        Assert.Equal(0, host.Refusals);
+    }
+
+    [Fact]
     public void ChessSlidersStopAtTheFirstPieceAndMissingKingsAreNotInCheck() {
         CheckChess(new long[64]);
         foreach (var sign in new[] { -1, 1 }) {
@@ -107,13 +146,13 @@ public sealed class AuthoredBoardRulesLawTests {
     }
 
     private static WorldDefinition CastlePosition(long[] before, long[] after, string ruleName, int moveKind = 4) => Fixtures.BuildDocument() with {
-        StateRaw = new WorldStateSection(World: [.. Garden.State.Where(r => r.Name.Value is
-            "board" or "lastLegal" or "self" or "move" or "settleHold" or "castleRights" or "castleTransitAttacked").Select(r => r.Name.Value switch {
+        StateRaw = new WorldStateSection(World: [.. ChessModule.State.Where(r => r.Name.Value is
+            "board" or "lastLegal" or "move" or "settleHold" or "castleRights" or "castleTransitAttacked").Select(r => r.Name.Value switch {
                 "board" => Seed(r, after), "lastLegal" => Seed(r, before), "settleHold" => Seed(r, 60),
                 "move" => r with { Cells = [.. r.Cells!.Select(c => c with { Value = c.Key.Value == "kind" ? moveKind : -1 })] },
                 _ => r,
-            })], Lattices: [Garden.StateRaw!.Lattices!.Single(t => t.Name == "chessBoard")]),
-        Rules = [Garden.Rules!.Single(r => r.Name.Value == ruleName)],
+            })], Lattices: [ChessModule.StateRaw!.Lattices!.Single(t => t.Name == "chessBoard")]),
+        Rules = [ChessModule.Rules!.Single(r => r.Name.Value == ruleName)],
     };
 
     [Theory]

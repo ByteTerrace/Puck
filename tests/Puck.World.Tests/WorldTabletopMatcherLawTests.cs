@@ -199,6 +199,46 @@ public sealed class WorldTabletopMatcherLawTests {
         capture.Step(); Assert.Equal(1, Read(capture, "verdict")); Assert.Equal(2, Read(capture, "castleRights"));
     }
 
+    [Fact]
+    public void CastlingRightsProjectEveryHomeOccupantLossAndPreserveConsumedRights() {
+        (int Cell, int Piece, int Rights)[] homes = [(0, 4, 1), (4, 6, 3), (7, 4, 2),
+            (56, -4, 4), (60, -6, 12), (63, -4, 8)];
+        var before = Position((0, 4), (7, 4), (56, -4), (63, -4));
+        void CheckRights(long[] after, int rights) {
+            var source = Judge(before, after, rights: rights);
+            var expected = rights;
+            foreach (var home in homes) {
+                if (before[home.Cell] == home.Piece && after[home.Cell] != home.Piece) { expected |= home.Rights; }
+            }
+            using var fixture = Fixtures.FreshServer(source with {
+                StateRaw = source.StateRaw! with { World = [.. source.State.Select(row => row.Name.Value switch {
+                    "verdict" => Slot(row, 1),
+                    "move" => row with { Cells = [.. row.Cells!.Select(c => c.Key.Value == "kind" ? c with { Value = 1 } : c)] },
+                    _ => row,
+                })] },
+                Rules = [.. source.Rules!.Where(r => r.Name.Value == "tabletop-advance-turn")],
+            });
+            fixture.Step();
+            Assert.Equal(expected, Read(fixture, "castleRights"));
+            Assert.Equal(1, Read(fixture, "turn"));
+        }
+        for (var losses = 0; losses < 64; losses++) {
+            var after = (long[])before.Clone();
+            for (var i = 0; i < homes.Length; i++) {
+                if ((losses & (1 << i)) != 0) { after[homes[i].Cell] = 0; }
+            }
+            for (var rights = 0; rights < 16; rights++) { CheckRights(after, rights); }
+        }
+        // Replacement is loss too, unless the same home piece still occupies that square.
+        foreach (var home in homes) {
+            for (var code = -6; code <= 6; code++) {
+                var after = (long[])before.Clone();
+                after[home.Cell] = code;
+                CheckRights(after, 0);
+            }
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

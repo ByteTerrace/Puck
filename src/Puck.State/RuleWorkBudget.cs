@@ -231,14 +231,93 @@ public static class RuleWorkBudget {
         return cost;
     }
 
-    /// <summary>Returns the work units an expression costs: one per token, or the operand's own cost.</summary>
+    /// <summary>Returns the work units one non-operand operation token costs based on its static disassembly and execution complexity.</summary>
+    /// <param name="operation">The operation.</param>
+    /// <param name="board">The compiled board query for board-shift operations.</param>
+    public static long OperationCost(ExpressionOp operation, BoardQuery? board = null) => operation switch {
+        // Tier 0: Single-cycle ALU, bitwise ops, shifts, relations, unary math (1)
+        ExpressionOp.Constant or ExpressionOp.Operand
+            or ExpressionOp.Add or ExpressionOp.Subtract
+            or ExpressionOp.BitAnd or ExpressionOp.BitOr or ExpressionOp.BitXor or ExpressionOp.BitNot
+            or ExpressionOp.ShiftLeft or ExpressionOp.ShiftRight or ExpressionOp.ShiftRightLogical
+            or ExpressionOp.Equal or ExpressionOp.NotEqual or ExpressionOp.Less or ExpressionOp.Greater
+            or ExpressionOp.LessOrEqual or ExpressionOp.GreaterOrEqual
+            or ExpressionOp.Negate or ExpressionOp.Abs or ExpressionOp.Sign => 1L,
+
+        // Tier 1: Conditional choice & select (2)
+        ExpressionOp.Minimum or ExpressionOp.Maximum or ExpressionOp.Clamp or ExpressionOp.Select => 2L,
+
+        // Tier 2: Dedicated hardware bit intrinsics (2)
+        ExpressionOp.PopCount or ExpressionOp.LeadingZeroCount or ExpressionOp.TrailingZeroCount
+            or ExpressionOp.LowestSetBit or ExpressionOp.ClearLowestSetBit
+            or ExpressionOp.ByteSwap or ExpressionOp.BitReverse or ExpressionOp.SmallestMissing => 2L,
+
+        // Tier 3: Hardware multiply, rotations, bitfields, parallel bit extract/deposit (3-4)
+        ExpressionOp.Multiply or ExpressionOp.RotateLeft or ExpressionOp.RotateRight
+            or ExpressionOp.BitField or ExpressionOp.BitInsert => 3L,
+        ExpressionOp.ParallelBitExtract or ExpressionOp.ParallelBitDeposit => 4L,
+
+        // Tier 4: Fast coordinate projections (5-6)
+        ExpressionOp.HexEuclideanSquared or ExpressionOp.SquareRadius or ExpressionOp.SquareLength
+            or ExpressionOp.SquareEuclideanSquared => 5L,
+        ExpressionOp.SquareDistance or ExpressionOp.SquareChebyshev => 6L,
+
+        // Tier 5: Direct coordinate algebra (10-15)
+        ExpressionOp.HexDistance or ExpressionOp.HexNeighbor or ExpressionOp.HexRotate
+            or ExpressionOp.HexMirror or ExpressionOp.HexSwap or ExpressionOp.HexAdd or ExpressionOp.HexSubtract
+            or ExpressionOp.SquareIndex or ExpressionOp.SquareNeighbor or ExpressionOp.SquareRotate
+            or ExpressionOp.SquareMirror or ExpressionOp.SquareSwap or ExpressionOp.SquareAdd or ExpressionOp.SquareSubtract
+            or ExpressionOp.SquareMultiply or ExpressionOp.SquareScale or ExpressionOp.SquareTranslate => 10L,
+        ExpressionOp.Pair or ExpressionOp.PairTranslate or ExpressionOp.PairScale
+            or ExpressionOp.HexScale or ExpressionOp.HexTranslate or ExpressionOp.HexIndex or ExpressionOp.HexMultiply => 12L,
+        ExpressionOp.Morton or ExpressionOp.MortonX or ExpressionOp.MortonY => 15L,
+
+        // Tier 6: Multi-cycle integer division, modulo, and cyclic distance (16-18)
+        ExpressionOp.Divide or ExpressionOp.Modulo => 16L,
+        ExpressionOp.FloorModulo or ExpressionOp.CycleForward or ExpressionOp.CycleDistance => 18L,
+
+        // Tier 7: Square roots, transcendentals, and quadratic sequences (20-25)
+        ExpressionOp.SquareRoot => 20L,
+        ExpressionOp.Layer or ExpressionOp.LayerOffset or ExpressionOp.LayerStart or ExpressionOp.LayerSize => 20L,
+        ExpressionOp.Sine or ExpressionOp.Cosine => 25L,
+
+        // Tier 8: Shell unpairing & square root locators (25-35)
+        ExpressionOp.PairX or ExpressionOp.PairY or ExpressionOp.PairSwap
+            or ExpressionOp.PairMax or ExpressionOp.PairMin or ExpressionOp.PairSum or ExpressionOp.PairDifference
+            or ExpressionOp.SquareX or ExpressionOp.SquareY => 25L,
+        ExpressionOp.HexRadius => 30L,
+        ExpressionOp.HexQ or ExpressionOp.HexR => 35L,
+
+        // Tier 9: Table lookups (3)
+        ExpressionOp.Factorial or ExpressionOp.Prime => 3L,
+
+        // Tier 10: Combinatorial & iterative Euclidean loops (40-80)
+        ExpressionOp.GreatestCommonDivisor or ExpressionOp.Choose => 40L,
+        ExpressionOp.LeastCommonMultiple => 45L,
+        ExpressionOp.Hilbert or ExpressionOp.HilbertX or ExpressionOp.HilbertY => 60L,
+        ExpressionOp.SubsetRank or ExpressionOp.SubsetAt or ExpressionOp.SubsetMember
+            or ExpressionOp.ArrangementRank or ExpressionOp.ArrangementAt or ExpressionOp.ArrangementMember => 60L,
+
+        // Tier 11: Heavy primality test (200)
+        ExpressionOp.IsPrime => 200L,
+
+        // Tier 12: Topology shifts & transforms
+        ExpressionOp.BoardShift or ExpressionOp.BoardImage => (board is { } b ? (b.Topology.CellCount / 2 + b.Visits) : 24L),
+
+        _ => 1L,
+    };
+
+    /// <summary>Returns the work units an expression costs: the sum of its operations and live operand reads.</summary>
     public static long ExpressionCost(CompiledExpressionToken[] tokens, RuleCompileContext context) {
         ArgumentNullException.ThrowIfNull(argument: tokens);
 
         var cost = 0L;
 
         foreach (var token in tokens) {
-            cost = SaturatingAdd(left: cost, right: ((token.Operand is { } operand) ? operand.Cost(context: context) : 1L));
+            var tokenCost = ((token.Operand is { } operand)
+                ? operand.Cost(context: context)
+                : OperationCost(operation: token.Operation, board: token.Board));
+            cost = SaturatingAdd(left: cost, right: tokenCost);
         }
 
         return cost;

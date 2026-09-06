@@ -488,18 +488,11 @@ public static class EffectCosts {
     public static long SaturatingMultiply(long left, long right) => ((left == 0L) || (right == 0L))
         ? 0L
         : ((left > (long.MaxValue / right)) ? long.MaxValue : (left * right));
-    /// <summary>Counts tokens and conservative state-candidate visits for a compiled expression.</summary>
+    /// <summary>Counts operations and conservative state-candidate visits for a compiled expression.</summary>
     /// <param name="tokens">The compiled postfix expression.</param>
     /// <param name="context">The compile context whose capacities bound indirect reads and reductions.</param>
-    public static long Expression(CompiledExpressionToken[] tokens, RuleCompileContext context) {
-        ArgumentNullException.ThrowIfNull(argument: tokens);
-        ArgumentNullException.ThrowIfNull(argument: context);
-        var cost = 0L;
-        foreach (var token in tokens) {
-            cost = SaturatingAdd(left: cost, right: ((token.Operand is { } operand) ? operand.Cost(context: context) : 1L));
-        }
-        return cost;
-    }
+    public static long Expression(CompiledExpressionToken[] tokens, RuleCompileContext context) =>
+        RuleWorkBudget.ExpressionCost(tokens: tokens, context: context);
     /// <summary>Sums the cost of a list of effects.</summary>
     /// <param name="effects">The effects.</param>
     /// <param name="context">The compile context.</param>

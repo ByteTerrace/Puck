@@ -938,6 +938,7 @@
             "value": 0
           }
         ],
+        "capacity": 14,
         "domain": {
           "$type": "cellsOf",
           "topology": "mancalaBoard"

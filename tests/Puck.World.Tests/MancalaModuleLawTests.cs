@@ -1,7 +1,6 @@
 using Xunit;
 
 using Puck.World.Protocol;
-using Puck.World.Server;
 
 namespace Puck.World.Tests;
 
