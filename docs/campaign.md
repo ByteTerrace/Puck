@@ -11,6 +11,29 @@ place to start.
 
 ## The charter (owner-ratified 2026-08-06, binding)
 
+**Amended 2026-09-06 (owner ruling): one world.** Everything the charter below names, and everything the
+campaign has built toward since the demo, converges on ONE shipped document, `puck.world.json`: the
+floating island IS the nexus, and the dungeons, the studio canvas, the arcade cabinets, the market of
+tabletop games, the creature garden, the proving ground, split-screen seats, and the game-within-a-game
+reveals are DISTRICTS of that island rather than sibling documents. Each district is an importable module
+(`imports[].as`) the island composes; a district reached by walking is a place on the island, and a
+district that must be instanced (a group dungeon, a user workshop) is the same module minted through a
+`destinations` row. The island is also the operational twin of the platform that hosts it: the
+granary court renders the deployment's storage inventory today, and every further reading of the
+platform (traffic, queues, compute, gateways, caches) enters the same way, as observation rows a
+module's placements, bodies, and rules read — the engine learns no cloud noun and no game noun for it.
+The roster of retired prototypes (`play`, `nexus`, `dive`, `kart`, `jump`, `studio`, the quilt corners,
+the frozen diorama, the two scenario documents, `granaries.world.json`) is realized inside the one world
+and DELETED as each is realized, never repaired beside it; `experimental/Puck.Demo` retires the same way,
+folder by folder, each deletion beside the landing that eclipses it. The 51-game tabletop roster
+(chess through billiards, Riichi Mahjong, Chinese Checkers) is a real target the market district is
+built toward, and every capability it needs lands as a game-agnostic primitive — chance and
+information-set search nodes, multi-hop candidate chains, n-player search, a cue gesture over
+`body.impulse`, priority windows over phases and deadlines — proven by authoring and running the game
+that needs it, never by asserting it. The four-world reading below stays as the record of what each
+district is for.
+
+
 **Four game worlds, no others.** **Nexus** — the overworld hub, a floating island above a field of
 planetoids, a plaza that local multiplayer shares — and three instanced "dungeons" reached from it:
 **Dive** (underwater), **Kart** (racing), **Jump** (platformer).
@@ -1488,6 +1511,42 @@ each piece:
   never embeds them.
 - `Puck.Audio` parses no document (the `Puck.Physics` boundary); document families live in world
   projects.
+
+**One World (owner ruling 2026-09-06; supersedes the nexus-as-island and quilt-as-nexus shapes below,
+which stay as the reasoning they recorded).** The waves, each a decision rather than a status — the code
+answers what has landed:
+
+- **The primitives the island refuses without, named as guarantees.** A placement whose instances are
+  DEALT from a keyed state row (one instance per cell, keyed by the cell, laid out by the row's own
+  `distribution` region in cell order, a variant chosen by a second row; instances follow the row live
+  through the ordinary placement door) — this replaces the extension host's own column-grid projection,
+  which is deleted: an observation writes rows and nothing else. An observation field lands on a row of
+  ANY cell kind, parsed by the row's kind and refused by name when it does not parse. A placement's
+  `respond` condition reads an ordinary state cell as well as a lattice field. An inhabit facet's count
+  may be a state cell, so a row's value admits and retires bodies live. Identity-carried FACTS: a keyed
+  row persisted on the owned identity, written by a rule effect scoped to a seat's identity, read by
+  `$identity:<key>` and bound by the HUD, echoed by `identity.facts` — the reveal ladder's carrier. A
+  `machine` screen boots a `puck.cartridge.v1` document as readily as a ROM, compiled at bind by the
+  brick's own forge, so a cabinet's game is authored data beside the world.
+- **The island.** `puck.world.json` re-authored on the 2026-08-31 rule (one description, rendered and
+  collided): the floating island above its planetoids, the plaza at its crown with the granary court, the
+  arcade, and the market hall; the proving ground and the garden kept as districts; the pool as the dive
+  district; a track as the kart district; a course as the jump district; the studio canvas as a district
+  behind the fourth arch; two local seats in a split layout; a spawn point per district; a navigation
+  domain per walkable district; `captures` rows for parity. Districts are modules under
+  `Assets/worlds/modules/`, imported under an alias and exporting only their control rows.
+- **What retires with it.** `granaries.world.json`, `puck.world.frozen.json` and `puck.basis.frozen.json`,
+  `Assets/scenarios/*`, the canaries that booted them (re-recorded against the one world in the same
+  change or deleted with a named successor), and `experimental/Puck.Demo` with a ledger naming each
+  folder's live successor.
+- **Then the market's engine gaps**, sequenced by what an authored probe world refuses first: Backgammon
+  for chance nodes, Chinese Checkers for chains and n-player search, billiards for the cue gesture,
+  Riichi Mahjong for priority windows.
+
+The checks: `dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2` boots the one
+world with no bracketed stderr line; `world.imports` names every district under its alias;
+`body.pose spawn:<district>` stands a seat in each; `puck parity` holds on both backends; the two
+retired-world canaries are gone from `puck landing`'s automatic set and their successors run.
 
 **Nexus-as-island.** `play.world.json` retires and `nexus.world.json` is the hub and the boot default: a
 floating island above a field of planetoids, carrying the four dungeon/studio portal arches, the arcade
