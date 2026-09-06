@@ -1,0 +1,10 @@
+world.status
+world.imports
+world.wait 5
+body.pose 3 0 5.5 0 0 0 0
+world.wait 3
+world.state arena_targeted 0
+world.rule.trace arena_manual-attack 3
+body.press attack
+world.wait 5
+world.rule.trace
