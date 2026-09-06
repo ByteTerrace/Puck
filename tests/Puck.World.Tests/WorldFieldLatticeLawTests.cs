@@ -337,7 +337,8 @@ public sealed class WorldFieldLatticeLawTests {
     public void ASegmentEntirelyBelowTheFreeSurfaceProvesInsideTheMedium_WhereOneCrossingTheSurfaceRefuses() {
         // Same lattice as above: surface at Y = 5, raw voxel box only one cellSize (1) tall. A short segment well
         // beneath the surface but above that one voxel must still prove submerged for navigation's medium-domain
-        // locomotion check (WorldNavigationRuntime.Domain.AdmitsLocomotion) to ever admit a swimmer's move.
+        // locomotion check (Puck.Physics.Navigation.NavigationRuntime.Domain.AdmitsLocomotion) to ever admit a
+        // swimmer's move.
         var lattice = Fixtures.BuildLattice(document: MediumFields(initial: 1f, heightScale: 5f));
         var from = new FixedVector3(X: FixedQ4816.FromDouble(value: 1.5), Y: FixedQ4816.FromInteger(value: 3), Z: FixedQ4816.FromDouble(value: 1.5));
         var to = new FixedVector3(X: FixedQ4816.FromDouble(value: 1.6), Y: FixedQ4816.FromInteger(value: 3), Z: FixedQ4816.FromDouble(value: 1.5));

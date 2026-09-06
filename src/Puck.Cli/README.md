@@ -437,9 +437,10 @@ shipped-world server construction time, idle-tick time and quiet-tick
 allocation (median over a sampled window, after a warmup), and a scripted
 Klondike deal's per-tick time and per-mutation allocation. A server
 construction against the shipped world costs tens of seconds
-(`WorldNavigationRuntime.BuildEdges` sphere-casting through the static SDF
-program) — far past what an iteration-based BenchmarkDotNet job can amortize
-honestly — so this lane is a plain stopwatch harness (`WorldBenchmarks.cs`,
+(`Puck.Physics.Navigation.NavigationRuntime.Domain.BuildEdges` sphere-casting
+through the static SDF program) — far past what an iteration-based
+BenchmarkDotNet job can amortize honestly — so this lane is a plain stopwatch
+harness (`WorldBenchmarks.cs`,
 `WorldBenchHarness.cs`) rather than a `[Benchmark]` class, run directly by
 `BenchRunner` before it reaches `BenchmarkSwitcher`:
 

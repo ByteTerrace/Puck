@@ -1,6 +1,7 @@
 using Puck.Maths;
 using Puck.Physics;
 using Puck.Physics.Motion;
+using Puck.Physics.Navigation;
 
 namespace Puck.World.Server;
 
@@ -117,10 +118,15 @@ public sealed partial class WorldPopulation {
             ? derivedSolids
             : null
         );
-        m_navigation = new WorldNavigationRuntime(
-            definition: definition,
+        m_navigation = new NavigationRuntime(
+            domains: CompileNavigationDomains(rows: definition.Navigation.Rows),
             query: derivedSolids?.Query,
-            fields: m_fields
+            fields: (m_fields is null ? null : new NavigationMediumFieldAdapter(lattice: m_fields)),
+            capacity: new NavigationCapacity(
+                MaxSurfaceClearanceSweeps: WorldNavigationCapacity.MaxSurfaceClearanceSweeps,
+                MaxMediumSegmentSubdivisions: WorldNavigationCapacity.MaxMediumSegmentSubdivisions,
+                MaxConcurrentRequesters: WorldBodiesLimits.CapacityCeiling
+            )
         );
         m_seatKit = ResolveKit(name: definition.DefaultSeatKit);
         // The LOOK table: the authored rows, or the implicit single catalog look when the author declared none.

@@ -1,6 +1,7 @@
 using Puck.Maths;
 using Puck.World.Protocol;
 using Puck.Physics.Motion;
+using Puck.Physics.Navigation;
 
 namespace Puck.World.Server;
 
@@ -206,18 +207,18 @@ public sealed partial class WorldPopulation {
             goal = frozen ? m_flockPositions[designation.Index] : designatedBody.FixedPosition;
             targetIndex = designation.Index;
         } else {
-            state.Clear(status: WorldNavigationStatus.NoTarget);
+            state.Clear(status: NavigationStatus.NoTarget);
             return BodySensorTarget.None;
         }
 
         if ((uint)target.NavigationDomainIndex >= (uint)m_navigation.Count) {
-            state.Clear(status: WorldNavigationStatus.OutsideDomain);
+            state.Clear(status: NavigationStatus.OutsideDomain);
             return BodySensorTarget.None;
         }
 
         var domain = m_navigation[target.NavigationDomainIndex];
         if (!domain.TryCell(position: in self, node: out var start) || !domain.TryCell(position: in goal, node: out var goalCell)) {
-            state.Clear(status: WorldNavigationStatus.OutsideDomain);
+            state.Clear(status: NavigationStatus.OutsideDomain);
             return BodySensorTarget.None;
         }
 
@@ -251,7 +252,7 @@ Replan:
             }
             var waypoint = domain.Position(node: state.Path[state.Waypoint]);
             if ((waypoint - self).LengthSquared > arrivalSquared) {
-                state.Status = WorldNavigationStatus.Active;
+                state.Status = NavigationStatus.Active;
                 return new BodySensorTarget(
                     Index: targetIndex,
                     Position: waypoint,
@@ -262,7 +263,7 @@ Replan:
         }
 
         var distanceSquared = (goal - self).LengthSquared;
-        state.Status = (distanceSquared <= arrivalSquared ? WorldNavigationStatus.Arrived : WorldNavigationStatus.Active);
+        state.Status = (distanceSquared <= arrivalSquared ? NavigationStatus.Arrived : NavigationStatus.Active);
         return new BodySensorTarget(Index: targetIndex, Position: goal, DistanceSquared: distanceSquared);
     }
     // Advances a curve-follow arc position by one compiled step, then wraps (closed) or clamps (open) it back inside
@@ -491,7 +492,7 @@ Replan:
                 entry.ProducerState.ActiveProducerCurveIndex = -1;
                 entry.ProducerState.ActiveProducerNavigationDomainIndex = -1;
                 entry.ProducerState.CurveArcRaw = 0L;
-                entry.NavigationState.Clear(status: WorldNavigationStatus.NoTarget);
+                entry.NavigationState.Clear(status: NavigationStatus.NoTarget);
                 entry.ProducerState.FlockSeeded = false;
             }
             body.StageProducerIntent(intent: default);

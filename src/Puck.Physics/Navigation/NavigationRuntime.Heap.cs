@@ -1,4 +1,4 @@
-namespace Puck.World.Server;
+namespace Puck.Physics.Navigation;
 
 /// <summary>A total order over node indices a <see cref="NodeHeap"/> pops by. Implemented by a
 /// <see langword="readonly"/> struct so the heap's generic instantiation inlines the comparison and allocates

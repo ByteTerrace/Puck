@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Puck.Physics.Navigation;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
@@ -89,7 +90,7 @@ public sealed partial class NavigationLawTests {
         var captured = fixture.Server.Population.Capture();
         var entry = Assert.Single(captured.Entries);
         var route = entry.Navigation!.Value;
-        var invalid = route with { ExpandedLast = shared ? 1 : 0, Path = [], Waypoint = 0, Status = WorldNavigationStatus.Pending };
+        var invalid = route with { ExpandedLast = shared ? 1 : 0, Path = [], Waypoint = 0, Status = NavigationStatus.Pending };
         var malformed = captured with { Entries = [entry with { Navigation = invalid }] };
         var before = WorldRuntimeStateHash.HashAuthoritative(fixture.Server, 0);
         Assert.Contains("shared", Assert.Throws<InvalidOperationException>(() =>

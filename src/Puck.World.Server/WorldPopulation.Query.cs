@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Maths;
 using Puck.Physics.Motion;
+using Puck.Physics.Navigation;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -42,7 +43,7 @@ public sealed partial class WorldPopulation {
             array: entry.Designations,
             value: WorldTargetDesignation.None
         );
-        entry.NavigationState.Clear(status: WorldNavigationStatus.NoTarget);
+        entry.NavigationState.Clear(status: NavigationStatus.NoTarget);
         entry.DesignationRefusal = string.Empty;
     }
     private int CountActiveCensus() {
@@ -350,11 +351,11 @@ public sealed partial class WorldPopulation {
         var state = m_entries[index].NavigationState;
         return facet switch {
             "hasPath" => (state.PathLength != 0 ? 1L : 0L),
-            "active" => (state.Status == WorldNavigationStatus.Active ? 1L : 0L),
-            "arrived" => (state.Status == WorldNavigationStatus.Arrived ? 1L : 0L),
-            "pending" => (state.Status == WorldNavigationStatus.Pending ? 1L : 0L),
-            "capacity" => (state.Status == WorldNavigationStatus.CapacityLimited ? 1L : 0L),
-            "unreachable" => (state.Status is WorldNavigationStatus.Unreachable or WorldNavigationStatus.SearchLimit or WorldNavigationStatus.PathLimit or WorldNavigationStatus.OutsideDomain ? 1L : 0L),
+            "active" => (state.Status == NavigationStatus.Active ? 1L : 0L),
+            "arrived" => (state.Status == NavigationStatus.Arrived ? 1L : 0L),
+            "pending" => (state.Status == NavigationStatus.Pending ? 1L : 0L),
+            "capacity" => (state.Status == NavigationStatus.CapacityLimited ? 1L : 0L),
+            "unreachable" => (state.Status is NavigationStatus.Unreachable or NavigationStatus.SearchLimit or NavigationStatus.PathLimit or NavigationStatus.OutsideDomain ? 1L : 0L),
             "remaining" => Math.Max(0, state.PathLength - state.Waypoint),
             _ => 0L,
         };

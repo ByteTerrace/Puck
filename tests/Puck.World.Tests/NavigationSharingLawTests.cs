@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Physics.Navigation;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
@@ -15,7 +16,7 @@ public sealed partial class NavigationLawTests {
     private static FixedVector3 SharedGoal(int x = 4, int y = 4, int z = 0) =>
         new(FixedQ4816.FromInteger(x), FixedQ4816.FromInteger(y), FixedQ4816.FromInteger(z));
 
-    private static WorldNavigationTreeCheckpoint[] SharedTrees(WorldFixture fixture) =>
+    private static NavigationTreeCheckpoint[] SharedTrees(WorldFixture fixture) =>
         fixture.Server.Population.Capture().SharedNavigation![0].Trees;
 
     [Fact]

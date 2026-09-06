@@ -2,7 +2,8 @@
 
 Puck.Physics owns the engine's deterministic fixed-point simulation kernels:
 exact and scalable gravitational fields, compound dynamic-body overlap, analytic
-static contact geometry, a substepping rigid-contact solver, and — under
+static contact geometry, a substepping rigid-contact solver, a bounded A*/
+shared-search navigation kernel under `Navigation/`, and — under
 `Motion/` — the body motion-program core. Everything here is built on Puck.Maths,
 so identical ordered inputs return identical results — bit for bit — on every
 machine and backend, and a run can be recorded and replayed exactly.
@@ -248,6 +249,67 @@ and goal selection are caller policy, so following a competent stranger need not
 imply attraction or friendship. The kernel returns intent, not a collision-free
 trajectory. Its steering decomposition follows [Reynolds' steering model](https://www.red3d.com/cwr/steer/gdc99/).
 
+## 🧭 Navigation kernel (`Navigation/`)
+
+`NavigationRuntime` is a deterministic, bounded route-search kernel over a set
+of finite grids a host compiles once from its own document boundary into
+`NavigationDomainInput` — the kernel parses no document and holds no Schema or
+Server reference; a host's live-medium field implements the narrow
+`INavigationMediumField` seam instead of the kernel depending on that
+representation. `Puck.World.Server.WorldPopulation` is today's host: it
+compiles `navigation.domains` rows and bridges its own `WorldFieldLattice`
+through that seam (see [its README](../Puck.World.Server/README.md#navigation)).
+
+A `Surface` domain samples ground through the host's `IWorldQuery.TryGroundHeight`,
+proving lower/head clearance, slope, and step limits; every admitted edge is
+proven with swept spheres from `maxStepHeight` above the foot up to the head
+(the step rule already admits anything lower, and a sphere sweeping the floor
+it stands on advances one contact skin per march step) and stored in one
+26-bit mask per cell. `Volume` and `Medium` domains use the same swept-sphere
+edge proof in three dimensions. A `Medium` domain additionally resolves its
+field name to an ordinal once and checks the agent clearance volume at each
+live node plus half-cell-or-shorter swept boxes on search and before
+following the next cached edge, through `INavigationMediumField`; every
+intersected voxel's free surface is checked, including dry caps between wet
+layers, so field evolution never needs rebaking static solids.
+
+Without `Shared`, search is bounded A* over reused arrays: integer costs
+(1000/1414/1732), stable `(f, h, nodeOrdinal)` ties, and the domain's own
+expansion/path ceilings. Domain search workspace allocates once at
+construction; per-body route storage is a host concern, so a steady-state
+search allocates nothing here.
+
+A domain carrying `Shared` runs queued reverse-Dijkstra searches instead,
+with stable `(cost, nodeOrdinal)` ties and one aggregate expansion allowance
+per domain per simulation tick (each expansion inspects at most 26 edges).
+Resident goals take turns, one expansion at a time; unfinished requests
+continue on later calls to `BeginStep`. The shared tree can eventually cover
+every cell in the domain; `MaxExpandedNodes` remains the independent A* limit,
+while `MaxPathNodes` also bounds paths extracted from shared trees.
+
+The shared cache key is the domain and destination cell — not a leader,
+friendship, or requester identity. Completed trees are evicted
+least-recently-used using bounded, distinct recency ranks, so repeated
+requests cannot erase the order of other goals; pending requests pin a tree
+for the next search step, and a full cache with no idle slot reports
+`CapacityLimited` rather than launching an unbudgeted independent search. A
+change to the referenced medium field invalidates every resident tree; this
+implementation restarts affected trees rather than incrementally repairing
+them, so rapidly changing water can delay a distant request under a small
+budget. It does not provide crowd collision avoidance, bottleneck
+reservations, hierarchical long-distance routing, or group membership. The
+many-agents/one-destination approach is informed by
+[Emerson's crowd pathfinding chapter](https://www.gameaipro.com/GameAIPro/GameAIPro_Chapter23_Crowd_Pathfinding_and_Steering_Using_Flow_Field_Tiles.pdf),
+using finite domain trees rather than that chapter's tiled hierarchy.
+
+`CaptureShared`/`RestoreShared`/`ValidateShared`/`AppendSharedHash` checkpoint
+and hash the shared scheduler: resident goals, discovered costs/successors,
+settled flags, pending starts, eviction ages, and the scheduler cursor. Node
+digests are cached in 64-cell blocks — only changed blocks rehash, and an
+unchanged tree contributes its cached digest in constant time. Pending starts
+hash in sorted order from their bounded request list, never by scanning the
+domain.
+
 ## 🚀 Basic use
 
 ```csharp
@@ -338,6 +400,10 @@ thread-safe**.
 - **Surface-attach query** — `FixedSurfaceQuery`, `FixedSurfaceAttachCandidate`,
   `FixedSurfaceColliderSource`.
 - **Rigid solver** — `FixedRigidSolver`, `FixedContactCandidate`.
+- **Navigation kernel** — `NavigationRuntime`, `NavigationRuntime.Domain`,
+  `NavigationDomainInput`, `NavigationCapacity`, `NavigationSharing`,
+  `INavigationMediumField`, `NavigationStatus`, `NavigationSharedCheckpoint`,
+  `NavigationTreeCheckpoint`, `NavigationTreeNode`.
 - **Multi-body coupling** — `FixedTwoBodyKernel`, `FixedTwoBodyContact`,
   `FixedPairManifoldSlotTable`, `FixedRigidWorld` (shape only, not wired into
   any World tick).

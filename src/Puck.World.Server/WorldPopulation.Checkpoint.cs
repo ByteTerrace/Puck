@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Maths;
+using Puck.Physics.Navigation;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -73,12 +74,12 @@ public sealed partial class WorldPopulation {
         int GoalCell,
         int Waypoint,
         int ExpandedLast,
-        WorldNavigationStatus Status,
+        NavigationStatus Status,
         int[] Path
     );
     /// <summary>The population's own checkpointed state — see <see cref="Capture"/>.</summary>
     public sealed record WorldPopulationCheckpoint(int SimulatedCount, int Revision, byte SeatKit, IReadOnlyList<WorldPopulationEntryCheckpoint> Entries,
-        int[] Generations, WorldNavigationSharedCheckpoint[]? SharedNavigation = null);
+        int[] Generations, NavigationSharedCheckpoint[]? SharedNavigation = null);
 
     /// <summary>Captures every active slot's simulation state. Asserts the per-tick pending-output lists are empty —
     /// guaranteed by <see cref="WorldServer.TryCaptureCheckpoint"/>'s capture point sitting between a completed
@@ -507,14 +508,14 @@ public sealed partial class WorldPopulation {
             if (state.GoalCell != -1 || state.Path.Length != 0 || state.Waypoint != 0 || state.ExpandedLast != 0) {
                 throw new InvalidOperationException(message: "population checkpoint navigation state carries route data without a domain.");
             }
-            if (state.Status is not (WorldNavigationStatus.None or WorldNavigationStatus.NoTarget or WorldNavigationStatus.OutsideDomain)) {
+            if (state.Status is not (NavigationStatus.None or NavigationStatus.NoTarget or NavigationStatus.OutsideDomain)) {
                 throw new InvalidOperationException(message: $"population checkpoint navigation status '{state.Status}' requires a domain.");
             }
             return;
         }
 
         var domain = m_navigation[state.DomainIndex];
-        if (domain.Sharing is null && state.Status is WorldNavigationStatus.Pending or WorldNavigationStatus.CapacityLimited) {
+        if (domain.Sharing is null && state.Status is NavigationStatus.Pending or NavigationStatus.CapacityLimited) {
             throw new InvalidOperationException(message: "population checkpoint shared navigation status requires a shared domain.");
         }
         if (domain.Sharing is not null && state.ExpandedLast != 0) {
@@ -536,14 +537,14 @@ public sealed partial class WorldPopulation {
             throw new InvalidOperationException(message: $"population checkpoint navigation waypoint {state.Waypoint} lies outside its {state.Path.Length}-node path.");
         }
         if (state.Path.Length == 0) {
-            if (state.Status is not (WorldNavigationStatus.Unreachable or WorldNavigationStatus.SearchLimit or WorldNavigationStatus.PathLimit or WorldNavigationStatus.Pending or WorldNavigationStatus.CapacityLimited)) {
+            if (state.Status is not (NavigationStatus.Unreachable or NavigationStatus.SearchLimit or NavigationStatus.PathLimit or NavigationStatus.Pending or NavigationStatus.CapacityLimited)) {
                 throw new InvalidOperationException(message: $"population checkpoint navigation status '{state.Status}' requires a stored path.");
             }
         } else {
             if (state.Waypoint == 0) {
                 throw new InvalidOperationException(message: "population checkpoint navigation path has not advanced past its start node.");
             }
-            if (state.Status is not (WorldNavigationStatus.Active or WorldNavigationStatus.Arrived)) {
+            if (state.Status is not (NavigationStatus.Active or NavigationStatus.Arrived)) {
                 throw new InvalidOperationException(message: $"population checkpoint stored path cannot carry status '{state.Status}'.");
             }
         }

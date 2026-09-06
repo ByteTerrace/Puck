@@ -1,15 +1,16 @@
 using Puck.Maths;
 using Puck.Physics.Motion;
+using Puck.Physics.Navigation;
 
 namespace Puck.World.Server;
 
 public sealed partial class WorldBody {
     // Tick-local binding, rebuilt before Advance; no domain object or diagnostic counter belongs in a checkpoint.
-    private WorldNavigationRuntime.Domain? m_flockMovementDomain;
+    private NavigationRuntime.Domain? m_flockMovementDomain;
     internal bool FlockMotionChecked { get; private set; }
     internal bool FlockMotionRefused { get; private set; }
 
-    internal void SetFlockMovementDomain(WorldNavigationRuntime.Domain? domain) {
+    internal void SetFlockMovementDomain(NavigationRuntime.Domain? domain) {
         m_flockMovementDomain = domain;
         FlockMotionChecked = false;
         FlockMotionRefused = false;

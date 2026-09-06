@@ -1,25 +1,25 @@
 using Puck.Maths;
 
-namespace Puck.World.Server;
+namespace Puck.Physics.Navigation;
 
 /// <summary>Canonical discovered-node state of a shared destination tree. Heap layout is derived, not persisted.</summary>
-public readonly record struct WorldNavigationTreeNode(int Node, int Cost, int Next, bool Settled);
+public readonly record struct NavigationTreeNode(int Node, int Cost, int Next, bool Settled);
 
 /// <summary>One resident destination tree and requests queued for the next navigation step. Age is the
 /// unique recency rank among resident trees: zero is newest, not an elapsed-time counter.</summary>
-public sealed record WorldNavigationTreeCheckpoint(int Goal, int Age, WorldNavigationTreeNode[] Nodes, int[] Pending);
+public sealed record NavigationTreeCheckpoint(int Goal, int Age, NavigationTreeNode[] Nodes, int[] Pending);
 
 /// <summary>A domain's shared search scheduler and resident destination trees, in stable slot order.</summary>
-public sealed record WorldNavigationSharedCheckpoint(int Cursor, WorldNavigationTreeCheckpoint[] Trees);
+public sealed record NavigationSharedCheckpoint(int Cursor, NavigationTreeCheckpoint[] Trees);
 
-internal sealed partial class WorldNavigationRuntime {
+public sealed partial class NavigationRuntime {
     public void BeginStep() {
         foreach (var domain in m_domains) { domain.AdvanceShared(); }
     }
 
-    public WorldNavigationSharedCheckpoint[] CaptureShared() => m_domains.Select(domain => domain.CaptureShared()).ToArray();
+    public NavigationSharedCheckpoint[] CaptureShared() => m_domains.Select(domain => domain.CaptureShared()).ToArray();
 
-    public void ValidateShared(WorldNavigationSharedCheckpoint[]? checkpoints) {
+    public void ValidateShared(NavigationSharedCheckpoint[]? checkpoints) {
         if (checkpoints is null) {
             if (m_domains.Any(domain => domain.Sharing is not null)) {
                 throw new InvalidOperationException("population checkpoint omits shared navigation state.");
@@ -30,7 +30,7 @@ internal sealed partial class WorldNavigationRuntime {
         for (var index = 0; index < Count; index++) { m_domains[index].ValidateShared(checkpoints[index]); }
     }
 
-    public void RestoreShared(WorldNavigationSharedCheckpoint[]? checkpoints) {
+    public void RestoreShared(NavigationSharedCheckpoint[]? checkpoints) {
         ValidateShared(checkpoints);
         if (checkpoints is null) { return; }
         for (var index = 0; index < Count; index++) { m_domains[index].RestoreShared(checkpoints[index]); }
@@ -40,25 +40,25 @@ internal sealed partial class WorldNavigationRuntime {
         foreach (var domain in m_domains) { domain.AppendSharedHash(ref hash); }
     }
 
-    internal sealed partial class Domain {
+    public sealed partial class Domain {
         private SharedTree[] m_sharedTrees = [];
         private int m_sharedCursor;
         private ulong m_sharedFieldRevision;
-        public WorldNavigationSharing? Sharing { get; private set; }
+        public NavigationSharing? Sharing { get; private set; }
         public int SharedExpandedLast { get; private set; }
         public int SharedPathsLast { get; private set; }
         public int SharedCapacityRefusalsLast { get; private set; }
         public int SharedResidentGoals => m_sharedTrees.Count(tree => tree.Goal >= 0);
         // Five cell-sized int arrays, one bool array, two bounded pending-cell lists and derived hash blocks.
         private long SharedWorkspaceBytes => (long)m_sharedTrees.Length *
-            (CellCount * (5L * sizeof(int) + sizeof(byte)) + Math.Min(CellCount, WorldBodiesLimits.CapacityCeiling) * 2L * sizeof(int)
+            (CellCount * (5L * sizeof(int) + sizeof(byte)) + Math.Min(CellCount, m_capacity.MaxConcurrentRequesters) * 2L * sizeof(int)
             + SharedTree.HashBlockCount(CellCount) * (sizeof(ulong) + sizeof(byte)));
         private ulong MediumRevision => m_mediumField >= 0 ? m_fields!.ValueRevision(m_mediumField) : 0;
-        private bool SharedStale => Tuning.Kind == WorldNavigationKind.Medium && m_sharedFieldRevision != MediumRevision;
+        private bool SharedStale => Tuning.Kind == NavigationKind.Medium && m_sharedFieldRevision != MediumRevision;
 
         private void InitializeSharing() {
             m_sharedTrees = new SharedTree[Sharing?.GoalCapacity ?? 0];
-            for (var index = 0; index < m_sharedTrees.Length; index++) { m_sharedTrees[index] = new SharedTree(CellCount); }
+            for (var index = 0; index < m_sharedTrees.Length; index++) { m_sharedTrees[index] = new SharedTree(CellCount, m_capacity.MaxConcurrentRequesters); }
             m_sharedFieldRevision = MediumRevision;
         }
 
@@ -92,11 +92,11 @@ internal sealed partial class WorldNavigationRuntime {
             }
         }
 
-        public WorldNavigationStatus RequestShared(int start, int goal, Span<int> path, out int length) {
+        public NavigationStatus RequestShared(int start, int goal, Span<int> path, out int length) {
             length = 0;
             SynchronizeSharedGraph();
-            if (!IsWalkable(start) || !IsWalkable(goal)) { return WorldNavigationStatus.OutsideDomain; }
-            if (start == goal) { path[0] = start; length = 1; return WorldNavigationStatus.Arrived; }
+            if (!IsWalkable(start) || !IsWalkable(goal)) { return NavigationStatus.OutsideDomain; }
+            if (start == goal) { path[0] = start; length = 1; return NavigationStatus.Arrived; }
             SharedTree? selected = null;
             SharedTree? victim = null;
             foreach (var tree in m_sharedTrees) {
@@ -104,7 +104,7 @@ internal sealed partial class WorldNavigationRuntime {
                 if (!tree.PinnedForStep && tree.PendingCount == 0 && (victim is null || tree.Goal < 0 || (victim.Goal >= 0 && tree.Age > victim.Age))) { victim = tree; }
             }
             if (selected is null) {
-                if (victim is null) { SharedCapacityRefusalsLast++; return WorldNavigationStatus.CapacityLimited; }
+                if (victim is null) { SharedCapacityRefusalsLast++; return NavigationStatus.CapacityLimited; }
                 selected = victim;
                 var previousAge = selected.Goal >= 0 ? selected.Age : m_sharedTrees.Length;
                 selected.Reset(goal);
@@ -126,7 +126,7 @@ internal sealed partial class WorldNavigationRuntime {
         private int Predecessors(int node, Span<SharedEdge> edges) {
             Coordinates(node, out var x, out var y, out var z);
             var count = 0;
-            for (var dy = Tuning.Kind == WorldNavigationKind.Surface ? 0 : -1; dy <= (Tuning.Kind == WorldNavigationKind.Surface ? 0 : 1); dy++) {
+            for (var dy = Tuning.Kind == NavigationKind.Surface ? 0 : -1; dy <= (Tuning.Kind == NavigationKind.Surface ? 0 : 1); dy++) {
                 for (var dz = -1; dz <= 1; dz++) {
                     for (var dx = -1; dx <= 1; dx++) {
                         var axes = (dx == 0 ? 0 : 1) + (dy == 0 ? 0 : 1) + (dz == 0 ? 0 : 1);
@@ -144,10 +144,10 @@ internal sealed partial class WorldNavigationRuntime {
             return count;
         }
 
-        public WorldNavigationSharedCheckpoint CaptureShared() => new(SharedStale ? 0 : m_sharedCursor,
-            m_sharedTrees.Select(tree => SharedStale ? new WorldNavigationTreeCheckpoint(-1, 0, [], []) : tree.Capture()).ToArray());
+        public NavigationSharedCheckpoint CaptureShared() => new(SharedStale ? 0 : m_sharedCursor,
+            m_sharedTrees.Select(tree => SharedStale ? new NavigationTreeCheckpoint(-1, 0, [], []) : tree.Capture()).ToArray());
 
-        public void ValidateShared(WorldNavigationSharedCheckpoint checkpoint) {
+        public void ValidateShared(NavigationSharedCheckpoint checkpoint) {
             if (checkpoint is null || checkpoint.Trees is null || checkpoint.Trees.Length != m_sharedTrees.Length ||
                 checkpoint.Cursor < 0 || checkpoint.Cursor >= Math.Max(1, m_sharedTrees.Length)) {
                 throw new InvalidOperationException("shared navigation checkpoint scheduler shape differs.");
@@ -157,7 +157,7 @@ internal sealed partial class WorldNavigationRuntime {
             foreach (var tree in checkpoint.Trees) {
                 if (tree is null || tree.Goal < -1 || tree.Goal >= CellCount || tree.Age < 0 || tree.Age >= m_sharedTrees.Length ||
                     tree.Nodes is null || tree.Nodes.Length > CellCount || tree.Pending is null ||
-                    tree.Pending.Length > Math.Min(CellCount, WorldBodiesLimits.CapacityCeiling)) {
+                    tree.Pending.Length > Math.Min(CellCount, m_capacity.MaxConcurrentRequesters)) {
                     throw new InvalidOperationException("shared navigation checkpoint tree shape differs.");
                 }
                 if (tree.Goal < 0) {
@@ -168,7 +168,7 @@ internal sealed partial class WorldNavigationRuntime {
                 }
                 if (!goals.Add(tree.Goal)) { throw new InvalidOperationException("shared navigation checkpoint repeats a goal."); }
                 if (!ages.Add(tree.Age)) { throw new InvalidOperationException("shared navigation checkpoint repeats a recency rank."); }
-                var nodes = new Dictionary<int, WorldNavigationTreeNode>(tree.Nodes.Length);
+                var nodes = new Dictionary<int, NavigationTreeNode>(tree.Nodes.Length);
                 var previous = -1;
                 foreach (var node in tree.Nodes) {
                     if (node.Node <= previous || node.Node >= CellCount || node.Cost < 0 || node.Cost > CellCount * SpaceDiagonalCost) {
@@ -208,7 +208,7 @@ internal sealed partial class WorldNavigationRuntime {
             }
         }
 
-        public void RestoreShared(WorldNavigationSharedCheckpoint checkpoint) {
+        public void RestoreShared(NavigationSharedCheckpoint checkpoint) {
             m_sharedCursor = checkpoint.Cursor;
             m_sharedFieldRevision = MediumRevision;
             for (var index = 0; index < m_sharedTrees.Length; index++) { m_sharedTrees[index].Restore(checkpoint.Trees[index]); }
@@ -250,10 +250,10 @@ internal sealed partial class WorldNavigationRuntime {
             public bool PinnedForStep { get; set; }
             public bool NeedsWork => PendingCount != 0 && m_open.Count != 0;
 
-            public SharedTree(int cells) {
+            public SharedTree(int cells, int maxConcurrentRequesters) {
                 m_cost = new int[cells]; m_next = new int[cells]; m_open = new NodeHeap(cells);
                 m_stamp = new int[cells]; m_pending = new bool[cells];
-                m_pendingList = new int[Math.Min(cells, WorldBodiesLimits.CapacityCeiling)];
+                m_pendingList = new int[Math.Min(cells, maxConcurrentRequesters)];
                 m_pendingOrdered = new int[m_pendingList.Length];
                 m_blockHashes = new ulong[HashBlockCount(cells)];
                 m_dirtyBlocks = new bool[m_blockHashes.Length];
@@ -290,18 +290,18 @@ internal sealed partial class WorldNavigationRuntime {
                 m_pendingDirty = true;
             }
 
-            public WorldNavigationStatus ReadPath(int start, Span<int> path, out int length) {
+            public NavigationStatus ReadPath(int start, Span<int> path, out int length) {
                 length = 0;
                 if (!Settled(start)) {
-                    if (m_open.Count == 0) { return WorldNavigationStatus.Unreachable; }
+                    if (m_open.Count == 0) { return NavigationStatus.Unreachable; }
                     Queue(start);
-                    return WorldNavigationStatus.Pending;
+                    return NavigationStatus.Pending;
                 }
                 for (var node = start; node >= 0; node = m_next[node]) {
-                    if (length == path.Length) { length = 0; return WorldNavigationStatus.PathLimit; }
+                    if (length == path.Length) { length = 0; return NavigationStatus.PathLimit; }
                     path[length++] = node;
                 }
-                return WorldNavigationStatus.Active;
+                return NavigationStatus.Active;
             }
 
             public bool Expand(Domain domain) {
@@ -339,8 +339,8 @@ internal sealed partial class WorldNavigationRuntime {
                 } else { m_open.Decrease(node, order); }
             }
 
-            public WorldNavigationTreeCheckpoint Capture() {
-                var nodes = new List<WorldNavigationTreeNode>();
+            public NavigationTreeCheckpoint Capture() {
+                var nodes = new List<NavigationTreeNode>();
                 var pending = new List<int>();
                 if (Goal >= 0) {
                     for (var node = 0; node < m_stamp.Length; node++) {
@@ -351,7 +351,7 @@ internal sealed partial class WorldNavigationRuntime {
                 return new(Goal, Age, nodes.ToArray(), pending.ToArray());
             }
 
-            public void Restore(WorldNavigationTreeCheckpoint state) {
+            public void Restore(NavigationTreeCheckpoint state) {
                 Reset(-1);
                 Goal = state.Goal; Age = state.Age;
                 foreach (var node in state.Nodes) {

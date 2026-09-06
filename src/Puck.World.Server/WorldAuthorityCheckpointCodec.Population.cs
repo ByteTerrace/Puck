@@ -1,4 +1,5 @@
 using Puck.Networking;
+using Puck.Physics.Navigation;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -218,7 +219,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 GoalCell: r.ReadInt32(),
                 Waypoint: r.ReadInt32(),
                 ExpandedLast: r.ReadInt32(),
-                Status: (WorldNavigationStatus)r.ReadByte(),
+                Status: (NavigationStatus)r.ReadByte(),
                 Path: WorldAuthorityCheckpointCodec.ReadArray(
                     reader: ref r,
                     field: "population entry navigation path",
@@ -311,13 +312,13 @@ public static partial class WorldAuthorityCheckpointCodec {
                 var goal = treeReader.ReadInt32();
                 var age = treeReader.ReadInt32();
                 var nodes = ReadArray(ref treeReader, "shared navigation nodes", static (ref WireReader nodeReader) =>
-                    new WorldNavigationTreeNode(nodeReader.ReadInt32(), nodeReader.ReadInt32(), nodeReader.ReadInt32(), nodeReader.ReadBoolean()),
+                    new NavigationTreeNode(nodeReader.ReadInt32(), nodeReader.ReadInt32(), nodeReader.ReadInt32(), nodeReader.ReadBoolean()),
                     maximum: WorldNavigationCapacity.MaxCellsPerDomain);
                 var pending = ReadArray(ref treeReader, "shared navigation pending starts", static (ref WireReader pendingReader) => pendingReader.ReadInt32(),
                     maximum: WorldBodiesLimits.CapacityCeiling);
-                return new WorldNavigationTreeCheckpoint(goal, age, nodes, pending);
+                return new NavigationTreeCheckpoint(goal, age, nodes, pending);
             }, maximum: WorldNavigationCapacity.MaxSharedGoals);
-            return new WorldNavigationSharedCheckpoint(cursor, trees);
+            return new NavigationSharedCheckpoint(cursor, trees);
         }, maximum: WorldNavigationCapacity.MaxDomains) : null;
         var entries = ReadArray(
             reader: ref reader,

@@ -214,73 +214,28 @@ of wrapping, and a later Replace remains an ordinary assignment.
 
 ## Navigation
 
-`WorldNavigationRuntime` compiles each authored domain once at boot/rebuild.
-Surface cells use `TryGroundHeight`, lower/head clearance, slope and step
-limits; every admitted edge is proven with swept spheres from `maxStepHeight`
-above the foot up to the head (the step rule already admits anything lower,
-and a sphere sweeping the floor it stands on advances one contact skin per
-march step) and stored in one 26-bit mask per cell. Free-volume and medium domains use the same swept-sphere
-edge proof in three dimensions. A medium additionally resolves its field name
-to an ordinal once and checks the agent clearance volume at each live node plus
-half-cell-or-shorter swept boxes on search and before following the next cached
-edge. Every intersected voxel's free surface is checked, including dry caps
-between wet layers; testing only point samples or cube corners is insufficient.
-Each swept piece visits at most 27 voxels, with a hard subdivision ceiling.
-This is how underwater
-routes react to field evolution without rebaking static solids.
+The A*/shared-search kernel — `Puck.Physics.Navigation.NavigationRuntime` — is
+Physics vocabulary; see [its README](../Puck.Physics/README.md#-navigation-kernel-navigation)
+for the algorithm, the swept-sphere edge proof, and the shared-tree checkpoint
+shapes. `WorldPopulation` owns the document seam: `CompileNavigationDomains`
+(`WorldPopulation.Navigation.cs`) compiles each authored `navigation.domains`
+row into a `NavigationDomainInput` once at resolve time, mapping the
+document's own kind/connectivity enums onto the kernel's, and
+`NavigationMediumFieldAdapter` bridges `WorldFieldLattice` to the kernel's
+`INavigationMediumField` seam so a medium-kind domain never needs the
+lattice's own representation.
 
-Without `shared`, search is bounded A* over reused arrays: integer costs (1000/1414/1732), stable
-`(f, h, nodeOrdinal)` ties and authored expansion/path ceilings. Domain search
-workspace allocates once at compile; per-body route storage allocates lazily on
-first use, so steady-state searches allocate nothing. Changing a navigation definition,
-clearing designations, switching producers, or transferring authority clears
-the local cache; checkpoints carry active routes and the codec validates every
-domain, node, waypoint, status, and budget before restore. The authoritative
-state hash includes producer-domain and route state. `world.navigation`,
-`body.targets`, and `world.budget` expose occupancy, state, expansions, the
-current followers' simultaneous-replan ceiling, and fixed workspace bytes;
-`$nav:` rule facts read the same live status.
-
-A domain can instead declare `shared: { "goalCapacity": 4,
-"expandedNodesPerTick": 128 }`. This runs queued reverse Dijkstra searches,
-with stable `(cost, nodeOrdinal)` ties and one aggregate expansion allowance
-per domain per simulation tick. Each expansion inspects at most 26 edges.
-Resident goals take turns, one expansion at a time; unfinished requests continue
-on later ticks. The shared tree can eventually cover every cell in the domain;
-`maxExpandedNodes` remains the independent A* limit, while `maxPathNodes` also
-bounds paths extracted from shared trees. Boot allocation and checkpoint size
-are bounded by the world's sum of `cellCount * goalCapacity`.
-
-The cache key is the domain and destination cell—not a leader, friendship, or
-body slot. The domain fixes topology, clearance, and medium compatibility;
-shared volume/medium users must fit its root-centered clearance sphere.
-Each body retains its own waypoint array/cursor and exact designated final
-point. A body can leave, change goal, or reconnect from another in-domain cell
-without changing another body's route. Reconnection extends the same bounded
-tree if necessary; there is no straight-line teleport or unbounded connector.
-Completed trees are evicted least-recently-used using bounded, distinct recency
-ranks, so repeated requests cannot erase the order of other goals. Pending requests pin a tree
-for the next search step. If all slots are pinned, another goal reports
-`capacity` and can retry; no independent search bypasses the budget.
-`pending` is distinct from `unreachable`. These are ordinary `$nav:` facets,
-alongside `hasPath`, `active`, `arrived`, `remaining`, and `unreachable`.
-
-Checkpoint/hash state includes resident goals, discovered costs/successors,
-settled flags, pending starts, eviction ages, and the scheduler cursor. Heap
-layout is derived. Node digests are cached in 64-cell blocks; only changed blocks
-are rehashed, and unchanged trees contribute cached roots in constant time.
-Pending starts are hashed in sorted order from their bounded request list, not
-by scanning the domain. These digests are derived and rebuilt after restore.
-A change to the referenced medium field invalidates its trees;
-other fields do not. Rebuilds invalidate domain-local caches. This first shared
-implementation restarts affected trees rather than incrementally repairing them:
-rapidly changing water can delay a distant request indefinitely under a small
-budget. It does not provide crowd collision avoidance, bottleneck reservations,
-hierarchical long-distance routing, or group membership.
-
-The many-agents/one-destination approach is informed by
-[Emerson's crowd pathfinding chapter](https://www.gameaipro.com/GameAIPro/GameAIPro_Chapter23_Crowd_Pathfinding_and_Steering_Using_Flow_Field_Tiles.pdf).
-This implementation uses finite domain trees, not that chapter's tiled hierarchy.
+Changing a navigation definition, clearing designations, switching producers,
+or transferring authority clears a body's local route cache
+(`BodyNavigationState`); `WorldPopulationNavigationCheckpoint` carries the
+domain, goal cell, waypoint cursor, status, and expanded-node count, and
+`WorldAuthorityCheckpointCodec` validates every domain, node, waypoint,
+status, and budget before restore. The authoritative state hash includes
+producer-domain and route state. `world.navigation`, `body.targets`, and
+`world.budget` expose occupancy, state, expansions, the current followers'
+simultaneous-replan ceiling, and fixed workspace bytes; `$nav:` rule facts
+(`hasPath`, `active`, `arrived`, `remaining`, `pending`, `unreachable`) read
+the same live status.
 
 **Mutations, the journal, and undo.** A `WorldMutation` applies by composing a
 candidate document, revalidating the WHOLE document through

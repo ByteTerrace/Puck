@@ -1,9 +1,9 @@
 using Puck.Maths;
 
-namespace Puck.World.Server;
+namespace Puck.Physics.Navigation;
 
 /// <summary>Result of one bounded deterministic route search.</summary>
-public enum WorldNavigationStatus : byte {
+public enum NavigationStatus : byte {
     None,
     Active,
     Arrived,
@@ -16,19 +16,27 @@ public enum WorldNavigationStatus : byte {
     CapacityLimited,
 }
 
-internal sealed partial class WorldNavigationRuntime {
+/// <summary>A deterministic, bounded A*/shared-search kernel over a set of navigation domains compiled from a
+/// host's own solid-field query and optional live-medium field. Reads no document; every domain's tuning arrives
+/// pre-compiled as a <see cref="NavigationDomainInput"/>.</summary>
+public sealed partial class NavigationRuntime {
     private readonly Domain[] m_domains;
 
-    public WorldNavigationRuntime(WorldDefinition definition, IWorldQuery? query, WorldFieldLattice? fields) {
-        var rows = definition.Navigation.Rows;
-
-        if (rows.Count != 0 && query is null) {
+    /// <summary>Compiles a runtime over the given domains.</summary>
+    /// <param name="domains">The compiled domain tunings, in stable authored order.</param>
+    /// <param name="query">The deterministic solid-field query provider; required when <paramref name="domains"/>
+    /// is non-empty.</param>
+    /// <param name="fields">The live-medium field a medium-kind domain reads through; optional when no domain is
+    /// medium-kind.</param>
+    /// <param name="capacity">Representation ceilings the host's own authoring vocabulary declares.</param>
+    public NavigationRuntime(IReadOnlyList<NavigationDomainInput> domains, IWorldQuery? query, INavigationMediumField? fields, NavigationCapacity capacity) {
+        if (domains.Count != 0 && query is null) {
             throw new InvalidOperationException(message: "navigation domains require the deterministic solid-field query provider.");
         }
 
-        m_domains = new Domain[rows.Count];
-        for (var index = 0; index < rows.Count; index++) {
-            m_domains[index] = new Domain(row: rows[index], query: query!, fields: fields);
+        m_domains = new Domain[domains.Count];
+        for (var index = 0; index < domains.Count; index++) {
+            m_domains[index] = new Domain(row: domains[index], query: query!, fields: fields, capacity: capacity);
         }
     }
 
@@ -38,7 +46,7 @@ internal sealed partial class WorldNavigationRuntime {
     public long WorkspaceBytes => m_domains.Sum(selector: static domain => domain.WorkspaceBytes);
     public Domain this[int index] => m_domains[index];
 
-    internal sealed partial class Domain {
+    public sealed partial class Domain {
         private const int StraightCost = 1_000;
         private const int DiagonalCost = 1_414;
         private const int SpaceDiagonalCost = 1_732;
@@ -58,16 +66,18 @@ internal sealed partial class WorldNavigationRuntime {
         private int m_searchStamp;
         private readonly bool[] m_walkable;
 
-        private readonly WorldFieldLattice? m_fields;
+        private readonly INavigationMediumField? m_fields;
         private readonly int m_mediumField;
         private readonly IWorldQuery m_query;
+        private readonly NavigationCapacity m_capacity;
 
-        public Domain(WorldNavigationDomain row, IWorldQuery query, WorldFieldLattice? fields) {
+        public Domain(NavigationDomainInput row, IWorldQuery query, INavigationMediumField? fields, NavigationCapacity capacity) {
             Name = row.Name;
-            Tuning = FixedWorldNavigationDomain.Compile(domain: row);
+            Tuning = row;
             m_fields = fields;
             m_query = query;
-            m_mediumField = ((Tuning.Kind == WorldNavigationKind.Medium) && (fields is not null) && fields.TryFieldIndex(name: Tuning.Medium!, field: out var mediumField)
+            m_capacity = capacity;
+            m_mediumField = ((Tuning.Kind == NavigationKind.Medium) && (fields is not null) && fields.TryFieldIndex(name: Tuning.Medium!, field: out var mediumField)
                 ? mediumField
                 : -1
             );
@@ -89,7 +99,7 @@ internal sealed partial class WorldNavigationRuntime {
                     Z: (Tuning.Origin.Z + (Tuning.CellSize * FixedQ4816.FromInteger(value: z)))
                 );
 
-                if (Tuning.Kind != WorldNavigationKind.Surface) {
+                if (Tuning.Kind != NavigationKind.Surface) {
                     if (!query.Overlap(center: FixedPosition.FromLocal(local: probe), radius: Tuning.AgentRadius)) {
                         m_ground[node] = probe.Y;
                         m_walkable[node] = true;
@@ -139,16 +149,16 @@ internal sealed partial class WorldNavigationRuntime {
 
         public int CellCount => m_walkable.Length;
         public string Name { get; }
-        public FixedWorldNavigationDomain Tuning { get; }
+        public NavigationDomainInput Tuning { get; }
         public int WalkableCellCount { get; }
         public long WorkspaceBytes => checked((long)CellCount * ((6L * sizeof(int)) + sizeof(long) + sizeof(uint) + sizeof(byte)) + SharedWorkspaceBytes);
 
         // Actual off-center locomotion needs a continuous proof: a cached grid edge certifies only the line
         // between its cell centers. Surface locomotion has a different support/clearance contract.
         public bool AdmitsLocomotion(in FixedVector3 from, in FixedVector3 to) {
-            if (Tuning.Kind == WorldNavigationKind.Surface || !TryCell(from, out _) || !TryCell(to, out _)) { return false; }
-            if (Tuning.Kind == WorldNavigationKind.Medium && (m_fields is null || !m_fields.IsSegmentInsideMedium(
-                m_mediumField, from, to, Tuning.AgentRadius, WorldNavigationCapacity.MaxMediumSegmentSubdivisions))) { return false; }
+            if (Tuning.Kind == NavigationKind.Surface || !TryCell(from, out _) || !TryCell(to, out _)) { return false; }
+            if (Tuning.Kind == NavigationKind.Medium && (m_fields is null || !m_fields.IsSegmentInsideMedium(
+                m_mediumField, from, to, Tuning.AgentRadius, m_capacity.MaxMediumSegmentSubdivisions))) { return false; }
             if (m_query.Overlap(FixedPosition.FromLocal(from), Tuning.AgentRadius) ||
                 m_query.Overlap(FixedPosition.FromLocal(to), Tuning.AgentRadius)) { return false; }
             var delta = to - from;
@@ -160,7 +170,7 @@ internal sealed partial class WorldNavigationRuntime {
             Coordinates(node: node, x: out var x, y: out var y, z: out var z);
             return new FixedVector3(
                 X: (Tuning.Origin.X + (Tuning.CellSize * FixedQ4816.FromInteger(value: x))),
-                Y: (Tuning.Kind == WorldNavigationKind.Surface ? m_ground[node] : (Tuning.Origin.Y + (Tuning.CellSize * FixedQ4816.FromInteger(value: y)))),
+                Y: (Tuning.Kind == NavigationKind.Surface ? m_ground[node] : (Tuning.Origin.Y + (Tuning.CellSize * FixedQ4816.FromInteger(value: y)))),
                 Z: (Tuning.Origin.Z + (Tuning.CellSize * FixedQ4816.FromInteger(value: z)))
             );
         }
@@ -168,7 +178,7 @@ internal sealed partial class WorldNavigationRuntime {
         public bool TryCell(in FixedVector3 position, out int node) {
             var x = RoundedCell(value: (Int128)position.X.Value - Tuning.Origin.X.Value, cellSize: Tuning.CellSize.Value);
             var z = RoundedCell(value: (Int128)position.Z.Value - Tuning.Origin.Z.Value, cellSize: Tuning.CellSize.Value);
-            var y = (Tuning.Kind == WorldNavigationKind.Surface ? 0 : RoundedCell(value: (Int128)position.Y.Value - Tuning.Origin.Y.Value, cellSize: Tuning.CellSize.Value));
+            var y = (Tuning.Kind == NavigationKind.Surface ? 0 : RoundedCell(value: (Int128)position.Y.Value - Tuning.Origin.Y.Value, cellSize: Tuning.CellSize.Value));
             if (x < 0 || x >= Tuning.Width || y < 0 || y >= Tuning.Layers || z < 0 || z >= Tuning.Depth) {
                 node = -1;
                 return false;
@@ -177,16 +187,16 @@ internal sealed partial class WorldNavigationRuntime {
             return IsWalkable(node: node);
         }
 
-        public WorldNavigationStatus FindPath(int start, int goal, Span<int> path, out int pathLength, out int expanded) {
+        public NavigationStatus FindPath(int start, int goal, Span<int> path, out int pathLength, out int expanded) {
             pathLength = 0;
             expanded = 0;
             if (!IsWalkable(start) || !IsWalkable(goal)) {
-                return WorldNavigationStatus.OutsideDomain;
+                return NavigationStatus.OutsideDomain;
             }
             if (start == goal) {
                 path[0] = start;
                 pathLength = 1;
-                return WorldNavigationStatus.Arrived;
+                return NavigationStatus.Arrived;
             }
 
             BeginSearch();
@@ -199,12 +209,12 @@ internal sealed partial class WorldNavigationRuntime {
                     return Reconstruct(goal: goal, path: path, pathLength: out pathLength);
                 }
                 if (expanded >= Tuning.MaxExpandedNodes) {
-                    return WorldNavigationStatus.SearchLimit;
+                    return NavigationStatus.SearchLimit;
                 }
 
                 Coordinates(node: current, x: out var cx, y: out var cy, z: out var cz);
-                var minY = (Tuning.Kind == WorldNavigationKind.Surface ? 0 : -1);
-                var maxY = (Tuning.Kind == WorldNavigationKind.Surface ? 0 : 1);
+                var minY = (Tuning.Kind == NavigationKind.Surface ? 0 : -1);
+                var maxY = (Tuning.Kind == NavigationKind.Surface ? 0 : 1);
                 for (var dy = minY; dy <= maxY; dy++) {
                     for (var dz = -1; dz <= 1; dz++) {
                         for (var dx = -1; dx <= 1; dx++) {
@@ -231,7 +241,7 @@ internal sealed partial class WorldNavigationRuntime {
                     }
                 }
             }
-            return WorldNavigationStatus.Unreachable;
+            return NavigationStatus.Unreachable;
         }
 
         private void BeginSearch() {
@@ -243,9 +253,9 @@ internal sealed partial class WorldNavigationRuntime {
                 m_searchStamp = 1;
             }
         }
-        private bool AdmitsAxes(int axes) => Tuning.Kind == WorldNavigationKind.Surface || Tuning.Connectivity switch {
-            WorldNavigationConnectivity.Axis => axes == 1,
-            WorldNavigationConnectivity.FacesAndEdges => axes <= 2,
+        private bool AdmitsAxes(int axes) => Tuning.Kind == NavigationKind.Surface || Tuning.Connectivity switch {
+            NavigationConnectivity.Axis => axes == 1,
+            NavigationConnectivity.FacesAndEdges => axes <= 2,
             _ => true,
         };
         private bool CanTraverse(int current, int next, int x, int y, int z, int dx, int dy, int dz) {
@@ -253,7 +263,7 @@ internal sealed partial class WorldNavigationRuntime {
                 return false;
             }
             var axes = ((dx == 0 ? 0 : 1) + (dy == 0 ? 0 : 1) + (dz == 0 ? 0 : 1));
-            if (Tuning.Kind == WorldNavigationKind.Medium && axes > 1) {
+            if (Tuning.Kind == NavigationKind.Medium && axes > 1) {
                 if (dx != 0 && !IsWalkable(Index(x: x + dx, y: y, z: z))) {
                     return false;
                 }
@@ -264,12 +274,12 @@ internal sealed partial class WorldNavigationRuntime {
                     return false;
                 }
             }
-            if (Tuning.Kind == WorldNavigationKind.Medium && (m_fields is null || !m_fields.IsSegmentInsideMedium(
+            if (Tuning.Kind == NavigationKind.Medium && (m_fields is null || !m_fields.IsSegmentInsideMedium(
                 clearance: Tuning.AgentRadius,
                 field: m_mediumField,
                 from: Position(node: current),
                 to: Position(node: next),
-                maximumSubdivisions: WorldNavigationCapacity.MaxMediumSegmentSubdivisions
+                maximumSubdivisions: m_capacity.MaxMediumSegmentSubdivisions
             ))) {
                 return false;
             }
@@ -295,8 +305,8 @@ internal sealed partial class WorldNavigationRuntime {
                     continue;
                 }
                 Coordinates(node: current, x: out var x, y: out var y, z: out var z);
-                var minY = (Tuning.Kind == WorldNavigationKind.Surface ? 0 : -1);
-                var maxY = (Tuning.Kind == WorldNavigationKind.Surface ? 0 : 1);
+                var minY = (Tuning.Kind == NavigationKind.Surface ? 0 : -1);
+                var maxY = (Tuning.Kind == NavigationKind.Surface ? 0 : 1);
                 for (var dy = minY; dy <= maxY; dy++) {
                     for (var dz = -1; dz <= 1; dz++) {
                         for (var dx = -1; dx <= 1; dx++) {
@@ -326,7 +336,7 @@ internal sealed partial class WorldNavigationRuntime {
             if (!m_walkable[next]) {
                 return false;
             }
-            if (Tuning.Kind == WorldNavigationKind.Surface) {
+            if (Tuning.Kind == NavigationKind.Surface) {
                 var rise = FixedQ4816.Abs(value: (m_ground[next] - m_ground[current]));
                 var maximumSlopeRise = ((dx != 0) && (dz != 0)
                     ? (Tuning.MaximumSlopeRise * SquareRootTwo)
@@ -362,7 +372,7 @@ internal sealed partial class WorldNavigationRuntime {
             var sweeps = 1;
             var lift = FixedQ4816.Zero;
             var verticalCore = FixedQ4816.Zero;
-            if (Tuning.Kind == WorldNavigationKind.Surface) {
+            if (Tuning.Kind == NavigationKind.Surface) {
                 verticalCore = FixedQ4816.Max(
                     x: FixedQ4816.Zero,
                     y: (Tuning.AgentHeight - (Tuning.AgentRadius * FixedQ4816.FromInteger(value: 2)) - (ClearanceEpsilon * FixedQ4816.FromInteger(value: 2)))
@@ -377,7 +387,7 @@ internal sealed partial class WorldNavigationRuntime {
                 var span = (verticalCore - lift);
                 var diameter = (Tuning.AgentRadius * FixedQ4816.FromInteger(value: 2));
                 sweeps = Math.Min(
-                    val1: WorldNavigationCapacity.MaxSurfaceClearanceSweeps,
+                    val1: m_capacity.MaxSurfaceClearanceSweeps,
                     val2: checked((int)((span.Value + diameter.Value - 1L) / diameter.Value) + 1)
                 );
             }
@@ -425,7 +435,7 @@ internal sealed partial class WorldNavigationRuntime {
             if ((uint)node >= (uint)m_walkable.Length || !m_walkable[node]) {
                 return false;
             }
-            if (Tuning.Kind != WorldNavigationKind.Medium) {
+            if (Tuning.Kind != NavigationKind.Medium) {
                 return true;
             }
             return m_fields is not null && m_fields.IsInsideMedium(field: m_mediumField, position: Position(node), clearance: Tuning.AgentRadius);
@@ -448,17 +458,17 @@ internal sealed partial class WorldNavigationRuntime {
                 m_open.Decrease(node: node, order: order);
             }
         }
-        private WorldNavigationStatus Reconstruct(int goal, Span<int> path, out int pathLength) {
+        private NavigationStatus Reconstruct(int goal, Span<int> path, out int pathLength) {
             pathLength = 0;
             for (var node = goal; node >= 0; node = m_parent[node]) {
                 if (pathLength >= path.Length || pathLength >= Tuning.MaxPathNodes) {
                     pathLength = 0;
-                    return WorldNavigationStatus.PathLimit;
+                    return NavigationStatus.PathLimit;
                 }
                 path[pathLength++] = node;
             }
             path[..pathLength].Reverse();
-            return WorldNavigationStatus.Active;
+            return NavigationStatus.Active;
         }
         private static Int128 RoundedCell(Int128 value, long cellSize) {
             var numerator = value;
@@ -474,31 +484,5 @@ internal sealed partial class WorldNavigationRuntime {
             }
             return quotient;
         }
-    }
-}
-
-internal sealed class BodyNavigationState {
-    public int DomainIndex = -1;
-    public int ExpandedLast;
-    public int GoalCell = -1;
-    public int PathLength;
-    public int Waypoint;
-    public int[] Path { get; private set; } = [];
-    public WorldNavigationStatus Status;
-
-    public Span<int> WritablePath() {
-        if (Path.Length == 0) {
-            Path = new int[WorldNavigationCapacity.MaxPathNodes];
-        }
-        return Path;
-    }
-
-    public void Clear(WorldNavigationStatus status = WorldNavigationStatus.None) {
-        DomainIndex = -1;
-        ExpandedLast = 0;
-        GoalCell = -1;
-        PathLength = 0;
-        Waypoint = 0;
-        Status = status;
     }
 }
