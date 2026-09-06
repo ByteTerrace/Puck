@@ -1202,6 +1202,12 @@ resolved document — so whether the world boots would depend on what it rolled,
 refusal moving with the world seed and the instance identity. Refusing the
 authoring mismatch makes the door the type rather than the outcome.
 
+**`host.journalDepth`** is the undo horizon, in journal entries: `0` (the
+default, every world authored before the field existed) is unbounded, today's
+behavior; a positive value is refused only if negative here — the fold that
+actually bounds the journal (`WorldServer.EnforceJournalDepth`, run once per
+tick) lives in `Puck.World.Server`, not this project.
+
 **A row may instead declare an ADVANCE** (`StateAdvance`): `rateNumerator`/
 `rateDenominator` (an exact per-tick rate, in the row's own DISPLAYED unit — for
 a `fixed` row `1/1` is `1.0` per tick, and a rate far slower than one raw Q48.16

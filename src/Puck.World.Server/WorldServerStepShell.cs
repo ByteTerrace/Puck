@@ -45,6 +45,7 @@ public static class WorldServerStepShell {
             // command-apply window holds; the loopback has already dropped this tick's masked seat input.
             tape?.InjectDriveTick();
             server.Advance(stepTicks: current.StepTicks);
+            server.EnforceJournalDepth();
 
             var tick = (current.Tick + 1UL);
 

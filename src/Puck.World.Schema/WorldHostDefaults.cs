@@ -270,6 +270,13 @@ public enum WorldHostPresentation : byte {
 /// <param name="Backend">The preferred graphics backend (<see cref="WorldBackendPreference.Auto"/> is OS-portable), or
 /// <see langword="null"/> when <paramref name="BackendRow"/> reads it from a row — omitting both reads as
 /// <see cref="WorldBackendPreference.Auto"/>.</param>
+/// <param name="JournalDepth">The undo horizon, in journal entries: <c>world.undo</c> can never reach past this many
+/// trailing entries. <c>0</c> is unbounded — every world authored before this field existed keeps growing its journal
+/// for the life of the process, exactly as before. A positive depth bounds it: once the journal holds more than this
+/// many entries, the oldest ones fold forward into the base the journal already keeps (the same document-level
+/// replay <c>WorldServer.ApplyUndo</c> performs, run forward), so a checkpoint restore and a replay from the new base
+/// plus the retained tail still reproduce the live definition bit-identically. <c>world.status</c> echoes the
+/// authored value; <c>world.undo</c> names it when a requested count reaches past what the horizon has kept.</param>
 public sealed record WorldHostDefaults(
     WorldHostPresentation Presentation,
     int Width,
@@ -288,7 +295,8 @@ public sealed record WorldHostDefaults(
     // OPTIONAL — the authored-randomness facet over Backend above (see the param docs). XOR-BY-PRESENCE against it:
     // WorldHostDefaults is a CLASS, so a null Backend is honestly distinguishable from an authored one and declaring
     // both is refused BY NAME. (the capacity-row site needs no such guard — see its own remarks.)
-    [property: JsonPropertyName("backendRow"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? BackendRow = null
+    [property: JsonPropertyName("backendRow"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? BackendRow = null,
+    int JournalDepth = 0
 ) {
     /// <summary>Gets the inert absence — no presentation (<see cref="WorldHostPresentation.None"/>: no window, no
     /// GPU device), zero extent, no pacing, no listener. The engine holds no boot shape of its own: the standard
@@ -308,7 +316,8 @@ public sealed record WorldHostDefaults(
         Timing: false,
         Genlock: null,
         Listen: null,
-        Authority: null
+        Authority: null,
+        JournalDepth: 0
     );
 }
 /// <summary>

@@ -297,6 +297,17 @@ plus every admitted peer connection's re-minted admission grant; every other
 live `world.grant` acquisition drops). The `dirty` count in `world.status` IS
 the journal length.
 
+`host.journalDepth` bounds the undo horizon: `0` (the default) leaves the
+journal growing for the life of the process, exactly as before the field
+existed; a positive depth makes `WorldServer.EnforceJournalDepth` fold the
+oldest entries past the horizon forward into the base the journal already
+keeps — the same per-entry compose-and-rebase `ApplyUndo` performs, run
+forward instead of backward — once per completed tick
+(`WorldServerStepShell.Step`), so the journal never grows past the depth and
+`world.undo` can never reach further back than what it kept (it refuses by
+name, naming the depth, rather than silently undoing fewer than asked).
+`world.status` echoes the authored depth.
+
 World-rule failures accumulate in the evaluator's ledger, one entry per
 category. The first occurrence is narrated; repeated Level-rule failures only
 increment their counter. `world.rule.failures` reports the count and latest tick/rule/effect/reason.

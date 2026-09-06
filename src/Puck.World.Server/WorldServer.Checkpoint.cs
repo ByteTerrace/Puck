@@ -37,6 +37,23 @@ public sealed partial class WorldServer {
             );
         }
 
+        // A bounded journal (host.journalDepth > 0) has already folded anything past the horizon into m_base — the
+        // journal itself never holds more than that many entries (see EnforceJournalDepth), so a request past what
+        // remains cannot be satisfied by clamping to fewer without silently doing less than asked. An unbounded
+        // journal (0, today's behavior) keeps the old clamp: every entry is always still there to reach.
+        var journalDepth = m_definition.Host.JournalDepth;
+
+        if (
+            (journalDepth > 0) &&
+            (count > m_journal.Count)
+        ) {
+            return RefuseUndo(
+                connectionId: connectionId,
+                correlationId: correlationId,
+                refusal: $"undo refused: {count} requested, but host.journalDepth {journalDepth} bounds the horizon to the {m_journal.Count} entries still in the journal — earlier mutations have already compacted into the base"
+            );
+        }
+
         var drop = Math.Clamp(
             value: count,
             min: 1,
@@ -297,6 +314,58 @@ public sealed partial class WorldServer {
             Count: count,
             Principal: principal
         ));
+    }
+
+    /// <summary>Bounds the journal to at most <c>host.journalDepth</c> trailing entries (0 = unbounded, the default —
+    /// a no-op). The oldest entries past the horizon fold forward, in order, into the base the journal already
+    /// keeps — the same per-entry compose-and-rebase <see cref="ApplyUndo"/>'s own replay performs, run forward
+    /// instead of backward, so a checkpoint captured after this call restores to the identical live definition a
+    /// checkpoint captured before it would have. Called once per completed tick.</summary>
+    public void EnforceJournalDepth() {
+        lock (m_authorityGate) {
+            var depth = m_definition.Host.JournalDepth;
+
+            if (
+                (depth <= 0) ||
+                (m_journal.Count <= depth)
+            ) {
+                return;
+            }
+
+            var excess = (m_journal.Count - depth);
+            var candidate = m_base;
+
+            for (var index = 0; (index < excess); index++) {
+                var entry = m_journal[index];
+
+                // Every entry here already applied live once, against this exact base-and-prefix, so recomposing it
+                // is expected to succeed; if it somehow does not, leave the journal exactly as it stood rather than
+                // fold onto a candidate that failed to build.
+                if (!TryCompose(
+                    current: candidate,
+                    mutation: entry.Mutation,
+                    tick: entry.Tick,
+                    instanceIdentity: InstanceIdentity,
+                    candidate: out var next,
+                    reason: out _,
+                    evictedKey: out _,
+                    patterns: m_patterns
+                )) {
+                    return;
+                }
+
+                candidate = RebaseCellTraits(
+                    original: candidate,
+                    candidate: next,
+                    mutation: entry.Mutation,
+                    tick: entry.Tick
+                );
+            }
+
+            m_base = candidate;
+            m_baseOrigin = $"the journal depth horizon (host.journalDepth {depth})";
+            m_journal.RemoveRange(index: 0, count: excess);
+        }
     }
 
     /// <summary>This server's own checkpointed fields — journal, base/definition documents, buffered pending ops,

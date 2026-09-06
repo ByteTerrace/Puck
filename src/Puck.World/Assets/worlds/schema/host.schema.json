@@ -100,6 +100,12 @@
         "null"
       ],
       "default": null
+    },
+    "journalDepth": {
+      "description": "The undo horizon, in journal entries; world.undo can never reach past this many trailing entries. 0 (the default) is unbounded — today's behavior. A positive depth folds entries past the horizon forward into the journal's own base as they age out.",
+      "type": "integer",
+      "minimum": 0,
+      "default": 0
     }
   },
   "required": [

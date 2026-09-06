@@ -450,6 +450,7 @@
     "fullscreen": false,
     "genlock": null,
     "height": 800,
+    "journalDepth": 2000,
     "listen": null,
     "presentMode": "Immediate",
     "presentation": "Windowed",

@@ -243,6 +243,14 @@ public static partial class WorldDefinitionValidator {
             path: "host.authority",
             errors: errors
         );
+
+        RequireIntRange(
+            value: host.JournalDepth,
+            min: 0,
+            max: int.MaxValue,
+            name: "host.journalDepth",
+            errors: errors
+        );
     }
     private static void ValidateHostEndpoint(string? value, string path, List<string> errors) {
         if (value is null) {
