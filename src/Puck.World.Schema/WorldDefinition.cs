@@ -530,24 +530,17 @@ public sealed record WorldDefinition(
         lock (sourceCache.SyncRoot) {
             lock (targetCache.SyncRoot) {
                 if (sourceCache.FieldsCompiled) {
-                    var candidate = WorldFieldsSection.Compile(state: target.StateRaw);
-
-                    targetCache.Fields = (
-                        ((sourceCache.Fields is not null) &&
-                        (candidate is not null) &&
-                        sourceCache.Fields.HasSameCompilation(other: candidate))
-                            ? sourceCache.Fields
-                            : candidate
+                    targetCache.Fields = (WorldFieldsSection.MatchesState(composite: sourceCache.Fields, state: target.StateRaw)
+                        ? sourceCache.Fields
+                        : WorldFieldsSection.Compile(state: target.StateRaw)
                     );
                     targetCache.FieldsCompiled = true;
                 }
 
                 if (sourceCache.StateCatalog is not null) {
-                    var candidate = StateCatalog.Compile(section: target.StateRaw);
-
-                    targetCache.StateCatalog = (sourceCache.StateCatalog.HasSameShape(other: candidate)
+                    targetCache.StateCatalog = (sourceCache.StateCatalog.MatchesShape(section: target.StateRaw)
                         ? sourceCache.StateCatalog
-                        : candidate
+                        : StateCatalog.Compile(section: target.StateRaw)
                     );
                 }
 
