@@ -2,6 +2,25 @@
 
     <Import Project="$(MSBuildThisFileDirectory)Architecture.props" />
 
+    <!--
+        RoslynCodeTaskFactory's own defaults (Microsoft.Build.Framework, Microsoft.Build.Utilities.Core, mscorlib,
+        netstandard) are UNIONED with whatever a task adds via <Reference>, never replaced — but the mscorlib and
+        netstandard it resolves them to are the classic .NET Framework facades bundled at
+        $(MSBuildToolsPath)\ref\ (measured: those exact four names are the only files there). Adding the modern
+        .NET-Core shared-framework System.Reflection.Metadata.dll conflicts with that pair — it is built against
+        System.Private.CoreLib, a DIFFERENT corlib than the one this compilation already committed to, so Object
+        and IDisposable stop resolving and every type the facades also carry (Dictionary, List, SortedSet) becomes
+        ambiguous between the two corlibs. The SDK also carries a .NET Framework build of the same library, at the
+        one path it ships one for (bundled for its own net472-hosted tooling, e.g. Razor's inline tasks) — that
+        build targets the SAME classic mscorlib the two defaults already use, so it is the one that resolves
+        cleanly alongside them.
+    -->
+    <PropertyGroup>
+        <PuckArchitectureNetFrameworkToolsDirectory>$([System.IO.Path]::Combine('$(MSBuildToolsPath)', 'Sdks', 'Microsoft.NET.Sdk', 'tools', 'net472'))\</PuckArchitectureNetFrameworkToolsDirectory>
+        <PuckArchitectureReferenceImmutable>$(PuckArchitectureNetFrameworkToolsDirectory)System.Collections.Immutable.dll</PuckArchitectureReferenceImmutable>
+        <PuckArchitectureReferenceMetadata>$(PuckArchitectureNetFrameworkToolsDirectory)System.Reflection.Metadata.dll</PuckArchitectureReferenceMetadata>
+    </PropertyGroup>
+
     <UsingTask
         AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll"
         Condition="'$(PuckArchitectureGateEnabled)' == 'true'"
@@ -21,6 +40,30 @@
             <References ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
         </ParameterGroup>
         <Task>
+            <!-- Both UsingTask blocks below compile this same Type="Class" source file end to end, so the
+                 denied-API gate class's use of System.Reflection.PortableExecutable needs this reference here too,
+                 even though PuckArchitectureGate itself never names that namespace. -->
+            <Reference Include="$(PuckArchitectureReferenceImmutable)" />
+            <Reference Include="$(PuckArchitectureReferenceMetadata)" />
+            <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckArchitectureGate.cs" Type="Class" />
+        </Task>
+    </UsingTask>
+
+    <UsingTask
+        AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll"
+        Condition="'$(PuckArchitectureGateEnabled)' == 'true'"
+        TaskFactory="RoslynCodeTaskFactory"
+        TaskName="PuckArchitectureDeniedApiGate"
+    >
+        <ParameterGroup>
+            <AssemblyPath ParameterType="System.String" />
+            <DeniedApis ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
+            <ProjectFile ParameterType="System.String" Required="true" />
+            <ProjectName ParameterType="System.String" Required="true" />
+        </ParameterGroup>
+        <Task>
+            <Reference Include="$(PuckArchitectureReferenceImmutable)" />
+            <Reference Include="$(PuckArchitectureReferenceMetadata)" />
             <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckArchitectureGate.cs" Type="Class" />
         </Task>
     </UsingTask>
@@ -63,6 +106,25 @@
             ProjectFile="$(MSBuildProjectFullPath)"
             ProjectName="$(MSBuildProjectName)"
             References="@(ReferencePathWithRefAssemblies)"
+        />
+    </Target>
+
+    <!--
+        The denied-API check runs AFTER CoreCompile, not before: a denied assembly such as System.Console arrives
+        through the shared framework rather than a ProjectReference, so it never appears in the reference sets the
+        gate above reads. @(IntermediateAssembly) is the freshly compiled output — the only place the answer
+        "did this project's code actually pull a member from the denied assembly in" is recorded.
+    -->
+    <Target
+        Condition="'$(PuckArchitectureGateEnabled)' == 'true'"
+        Name="PuckArchitectureDeniedApiCheck"
+        AfterTargets="CoreCompile"
+    >
+        <PuckArchitectureDeniedApiGate
+            AssemblyPath="@(IntermediateAssembly)"
+            DeniedApis="@(PuckArchitectureDeniedApi)"
+            ProjectFile="$(MSBuildProjectFullPath)"
+            ProjectName="$(MSBuildProjectName)"
         />
     </Target>
 

@@ -74,9 +74,12 @@ envelope on every run. It needs a display and both GPU devices, so run it on
 hardware for any render-path, shader, presenter, or capture change; it covers
 composed-frame agreement and nothing else.
 
-Still in the build and still applicable: the architecture gate (every build),
-the two emulator batteries below, `dotnet build Puck.slnx -c Release`,
-`puck parity`, and running `Puck.World`.
+Still in the build and still applicable: the architecture gate (every build) —
+including `PUCKARCH008`, which fails a denied project's build when its
+compiled output references an assembly `build/Architecture.props`'s
+`PuckArchitectureDeniedApi` denies it (`Puck.World.Server` and
+`System.Console` today) — the two emulator batteries below,
+`dotnet build Puck.slnx -c Release`, `puck parity`, and running `Puck.World`.
 
 For changes under `src/Puck.Maths`, also run the maths law suite. The default
 tier is the everyday gate; `deep` and `exhaustive` are the opt-in volumes:

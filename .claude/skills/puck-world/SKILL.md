@@ -164,12 +164,15 @@ on the fixture and the shipped world.
 **Narrate through the hub, never the console.** Server writes nothing to
 `System.Console`; every line is a `WorldNarration` through
 `WorldOutputHub.Narrate(channel, text)` under `HasNarrationSink` (a lambda that
-captures locals allocates its closure on every call, sink or none), and the
-composition root binds `WorldConsoleNarrationSink` to stderr, or stdout for the
-few lines a script reads as answers. A fixture server narrates only if it is
-handed the sink (`Fixtures.FreshServer` does), so a law that captures
-`Console.Error` reads what the game prints. `ServerConsoleLawTests` holds the
-tree to the one writer until the architecture gate's console denial is armed.
+captures locals allocates its closure on every call, sink or none), and a
+composition root binds `Puck.World.Console`'s `WorldConsoleNarrationSink` to
+stderr, or stdout for the few lines a script reads as answers — `Puck.World.Server`
+cannot hold that type itself, since `build/Architecture.props`'s
+`PuckArchitectureDeniedApi` denies it a `System.Console` reference and
+`PuckArchitectureDeniedApiGate` fails the build (`PUCKARCH008`) on the compiled
+output if one slips in. A fixture server narrates only if it is handed the
+sink (`Fixtures.FreshServer` does), so a law that captures `Console.Error`
+reads what the game prints.
 A body sleeps after `bodies.sleepAfterTicks` idle engine ticks (0 never sleeps)
 and wakes on intent, pose, transfer, admission, a designation, a dynamic
 contact, or a contact-field version bump (`WorldBody.Sleep.cs`). A value write

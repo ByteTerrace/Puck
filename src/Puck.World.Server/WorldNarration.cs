@@ -13,9 +13,7 @@ public readonly record struct WorldNarration(string Channel, string Text, WorldN
     public override string ToString() => Text;
 }
 
-/// <summary>A sink that receives every <see cref="WorldNarration"/> a <see cref="WorldOutputHub"/> delivers while
-/// attached (<see cref="WorldOutputHub.AttachNarrationSink"/>). A sink that throws is detached — see
-/// <see cref="WorldOutputHub"/>'s own remarks on delivery isolation.</summary>
+/// <summary>The console stream a <see cref="WorldNarration"/> belongs on.</summary>
 public enum WorldNarrationStream {
     /// <summary>Standard error.</summary>
     Error,
@@ -23,16 +21,13 @@ public enum WorldNarrationStream {
     Output,
 }
 
+/// <summary>A sink that receives every <see cref="WorldNarration"/> a <see cref="WorldOutputHub"/> delivers while
+/// attached (<see cref="WorldOutputHub.AttachNarrationSink"/>). A sink that throws is detached — see
+/// <see cref="WorldOutputHub"/>'s own remarks on delivery isolation.</summary>
+/// <remarks>The console-writing implementation, <c>WorldConsoleNarrationSink</c>, lives in Puck.World.Console:
+/// build/Architecture.props denies Puck.World.Server a reference to <c>System.Console</c>.</remarks>
 public interface IWorldNarrationSink {
     /// <summary>Receives one narration line.</summary>
     /// <param name="narration">The narration.</param>
     void Narrate(in WorldNarration narration);
-}
-
-/// <summary>The narration sink every composition root binds so a headless script or canary keeps reading the exact
-/// lines it read when the deterministic core wrote them straight to <see cref="Console.Error"/>.</summary>
-public sealed class WorldConsoleNarrationSink : IWorldNarrationSink {
-    /// <inheritdoc/>
-    public void Narrate(in WorldNarration narration) =>
-        ((narration.Stream == WorldNarrationStream.Output) ? Console.Out : Console.Error).WriteLine(value: narration.Text);
 }

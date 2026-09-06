@@ -536,3 +536,94 @@ public sealed class PuckArchitectureGate : Task {
         public string ProjectPath = "";
     }
 }
+
+/// <summary>
+/// The denied-API gate: after a project compiles, reads its OUTPUT ASSEMBLY's own assembly-reference table and
+/// fails when it names an assembly <c>build/Architecture.props</c> denies that project.
+/// </summary>
+/// <remarks>
+/// <para>Hooked at <c>AfterTargets="CoreCompile"</c>, not before: a denied assembly such as <c>System.Console</c>
+/// arrives through the shared framework, never a <c>&lt;ProjectReference&gt;</c>, so <see cref="PuckArchitectureGate"/>'s
+/// resolved-closure walk cannot see it at all. Only the compiled output records whether the code actually pulled a
+/// member from it in — the C# compiler emits an assembly-reference row only for an assembly a type or member is
+/// actually read from, never for one merely available at compile time — so the check has to run once that output
+/// exists.</para>
+/// <para>Compiled by the same <c>RoslynCodeTaskFactory</c> host as <see cref="PuckArchitectureGate"/>, so it is
+/// outside the repository's analyzer and nullable context too.</para>
+/// </remarks>
+public sealed class PuckArchitectureDeniedApiGate : Task {
+    /// <summary>The freshly compiled output assembly to inspect (<c>@(IntermediateAssembly)</c>).</summary>
+    public string AssemblyPath { get; set; } = "";
+
+    /// <summary>The denial ledger: <c>Include</c> is the denied project, <c>Type</c> the denied assembly's name, <c>Enabled</c> "true" or "false".</summary>
+    public ITaskItem[] DeniedApis { get; set; } = Array.Empty<ITaskItem>();
+
+    /// <summary>This project's full path, used for the diagnostic's file position.</summary>
+    public string ProjectFile { get; set; } = "";
+
+    /// <summary>This project's name.</summary>
+    public string ProjectName { get; set; } = "";
+
+    public override bool Execute() {
+        var denials = DeniedApis
+            .Where(predicate: d => string.Equals(a: d.ItemSpec, b: ProjectName, comparisonType: StringComparison.OrdinalIgnoreCase))
+            .Where(predicate: d => string.Equals(a: d.GetMetadata(metadataName: "Enabled"), b: "true", comparisonType: StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        if ((denials.Length == 0) || string.IsNullOrEmpty(value: AssemblyPath) || !File.Exists(path: AssemblyPath)) {
+            return true;
+        }
+
+        var referenced = ReadAssemblyReferenceNames(assemblyPath: AssemblyPath);
+        var ok = true;
+
+        foreach (var denial in denials) {
+            var deniedAssembly = denial.GetMetadata(metadataName: "Type");
+
+            if (string.IsNullOrEmpty(value: deniedAssembly) || !referenced.Contains(item: deniedAssembly)) {
+                continue;
+            }
+
+            Log.LogError(
+                subcategory: null,
+                errorCode: "PUCKARCH008",
+                helpKeyword: null,
+                file: ProjectFile,
+                lineNumber: 0,
+                columnNumber: 0,
+                endLineNumber: 0,
+                endColumnNumber: 0,
+                message:
+                    $"{ProjectName}'s compiled output references the denied assembly '{deniedAssembly}' (build/Architecture.props, PuckArchitectureDeniedApi). "
+                    + $"Route the call through a seam {ProjectName} already exposes for it and bind the concrete implementation from a composition root or console project the ledger does not deny.");
+
+            ok = false;
+        }
+
+        return ok;
+    }
+
+    private static HashSet<string> ReadAssemblyReferenceNames(string assemblyPath) {
+        var names = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+
+        using var stream = File.OpenRead(path: assemblyPath);
+        using var peReader = new System.Reflection.PortableExecutable.PEReader(peStream: stream);
+
+        if (!peReader.HasMetadata) {
+            return names;
+        }
+
+        // The build-time host's copy of this library predates PEReader.GetMetadataReader(): its metadata block
+        // is read back through the byte-array overload of MetadataReaderProvider.FromMetadataImage instead.
+        using var provider = System.Reflection.Metadata.MetadataReaderProvider.FromMetadataImage(image: peReader.GetMetadata().GetContent());
+        var metadata = provider.GetMetadataReader(options: System.Reflection.Metadata.MetadataReaderOptions.Default, utf8Decoder: null);
+
+        foreach (var handle in metadata.AssemblyReferences) {
+            var reference = metadata.GetAssemblyReference(handle: handle);
+
+            _ = names.Add(item: metadata.GetString(handle: reference.Name));
+        }
+
+        return names;
+    }
+}

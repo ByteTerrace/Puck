@@ -34,6 +34,13 @@ reconstruction every JSON/prose-tailed verb shares) lives in
 [`Puck.World.Server`](../Puck.World.Server/README.md) instead, since modules
 that stayed in `Puck.World` need it too.
 
+`WorldConsoleNarrationSink` (`WorldConsoleNarrationSink.cs`) is the
+`IWorldNarrationSink` implementation every composition root binds so a
+headless script or canary reads byte-identical lines to a direct
+`Console.Error` write — it lives here rather than in `Puck.World.Server`
+because `build/Architecture.props` denies that project a reference to
+`System.Console`.
+
 Project references: `Puck.World.Server`, `Puck.World.Protocol`,
 `Puck.World.Schema`, `Puck.Commands`, `Puck.Launcher` (the
 `ITextCommandHoldGate` seam `WorldConsoleWaitGate` implements). `Puck.Hosting`

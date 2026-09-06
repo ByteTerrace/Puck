@@ -1376,11 +1376,10 @@ public sealed class WorldReplaySnapshot {
         server.EnterExtensionReplay();
 
         // Replay verification is side-effect-free: a rule's 'save' effect re-derives deterministically like any
-        // other rule effect, but writing the world's own file is engine I/O. Wire an explicit narration-only tap
-        // (rather than leaving it null implicitly) so a verify run reports why no file write happened; the population hash
-        // this drive compares never depends on whether the write occurred. This shadow server carries no other
-        // attached sink, so bind one here for this one narration.
-        _ = server.AttachNarrationSink(sink: new WorldConsoleNarrationSink());
+        // other rule effect, but writing the world's own file is engine I/O. The tap narrates why no file write
+        // happened; the population hash this drive compares never depends on whether the write occurred. This
+        // shadow server binds no sink of its own — Server cannot construct a console-writing one — so the line
+        // reaches a caller only if it attaches one first.
         server.SaveEffectTap = tick => server.Output.Narrate(
             channel: "replay",
             text: $"[replay: save effect suppressed (tick {tick}) — replay verification is side-effect-free]"

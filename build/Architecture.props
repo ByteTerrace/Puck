@@ -333,15 +333,14 @@
     </ItemGroup>
 
     <!--
-        The System.Console denial for Puck.World.Server: declared, not yet armed.
-
+        The System.Console denial for Puck.World.Server, armed: PuckArchitectureDeniedApiGate reads this item
+        after Puck.World.Server compiles and fails PUCKARCH008 if the output assembly references System.Console.
         Every narration line under Puck.World.Server is a WorldNarration delivered through WorldOutputHub; the one
-        console writer is the sink a composition root binds (WorldNarration.cs). No PuckArchitectureGate.cs check
-        reads a denied-API item yet, so the flag stays false and tests/Puck.World.Tests/ServerConsoleLawTests.cs
-        holds the tree to that sink until the check exists.
+        console-writing sink, WorldConsoleNarrationSink, lives in Puck.World.Console and is bound by a composition
+        root or a test — never constructed from inside Puck.World.Server itself.
     -->
     <PropertyGroup>
-        <PuckArchitectureDenyConsoleEnabled Condition="'$(PuckArchitectureDenyConsoleEnabled)' == ''">false</PuckArchitectureDenyConsoleEnabled>
+        <PuckArchitectureDenyConsoleEnabled Condition="'$(PuckArchitectureDenyConsoleEnabled)' == ''">true</PuckArchitectureDenyConsoleEnabled>
     </PropertyGroup>
     <ItemGroup>
         <PuckArchitectureDeniedApi Include="Puck.World.Server" Type="System.Console" Enabled="$(PuckArchitectureDenyConsoleEnabled)" />

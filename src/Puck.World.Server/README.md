@@ -1013,9 +1013,11 @@ line opens with (`world.grant`, `world.mutation`, `replay.drive`, …), `format`
 a `Func<string>` invoked at most once and only while a sink is attached
 (`HasNarrationSink`), so a quiet run pays for neither the interpolation nor
 the write. `WorldServer.AttachNarrationSink`/`WorldInstanceHost.AttachNarrationSink`
-attach an `IWorldNarrationSink`; `WorldConsoleNarrationSink` (`WorldNarration.cs`)
+attach an `IWorldNarrationSink`; `Puck.World.Console`'s `WorldConsoleNarrationSink`
 is the one every composition root binds, so a headless script or canary reads
-byte-identical lines to a direct `Console.Error` write. A server's own
+byte-identical lines to a direct `Console.Error` write — this project cannot
+hold that implementation itself (`build/Architecture.props` denies it a
+`System.Console` reference). A server's own
 narration must be attached from its constructor's `narrationSink` parameter,
 not after — the document's own authored grants narrate during construction,
 before any post-build wiring step could reach them. `WorldMachineHost` and
