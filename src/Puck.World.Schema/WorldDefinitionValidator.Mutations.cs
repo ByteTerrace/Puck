@@ -6,7 +6,7 @@ public static partial class WorldDefinitionValidator {
     /// search plan, or flock affinity compiled. The containing definition has already composed the mutation; this
     /// checks only what that mutation could have changed. A row keyed over one of the named rows (a <c>keysOf</c>
     /// zone whose domain is a row this call was given) is queued alongside it: a domain row losing a key leaves such
-    /// a zone holding a key outside its own domain, a shape only a walk over the ZONE's own cells — never the
+    /// a zone holding a key outside its own domain, a shape only a walk over the zone's own cells — never the
     /// domain's — catches (see <see cref="ValidateTokenAndPhaseRow"/>'s domain-membership check).</summary>
     /// <param name="definition">The composed candidate document.</param>
     /// <param name="rowNames">The row names the mutation touched; duplicates are checked once.</param>
@@ -35,10 +35,18 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
+        var catalog = definition.StateCatalog;
+        var rows = definition.State;
+
         while (queue.Count > 0) {
             var rowName = queue.Dequeue();
 
-            if (WorldDefinitionRows.FindStateRow(rows: definition.State, name: rowName) is not { } row) {
+            if (
+                !catalog.TryResolve(lane: StateLane.Document, name: rowName, handle: out var handle) ||
+                !catalog.TryGetDescriptor(handle: handle, descriptor: out var descriptor) ||
+                (((uint)descriptor.LaneOrdinal) >= ((uint)rows.Count)) ||
+                (rows[descriptor.LaneOrdinal] is not { } row)
+            ) {
                 errors.Add(item: $"state row '{rowName}' does not exist in the composed candidate.");
 
                 continue;

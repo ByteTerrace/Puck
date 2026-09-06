@@ -207,6 +207,7 @@ public sealed class StateFrame : StateStore {
 
     private readonly long[] m_values;
     private JournalEntry[] m_journal = new JournalEntry[64];
+    private long[] m_snapshot = [];
     private int m_journalLength;
     private int m_journalScopes;
     private long m_journalTouches;
@@ -266,6 +267,28 @@ public sealed class StateFrame : StateStore {
 
         m_values[index] = value;
     }
+    // A before-image of one row span for a transform that writes the whole span itself; the buffer grows to the
+    // widest row this frame has snapshotted and is reused, so a lattice-sized row costs neither stack nor heap per
+    // transform.
+    private ReadOnlySpan<long> Snapshot(ReadOnlySpan<long> values) {
+        if (m_snapshot.Length < values.Length) {
+            m_snapshot = new long[Math.Max(values.Length, (m_snapshot.Length * 2))];
+        }
+
+        var before = m_snapshot.AsSpan(start: 0, length: values.Length);
+
+        values.CopyTo(destination: before);
+
+        return before;
+    }
+    // Journals every cell a whole-span writer changed, by comparing its before-image against the span it left.
+    private void JournalChanged(int offset, ReadOnlySpan<long> before, ReadOnlySpan<long> after) {
+        for (var cell = 0; cell < before.Length; cell++) {
+            if (before[cell] != after[cell]) {
+                RecordJournal(index: (offset + cell), previous: before[cell]);
+            }
+        }
+    }
     // Journals a value already overwritten by a caller that writes a whole span itself (a board transform this
     // frame does not own the writing of): the caller diffs against a before-snapshot and reports only what changed.
     private void RecordJournal(int index, long previous) {
@@ -298,6 +321,7 @@ public sealed class StateFrame : StateStore {
     /// <param name="source">The store to read; its rows must share this frame's structure.</param>
     public void Load(StateStore source) {
         ArgumentNullException.ThrowIfNull(argument: source);
+        RequireNoJournalScope();
 
         for (var ordinal = 0; ordinal < Layout.RowCount; ordinal++) {
             var layout = Layout[ordinal];
@@ -355,7 +379,14 @@ public sealed class StateFrame : StateStore {
             throw new ArgumentException(message: "The frames are laid out differently.", paramName: nameof(other));
         }
 
+        RequireNoJournalScope();
         other.m_values.AsSpan().CopyTo(destination: m_values);
+    }
+    // A whole-frame load bypasses the journal, so it is refused while a scope could still rewind over it.
+    private void RequireNoJournalScope() {
+        if (m_journalScopes > 0) {
+            throw new InvalidOperationException(message: "The frame cannot be reloaded while a journal scope is open.");
+        }
     }
 
     /// <inheritdoc/>
@@ -706,16 +737,10 @@ public sealed class StateFrame : StateStore {
         if (m_journalScopes > 0) {
             // clearEnclosed writes through BoardQueries, which owns the whole board span; journal what it changed
             // by comparing against a snapshot rather than intercepting each of its writes.
-            Span<long> before = stackalloc long[layout.Length];
+            var before = Snapshot(target);
 
-            target.CopyTo(destination: before);
             _ = BoardQueries.ClearEnclosed(topology: layout.Topology, values: target, source: source, lower: enclosed.Lower, upper: enclosed.Upper, empty: layout.Empty);
-
-            for (var cell = 0; cell < before.Length; cell++) {
-                if (before[cell] != target[cell]) {
-                    RecordJournal(index: (layout.Offset + cell), previous: before[cell]);
-                }
-            }
+            JournalChanged(offset: layout.Offset, before: before, after: target);
         } else {
             _ = BoardQueries.ClearEnclosed(topology: layout.Topology, values: target, source: source, lower: enclosed.Lower, upper: enclosed.Upper, empty: layout.Empty);
         }
@@ -829,16 +854,10 @@ public sealed class StateFrame : StateStore {
         if (m_journalScopes > 0) {
             // boardCombine writes through BoardCombination, which owns the whole board span; journal what it
             // changed by comparing against a snapshot rather than intercepting each of its writes.
-            Span<long> before = stackalloc long[topology.CellCount];
+            var before = Snapshot(target);
 
-            target.CopyTo(destination: before);
             BoardCombination.Write(combine, topology, left, leftEmpty, right, rightEmpty, target, layout.Empty, direction, element);
-
-            for (var cell = 0; cell < before.Length; cell++) {
-                if (before[cell] != target[cell]) {
-                    RecordJournal(index: (layout.Offset + cell), previous: before[cell]);
-                }
-            }
+            JournalChanged(offset: layout.Offset, before: before, after: target);
         } else {
             BoardCombination.Write(combine, topology, left, leftEmpty, right, rightEmpty, target, layout.Empty, direction, element);
         }

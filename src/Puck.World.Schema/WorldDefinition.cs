@@ -457,8 +457,21 @@ public sealed record WorldDefinition(
     private static readonly RuntimeCompilationCache s_absentStateCompilation = new();
     private static readonly ConditionalWeakTable<WorldStateSection, RuntimeCompilationCache> s_runtimeCompilationCaches = new();
 
+    // The compiled views are read on the tick path (every rule operand resolves through the catalog), so a warm read
+    // answers from the cache without taking its lock: a shape check against the live section is enough, because a
+    // stale product never matches and a matching product is the same answer the locked path would give. The lock
+    // covers only compilation and its publication; a product is published after it is complete, so a reader that
+    // observes it observes a finished one.
     private WorldFieldsSection? GetCompiledFields() {
         var cache = GetCompilationCache(state: StateRaw);
+
+        if (Volatile.Read(location: ref cache.FieldsCompiled)) {
+            var warm = Volatile.Read(location: ref cache.Fields);
+
+            if (WorldFieldsSection.MatchesState(composite: warm, state: StateRaw)) {
+                return warm;
+            }
+        }
 
         lock (cache.SyncRoot) {
             if (
@@ -469,7 +482,7 @@ public sealed record WorldDefinition(
                 )
             ) {
                 cache.Fields = WorldFieldsSection.Compile(state: StateRaw);
-                cache.FieldsCompiled = true;
+                Volatile.Write(location: ref cache.FieldsCompiled, value: true);
             }
 
             return cache.Fields;
@@ -477,6 +490,10 @@ public sealed record WorldDefinition(
     }
     private StateCatalog GetStateCatalog() {
         var cache = GetCompilationCache(state: StateRaw);
+
+        if ((Volatile.Read(location: ref cache.StateCatalog) is { } warm) && warm.MatchesShape(section: StateRaw)) {
+            return warm;
+        }
 
         lock (cache.SyncRoot) {
             if (
@@ -534,7 +551,7 @@ public sealed record WorldDefinition(
                         ? sourceCache.Fields
                         : WorldFieldsSection.Compile(state: target.StateRaw)
                     );
-                    targetCache.FieldsCompiled = true;
+                    Volatile.Write(location: ref targetCache.FieldsCompiled, value: true);
                 }
 
                 if (sourceCache.StateCatalog is not null) {
@@ -552,7 +569,7 @@ public sealed record WorldDefinition(
                     var catalog = (targetCache.StateCatalog ?? StateCatalog.Compile(section: target.StateRaw));
 
                     targetCache.Fields = fields;
-                    targetCache.FieldsCompiled = true;
+                    Volatile.Write(location: ref targetCache.FieldsCompiled, value: true);
                     targetCache.StateCatalog = catalog;
                     targetCache.FieldProgram = (
                         ((sourceCache.FieldProgram is not null) &&
@@ -588,9 +605,9 @@ public sealed record WorldDefinition(
 
     private sealed class RuntimeCompilationCache {
         public object SyncRoot { get; } = new();
-        public bool FieldsCompiled { get; set; }
-        public WorldFieldsSection? Fields { get; set; }
-        public StateCatalog? StateCatalog { get; set; }
+        public bool FieldsCompiled;
+        public WorldFieldsSection? Fields;
+        public StateCatalog? StateCatalog;
         public bool FieldProgramCompiled { get; set; }
         public WorldFieldProgram? FieldProgram { get; set; }
         public WorldFieldsSection? FieldProgramFields { get; set; }
