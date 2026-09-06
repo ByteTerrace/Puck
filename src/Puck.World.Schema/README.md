@@ -2310,16 +2310,50 @@ uprightness, quiescence). A relocation is accepted when the verdict reads
 `accept` and the turn changed. Nothing hypothetical reaches the installed
 section. The job restarts whenever any framed cell other than its own outputs
 changes, so a settling piece restarts it every tick until the board rests.
+This root walk is unconditional and exhaustive — it never prunes and never
+skips a candidate — so `legal`/`count` are the same whether or not the job
+searches deeper.
+
+`depth` (default 1) and `score` ask what a position beyond the immediate ply is
+worth. `score` is an infix expression, in the rule expression grammar,
+compiled the same way a rule binding is (`RuleCompiler.CompileExpression`
+over `ExpressionSpelling.TryParse`'s tokens) and refused at validation if it
+reads a fact only the world host answers — a frame cannot evaluate one. It is
+required whenever `depth` exceeds one, or `best` is authored. `best` is a
+keyed integer row receiving the deepest completed depth's answer: `token` (the
+mover's ordinal in `tokens`), `to` (its destination cell), and `score` (the
+negamax value).
+
+A job with a score iterative-deepens: for each depth from one up to the
+authored `depth` in turn, the same root walk negamaxes every accepted
+relocation to that depth — for each accepted root candidate, if plies remain
+it recurses one more ply and negates the reply (the value is from the
+perspective of the side that JUST MOVED, so an opponent's gain is this side's
+loss); once no plies remain, `score` is evaluated directly on the frame after
+the ply. A position with no accepted relocation scores `-WorldSearchCapacity.
+MateScore` for the side to move — a magnitude shifted down from
+`long.MaxValue` so repeated negation and comparison across the deepest
+authored search never overflows. Alpha-beta prunes every ply past the root
+(the root itself never prunes, preserving `legal`/`count`). The recursion runs
+on an explicit stack — one `StateFrame` per ply beyond the root, pooled and
+sized to `depth - 1` — rather than the call stack, so a tick boundary can
+suspend it at any node and a checkpoint carries it byte-for-byte (per-ply
+cursor, window, and best-so-far, plus the ply's own frame values). Depth
+completes before landing: the running best is overwritten every pass, so
+whatever it holds when the final depth finishes is that depth's answer.
 
 Work derives: one judge run costs the sum of the frame-evaluable rules'
 work-sheet lines, and the per-tick node quota is what `RuleCapacity.
 MaxWorkUnitsPerTick` leaves after the sheet, shared by the jobs and divided by
 that cost (at most `WorldSearchCapacity.MaxNodesPerTick`); a document whose
 rules leave no room for one judge run is refused. `nodes` may lower the quota
-for a job with something specific in mind, never raise it. Job progress is
-simulation state — it hashes and rides the checkpoint — and `world.search`
+for a job with something specific in mind, never raise it — a deeper search
+spends the same quota over more ticks rather than a larger one. Job progress
+is simulation state — it hashes and rides the checkpoint — and `world.search`
 lists each job's phase, walk position, accepted count, judged count, quota,
-judge cost, and rule count.
+judge cost, rule count, and (a job authoring a score) the depth it is
+iterative-deepening through and the negamax answer the deepest completed pass
+found.
 
 ## The egress documents — what leaves an authority
 

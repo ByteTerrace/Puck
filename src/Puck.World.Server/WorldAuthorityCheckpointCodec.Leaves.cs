@@ -28,6 +28,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             maximum: maximum,
             minimum: 0
         );
+
+        if (count == 0) {
+            return [];
+        }
+
         var items = new T[count];
 
         for (var index = 0; ((index < count) && !reader.Failed); index++) {
