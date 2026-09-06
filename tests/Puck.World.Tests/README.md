@@ -34,6 +34,13 @@ promotion. Preserve population sizes, work limits, and allocation controls.
 Network deadline tests use controlled timers and wait for the relevant work
 to arrive before expiring it; production timeout lengths need not elapse.
 
+Extension hosting tests use fake providers and controlled scheduling time.
+`ConfinedStorageLawTests` uses real files for link, namespace, concurrent
+replacement, and conditional-write behavior. Run that class on Windows and
+Linux x64: Windows covers junctions and hard links, while Linux also covers
+file symlinks without the Windows symlink privilege. No live Azure mutation is
+part of these tests.
+
 ## What an assertion must prove
 
 Assert behavior, not an incidental implementation shape. Counts that belong to

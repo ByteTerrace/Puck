@@ -1,38 +1,38 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState } from "react";
+import { Box, Grid, Stack, Text, Tabs } from "@mantine/core";
 import {
-  Box,
-  Grid,
-  Group,
-  Stack,
-  Text,
-  Badge,
-  Select,
-  Button,
-  Tabs,
-  Paper,
-  Alert,
-} from "@mantine/core";
-import {
-  RiRefreshLine,
-  RiGamepadLine,
-  RiCodeSSlashLine,
-  RiUser3Line,
-  RiArrowLeftLine,
-  RiArrowRightLine,
-  RiTrophyLine,
-  RiGitMergeLine,
   RiHistoryLine,
   RiFlaskLine,
   RiCpuLine,
   RiCompass3Fill,
   RiTerminalBoxLine,
-  RiAddLine,
-  RiSparklingLine,
+  RiGitMergeLine,
+  RiCodeSSlashLine,
 } from "@remixicon/react";
+
+import { SimulationContext } from "../../context/SimulationContext";
+import {
+  selectActivePlayer,
+  selectCurrentTickIndex,
+  selectCurrentSnapshot,
+  selectSnapshotsList,
+  selectLiveState,
+  selectLiveCells,
+  selectTopologies,
+  selectTopologyMap,
+  selectActiveTopology,
+  selectStateDefinitions,
+  selectRules,
+  selectWorldJsonText,
+  selectHoveredCell,
+  selectHoveredMask,
+  selectDisplayedRayBeam,
+  selectLastDeltas,
+} from "../../machines/worldSimulationMachine";
 
 import UniversalTopologyView from "./UniversalTopologyView";
 import ReactiveRuleGraph from "./ReactiveRuleGraph";
-import StateMatrixView, { StateRowDefinition } from "./StateMatrixView";
+import StateMatrixView from "./StateMatrixView";
 import WorldWorkbench from "./WorldWorkbench";
 import ExecutionTraceLog from "./ExecutionTraceLog";
 import ScenarioTestStudio from "./ScenarioTestStudio";
@@ -40,442 +40,87 @@ import MonteCarloStudio from "./MonteCarloStudio";
 import LatticeRayStudio from "./LatticeRayStudio";
 import PuckReplConsole from "./PuckReplConsole";
 import RuleAuthoringModal from "./RuleAuthoringModal";
+import { WorldVaultModal } from "./vault/WorldVaultModal";
+import { SaveWorldModal } from "./vault/SaveWorldModal";
+import { TopologyDesignerModal } from "./authoring/TopologyDesignerModal";
+import { StateSchemaDesignerModal } from "./authoring/StateSchemaDesignerModal";
+import { WorldHudDesignerModal, WorldHudConfig } from "./authoring/WorldHudDesignerModal";
+import { WorldStudioHeader, StudioModalType } from "./WorldStudioHeader";
+import { WorldStudioAlerts } from "./WorldStudioAlerts";
+import { defaultWorldStorageClient, WorldMetadata } from "../../clients/worldStorageClient";
+import { TopologyDefinition, WorldRule } from "../../engine/evaluator";
+import { StateRowDefinition } from "./StateMatrixView";
 
-import {
-  TopologyDefinition,
-  WorldRule,
-  boardShift,
-  computeBoardMask,
-  getTopologyCoordinates,
-} from "../../engine/evaluator";
-import { executeSimulationTick, StateDelta } from "../../engine/tickRunner";
-import { ReplayTape, TickSnapshot } from "../../engine/replayTape";
-import { AVAILABLE_PRESETS, TIC_TAC_TOE_WORLD } from "../../catalog/worldCatalog";
+const WorldStudioInner: React.FC = () => {
+  const simActor = SimulationContext.useActorRef();
 
-export const WorldStudio: React.FC = () => {
-  // World Preset Selection
+  // High-performance XState slice selectors
+  const activePlayer = SimulationContext.useSelector(selectActivePlayer);
+  const currentTickIndex = SimulationContext.useSelector(selectCurrentTickIndex);
+  const currentSnapshot = SimulationContext.useSelector(selectCurrentSnapshot);
+  const snapshotsList = SimulationContext.useSelector(selectSnapshotsList);
+  const liveState = SimulationContext.useSelector(selectLiveState);
+  const liveCells = SimulationContext.useSelector(selectLiveCells);
+  const topologies = SimulationContext.useSelector(selectTopologies);
+  const topologyMap = SimulationContext.useSelector(selectTopologyMap);
+  const activeTopology = SimulationContext.useSelector(selectActiveTopology);
+  const stateDefinitions = SimulationContext.useSelector(selectStateDefinitions);
+  const rules = SimulationContext.useSelector(selectRules);
+  const worldJsonText = SimulationContext.useSelector(selectWorldJsonText);
+  const hoveredCell = SimulationContext.useSelector(selectHoveredCell);
+  const hoveredMask = SimulationContext.useSelector(selectHoveredMask);
+  const displayedRayBeam = SimulationContext.useSelector(selectDisplayedRayBeam);
+  const lastDeltas = SimulationContext.useSelector(selectLastDeltas);
+
+  // Studio UI Modals (discriminated union prevents conflicting open modals)
+  const [activeModal, setActiveModal] = useState<StudioModalType>(null);
   const [selectedPresetId, setSelectedPresetId] = useState<string>("tictactoe");
-  const [worldJsonText, setWorldJsonText] = useState<string>(
-    JSON.stringify(TIC_TAC_TOE_WORLD, null, 2)
-  );
 
-  // Parse world data
-  const parsedWorld = useMemo(() => {
-    try {
-      return JSON.parse(worldJsonText);
-    } catch {
-      return TIC_TAC_TOE_WORLD;
-    }
-  }, [worldJsonText]);
+  // Storage Substrate Metadata
+  const [activeWorldId, setActiveWorldId] = useState<string>("tictactoe");
+  const [worldMetadata, setWorldMetadata] = useState<Partial<WorldMetadata>>({
+    name: "Qubic 3D 4x4x4 Tic-Tac-Toe",
+    author: "ByteTerrace",
+    description: "Standard 3D Qubic on a 4x4x4 lattice substrate.",
+    category: "Strategy",
+    visibility: "public",
+  });
 
-  const topologies: TopologyDefinition[] = parsedWorld.state?.lattices ?? [];
-  const stateDefinitions: StateRowDefinition[] = parsedWorld.state?.world ?? [];
-  const rules: WorldRule[] = parsedWorld.rules ?? [];
-
-  const topologyMap = useMemo(() => {
-    const map: Record<string, TopologyDefinition> = {};
-    topologies.forEach((t) => {
-      map[t.name] = t;
-    });
-    return map;
-  }, [topologies]);
-
-  const [selectedTopologyName, setSelectedTopologyName] = useState<string>(
-    topologies[0]?.name ?? "tttCube"
-  );
-  const activeTopology =
-    topologies.find((t) => t.name === selectedTopologyName) ?? topologies[0];
-
-  // Replay tape for time-travel
-  const replayTapeRef = useRef<ReplayTape | null>(null);
-  const [currentSnapshot, setCurrentSnapshot] = useState<TickSnapshot | null>(null);
-  const [snapshotsList, setSnapshotsList] = useState<TickSnapshot[]>([]);
-  const [hoveredMask, setHoveredMask] = useState<bigint | null>(null);
-
-  // Probed vector beam from LatticeRayStudio
-  const [probedRayBeam, setProbedRayBeam] = useState<{ name: string; cells: number[] } | null>(null);
-
-  // Visual Rule Composer Modal
-  const [ruleModalOpen, setRuleModalOpen] = useState(false);
-
-  // Hovered cell for speculative ghost move projection
-  const [hoveredCell, setHoveredCell] = useState<number | null>(null);
-
-  // Initialize replay tape whenever a new world definition is loaded
-  useEffect(() => {
-    const initialScalars: Record<string, any> = {};
-    const initialCells: Record<string, Record<number, number>> = {};
-
-    stateDefinitions.forEach((s) => {
-      if (s.domain) {
-        initialCells[s.name] = {};
-        if ((s as any).cells && Array.isArray((s as any).cells)) {
-          (s as any).cells.forEach((c: any) => {
-            initialCells[s.name][Number(c.key)] = Number(c.value);
-          });
-        }
-      } else {
-        initialScalars[s.name] = s.value ?? 0;
-      }
-    });
-
-    const tape = new ReplayTape(initialScalars, initialCells);
-    replayTapeRef.current = tape;
-    setCurrentSnapshot(tape.getCurrentSnapshot());
-    setSnapshotsList(tape.getAllSnapshots());
-  }, [worldJsonText]);
-
-  const liveState = currentSnapshot?.state ?? {};
-  const liveCells = currentSnapshot?.boardCells?.["tttBoard"] ?? currentSnapshot?.boardCells?.[stateDefinitions[0]?.name ?? ""] ?? {};
-  const tickCount = currentSnapshot?.tickNumber ?? 0;
-  const activePlayer = liveState["tttActive"] ?? liveState["hexTurn"] ?? liveState["chessTurn"] ?? 1;
-  const winner = liveState["tttWinner"] ?? liveState["hexWinner"] ?? 0;
-  const lastDeltas: StateDelta[] = currentSnapshot?.trace?.allDeltas ?? [];
-
-  // Speculative Ghost Move Simulation on Hover
-  const speculativeResult = useMemo(() => {
-    if (hoveredCell === null || winner !== 0 || !currentSnapshot) return null;
-    const isOccupied = liveCells[hoveredCell] && liveCells[hoveredCell] !== 0;
-    if (isOccupied) {
-      return { illegal: true, message: `Cell #${hoveredCell} is already occupied` };
-    }
-
-    const moveRequestSeq = Number(liveState["tttMoveRequest"] ?? 0) + 1;
-    const sim = executeSimulationTick(
-      tickCount + 1,
-      `Speculative Move at #${hoveredCell}`,
-      {
-        tttMoveCell: hoveredCell,
-        tttMoveRequest: moveRequestSeq,
-        hexMoveCell: hoveredCell,
-        hexMoveRequest: moveRequestSeq,
-      },
-      currentSnapshot.state,
-      currentSnapshot.boardCells,
-      rules,
-      topologyMap
-    );
-
-    const nextWinner = sim.nextState["tttWinner"] ?? sim.nextState["hexWinner"] ?? 0;
-    const firedRule = sim.trace.ruleEvents.find((r) => r.fired);
-    const nextPlayer = sim.nextState["tttActive"] ?? sim.nextState["hexTurn"] ?? 1;
-
-    return {
-      illegal: false,
-      cell: hoveredCell,
-      nextWinner,
-      firedRuleName: firedRule?.ruleName ?? "ttt-place-mark",
-      nextPlayer,
-      isWinningMove: nextWinner > 0,
-    };
-  }, [hoveredCell, winner, currentSnapshot, liveCells, liveState, rules, topologyMap, tickCount]);
-
-  // Calculate winning ray cells for 3D beam illumination
-  const activeWinningRay = useMemo(() => {
-    if (!winner || winner === 3 || !activeTopology) return null;
-
-    const boardCells = liveCells;
-    const playerVal = winner; // 1 for X, 2 for O
-    const mask = computeBoardMask(boardCells, playerVal);
-    const coords = getTopologyCoordinates(activeTopology);
-
-    // Test each direction to find which one caused the 4-in-a-row
-    for (const dir of activeTopology.directions ?? []) {
-      const s1 = boardShift(mask, activeTopology, dir.name);
-      const s2 = boardShift(s1 & mask, activeTopology, dir.name);
-      const s3 = boardShift(s2 & mask, activeTopology, dir.name);
-      const winBits = s3 & mask;
-
-      if (winBits !== 0n) {
-        // Find 4 collinear cells along this ray
-        const winningIndices: number[] = [];
-        for (let i = 0; i < coords.length; i++) {
-          if ((winBits & (1n << BigInt(i))) !== 0n) {
-            // Found target endpoint, backtrack 3 steps
-            winningIndices.push(i);
-            const oppositeName = dir.name.endsWith("Back")
-              ? dir.name.replace("Back", "")
-              : `${dir.name}Back`;
-            let curr = i;
-            for (let step = 0; step < 3; step++) {
-              const singleMask = 1n << BigInt(curr);
-              const back = boardShift(singleMask, activeTopology, oppositeName);
-              for (let j = 0; j < coords.length; j++) {
-                if ((back & (1n << BigInt(j))) !== 0n) {
-                  winningIndices.push(j);
-                  curr = j;
-                  break;
-                }
-              }
-            }
-            break;
-          }
-        }
-        if (winningIndices.length > 0) {
-          return { name: dir.name, cells: winningIndices };
-        }
-      }
-    }
-    return null;
-  }, [winner, liveCells, activeTopology]);
-
-  // Combined ray passed to 3D view (winning ray has priority, otherwise probed ray)
-  const displayedRayBeam = activeWinningRay ?? probedRayBeam;
-
-  // Handle Preset World Switch
-  const handlePresetSelect = (presetId: string | null) => {
-    if (!presetId) return;
+  const handleSelectPreset = (presetId: string, metadata: Partial<WorldMetadata>) => {
     setSelectedPresetId(presetId);
-    setProbedRayBeam(null);
-    const item = AVAILABLE_PRESETS.find((p) => p.id === presetId);
-    if (item) {
-      setWorldJsonText(JSON.stringify(item.world, null, 2));
+    setActiveWorldId(presetId);
+    setWorldMetadata(metadata);
+  };
+
+  const handleSaveWorld = async (id: string, meta: Partial<WorldMetadata>) => {
+    const parsed = JSON.parse(worldJsonText);
+    await defaultWorldStorageClient.saveWorld(id, parsed, meta);
+    setActiveWorldId(id);
+    setWorldMetadata((prev) => ({ ...prev, ...meta, name: meta.name || prev.name }));
+    simActor.send({ type: "SET_DIRTY", isDirty: false });
+  };
+
+  const handleLoadWorld = (worldData: any, meta: any) => {
+    const json = JSON.stringify(worldData, null, 2);
+    simActor.send({ type: "LOAD_WORLD", worldJsonText: json });
+    if (meta?.id) {
+      setActiveWorldId(meta.id);
+      setSelectedPresetId(meta.id);
     }
-  };
-
-  // Dispatch an action and run full Puck simulation tick
-  const dispatchAction = (intentDescription: string, mutations: Record<string, any>) => {
-    if (!replayTapeRef.current || !currentSnapshot) return;
-
-    const result = executeSimulationTick(
-      tickCount + 1,
-      intentDescription,
-      mutations,
-      currentSnapshot.state,
-      currentSnapshot.boardCells,
-      rules,
-      topologyMap
-    );
-
-    replayTapeRef.current.recordStep(
-      tickCount + 1,
-      result.nextState,
-      result.nextBoardCells,
-      result.trace
-    );
-
-    setCurrentSnapshot(replayTapeRef.current.getCurrentSnapshot());
-    setSnapshotsList(replayTapeRef.current.getAllSnapshots());
-  };
-
-  // Clicking a cell on the topology
-  const handleSelectCell = (cellIdx: number) => {
-    if (winner !== 0) return; // Game already finished
-
-    const moveRequestSeq = Number(liveState["tttMoveRequest"] ?? 0) + 1;
-    dispatchAction(`Place mark at Cell #${cellIdx}`, {
-      tttMoveCell: cellIdx,
-      tttMoveRequest: moveRequestSeq,
-      hexMoveCell: cellIdx,
-      hexMoveRequest: moveRequestSeq,
-    });
-  };
-
-  // Time-travel functions
-  const handleUndo = () => {
-    if (!replayTapeRef.current) return;
-    const snap = replayTapeRef.current.undo();
-    if (snap) setCurrentSnapshot(snap);
-  };
-
-  const handleRedo = () => {
-    if (!replayTapeRef.current) return;
-    const snap = replayTapeRef.current.redo();
-    if (snap) setCurrentSnapshot(snap);
-  };
-
-  const handleJumpToTick = (idx: number) => {
-    if (!replayTapeRef.current) return;
-    const snap = replayTapeRef.current.jumpTo(idx);
-    if (snap) setCurrentSnapshot(snap);
-  };
-
-  const handleResetWorld = () => {
-    const initialScalars: Record<string, any> = {};
-    const initialCells: Record<string, Record<number, number>> = {};
-
-    stateDefinitions.forEach((s) => {
-      if (s.domain) {
-        initialCells[s.name] = {};
-      } else {
-        initialScalars[s.name] = s.value ?? 0;
-      }
-    });
-
-    replayTapeRef.current?.reset(initialScalars, initialCells);
-    if (replayTapeRef.current) {
-      setCurrentSnapshot(replayTapeRef.current.getCurrentSnapshot());
-      setSnapshotsList(replayTapeRef.current.getAllSnapshots());
-    }
-  };
-
-  const handleStateChange = (stateName: string, newValue: any) => {
-    dispatchAction(`Manual tweak: ${stateName} = ${newValue}`, {
-      [stateName]: newValue,
-    });
-  };
-
-  const handleSaveCustomRule = (newRule: WorldRule) => {
-    try {
-      const currentWorld = JSON.parse(worldJsonText);
-      const updatedRules = [...(currentWorld.rules ?? []), newRule];
-      const updatedWorld = { ...currentWorld, rules: updatedRules };
-      setWorldJsonText(JSON.stringify(updatedWorld, null, 2));
-    } catch {
-      // ignore
-    }
+    if (meta) setWorldMetadata(meta);
   };
 
   return (
     <Box p="md">
-      {/* Studio Header Toolbar */}
-      <Paper p="sm" radius="md" mb="md" style={{ background: "var(--paper-2)", border: "1px solid var(--rule)" }}>
-        <Group justify="space-between" wrap="wrap" gap="sm">
-          <Group gap="sm">
-            <RiGamepadLine size={26} color="var(--accent)" />
-            <div>
-              <div className="kicker">Puck World Simulation IDE</div>
-              <Group gap={8} align="baseline">
-                <Text fw={600} size="md" style={{ fontFamily: '"Lora", Georgia, serif', color: "var(--ink)" }}>
-                  Formal State Simulation, CAD & Rule Studio
-                </Text>
-              </Group>
-            </div>
-          </Group>
+      {/* Studio Header Toolbar & Controls */}
+      <WorldStudioHeader
+        selectedPresetId={selectedPresetId}
+        onSelectPreset={handleSelectPreset}
+        onOpenModal={setActiveModal}
+      />
 
-          {/* Preset Selector */}
-          <Group gap="xs">
-            <Select
-              size="xs"
-              label="World Preset"
-              value={selectedPresetId}
-              onChange={handlePresetSelect}
-              data={AVAILABLE_PRESETS.map((p) => ({ label: `${p.name} (${p.category})`, value: p.id }))}
-              style={{ width: 250 }}
-            />
-
-            {topologies.length > 1 && (
-              <Select
-                size="xs"
-                label="Active Topology"
-                value={selectedTopologyName}
-                onChange={(val) => val && setSelectedTopologyName(val)}
-                data={topologies.map((t) => ({ label: `${t.name} (${t.$type})`, value: t.name }))}
-                style={{ width: 170 }}
-              />
-            )}
-
-            <Button
-              size="xs"
-              variant="outline"
-              color="jade"
-              leftSection={<RiAddLine size={14} />}
-              onClick={() => setRuleModalOpen(true)}
-              style={{ alignSelf: "flex-end" }}
-            >
-              New Rule
-            </Button>
-          </Group>
-
-          {/* Simulation & Time-Travel Controls */}
-          <Group gap="xs" align="flex-end">
-            <Badge
-              variant="light"
-              color={activePlayer === 1 ? "coral" : "jade"}
-              size="md"
-              leftSection={<RiUser3Line size={13} />}
-            >
-              Turn: Player {activePlayer} ({activePlayer === 1 ? "Rose-Coral 'X'" : "Jade 'O'"})
-            </Badge>
-
-            <Button
-              size="xs"
-              variant="default"
-              leftSection={<RiArrowLeftLine size={14} />}
-              onClick={handleUndo}
-              disabled={!replayTapeRef.current?.canUndo()}
-            >
-              Undo
-            </Button>
-
-            <Badge variant="filled" color="coral" size="md">
-              Tick #{tickCount}
-            </Badge>
-
-            <Button
-              size="xs"
-              variant="default"
-              rightSection={<RiArrowRightLine size={14} />}
-              onClick={handleRedo}
-              disabled={!replayTapeRef.current?.canRedo()}
-            >
-              Redo
-            </Button>
-
-            <Button
-              size="xs"
-              variant="light"
-              color="coral"
-              leftSection={<RiRefreshLine size={14} />}
-              onClick={handleResetWorld}
-            >
-              Reset
-            </Button>
-          </Group>
-        </Group>
-      </Paper>
-
-      {/* Game Over / Winner Banner */}
-      {winner !== 0 && (
-        <Alert
-          icon={<RiTrophyLine size={20} />}
-          title={winner === 3 ? "Game Concluded: Draw" : `Victory: Player ${winner} (${winner === 1 ? "Rose-Coral 'X'" : "Jade 'O'"}) Wins!`}
-          color={winner === 1 ? "coral" : winner === 2 ? "jade" : "gray"}
-          mb="md"
-          style={{
-            background: "var(--quote-bg)",
-            border: "1px solid var(--rule)",
-            borderLeft: `4px solid ${winner === 1 ? "var(--accent)" : winner === 2 ? "var(--accent-2)" : "var(--rule)"}`,
-          }}
-        >
-          <Text size="sm" style={{ fontFamily: '"Lora", Georgia, serif' }}>
-            {activeWinningRay
-              ? `Four collinear marks verified along lattice ray ${activeWinningRay.name}! Glowing vector is illuminated on the 3D topology.`
-              : "World reached terminal win state according to Level reactive rules."}
-          </Text>
-        </Alert>
-      )}
-
-      {/* Speculative Ghost Hover HUD Alert */}
-      {speculativeResult && winner === 0 && (
-        <Alert
-          icon={<RiSparklingLine size={18} color={speculativeResult.isWinningMove ? "var(--accent)" : "var(--accent-2)"} />}
-          color={speculativeResult.isWinningMove ? "yellow" : speculativeResult.illegal ? "red" : "teal"}
-          variant="light"
-          mb="md"
-          title={`Speculative Move Preview [Cell #${hoveredCell}]`}
-        >
-          {speculativeResult.illegal ? (
-            <Text size="xs" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
-              Illegal Action: {speculativeResult.message}
-            </Text>
-          ) : (
-            <Group gap="md">
-              <Text size="xs" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
-                Rule: <strong>{speculativeResult.firedRuleName}</strong> will fire
-              </Text>
-              <Text size="xs" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
-                Next Turn: Player {speculativeResult.nextPlayer}
-              </Text>
-              {speculativeResult.isWinningMove && (
-                <Badge size="xs" color="yellow" variant="filled">
-                  CRITICAL WINNING MOVE!
-                </Badge>
-              )}
-            </Group>
-          )}
-        </Alert>
-      )}
+      {/* Dynamic Alerts (Game Over & Speculative Hover Preview) */}
+      <WorldStudioAlerts />
 
       {/* Main Studio Two-Column Grid */}
       <Grid gap="md">
@@ -487,12 +132,12 @@ export const WorldStudio: React.FC = () => {
                 topology={activeTopology}
                 cellValues={liveCells}
                 selectedCell={liveState["tttMoveCell"]}
-                onSelectCell={handleSelectCell}
+                onSelectCell={(cellIdx) => simActor.send({ type: "CELL_CLICK", cellIdx })}
                 hoveredMask={hoveredMask}
                 activeWinningRay={displayedRayBeam}
                 ghostCell={hoveredCell}
                 ghostPlayer={activePlayer}
-                onHoverCell={setHoveredCell}
+                onHoverCell={(cellIdx) => simActor.send({ type: "HOVER_CELL", cellIdx })}
               />
             ) : (
               <Text c="var(--ink-faint)" size="sm">
@@ -504,9 +149,11 @@ export const WorldStudio: React.FC = () => {
               stateDefinitions={stateDefinitions}
               currentState={liveState}
               lastDeltas={lastDeltas}
-              onStateChange={handleStateChange}
-              onResetState={handleResetWorld}
-              onHoverMask={setHoveredMask}
+              onStateChange={(stateName, newValue) =>
+                simActor.send({ type: "STATE_CHANGE", stateName, newValue })
+              }
+              onResetState={() => simActor.send({ type: "RESET_WORLD" })}
+              onHoverMask={(mask) => simActor.send({ type: "HOVER_MASK", mask })}
             />
           </Stack>
         </Grid.Col>
@@ -542,8 +189,8 @@ export const WorldStudio: React.FC = () => {
             <Tabs.Panel value="trace">
               <ExecutionTraceLog
                 snapshots={snapshotsList}
-                currentTickIndex={replayTapeRef.current?.getCurrentIndex() ?? 0}
-                onJumpToTick={handleJumpToTick}
+                currentTickIndex={currentTickIndex}
+                onJumpToTick={(tickIndex) => simActor.send({ type: "JUMP_TO_TICK", tickIndex })}
               />
             </Tabs.Panel>
 
@@ -571,11 +218,15 @@ export const WorldStudio: React.FC = () => {
               {activeTopology ? (
                 <LatticeRayStudio
                   topology={activeTopology}
-                  onSelectRayBeam={(rayName, cells) => setProbedRayBeam({ name: rayName, cells })}
+                  onSelectRayBeam={(rayName, cells) =>
+                    simActor.send({ type: "PROBE_RAY", ray: { name: rayName, cells } })
+                  }
                   activeRayName={displayedRayBeam?.name}
                 />
               ) : (
-                <Text size="xs" c="dimmed">No active topology to probe.</Text>
+                <Text size="xs" c="dimmed">
+                  No active topology to probe.
+                </Text>
               )}
             </Tabs.Panel>
 
@@ -597,7 +248,10 @@ export const WorldStudio: React.FC = () => {
             <Tabs.Panel value="workbench">
               <WorldWorkbench
                 worldJson={worldJsonText}
-                onWorldJsonChange={(newJson) => setWorldJsonText(newJson)}
+                onWorldJsonChange={(newJson) => {
+                  simActor.send({ type: "LOAD_WORLD", worldJsonText: newJson });
+                  simActor.send({ type: "SET_DIRTY", isDirty: true });
+                }}
               />
             </Tabs.Panel>
           </Tabs>
@@ -606,13 +260,87 @@ export const WorldStudio: React.FC = () => {
 
       {/* Visual Rule Authoring Modal Dialog */}
       <RuleAuthoringModal
-        opened={ruleModalOpen}
-        onClose={() => setRuleModalOpen(false)}
-        onSaveRule={handleSaveCustomRule}
+        opened={activeModal === "rule"}
+        onClose={() => setActiveModal(null)}
+        onSaveRule={(newRule: WorldRule) => simActor.send({ type: "ADD_RULE", rule: newRule })}
         existingStateVars={stateDefinitions.map((s) => s.name)}
         topologyNames={topologies.map((t) => t.name)}
       />
+
+      {/* Cloud World Vault & Checkpoints Modal */}
+      <WorldVaultModal
+        opened={activeModal === "vault"}
+        onClose={() => setActiveModal(null)}
+        storageClient={defaultWorldStorageClient}
+        activeWorldId={activeWorldId}
+        onLoadWorld={handleLoadWorld}
+        onOpenSaveModal={() => setActiveModal("save")}
+      />
+
+      {/* Save World Modal */}
+      <SaveWorldModal
+        opened={activeModal === "save"}
+        onClose={() => setActiveModal(null)}
+        onSave={handleSaveWorld}
+        currentId={activeWorldId}
+        defaultName={worldMetadata.name || "My Custom World"}
+      />
+
+      {/* Spatial Topology CAD Designer Modal */}
+      <TopologyDesignerModal
+        opened={activeModal === "topology"}
+        onClose={() => setActiveModal(null)}
+        onSaveTopology={(newTopo: TopologyDefinition) =>
+          simActor.send({ type: "SAVE_TOPOLOGY", topology: newTopo })
+        }
+        existingTopologies={topologies}
+      />
+
+      {/* State Schema & Domain Designer Modal */}
+      <StateSchemaDesignerModal
+        opened={activeModal === "schema"}
+        onClose={() => setActiveModal(null)}
+        stateDefinitions={stateDefinitions}
+        onSaveStateDefinitions={(newStates: StateRowDefinition[]) =>
+          simActor.send({ type: "SAVE_STATE_DEFINITIONS", stateDefinitions: newStates })
+        }
+        availableTopologies={topologies}
+      />
+
+      {/* Player HUD & Scoreboard Configurator Modal */}
+      <WorldHudDesignerModal
+        opened={activeModal === "hud"}
+        onClose={() => setActiveModal(null)}
+        stateVariables={stateDefinitions.map((s) => s.name)}
+        onSaveHudConfig={(config: WorldHudConfig) => {
+          try {
+            const currentWorld = JSON.parse(worldJsonText);
+            const updatedWorld = {
+              ...currentWorld,
+              metadata: {
+                ...currentWorld.metadata,
+                hud: config,
+              },
+            };
+            simActor.send({
+              type: "LOAD_WORLD",
+              worldJsonText: JSON.stringify(updatedWorld, null, 2),
+            });
+            simActor.send({ type: "SET_DIRTY", isDirty: true });
+          } catch (err) {
+            console.error("Failed to save HUD config", err);
+          }
+        }}
+      />
     </Box>
+  );
+};
+
+export const WorldStudio: React.FC = () => {
+  return (
+    <SimulationContext.Provider>
+      <WorldStudioInner />
+    </SimulationContext.Provider>
   );
 };
 

@@ -18,6 +18,8 @@ export interface TopologyDefinition {
   depth?: number;
   layers?: number;
   radius?: number;
+  cellSize?: number;
+  layerHeight?: number;
   origin?: [number, number, number];
   dimensions?: { x?: number; y?: number; z?: number };
   coordinates?: TopologyCoordinate[];

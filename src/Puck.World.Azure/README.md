@@ -37,11 +37,10 @@ version. Resource IDs and action paths are unescaped ARM paths, not
 arbitrary service URLs. The payload is an unchanged JSON object in the selected
 resource provider's schema. POST and DELETE may omit it.
 
-The following belongs in a trusted host, after it has authorized the request.
-`server`, `extension`, `journal`, and `credential` are host-owned objects from the
-shared extension contract. Resource selection and API version come from the
-host's service configuration; the operation ID comes from the world request's
-authority lineage, entity incarnation, and generation.
+Use the [shared extension host](../Puck.World.Server/ExtensionHosting.md) to own
+dispatch and polling. `server`, `journal`, and `credential` are root-owned
+objects. Resource selection and API version come from the host's service
+configuration. The caller gets a granted client:
 
 ```csharp
 var binding = new AzureResourceBinding(
@@ -52,20 +51,22 @@ var binding = new AzureResourceBinding(
     ApiVersion: configuredApiVersion);
 
 using var provider = new AzureResourceOperationProvider(credential, binding);
-var dispatcher = new WorldExternalOperationDispatcher(extension, journal,
-    new Dictionary<string, IWorldExternalOperationProvider> {
-        [binding.Name] = provider,
-    });
+await using var host = new WorldExtensionHost(server, journal, authorityLineage,
+    [provider.Register("Delete this creature's associated resource")],
+    () => server.CaptureExternalOperationCause(hostRow));
+using var client = host.CreateClient(WorldPrincipal.Addon("creature-controller"),
+    allowedOperations: [binding.Name], worldRequests: manifest);
+host.Start();
 
-var request = provider.CreateOperation(stableRequestId);
-var cause = server.CaptureExternalOperationCause(hostRow);
-await dispatcher.CommitAsync(request, cause, cancellationToken);
-var outcome = await dispatcher.DispatchAsync(request.Id, cancellationToken);
+var operation = await client.InvokeAsync(binding.Name,
+    requestKey: "creature-17/incarnation-3/death-1",
+    cancellationToken: cancellationToken);
+var progress = await operation.ReadAsync(cancellationToken);
 ```
 
 For a POST action, set `Method` to `Post` and `Action` to the resource-relative
 action name, such as `start`. For PATCH or PUT, pass the JSON object as the
-second argument to `CreateOperation`. Each operation binding has its own identity;
+`input` argument to `client.InvokeAsync`. Each operation binding has its own identity;
 changing its target, incarnation, method, version, cloud, or precondition refuses
 old requests instead of redirecting them.
 
@@ -78,11 +79,12 @@ incarnation check.
 Puck's world grants govern observations and gameplay contributions. They do not
 authorize Azure operations. The trusted host authorizes access to bindings, and
 Azure RBAC independently checks the supplied credential. Do not hand untrusted
-code a dispatcher containing bindings it should not invoke.
+code a dispatcher containing bindings it should not invoke. Grant a scoped
+client instead; its operation discovery contains only those grants.
 
 ## Completion and recovery
 
-Run service work on host workers. The dispatcher claims each operation durably
+The shared host runs service work on workers. The dispatcher claims each operation durably
 before sending it. The SDK's automatic transient retries are disabled, and the
 default HTTP transport does not follow redirects. The client-request ID is a
 correlation aid, not an Azure idempotency guarantee.
@@ -94,17 +96,15 @@ and `Location`, in that order, and only follows HTTPS status URLs on the configu
 ARM origin. Azure status URLs may be outside the original resource path.
 See Microsoft's [asynchronous operation protocol](https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/async-operations).
 
-The host schedules individual `dispatcher.ReconcileAsync` calls, respecting
-`Retry-After` or its own bounded polling policy when that header is absent. Each
+`Register` supplies the shared worker with the adapter's `Retry-After` parser.
+The worker schedules individual reconciliation calls using that hint and its
+minimum polling interval. Each
 call uses GET against the saved status URL. Polling does not resend the mutation.
 No polling loop sleeps inside the provider or simulation pump. Failed status
 reads remain uncertain and preserve their continuation for another observation.
 
-```csharp
-var receipt = AzureResourceOperationReceipt.Parse(outcome.Result);
-// Schedule according to receipt.RetryAfter, then on a host worker:
-outcome = await dispatcher.ReconcileAsync(request.Id, cancellationToken);
-```
+Custom hosts can still use `CreateOperation`, `WorldExternalOperationDispatcher`,
+and `AzureResourceOperationReceipt` directly when they own scheduling.
 
 A request whose response was lost before its receipt was persisted can remain
 `Unknown`: ARM has no universal lookup by client-request ID. A 202 response
@@ -140,5 +140,6 @@ account and perform no live resource changes.
 
 ARM covers the management plane. Data-plane operations such as uploading blob
 contents may need their service SDK and a separately scoped provider. The Azure
-extension does not add an MCP server, managed-assembly loader, agent tool catalog,
-or automatic world-state watcher; those remain host composition concerns.
+extension supplies metadata to the shared client's operation catalog. It does
+not add an MCP transport, managed-assembly loader, or automatic world-state
+watcher; those remain host composition concerns.

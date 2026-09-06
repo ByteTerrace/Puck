@@ -29,6 +29,18 @@ provider result, not the authority recovery image; preserve that result when a
 status query fails. SDK retries of mutations and cross-origin polling must not
 bypass the external-operation journal. No live cloud operation belongs in tests.
 
+`src/Puck.World.Server/ExtensionHosting.md` owns explicit service registration,
+scoped `WorldExtensionClient` capabilities, and the bounded `WorldExtensionHost`
+worker. Give adapters clients, never the root journal, credentials, or providers.
+World manifests do not grant service access. In-process providers are trusted;
+do not introduce executable discovery from documents or writable directories.
+`ObjectBlobNamespace` binds storage to a host-selected object, opaque namespace,
+byte limit, and lifetime; retain replay revocation on saved handles. Follow
+`src/Puck.Storage/README.md` for local confinement. Do not replace native
+handle-based containment with a string-prefix check. Verify changes with
+`WorldExtensionHostLawTests`, `WorldExtensionLawTests`, and
+`ConfinedStorageLawTests`; the latter needs Windows and Linux filesystem legs.
+
 ## Contents
 
 - The row, mounting, and the prepare/commit transaction

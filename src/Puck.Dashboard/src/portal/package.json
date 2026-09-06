@@ -10,8 +10,10 @@
     "@react-three/drei": "^10",
     "@react-three/fiber": "^9",
     "@remixicon/react": "^4",
+    "@xstate/react": "^6.1.0",
     "codemirror": "^6.0.2",
-    "three": "^0.183"
+    "three": "^0.183",
+    "xstate": "^5.32.6"
   },
   "devDependencies": {
     "@azure/identity": "^4",

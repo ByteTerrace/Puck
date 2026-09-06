@@ -9,7 +9,7 @@ namespace Puck.Storage;
 /// <summary>
 /// The Azure Blob backend. Its version token is the blob ETag — the download ETag on a read, and a
 /// <c>BlobRequestConditions.IfMatch</c> on a conditional write, catching a 412 as a precondition
-/// failure. This is the true optimistic-concurrency path; the local backend implements the same seam best-effort.
+/// failure. The local backend implements this seam with a cross-process lock and atomic file replacement.
 /// <see cref="ListAsync"/> answers the discovery half of the contract — the caller's own
 /// listed keys, in the same object-relative key space a read/write address carries; an edge-shaped target routes List
 /// to <see cref="AzureBlobObjectStorageTarget.DirectEndpoint"/> instead of the edge (see that property's remarks —

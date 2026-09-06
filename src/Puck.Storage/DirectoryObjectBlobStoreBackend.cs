@@ -2,240 +2,99 @@ using System.Security.Cryptography;
 
 namespace Puck.Storage;
 
-/// <summary>
-/// The local-filesystem backend. Its version token is a content hash of the blob's own bytes (SHA-256, lowercase
-/// hex) rather than a write-order stamp, so two writers depositing identical bytes agree on the token without
-/// coordinating. <see cref="ObjectBlobWriteMode.CreateOnly"/> uses <see cref="FileMode.CreateNew"/>, which is atomic
-/// at the filesystem level (the OS refuses a second creator). <see cref="ObjectBlobWriteMode.Overwrite"/> with an
-/// if-match token holds one exclusive file handle across the whole read-compare-write, so the compare-and-swap is
-/// atomic on a single machine — stronger than the "best-effort" a local backend is allowed to be
-/// (<see cref="IObjectBlobStoreBackend"/>'s own remarks), and exactly the guarantee the write-semantics law suite
-/// proves against a real Azure account.
-/// </summary>
+/// <summary>Local blob storage through pinned, no-follow directory capabilities. Conditional writes hold a
+/// cross-process directory lock and publish a flushed temporary file by atomic replacement. Local roots must
+/// remain host-owned; this is not a sandbox for native code running as that host identity.</summary>
 internal sealed class DirectoryObjectBlobStoreBackend : IObjectBlobStoreBackend {
-    private static string ComputeVersionToken(ReadOnlySpan<byte> content) {
-        Span<byte> hash = stackalloc byte[32];
+    public bool Supports(ObjectStorageTarget target) => target is DirectoryObjectStorageTarget;
 
-        SHA256.HashData(
-            destination: hash,
-            source: content
-        );
-
-        return Convert.ToHexStringLower(bytes: hash);
-    }
-    private static string ResolvePath(DirectoryObjectStorageTarget target, ObjectBlobAddress address) {
-        var key = ObjectBlobAddressPath.GetNormalizedKey(address: address).Replace(
-            newChar: Path.DirectorySeparatorChar,
-            oldChar: '/'
-        );
-
-        return Path.GetFullPath(path: Path.Combine(
-            path1: target.RootPath,
-            path2: address.ObjectId.ToString(),
-            path3: key
-        ));
+    public ValueTask<ObjectBlobContent?> ReadAsync(ObjectStorageTarget target, ObjectBlobAddress address,
+        CancellationToken cancellationToken = default) {
+        cancellationToken.ThrowIfCancellationRequested();
+        var local = ObjectStorageTarget.Require<DirectoryObjectStorageTarget>(target, "a directory target");
+        var (parent, name) = Resolve(local, address);
+        using var directory = ConfinedDirectory.Open(parent, create: false);
+        if (directory is null) { return ValueTask.FromResult<ObjectBlobContent?>(null); }
+        using var gate = directory.AcquireLock(cancellationToken);
+        return ValueTask.FromResult(Read(directory, name, local.MaximumBlobBytes));
     }
 
-    public ValueTask<IReadOnlyList<string>> ListAsync(
-        ObjectStorageTarget target,
-        Guid objectId,
-        string keyPrefix,
-        CancellationToken cancellationToken = default
-    ) {
-        var directoryTarget = ObjectStorageTarget.Require<DirectoryObjectStorageTarget>(
-            description: "a directory target",
-            target: target
-        );
-        var root = Path.GetFullPath(path: Path.Combine(
-            path1: directoryTarget.RootPath,
-            path2: objectId.ToString()
-        ));
-
-        if (!Directory.Exists(path: root)) {
-            return ValueTask.FromResult<IReadOnlyList<string>>(result: []);
+    public ValueTask<ObjectBlobWriteResult> WriteAsync(ObjectStorageTarget target, ObjectBlobAddress address,
+        ReadOnlyMemory<byte> content, ObjectBlobWriteMode mode, string? ifMatchVersion = null,
+        CancellationToken cancellationToken = default) {
+        cancellationToken.ThrowIfCancellationRequested();
+        var local = ObjectStorageTarget.Require<DirectoryObjectStorageTarget>(target, "a directory target");
+        if (content.Length > local.MaximumBlobBytes) { throw new IOException("Storage blob exceeds its byte budget."); }
+        if (!Enum.IsDefined(mode)) { throw new ArgumentOutOfRangeException(nameof(mode)); }
+        var (parent, name) = Resolve(local, address);
+        using var directory = ConfinedDirectory.Open(parent, create: true)!;
+        using var gate = directory.AcquireLock(cancellationToken);
+        var current = Read(directory, name, local.MaximumBlobBytes);
+        if (mode == ObjectBlobWriteMode.CreateOnly && current is not null) {
+            return ValueTask.FromResult(new ObjectBlobWriteResult(false, false, current.Value.VersionToken));
         }
-
-        var normalizedPrefix = ObjectBlobAddressPath.GetNormalizedPrefix(keyPrefix: keyPrefix);
-        var keys = new List<string>();
-
-        foreach (var file in Directory.EnumerateFiles(
-            path: root,
-            searchOption: SearchOption.AllDirectories,
-            searchPattern: "*"
-        )) {
-            var relative = Path.GetRelativePath(
-                path: file,
-                relativeTo: root
-            ).Replace(
-                newChar: '/',
-                oldChar: Path.DirectorySeparatorChar
-            );
-
-            if (relative.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: normalizedPrefix
-            )) {
-                keys.Add(item: relative);
-            }
+        if (ifMatchVersion is not null && current?.VersionToken != ifMatchVersion) {
+            return ValueTask.FromResult(new ObjectBlobWriteResult(false, true, current?.VersionToken));
         }
-
-        return ValueTask.FromResult<IReadOnlyList<string>>(result: keys);
-    }
-    public ValueTask<ObjectBlobContent?> ReadAsync(
-        ObjectStorageTarget target,
-        ObjectBlobAddress address,
-        CancellationToken cancellationToken = default
-    ) {
-        var directoryTarget = ObjectStorageTarget.Require<DirectoryObjectStorageTarget>(
-            description: "a directory target",
-            target: target
-        );
-        var path = ResolvePath(
-            address: address,
-            target: directoryTarget
-        );
-
-        if (!File.Exists(path: path)) {
-            return ValueTask.FromResult<ObjectBlobContent?>(result: null);
-        }
-
-        var bytes = File.ReadAllBytes(path: path);
-
-        return ValueTask.FromResult<ObjectBlobContent?>(result: new ObjectBlobContent(
-            Content: bytes,
-            VersionToken: ComputeVersionToken(content: bytes)
-        ));
-    }
-    public bool Supports(ObjectStorageTarget target) {
-        ArgumentNullException.ThrowIfNull(argument: target);
-
-        return (target is DirectoryObjectStorageTarget);
-    }
-    public ValueTask<ObjectBlobWriteResult> WriteAsync(
-        ObjectStorageTarget target,
-        ObjectBlobAddress address,
-        ReadOnlyMemory<byte> content,
-        ObjectBlobWriteMode mode,
-        string? ifMatchVersion = null,
-        CancellationToken cancellationToken = default
-    ) {
-        var directoryTarget = ObjectStorageTarget.Require<DirectoryObjectStorageTarget>(
-            description: "a directory target",
-            target: target
-        );
-        var path = ResolvePath(
-            address: address,
-            target: directoryTarget
-        );
-
-        if (Path.GetDirectoryName(path: path) is { Length: > 0 } directory) {
-            Directory.CreateDirectory(path: directory);
-        }
-
         var bytes = content.ToArray();
-
-        if (mode == ObjectBlobWriteMode.CreateOnly) {
-            try {
-                using var stream = new FileStream(
-                    access: FileAccess.Write,
-                    mode: FileMode.CreateNew,
-                    path: path,
-                    share: FileShare.None
-                );
-
-                stream.Write(buffer: bytes);
-            } catch (IOException) {
-                var current = (File.Exists(path: path)
-                    ? ComputeVersionToken(content: File.ReadAllBytes(path: path))
-                    : null);
-
-                return ValueTask.FromResult(result: new ObjectBlobWriteResult(
-                    PreconditionFailed: false,
-                    Succeeded: false,
-                    VersionToken: current
-                ));
+        var temporary = $".puck-{Guid.NewGuid():N}.tmp";
+        try {
+            using (var stream = directory.OpenFile(temporary, create: true, exclusive: true, newFile: true)!) {
+                stream.Write(bytes);
+                stream.Flush(flushToDisk: true);
             }
-
-            return ValueTask.FromResult(result: new ObjectBlobWriteResult(
-                PreconditionFailed: false,
-                Succeeded: true,
-                VersionToken: ComputeVersionToken(content: bytes)
-            ));
-        }
-
-        if (mode != ObjectBlobWriteMode.Overwrite) {
-            throw new ArgumentOutOfRangeException(
-                actualValue: mode,
-                message: "Unsupported object blob write mode.",
-                paramName: nameof(mode)
-            );
-        }
-
-        // Held across the whole read-compare-write below so the compare-and-swap is atomic on this machine.
-        var preExisted = File.Exists(path: path);
-
-        using var handle = new FileStream(
-            access: FileAccess.ReadWrite,
-            mode: FileMode.OpenOrCreate,
-            path: path,
-            share: FileShare.None
-        );
-
-        byte[] currentBytes = [];
-
-        if (preExisted) {
-            currentBytes = new byte[handle.Length];
-
-            var offset = 0;
-
-            while (offset < currentBytes.Length) {
-                var read = handle.Read(
-                    buffer: currentBytes,
-                    count: (currentBytes.Length - offset),
-                    offset: offset
-                );
-
-                if (read == 0) {
-                    break;
-                }
-
-                offset += read;
-            }
-        }
-
-        if (ifMatchVersion is not null) {
-            if (!preExisted) {
-                return ValueTask.FromResult(result: new ObjectBlobWriteResult(
-                    PreconditionFailed: true,
-                    Succeeded: false,
-                    VersionToken: null
-                ));
-            }
-
-            var currentToken = ComputeVersionToken(content: currentBytes);
-
-            if (!string.Equals(
-                a: currentToken,
-                b: ifMatchVersion,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return ValueTask.FromResult(result: new ObjectBlobWriteResult(
-                    PreconditionFailed: true,
-                    Succeeded: false,
-                    VersionToken: currentToken
-                ));
-            }
-        }
-
-        handle.SetLength(value: 0);
-        handle.Position = 0;
-        handle.Write(buffer: bytes);
-        handle.Flush();
-
-        return ValueTask.FromResult(result: new ObjectBlobWriteResult(
-            PreconditionFailed: false,
-            Succeeded: true,
-            VersionToken: ComputeVersionToken(content: bytes)
-        ));
+            cancellationToken.ThrowIfCancellationRequested();
+            directory.Publish(temporary, name);
+        } finally { directory.RemoveTemporary(temporary); }
+        return ValueTask.FromResult(new ObjectBlobWriteResult(true, false, Token(bytes)));
     }
+
+    public ValueTask<IReadOnlyList<string>> ListAsync(ObjectStorageTarget target, Guid objectId, string keyPrefix,
+        CancellationToken cancellationToken = default) {
+        cancellationToken.ThrowIfCancellationRequested();
+        var local = ObjectStorageTarget.Require<DirectoryObjectStorageTarget>(target, "a directory target");
+        var prefix = ObjectBlobAddressPath.GetNormalizedPrefix(keyPrefix);
+        using var directory = ConfinedDirectory.Open(Path.Combine(local.RootPath, objectId.ToString()), create: false);
+        var keys = new List<string>();
+        var remaining = local.MaximumListEntries;
+        if (directory is not null) { Walk(directory, "", prefix, keys, ref remaining, cancellationToken); }
+        return ValueTask.FromResult<IReadOnlyList<string>>(keys);
+    }
+
+    private static void Walk(ConfinedDirectory directory, string path, string prefix, List<string> keys, ref int remaining,
+        CancellationToken cancellationToken) {
+        foreach (var name in directory.Entries()) {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (--remaining < 0) { throw new IOException("Storage listing exceeds its entry budget."); }
+            if (name.StartsWith(".puck-", StringComparison.OrdinalIgnoreCase)) { continue; }
+            var key = path + name;
+            _ = ObjectBlobAddressPath.GetNormalizedKey(new(Guid.Empty, key));
+            if (directory.IsDirectory(name)) {
+                using var child = directory.Child(name);
+                if (child is not null) { Walk(child, key + "/", prefix, keys, ref remaining, cancellationToken); }
+            } else {
+                using var file = directory.OpenFile(name);
+                if (file is not null && key.StartsWith(prefix, StringComparison.Ordinal)) {
+                    keys.Add(key);
+                }
+            }
+        }
+    }
+
+    private static (string Parent, string Name) Resolve(DirectoryObjectStorageTarget target, ObjectBlobAddress address) {
+        var segments = ObjectBlobAddressPath.GetKeySegments(address);
+        var path = Path.Combine(target.RootPath, address.ObjectId.ToString(), Path.Combine(segments));
+        return (Path.GetDirectoryName(path)!, segments[^1]);
+    }
+
+    private static ObjectBlobContent? Read(ConfinedDirectory directory, string name, int maximum) {
+        using var stream = directory.OpenFile(name);
+        if (stream is null) { return null; }
+        if (stream.Length > maximum) { throw new IOException("Storage blob exceeds its byte budget."); }
+        var bytes = new byte[checked((int)stream.Length)];
+        stream.ReadExactly(bytes);
+        return new(bytes, Token(bytes));
+    }
+
+    private static string Token(ReadOnlySpan<byte> content) => Convert.ToHexStringLower(SHA256.HashData(content));
 }

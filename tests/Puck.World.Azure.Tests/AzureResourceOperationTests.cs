@@ -13,6 +13,26 @@ public sealed class AzureResourceOperationTests {
     private const string Poll = "https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000000001/providers/Microsoft.Example/locations/eastus/operations/42?api-version=2025-01-01";
     private static CancellationToken Cancel => TestContext.Current.CancellationToken;
 
+    [Theory]
+    [InlineData("17", 17)]
+    [InlineData("Thu, 01 Jan 2026 00:00:20 GMT", 20)]
+    [InlineData("Wed, 31 Dec 2025 23:59:59 GMT", 0)]
+    [InlineData("not-a-delay", -1)]
+    [InlineData("9223372036854775807", 922337203685L)]
+    public async Task HostRegistrationValidatesInputsAndSchedulesFromDurableServiceHints(string retryAfter, long expectedSeconds) {
+        using var wire = new Wire(Reply(202, headers: [("Azure-AsyncOperation", Poll), ("Retry-After", retryAfter)]));
+        using var provider = Provider(wire);
+        var registration = provider.Register("Delete the associated resource");
+        Assert.DoesNotContain(ResourceId, registration.Description.InputSchema);
+        Assert.Throws<System.Text.Json.JsonException>(() => registration.CreateRequest("invalid", "[]"));
+        var request = registration.CreateRequest("death/registered", "{}");
+        var running = await registration.Provider.ExecuteAsync(request, Cancel);
+        var delay = registration.PollingDelay!(running, new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        if (expectedSeconds < 0) { Assert.Null(delay); }
+        else { Assert.Equal(TimeSpan.FromTicks(expectedSeconds * TimeSpan.TicksPerSecond), delay); }
+        Assert.Single(wire.Requests);
+    }
+
     [Fact]
     public async Task ProviderQueryArgumentsAreEscapedCopiedAndIncludedInIdentity() {
         using var wire = new Wire(Reply(204));

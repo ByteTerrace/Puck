@@ -4,6 +4,10 @@ An extension may call a service, run an inference model, or use a library that
 does not promise deterministic results. Puck reproduces its recorded
 contributions without repeating the computation that produced them.
 
+Use [Hosting service extensions](ExtensionHosting.md) for the normal composition
+API, scoped caller capabilities, and the owned worker. This document owns the
+underlying authority, delivery, and recovery contract used by that host.
+
 `IWorldExtensionRuntime` separates lifetime from contribution policy:
 
 | Policy | Live behavior | Replay behavior |
@@ -89,7 +93,8 @@ pinned module assets alongside that recovery image. The journal accepts opaque r
 evidence; it cannot prove that an arbitrary supplied string is sufficient.
 Selecting and restoring that recovery image remains the authority host's job.
 
-Run dispatch and reconciliation on host workers:
+The shared host owns dispatch and reconciliation. For a host integrating the
+lower-level dispatcher directly, run these calls on host workers:
 
 ```csharp
 var cause = server.CaptureExternalOperationCause(hostRow);
@@ -115,7 +120,7 @@ responses, faults, and invalid provider outcomes create uncertainty. A failure
 to persist an outcome leaves the earlier claim available for reconciliation.
 Exception messages are not journaled because SDK diagnostics can contain secrets.
 
-After a crash, enumerate `ReadAsync` and reconcile `Dispatching`, `Running`, and
+After a crash, the shared host enumerates `ReadAsync` and reconciles `Dispatching`, `Running`, and
 `Unknown` entries. `ReconcileAsync` must only observe the existing operation.
 It must not repeat the effect. If the service cannot establish what happened,
 return `Unknown`. There is no automatic retry of an ambiguous effect or universal
@@ -165,6 +170,10 @@ backend, and a fake external service. It covers copied bounded contributions,
 authority and manifest checks, provider-free replay, duplicate dispatch, crashes
 before outcome persistence, lost responses, reconciliation, and late completion.
 It does not claim Azure API conformance.
+
+`WorldExtensionHostLawTests` covers the scoped client and shared worker above
+this contract. `ConfinedStorageLawTests` checks the
+[local storage boundary](../Puck.Storage/README.md) with real filesystem attacks.
 
 The optional [Azure resource extension](../Puck.World.Azure/README.md) implements
 generic ARM mutations and durable status polling. Its tests exercise the real
