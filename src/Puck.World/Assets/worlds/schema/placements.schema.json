@@ -128,7 +128,7 @@
           "type": "integer"
         },
         "authoringHeadroomPlacements": {
-          "description": "Boot-consumed. The placement rows of headroom the probe reserves beyond the boot placements (see Client.WorldPlacementStamper.StaticStampInstances).",
+          "description": "Boot-consumed. The placement rows of headroom the probe reserves beyond the boot placements. Each slot reserves both a whole-creation stamp and the maximum per-shape instance count; these independent conservative buffer floors are not a strict row quota.",
           "type": "integer"
         },
         "minPlacementScale": {
