@@ -1,0 +1,410 @@
+{
+  "schema": "puck.world.def.v1",
+  "basis": "standard.basis.json",
+  "documentId": "granaries",
+  "simulation": {
+    "rateHz": 30
+  },
+  "imports": [
+    "modules/granaries.world.json"
+  ],
+  "bodies": {
+    "capacity": 4,
+    "localSeats": 1,
+    "seatSpawns": [
+      "granary-arrival"
+    ],
+    "networkPlayers": 0,
+    "defaultPeerSource": "Idle"
+  },
+  "channels": [
+    {
+      "frame": "Heading",
+      "name": "forward",
+      "role": "MoveAdvance",
+      "shape": "Bipolar"
+    },
+    {
+      "frame": "Heading",
+      "name": "strafe",
+      "role": "MoveStrafe",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "turn",
+      "role": "Turn",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "faceX",
+      "role": "FaceX",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "faceZ",
+      "role": "FaceZ",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "faceY",
+      "role": "FaceY",
+      "shape": "Bipolar"
+    },
+    {
+      "composition": true,
+      "name": "jump",
+      "shape": "Binary"
+    },
+    {
+      "name": "rise",
+      "role": "MoveUp",
+      "shape": "Bipolar"
+    },
+    {
+      "composition": true,
+      "name": "tetherAttach",
+      "shape": "Binary"
+    },
+    {
+      "composition": true,
+      "name": "tetherDetach",
+      "shape": "Binary"
+    },
+    {
+      "composition": true,
+      "name": "tetherReel",
+      "shape": "Bipolar"
+    }
+  ],
+  "bodyMotionPrograms": [
+    {
+      "kind": "Motion",
+      "name": "walk",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
+        "ComputePlanarTargetVelocity",
+        "ShapeVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyHold",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ],
+      "version": "puck.body-motion.v1"
+    }
+  ],
+  "kits": {
+    "rows": [
+      {
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "walk",
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            1,
+            0
+          ],
+          "radius": 0.35
+        },
+        "motion": {
+          "facingSnap": false,
+          "holds": [
+            {
+              "bond": "Surface",
+              "cone": [
+                0,
+                60
+              ],
+              "envelope": {
+                "sinkSpeed": 40
+              },
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "hold": "Gravity",
+              "name": "ground",
+              "reach": 1.2
+            },
+            {
+              "bond": "Free",
+              "envelope": {
+                "sinkSpeed": 40
+              },
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "hold": "Gravity",
+              "name": "air"
+            }
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 4
+          },
+          "turn": {
+            "rate": 2.5
+          }
+        },
+        "name": "walker"
+      }
+    ]
+  },
+  "defaultSeatKit": "walker",
+  "bindingOverlays": [
+    {
+      "document": {
+        "chords": [
+          {
+            "chord": [],
+            "group": "play",
+            "page": {
+              "entries": [
+                {
+                  "channel": "forward",
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.w",
+                    "keyboard.arrowUp"
+                  ]
+                },
+                {
+                  "channel": "forward",
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.s",
+                    "keyboard.arrowDown"
+                  ]
+                },
+                {
+                  "channel": "strafe",
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.a"
+                  ]
+                },
+                {
+                  "channel": "strafe",
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.d"
+                  ]
+                },
+                {
+                  "channel": "turn",
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.arrowLeft"
+                  ]
+                },
+                {
+                  "channel": "turn",
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.arrowRight"
+                  ]
+                },
+                {
+                  "command": "player.move.strafe",
+                  "sources": [
+                    "gamepad.leftStick"
+                  ]
+                },
+                {
+                  "command": "player.look.steer",
+                  "sources": [
+                    "gamepad.rightStick"
+                  ]
+                },
+                {
+                  "command": "player.orbit",
+                  "sources": [
+                    "mouse.button1"
+                  ]
+                },
+                {
+                  "command": "player.steer",
+                  "label": "Steer",
+                  "sources": [
+                    "mouse.button2"
+                  ]
+                },
+                {
+                  "channel": "jump",
+                  "sources": [
+                    "gamepad.buttonSouth",
+                    "keyboard.space"
+                  ]
+                }
+              ],
+              "id": "base"
+            }
+          }
+        ],
+        "modifiers": [],
+        "version": "puck.bindings.v1"
+      },
+      "id": "bare"
+    }
+  ],
+  "host": {
+    "backend": "auto",
+    "exitAfterSeconds": 0,
+    "fullscreen": false,
+    "genlock": null,
+    "height": 800,
+    "listen": null,
+    "presentMode": "Immediate",
+    "presentation": "Windowed",
+    "rayQuery": true,
+    "surfaceFormat": "r8g8b8a8",
+    "targetHertz": 60,
+    "timing": false,
+    "width": 1280
+  },
+  "collision": {
+    "contactSkin": 0.02,
+    "gradientProbe": 0.0,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60.0,
+    "requirements": [
+      "SmoothUnionContact"
+    ]
+  },
+  "gravity": {
+    "attractors": [],
+    "gravitationalConstant": 0.0,
+    "softeningLength": 0.5,
+    "solver": "Pairwise",
+    "uniform": [
+      0,
+      -46,
+      0
+    ]
+  },
+  "render": {
+    "farDistance": 120
+  },
+  "spawnPoints": [
+    {
+      "id": "granary-arrival",
+      "position": [
+        -4,
+        -15.5,
+        -63
+      ],
+      "yawDegrees": 180
+    }
+  ],
+  "views": {
+    "seatRig": {
+      "name": "granary-walk",
+      "version": "puck.camera.v1",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 5,
+          "pitch": 0.35,
+          "yaw": 0
+        },
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          },
+          "targetOffset": [
+            0,
+            1,
+            0
+          ],
+          "worldAxes": false
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.95
+        }
+      ]
+    },
+    "seatControl": {
+      "maxPitch": 1.2,
+      "minPitch": -0.35,
+      "yawReference": "World"
+    },
+    "layouts": [
+      {
+        "name": "action",
+        "transitionSeconds": 0.4,
+        "transitionRenderScale": 0.5,
+        "seatCount": 0,
+        "slots": [
+          {
+            "camera": "granary-overlook",
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          }
+        ]
+      }
+    ]
+  },
+  "cameras": [
+    {
+      "name": "granary-overlook",
+      "anchor": null,
+      "renderWidth": 1280,
+      "renderHeight": 800,
+      "rig": {
+        "name": "granary-overlook",
+        "version": "puck.camera.v1",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                20,
+                1,
+                -83
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                -4,
+                -13,
+                -47
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.9
+          }
+        ]
+      }
+    }
+  ],
+  "placements": {
+    "policy": {
+      "authoringHeadroomPlacements": 16,
+      "authoringHeadroomScreens": 0,
+      "minPlacementScale": 1,
+      "maxPlacementScale": 1,
+      "candidateRadius": 30,
+      "candidateCap": 16,
+      "previewDeadlineFrames": 8,
+      "derivedFaceScreens": 0
+    }
+  }
+}

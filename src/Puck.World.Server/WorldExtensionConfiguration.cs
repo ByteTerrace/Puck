@@ -16,11 +16,12 @@ namespace Puck.World.Server;
 /// <param name="MaximumBytes">Private journal byte ceiling.</param>
 /// <param name="ScanEveryTicks">Minimum completed world ticks between connection scans.</param>
 /// <param name="Recovery">checkpoint or recording; recording requires an active closed replay prefix.</param>
+/// <param name="Observations">Optional bounded collection observations, independent of effect dispatch.</param>
 public sealed record WorldExtensionConfiguration(string Schema, string World, Guid Lineage,
     IReadOnlyList<WorldExtensionProviderSettings> Providers, IReadOnlyList<WorldExtensionOperationSettings> Operations,
     IReadOnlyList<WorldExtensionClientSettings> Clients, IReadOnlyList<WorldExtensionConnection> Connections,
     WorldExtensionHostOptions? Worker = null, int MaximumEntries = 1024, int MaximumBytes = 16777216,
-    int ScanEveryTicks = 240, string Recovery = "checkpoint") {
+    int ScanEveryTicks = 240, string Recovery = "checkpoint", IReadOnlyList<WorldExtensionObservationSettings>? Observations = null) {
     /// <summary>Parses bounded, strict JSON; unknown and duplicate members refuse at every depth.</summary>
     /// <param name="utf8">The host-selected configuration bytes.</param>
     /// <returns>The detached configuration.</returns>

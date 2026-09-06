@@ -32,7 +32,7 @@ internal sealed class WorldServiceExtensions(WorldServiceExtensionOptions option
     internal void Pump(ulong tick) => Runtime?.Pump(tick);
 
     public Task StartAsync(CancellationToken cancellationToken) {
-        Runtime?.Host.Start();
+        if (Runtime?.OperationNames.Count > 0) { Runtime.Host.Start(); }
         return Task.CompletedTask;
     }
 

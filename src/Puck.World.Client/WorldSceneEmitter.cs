@@ -45,7 +45,7 @@ namespace Puck.World.Client;
 /// emitter); registering another emitter ahead of it must re-base those two readers in the same change.
 /// </para>
 /// </remarks>
-internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
+public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // The per-seat perception anchor: the crowd soft-shadow centers resolve each seat's body index through it, so a
     // possession anchor swap moves the crowd bound with the seat's perceived body. The always-cast/footstep gates
     // below stay keyed on the raw body index band instead — see their own comments for why.
@@ -178,14 +178,15 @@ internal sealed class WorldSceneEmitter : ISdfSceneEmitter {
             dynamics: definition.Dynamics,
             bodyStamps: m_bodyStamps
         );
-        // Authoring-headroom stamps reserve as SCOPED whole-creation stamps (the 48-shape probe form dominates
-        // anything a live-placed candidate can materialize).
+        // A future stamp may use either emission class. Reserve both independent floors: a scoped creation's
+        // single instance does not cover a scope-free creation's per-shape directory entries or probe words.
         (m_placementReservation, m_placementShapeReservation) = WorldPlacementStamper.StaticStampReservation(
             creations: definition.Creations,
             placements: definition.Placements,
             worldSeed: (definition.Generation?.WorldSeed ?? 0UL)
         );
         m_placementReservation += m_authoringHeadroomPlacements;
+        m_placementShapeReservation = checked(m_placementShapeReservation + m_authoringHeadroomPlacements * WorldPlacementPolicy.MaxShapesPerStamp);
     }
 
     /// <summary>The frozen transform-slot count this emitter declares: maximum-sized rigs for the detailed body band,

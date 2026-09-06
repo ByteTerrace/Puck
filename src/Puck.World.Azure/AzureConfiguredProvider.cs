@@ -8,7 +8,7 @@ using Puck.World.Server;
 namespace Puck.World.Azure;
 
 /// <summary>The explicitly installed azure.resource provider type for declarative host composition.</summary>
-public sealed class AzureConfiguredProvider : IWorldConfiguredProvider {
+public sealed class AzureConfiguredProvider : IWorldConfiguredProvider, IWorldConfiguredObservationProvider {
     private readonly TokenCredential m_credential;
     private readonly ArmEnvironment m_environment;
     private readonly List<AzureResourceOperationProvider> m_operations = [];
@@ -59,6 +59,12 @@ public sealed class AzureConfiguredProvider : IWorldConfiguredProvider {
         m_disposed = true;
         foreach (var operation in m_operations) { operation.Dispose(); }
         (m_credential as IDisposable)?.Dispose();
+    }
+
+    /// <inheritdoc/>
+    public IWorldExtensionObservationSource BindObservation(JsonElement settings, int maximumItems) {
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        return new AzureResourceInventory(m_credential, m_environment, settings, maximumItems);
     }
 }
 

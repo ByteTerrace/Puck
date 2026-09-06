@@ -268,7 +268,7 @@ public static class WorldPlacementStamper {
     /// <param name="reservedCount">The reserved SCOPED stamp count (scoped/text-carrying boot placements + the
     /// authoring headroom).</param>
     /// <param name="reservedShapeInstances">The reserved per-SHAPE instance count (scope-free boot placements'
-    /// copies × shapes — see <see cref="StaticStampReservation"/>).</param>
+    /// copies × shapes, plus MaxShapesPerStamp for each authoring-headroom copy — see <see cref="StaticStampReservation"/>).</param>
     public static void EmitProbe(SdfProgramBuilder builder, int reservedCount, int reservedShapeInstances = 0) {
         for (var index = 0; (index < reservedCount); index++) {
             // Worst-case distinct materials: every reserved stamp references a DISTINCT creation with a full palette

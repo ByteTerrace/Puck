@@ -1,0 +1,98 @@
+{
+  "schema": "puck.world.extensions.v1",
+  "world": "granaries",
+  "scanEveryTicks": 30,
+  "lineage": "f4624d47-11ec-4057-af02-281597be27e6",
+  "providers": [
+    {
+      "name": "azure",
+      "type": "azure.resource",
+      "settings": {
+        "authentication": "azureCli",
+        "tenantId": "e09734be-ca09-41ec-b70d-98f5536fb774"
+      }
+    }
+  ],
+  "operations": [],
+  "clients": [
+    {
+      "principal": "console",
+      "operations": [],
+      "requests": [
+        {
+          "capability": "observe",
+          "subject": "state:granaryNames"
+        },
+        {
+          "capability": "observe",
+          "subject": "state:granaryResources"
+        },
+        {
+          "capability": "observe",
+          "subject": "state:granaryRegions"
+        },
+        {
+          "capability": "observe",
+          "subject": "state:granaryKinds"
+        },
+        {
+          "capability": "observe",
+          "subject": "state:granarySkus"
+        },
+        {
+          "capability": "mutate",
+          "subject": "section:state"
+        },
+        {
+          "capability": "mutate",
+          "subject": "section:placements"
+        }
+      ]
+    }
+  ],
+  "connections": [],
+  "observations": [
+    {
+      "name": "partition-accounts",
+      "provider": "azure",
+      "client": "console",
+      "maximumItems": 16,
+      "refreshTicks": 1800,
+      "settings": {
+        "resourceGroup": "/subscriptions/fd49ea67-135b-449f-a62c-3e4b8d26d3d6/resourceGroups/byteterrace",
+        "apiVersion": "2021-04-01",
+        "resourceType": "Microsoft.Storage/storageAccounts",
+        "namePrefix": "bytrcstp",
+        "excludeNames": [
+          "bytrcstp000"
+        ],
+        "fields": {
+          "name": "/name",
+          "id": "/id",
+          "region": "/location",
+          "kind": "/kind",
+          "sku": "/sku/name"
+        }
+      },
+      "fields": {
+        "name": "granaryNames",
+        "id": "granaryResources",
+        "region": "granaryRegions",
+        "kind": "granaryKinds",
+        "sku": "granarySkus"
+      },
+      "placements": {
+        "template": "granaryCourt",
+        "prefix": "granary-",
+        "prototype": "granaryStore",
+        "columns": 3,
+        "spacingX": 10,
+        "spacingZ": 10,
+        "variantField": "name",
+        "variants": {
+          "bytrcstp001": "granaryAnchor"
+        }
+      }
+    }
+  ]
+}

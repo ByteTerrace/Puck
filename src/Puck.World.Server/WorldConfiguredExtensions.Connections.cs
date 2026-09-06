@@ -18,6 +18,7 @@ public sealed partial class WorldConfiguredExtensions {
         m_lastScan = completedTick; m_scanned = true;
         try {
             if (m_configuration.World != m_server.Definition.DocumentId) { throw new InvalidOperationException("Configured extension world identity changed."); }
+            m_server.ExecuteAuthorityOperation(() => PumpObservations(completedTick));
             var requests = new List<Request>();
             m_server.ExecuteAuthorityOperation(() => {
                 foreach (var connection in m_configuration.Connections) {

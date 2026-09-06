@@ -41,7 +41,7 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
     /// <param name="store">The private routed store.</param>
     /// <param name="target">The host-selected private persistence target.</param>
     /// <param name="captureCause">Capture at a closed simulation boundary, before asynchronous work.</param>
-    /// <returns>An owned composition; call its host's Start and its Pump to run it.</returns>
+    /// <returns>An owned composition; call Pump to observe collections and requests, and the host's Start when operations are configured.</returns>
     /// <exception cref="ArgumentException">A name, reference, capacity, or world binding is invalid.</exception>
     /// <exception cref="InvalidOperationException">A required capability or state table is unavailable.</exception>
     public static WorldConfiguredExtensions Create(WorldExtensionConfiguration configuration,
@@ -111,13 +111,16 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
                 _ = owner.ReadTable(client, connection.Status, CellKind.Int);
                 if (connection.Results is { } resultTable) { _ = owner.ReadTable(client, resultTable, CellKind.Text); }
             }
+            owner.ConfigureObservations(providers, outputs);
             if (configuration.Connections.Any(connection => outputs.Contains(connection.Requests))) {
                 throw new ArgumentException("A connection output cannot also be a request table; use authored rules to initiate a new request.");
             }
             return owner;
         } catch {
+            foreach (var observation in owner.m_observations) { observation.Source.Dispose(); }
             foreach (var client in owner.m_clients.Values) { client.Dispose(); }
             foreach (var provider in owner.m_providers.AsEnumerable().Reverse()) { provider.Dispose(); }
+            owner.m_stop.Dispose();
             throw;
         }
     }
@@ -162,12 +165,15 @@ public sealed partial class WorldConfiguredExtensions : IAsyncDisposable {
         return row.Cells.Where(cell => !cell.Hidden).ToArray();
     }
 
-    /// <summary>Stops connection work, drains the shared host, then disposes owned providers.</summary>
+    /// <summary>Cancels and drains connection and observation work, drains the shared host, then disposes owned providers.</summary>
     public async ValueTask DisposeAsync() {
         if (m_disposed) { return; }
         m_disposed = true;
         await m_stop.CancelAsync().ConfigureAwait(false);
         await m_work.ConfigureAwait(false);
+        try { await Task.WhenAll(m_observations.Where(source => source.Pending is not null).Select(source => source.Pending!)).ConfigureAwait(false); }
+        catch (Exception) { /* Each source failure is diagnostic; disposal must still retire every source. */ }
+        foreach (var observation in m_observations) { observation.Source.Dispose(); }
         await Host.DisposeAsync().ConfigureAwait(false);
         foreach (var provider in m_providers.AsEnumerable().Reverse()) { provider.Dispose(); }
         m_stop.Dispose();

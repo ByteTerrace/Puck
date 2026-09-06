@@ -468,7 +468,8 @@
     "games/tictactoe.world.json",
     "games/hexlines.world.json",
     "games/mancala.world.json",
-    "games/solitaire.world.json"
+    "games/solitaire.world.json",
+    "modules/granaries.world.json"
   ],
   "interactions": {
     "interactions": [
