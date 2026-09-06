@@ -6,6 +6,21 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
+    /// <summary>Gets the number of active non-seat bodies currently asleep — the <c>world.status</c> read-back's own
+    /// population-level echo of <see cref="WorldBody.Asleep"/>.</summary>
+    public int SleepingCount {
+        get {
+            var count = 0;
+
+            for (var index = LocalSeatCount; (index < Capacity); index++) {
+                if (m_entries[index] is { Active: true, Body.Asleep: true }) {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+    }
     private int AvailableCensusSlots() {
         var count = 0;
 

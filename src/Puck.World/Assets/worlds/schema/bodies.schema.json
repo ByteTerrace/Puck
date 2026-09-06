@@ -102,6 +102,9 @@
         "string",
         "null"
       ]
+    },
+    "sleepAfterTicks": {
+      "type": "integer"
     }
   },
   "additionalProperties": false,

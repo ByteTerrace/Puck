@@ -2193,6 +2193,14 @@ divided by the first pass's own resolved-pair count, so a lightly loaded tick
 gets every authored pass and a crowded one stays bounded. See the
 [server reference](../Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs).
 
+### Body sleep
+
+`bodies.sleepAfterTicks` (engine ticks, 0 or positive; 0, the default, never
+sleeps) is the idle floor a non-seat, non-rigid body clears before its motion
+program and contact solve stop running. See the
+[server reference](../Puck.World.Server/README.md) for the mechanism and its
+wake conditions.
+
 ### Rigid dynamics (`WorldRigid.cs`)
 
 A kit's optional `rigid` facet (`WorldRigid`: `mass`, `restitution`,

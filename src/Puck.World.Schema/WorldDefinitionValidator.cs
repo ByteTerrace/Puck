@@ -1080,6 +1080,10 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
+        if (definition.Population.SleepAfterTicks < 0) {
+            errors.Add(item: $"bodies.sleepAfterTicks {definition.Population.SleepAfterTicks} must be 0 (never sleep) or positive.");
+        }
+
         // The audio asset sections come FIRST among the row sets: emission facets on scene rows/placements and the
         // speaker rows below all resolve against the tune/patch id sets.
         var tuneIds = ValidateAssets(

@@ -1269,6 +1269,7 @@ public sealed partial class WorldPopulation {
             entry.Parked = false;
             entry.ParkedUntilTick = null;
             m_revision++;
+            entry.Body?.WakeUp();
             admitted = PeerEventEntry(index: index);
 
             return true;

@@ -229,6 +229,11 @@ public sealed partial class WorldBody {
     /// velocity/orientation fields beside it.</summary>
     /// <param name="state">The state a matching <see cref="CaptureTransferState"/> call produced.</param>
     public void ApplyTransferState(TransferState state) {
+        // A restored body never sleeps through the restore that just replaced its velocity/orientation/program —
+        // see WorldBody.Sleep.cs's own remarks. SetBodyMotionProgram below wakes too, but only when the captured
+        // program name differs from the fresh body's default, so this cannot rely on that alone.
+        WakeUp();
+
         // FIRST: a program switch reruns part of the SAME reset ApplyTransferState exists to restore on top of (see
         // this method's own summary) — every write below must be the LAST word, never this one. A no-op when the
         // captured name already matches the fresh body's own kit-default program (the common case, no body.motion

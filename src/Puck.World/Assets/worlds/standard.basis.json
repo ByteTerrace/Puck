@@ -1,4 +1,7 @@
 {
+  "bodies": {
+    "sleepAfterTicks": 50400
+  },
   "placements": {
     "rows": [
       {

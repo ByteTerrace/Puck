@@ -31,13 +31,19 @@ public sealed partial class WorldBody {
     /// (the caller should engage); otherwise <see langword="false"/>.</returns>
     /// <param name="rigidPolicy">The authored, once-compiled rigid-contact tunables <see cref="AdvanceRigid"/> reads;
     /// ignored for a locomotion kit.</param>
+    /// <param name="sleepAfterTicks">The authored <c>bodies.sleepAfterTicks</c> idle floor this body sleeps under
+    /// once cleared with no motion and no incoming intent; 0 (the default) never sleeps — see
+    /// <see cref="UpdateSleepEligibility"/>.</param>
+    /// <param name="contactFieldVersion">The population's current <see cref="WorldPopulation.ContactFieldVersion"/>,
+    /// folded into this body's own idle bookkeeping so a contact-surface change under it is never mistaken for rest.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
-    internal bool Advance(ulong tick, ulong stepTicks, RigidContactPolicy rigidPolicy, int? engageProbeOrdinal = null, int entityIndex = -1, BodyEffectTargets effectTargets = default, List<BodyEffectOutput>? effectOutputs = null, List<WorldDesignation>? designationOutputs = null, List<WorldGeneratorInvocation>? generatorInvocations = null) {
+    internal bool Advance(ulong tick, ulong stepTicks, RigidContactPolicy rigidPolicy, int? engageProbeOrdinal = null, int entityIndex = -1, BodyEffectTargets effectTargets = default, List<BodyEffectOutput>? effectOutputs = null, List<WorldDesignation>? designationOutputs = null, List<WorldGeneratorInvocation>? generatorInvocations = null, ulong sleepAfterTicks = 0UL, ulong contactFieldVersion = 0UL) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
 
         // Captured before ExecuteProgram (or the overlay add below) can move m_position — the swept portal-crossing
         // scan's segment start for this step. A hard teleport between scans overwrites this separately (CommitTeleport).
         m_previousPosition = m_position;
+        var previousOrientationForSleep = m_orientation;
 
         // A carried body's pose and rigid velocity are DERIVED from its carrier every tick (WorldBody.FollowCarrier,
         // called from WorldPopulation.UpdateCarriedBodies after both advance passes complete) — its own integration
@@ -63,8 +69,12 @@ public sealed partial class WorldBody {
         MaterializeDefaultLanePresses(stepTicks: stepTicks);
 
         // The full merged intent for this sub-step: NextIntent expresses the whole precedence (movement channels —
-        // tape > submitted, gated by the possession latch — with the action-track lanes overlaid).
+        // tape > submitted, gated by the possession latch — with the action-track lanes overlaid). StageProducer
+        // stages an intent for every body every tick, including a kit with no producer at all (it stages the inert
+        // default) — so "had incoming intent" for the sleep floor below reads the resolved vector after this call,
+        // not the raw pre-resolve flags, which would read true for a body nothing is actually driving.
         var intent = NextIntent(stepTicks: stepTicks);
+        var hadIncomingIntentForSleep = (intent != default);
 
         // Captured EVERY Advance, regardless of the latch — a mirrored application set needs this body's resolved
         // intent for its targets' translation/passthrough even while the avatar keeps integrating below. Reading it costs nothing beyond a struct copy already computed above.
@@ -159,6 +169,15 @@ public sealed partial class WorldBody {
         m_heldChannels = default;
         m_affectingSubject = -1;
 
+        UpdateSleepEligibility(
+            tick: tick,
+            stepTicks: stepTicks,
+            sleepAfterTicks: sleepAfterTicks,
+            contactFieldVersion: contactFieldVersion,
+            hadIncomingIntent: hadIncomingIntentForSleep,
+            moved: ((m_position != m_previousPosition) || (m_orientation != previousOrientationForSleep))
+        );
+
         return engageEdge;
     }
     /// <summary>Applies one deterministic body-contact depenetration without turning it into a teleport.</summary>
@@ -189,6 +208,10 @@ public sealed partial class WorldBody {
         }
     }
     internal bool ApplyTargetedEffect(int sourceIndex, CompiledBodyInstruction instruction) {
+        // A foreign effect always targets a live consequence (velocity, state, a pose), so a sleeping target wakes
+        // unconditionally rather than sleeping through whatever this instruction just changed about it.
+        WakeUp();
+
         var slot = ((instruction.StateName is null)
             ? -1
             : FindActionState(name: instruction.StateName)
@@ -310,6 +333,10 @@ public sealed partial class WorldBody {
     // position and vertical state but preserves rotation; full Pose/Reconcile operations reset every carry. SetBodyMotionProgram
     // resets the pose carries and only resets vertical state when switching to grounded.
     private void CommitTeleport(bool resetPosition = true, bool resetVertical = true, bool resetRotation = true) {
+        // Every hard-teleport caller (Pose/Warp/Face/Reconcile, a motion-program switch) is a pose the caller
+        // directed at this body — see WorldBody.Sleep.cs's own remarks.
+        WakeUp();
+
         if (resetPosition) {
             m_positionAccumulator.Reset();
             // A hard reposition cancels any in-flight impulse overlay (a warp never carries a dash across).

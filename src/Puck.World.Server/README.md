@@ -364,6 +364,22 @@ conservative there. A solid row participates in simulation, which is why
 mutating scene, screen, creation, or placement geometry is a real authority
 widening.
 
+A non-seat body sleeps once its program has produced no motion and it has
+received no intent for `bodies.sleepAfterTicks` engine ticks (`WorldBody.Sleep.cs`;
+0, the default, never sleeps). `WorldPopulation.AdvanceSimulated` skips a
+sleeping body outright — no producer staging, no motion program, no contact
+solve — until something wakes it: an adopted intent (tape, submitted, or
+producer), a hard teleport, a transfer, a targeted effect, a parked peer
+resuming, or a bump to `WorldPopulation.ContactFieldVersion`. That version sums
+three independently-increasing counters — a document install/adjacency
+reconfigure, `WorldColliderSet.RefreshAttached` finding an attached row at a
+new pose, and the field lattice's own `Revision` — so an unchanged sum proves
+none of them moved since a sleeping body last observed it. `body.where` trails
+`asleep=<tick>` for a sleeping body (absent otherwise); `world.status` echoes
+the population-wide `sleeping` count. A rigid kit's own rest latch
+(`WorldBody.Resting`) is a distinct, older mechanism — a rigid body never
+reaches this one at all (`Advance` returns before it).
+
 Body-frame policy is compiled separately from that provider seam. Every body
 uses opposed solved gravity (or the contact field's ambient up fallback) as its
 ambient frame. Authoring `GradientDerivedUp` additionally selects

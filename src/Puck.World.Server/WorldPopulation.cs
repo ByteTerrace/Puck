@@ -135,6 +135,20 @@ public sealed partial class WorldPopulation {
     /// without a second boot build. A live rebuild instead receives the server's field back through
     /// <see cref="Rebuild(WorldDefinition, WorldSolidField?)"/>.</summary>
     public WorldSolidField? SolidField => (m_contactField as WorldSolidField);
+    /// <summary>Gets a counter a sleeping body compares against the value it last observed to decide whether the
+    /// contact surface it sleeps against could now answer a query differently — an install (a document rebuild or an
+    /// adjacency source (re)configured), an attached solid row RefreshAttached found at a new pose
+    /// (<see cref="WorldColliderSet.AttachedRevision"/>), or a field-lattice repaint/medium step
+    /// (<see cref="WorldFieldLattice.Revision"/>). Every term only increases, so an unchanged sum proves none of them
+    /// changed since the value was last observed.</summary>
+    public ulong ContactFieldVersion => unchecked(
+        m_contactFieldInstallVersion +
+        ((m_contactField as WorldColliderSet)?.AttachedRevision ?? 0UL) +
+        ((ulong)(m_fields?.Revision ?? 0))
+    );
+    /// <summary>Gets the authored engine-tick idle floor (<c>bodies.sleepAfterTicks</c>) before a non-seat body's
+    /// motion program and contact solve stop running — 0 means never sleep.</summary>
+    public ulong SleepAfterTicks => m_sleepAfterTicks;
     /// <summary>The world's compiled target-register table sharing the Drive reach-mask ordinal space.</summary>
     public WorldTargetRegisterTable TargetRegisters => m_targets;
     /// <summary>Gets this world's reserved local-seat count — the document's own <c>population.localSeats</c>
@@ -170,6 +184,11 @@ public sealed partial class WorldPopulation {
     // band, or m_baseContactField unwrapped otherwise. Composed by
     // ComposeContactField, the ONE place either input changes.
     private IContactField? m_baseContactField;
+    // Bumped once per ComposeContactField call — every document rebuild and every adjacency-source (re)configure,
+    // regardless of whether the resulting reference actually differs. Folds into ContactFieldVersion.
+    private ulong m_contactFieldInstallVersion;
+    // The compiled population.sleepAfterTicks — see ContactFieldVersion's own remarks and CompileFixedTables.
+    private ulong m_sleepAfterTicks;
     // The authoritative body-frame policy compiled from the collision requirements. Contact providers report
     // geometric facts; every body receives this policy separately so provider composition (including adjacency)
     // never decides how those facts orient simulation state.

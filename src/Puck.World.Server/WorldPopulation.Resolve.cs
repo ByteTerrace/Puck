@@ -21,6 +21,7 @@ public sealed partial class WorldPopulation {
         m_seatVariation = definition.Population.SeatVariation;
         m_peerColors = definition.Population.PeerColors;
         m_reconnectGraceTicks = definition.PopulationReconnectGraceTicks;
+        m_sleepAfterTicks = ((ulong)Math.Max(val1: 0, val2: definition.Population.SleepAfterTicks));
         m_kitRows = definition.Kits;
         var programs = new Dictionary<string, CompiledBodyMotionProgram>(comparer: StringComparer.Ordinal);
         var programRows = new Dictionary<string, BodyMotionProgram>(comparer: StringComparer.Ordinal);
@@ -226,6 +227,8 @@ public sealed partial class WorldPopulation {
     // ONE place any of the three changes. A definition authoring no adjacency, or no injected source, leaves
     // m_contactField pointing at m_baseContactField directly.
     private void ComposeContactField() {
+        m_contactFieldInstallVersion++;
+
         if (
             (m_baseContactField is not { } baseField) ||
             (m_adjacencyDefinition is not { } definition)

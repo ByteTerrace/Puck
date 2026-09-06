@@ -54,6 +54,10 @@ internal sealed class WorldColliderSet : IContactField {
     // it" fact.
     private readonly bool[] m_holdableGrantedByOverride;
     private readonly FixedStaticContactSolver m_solver;
+    // A running fold of the last-refreshed m_attachedColliders, so RefreshAttached can tell whether the carrier
+    // actually moved without keeping a second snapshot array. AttachedRevision only advances when the fold changes —
+    // never on every call — so a world with no moving attached row (the common case) never wakes a sleeping body.
+    private ulong m_attachedHash;
 
     private WorldColliderSet(FixedStaticCollider[] colliders, FixedStaticCollider[] holdableColliders, bool[] holdableGrantedByOverride, FixedWorldCollision tuning, IReadOnlyList<(WorldPlacement Placement, WorldPrototype Creation)> attachedRows) {
         m_colliders = colliders;
@@ -81,6 +85,10 @@ internal sealed class WorldColliderSet : IContactField {
     public int SolidCount => ((SphereCount + BoxCount) + PlaneCount);
     /// <summary>Gets the number of solid spheres in the set.</summary>
     public int SphereCount { get; private init; }
+    /// <summary>Gets a counter that advances whenever <see cref="RefreshAttached"/> finds an attached solid row at a
+    /// different resolved pose than the snapshot it replaces — never on a call that leaves every collider unchanged.
+    /// A sleeping body compares this against the value it last observed to decide whether a moving carrier woke it.</summary>
+    public ulong AttachedRevision { get; private set; }
 
     /// <summary>Measures the analytic collider vocabulary without materializing the collider array.</summary>
     /// <param name="definition">The live world definition.</param>
@@ -390,6 +398,8 @@ internal sealed class WorldColliderSet : IContactField {
             return;
         }
 
+        var hash = Fnv1aHash.Create();
+
         foreach (var (placement, creation) in m_attachedRows) {
             // An inactive target body resolves nothing — the row's established "contributes nothing" verdict
             // (WorldPlacementAttach's own remarks), never a stale collider parked at the last-known pose.
@@ -423,36 +433,58 @@ internal sealed class WorldColliderSet : IContactField {
                     ReflectionNormal: null
                 ),
                 visitor: copy => {
+                    FixedStaticCollider attached;
+
                     if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
                         var normal = copy.PlaneNormal;
 
-                        m_attachedColliders.Add(item: FixedStaticCollider.HalfSpace(
+                        attached = FixedStaticCollider.HalfSpace(
                             point: (copy.Center + (normal * margin)),
                             normal: normal
-                        ));
+                        );
+                        m_attachedColliders.Add(item: attached);
+                        FoldCollider(collider: in attached, hash: ref hash);
                     } else if (
                         (copy.Shape.Type == SdfSolidPrimitive.Sphere) &&
                         (copy.UniformScale > FixedQ4816.Zero)
                     ) {
                         var sphereBounds = SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere);
 
-                        m_attachedColliders.Add(item: FixedStaticCollider.Sphere(
+                        attached = FixedStaticCollider.Sphere(
                             center: copy.Center,
                             radius: ((FixedQ4816.FromDouble(value: sphereBounds.HalfExtents.X) * copy.UniformScale) + margin)
-                        ));
+                        );
+                        m_attachedColliders.Add(item: attached);
+                        FoldCollider(collider: in attached, hash: ref hash);
                     } else {
-                        m_attachedColliders.Add(item: FixedStaticCollider.AxisAlignedBox(
+                        attached = FixedStaticCollider.AxisAlignedBox(
                             center: copy.Center,
                             halfExtents: (copy.HalfExtents + new FixedVector3(
                                 X: margin,
                                 Y: margin,
                                 Z: margin
                             ))
-                        ));
+                        );
+                        m_attachedColliders.Add(item: attached);
+                        FoldCollider(collider: in attached, hash: ref hash);
                     }
                 }
             );
         }
+
+        if (hash.Value != m_attachedHash) {
+            m_attachedHash = hash.Value;
+            AttachedRevision++;
+        }
+    }
+    private static void FoldCollider(in FixedStaticCollider collider, ref Fnv1aHash hash) {
+        hash.Add(value: ((byte)collider.Kind));
+        hash.Add(value: collider.Center.X.Value);
+        hash.Add(value: collider.Center.Y.Value);
+        hash.Add(value: collider.Center.Z.Value);
+        hash.Add(value: collider.Extent.X.Value);
+        hash.Add(value: collider.Extent.Y.Value);
+        hash.Add(value: collider.Extent.Z.Value);
     }
     /// <inheritdoc/>
     public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>

@@ -38,6 +38,6 @@ public sealed class HandleTickPathLawTests(ITestOutputHelper output) {
 
         output.WriteLine($"shipped world idle: median {median:N0} bytes/tick, widest {widest:N0} bytes/tick");
 
-        Assert.True(median < (16L * 1024L), $"expected a quiet idle tick under 16 KiB, measured a median of {median:N0} bytes");
+        Assert.True(median < (8L * 1024L), $"expected a quiet idle tick under 8 KiB, measured a median of {median:N0} bytes");
     }
 }

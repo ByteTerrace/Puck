@@ -167,8 +167,10 @@ public sealed partial class WorldBody {
     /// stays the root every kit shares. <c>carrying=</c> trails only while <see cref="Carrying"/> is set, and
     /// <c>carriedBy=</c> only while <see cref="CarriedBy"/> is — both absent for every body outside a carry
     /// relationship. <c>tether=</c>/<c>anchor=</c> trail only while <see cref="TetherLength"/> is set — absent for
-    /// every body carrying no tether facet, or one that authors the facet but is not currently attached. The bare
-    /// planar fragment is <see cref="DescribePose"/>.</summary>
+    /// every body carrying no tether facet, or one that authors the facet but is not currently attached.
+    /// <c>asleep=</c> trails only while <see cref="Asleep"/> is set, naming the simulation tick it fell asleep at
+    /// (<see cref="AsleepSinceTick"/>) — absent for every body under a world authoring no <c>bodies.sleepAfterTicks</c>.
+    /// The bare planar fragment is <see cref="DescribePose"/>.</summary>
     /// <param name="index">The 0-based body index to tag the line with.</param>
     /// <returns>The full bracketed <c>body.where</c> echo line.</returns>
     public string DescribeWhere(int index) {
@@ -195,10 +197,11 @@ public sealed partial class WorldBody {
             )
             : string.Empty
         );
+        var asleepSuffix = (Asleep ? $" asleep={AsleepSinceTick}" : string.Empty);
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)} home=({home.X:0.00}, {home.Y:0.00}, {home.Z:0.00}) scale={scale:0.00}{comSuffix}{carrySuffix}{tetherSuffix}]"
+            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)} home=({home.X:0.00}, {home.Y:0.00}, {home.Z:0.00}) scale={scale:0.00}{comSuffix}{carrySuffix}{tetherSuffix}{asleepSuffix}]"
         );
     }
     /// <summary>Enqueues a timed scripted segment onto the tape: while it is live it drives the avatar with

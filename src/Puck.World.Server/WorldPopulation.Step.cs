@@ -719,6 +719,10 @@ Replan:
         FreezeFlockImage();
         m_navigation.BeginStep();
 
+        // Read once for the whole tick: every sleeping body below compares against the same value, so a solid/lattice
+        // change mid-loop (nothing here writes either) can never wake half a tick's peers and not the other half.
+        var contactFieldVersion = ContactFieldVersion;
+
         for (var index = LocalSeatCount; (index < Capacity); index++) {
             var entry = m_entries[index];
 
@@ -729,6 +733,12 @@ Replan:
                 (entry.Kind == PopulationKind.LocalSeat) ||
                 (entry.Body is not { } player)
             ) {
+                continue;
+            }
+
+            // An asleep body that wakes for nothing this tick costs nothing beyond this check — no staging, no
+            // cadence bookkeeping, no Advance. See WorldBody.Sleep.cs.
+            if (player.TryDeferSleepingAdvance(contactFieldVersion: contactFieldVersion)) {
                 continue;
             }
 
@@ -814,7 +824,9 @@ Replan:
                 effectOutputs: m_effectOutputs,
                 designationOutputs: m_designationOutputs,
                 generatorInvocations: m_generatorInvocations,
-                rigidPolicy: m_rigidContactPolicy
+                rigidPolicy: m_rigidContactPolicy,
+                sleepAfterTicks: m_sleepAfterTicks,
+                contactFieldVersion: contactFieldVersion
             );
             RecordFlockMotion(player);
         }
