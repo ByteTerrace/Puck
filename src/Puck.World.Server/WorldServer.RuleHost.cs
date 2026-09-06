@@ -8,10 +8,14 @@ namespace Puck.World.Server;
 /// answer.</summary>
 public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
     private long[] m_boardScratch = [];
-    private RowStore? m_store;
 
     ulong IRuleReader.Tick => m_evaluator.Tick;
-    StateStore IRuleReader.Store => (m_store ??= new RowStore(rows: () => m_definition.State));
+    // While EvaluateWorldRules holds the frame active, a read answers from it (EnsureRuleFrame's own reference
+    // check keeps this cheap between writes). Every other reader (flock affinity, and anything else that reaches
+    // IRuleReader outside EvaluateWorldRules) reads the installed document instead — the frame-commit contract: a
+    // read outside the tick's own rule evaluation sees the document, never a mid-evaluation frame that this
+    // tick's own fold has not yet installed.
+    StateStore IRuleReader.Store => (m_ruleFrameActive ? EnsureRuleFrame() : (m_ruleFrameFallbackStore ??= new RowStore(rows: () => m_definition.State)));
     StateCatalog IRuleReader.Catalog => m_definition.StateCatalog;
     CompiledPatterns IRuleReader.Patterns => m_patterns;
     string? IRuleReader.BoundEachKey => m_evaluator.BoundEachKey;
@@ -35,42 +39,126 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
     void IRuleReader.ReportTableKeyMissing(string table, long key) => m_evaluator.ReportTableKeyMissing(table: table, key: key);
     Span<long> IRuleReader.BoardScratch(int cells) => BoardScratch(count: cells);
 
-    bool IRuleHost.TryApply(StateMutation mutation, ulong tick, bool preflight, out string reason) => TryApplyRuleMutation(
-        mutation: mutation switch {
-            StateMutation.UpsertCell cell => new WorldMutation.UpsertStateCell(
-                Principal: WorldPrincipal.World,
-                Row: cell.Row,
-                Key: cell.Key,
-                Value: cell.Value,
-                Kind: ((cell.Write == StateWriteKind.Add) ? WorldDocumentWriteKind.Add : WorldDocumentWriteKind.Set),
-                Text: cell.Text
-            ),
-            StateMutation.RemoveCell cell => new WorldMutation.RemoveStateCell(Principal: WorldPrincipal.World, Row: cell.Row, Key: cell.Key),
-            StateMutation.Generate generate => new WorldMutation.Generate(Principal: WorldPrincipal.World, Row: generate.Row),
-            StateMutation.Apply apply => new WorldMutation.TransformState(WorldPrincipal.World, apply.Transform),
-            _ => throw new InvalidOperationException(message: $"state mutation '{mutation.GetType().Name}' has no world mapping."),
-        },
-        tick: tick,
-        preflight: preflight,
-        reason: out reason
-    );
+    // Every state effect (cell write, transfer, transform, draw) lands on WorldServer.RuleFrame.cs's value frame
+    // instead of composing a whole candidate document: a text cell, a cell removal, a generator draw, and a
+    // shuffle need cross-row bookkeeping a frame cannot hold, so those four fall to the cross-row path (which
+    // still composes, but replays from this tick's own baseline rather than installing on the spot); the rest
+    // answer through the frame's own value array. Either way the mutation queues for EvaluateWorldRules' own
+    // end-of-tick fold — nothing here installs, journals, or delivers.
+    bool IRuleHost.TryApply(StateMutation mutation, ulong tick, bool preflight, out string reason) {
+        switch (mutation) {
+            case StateMutation.UpsertCell { Text: not null }:
+                return TryApplyCrossRowStateMutation(mapped: MapStateMutation(mutation: mutation), tick: tick, reason: out reason);
+            case StateMutation.UpsertCell cell: {
+                var frame = EnsureRuleFrame();
+
+                // A frame's Keyed layout is fixed-size at construction, so a keyed row's key that is not already
+                // stored means minting a cell — the one shape that needs the cross-row path, since only a keyed
+                // row ever grows this way (a board's cells are topology-fixed, a slot has exactly one). Once the
+                // frame already holds (or could never mint) the cell, a TryWrite refusal is a real one (envelope,
+                // kind, an off-topology key) — trusted as-is rather than retried, so a later effect's refusal never
+                // resurrects an earlier sibling's write by routing it through a batch that could fail as a whole.
+                if (
+                    (frame.Find(name: cell.Row) is { } row) &&
+                    CellName.TryParse(candidate: cell.Key, name: out var key, reason: out reason)
+                ) {
+                    var keyed = (frame.Layout.TryOrdinal(name: row.Name.Value, ordinal: out var ordinal) && (frame.Layout[ordinal].Kind == FrameRowKind.Keyed));
+
+                    if (keyed && !frame.TryStored(row: row, key: key, value: out _, text: out _)) {
+                        return TryApplyCrossRowStateMutation(mapped: MapStateMutation(mutation: mutation), tick: tick, reason: out reason);
+                    }
+                    if (!frame.TryWrite(row: row, key: key, value: cell.Value, write: cell.Write, reason: out reason)) {
+                        return false;
+                    }
+
+                    m_ruleFrameMutations.Add(item: MapStateMutation(mutation: mutation));
+
+                    return true;
+                }
+
+                return TryApplyCrossRowStateMutation(mapped: MapStateMutation(mutation: mutation), tick: tick, reason: out reason);
+            }
+            case StateMutation.Apply { Transform: StateTransform.BoardCombine combine }: {
+                if (!EnsureRuleFrame().TryBoardCombine(combine: combine, reason: out reason)) {
+                    return false;
+                }
+
+                m_ruleFrameMutations.Add(item: MapStateMutation(mutation: mutation));
+
+                return true;
+            }
+            case StateMutation.Apply { Transform: StateTransform.WriteSet writeSet }: {
+                if (!EnsureRuleFrame().TryWriteSet(writeSet: writeSet, reason: out reason)) {
+                    return false;
+                }
+
+                m_ruleFrameMutations.Add(item: MapStateMutation(mutation: mutation));
+
+                return true;
+            }
+            case StateMutation.Apply { Transform: StateTransform.Push push }: {
+                var frame = EnsureRuleFrame();
+
+                if (frame.Find(name: push.Row) is not { } ring) {
+                    reason = $"row '{push.Row}' is not in the frame";
+
+                    return false;
+                }
+                if (!frame.TryPush(row: ring, value: push.Value, reason: out reason)) {
+                    return false;
+                }
+
+                m_ruleFrameMutations.Add(item: MapStateMutation(mutation: mutation));
+
+                return true;
+            }
+            case StateMutation.Apply { Transform: StateTransform.ClearEnclosed enclosed }: {
+                if (!EnsureRuleFrame().TryClearEnclosed(enclosed: enclosed, reason: out reason)) {
+                    return false;
+                }
+
+                m_ruleFrameMutations.Add(item: MapStateMutation(mutation: mutation));
+
+                return true;
+            }
+            case StateMutation.Apply { Transform: StateTransform.Transfer { Selector: ZoneSelector.First or ZoneSelector.Last or ZoneSelector.Key } transfer }: {
+                if (!EnsureRuleFrame().TryTransfer(transfer: transfer, reason: out reason)) {
+                    return false;
+                }
+
+                m_ruleFrameMutations.Add(item: MapStateMutation(mutation: mutation));
+
+                return true;
+            }
+            default:
+                // A frame answers a transfer by first/last/key alone; StateTransform.Transfer's Random and Slice
+                // selectors, like Shuffle, fall to the cross-row path below.
+                return TryApplyCrossRowStateMutation(mapped: MapStateMutation(mutation: mutation), tick: tick, reason: out reason);
+        }
+    }
     void IRuleHost.BeginPreflight() {
         m_preflightScopes.Push(item: m_definition);
         m_preflightMutations.Push(item: []);
+        BeginRuleFrameScope();
     }
     void IRuleHost.EndPreflight() {
         m_definition = m_preflightScopes.Pop();
         _ = m_preflightMutations.Pop();
+        EndRuleFrameScope();
     }
     // One member installs as itself; several install as one Batch — one admission, validation, journal entry, and
-    // delivery for the whole transaction.
+    // delivery for the whole transaction. A transaction whose members were all state mutations composes nothing
+    // here (the document-mechanism's own composed list stays empty) — its mutations already queued on the frame's
+    // flat list, folded once at the end of the tick alongside every other rule's, so a caller ORs this call's
+    // return against CommitRuleFrameScope's to learn whether the transaction applied at all.
     bool IRuleHost.TryCommitPreflight(ulong tick, out string reason) {
         m_definition = m_preflightScopes.Pop();
         var composed = m_preflightMutations.Pop();
+        var stateApplied = CommitRuleFrameScope();
         reason = string.Empty;
 
         if (composed.Count == 0) {
-            return false;
+            return stateApplied;
         }
 
         var mutation = ((composed.Count == 1) ? composed[0] : new WorldMutation.Batch(Principal: WorldPrincipal.World, Mutations: composed));

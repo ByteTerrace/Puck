@@ -394,9 +394,13 @@ public sealed partial class WorldServer {
     private void EvaluateWorldRules(ulong tick, ulong stepTicks) {
         m_decisionWork = default;
         FreezeDecisionPerception(m_rules);
+        LoadRuleFrame();
         var applied = m_evaluator.Evaluate(rules: m_rules, latch: m_ruleGateHeld, tick: tick, stepTicks: stepTicks);
 
         applied |= m_evaluator.Evaluate(rules: m_interactions, latch: m_interactionGateHeld, tick: tick, stepTicks: stepTicks);
+
+        FoldRuleFrameMutations(tick: tick);
+        m_ruleFrameActive = false;
 
         if (applied) {
             m_output.DeliverDefinition(definition: m_definition);

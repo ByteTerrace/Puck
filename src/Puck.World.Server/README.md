@@ -16,7 +16,8 @@ Project references: `Puck.World.Schema`, `Puck.World.Protocol`, `Puck.Networking
 `Puck.Storage`, `Puck.Hosting`, and — through the schema — `Puck.State`, whose
 reader, catalog, topologies, and rule evaluator the tick runs; `WorldServer` is
 the evaluator's host (`WorldServer.RuleHost.cs`: the mutation door, preflight
-scopes, the world's effect arms), and interactions and decisions stay here as
+scopes, the world's effect arms — over a value frame, `WorldServer.RuleFrame.cs`,
+see below), and interactions and decisions stay here as
 the rule kinds only a world evaluates. The addon guest runtime itself is
 [`Puck.World.Addons`](../Puck.World.Addons/README.md), which references this
 project rather than the reverse — see `IWorldAddonHost` below.
@@ -67,6 +68,61 @@ typed completions (`WorldSubmissionResult`), and deliveries fan out through
 definition delivery is `DeliverDefinition` after a shape change or
 `DeliverState` after a value-only write — see `Puck.World.Protocol`'s
 `IClientSink`.
+
+## Rule effects land on a frame (`WorldServer.RuleHost.cs`, `WorldServer.RuleFrame.cs`)
+
+`EvaluateWorldRules` loads a `StateFrame` (`Puck.State`) from the installed
+document once at the start of the tick's rule evaluation and holds it active
+for `IRuleReader.Store` for that call only — a read from anywhere else (flock
+affinity among them) falls back to reading the installed document directly,
+which is the frame-commit contract: reads outside a tick's own rule
+evaluation never see a mid-evaluation frame the tick's own fold has not yet
+installed. A cell write, push, board combine, write-set, or a transfer by
+first/last/key answers straight from the frame's value array — no document
+compose — and queues its mapped `WorldMutation` on one flat, firing-order list
+(`m_ruleFrameMutations`) that a rejected preflight scope truncates back to its
+own start. At the end of the tick's evaluation, `FoldRuleFrameMutations`
+installs that list as ONE mutation (a single member installs as itself,
+several as a `Batch`) through the ordinary door — one compose, one
+touched-row validation, one journal entry, one delivery — replayed from the
+document the tick actually started on, never from whatever the frame's own
+cross-row path left `m_definition` at mid-tick. A tick that wrote nothing
+folds nothing.
+
+Four shapes a value frame cannot answer — a text cell (the frame holds only
+raw integers), a cell removal, a generator draw (advances a row's own
+`DrawCursor`/`DrawnMasks`, not a cell value), a shuffle, and a transfer by
+`Random` or `Slice` (both need the generator stream `First`/`Last`/`Key`
+never touch) — and minting a new cell of a keyed row (a frame's layout is
+fixed-size once built) all fall to `TryApplyCrossRowStateMutation`: it
+replays this tick's own queued mutations from the tick's starting document,
+composes the new one on top, and re-derives the frame from the result so a
+later same-tick read (another rule's gate, or the very next effect) sees it.
+Nothing here installs for real — the tick's own fold still owns that.
+
+A preflight scope (an explicit `transaction` effect, or the transient
+validate-then-fire pass every top-level state effect takes before it commits
+for real) tracks the frame's own journal mark, its slice of the mutation
+list, and a stamp of how many cross-row reloads have happened so far.
+Closing the scope compares that stamp: unchanged, an ordinary journal rewind
+(or commit) suffices; changed, the frame is re-derived from `m_definition` as
+the scope's own close already left it, since a cross-row reload's whole-frame
+`Load` bypasses the journal and a plain rewind cannot undo it. No shipped
+rule nests a cell/transform write ahead of a shuffle, generator draw, or cell
+removal inside one transaction; the tick's own installed result is correct
+either way, since the fold always replays the full ordered list from the
+tick's true starting document.
+
+`WorldMutation.Batch`'s own compose still runs one `TryCompose` per member
+(unchanged, `WorldServer.MutationCompose.cs`), and `TryCompose`'s wrapper
+calls `WorldStateDocumentValues.TryRefresh` (`Puck.World.Schema`) once per
+member — a reflection walk over the whole document graph checking whether
+anything is bound to the touched row, costing several KiB regardless of the
+answer. That is why a tick's fold reaches one journal entry and one
+delivery, but not the theoretical floor of one document compose: closing
+that remaining gap needs `TryRefresh` (or a sibling) to check a set of
+touched rows in one walk, a change against a shared traversal every document
+load and save also runs, correctly out of scope here.
 
 ## Local flock steering
 

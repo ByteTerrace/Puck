@@ -224,6 +224,36 @@ public sealed partial class WorldServer : IWorldServerHost {
     private readonly Stack<WorldDefinition> m_preflightScopes = new();
     // The mutations each open preflight scope composed, innermost last — what TryCommitPreflight installs as one Batch.
     private readonly Stack<List<WorldMutation>> m_preflightMutations = new();
+    // The value frame every state effect writes during EvaluateWorldRules (WorldServer.RuleFrame.cs), laid out from
+    // the installed catalog and loaded fresh from the installed rows at the start of every tick's rule evaluation.
+    private FrameLayout? m_ruleFrameLayout;
+    private StateFrame? m_ruleFrame;
+    private StateCatalog? m_ruleFrameCatalog;
+    private RowStore? m_ruleFrameStore;
+    // The rows EnsureRuleFrame last confirmed the frame fits — a cheap reference check that skips re-deriving every
+    // row's layout on a read that runs between two writes, since neither changes m_definition.State's own reference.
+    private IReadOnlyList<StateRow>? m_ruleFrameFitRows;
+    // Whether EvaluateWorldRules currently holds the frame active (set for its own duration) — IRuleReader.Store
+    // answers from the frame only then; every other reader (flock affinity among them) falls back to m_ruleFrameFallbackStore.
+    private bool m_ruleFrameActive;
+    private RowStore? m_ruleFrameFallbackStore;
+    // The document EvaluateWorldRules started this tick from — what the once-per-tick fold replays m_ruleFrameMutations
+    // against, so a mid-tick cross-row flush (TryApplyCrossRowStateMutation) never becomes the fold's own baseline.
+    private WorldDefinition? m_ruleFrameTickBaseline;
+    // Every state effect fired this tick, in firing order, spanning every rule/interaction and every nested
+    // transaction alike — one flat sequence a nested scope's rejection truncates and the tick's own end folds as one
+    // mutation. Reassigned (never cleared) once folded, since the fold may hand the SAME list to a WorldMutation.Batch.
+    private List<WorldMutation> m_ruleFrameMutations = [];
+    // Frame journal marks, one per currently open preflight scope (BeginRuleFrameScope/EndRuleFrameScope/CommitRuleFrameScope) —
+    // parallel in depth to m_preflightScopes/m_preflightMutations, though the frame's own scope is a SEPARATE journal.
+    private readonly Stack<int> m_ruleFrameJournalMarks = new();
+    // Where in m_ruleFrameMutations each currently open scope started, so its own rejection truncates only its own tail.
+    private readonly Stack<int> m_ruleFrameMutationMarks = new();
+    // Bumped every time TryApplyCrossRowStateMutation re-derives the frame from a composed candidate — a whole-frame
+    // Load that bypasses the journal, so a scope closing under a stamp different from the one it began under cannot
+    // trust RewindJournalScope and re-derives the frame from m_definition instead (ResyncRuleFrame).
+    private long m_ruleFrameReloadStamp;
+    private readonly Stack<long> m_ruleFrameReloadMarks = new();
     // Reused carrier/key scratch for rule evaluation: left (and forEach keys) and right, both live during one
     // distance interaction.
     private readonly List<int> m_carrierScratchLeft = [];
