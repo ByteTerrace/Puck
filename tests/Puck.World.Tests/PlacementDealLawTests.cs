@@ -17,7 +17,7 @@ namespace Puck.World.Tests;
 /// the sweep may mint a child's id.
 /// </summary>
 [Collection(AllocationCollection.Name)]
-public sealed class PlacementDealLawTests(ITestOutputHelper output) {
+public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
     private const string AnchorCreation = "anchor";
     private const string RowName = "accounts";
     private const string StoreCreation = "store";
@@ -116,6 +116,29 @@ public sealed class PlacementDealLawTests(ITestOutputHelper output) {
         separator: "|",
         values: Children(server: server).OrderBy(keySelector: child => child.Id, comparer: StringComparer.Ordinal).Select(selector: child => $"{child.Id}@{child.Position.Value}:{child.PrototypeId}")
     );
+
+    [Fact]
+    public void InstanceOwnedTransformAndFacetsSurviveInventoryAndVariantChanges() {
+        var template = Template(new WorldPlacementDeal(RowName,
+            new WorldPlacementDealVariants(VariantRowName, new Dictionary<string, string> { ["1"] = AnchorCreation }),
+            new WorldPlacementDealPreserve(Transform: true, Facets: true)));
+        var variants = new WorldStateRow(Name: CellName.Parse(VariantRowName), Kind: CellKind.Int, Capacity: 4, Cells: []);
+        using var fixture = Fixtures.FreshServer(definition: Document(template, AccountsRow("a", "b"), variants));
+        fixture.Step();
+        var moved = Child(fixture.Server, "a") with { Position = new Vector3(17, 0, 9), YawDegrees = 45, Region = new WorldPlacementRegion(3) };
+        fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(WorldPrincipal.Console, moved));
+        fixture.Step();
+        fixture.Server.EnqueueMutation(Upsert("c"));
+        fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(WorldPrincipal.Console, VariantRowName, "a", 1, WorldDocumentWriteKind.Set));
+        fixture.Step();
+        var actual = Child(fixture.Server, "a");
+        Assert.Equal(moved.Position, actual.Position);
+        Assert.Equal(moved.YawDegrees, actual.YawDegrees);
+        Assert.Equal(moved.Region, actual.Region);
+        Assert.Equal(AnchorCreation, actual.PrototypeId);
+        Assert.Equal(moved.DealSlot, actual.DealSlot);
+        Assert.Equal(2, Child(fixture.Server, "c").DealSlot);
+    }
 
     /// <summary>Three cells deal three children on the first sweep: <c>stores/a</c>, <c>stores/b</c>, <c>stores/c</c>,
     /// each parented to the template at the region's first three offsets, yaw 0, scale 1, carrying the template's
@@ -352,7 +375,7 @@ public sealed class PlacementDealLawTests(ITestOutputHelper output) {
         var dealt = (Dealt("a") with {
             PlacementRowsRaw = [
                 Template(deal: new WorldPlacementDeal(Row: RowName)),
-                new WorldPlacement(Id: WorldPlacementDeal.ChildId(template: TemplateId, key: "a"), PrototypeId: StoreCreation, Position: new DocumentVector3(value: Vector3.Zero), YawDegrees: 0f, Scale: 1f, Parent: TemplateId),
+                new WorldPlacement(Id: WorldPlacementDeal.ChildId(template: TemplateId, key: "a"), PrototypeId: StoreCreation, Position: new DocumentVector3(value: Vector3.Zero), YawDegrees: 0f, Scale: 1f, Parent: TemplateId, DealSlot: 0),
             ],
         });
 
@@ -391,7 +414,7 @@ public sealed class PlacementDealLawTests(ITestOutputHelper output) {
     }
     /// <summary>A quiet tick — no row change, no other mutation — allocates nothing in the sweep: the per-tick
     /// allocation of a dealt fixture at steady state is the same as the identical fixture without the deal facet,
-    /// on the code-built document and on the shipped island whose granary court deals its accounts.</summary>
+    /// on the code-built document and on the shipped granary court isolated from unrelated island simulation.</summary>
     [Fact]
     public void AQuietTickAllocatesNothingInTheSweep() {
         var small = Measure(definition: Dealt("a", "b", "c"), seed: null);
@@ -400,7 +423,14 @@ public sealed class PlacementDealLawTests(ITestOutputHelper output) {
         output.WriteLine($"fixture: dealt median {small:N0} bytes/tick, control median {smallControl:N0} bytes/tick");
         Assert.True(condition: (small <= smallControl), userMessage: $"a dealt fixture's quiet tick allocated {small:N0} bytes against the control's {smallControl:N0}");
 
-        var island = AuthoredGameFixtures.Nexus;
+        var source = AuthoredGameFixtures.Nexus;
+        var ids = new HashSet<string>(StringComparer.Ordinal) { "granaryCourt", "granaryStore", "granaryAnchor" };
+        var island = Fixtures.BuildDocument() with {
+            Text = source.Text,
+            CreationsRaw = [.. source.Creations.Where(row => ids.Contains(row.Id))],
+            PlacementRowsRaw = [.. source.Placements.Where(row => row.Id is "granaryCourt" or "granaryStores")],
+            StateRaw = new WorldStateSection(World: [.. source.State.Where(row => row.Name.Value.StartsWith("granaries_", StringComparison.Ordinal))])
+        };
         var template = Assert.Single(collection: island.Placements, predicate: static placement => placement.Deal is not null);
         var seed = new WorldMutation.Batch(Principal: WorldPrincipal.Console, Mutations: [
             new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.Console, Row: template.Deal!.Row, Key: "bytrcstp001", Value: 0L, Kind: WorldDocumentWriteKind.Set, Text: "bytrcstp001"),

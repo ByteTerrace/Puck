@@ -70,10 +70,15 @@ public sealed partial class NavigationRuntime {
         private readonly int m_mediumField;
         private readonly IWorldQuery m_query;
         private readonly NavigationCapacity m_capacity;
+        private readonly FixedQuaternion m_rotation;
+        private readonly FixedQuaternion m_inverseRotation;
 
         public Domain(NavigationDomainInput row, IWorldQuery query, INavigationMediumField? fields, NavigationCapacity capacity) {
             Name = row.Name;
             Tuning = row;
+            var up = new FixedVector3(FixedQ4816.Zero, FixedQ4816.One, FixedQ4816.Zero);
+            m_rotation = FixedQuaternion.FromAxisAngle(up, row.YawRadians);
+            m_inverseRotation = FixedQuaternion.FromAxisAngle(up, -row.YawRadians);
             m_fields = fields;
             m_query = query;
             m_capacity = capacity;
@@ -93,11 +98,7 @@ public sealed partial class NavigationRuntime {
 
             for (var node = 0; node < count; node++) {
                 Coordinates(node: node, x: out var x, y: out var y, z: out var z);
-                var probe = new FixedVector3(
-                    X: (Tuning.Origin.X + (Tuning.CellSize * FixedQ4816.FromInteger(value: x))),
-                    Y: (Tuning.Origin.Y + (Tuning.CellSize * FixedQ4816.FromInteger(value: y))),
-                    Z: (Tuning.Origin.Z + (Tuning.CellSize * FixedQ4816.FromInteger(value: z)))
-                );
+                var probe = GridPosition(x, y, z);
 
                 if (Tuning.Kind != NavigationKind.Surface) {
                     if (!query.Overlap(center: FixedPosition.FromLocal(local: probe), radius: Tuning.AgentRadius)) {
@@ -168,17 +169,21 @@ public sealed partial class NavigationRuntime {
 
         public FixedVector3 Position(int node) {
             Coordinates(node: node, x: out var x, y: out var y, z: out var z);
-            return new FixedVector3(
-                X: (Tuning.Origin.X + (Tuning.CellSize * FixedQ4816.FromInteger(value: x))),
-                Y: (Tuning.Kind == NavigationKind.Surface ? m_ground[node] : (Tuning.Origin.Y + (Tuning.CellSize * FixedQ4816.FromInteger(value: y)))),
-                Z: (Tuning.Origin.Z + (Tuning.CellSize * FixedQ4816.FromInteger(value: z)))
-            );
+            var position = GridPosition(x, y, z);
+            return Tuning.Kind == NavigationKind.Surface ? new FixedVector3(position.X, m_ground[node], position.Z) : position;
+        }
+
+        private FixedVector3 GridPosition(int x, int y, int z) {
+            var local = new FixedVector3(Tuning.CellSize * FixedQ4816.FromInteger(x),
+                Tuning.CellSize * FixedQ4816.FromInteger(y), Tuning.CellSize * FixedQ4816.FromInteger(z));
+            return Tuning.Origin + (Tuning.YawRadians == FixedQ4816.Zero ? local : m_rotation.Rotate(local));
         }
 
         public bool TryCell(in FixedVector3 position, out int node) {
-            var x = RoundedCell(value: (Int128)position.X.Value - Tuning.Origin.X.Value, cellSize: Tuning.CellSize.Value);
-            var z = RoundedCell(value: (Int128)position.Z.Value - Tuning.Origin.Z.Value, cellSize: Tuning.CellSize.Value);
-            var y = (Tuning.Kind == NavigationKind.Surface ? 0 : RoundedCell(value: (Int128)position.Y.Value - Tuning.Origin.Y.Value, cellSize: Tuning.CellSize.Value));
+            var local = Tuning.YawRadians == FixedQ4816.Zero ? position : Tuning.Origin + m_inverseRotation.Rotate(position - Tuning.Origin);
+            var x = RoundedCell(value: (Int128)local.X.Value - Tuning.Origin.X.Value, cellSize: Tuning.CellSize.Value);
+            var z = RoundedCell(value: (Int128)local.Z.Value - Tuning.Origin.Z.Value, cellSize: Tuning.CellSize.Value);
+            var y = (Tuning.Kind == NavigationKind.Surface ? 0 : RoundedCell(value: (Int128)local.Y.Value - Tuning.Origin.Y.Value, cellSize: Tuning.CellSize.Value));
             if (x < 0 || x >= Tuning.Width || y < 0 || y >= Tuning.Layers || z < 0 || z >= Tuning.Depth) {
                 node = -1;
                 return false;

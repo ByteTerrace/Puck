@@ -9176,10 +9176,114 @@
                 ],
                 "additionalProperties": false,
                 "default": null
+              },
+              "preserve": {
+                "description": "Which properties of existing instances are owned by gameplay. Absent synchronizes copied properties with the template. New instances receive the template\u0027s supported copied facets.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "transform": {
+                    "description": "Preserve an existing child\u0027s local position, yaw, and scale.",
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "prototype": {
+                    "description": "Preserve its prototype, including changes made by responses.",
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "facets": {
+                    "description": "Preserve its other facets, including responses and face sources.",
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "additionalProperties": false,
+                "default": null
+              },
+              "reflow": {
+                "description": "Optional bounded rearrangement policy. Requires instance-owned transforms and a footprint.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "candidateBudget": {
+                    "description": "Maximum preparation, candidate, and overlap work units in one preview; preparation includes a conservative charge for sorting offsets. Exhaustion refuses without edits.",
+                    "type": "integer",
+                    "default": 4096
+                  },
+                  "costPerMove": {
+                    "description": "Nonnegative Int units charged for each changed transform.",
+                    "type": "integer",
+                    "default": 0
+                  },
+                  "costRow": {
+                    "description": "An Int state row paying the price. Required for a nonzero price.",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "costKey": {
+                    "description": "The payer cell; absent selects an unkeyed row\u0027s slot.",
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "default": null
+                  }
+                },
+                "additionalProperties": false,
+                "default": null
               }
             },
             "required": [
               "row"
+            ],
+            "additionalProperties": false,
+            "default": null
+          },
+          "dealSlot": {
+            "description": "A dealt child\u0027s reserved distribution slot, independent of its editable transform. Absent on ordinary placements and templates.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "footprint": {
+            "description": "Optional occupation and clearance contract used by layout proposals.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "halfWidth": {
+                "description": "Positive local X half-extent.",
+                "type": "number"
+              },
+              "halfDepth": {
+                "description": "Positive local Z half-extent.",
+                "type": "number"
+              },
+              "clearance": {
+                "description": "Nonnegative space reserved outside the footprint.",
+                "type": "number",
+                "default": 0
+              },
+              "pinned": {
+                "description": "Whether automatic layout must preserve this placement\u0027s transform.",
+                "type": "boolean",
+                "default": false
+              }
+            },
+            "required": [
+              "halfWidth",
+              "halfDepth"
             ],
             "additionalProperties": false,
             "default": null
@@ -13601,6 +13705,18 @@
                             },
                             "deal": {
                               "$ref": "#/properties/placements/items/properties/deal",
+                              "default": null
+                            },
+                            "dealSlot": {
+                              "description": "A dealt child\u0027s reserved distribution slot, independent of its editable transform. Absent on ordinary placements and templates.",
+                              "type": [
+                                "integer",
+                                "null"
+                              ],
+                              "default": null
+                            },
+                            "footprint": {
+                              "$ref": "#/properties/placements/items/properties/footprint",
                               "default": null
                             }
                           },

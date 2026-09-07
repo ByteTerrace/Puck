@@ -78,6 +78,17 @@ public sealed partial class WorldServer {
     }
     private static string DescribeFacets(WorldPlacement placement) {
         var facets = string.Empty;
+        if (placement.DealSlot is { } slot) { facets += $" dealSlot={slot}"; }
+        if (placement.Footprint is { } footprint) {
+            facets += string.Create(CultureInfo.InvariantCulture,
+                $" footprint=({footprint.HalfWidth:0.###},{footprint.HalfDepth:0.###}) clearance={footprint.Clearance:0.###} pinned={footprint.Pinned}");
+        }
+        if (placement.Deal?.Preserve is { } preserve) {
+            facets += $" preserve=(transform:{preserve.Transform},prototype:{preserve.Prototype},facets:{preserve.Facets})";
+        }
+        if (placement.Deal?.Reflow is { } reflow) {
+            facets += $" reflow=(work:{reflow.CandidateBudget},costPerMove:{reflow.CostPerMove},payer:{reflow.CostRow ?? "none"})";
+        }
 
         if (placement.Distribution is { } distribution) {
             facets += $" distribution={distribution.Region.GetType().Name.ToLowerInvariant()}";
@@ -285,7 +296,8 @@ public sealed partial class WorldServer {
                 continue;
             }
 
-            var slot = SlotOf(value: candidate.Position, offsets: offsets);
+            var slot = candidate.DealSlot ?? -1;
+            if ((uint)slot >= (uint)offsets.Length) { slot = -1; }
 
             if ((slot >= 0) && m_dealSlotTaken[slot]) {
                 slot = -1;
@@ -326,13 +338,14 @@ public sealed partial class WorldServer {
             var child = m_dealChildren[childIndex];
             var prototype = ResolvePrototype(template: template, deal: deal, variantRow: variantRow, key: key);
 
-            if (Conforms(child: child, template: template, prototype: prototype)) {
+            var reconciled = ReconcileChild(child: child, template: template, prototype: prototype, offset: offsets[slot], slot: slot);
+            if (child == reconciled) {
                 continue;
             }
 
             replaced++;
             m_dealMutations.Add(item: new WorldMutation.UpsertPlacement(
-                Placement: BuildChild(id: child.Id, offset: offsets[slot], prototype: prototype, template: template),
+                Placement: reconciled,
                 Principal: WorldPrincipal.World
             ));
         }
@@ -381,9 +394,11 @@ public sealed partial class WorldServer {
             }
 
             m_dealMutations.Add(item: new WorldMutation.UpsertPlacement(
-                Placement: BuildChild(
+                Placement: existing >= 0 ? ReconcileChild(m_dealChildren[existing], template,
+                    ResolvePrototype(template, deal, variantRow, key), offsets[slot], slot) : BuildChild(
                     id: ((existing >= 0) ? m_dealChildren[existing].Id : WorldPlacementDeal.ChildId(template: template.Id, key: key)),
                     offset: offsets[slot],
+                    slot: slot,
                     prototype: ResolvePrototype(template: template, deal: deal, variantRow: variantRow, key: key),
                     template: template
                 ),
@@ -455,16 +470,6 @@ public sealed partial class WorldServer {
 
         return -1;
     }
-    private static int SlotOf(Vector3 value, Vector3[] offsets) {
-
-        for (var slot = 0; (slot < offsets.Length); slot++) {
-            if (offsets[slot] == value) {
-                return slot;
-            }
-        }
-
-        return -1;
-    }
     // The variant row's same-keyed cell selects from the map by its text, or by its integer value spelled as text;
     // no cell, or no entry, deals the template's own prototype.
     private static string ResolvePrototype(WorldPlacement template, WorldPlacementDeal deal, WorldStateRow? variantRow, string key) {
@@ -500,27 +505,19 @@ public sealed partial class WorldServer {
 
         return template.PrototypeId;
     }
-    // A child conforms when it is exactly what BuildChild would write at its own slot: the transform is pinned by the
-    // slot match, the parent by IsChild.
-    private static bool Conforms(WorldPlacement child, WorldPlacement template, string prototype) => (
-        string.Equals(a: child.PrototypeId, b: prototype, comparisonType: StringComparison.Ordinal) &&
-        (child.YawDegrees == 0f) &&
-        (child.Scale == 1f) &&
-        (child.Distribution is null) &&
-        (child.Mirror is null) &&
-        (child.Inhabit is null) &&
-        (child.FaceSources is null) &&
-        (child.Attach is null) &&
-        (child.Contribution is null) &&
-        (child.Respond is null) &&
-        (child.Board is null) &&
-        (child.Deal is null) &&
-        Equals(objA: child.Solid, objB: template.Solid) &&
-        Equals(objA: child.Grip, objB: template.Grip) &&
-        Equals(objA: child.Region, objB: template.Region) &&
-        Equals(objA: child.Emission, objB: template.Emission)
-    );
-    private static WorldPlacement BuildChild(WorldPlacement template, string id, string prototype, Vector3 offset) => new(
+    private static WorldPlacement ReconcileChild(WorldPlacement child, WorldPlacement template, string prototype, Vector3 offset, int slot) {
+        var seed = BuildChild(template: template, id: child.Id, prototype: prototype, offset: offset, slot: slot);
+        var preserve = template.Deal?.Preserve;
+        var result = (preserve?.Facets == true ? child : seed);
+        return result with {
+            Parent = template.Id, DealSlot = slot, Deal = null,
+            Position = (preserve?.Transform == true ? child.Position : seed.Position),
+            YawDegrees = (preserve?.Transform == true ? child.YawDegrees : seed.YawDegrees),
+            Scale = (preserve?.Transform == true ? child.Scale : seed.Scale),
+            PrototypeId = (preserve?.Prototype == true ? child.PrototypeId : prototype),
+        };
+    }
+    private static WorldPlacement BuildChild(WorldPlacement template, string id, string prototype, Vector3 offset, int slot) => new(
         Id: id,
         PrototypeId: prototype,
         Position: offset,
@@ -530,6 +527,8 @@ public sealed partial class WorldServer {
         Solid: template.Solid,
         Region: template.Region,
         Grip: template.Grip,
-        Parent: template.Id
+        Parent: template.Id,
+        DealSlot: slot,
+        Footprint: template.Footprint
     );
 }

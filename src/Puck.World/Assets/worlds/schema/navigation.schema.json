@@ -30,18 +30,18 @@
             ]
           },
           "origin": {
-            "description": "The world-space center of cell (0,0,0); for a surface domain, Y is the ground-probe baseline."
+            "description": "The center of cell (0,0,0), relative to Parent when present and world-space otherwise; for a surface domain, resolved world Y is the ground-probe baseline."
           },
           "cellSize": {
             "description": "The square cell width in world units.",
             "type": "number"
           },
           "width": {
-            "description": "The number of cells along world X.",
+            "description": "The number of cells along the frame\u0027s X axis.",
             "type": "integer"
           },
           "depth": {
-            "description": "The number of cells along world Z.",
+            "description": "The number of cells along the frame\u0027s Z axis.",
             "type": "integer"
           },
           "agentRadius": {
@@ -128,6 +128,14 @@
               "expandedNodesPerTick"
             ],
             "additionalProperties": false,
+            "default": null
+          },
+          "parent": {
+            "description": "Optional static placement frame. Origin and grid axes are local to that frame; probes remain vertical. The frame must be undistributed and unit scale.",
+            "type": [
+              "string",
+              "null"
+            ],
             "default": null
           }
         },

@@ -25,6 +25,7 @@
         "maxSlopeDegrees": 60,
         "maxStepHeight": 0.55,
         "name": "granaryYard",
+        "parent": "granaryCourt",
         "origin": [
           -30,
           -2,
@@ -66,6 +67,7 @@
         "solid": {
           "margin": 0
         },
+        "footprint": { "halfWidth": 1.5, "halfDepth": 1.5, "clearance": 0.25 },
         "distribution": {
           "fill": {
             "name": "none",
@@ -83,6 +85,8 @@
           }
         },
         "deal": {
+          "preserve": { "transform": true, "facets": true },
+          "reflow": { "candidateBudget": 4096 },
           "row": "granaryNames",
           "variants": {
             "row": "granaryNames",

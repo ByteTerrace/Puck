@@ -258,6 +258,9 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// <see langword="null"/> for an ordinary placement. A template renders nothing and collides with nothing itself.
 /// Omitted from the wire when null. Requires <see cref="Distribution"/>; refused together with <see cref="Inhabit"/>,
 /// <see cref="Attach"/>, <see cref="Respond"/>, <see cref="Mirror"/>, and <see cref="FaceSources"/>.</param>
+/// <param name="DealSlot">A dealt child's reserved distribution slot, independent of its editable transform.
+/// Absent on ordinary placements and templates.</param>
+/// <param name="Footprint">Optional occupation and clearance contract used by layout proposals.</param>
 public sealed record WorldPlacement(
     string Id,
     string PrototypeId,
@@ -277,7 +280,9 @@ public sealed record WorldPlacement(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementGrip? Grip = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementBoard? Board = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Parent = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementDeal? Deal = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementDeal? Deal = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? DealSlot = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementFootprint? Footprint = null
 );
 /// <summary>Adapts placement document facets to the shared creation-stamp vocabulary.</summary>
 public static class WorldPlacementStamp {

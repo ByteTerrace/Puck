@@ -108,6 +108,19 @@
             "$ref": "./common.schema.json#/$defs/WorldPlacementDeal",
             "description": "The placement\u0027s deal facet (see WorldPlacementDeal) \u2014 the row is a template whose instances are dealt from a keyed state row as child placements over its own Distribution region, or null for an ordinary placement. A template renders nothing and collides with nothing itself. Omitted from the wire when null. Requires Distribution; refused together with Inhabit, Attach, Respond, Mirror, and FaceSources.",
             "default": null
+          },
+          "dealSlot": {
+            "description": "A dealt child\u0027s reserved distribution slot, independent of its editable transform. Absent on ordinary placements and templates.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "footprint": {
+            "$ref": "./common.schema.json#/$defs/WorldPlacementFootprint",
+            "description": "Optional occupation and clearance contract used by layout proposals.",
+            "default": null
           }
         },
         "required": [

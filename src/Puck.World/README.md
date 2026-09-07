@@ -30,7 +30,10 @@ connections. Imported world content cannot enable cloud access by itself.
 
 The [granaries district](Assets/worlds/modules/README.md) renders the existing Azure
 deployment's storage inventory on the island's own plaza as an importable, authored
-storeyard; the same collection tables can serve a text world.
+storeyard; the same collection tables can serve a text world. Its buildings can preserve gameplay-owned
+transforms and facets across inventory refreshes, and `world.reflow.preview` / `world.reflow.status` / `world.reflow.commit` rearrange
+declared footprints through a guarded, undoable placement-and-payment batch. The district guide owns the policy
+and its current boundaries.
 
 ```
 dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 6

@@ -9,6 +9,14 @@ using Puck.Physics.Motion;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
+    // Editable instances pay their actual cost; the template reserves only unoccupied slots.
+    private static long ReservedPlacementCopies(WorldPlacement placement, IReadOnlyDictionary<string, int> childCounts, long ceiling) {
+        var copies = WorldPlacementStamp.MaterializedCopyCeiling(ceiling: ceiling, placement: placement);
+        if (copies < ceiling && placement.Deal?.Preserve is { Prototype: true } or { Facets: true }) {
+            copies = Math.Max(0, copies - childCounts.GetValueOrDefault(placement.Id));
+        }
+        return copies;
+    }
     // The null-tolerant face of the keyed row lookups: a malformed row whose id/name never parsed resolves to
     // nothing — the missing-key refusal is already recorded by the caller's own required-field check — exactly as
     // the linear scan these dictionaries replaced treated a null key.
@@ -1440,6 +1448,15 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
+        var childCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+        var slotCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+        var occupiedSlots = new HashSet<(string Parent, int Slot)>();
+        foreach (var child in placements) {
+            if (child is { Id: not null, Parent: { } parent } && placementsById.TryGetValue(parent, out var template) && WorldPlacementDeal.IsChild(child, template)) {
+                childCounts[parent] = childCounts.GetValueOrDefault(parent) + 1;
+            }
+        }
+
         for (var index = 0; (index < placements.Count); index++) {
             var placement = placements[index];
             var path = $"placements[{index}]";
@@ -1458,6 +1475,14 @@ public static partial class WorldDefinitionValidator {
                 errors: errors
             );
 
+            if (placement.Footprint is { } footprint) {
+                RequirePositive(footprint.HalfWidth, $"{path}.footprint.halfWidth", errors);
+                RequirePositive(footprint.HalfDepth, $"{path}.footprint.halfDepth", errors);
+                RequireNavigationFixedPositive(footprint.HalfWidth, $"{path}.footprint.halfWidth", errors);
+                RequireNavigationFixedPositive(footprint.HalfDepth, $"{path}.footprint.halfDepth", errors);
+                RequireNonNegative(footprint.Clearance, $"{path}.footprint.clearance", errors);
+            }
+
             // A dealt child is the one row whose id may spell the child separator, and only in the exact shape the
             // sweep mints — <template>/<cellKey> under a parent carrying the deal facet.
             _ = TryFindRow(
@@ -1470,6 +1495,22 @@ public static partial class WorldDefinitionValidator {
                 placement: placement,
                 parent: parentRow
             );
+            if (isDealtChild) {
+                if (placement.Deal is not null) {
+                    errors.Add($"{path}.deal cannot turn a source-owned child into another deal template.");
+                }
+                if (!slotCounts.TryGetValue(parentRow!.Id, out var slots)) {
+                    slots = WorldPlacementDeal.InstanceCount(parentRow, definition.Generation?.WorldSeed ?? 0UL);
+                    slotCounts.Add(parentRow.Id, slots);
+                }
+                if (placement.DealSlot is not { } slot || slot < 0 || slot >= slots) {
+                    errors.Add($"{path}.dealSlot must name a slot in parent '{parentRow!.Id}' (0..{slots - 1}).");
+                } else if (!occupiedSlots.Add((parentRow!.Id, slot))) {
+                    errors.Add($"{path}.dealSlot {slot} is already occupied under parent '{parentRow.Id}'.");
+                }
+            } else if (placement.DealSlot is not null) {
+                errors.Add($"{path}.dealSlot is reserved for a child of a deal template.");
+            }
 
             if (
                 !isDealtChild &&
@@ -1618,11 +1659,12 @@ public static partial class WorldDefinitionValidator {
                     }
 
                     // The field provider compiles every solid row into ONE program instead of one collider per copy,
-                    // so the analytic ceiling does not describe what it costs. A dealt child is charged by its
-                    // template's region count, never a second time as its own row.
-                    if (!requiresField && !isDealtChild) {
-                        var copies = WorldPlacementStamp.MaterializedCopyCeiling(
+                    // so the analytic ceiling does not describe what it costs. Synchronized children use their
+                    // template reservation; editable children pay their actual cost beside the remaining reserve.
+                    if (!requiresField && (!isDealtChild || parentRow!.Deal!.Preserve is { Prototype: true } or { Facets: true })) {
+                        var copies = ReservedPlacementCopies(
                             ceiling: (WorldPlacementPolicy.MaxSolidPlacementColliders + 1L),
+                            childCounts: childCounts,
                             placement: placement
                         );
                         var contribution = CreationStampLattice.MultiplySaturated(
@@ -1713,7 +1755,7 @@ public static partial class WorldDefinitionValidator {
             if (
                 !isAnimated &&
                 (placement.Inhabit is null) &&
-                !isDealtChild
+                (!isDealtChild || parentRow!.Deal!.Preserve is { Prototype: true } or { Facets: true })
             ) {
                 // A scope-free static stamp materializes one engine instance PER SHAPE (the tight-bound emission
                 // split — Puck.World.Authoring.CreationStampEmitter.PerCopyInstanceCount), so the ceiling charges
@@ -1722,8 +1764,9 @@ public static partial class WorldDefinitionValidator {
                     ? Puck.World.Authoring.CreationStampEmitter.PerCopyInstanceCount(document: staticCreation.Document)
                     : 1
                 );
-                var contribution = checked((WorldPlacementStamp.MaterializedCopyCeiling(
+                var contribution = checked((ReservedPlacementCopies(
                     ceiling: (SdfProgramBuilder.MaxInstances + 1L),
+                    childCounts: childCounts,
                     placement: placement
                 ) * perCopyInstances));
                 var previousInstanceCount = staticPlacementInstanceCount;
@@ -1909,6 +1952,22 @@ public static partial class WorldDefinitionValidator {
     // show must be a declared static creation, and the template carries none of the facets a child cannot copy.
     private static void ValidatePlacementDeal(WorldPlacementDeal deal, WorldPlacement placement, WorldDefinition definition, HashSet<string> prototypeIds, string path, List<string> errors) {
         var dealPath = $"{path}.deal";
+        if (deal.Reflow is { } reflow) {
+            if (deal.Preserve?.Transform != true || placement.Footprint is null) {
+                errors.Add($"{dealPath}.reflow requires preserve.transform and a footprint.");
+            }
+            if (reflow.CandidateBudget is < 1 or > 65536 || reflow.CostPerMove < 0) {
+                errors.Add($"{dealPath}.reflow requires candidateBudget 1..65536 and nonnegative costPerMove.");
+            }
+            if (reflow.CostRow is { } costRow) {
+                var payer = WorldDefinitionRows.FindStateRow(definition.State, costRow);
+                if (payer is not { Kind: CellKind.Int } || payer.IsKeyed != (reflow.CostKey is not null)) {
+                    errors.Add($"{dealPath}.reflow.costRow must name an Int row with a matching costKey shape.");
+                }
+            } else if (reflow.CostPerMove != 0 || reflow.CostKey is not null) {
+                errors.Add($"{dealPath}.reflow requires costRow for payment.");
+            }
+        }
 
         if (
             (placement.Inhabit is not null) ||

@@ -816,6 +816,15 @@ public static class WorldSubmissionCodec {
     // spelled by the caller rather than guessed at inside the rule.
     private static bool TryValidateMutationPrincipals(WorldMutation mutation, out WorldCodecFailure failure, bool committed = false) {
         failure = default;
+        if (mutation is WorldMutation.Batch batch) {
+            if (!batch.TryValidateShape(out var reason)) {
+                failure = new WorldCodecFailure(WorldCodecRefusal.PayloadMalformed, reason);
+                return false;
+            }
+            for (var index = 0; index < batch.Mutations.Count; index++) {
+                if (!TryValidateMutationPrincipals(batch.Mutations[index], out failure, committed)) { return false; }
+            }
+        }
         // Only the committed-journal codec admits the canonical structural actor. A nested grant row still passes
         // the normal validation below; no live submission decoder calls this with committed=true.
         if (!(committed && mutation.Principal == WorldPrincipal.World) && !TryValidatePrincipal(

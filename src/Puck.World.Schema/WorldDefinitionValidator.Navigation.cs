@@ -17,6 +17,18 @@ public static partial class WorldDefinitionValidator {
         for (var index = 0; index < domains.Count; index++) {
             var domain = domains[index];
             var path = $"navigation.domains[{index}]";
+            if (domain.Parent is { } parentId) {
+                var parent = WorldDefinitionRows.FindPlacement(id: parentId, placements: definition.Placements);
+                var remaining = definition.Placements.Count + 1;
+                while (parent is not null && remaining-- > 0 && parent.Scale == 1f && parent.Attach is null &&
+                    parent.Inhabit is null && parent.Mirror is null && (parent.Distribution is null || parent.Deal is not null) && parent.Parent is { } ancestor) {
+                    parent = WorldDefinitionRows.FindPlacement(id: ancestor, placements: definition.Placements);
+                }
+                if (parent is null || parent.Scale != 1f || parent.Attach is not null || parent.Inhabit is not null ||
+                    parent.Mirror is not null || (parent.Distribution is not null && parent.Deal is null) || remaining <= 0) {
+                    errors.Add($"{path}.parent '{parentId}' must name a static, unit-scale placement with one frame.");
+                }
+            }
             if (domain.Shared is { } sharing) {
                 RequireRange(sharing.GoalCapacity, 1, WorldNavigationCapacity.MaxSharedGoals, $"{path}.shared.goalCapacity", errors);
                 RequireRange(sharing.ExpandedNodesPerTick, 1, WorldNavigationCapacity.MaxSharedExpandedPerTick, $"{path}.shared.expandedNodesPerTick", errors);

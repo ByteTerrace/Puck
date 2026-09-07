@@ -646,6 +646,10 @@ public sealed partial class WorldServer {
             }
         }
 
+        // A new base starts a fresh deal lifecycle, even when its source rows equal the previous session's.
+        // Keeping a completed memo would skip materialization after reset or a live replay drive.
+        m_dealMemos.Clear();
+        m_dealSweptDefinition = null;
         m_journal.Clear();
 
         // Snapshot, for every CURRENTLY CONNECTED (admitted, not parked) peer, exactly

@@ -1598,6 +1598,14 @@ provide a diegetic view of the existing user-data account inventory through an
 explicitly enabled Azure observation source. This is an authored storage metaphor,
 not evidence that the silo-hosted hub or live grain-placement telemetry is running.
 
+The constructable slice gives dealt children stable allocation slots and independently preserved transforms,
+prototypes, and facets. The granary court opts into transform/facet ownership and free bounded reflow; other
+authors can declare an Int payment. Preview produces an ordinary guarded mutation batch, with current authority,
+inventory, document dependencies, and payment checked at commit. Navigation domains can share a static placement
+frame, including yaw. Geometry-changing edits still rebuild navigation conservatively. Powered/watered network
+constraints, movable or resizable physical lattices, and incremental geometry invalidation remain future work;
+the larger estate and universal-world vision does not turn this bounded slice into their implementation.
+
 **Client seam.** `PlayerRoster`'s loopback-only reads of the live server become a link query that works
 identically in-process and over the wire; no direct-object interface is minted for the shortcut, and
 `WorldOwnedWorlds` stays in Server. Remote is the default path.

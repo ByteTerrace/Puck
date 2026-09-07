@@ -6,6 +6,17 @@ sealed records — one coarse record per `WorldDefinition` section, addressed by
 stable id, whole-row upsert, never a field poke. A genre world arrives as
 different DATA through these same messages, never a new message shape.
 
+`Batch` can carry an `expectedDefinition` fingerprint, an optional `expectedStateRows` dependency selection,
+an optional `expectedLayoutTemplate` scope, and numeric `expectedCells` comparisons evaluated at commit time.
+Each cell can also require an exact post-composition `change` and `kind`; failure discards the whole candidate.
+Observation grants cover guarded rows. Members must carry the enclosing principal, checked at codec and server
+admission. Reflow uses this ordinary batch and ordered submission path; Immediate preview starts bounded background work,
+status reviews detached positions and price, and Simulation commit submits the resulting payload. A preview is
+not a simulation write. Do not replace that submission with direct server enqueue in the console: the link is
+what records the accepted payload for replay.
+Successful base rebuilds clear deal sweep memos so a reset or live replay materializes children even when
+the replacement inventory equals the prior session's. Ordinary edits and undo retain their reconciliation semantics.
+
 ## Contents
 
 - The tick (`WorldServer.Step`)

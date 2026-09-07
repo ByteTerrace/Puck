@@ -47,15 +47,18 @@ public sealed partial class WorldPopulation {
     // Compiles the authored navigation rows into the kernel's own plain input shape once at resolve time; the
     // kernel parses no document, so every authoring enum crosses the seam through an explicit mapping rather than
     // a numeric cast that would silently drift if either side's member order ever changed.
-    private static NavigationDomainInput[] CompileNavigationDomains(IReadOnlyList<WorldNavigationDomain> rows) {
+    private static NavigationDomainInput[] CompileNavigationDomains(WorldDefinition definition) {
+        var rows = definition.Navigation.Rows;
         var domains = new NavigationDomainInput[rows.Count];
         for (var index = 0; index < domains.Length; index++) {
             var row = rows[index];
             var compiled = FixedWorldNavigationDomain.Compile(domain: row);
+            var frame = row.Parent is { } parent ? definition.PlacementFrames[parent] : default;
+            var origin = row.Parent is null ? row.Origin : frame.Position + WorldPlacementFrameCompilation.RotateY(row.Origin, frame.YawDegrees);
             domains[index] = new NavigationDomainInput(
                 Name: row.Name,
                 Kind: MapNavigationKind(kind: compiled.Kind),
-                Origin: compiled.Origin,
+                Origin: FixedVector3.FromVector3(origin),
                 CellSize: compiled.CellSize,
                 Width: compiled.Width,
                 Depth: compiled.Depth,
@@ -71,7 +74,8 @@ public sealed partial class WorldPopulation {
                 MaxExpandedNodes: compiled.MaxExpandedNodes,
                 MaxPathNodes: compiled.MaxPathNodes,
                 Medium: compiled.Medium,
-                Shared: row.Shared is { } shared ? new NavigationSharing(GoalCapacity: shared.GoalCapacity, ExpandedNodesPerTick: shared.ExpandedNodesPerTick) : null
+                Shared: row.Shared is { } shared ? new NavigationSharing(GoalCapacity: shared.GoalCapacity, ExpandedNodesPerTick: shared.ExpandedNodesPerTick) : null,
+                YawRadians: FixedQ4816.FromDouble(frame.YawDegrees * (Math.PI / 180.0))
             );
         }
         return domains;

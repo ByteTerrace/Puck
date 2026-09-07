@@ -303,8 +303,10 @@ public sealed partial class WorldPopulation {
         for (var index = 0; index < rows.Length; index++) {
             var domain = m_navigation[index];
             var tuning = domain.Tuning;
+            var frame = string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                $" origin=({(double)tuning.Origin.X:0.###},{(double)tuning.Origin.Y:0.###},{(double)tuning.Origin.Z:0.###}) yaw={(double)tuning.YawRadians * (180 / Math.PI):0.###}");
             var shared = domain.Sharing is { } sharing ? $",shared={domain.SharedResidentGoals}/{sharing.GoalCapacity},expanded={domain.SharedExpandedLast}/{sharing.ExpandedNodesPerTick},paths={domain.SharedPathsLast},capacityRefusals={domain.SharedCapacityRefusalsLast}" : ",shared=none";
-            rows[index] = $"{domain.Name}:{tuning.Kind.ToString().ToLowerInvariant()} {tuning.Width}x{tuning.Depth}x{tuning.Layers} clear={domain.WalkableCellCount}/{domain.CellCount} connectivity={tuning.Connectivity.ToString().ToLowerInvariant()} search<={tuning.MaxExpandedNodes} path<={tuning.MaxPathNodes} medium={(tuning.Medium ?? "none")}{shared}";
+            rows[index] = $"{domain.Name}:{tuning.Kind.ToString().ToLowerInvariant()} {tuning.Width}x{tuning.Depth}x{tuning.Layers} clear={domain.WalkableCellCount}/{domain.CellCount} connectivity={tuning.Connectivity.ToString().ToLowerInvariant()} search<={tuning.MaxExpandedNodes} path<={tuning.MaxPathNodes} medium={(tuning.Medium ?? "none")}{shared}{frame}";
         }
         return $"[world.navigation: {string.Join(separator: "; ", values: rows)}]";
     }

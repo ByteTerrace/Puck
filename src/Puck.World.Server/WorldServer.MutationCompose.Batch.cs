@@ -1,4 +1,5 @@
 using Puck.World.Protocol;
+using Puck.Maths;
 
 namespace Puck.World.Server;
 
@@ -28,6 +29,19 @@ public sealed partial class WorldServer {
 
         reason = string.Empty;
         evictedKey = null;
+        if (batch.ExpectedDefinition is { } expected && expected != WorldDefinitionFingerprint.Compute(current, batch.ExpectedStateRows, batch.ExpectedLayoutTemplate)) {
+            candidate = current;
+            reason = "the proposal is stale: its base definition changed; preview again";
+            return false;
+        }
+        foreach (var cell in batch.ExpectedCells ?? []) {
+            if (!WorldStateReader.TryRead(current, cell.Row, cell.Key, tick, out var row, out var raw, out _) || raw is not { } value ||
+                (cell.Kind is { } kind && row.Kind != kind) || !cell.Comparison.Holds(FixedQ4816.FromRawBits(value), FixedQ4816.FromRawBits(cell.Value))) {
+                candidate = current;
+                reason = $"the proposal is stale: state '{cell.Row}' changed; preview again";
+                return false;
+            }
+        }
 
         for (var index = 0; index < batch.Mutations.Count; index++) {
             var member = batch.Mutations[index];
@@ -133,6 +147,17 @@ public sealed partial class WorldServer {
             }
         }
 
+        foreach (var cell in batch.ExpectedCells ?? []) {
+            if (cell.Change is not { } change) { continue; }
+            if (!WorldStateReader.TryRead(current, cell.Row, cell.Key, tick, out var beforeRow, out var before, out _) ||
+                !WorldStateReader.TryRead(working, cell.Row, cell.Key, tick, out var afterRow, out var after, out _) ||
+                before is null || after is null || beforeRow.Kind != afterRow.Kind || (Int128)after.Value - before.Value != change ||
+                (afterRow.Min is { } minimum && after.Value < minimum) || (afterRow.Max is { } maximum && after.Value > maximum)) {
+                candidate = current;
+                reason = $"state '{cell.Row}' constraints prevent the exact required change";
+                return false;
+            }
+        }
         candidate = working;
 
         return true;

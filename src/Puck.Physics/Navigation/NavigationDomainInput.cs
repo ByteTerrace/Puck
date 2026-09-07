@@ -42,8 +42,8 @@ public sealed record NavigationSharing(int GoalCapacity, int ExpandedNodesPerTic
 /// <param name="Kind">Whether cells follow ground, free 3D space, or a live medium.</param>
 /// <param name="Origin">The world-space center of cell (0,0,0); for a surface domain, Y is the ground-probe baseline.</param>
 /// <param name="CellSize">The square cell width in world units.</param>
-/// <param name="Width">The number of cells along world X.</param>
-/// <param name="Depth">The number of cells along world Z.</param>
+/// <param name="Width">The number of cells along the grid's rotated X axis.</param>
+/// <param name="Depth">The number of cells along the grid's rotated Z axis.</param>
 /// <param name="Layers">The number of cells along world Y; surface domains carry one.</param>
 /// <param name="Connectivity">The volume neighbour set; ignored by surface domains.</param>
 /// <param name="ProbeUp">For a surface domain, the ground-search distance above origin Y.</param>
@@ -58,6 +58,7 @@ public sealed record NavigationSharing(int GoalCapacity, int ExpandedNodesPerTic
 /// <param name="MaxPathNodes">The hard stored-waypoint budget for one route.</param>
 /// <param name="Medium">For a medium domain, the named lattice field cells must remain inside.</param>
 /// <param name="Shared">Optional shared reverse-search policy. Absent uses independent bounded A* searches.</param>
+/// <param name="YawRadians">Rotation of the grid axes about world +Y. Zero preserves axis-aligned grids.</param>
 public readonly record struct NavigationDomainInput(
     string Name,
     NavigationKind Kind,
@@ -77,7 +78,8 @@ public readonly record struct NavigationDomainInput(
     int MaxExpandedNodes,
     int MaxPathNodes,
     string? Medium,
-    NavigationSharing? Shared
+    NavigationSharing? Shared,
+    FixedQ4816 YawRadians = default
 );
 
 /// <summary>Representation ceilings a host names when constructing a <see cref="NavigationRuntime"/>. The kernel

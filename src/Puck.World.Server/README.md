@@ -225,6 +225,12 @@ document's own kind/connectivity enums onto the kernel's, and
 `INavigationMediumField` seam so a medium-kind domain never needs the
 lattice's own representation.
 
+A domain's optional `parent` resolves its local origin and X/Z axes through the placement frame compilation;
+surface probes remain vertical. `world.navigation` includes the resolved origin and yaw. Moving a court thus
+rebuilds the domain in its new frame. Geometry edits still use conservative full rebuilds; this is not an
+incremental SDF invalidation scheme. The [granary authoring example](../Puck.World/Assets/worlds/modules/README.md#grow-and-rearrange-the-court)
+combines these frames with preserved dealt instances and guarded reflow.
+
 Changing a navigation definition, clearing designations, switching producers,
 or transferring authority clears a body's local route cache
 (`BodyNavigationState`); `WorldPopulationNavigationCheckpoint` carries the

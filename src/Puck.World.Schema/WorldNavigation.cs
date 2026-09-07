@@ -40,10 +40,11 @@ public enum WorldNavigationConnectivity : byte {
 /// <summary>One finite navigation grid compiled from the world's collision and optional medium truth.</summary>
 /// <param name="Name">The stable domain name referenced by navigated producer targets.</param>
 /// <param name="Kind">Whether cells follow ground, free 3D space, or a live medium.</param>
-/// <param name="Origin">The world-space center of cell (0,0,0); for a surface domain, Y is the ground-probe baseline.</param>
+/// <param name="Origin">The center of cell (0,0,0), relative to Parent when present and world-space otherwise;
+/// for a surface domain, resolved world Y is the ground-probe baseline.</param>
 /// <param name="CellSize">The square cell width in world units.</param>
-/// <param name="Width">The number of cells along world X.</param>
-/// <param name="Depth">The number of cells along world Z.</param>
+/// <param name="Width">The number of cells along the frame's X axis.</param>
+/// <param name="Depth">The number of cells along the frame's Z axis.</param>
 /// <param name="AgentRadius">The solid-clearance sphere radius. A medium domain also keeps this whole volume submerged.</param>
 /// <param name="ArrivalDistance">How close a body must come before advancing to the next waypoint.</param>
 /// <param name="MaxExpandedNodes">The hard A* expansion budget for one route search.</param>
@@ -58,6 +59,8 @@ public enum WorldNavigationConnectivity : byte {
 /// <param name="Medium">For a medium domain, the named lattice field that cells must remain inside.</param>
 /// <param name="Shared">Optional shared reverse-search policy. Absent uses independent bounded A* searches.
 /// Shared searches are queued and advanced on subsequent simulation ticks, independently of any leader.</param>
+/// <param name="Parent">Optional static placement frame. Origin and grid axes are local to that frame;
+/// probes remain vertical. The frame must be undistributed and unit scale.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldNavigationDomain(
     string Name,
@@ -78,7 +81,8 @@ public sealed record WorldNavigationDomain(
     float MaxStepHeight = 0f,
     float MaxSlopeDegrees = 0f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Medium = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldNavigationSharing? Shared = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldNavigationSharing? Shared = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Parent = null
 );
 
 /// <summary>Bounds reusable destination trees and their aggregate expansion work in one navigation domain.</summary>

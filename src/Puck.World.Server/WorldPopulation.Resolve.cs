@@ -120,7 +120,7 @@ public sealed partial class WorldPopulation {
             : null
         );
         m_navigation = new NavigationRuntime(
-            domains: CompileNavigationDomains(rows: definition.Navigation.Rows),
+            domains: CompileNavigationDomains(definition: definition),
             query: derivedSolids?.Query,
             fields: (m_fields is null ? null : new NavigationMediumFieldAdapter(lattice: m_fields)),
             capacity: new NavigationCapacity(

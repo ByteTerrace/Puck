@@ -638,6 +638,43 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// every member on its own terms; a member that would be refused alone refuses the batch.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Mutations">The members, in application order.</param>
+    /// <param name="ExpectedDefinition">Optional canonical document fingerprint. Composition refuses the entire
+    /// batch if its base changed after preview; permission and capacity checks still run normally.</param>
+    /// <param name="ExpectedCells">Optional numeric reads checked at commit time, including advancing cell values.</param>
+    /// <param name="ExpectedStateRows">Optional world-state dependency selection for ExpectedDefinition; null hashes every row.</param>
+    /// <param name="ExpectedLayoutTemplate">Optional layout-only fingerprint scope: this template, children, footprint census and ancestor frames.</param>
     [MutationKind(ordinal: 81, section: WorldSection.State)]
-    public sealed record Batch(WorldPrincipal Principal, [property: System.Text.Json.Serialization.JsonConverter(typeof(WorldMutationListJsonConverter))] IReadOnlyList<WorldMutation> Mutations) : WorldMutation(Principal);
+    public sealed record Batch(WorldPrincipal Principal, [property: System.Text.Json.Serialization.JsonConverter(typeof(WorldMutationListJsonConverter))] IReadOnlyList<WorldMutation> Mutations,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? ExpectedDefinition = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldStateExpectation>? ExpectedCells = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? ExpectedStateRows = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? ExpectedLayoutTemplate = null) : WorldMutation(Principal) {
+        /// <summary>Validates this batch's immediate members and guards. Nested batches pass the same check when
+        /// admitted or decoded recursively; every member must carry the enclosing actor.</summary>
+        /// <param name="reason">The structural refusal, or empty on success.</param>
+        /// <returns>Whether this level has a well-formed shape.</returns>
+        public bool TryValidateShape(out string reason) {
+            reason = "a batch requires members carrying its own principal and well-formed guards";
+            if (Mutations is not { Count: > 0 }) { return false; }
+            for (var index = 0; index < Mutations.Count; index++) {
+                if (Mutations[index] is not { } member || member.Principal != Principal) { return false; }
+            }
+            if (ExpectedDefinition is { } hash && (hash.Length != 64 || hash.Any(c => !char.IsAsciiHexDigit(c)))) { return false; }
+            if (ExpectedLayoutTemplate is { } template && (string.IsNullOrWhiteSpace(template) || ExpectedDefinition is null || ExpectedStateRows is null)) { return false; }
+            if (ExpectedStateRows is { } rows) {
+                if (ExpectedDefinition is null) { return false; }
+                for (var index = 0; index < rows.Count; index++) {
+                    if (string.IsNullOrWhiteSpace(rows[index])) { return false; }
+                }
+            }
+            if (ExpectedCells is { } cells) {
+                for (var index = 0; index < cells.Count; index++) {
+                    if (cells[index] is not { } cell || string.IsNullOrWhiteSpace(cell.Row) || cell.Key is { Length: 0 } ||
+                        !Enum.IsDefined(cell.Comparison) || (cell.Kind is { } kind && !Enum.IsDefined(kind))) { return false; }
+                }
+            }
+            reason = string.Empty;
+            return true;
+        }
+    }
 }

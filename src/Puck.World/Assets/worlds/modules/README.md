@@ -9,9 +9,10 @@ walkable ground, and an `exports` record naming the only rows a host may read, w
 spelled bare inside the module and compose as `<alias>_<name>` (`world.state dive_depth`); placement ids,
 spawn point ids, kit names, and camera names compose as authored, which is how the island restates a
 district's court (`{"id": "diveCourt", "position": [...], "yawDegrees": ...}`) and its arrival spawn without
-naming anything private. Rows that carry absolute positions — a `state.lattices` origin, a navigation domain
-origin, a curve's knots — are authored against the court at the origin and translated to the court's island
-position when the district is placed. A module authors no world-level tunable (a simulation rate, a seat
+naming anything private. A navigation domain can name the court as `parent`, making its origin and grid axes
+local to that court; the granaries use this form. Rows that still carry absolute positions — a `state.lattices`
+origin, an unparented navigation origin, a curve's knots — require translation when the district is placed.
+A module authors no world-level tunable (a simulation rate, a seat
 count); it reads the island's.
 
 | Alias | File | District |
@@ -69,11 +70,61 @@ a prototype: `bytrcstp001` deals `granaryAnchor` (the beacon), every other
 account deals `granaryStore`.
 
 The server's per-tick sweep (`WorldServer.SweepPlacementDeals`) re-deals only
-when the row moves. A cell that arrives takes the lowest free offset; a cell
-that leaves frees its offset and moves no sibling; a re-authored variant re-deals
+when its source row, variant row, or template changes. A cell that arrives takes the lowest free `dealSlot`;
+a cell that leaves frees its slot and moves no sibling; a re-authored variant re-deals
 that one child in place. Children land as ordinary placement mutations under the
 world principal, so they journal, `world.undo`, and replay through the one
 placement door.
+
+### Grow and rearrange the court
+
+The granaries declare `deal.preserve.transform` and `deal.preserve.facets`. Inventory owns membership;
+gameplay owns an existing building's local position, yaw, scale, and facets. These survive a later inventory
+refresh. `dealSlot` remains its allocation identity even after it moves. Variants still select the prototype;
+an author who wants gameplay to own that choice too enables `deal.preserve.prototype`. Removing the inventory
+cell removes the building and its customization. New buildings receive template defaults.
+
+Use `world.placement.get <id>` to obtain a complete child row, then submit the edited row through
+`world.row.set placements <json>`. Increasing its scale grows both geometry and its layout footprint.
+The `footprint` declares local X/Z half-extents, world-unit `clearance`, and optional `pinned: true`.
+It is a planar occupation contract for layout proposals; physical contact still uses the solid geometry.
+Footprints use conservative envelopes under rotation, so a refusal does not prove that no tighter packing exists.
+
+```text
+world.reflow.preview granaryStores
+world.reflow.status
+world.reflow.commit
+world.placements
+```
+
+These boot-instance authoring commands keep one pending preview per principal. Planning runs off the simulation
+thread, with one worker per server and normal mutation admission metering. If status reports `planning`, read it
+again when ready; it shows the proposed local positions, price, and work before commit is enabled. Previews expire
+after five minutes; the bounded cache evicts its oldest entry when full, including abandoned sessions.
+Search prefers current positions, then nearby distribution offsets. Commit submits an
+ordinary guarded mutation batch through the ordered link. A failed or stale commit changes neither placements
+nor payment. Undo restores them together. The template, children, footprint census, ancestor frames, and their
+inventory/bound-value rows participate in the guard. New blockers invalidate the proposal; unrelated chairs,
+views, kits, and state counters do not. Full document validity, capacity, authority, and payment are checked at
+commit against the current world. A preview is a proposed layout, not a reservation of those capacities.
+
+`deal.reflow` authors `candidateBudget` (1..65536 work units) and optional `costPerMove`, `costRow`, and `costKey`.
+The shipped court charges zero. A paid policy names an Int state row; a keyed row also needs a key. The exact
+price must fit the balance and its state constraints at commit. Advancing balances and intervening deposits or
+withdrawals are allowed while sufficient funds remain; a clamp that prevents the exact debit refuses the whole
+batch. Search supports up to 64 static children; pinned children and other declared footprints stay
+fixed. It refuses unsupported moving or distributed blockers and budget exhaustion. A currently valid layout
+returns an unchanged-layout explanation rather than a chargeable proposal.
+
+Sibling `dealSlot` values must be unique. A source-owned child cannot itself declare `deal`. Other authored facets
+remain available under their ordinary validation and capacity rules; moving or distributed children cannot
+participate in static reflow. Planar footprints deliberately reserve their X/Z column regardless of elevation,
+so this planner does not pack multiple storeys above one another.
+
+Moving or turning `granaryCourt` carries the child geometry, existing creation faces, and `granaryYard` navigation
+frame. `world.navigation` reports the resolved origin and yaw. Surface probes stay vertical. Geometry edits still
+rebuild navigation conservatively. Moving physical field lattices, expanding service networks, and solving
+utility coverage constraints are subsequent work; this slice does not make those contracts implicit in a footprint.
 
 Read back:
 

@@ -6,6 +6,27 @@ namespace Puck.World.Protocol.Tests;
 /// <summary>A batch crosses the checkpoint journal as one committed leaf whose members keep their concrete kinds.</summary>
 public sealed class BatchMutationCodecLawTests {
     [Fact]
+    public void GuardsRoundTripAndNestedActorsCannotEscalate() {
+        var member = new WorldMutation.UpsertStateCell(WorldPrincipal.Console, "gold", "$value", 1, WorldDocumentWriteKind.Add);
+        var valid = new WorldMutation.Batch(WorldPrincipal.Console, [member], new string('A', 64),
+            [new WorldStateExpectation("gold", null, 5, ActionStateComparison.GreaterOrEqual, 1, CellKind.Int)], ["gold"], "court");
+        Assert.True(WorldSubmissionCodec.TryEncodeMutation(valid, out var bytes, out var error), error.Detail);
+        Assert.True(WorldSubmissionCodec.TryDecodeMutation(bytes, out var decoded, out error), error.Detail);
+        var round = Assert.IsType<WorldMutation.Batch>(decoded);
+        Assert.Equal(valid.ExpectedDefinition, round.ExpectedDefinition);
+        Assert.Equal(valid.ExpectedCells, round.ExpectedCells);
+        Assert.Equal(valid.ExpectedStateRows, round.ExpectedStateRows);
+        Assert.Equal(valid.ExpectedLayoutTemplate, round.ExpectedLayoutTemplate);
+        var wrongActor = valid with { Principal = WorldPrincipal.Seat(0) };
+        Assert.False(WorldSubmissionCodec.TryEncodeMutation(wrongActor, out _, out _));
+        Assert.False(WorldSubmissionCodec.TryEncodeCommittedMutation(wrongActor, out _, out _));
+        var nested = valid with { Mutations = [wrongActor] };
+        Assert.False(WorldSubmissionCodec.TryEncodeMutation(nested, out _, out _));
+        var malformed = valid with { ExpectedCells = [null!] };
+        Assert.False(WorldSubmissionCodec.TryEncodeMutation(malformed, out _, out _));
+        Assert.False(WorldSubmissionCodec.TryEncodeMutation(valid with { Mutations = [] }, out _, out _));
+    }
+    [Fact]
     public void ABatchRoundTripsWithEveryMemberKind() {
         var batch = new WorldMutation.Batch(
             Principal: WorldPrincipal.World,

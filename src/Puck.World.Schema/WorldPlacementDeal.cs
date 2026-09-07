@@ -17,12 +17,13 @@ namespace Puck.World;
 /// instance journals, undoes, replays, and rebuilds colliders through the one placement door.
 /// </summary>
 /// <remarks>
-/// <para>A child keeps the offset it was dealt for as long as its cell is present: a cell that leaves frees its
-/// offset and moves no sibling, and the next cell dealt takes the lowest free offset. The alternative — a cell's
+/// <para>A child keeps its allocated <see cref="WorldPlacement.DealSlot"/> while its cell is present. Instance-owned
+/// transforms may move away from that slot without releasing it. A cell that leaves frees its
+/// slot and moves no sibling, and the next cell dealt takes the lowest free slot. The alternative — a cell's
 /// ordinal among the cells present — would shuffle every later instance whenever an earlier cell left, and a court
 /// whose accounts come and go would rebuild itself on every departure. The offsets are the same ones a static
-/// distribution of the template materializes (<see cref="Offsets"/>), so a dealt instance stands exactly where the
-/// copy would have.</para>
+/// distribution of the template materializes (<see cref="Offsets"/>), so a new instance starts where the copy
+/// would have. <see cref="Preserve"/> controls subsequent reconciliation with the template.</para>
 /// <para>The sweep re-deals only when the dealt row, the variant row, or the template itself changes: an undo that
 /// removes the children a sweep added stays undone until the row moves again.</para>
 /// <para>Refused alongside <see cref="WorldPlacement.Inhabit"/>, <see cref="WorldPlacement.Attach"/>,
@@ -37,10 +38,15 @@ namespace Puck.World;
 /// <param name="Variants">The optional variant selection: a second keyed row read at the same key, whose cell text
 /// (an integer cell spelled as text) selects a prototype from <see cref="WorldPlacementDealVariants.Map"/>; a cell
 /// with no entry, or no cell at all, deals the template's own prototype.</param>
+/// <param name="Preserve">Which properties of existing instances are owned by gameplay. Absent synchronizes
+/// copied properties with the template. New instances receive the template's supported copied facets.</param>
+/// <param name="Reflow">Optional bounded rearrangement policy. Requires instance-owned transforms and a footprint.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldPlacementDeal(
     string Row,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementDealVariants? Variants = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementDealVariants? Variants = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementDealPreserve? Preserve = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementReflow? Reflow = null
 ) {
     /// <summary>The character between a template's id and the cell key in a dealt child's id.</summary>
     public const char ChildSeparator = '/';
@@ -135,6 +141,7 @@ public sealed record WorldPlacementDeal(
     /// or <see langword="null"/>.</param>
     public static bool IsChild(WorldPlacement placement, WorldPlacement? parent) => (
         (parent is { Deal: not null }) &&
+        (placement.Id is not null) &&
         (placement.Parent is { } parentId) &&
         string.Equals(a: parentId, b: parent.Id, comparisonType: StringComparison.Ordinal) &&
         (placement.Id.Length > (parentId.Length + 1)) &&
@@ -149,3 +156,11 @@ public sealed record WorldPlacementDeal(
 /// child shows. Every value must resolve to a declared, non-animated creation.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldPlacementDealVariants(string Row, IReadOnlyDictionary<string, string> Map);
+
+/// <summary>Instance-owned properties which reconciliation seeds at creation and subsequently preserves.
+/// Membership and the allocated deal slot remain owned by the source row.</summary>
+/// <param name="Transform">Preserve an existing child's local position, yaw, and scale.</param>
+/// <param name="Prototype">Preserve its prototype, including changes made by responses.</param>
+/// <param name="Facets">Preserve its other facets, including responses and face sources.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldPlacementDealPreserve(bool Transform = false, bool Prototype = false, bool Facets = false);

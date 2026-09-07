@@ -181,7 +181,11 @@ public static class WorldPlacementFrameCompilation {
 
         return ((wrapped < 0f) ? (wrapped + 360f) : wrapped);
     }
-    private static Vector3 RotateY(Vector3 vector, float degrees) {
+    /// <summary>Rotates a document vector about +Y through the deterministic placement-frame rotation.</summary>
+    /// <param name="vector">The local vector.</param>
+    /// <param name="degrees">Yaw in degrees.</param>
+    /// <returns>The rotated vector at the document boundary.</returns>
+    public static Vector3 RotateY(Vector3 vector, float degrees) {
         var angle = FixedQ4816.FromDouble(value: (degrees * (Math.PI / 180.0)));
         var rotation = FixedQuaternion.FromAxisAngle(axis: UnitY, angle: angle);
 

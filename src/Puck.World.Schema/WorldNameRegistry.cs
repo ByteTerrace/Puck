@@ -204,6 +204,7 @@ public static partial class WorldNameRegistry {
         new(typeof(WorldPlacementBoard), nameof(WorldPlacementBoard.Move), WorldNameKind.State, WorldNameRole.Names),
         new(typeof(WorldPlacementBoard), nameof(WorldPlacementBoard.Plan), WorldNameKind.State, WorldNameRole.Names),
         new(typeof(WorldPlacementDeal), nameof(WorldPlacementDeal.Row), WorldNameKind.State, WorldNameRole.Names),
+        new(typeof(WorldPlacementReflow), nameof(WorldPlacementReflow.CostRow), WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action),
         new(typeof(WorldPlacementDealVariants), nameof(WorldPlacementDealVariants.Row), WorldNameKind.State, WorldNameRole.Names),
         new(typeof(WorldInteraction), nameof(WorldInteraction.Left), WorldNameKind.State, WorldNameRole.Names),
         new(typeof(WorldInteraction), nameof(WorldInteraction.Right), WorldNameKind.State, WorldNameRole.Names),
@@ -354,6 +355,8 @@ public static partial class WorldNameRegistry {
         new(typeof(WorldProbeParameterTarget.Probe), nameof(WorldProbeParameterTarget.Probe.Field), "a probe parameter field"),
         new(typeof(WorldCurveRow), nameof(WorldCurveRow.Name), "a curve name"),
         new(typeof(WorldNavigationDomain), nameof(WorldNavigationDomain.Name), "a navigation domain name"),
+        new(typeof(WorldPlacementReflow), nameof(WorldPlacementReflow.CostKey), "a literal payer cell key"),
+        new(typeof(WorldNavigationDomain), nameof(WorldNavigationDomain.Parent), "a placement frame id"),
     ];
 
     /// <summary>Gets every registered name-bearing member.</summary>

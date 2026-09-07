@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using Puck.Commands;
 using Puck.World.Server;
+using Puck.World.Protocol;
 
 namespace Puck.World;
 
@@ -20,7 +21,7 @@ namespace Puck.World;
 /// (see <see cref="TryResolveInstance"/>). <c>world.faces</c> has no instance-addressed form: screens, the
 /// derived-face index space, and session binding are the boot instance's own presentation state, and a spawned
 /// instance carries neither a client nor a real machine host to bind them from.</remarks>
-internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopulation population, WorldScreenBinder binder, WorldInstanceHost instances, WorldSessionResolver resolver) : ICommandModule {
+internal sealed partial class WorldPlacementCommandModule(WorldServer server, WorldPopulation population, WorldScreenBinder binder, WorldInstanceHost instances, WorldSessionResolver resolver, IServerLink link, WorldDeferredVerbEchoes echoes) : ICommandModule {
     // The resolver's own live state for one destination row — see WorldSessionResolver.DescribeActive. Occupancy
     // reads back "?" for a generation whose instance is no longer running (a stale echo, not a live one — the
     // resolver's own cache entry is cleared the moment WorldInstanceHost.TryStop/ReapIfEmpty actually retires it, so
@@ -517,6 +518,7 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
+        foreach (var command in ReflowCommands()) { yield return command; }
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.placements",

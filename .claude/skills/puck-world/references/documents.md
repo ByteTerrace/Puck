@@ -775,6 +775,13 @@ and checkpoints byte-for-byte.
 
 ### `navigation` — bounded surface, flight, and medium routes
 
+An optional `parent` names a static unit-scale placement frame (including its ancestors). Origin and grid X/Z
+axes follow that frame's position/yaw; surface probes remain vertical. `world.navigation` echoes the resolved
+origin/yaw. Geometry changes still rebuild conservatively; do not infer local SDF invalidation from a parent.
+Dealt placement instances carry reserved `dealSlot` identities independently of their transforms. `deal.preserve`
+selects instance-owned transforms, prototypes, and facets. The granary module guide owns the footprint/reflow
+authoring contract: `src/Puck.World/Assets/worlds/modules/README.md#grow-and-rearrange-the-court`.
+
 `WorldNavigation.cs` owns named finite domains. `surface` samples SDF ground,
 step/slope limits, a vertical capsule, and swept neighbour edges from
 `maxStepHeight` above the foot to the head; `volume`

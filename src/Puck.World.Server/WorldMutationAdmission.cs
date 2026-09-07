@@ -34,6 +34,10 @@ public enum WorldMutationAdmissionRule : byte {
     MissingBudget,
     /// <summary>Denied — the untrusted principal's per-tick dispatch budget for this section is spent.</summary>
     BudgetExhausted,
+    /// <summary>Denied — a guarded batch would observe a state row the principal cannot read.</summary>
+    ObservationDenied,
+    /// <summary>Denied — a batch has malformed guards, no members, or a member claiming another actor.</summary>
+    MalformedBatch,
 }
 /// <summary>The decided outcome of <see cref="WorldServer.TryAdmitMutation"/> — which rule fired and the row-level
 /// evidence behind it, produced inside the decision so a caller's narration can never disagree with the door (the
@@ -66,6 +70,8 @@ public readonly record struct WorldMutationAdmission(
     /// print the same sentence for the same decision.</summary>
     /// <returns>The refusal fragment, or <c>"admitted"</c>.</returns>
     public string Describe() => Rule switch {
+        WorldMutationAdmissionRule.MalformedBatch => "cannot submit a batch with malformed guards, no members, or a different actor in a member",
+        WorldMutationAdmissionRule.ObservationDenied => $"cannot observe {Subject.Describe()} ({Verdict.DescribeDenial()})",
         WorldMutationAdmissionRule.Admitted => "admitted",
         WorldMutationAdmissionRule.Structural => "admitted structurally — the world's own authored program is not an actor, so the grant table is never consulted for it (see WorldPrincipal.World)",
         WorldMutationAdmissionRule.SectionDenied => $"cannot mutate {Subject.Describe()} ({Verdict.DescribeDenial()})",

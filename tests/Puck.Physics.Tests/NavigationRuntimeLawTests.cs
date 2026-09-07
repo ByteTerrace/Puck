@@ -11,6 +11,28 @@ namespace Puck.Physics.Tests;
 /// consults a medium field only through <see cref="INavigationMediumField"/> — no <c>Puck.World</c> or
 /// <c>Puck.World.Schema</c> type appears anywhere in this file.</summary>
 public sealed class NavigationRuntimeLawTests {
+    [Theory]
+    [InlineData(0)]
+    [InlineData(90)]
+    [InlineData(37)]
+    [InlineData(-135)]
+    public void RotatedGridPositionsRoundTripAndKeepTheSameRoutes(int degrees) {
+        var row = VolumeDomain(width: 4, depth: 3, layers: 2);
+        var original = new NavigationRuntime([row], new OpenQuery(), null, Capacity())[0];
+        var turned = new NavigationRuntime([row with {
+            Origin = FixedVector3.FromVector3(new Vector3(12, 5, -7)),
+            YawRadians = FixedQ4816.FromDouble(degrees * (Math.PI / 180))
+        }], new OpenQuery(), null, Capacity())[0];
+        for (var index = 0; index < turned.CellCount; index++) {
+            Assert.True(turned.TryCell(turned.Position(index), out var roundTrip));
+            Assert.Equal(index, roundTrip);
+        }
+        var first = new int[256];
+        var second = new int[256];
+        Assert.Equal(original.FindPath(0, original.CellCount - 1, first, out var firstLength, out _),
+            turned.FindPath(0, turned.CellCount - 1, second, out var secondLength, out _));
+        Assert.Equal(first[..firstLength], second[..secondLength]);
+    }
     private static NavigationCapacity Capacity() => new(MaxSurfaceClearanceSweeps: 16, MaxMediumSegmentSubdivisions: 32, MaxConcurrentRequesters: 4096);
 
     private static NavigationDomainInput VolumeDomain(int width = 6, int depth = 1, int layers = 1, string? medium = null, NavigationSharing? shared = null) => new(

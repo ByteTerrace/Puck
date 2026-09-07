@@ -6333,6 +6333,67 @@
       ],
       "additionalProperties": false
     },
+    "WorldPlacementDealPreserve": {
+      "description": "Instance-owned properties which reconciliation seeds at creation and subsequently preserves. Membership and the allocated deal slot remain owned by the source row.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "transform": {
+          "description": "Preserve an existing child\u0027s local position, yaw, and scale.",
+          "type": "boolean",
+          "default": false
+        },
+        "prototype": {
+          "description": "Preserve its prototype, including changes made by responses.",
+          "type": "boolean",
+          "default": false
+        },
+        "facets": {
+          "description": "Preserve its other facets, including responses and face sources.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorldPlacementReflow": {
+      "description": "Author-selected work and payment policy for rearranging a deal template\u0027s children.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "candidateBudget": {
+          "description": "Maximum preparation, candidate, and overlap work units in one preview; preparation includes a conservative charge for sorting offsets. Exhaustion refuses without edits.",
+          "type": "integer",
+          "default": 4096
+        },
+        "costPerMove": {
+          "description": "Nonnegative Int units charged for each changed transform.",
+          "type": "integer",
+          "default": 0
+        },
+        "costRow": {
+          "description": "An Int state row paying the price. Required for a nonzero price.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "costKey": {
+          "description": "The payer cell; absent selects an unkeyed row\u0027s slot.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
     "WorldPlacementDeal": {
       "description": "A placement\u0027s deal facet: the row is a template whose instances are dealt from a keyed state row, one child placement per cell, laid out over the template\u0027s own Distribution region in cell order. The template itself renders nothing and collides with nothing; its prototype and its Solid/Grip/Region/ Emission facets are what every child is stamped with. A child is an ordinary placement row named \u003Ctemplate\u003E/\u003CcellKey\u003E (ChildId) with Parent naming the template and the region\u0027s dealt offset as its local position, written and removed through ordinary UpsertPlacement/RemovePlacement mutations under WorldPrincipal.World by the per-tick sweep (Server.WorldServer.SweepPlacementDeals), so a dealt instance journals, undoes, replays, and rebuilds colliders through the one placement door.",
       "type": [
@@ -6348,10 +6409,52 @@
           "$ref": "#/$defs/WorldPlacementDealVariants",
           "description": "The optional variant selection: a second keyed row read at the same key, whose cell text (an integer cell spelled as text) selects a prototype from Map; a cell with no entry, or no cell at all, deals the template\u0027s own prototype.",
           "default": null
+        },
+        "preserve": {
+          "$ref": "#/$defs/WorldPlacementDealPreserve",
+          "description": "Which properties of existing instances are owned by gameplay. Absent synchronizes copied properties with the template. New instances receive the template\u0027s supported copied facets.",
+          "default": null
+        },
+        "reflow": {
+          "$ref": "#/$defs/WorldPlacementReflow",
+          "description": "Optional bounded rearrangement policy. Requires instance-owned transforms and a footprint.",
+          "default": null
         }
       },
       "required": [
         "row"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPlacementFootprint": {
+      "description": "An authored rectangular occupation footprint in placement-local X/Z, with additional passage clearance. Used by layout proposals; physical collision remains the placement\u0027s solid geometry.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "halfWidth": {
+          "description": "Positive local X half-extent.",
+          "type": "number"
+        },
+        "halfDepth": {
+          "description": "Positive local Z half-extent.",
+          "type": "number"
+        },
+        "clearance": {
+          "description": "Nonnegative space reserved outside the footprint.",
+          "type": "number",
+          "default": 0
+        },
+        "pinned": {
+          "description": "Whether automatic layout must preserve this placement\u0027s transform.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "halfWidth",
+        "halfDepth"
       ],
       "additionalProperties": false
     },
@@ -6449,6 +6552,19 @@
         "deal": {
           "$ref": "#/$defs/WorldPlacementDeal",
           "description": "The placement\u0027s deal facet (see WorldPlacementDeal) \u2014 the row is a template whose instances are dealt from a keyed state row as child placements over its own Distribution region, or null for an ordinary placement. A template renders nothing and collides with nothing itself. Omitted from the wire when null. Requires Distribution; refused together with Inhabit, Attach, Respond, Mirror, and FaceSources.",
+          "default": null
+        },
+        "dealSlot": {
+          "description": "A dealt child\u0027s reserved distribution slot, independent of its editable transform. Absent on ordinary placements and templates.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "footprint": {
+          "$ref": "#/$defs/WorldPlacementFootprint",
+          "description": "Optional occupation and clearance contract used by layout proposals.",
           "default": null
         }
       },
