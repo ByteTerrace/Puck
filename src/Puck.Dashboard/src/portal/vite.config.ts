@@ -28,9 +28,11 @@ export default defineConfig(({ mode }) => {
         filename: "portal-entry.js",
         manifest: true,
         name: "portal",
+        // The portal shares what it imports. @azure/msal-browser is absent deliberately: only the host
+        // imports it, and it is @azure/identity's own dependency — sharing both makes the plugin drop
+        // one of them in dev rather than fix the initialization order.
         shared: [
           "@azure/identity",
-          "@azure/msal-browser",
           "@azure/msal-react",
           "@reduxjs/toolkit",
           "@uidotdev/usehooks",

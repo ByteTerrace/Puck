@@ -11,6 +11,7 @@
         "stage": "node ../scripts/stageDeploy.mjs"
     },
     "devDependencies": {
+        "@module-federation/dts-plugin": "2.5.1",
         "@rolldown/binding-win32-x64-msvc": "^1.2.7"
     }
 }
