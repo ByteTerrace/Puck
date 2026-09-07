@@ -1,0 +1,43 @@
+{
+  "id": "front-door",
+  "title": "A fresh identity wakes in the studio behind a solid gate that opens once the look has cycled",
+  "binding": "Both legs boot a minimal host that imports modules/jump.world.json under alias 'jump' (for its 'vaulter' kit and channel vocabulary only) and modules/studio.world.json under alias 'studio', declares the reserved 'identity' state lane, and carries the same 'seat1-returning-identity-wakes-at-plaza' rule the island authors. The positive leg creates and binds a fresh identity, flies the seat backward from its studio-arrival spawn into the solid studioGate placement (barely moving, proving the gate blocks it), poses onto the turntable, presses the world's jump channel once, and reads back studio_look, identity.facts, and world.placements — the look advances, the identity's own 'awakened' fact is set, and the gate's respond facet swaps its prototype from studioGateClosed to studioGateOpen. The discriminating leg poses the same fresh identity onto the turntable but never presses jump, proving the region alone advances nothing and the gate stays exactly as authored.",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 8,
+  "timeoutSeconds": 30,
+  "fixtures": [],
+  "positive": {
+    "world": "host.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "body.fly", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.press", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "identity.facts", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "gate-solid", "stream": "stdout", "match": "contains", "text": "pos=(0.00, 0.42, 3.08)", "present": true },
+      { "type": "line", "name": "gate-closed-before", "stream": "stdout", "match": "contains", "text": "'studioGate' prototype=studioGateClosed", "present": true },
+      { "type": "line", "name": "look-cycled", "stream": "stdout", "match": "contains", "text": "'studio_look'.'$value' value=1", "present": true },
+      { "type": "line", "name": "identity-awakened", "stream": "stdout", "match": "contains", "text": "facts=awakened:1", "present": true },
+      { "type": "line", "name": "gate-open-after", "stream": "stdout", "match": "contains", "text": "'studioGate' prototype=studioGateOpen", "present": true },
+      { "type": "line", "name": "returning-pose", "stream": "stderr", "match": "contains", "text": "world.rule: pose body:0 -> (10, 0, 10)", "present": true },
+      { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  },
+  "discriminating": {
+    "world": "host.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "identity.facts", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "look-not-cycled", "stream": "stdout", "match": "contains", "text": "'studio_look'.'$value' value=0", "present": true },
+      { "type": "line", "name": "identity-not-awakened", "stream": "stdout", "match": "contains", "text": "facts=none", "present": true },
+      { "type": "line", "name": "gate-still-closed", "stream": "stdout", "match": "contains", "text": "'studioGate' prototype=studioGateClosed", "present": true },
+      { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  }
+}

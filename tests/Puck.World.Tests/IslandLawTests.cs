@@ -25,7 +25,48 @@ public sealed class IslandLawTests {
             Assert.Equal(1f, placement.Scale);
         }
 
-        Assert.Equal(["plaza-1", "plaza-2"], definition.Population.SeatSpawns);
+        Assert.Equal(["studio-arrival", "studio-arrival"], definition.Population.SeatSpawns);
+    }
+
+    [Fact]
+    public void AFreshSeatWakesInTheStudioBehindASolidGateThatOpensOnceAwakened() {
+        var definition = AuthoredGameFixtures.Nexus;
+
+        // The reserved identity lane the island declares so a body's fact travels through $identity:<bodyRef>:<fact>.
+        var lane = Assert.Single(definition.State, row => row.Name == "identity");
+
+        Assert.Equal(CellKind.Int, lane.Kind);
+        Assert.True(lane.IsKeyed);
+
+        // A returning identity's fact re-poses each local seat at the plaza; a fresh one never satisfies the gate,
+        // so it keeps the seatSpawns-authored studio arrival above.
+        var seat1Wake = Assert.Single(definition.Rules!, rule => rule.Name.ToString() == "seat1-returning-identity-wakes-at-plaza");
+        var seat1Pose = Assert.IsType<WorldEffect.Pose>(Assert.Single(seat1Wake.Effects));
+        var seat1Gate = Assert.IsType<ActionPredicate.CompareState>(seat1Wake.Gate);
+
+        Assert.Equal("plaza-1", seat1Pose.SpawnPoint);
+        Assert.Equal("$identity:body:0:awakened", seat1Gate.State);
+        Assert.Equal(ActionTriggerMode.Edge, seat1Wake.Mode);
+
+        var seat2Wake = Assert.Single(definition.Rules!, rule => rule.Name.ToString() == "seat2-returning-identity-wakes-at-plaza");
+        var seat2Pose = Assert.IsType<WorldEffect.Pose>(Assert.Single(seat2Wake.Effects));
+        var seat2Gate = Assert.IsType<ActionPredicate.CompareState>(seat2Wake.Gate);
+
+        Assert.Equal("plaza-2", seat2Pose.SpawnPoint);
+        Assert.Equal("$identity:body:1:awakened", seat2Gate.State);
+
+        // The gate stands solid between the studio and the plaza until either seat's fact is set.
+        var gate = Assert.Single(definition.Placements, row => row.Id == "studioGate");
+
+        Assert.Equal("studioGateClosed", gate.PrototypeId);
+        Assert.Equal("studioCourt", gate.Parent);
+        Assert.NotNull(gate.Solid);
+        Assert.All(gate.Respond!, response => Assert.Equal("studioGateOpen", response.PrototypeId));
+
+        // The turntable's look cycle also marks the identity awakened, on the same edge that advances the counter.
+        var lookCycle = Assert.Single(definition.Rules!, rule => rule.Name.ToString() == "studio_studio-look-cycle");
+
+        Assert.Contains(lookCycle.Effects, effect => (effect is WorldEffect.SetIdentityFact fact) && (fact.Fact == "awakened"));
     }
 
     [Fact]

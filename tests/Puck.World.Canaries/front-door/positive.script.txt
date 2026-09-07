@@ -1,0 +1,21 @@
+# Positive leg: a fresh identity boots the studio ("front door" of the island's one world). The gate stands solid
+# between the studio and the plaza until the identity's own look has cycled at least once on the turntable; cycling
+# it there sets the identity fact 'awakened', which opens the gate AND re-poses the seat at the plaza the instant
+# the fact transitions -- the same edge a second boot binding the identity would cross at its own first tick.
+identity.create amber
+player.identity amber
+world.wait 5
+body.where 0
+body.fly -1 0 0 0 0 0 2
+world.wait 20
+body.where 0
+world.placements
+body.pose 0 0 0 0 0 0 0
+world.wait 5
+body.where 0
+body.press jump 1 0.2 0
+world.wait 10
+world.state studio_look
+identity.facts
+world.wait 1
+world.placements

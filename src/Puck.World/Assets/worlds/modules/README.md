@@ -23,7 +23,7 @@ count); it reads the island's.
 | `kart` | `kart.world.json` | A track on a curve, a kart kit, gates, a lap counter |
 | `jump` | `jump.world.json` | A platform course rising from the shard steps, a vaulter kit, a trophy |
 | `arena` | `arena.world.json` | The hp/targeting/attack and elemental suites in a walled yard |
-| `studio` | `studio.world.json` | A flat stage for character work, look cycling, a mirror wall |
+| `studio` | `studio.world.json` | A flat stage for character work, look cycling, a mirror wall, a gate that opens once awakened |
 
 The island places the courts on its crown: `dive` north at (0, 0, -46), `kart` east at (48, 0, 0), `jump`
 south at (0, 0, 52), `studio` west at (-42, 0, 0), `arena` north-east at (46, 0, -46), `arcade` at (26, 0, 12),
@@ -390,20 +390,34 @@ no bodies of its own — a visiting seat brings its own avatar and kit.
 - `studioMirror` is a child wall carrying a `view` screen face (`mirror`) that shows
   the `studioStage` camera, itself anchored on the turntable and looking back at it —
   the reflection a body on the turntable sees of itself.
+- `studioGate` is a child wall opposite the mirror (local `(0, 1.1, 3.6)`, past the
+  arrival spawn) carrying a `respond` facet: its base creation is the solid
+  `studioGateClosed` box, and each entry swaps it to the collision-free
+  `studioGateOpen` creation once one local seat's own `identity.0-awakened`/
+  `identity.1-awakened` cell reads nonzero — the front door onto whatever the
+  importing world places beyond it.
 - `studioCourt` is the district's one root placement; moving it (position and yaw)
-  moves the whole stage, its turntable, and its mirror together.
+  moves the whole stage, its turntable, its mirror, and its gate together.
 
 ## The look counter
 
 `look` is a slot `int` row, range `0..7`, that a rule (`studio-look-cycle`) advances
 by one (wrapping) on the tick a body's seat presses the world's `jump` channel while
-the region reads at least one occupant:
+the region reads at least one occupant; the same edge also sets the fact `awakened`
+on local seat 1's own driving identity, through the reserved `identity` lane an
+importing world declares (see below):
 
 ```text
 gate: $region:studioTurntable >= 1  AND  $channel:1:jump >= 1
 mode: Edge
-effect: setState look = (look + 1) % 8
+effects: setState look = (look + 1) % 8
+         setIdentityFact key:0 fact:awakened value:1
 ```
+
+`awakened` is the reveal ladder's own name for "has cycled its look at least once" —
+an importing world reads it off `$identity:body:<n>:<fact>` to gate whatever the
+studio's own gate faces, and to re-pose a returning identity elsewhere at boot
+without waiting for it to walk back through the studio at all.
 
 A world-rule channel read is a fixed 1-based seat number, not "whichever body is in
 the region" — the closest primitive the engine offers today reads local seat 1's own
@@ -435,7 +449,11 @@ The importing host must declare its own `channels` row named `jump` (the shipped
 island already does) and a `placements.policy.derivedFaceScreens` reservation of at
 least 1 for the mirror's face to bind; a host authoring neither still boots the rest
 of the district, but the counter never advances and the mirror shows the no-signal
-card.
+card. A host that also wants the gate to open and the fact to travel declares a
+keyed `int` row named `identity` in its own `state.world` (`WorldIdentityFactLane`) —
+without it `setIdentityFact`/`$identity:` both refuse by name at compile, and
+`studioGate` simply never leaves its authored `studioGateClosed` prototype.
+
 ## The arcade
 
 `modules/arcade.world.json` is the arcade district: two cabinets and a handheld

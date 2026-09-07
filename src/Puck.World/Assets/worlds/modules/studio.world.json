@@ -116,6 +116,51 @@
           ]
         }
       }
+    },
+    {
+      "id": "studioGateClosed",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "studioGateClosed",
+        "palette": [
+          {
+            "color": "#4A3F52"
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "type": "Box",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              2.4,
+              2.2,
+              0.15
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "studioGateOpen",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "studioGateOpen",
+        "shapes": []
+      }
     }
   ],
   "placements": {
@@ -170,6 +215,43 @@
               "$type": "view",
               "cameraName": "studioStage"
             }
+          }
+        ]
+      },
+      {
+        "id": "studioGate",
+        "parent": "studioCourt",
+        "prototypeId": "studioGateClosed",
+        "position": [
+          0,
+          1.1,
+          3.6
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "respond": [
+          {
+            "when": {
+              "$type": "state",
+              "state": "identity",
+              "key": "0-awakened",
+              "comparison": "GreaterOrEqual",
+              "value": 1
+            },
+            "prototypeId": "studioGateOpen"
+          },
+          {
+            "when": {
+              "$type": "state",
+              "state": "identity",
+              "key": "1-awakened",
+              "comparison": "GreaterOrEqual",
+              "value": 1
+            },
+            "prototypeId": "studioGateOpen"
           }
         ]
       }
@@ -275,6 +357,12 @@
           "$type": "setState",
           "state": "look",
           "expression": "(look + 1) % 8"
+        },
+        {
+          "$type": "setIdentityFact",
+          "key": "0",
+          "fact": "awakened",
+          "value": 1
         }
       ],
       "gate": {

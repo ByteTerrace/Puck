@@ -133,8 +133,8 @@
     "localSeats": 2,
     "scaleRow": "scale",
     "seatSpawns": [
-      "plaza-1",
-      "plaza-2"
+      "studio-arrival",
+      "studio-arrival"
     ]
   },
   "bodyMotionPrograms": [
@@ -10081,6 +10081,40 @@
       },
       "mode": "Edge",
       "name": "capture-garden"
+    },
+    {
+      "effects": [
+        {
+          "$type": "pose",
+          "key": "0",
+          "spawnPoint": "plaza-1"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$identity:body:0:awakened",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "seat1-returning-identity-wakes-at-plaza"
+    },
+    {
+      "effects": [
+        {
+          "$type": "pose",
+          "key": "1",
+          "spawnPoint": "plaza-2"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$identity:body:1:awakened",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "seat2-returning-identity-wakes-at-plaza"
     }
   ],
   "schema": "puck.world.def.v1",
@@ -10821,6 +10855,11 @@
         "min": 0,
         "name": "captureStation",
         "value": 0
+      },
+      {
+        "capacity": 32,
+        "kind": "Int",
+        "name": "identity"
       }
     ]
   },
