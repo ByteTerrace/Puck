@@ -90,7 +90,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
 
             return (interaction.CoOccurrence switch {
                 WorldInteractionCoOccurrence.Distance => $"distance carrier pairs: population {capacity} x min(neighbours {((interaction.Neighbours > 0) ? interaction.Neighbours.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) : "unbounded")}, others {others})",
-                WorldInteractionCoOccurrence.Region => DescribeRegionMultiplier(definition: definition, placementId: interaction.Right, capacity: capacity),
+                WorldInteractionCoOccurrence.Region => DescribeRegionMultiplier(definition: definition, placementId: interaction.Right),
                 _ => $"population capacity {capacity}",
             });
         }
@@ -101,20 +101,13 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         );
     }
 
-    private static string DescribeRegionMultiplier(WorldDefinition definition, string placementId, int capacity) {
-        var region = WorldDefinitionRows.FindPlacement(placements: definition.Placements, id: placementId)?.Region;
+    private static string DescribeRegionMultiplier(WorldDefinition definition, string placementId) {
+        var (bound, terms) = RegionCapacityBound(
+            definition: definition,
+            placementId: placementId
+        );
 
-        if (region is null) {
-            return $"region '{placementId}' undeclared — population capacity {capacity}";
-        }
-        if (SmallestKitFootprintRadius(definition: definition) is not { } footprint || (footprint <= 0f)) {
-            return $"region '{placementId}' radius={region.Radius} — no solid-only kit footprint resolvable, population capacity {capacity}";
-        }
-
-        var packed = (long)Math.Floor(((double)region.Radius * region.Radius) / ((double)footprint * footprint));
-        var clamped = Math.Clamp(value: packed, min: 1L, max: (long)capacity);
-
-        return $"region '{placementId}' radius={region.Radius}, smallest solid-kit footprint={footprint} -> floor((R/r)^2)={packed}, clamped to population {capacity} = {clamped}";
+        return $"region '{placementId}' {terms} = {bound}";
     }
 
     /// <summary>Lists every rule whose gate pins a cell to an empty range, with that cell.</summary>
@@ -151,7 +144,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
 
             return (interaction.CoOccurrence switch {
                 WorldInteractionCoOccurrence.Distance => ((long)definition.Population.Capacity * ((interaction.Neighbours > 0) ? Math.Min(val1: interaction.Neighbours, val2: others) : others)),
-                WorldInteractionCoOccurrence.Region => RegionCapacityBound(definition: definition, placementId: interaction.Right),
+                WorldInteractionCoOccurrence.Region => RegionCapacityBound(definition: definition, placementId: interaction.Right).Bound,
                 _ => definition.Population.Capacity,
             });
         }
@@ -159,25 +152,33 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         return RuleWorkBudget.ForEachCount(rule: rule, context: context);
     }
 
-    /// <summary>Returns the most carriers a region interaction's own volume could ever hold — the smallest declared
-    /// kit footprint packed by area into the region's own disc (πR² / πr² = (R/r)², an upper bound on non-overlapping
-    /// circle packing since packing density never exceeds 1), clamped to the population capacity it replaces. Falls
-    /// back to the population capacity when the region is absent, or when <see cref="SmallestKitFootprintRadius"/>
-    /// cannot answer for it — the packing argument holds only among kits that mutually exclude each other, and a
-    /// property (the tag a region interaction's <c>left</c> names) carries no static link to a kit, so any body of
-    /// any kit could be the one standing in the region.</summary>
-    private static long RegionCapacityBound(WorldDefinition definition, string placementId) {
+    /// <summary>Returns the most carriers a region interaction could ever have inside it, with the terms that
+    /// produced it. Membership is by a body's own centre, so the carriers' centres all lie in a disc of radius R and
+    /// two carriers of footprint radius r are at least 2r apart; their r-discs are then disjoint and all contained
+    /// in a disc of radius R + r, so N·πr² ≤ π(R + r)² and N ≤ ((R + r)/r)². The result is clamped to the population
+    /// capacity it replaces. Falls back to the population capacity when the region is absent, or when
+    /// <see cref="SmallestKitFootprintRadius"/> cannot answer for it — the packing argument holds only among kits
+    /// that mutually exclude each other, and a property (the tag a region interaction's <c>left</c> names) carries
+    /// no static link to a kit, so any body of any kit could be the one standing in the region.</summary>
+    private static (long Bound, string Terms) RegionCapacityBound(WorldDefinition definition, string placementId) {
         var capacity = (long)definition.Population.Capacity;
         var region = WorldDefinitionRows.FindPlacement(placements: definition.Placements, id: placementId)?.Region;
 
-        if ((region is null) || (SmallestKitFootprintRadius(definition: definition) is not { } footprint) || (footprint <= 0f)) {
-            return capacity;
+        if (region is null) {
+            return (capacity, $"undeclared — population capacity {capacity}");
         }
 
-        var ratio = ((double)region.Radius * region.Radius) / ((double)footprint * footprint);
-        var packed = (long)Math.Floor(ratio);
+        if ((SmallestKitFootprintRadius(definition: definition) is not { } footprint) || (footprint <= 0f)) {
+            return (capacity, $"radius={region.Radius} — no solid-only kit footprint resolvable, population capacity {capacity}");
+        }
 
-        return Math.Clamp(value: packed, min: 1L, max: capacity);
+        var reach = (((double)region.Radius + footprint) / footprint);
+        var packed = (long)Math.Floor(d: (reach * reach));
+
+        return (
+            Math.Clamp(value: packed, min: 1L, max: capacity),
+            $"radius={region.Radius}, smallest solid-kit footprint={footprint} -> floor(((R+r)/r)^2)={packed}, clamped to population {capacity}"
+        );
     }
 
     // Two bodies depenetrate only when BOTH kits declare Solid contact (WorldBodyContactMode); an Overlap kit could

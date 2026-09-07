@@ -77,12 +77,26 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
 
     [Fact]
     public void ARegionInteractionsMultiplierIsThePackedFootprintWhenEveryKitIsSolid() {
-        // radius 1.2 packed with a 0.35 footprint: floor((1.2/0.35)^2) = 11, well under the 144-body population.
+        // radius 1.2 packed with a 0.35 footprint: floor(((1.2 + 0.35)/0.35)^2) = 19, well under the 144-body
+        // population.
         var document = RegionDocument(regionRadius: 1.2f, SolidKit(name: "walker", radius: 0.35f));
         var line = WorldRuleWorkBudget.Contributors(document).Single();
 
-        Assert.Equal(11L, line.Multiplier);
+        Assert.Equal(19L, line.Multiplier);
         Assert.True(line.Multiplier < document.Population.Capacity);
+    }
+    [Fact]
+    public void ARegionInteractionsMultiplierAdmitsEveryCarrierWhoseCentreFitsTheRegion() {
+        // Membership is by a carrier's own centre, so its footprint may hang over the rim. At radius 0.7 with a
+        // 0.35 footprint the region's own centre plus a hexagonal ring of six at radius 0.7 is seven carriers,
+        // every pair exactly 0.7 apart and every centre inside the region. A ratio taken over R alone admits
+        // floor((R/r)^2) = 4 of them and under-prices the interaction; the bound over R + r admits
+        // floor(((R + r)/r)^2) = 9.
+        var document = RegionDocument(regionRadius: 0.7f, SolidKit(name: "walker", radius: 0.35f));
+        var line = WorldRuleWorkBudget.Contributors(document).Single();
+
+        Assert.Equal(9L, line.Multiplier);
+        Assert.True(condition: (line.Multiplier >= 7L), userMessage: "seven carriers fit; a bound below that under-prices the interaction");
     }
 
     [Fact]
