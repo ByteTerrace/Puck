@@ -20,6 +20,7 @@
             "const": "fixed"
           },
           "position": {
+            "$ref": "./common.schema.json#/$defs/DocumentVector3",
             "description": "The emitter position, world space."
           },
           "name": {
@@ -54,6 +55,7 @@
             "description": "What the speaker rides (see WorldAnchor)."
           },
           "offset": {
+            "$ref": "./common.schema.json#/$defs/DocumentVector3",
             "description": "The attachment point relative to the anchor\u0027s resolved pose, in anchor-local axes."
           },
           "name": {
@@ -85,6 +87,7 @@
             "const": "bed"
           },
           "center": {
+            "$ref": "./common.schema.json#/$defs/DocumentVector3",
             "description": "The region\u0027s extent center, world space."
           },
           "radius": {

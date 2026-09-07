@@ -27,6 +27,7 @@
         "type": "object",
         "properties": {
           "center": {
+            "$ref": "./common.schema.json#/$defs/DocumentVector3",
             "description": "The boundary rectangle\u0027s center in this world\u0027s coordinates."
           },
           "outwardYawDegrees": {

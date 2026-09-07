@@ -25,6 +25,7 @@
           ],
           "properties": {
             "position": {
+              "$ref": "./common.schema.json#/$defs/DocumentVector3",
               "description": "The knot\u0027s world position \u2014 X/Z are the planar curvature-solve inputs, Y is the elevation lift (outside the planar curvature and arc-length solve; carried through as a linear grade over each segment\u0027s arc length \u2014 see CurvatureSpline\u0027s remarks). A DocumentVector3, the SAME spelling every other authored position in this document uses \u2014 no bespoke 2-vector shape."
             },
             "tangentYaw": {

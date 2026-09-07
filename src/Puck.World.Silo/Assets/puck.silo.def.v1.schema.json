@@ -3,8 +3,7 @@
   "$id": "puck.silo.def.v1",
   "x-puck": {
     "schemaVersion": "puck.silo.def.v1",
-    "generator": "Puck.World.WorldSchema",
-    "commit": "a1ee810d8ff6711664de6329b0b87707971f149a"
+    "generator": "Puck.World.WorldSchema"
   },
   "title": "Puck world silo (puck.silo.def.v1)",
   "description": "The silo document (puck.silo.def.v1) \u2014 durable configuration for one Puck.World.Silo process: which worlds it may activate, its declared door budget, where its checkpoints/journals/definitions live, its own state directory, and its clustering membership. Loaded once at silo start (--silo \u003Cpath\u003E); nothing in it is simulation state. See WorldSiloDefinitionValidator for the checks a document must pass before the silo composes against it.",

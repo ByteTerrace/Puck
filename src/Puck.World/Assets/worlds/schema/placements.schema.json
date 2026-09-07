@@ -26,6 +26,7 @@
             "type": "string"
           },
           "position": {
+            "$ref": "./common.schema.json#/$defs/DocumentVector3",
             "description": "The stamp position \u2014 world space when Parent is null (today\u0027s behavior, unchanged), or this row\u0027s own local frame relative to Parent\u0027s COMPOSED world frame otherwise (see Parent). Inert (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one."
           },
           "yawDegrees": {

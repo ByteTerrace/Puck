@@ -1,6 +1,8 @@
 using System.Numerics;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
 
 namespace Puck.Assets.Documents;
 
@@ -163,6 +165,18 @@ public sealed class DocumentQuaternion : DocumentSpatialValue<Quaternion>, IEqua
 }
 
 internal static class DocumentSpatialValueJson {
+    /// <summary>Builds the schema every document spatial value shares: the literal form, or a
+    /// <c>state.&lt;row&gt;[.&lt;key&gt;]</c> reference string the containing document resolves.</summary>
+    public static JsonObject LiteralOrReference(JsonObject literal) => new() {
+        ["anyOf"] = new JsonArray(
+            literal,
+            new JsonObject {
+                ["type"] = "string",
+                ["minLength"] = 1,
+                ["description"] = "A state.<row>[.<key>] reference the containing document resolves from a cell.",
+            }
+        ),
+    };
     public static string ReadReference(ref Utf8JsonReader reader, string kind) {
         var reference = reader.GetString();
 
@@ -174,7 +188,9 @@ internal static class DocumentSpatialValueJson {
 }
 
 /// <summary>Reads and writes <see cref="DocumentVector2"/>.</summary>
-public sealed class DocumentVector2JsonConverter : JsonConverter<DocumentVector2> {
+public sealed class DocumentVector2JsonConverter : JsonConverter<DocumentVector2>, IJsonSchemaNodeConverter {
+    /// <inheritdoc/>
+    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) => DocumentSpatialValueJson.LiteralOrReference(literal: FixedArityNumberArraySchema.Build(arity: 2));
     /// <inheritdoc/>
     public override DocumentVector2 Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
         ((reader.TokenType == JsonTokenType.String)
@@ -190,7 +206,9 @@ public sealed class DocumentVector2JsonConverter : JsonConverter<DocumentVector2
     }
 }
 /// <summary>Reads and writes <see cref="DocumentVector3"/>.</summary>
-public sealed class DocumentVector3JsonConverter : JsonConverter<DocumentVector3> {
+public sealed class DocumentVector3JsonConverter : JsonConverter<DocumentVector3>, IJsonSchemaNodeConverter {
+    /// <inheritdoc/>
+    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) => DocumentSpatialValueJson.LiteralOrReference(literal: FixedArityNumberArraySchema.Build(arity: 3));
     /// <inheritdoc/>
     public override DocumentVector3 Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
         ((reader.TokenType == JsonTokenType.String)
@@ -206,7 +224,9 @@ public sealed class DocumentVector3JsonConverter : JsonConverter<DocumentVector3
     }
 }
 /// <summary>Reads and writes <see cref="DocumentQuaternion"/>.</summary>
-public sealed class DocumentQuaternionJsonConverter : JsonConverter<DocumentQuaternion> {
+public sealed class DocumentQuaternionJsonConverter : JsonConverter<DocumentQuaternion>, IJsonSchemaNodeConverter {
+    /// <inheritdoc/>
+    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) => DocumentSpatialValueJson.LiteralOrReference(literal: FixedArityNumberArraySchema.Build(arity: 4));
     /// <inheritdoc/>
     public override DocumentQuaternion Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
         ((reader.TokenType == JsonTokenType.String)
@@ -250,7 +270,9 @@ public sealed class DocumentScalar : DocumentSpatialValue<float>, IEquatable<Doc
     public override int GetHashCode() => GetHashCodeCore();
 }
 /// <summary>Reads and writes <see cref="DocumentScalar"/>.</summary>
-public sealed class DocumentScalarJsonConverter : JsonConverter<DocumentScalar> {
+public sealed class DocumentScalarJsonConverter : JsonConverter<DocumentScalar>, IJsonSchemaNodeConverter {
+    /// <inheritdoc/>
+    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) => DocumentSpatialValueJson.LiteralOrReference(literal: new JsonObject { ["type"] = "number" });
     /// <inheritdoc/>
     public override DocumentScalar Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
         ((reader.TokenType == JsonTokenType.String)

@@ -2021,6 +2021,8 @@ public static partial class WorldSchema {
     /// exporter's cache never catches) is fully duplicated at every site instead.</summary>
     public static JsonObject Bundle(SplitSchema split) {
         var root = ((JsonObject)split.Root.DeepClone()!);
+
+        StampBundleCommit(root: root);
         var sectionsByName = split.Sections.ToDictionary(
             keySelector: s => s.Name,
             elementSelector: s => s.Node,

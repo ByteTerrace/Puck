@@ -4,14 +4,13 @@ using System.Text.Json.Nodes;
 namespace Puck.World;
 
 public static partial class WorldSchema {
-    // The commit a checked-in schema was generated at cannot equal the commit that FIRST introduces the file (the
-    // commit embedding the regenerated file's own hash does not exist yet when the file is written), so `--check`
-    // masks this field before comparing rather than pinning a value no commit could ever satisfy.
+    // A checked-in file carries no commit: the commit it is generated at cannot equal the one that first checks it
+    // in (that commit does not exist while the file is being written), so a stamped file could never match its own
+    // regeneration. The bundle, which nothing checks in, carries the commit (see StampBundleCommit).
     private static void ApplySelfIdentification(JsonObject root, string schemaVersion) {
         var identity = new JsonObject {
             ["schemaVersion"] = schemaVersion,
             ["generator"] = $"{nameof(Puck)}.{nameof(World)}.{nameof(WorldSchema)}",
-            ["commit"] = ResolveCommit(),
         };
 
         // Reinserted right after "$id" (the identity block reads together) rather than appended, so a person
@@ -30,6 +29,12 @@ public static partial class WorldSchema {
 
         if (root["properties"]?["schema"] is JsonObject schemaNode) {
             schemaNode["const"] = schemaVersion;
+        }
+    }
+    /// <summary>Stamps the bundle's <c>x-puck.commit</c> with the commit this generator was built at.</summary>
+    private static void StampBundleCommit(JsonObject root) {
+        if (root["x-puck"] is JsonObject identity) {
+            identity["commit"] = ResolveCommit();
         }
     }
     // The SDK's own git integration appends "+<revision>" to AssemblyInformationalVersion when the build tree sits

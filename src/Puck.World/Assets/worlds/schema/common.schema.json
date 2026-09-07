@@ -1,5 +1,22 @@
 {
   "$defs": {
+    "DocumentVector3": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+        }
+      ]
+    },
     "WorldRenderScaleTier": {
       "description": "The SAFE, enumerated world render-scale tiers a run pins for the settled REVEALED room view \u2014 the demo/user-facing quality option layered over the engine\u0027s CONTINUOUS render-scale knob (SdfViewSnapshot.RenderScale, quantized to SdfWorldEngine.RenderScaleQ). The player picks one of these KNOWN-GOOD steps, never a free numeric value; each tier is pinned to an exact quantized numerator so the reduced render extent (worldRenderDims) is a stable integer at any window size and the bilinear upsample stays artifact-free. The continuous knob stays reachable PROGRAMMATICALLY (layout eases, dev tooling) \u2014 the enumerated policy lives only here at the user surface. Names \u002B scales are the ONE definition (WorldRenderScaleTiers); the world document\u0027s quality presets, the console world.render-scale verb, and the boot resolution all read them there.",
       "enum": [
@@ -44,6 +61,7 @@
       ],
       "properties": {
         "direction": {
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload).",
           "default": null
         },
@@ -201,6 +219,23 @@
       ],
       "additionalProperties": false
     },
+    "DocumentVector2": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+        }
+      ]
+    },
     "WorldRenderSkyClouds": {
       "description": "The procedural cloud layer: a deterministic hashed-lattice noise (warped, four octaves) on a plane above the camera, thresholded by coverage, drawn over the gradient, sun disc and stars and fading into the horizon. No texture, no session state \u2014 the identical settings and seed always draw the identical layer at the identical tick.",
       "type": [
@@ -233,6 +268,7 @@
           "default": null
         },
         "drift": {
+          "$ref": "#/$defs/DocumentVector2",
           "description": "The layer\u0027s wind, in layer units per second along world X and Z, integrated on the tick clock. Optional; absent holds still.",
           "default": null
         },
@@ -253,6 +289,7 @@
           "default": null
         },
         "shear": {
+          "$ref": "#/$defs/DocumentVector2",
           "description": "The wind of the SHAPING field relative to the cloud field, in layer units per second: the two slide past each other, so clouds boil and re-form as they drift rather than glide as a fixed picture. Optional; absent holds their shapes.",
           "default": null
         }
@@ -1071,6 +1108,7 @@
           "const": "worldPoint"
         },
         "point": {
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The world-space position."
         }
       },
@@ -1127,6 +1165,7 @@
           "const": "offset"
         },
         "value": {
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The offset."
         },
         "worldAxes": {
@@ -1184,6 +1223,7 @@
           "description": "The subject to look at, or null to look along the current subject\u0027s own forward axis from the eye, at FocusDistance."
         },
         "targetOffset": {
+          "$ref": "#/$defs/DocumentVector3",
           "description": "An offset from the resolved Subject\u0027s pose; ignored when Subject is null.",
           "default": null
         },
@@ -1235,6 +1275,7 @@
           ]
         },
         "pivotOffset": {
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The world-axis offset from the current subject\u0027s origin to the pivot.",
           "default": null
         },
@@ -1638,6 +1679,7 @@
           "description": "The subject to look at, or null to look along the current subject\u0027s own forward axis from the eye, at FocusDistance."
         },
         "targetOffset": {
+          "$ref": "#/$defs/DocumentVector3",
           "description": "An offset from the resolved Subject\u0027s pose; ignored when Subject is null.",
           "default": null
         },
@@ -1672,6 +1714,7 @@
       ],
       "properties": {
         "value": {
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The offset."
         },
         "worldAxes": {
@@ -1723,6 +1766,7 @@
           ]
         },
         "pivotOffset": {
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The world-axis offset from the current subject\u0027s origin to the pivot.",
           "default": null
         },
@@ -2402,6 +2446,7 @@
           "const": "lattice"
         },
         "stepA": {
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The first per-copy step."
         },
         "countA": {
@@ -2409,6 +2454,7 @@
           "type": "integer"
         },
         "stepB": {
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The second per-copy step."
         },
         "countB": {
@@ -5311,7 +5357,9 @@
         "$type": {
           "const": "planarImpulse"
         },
-        "bodyDirection": {},
+        "bodyDirection": {
+          "$ref": "#/$defs/DocumentVector3"
+        },
         "speed": {
           "type": "number"
         },
@@ -5465,7 +5513,9 @@
         "key": {
           "type": "string"
         },
-        "bodyDirection": {},
+        "bodyDirection": {
+          "$ref": "#/$defs/DocumentVector3"
+        },
         "speed": {
           "type": "number"
         },
@@ -5854,6 +5904,7 @@
       ],
       "properties": {
         "normal": {
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The plane normal."
         },
         "offset": {
@@ -6060,6 +6111,7 @@
           "type": "integer"
         },
         "localOffset": {
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The stamp\u0027s position offset in the body\u0027s own local frame, world units."
         },
         "localYawDegrees": {
@@ -6469,9 +6521,11 @@
           ]
         },
         "center": {
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The local shape center."
         },
         "halfExtents": {
+          "$ref": "#/$defs/DocumentVector3",
           "description": "Positive local half extents for a box; zero for a sphere."
         },
         "radius": {
@@ -6558,6 +6612,7 @@
           "type": "string"
         },
         "position": {
+          "$ref": "#/$defs/DocumentVector3",
           "description": "The stamp position \u2014 world space when Parent is null (today\u0027s behavior, unchanged), or this row\u0027s own local frame relative to Parent\u0027s COMPOSED world frame otherwise (see Parent). Inert (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one."
         },
         "yawDegrees": {
@@ -6720,6 +6775,7 @@
           "default": null
         },
         "position": {
+          "$ref": "#/$defs/DocumentVector3",
           "default": null
         },
         "yawDegrees": {

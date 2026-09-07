@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.RegularExpressions;
 
 using Puck.Shaders;
 using Puck.World;
@@ -259,7 +258,7 @@ internal static class SchemaCommand {
         // one real finding drowns in false positives.
         var onDisk = File.ReadAllText(path: file.FullPath).Replace(newValue: "\n", oldValue: "\r\n");
 
-        if (string.Equals(a: MaskCommit(text: onDisk), b: MaskCommit(text: file.Text), comparisonType: StringComparison.Ordinal)) {
+        if (string.Equals(a: onDisk, b: file.Text, comparisonType: StringComparison.Ordinal)) {
             return;
         }
 
@@ -267,12 +266,6 @@ internal static class SchemaCommand {
 
         problems.Add(item: $"{CliPaths.ToDisplay(fullPath: file.FullPath)} is STALE — first difference at line {lineNumber}: checked-in [{onDiskLine}] vs generated [{generatedLine}].");
     }
-    // The x-puck.commit field names the commit the schema was generated AT — a value that necessarily differs from
-    // the commit that first checks the regenerated file in (that commit does not exist yet when the file is
-    // written), so a real commit can never satisfy a pinned value here. Masked before comparing rather than
-    // compared literally, so --check flags every other drift without ever flapping on this one field alone.
-    private static readonly Regex CommitFieldPattern = new(pattern: "\"commit\": \"[^\"]*\"");
-    private static string MaskCommit(string text) => CommitFieldPattern.Replace(input: text, replacement: "\"commit\": \"MASKED\"");
     // Both texts are LF-only by the time they arrive here (generated text by construction, on-disk text by
     // CheckFile's CRLF normalization), so splitting on '\n' alone lines them up one-for-one.
     private static (int LineNumber, string OnDisk, string Generated) FirstDifference(string onDisk, string generated) {

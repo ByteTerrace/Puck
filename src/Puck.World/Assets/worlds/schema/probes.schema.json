@@ -178,6 +178,7 @@
                   ]
                 },
                 "range": {
+                  "$ref": "./common.schema.json#/$defs/DocumentVector2",
                   "description": "The [min, max] presentation range a channel\u0027s mapped [-1, 1] axis value lerps across. Must be finite with X \u003C Y."
                 },
                 "maxAgeSeconds": {

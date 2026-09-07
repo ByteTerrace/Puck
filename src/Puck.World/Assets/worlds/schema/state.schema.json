@@ -1048,6 +1048,7 @@
                 "type": "string"
               },
               "origin": {
+                "$ref": "./common.schema.json#/$defs/DocumentVector3",
                 "description": "The minimum corner, world units."
               },
               "cellSize": {
@@ -1101,6 +1102,7 @@
                 "type": "string"
               },
               "origin": {
+                "$ref": "./common.schema.json#/$defs/DocumentVector3",
                 "description": "The minimum corner, world units."
               },
               "cellSize": {
@@ -1153,6 +1155,7 @@
                 "type": "string"
               },
               "origin": {
+                "$ref": "./common.schema.json#/$defs/DocumentVector3",
                 "description": "The minimum corner, world units."
               },
               "cellSize": {
@@ -1217,6 +1220,7 @@
                 "type": "string"
               },
               "origin": {
+                "$ref": "./common.schema.json#/$defs/DocumentVector3",
                 "description": "The minimum corner, world units."
               },
               "cellSize": {
@@ -1256,6 +1260,7 @@
                       "type": "string"
                     },
                     "centre": {
+                      "$ref": "./common.schema.json#/$defs/DocumentVector3",
                       "description": "The centre, relative to the topology\u0027s origin, in world units."
                     }
                   },
@@ -1333,6 +1338,7 @@
                 "type": "string"
               },
               "origin": {
+                "$ref": "./common.schema.json#/$defs/DocumentVector3",
                 "description": "The minimum corner, world units."
               },
               "cellSize": {
@@ -1378,6 +1384,7 @@
                 "type": "string"
               },
               "origin": {
+                "$ref": "./common.schema.json#/$defs/DocumentVector3",
                 "description": "The minimum corner, world units."
               },
               "cellSize": {
@@ -1656,6 +1663,7 @@
                 "type": "string"
               },
               "origin": {
+                "$ref": "./common.schema.json#/$defs/DocumentVector3",
                 "description": "The minimum corner, world units."
               },
               "cellSize": {

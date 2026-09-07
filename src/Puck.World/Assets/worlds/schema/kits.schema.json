@@ -265,6 +265,7 @@
                       ]
                     },
                     "cone": {
+                      "$ref": "./common.schema.json#/$defs/DocumentVector2",
                       "description": "The inclusive angle band, in degrees, between an admitted surface normal and gravity-up: [0, 60] is floors, [60, 120] walls, [0, 180] everything. Required for Surface, refused for Free.",
                       "default": null
                     },
@@ -742,6 +743,7 @@
                     "const": "capsule"
                   },
                   "endpoint": {
+                    "$ref": "./common.schema.json#/$defs/DocumentVector3",
                     "description": "The body-local vector from the lower sphere center to the upper sphere center."
                   },
                   "radius": {
@@ -762,10 +764,26 @@
                     "const": "box"
                   },
                   "halfExtents": {
+                    "$ref": "./common.schema.json#/$defs/DocumentVector3",
                     "description": "The positive half-extents."
                   },
                   "rotation": {
-                    "description": "The body-local orientation."
+                    "description": "The body-local orientation.",
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 4,
+                        "maxItems": 4
+                      },
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -853,6 +871,7 @@
             ],
             "properties": {
               "offset": {
+                "$ref": "./common.schema.json#/$defs/DocumentVector3",
                 "description": "The full-scale carry point, in the carrier\u0027s own body-local axes: a carried body\u0027s world pose tracks root \u002B orientation\u00B7(Offset \u00D7 Scale) every tick it stays attached."
               },
               "massEquivalent": {

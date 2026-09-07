@@ -47,6 +47,7 @@
       }
     },
     "uniform": {
+      "$ref": "./common.schema.json#/$defs/DocumentVector3",
       "description": "A constant acceleration added to every solved answer, in world units per second squared. Point masses cannot express a uniform field, so this is how a world keeps a flat floor underfoot while its attractors own the space around them: authored as an acceleration, it is already what a body integrates.",
       "default": null
     },
@@ -143,6 +144,7 @@
                     "const": "box"
                   },
                   "halfExtents": {
+                    "$ref": "./common.schema.json#/$defs/DocumentVector3",
                     "description": "The positive placement-local half extents, multiplied by the placement\u0027s scale."
                   }
                 },
@@ -167,6 +169,7 @@
                     "const": "directional"
                   },
                   "value": {
+                    "$ref": "./common.schema.json#/$defs/DocumentVector3",
                     "description": "The acceleration vector in world units per second squared. Zero is admitted so Replace can author a zero-gravity pocket."
                   }
                 },

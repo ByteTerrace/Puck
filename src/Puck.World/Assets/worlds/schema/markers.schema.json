@@ -37,6 +37,7 @@
                 "const": "point"
               },
               "position": {
+                "$ref": "./common.schema.json#/$defs/DocumentVector3",
                 "description": "The marker\u0027s world position."
               }
             },

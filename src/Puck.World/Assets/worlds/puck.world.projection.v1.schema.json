@@ -75,7 +75,22 @@
             "type": "string"
           },
           "position": {
-            "description": "The seat\u0027s spawn position."
+            "description": "The seat\u0027s spawn position.",
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+              }
+            ]
           },
           "yawDegrees": {
             "description": "The spawn yaw about \u002BY, in degrees.",
@@ -439,7 +454,22 @@
               "properties": {
                 "direction": {
                   "description": "The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload).",
-                  "default": null
+                  "default": null,
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      },
+                      "minItems": 3,
+                      "maxItems": 3
+                    },
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                    }
+                  ]
                 },
                 "weight": {
                   "description": "The sun\u0027s diffuse weight.",
@@ -651,7 +681,22 @@
                 },
                 "drift": {
                   "description": "The layer\u0027s wind, in layer units per second along world X and Z, integrated on the tick clock. Optional; absent holds still.",
-                  "default": null
+                  "default": null,
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      },
+                      "minItems": 2,
+                      "maxItems": 2
+                    },
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                    }
+                  ]
                 },
                 "spin": {
                   "description": "The layer\u0027s rotation about the zenith in radians per second \u2014 the planetary-scale turning a rotating frame gives a broad flow; positive is counter-clockwise seen from below. Optional; absent is none.",
@@ -671,7 +716,22 @@
                 },
                 "shear": {
                   "description": "The wind of the SHAPING field relative to the cloud field, in layer units per second: the two slide past each other, so clouds boil and re-form as they drift rather than glide as a fixed picture. Optional; absent holds their shapes.",
-                  "default": null
+                  "default": null,
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      },
+                      "minItems": 2,
+                      "maxItems": 2
+                    },
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                    }
+                  ]
                 }
               },
               "required": [
@@ -827,13 +887,58 @@
             "type": "integer"
           },
           "origin": {
-            "description": "The front face\u0027s world-space center (the sampled surface origin); the geometry center sits one HalfDepth behind it along the face normal."
+            "description": "The front face\u0027s world-space center (the sampled surface origin); the geometry center sits one HalfDepth behind it along the face normal.",
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+              }
+            ]
           },
           "right": {
-            "description": "The unit world axis the sampled U increases along (the slab\u0027s local \u002BX in world space). Must be orthogonal to Up: the client derives the slab\u0027s orientation and UV frame from the pair while the server\u0027s collider projects the half-extents onto it, so a skewed pair would render and collide as different solids."
+            "description": "The unit world axis the sampled U increases along (the slab\u0027s local \u002BX in world space). Must be orthogonal to Up: the client derives the slab\u0027s orientation and UV frame from the pair while the server\u0027s collider projects the half-extents onto it, so a skewed pair would render and collide as different solids.",
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+              }
+            ]
           },
           "up": {
-            "description": "The unit world axis the sampled V increases against \u2014 V = 0 at the top (the slab\u0027s local \u002BY in world space)."
+            "description": "The unit world axis the sampled V increases against \u2014 V = 0 at the top (the slab\u0027s local \u002BY in world space).",
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+              }
+            ]
           },
           "halfWidth": {
             "description": "The face half-width (the slab\u0027s local X half-extent).",
@@ -2014,7 +2119,22 @@
                                   "const": "worldPoint"
                                 },
                                 "point": {
-                                  "description": "The world-space position."
+                                  "description": "The world-space position.",
+                                  "anyOf": [
+                                    {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "number"
+                                      },
+                                      "minItems": 3,
+                                      "maxItems": 3
+                                    },
+                                    {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                                    }
+                                  ]
                                 }
                               },
                               "required": [
@@ -2044,7 +2164,22 @@
                           "const": "offset"
                         },
                         "value": {
-                          "description": "The offset."
+                          "description": "The offset.",
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            }
+                          ]
                         },
                         "worldAxes": {
                           "description": "Whether Value uses world axes rather than the subject\u0027s own.",
@@ -2125,7 +2260,22 @@
                                   "const": "worldPoint"
                                 },
                                 "point": {
-                                  "description": "The world-space position."
+                                  "description": "The world-space position.",
+                                  "anyOf": [
+                                    {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "number"
+                                      },
+                                      "minItems": 3,
+                                      "maxItems": 3
+                                    },
+                                    {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                                    }
+                                  ]
                                 }
                               },
                               "required": [
@@ -2137,7 +2287,22 @@
                         },
                         "targetOffset": {
                           "description": "An offset from the resolved Subject\u0027s pose; ignored when Subject is null.",
-                          "default": null
+                          "default": null,
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            }
+                          ]
                         },
                         "worldAxes": {
                           "description": "Whether TargetOffset uses world axes rather than the subject\u0027s own.",
@@ -2188,7 +2353,22 @@
                         },
                         "pivotOffset": {
                           "description": "The world-axis offset from the current subject\u0027s origin to the pivot.",
-                          "default": null
+                          "default": null,
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            }
+                          ]
                         },
                         "opcode": {
                           "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
@@ -2538,7 +2718,22 @@
                   },
                   "targetOffset": {
                     "description": "An offset from the resolved Subject\u0027s pose; ignored when Subject is null.",
-                    "default": null
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                      }
+                    ]
                   },
                   "worldAxes": {
                     "description": "Whether TargetOffset uses world axes rather than the subject\u0027s own.",
@@ -2571,7 +2766,22 @@
                 ],
                 "properties": {
                   "value": {
-                    "description": "The offset."
+                    "description": "The offset.",
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                      }
+                    ]
                   },
                   "worldAxes": {
                     "description": "Whether Value uses world axes rather than the subject\u0027s own.",
@@ -2623,7 +2833,22 @@
                   },
                   "pivotOffset": {
                     "description": "The world-axis offset from the current subject\u0027s origin to the pivot.",
-                    "default": null
+                    "default": null,
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                      }
+                    ]
                   },
                   "opcode": {
                     "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
@@ -3861,14 +4086,44 @@
                       "const": "lattice"
                     },
                     "stepA": {
-                      "description": "The first per-copy step."
+                      "description": "The first per-copy step.",
+                      "anyOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 3,
+                          "maxItems": 3
+                        },
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                        }
+                      ]
                     },
                     "countA": {
                       "description": "The copy count along StepA.",
                       "type": "integer"
                     },
                     "stepB": {
-                      "description": "The second per-copy step."
+                      "description": "The second per-copy step.",
+                      "anyOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 3,
+                          "maxItems": 3
+                        },
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                        }
+                      ]
                     },
                     "countB": {
                       "description": "The copy count along StepB.",
@@ -6662,7 +6917,22 @@
                     },
                     "cone": {
                       "description": "The inclusive angle band, in degrees, between an admitted surface normal and gravity-up: [0, 60] is floors, [60, 120] walls, [0, 180] everything. Required for Surface, refused for Free.",
-                      "default": null
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                        }
+                      ]
                     },
                     "pull": {
                       "description": "The inward pull, world units per second, under Pull. Applied as a positional standoff, so it closes a gap the surface opens without ever pushing the body through it.",
@@ -6924,7 +7194,22 @@
                     "const": "capsule"
                   },
                   "endpoint": {
-                    "description": "The body-local vector from the lower sphere center to the upper sphere center."
+                    "description": "The body-local vector from the lower sphere center to the upper sphere center.",
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                      }
+                    ]
                   },
                   "radius": {
                     "description": "The capsule radius.",
@@ -6944,10 +7229,40 @@
                     "const": "box"
                   },
                   "halfExtents": {
-                    "description": "The positive half-extents."
+                    "description": "The positive half-extents.",
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                      }
+                    ]
                   },
                   "rotation": {
-                    "description": "The body-local orientation."
+                    "description": "The body-local orientation.",
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 4,
+                        "maxItems": 4
+                      },
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -9354,7 +9669,22 @@
             "type": "string"
           },
           "position": {
-            "description": "The stamp position \u2014 world space when Parent is null (today\u0027s behavior, unchanged), or this row\u0027s own local frame relative to Parent\u0027s COMPOSED world frame otherwise (see Parent). Inert (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one."
+            "description": "The stamp position \u2014 world space when Parent is null (today\u0027s behavior, unchanged), or this row\u0027s own local frame relative to Parent\u0027s COMPOSED world frame otherwise (see Parent). Inert (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one.",
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+              }
+            ]
           },
           "yawDegrees": {
             "description": "The stamp yaw about \u002BY, degrees \u2014 world-space when Parent is null, added to the parent\u0027s own composed yaw otherwise. Same attach caveat as Position.",
@@ -9393,7 +9723,22 @@
             ],
             "properties": {
               "normal": {
-                "description": "The plane normal."
+                "description": "The plane normal.",
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                  }
+                ]
               },
               "offset": {
                 "description": "The signed plane offset along the normalized Normal.",
@@ -9958,7 +10303,22 @@
                 "type": "integer"
               },
               "localOffset": {
-                "description": "The stamp\u0027s position offset in the body\u0027s own local frame, world units."
+                "description": "The stamp\u0027s position offset in the body\u0027s own local frame, world units.",
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                  }
+                ]
               },
               "localYawDegrees": {
                 "description": "The stamp\u0027s yaw offset from the body\u0027s own heading, degrees. Zero rides the body\u0027s exact facing.",
@@ -10404,10 +10764,40 @@
                       ]
                     },
                     "center": {
-                      "description": "The local shape center."
+                      "description": "The local shape center.",
+                      "anyOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 3,
+                          "maxItems": 3
+                        },
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                        }
+                      ]
                     },
                     "halfExtents": {
-                      "description": "Positive local half extents for a box; zero for a sphere."
+                      "description": "Positive local half extents for a box; zero for a sphere.",
+                      "anyOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 3,
+                          "maxItems": 3
+                        },
+                        {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                        }
+                      ]
                     },
                     "radius": {
                       "description": "Positive radius for a sphere; zero for a box.",
@@ -10481,7 +10871,22 @@
                 "const": "fixed"
               },
               "position": {
-                "description": "The emitter position, world space."
+                "description": "The emitter position, world space.",
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                  }
+                ]
               },
               "name": {
                 "description": "The speaker\u0027s stable name \u2014 its mutation address.",
@@ -10743,7 +11148,22 @@
                 ]
               },
               "offset": {
-                "description": "The attachment point relative to the anchor\u0027s resolved pose, in anchor-local axes."
+                "description": "The attachment point relative to the anchor\u0027s resolved pose, in anchor-local axes.",
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                  }
+                ]
               },
               "name": {
                 "description": "The speaker\u0027s stable name \u2014 its mutation address.",
@@ -10814,7 +11234,22 @@
                 "const": "bed"
               },
               "center": {
-                "description": "The region\u0027s extent center, world space."
+                "description": "The region\u0027s extent center, world space.",
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                  }
+                ]
               },
               "radius": {
                 "description": "The region\u0027s outer radius \u2014 the envelope\u0027s zero and the cull edge.",
@@ -12907,7 +13342,22 @@
           "type": "object",
           "properties": {
             "origin": {
-              "description": "The minimum corner, world units."
+              "description": "The minimum corner, world units.",
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                }
+              ]
             },
             "cellSize": {
               "description": "The cubic cell edge, world units.",
@@ -14466,7 +14916,23 @@
                         "$type": {
                           "const": "planarImpulse"
                         },
-                        "bodyDirection": {},
+                        "bodyDirection": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            }
+                          ]
+                        },
                         "speed": {
                           "type": "number"
                         },
@@ -14620,7 +15086,23 @@
                         "key": {
                           "type": "string"
                         },
-                        "bodyDirection": {},
+                        "bodyDirection": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            }
+                          ]
+                        },
                         "speed": {
                           "type": "number"
                         },
@@ -14799,7 +15281,22 @@
                               "type": "string"
                             },
                             "position": {
-                              "description": "The stamp position \u2014 world space when Parent is null (today\u0027s behavior, unchanged), or this row\u0027s own local frame relative to Parent\u0027s COMPOSED world frame otherwise (see Parent). Inert (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one."
+                              "description": "The stamp position \u2014 world space when Parent is null (today\u0027s behavior, unchanged), or this row\u0027s own local frame relative to Parent\u0027s COMPOSED world frame otherwise (see Parent). Inert (still validated and stored, but read by nothing \u2014 neither the resolve nor the renderer) when Attach is set: the row\u0027s live position is the resolved attachment, never this authored one.",
+                              "anyOf": [
+                                {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 3,
+                                  "maxItems": 3
+                                },
+                                {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                                }
+                              ]
                             },
                             "yawDegrees": {
                               "description": "The stamp yaw about \u002BY, degrees \u2014 world-space when Parent is null, added to the parent\u0027s own composed yaw otherwise. Same attach caveat as Position.",
@@ -14938,7 +15435,22 @@
                           "default": null
                         },
                         "position": {
-                          "default": null
+                          "default": null,
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            }
+                          ]
                         },
                         "yawDegrees": {
                           "type": "number",
@@ -15213,7 +15725,22 @@
             "type": "object",
             "properties": {
               "center": {
-                "description": "The boundary rectangle\u0027s center in this world\u0027s coordinates."
+                "description": "The boundary rectangle\u0027s center in this world\u0027s coordinates.",
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                  }
+                ]
               },
               "outwardYawDegrees": {
                 "description": "The outward heading, in degrees (0 = \u002BZ, 90 = \u002BX).",
