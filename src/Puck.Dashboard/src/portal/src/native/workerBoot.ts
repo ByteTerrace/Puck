@@ -164,47 +164,17 @@ function defaultByteStore(): ByteStore {
  * `engine.worker.ts` to close the worker once the caller is done with it, exactly as
  * `inlineHost.wrapRawExports` already supports for the plain (non-official) worker boot.
  */
-/** The one runtime this JS realm hosts: dotnet.js refuses a second `create()` in the same realm
- * ("Runtime module already loaded"), and React's StrictMode double-mount, an HMR remount, or a
- * crashed-and-remounted actor each boot again. A boot for the same engine set (every file's hash)
- * therefore joins the realm's existing boot; a boot for a DIFFERENT engine set is refused by name,
- * because only a reload can host another runtime. */
-let realmBoot: { readonly key: string; readonly engine: Promise<WorldEngine> } | undefined;
+/** The runtimes this JS realm hosts, by the dotnet.js module specifier each was created from. A module
+ * specifier names one module instance, and dotnet.js refuses a second `create()` on the same instance
+ * ("Runtime module already loaded") — so a repeated boot of the same engine (React's StrictMode
+ * double-mount, an HMR remount, a crashed-and-remounted actor) joins the existing boot instead. Under
+ * Node every boot materializes a fresh temp file, so every boot there is its own instance. */
+const realmRuntimes = new Map<string, Promise<WorldEngine>>();
 
-function engineSetKey(request: BootRequest): string {
-  return Object.entries(request.engineFiles)
-    .map(([name, ref]) => `${name}=${ref.hash}`)
-    .sort()
-    .join("|");
-}
-
-export function bootEngineFromOfficialFiles(
+export async function bootEngineFromOfficialFiles(
   request: BootRequest,
   fetchImpl: FetchLike,
   byteStore: ByteStore = defaultByteStore(),
-  disposeCore?: () => void,
-): Promise<WorldEngine> {
-  const key = engineSetKey(request);
-  if (realmBoot) {
-    if (realmBoot.key === key) return realmBoot.engine;
-    return Promise.reject(
-      new OfficialRefusal("engine boot: this realm already hosts a different engine set; reload the page to switch engines."),
-    );
-  }
-  const engine = bootEngineFromOfficialFilesCore(request, fetchImpl, byteStore, disposeCore);
-  realmBoot = { key, engine };
-  engine.catch(() => {
-    // A failed boot leaves the realm free for a retry: dotnet.js only refuses a second create()
-    // after a SUCCESSFUL one.
-    if (realmBoot?.engine === engine) realmBoot = undefined;
-  });
-  return engine;
-}
-
-async function bootEngineFromOfficialFilesCore(
-  request: BootRequest,
-  fetchImpl: FetchLike,
-  byteStore: ByteStore,
   disposeCore?: () => void,
 ): Promise<WorldEngine> {
   const dotnetJsRef = request.engineFiles[DOTNET_JS_NAME];
@@ -295,13 +265,27 @@ async function bootEngineFromOfficialFilesCore(
     return Promise.resolve(new Response(asset.bytes.slice().buffer, { headers: { "content-type": asset.contentType } }));
   }
 
-  const dotnetModule = (await dynamicImport(dotnetJsSpecifier)) as { dotnet: DotnetHostBuilderLike };
-  const builder = dotnetModule.dotnet.withResourceLoader(resourceLoader);
-  const { getAssemblyExports } = await builder.create();
-  const exports = (await getAssemblyExports(MAIN_ASSEMBLY)) as { Puck: { World: { Browser: { Exports: { BrowserExports: RawBrowserExports } } } } };
-  const raw = exports.Puck.World.Browser.Exports.BrowserExports;
+  const existing = realmRuntimes.get(dotnetJsSpecifier);
+  if (existing) return existing;
+  if (realmRuntimes.size > 0 && !isNodeRuntime()) {
+    throw new OfficialRefusal("engine boot: this page already hosts a different engine build; reload the page to switch engines.");
+  }
 
-  return wrapRawExports(raw, disposeCore);
+  const booted = (async () => {
+    const dotnetModule = (await dynamicImport(dotnetJsSpecifier)) as { dotnet: DotnetHostBuilderLike };
+    const builder = dotnetModule.dotnet.withResourceLoader(resourceLoader);
+    const { getAssemblyExports } = await builder.create();
+    const exports = (await getAssemblyExports(MAIN_ASSEMBLY)) as { Puck: { World: { Browser: { Exports: { BrowserExports: RawBrowserExports } } } } };
+    const raw = exports.Puck.World.Browser.Exports.BrowserExports;
+
+    return wrapRawExports(raw, disposeCore);
+  })();
+  realmRuntimes.set(dotnetJsSpecifier, booted);
+  booted.catch(() => {
+    if (realmRuntimes.get(dotnetJsSpecifier) === booted) realmRuntimes.delete(dotnetJsSpecifier);
+  });
+
+  return booted;
 }
 
 // The narrow slice of dotnet.d.ts's own DotnetHostBuilder/RuntimeAPI this boot path calls —
