@@ -164,10 +164,47 @@ function defaultByteStore(): ByteStore {
  * `engine.worker.ts` to close the worker once the caller is done with it, exactly as
  * `inlineHost.wrapRawExports` already supports for the plain (non-official) worker boot.
  */
-export async function bootEngineFromOfficialFiles(
+/** The one runtime this JS realm hosts: dotnet.js refuses a second `create()` in the same realm
+ * ("Runtime module already loaded"), and React's StrictMode double-mount, an HMR remount, or a
+ * crashed-and-remounted actor each boot again. A boot for the same engine set (every file's hash)
+ * therefore joins the realm's existing boot; a boot for a DIFFERENT engine set is refused by name,
+ * because only a reload can host another runtime. */
+let realmBoot: { readonly key: string; readonly engine: Promise<WorldEngine> } | undefined;
+
+function engineSetKey(request: BootRequest): string {
+  return Object.entries(request.engineFiles)
+    .map(([name, ref]) => `${name}=${ref.hash}`)
+    .sort()
+    .join("|");
+}
+
+export function bootEngineFromOfficialFiles(
   request: BootRequest,
   fetchImpl: FetchLike,
   byteStore: ByteStore = defaultByteStore(),
+  disposeCore?: () => void,
+): Promise<WorldEngine> {
+  const key = engineSetKey(request);
+  if (realmBoot) {
+    if (realmBoot.key === key) return realmBoot.engine;
+    return Promise.reject(
+      new OfficialRefusal("engine boot: this realm already hosts a different engine set; reload the page to switch engines."),
+    );
+  }
+  const engine = bootEngineFromOfficialFilesCore(request, fetchImpl, byteStore, disposeCore);
+  realmBoot = { key, engine };
+  engine.catch(() => {
+    // A failed boot leaves the realm free for a retry: dotnet.js only refuses a second create()
+    // after a SUCCESSFUL one.
+    if (realmBoot?.engine === engine) realmBoot = undefined;
+  });
+  return engine;
+}
+
+async function bootEngineFromOfficialFilesCore(
+  request: BootRequest,
+  fetchImpl: FetchLike,
+  byteStore: ByteStore,
   disposeCore?: () => void,
 ): Promise<WorldEngine> {
   const dotnetJsRef = request.engineFiles[DOTNET_JS_NAME];
