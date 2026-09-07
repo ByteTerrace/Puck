@@ -1556,16 +1556,20 @@ answers what has landed:
   `Assets/scenarios/*`, the canaries that booted them (re-recorded against the one world in the same
   change or deleted with a named successor), and `experimental/Puck.Demo` with a ledger naming each
   folder's live successor.
-- **The same wave** moves the unauthored rate to 30 Hz and re-records what that moves, and brings the
-  quilt back as four corner shards over the island with their canaries.
-- **The reveal wave**: the retail basis deltas (the games suite, the platform craft, the retro handheld,
-  the arena), the camera pullback from a screen face to the seat rig on a fact, the binding overlay swapped
-  on a fact, the sky reading a cell, and the handheld held in the avatar's hands.
-- **The federation wave**: provenance signing for carried state, the bilateral attestation rows a duel or
-  wager is, a profile world docking at a shard's seam, then the silo-hosted hub.
-- **Then the market's engine gaps**, sequenced by what an authored probe world refuses first: Backgammon
-  for chance nodes, Chinese Checkers for chains and n-player search, billiards for the cue gesture,
-  Riichi Mahjong for priority windows.
+- **The playthrough's substrate** (one wave, file-disjoint): the island's seams re-sited with the four shards
+  validating and their canaries re-recorded; an inhabit count read from a cell (the spawner); a `screens` row's
+  `memory` bindings so machine bytes and state cells move each other (the campfire seam); the sky's colors and a
+  binding overlay's activation reading a state cell (the reveal's carrier); the handheld attached to the engaging
+  seat's body; the front door (a fresh seat wakes in the studio behind a gate the `awakened` identity fact opens);
+  construction back under five seconds and the idle tick under four milliseconds; cross-row effects composing on
+  the batch workspace; and three market probes that bring their primitives: Backgammon (a `chance` search level
+  and hidden operands), Chinese Checkers (hop chains and max-n over many seats), billiards (a chord-charged
+  impulse). Extended draw sites (authored tables and scripts on the one seed ladder) land beside it.
+- **The content wave**: the studio prologue's acts, the arena crawl's spawners and bosses, the arcade hearth's
+  seam content, the retail basis deltas that pin a boot seat and district behind a fact.
+- **The federation wave**: provenance signing for carried state, the bilateral attestation rows a duel or wager
+  is, a profile world attached at a shard's seam, then the silo-hosted hub; the facade and the remaining
+  ratchets ride behind it.
 
 The checks: `dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2` boots the one
 world with no bracketed stderr line; `world.imports` names every district under its alias;
