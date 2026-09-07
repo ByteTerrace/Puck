@@ -21,6 +21,7 @@ public enum NavigationStatus : byte {
 /// pre-compiled as a <see cref="NavigationDomainInput"/>.</summary>
 public sealed partial class NavigationRuntime {
     private readonly Domain[] m_domains;
+    private readonly bool[] m_retained;
 
     /// <summary>Compiles a runtime over the given domains.</summary>
     /// <param name="domains">The compiled domain tunings, in stable authored order.</param>
@@ -29,22 +30,47 @@ public sealed partial class NavigationRuntime {
     /// <param name="fields">The live-medium field a medium-kind domain reads through; optional when no domain is
     /// medium-kind.</param>
     /// <param name="capacity">Representation ceilings the host's own authoring vocabulary declares.</param>
-    public NavigationRuntime(IReadOnlyList<NavigationDomainInput> domains, IWorldQuery? query, INavigationMediumField? fields, NavigationCapacity capacity) {
+    /// <param name="previous">The prior runtime, when a host is replacing its document-derived query provider.
+    /// A domain is reused only after it proves that every compile-time occupancy, ground, clearance, and static-edge
+    /// query has the same result against the candidate provider; the reused domain then forwards all future queries
+    /// to <paramref name="query"/>.</param>
+    public NavigationRuntime(IReadOnlyList<NavigationDomainInput> domains, IWorldQuery? query, INavigationMediumField? fields, NavigationCapacity capacity, NavigationRuntime? previous = null) {
         if (domains.Count != 0 && query is null) {
             throw new InvalidOperationException(message: "navigation domains require the deterministic solid-field query provider.");
         }
 
         m_domains = new Domain[domains.Count];
+        m_retained = new bool[domains.Count];
+        var retained = 0;
         for (var index = 0; index < domains.Count; index++) {
-            m_domains[index] = new Domain(row: domains[index], query: query!, fields: fields, capacity: capacity);
+            Domain? reused = null;
+            if (previous is not null) {
+                for (var oldIndex = 0; oldIndex < previous.m_domains.Length; oldIndex++) {
+                    var candidate = previous.m_domains[oldIndex];
+                    if (candidate.Name == domains[index].Name && candidate.TryRebind(row: domains[index], query: query!, fields: fields, capacity: capacity)) {
+                        reused = candidate;
+                        break;
+                    }
+                }
+            }
+            m_domains[index] = reused ?? new Domain(row: domains[index], query: query!, fields: fields, capacity: capacity);
+            if (reused is not null) { m_retained[index] = true; retained++; }
         }
+        RetainedDomainCount = retained;
+        RebuiltDomainCount = domains.Count - retained;
     }
 
     public int Count => m_domains.Length;
+    /// <summary>Gets the number of domain workspaces retained from the prior runtime installation.</summary>
+    public int RetainedDomainCount { get; }
+    /// <summary>Gets the number of domain workspaces compiled for this runtime installation.</summary>
+    public int RebuiltDomainCount { get; }
     public long CellCount => m_domains.Sum(selector: static domain => (long)domain.CellCount);
     public long WalkableCellCount => m_domains.Sum(selector: static domain => (long)domain.WalkableCellCount);
     public long WorkspaceBytes => m_domains.Sum(selector: static domain => domain.WorkspaceBytes);
     public Domain this[int index] => m_domains[index];
+    /// <summary>Gets whether the domain at <paramref name="index"/> retained its compiled workspace from the prior install.</summary>
+    public bool WasRetained(int index) => m_retained[index];
 
     public sealed partial class Domain {
         private const int StraightCost = 1_000;
@@ -66,10 +92,10 @@ public sealed partial class NavigationRuntime {
         private int m_searchStamp;
         private readonly bool[] m_walkable;
 
-        private readonly INavigationMediumField? m_fields;
+        private INavigationMediumField? m_fields;
         private readonly int m_mediumField;
-        private readonly IWorldQuery m_query;
-        private readonly NavigationCapacity m_capacity;
+        private IWorldQuery m_query;
+        private NavigationCapacity m_capacity;
         private readonly FixedQuaternion m_rotation;
         private readonly FixedQuaternion m_inverseRotation;
 
@@ -97,55 +123,93 @@ public sealed partial class NavigationRuntime {
             m_open = new NodeHeap(cells: count);
 
             for (var node = 0; node < count; node++) {
-                Coordinates(node: node, x: out var x, y: out var y, z: out var z);
-                var probe = GridPosition(x, y, z);
-
-                if (Tuning.Kind != NavigationKind.Surface) {
-                    if (!query.Overlap(center: FixedPosition.FromLocal(local: probe), radius: Tuning.AgentRadius)) {
-                        m_ground[node] = probe.Y;
-                        m_walkable[node] = true;
-                        WalkableCellCount++;
-                    }
-                    continue;
-                }
-
-                if (!query.TryGroundHeight(
-                    position: FixedPosition.FromLocal(local: probe),
-                    probeUp: Tuning.ProbeUp,
-                    probeDown: Tuning.ProbeDown,
-                    groundY: out var ground
-                )) {
-                    continue;
-                }
-
-                var foot = new FixedVector3(X: probe.X, Y: (ground + Tuning.AgentRadius + ClearanceEpsilon), Z: probe.Z);
-                var headY = (ground + Tuning.AgentHeight - Tuning.AgentRadius - ClearanceEpsilon);
-                var clear = !query.Overlap(center: FixedPosition.FromLocal(local: foot), radius: Tuning.AgentRadius);
-
-                if (clear && headY > foot.Y) {
-                    var head = new FixedVector3(X: probe.X, Y: headY, Z: probe.Z);
-                    var core = (head - foot);
-                    clear = !query.Overlap(center: FixedPosition.FromLocal(local: head), radius: Tuning.AgentRadius)
-                        && !query.SphereCast(
-                            origin: FixedPosition.FromLocal(local: foot),
-                            dir: core,
-                            radius: Tuning.AgentRadius,
-                            maxDist: core.Length,
-                            hit: out _
-                        );
-                }
-                if (clear) {
-                    // The route point is the lower clearance-sphere center, not the ground surface. Steering a body
-                    // toward the surface would make the route itself collide even though its bake was clear.
-                    m_ground[node] = foot.Y;
+                if (TrySampleCell(query, node, out var ground)) {
+                    m_ground[node] = ground;
                     m_walkable[node] = true;
                     WalkableCellCount++;
                 }
             }
-
             BuildEdges();
             Sharing = row.Shared;
             InitializeSharing();
+        }
+
+        // A retained workspace is safe only when its fixed occupancy and edge bake means the same thing under the
+        // replacement provider. Dynamic off-grid locomotion is deliberately forwarded to the replacement provider;
+        // retaining a workspace never retains a stale geometry query. Medium revisions are part of the proof because
+        // IsWalkable/edge admission consults the live field in addition to the solid provider.
+        internal bool TryRebind(NavigationDomainInput row, IWorldQuery query, INavigationMediumField? fields, NavigationCapacity capacity) {
+            if (row != Tuning || capacity != m_capacity || (Tuning.Kind == NavigationKind.Medium && !SameMediumRevision(fields))) {
+                return false;
+            }
+            if (!ReferenceEquals(m_query, query) && !HasSameStaticGeometry(query)) {
+                return false;
+            }
+            m_query = query;
+            m_fields = fields;
+            m_capacity = capacity;
+            return true;
+        }
+
+        private bool SameMediumRevision(INavigationMediumField? fields) {
+            if (Tuning.Kind != NavigationKind.Medium || m_fields is null || fields is null || m_mediumField < 0 ||
+                !fields.TryFieldIndex(Tuning.Medium!, out var field) || field != m_mediumField) {
+                return false;
+            }
+            // Revision numbers belong to one provider; matching numbers from independent lattices prove nothing.
+            return ReferenceEquals(m_fields, fields) && m_sharedFieldRevision == fields.ValueRevision(field);
+        }
+
+        // Both initial baking and retention proof sample exactly the same clearance geometry.
+        private bool TrySampleCell(IWorldQuery query, int node, out FixedQ4816 routeY) {
+            Coordinates(node, out var x, out var y, out var z);
+            var probe = GridPosition(x, y, z);
+            routeY = probe.Y;
+            if (Tuning.Kind != NavigationKind.Surface) {
+                return !query.Overlap(FixedPosition.FromLocal(probe), Tuning.AgentRadius);
+            }
+            if (!query.TryGroundHeight(FixedPosition.FromLocal(probe), Tuning.ProbeUp, Tuning.ProbeDown, out var ground)) {
+                return false;
+            }
+            // Routes use the lower clearance-sphere center, never the floor surface itself.
+            routeY = ground + Tuning.AgentRadius + ClearanceEpsilon;
+            var foot = new FixedVector3(probe.X, routeY, probe.Z);
+            var headY = ground + Tuning.AgentHeight - Tuning.AgentRadius - ClearanceEpsilon;
+            if (query.Overlap(FixedPosition.FromLocal(foot), Tuning.AgentRadius)) { return false; }
+            if (headY <= routeY) { return true; }
+            var head = new FixedVector3(probe.X, headY, probe.Z);
+            var core = head - foot;
+            return !query.Overlap(FixedPosition.FromLocal(head), Tuning.AgentRadius) &&
+                !query.SphereCast(FixedPosition.FromLocal(foot), core, Tuning.AgentRadius, core.Length, out _);
+        }
+
+        private bool HasSameStaticGeometry(IWorldQuery query) {
+            for (var node = 0; node < CellCount; node++) {
+                var walkable = TrySampleCell(query, node, out var ground);
+                if (walkable != m_walkable[node] || (walkable && ground != m_ground[node])) { return false; }
+            }
+            for (var current = 0; current < CellCount; current++) {
+                Coordinates(current, out var x, out var y, out var z);
+                var minY = (Tuning.Kind == NavigationKind.Surface ? 0 : -1);
+                var maxY = (Tuning.Kind == NavigationKind.Surface ? 0 : 1);
+                for (var dy = minY; dy <= maxY; dy++) {
+                    for (var dz = -1; dz <= 1; dz++) {
+                        for (var dx = -1; dx <= 1; dx++) {
+                            var axes = (dx == 0 ? 0 : 1) + (dy == 0 ? 0 : 1) + (dz == 0 ? 0 : 1);
+                            var nx = x + dx; var ny = y + dy; var nz = z + dz;
+                            if (axes == 0 || !AdmitsAxes(axes) || (uint)nx >= (uint)Tuning.Width ||
+                                (uint)ny >= (uint)Tuning.Layers || (uint)nz >= (uint)Tuning.Depth) { continue; }
+                            var next = Index(nx, ny, nz);
+                            if (next <= current) { continue; }
+                            var candidate = m_walkable[current] && CanTraverseStatic(query, current, next, x, y, z, dx, dy, dz);
+                            var currentBit = (m_edges[current] & NeighborBit(dx, dy, dz)) != 0U;
+                            var reverseBit = (m_edges[next] & NeighborBit(-dx, -dy, -dz)) != 0U;
+                            if (candidate != currentBit || candidate != reverseBit) { return false; }
+                        }
+                    }
+                }
+            }
+            return true;
         }
 
         public int CellCount => m_walkable.Length;
@@ -337,7 +401,10 @@ public sealed partial class NavigationRuntime {
                 }
             }
         }
-        private bool CanTraverseStatic(int current, int next, int x, int y, int z, int dx, int dy, int dz) {
+        private bool CanTraverseStatic(int current, int next, int x, int y, int z, int dx, int dy, int dz) =>
+            CanTraverseStatic(m_query, current, next, x, y, z, dx, dy, dz);
+
+        private bool CanTraverseStatic(IWorldQuery query, int current, int next, int x, int y, int z, int dx, int dy, int dz) {
             if (!m_walkable[next]) {
                 return false;
             }
@@ -363,13 +430,15 @@ public sealed partial class NavigationRuntime {
                     return false;
                 }
             }
-            return HasClearTransition(current: current, next: next);
+            return HasClearTransition(query: query, current: current, next: next);
         }
         // A surface edge sweeps the agent's clearance spheres between the two route points from the step height up
         // to the head: the lowest sweep's underside sits maxStepHeight above the foot, because the step rule already
         // admits everything lower, and a sphere sweeping along the floor it stands on can only advance by its own
         // clearance to that floor per march step. A volume or medium edge sweeps once, at the route points.
-        private bool HasClearTransition(int current, int next) {
+        private bool HasClearTransition(int current, int next) => HasClearTransition(m_query, current, next);
+
+        private bool HasClearTransition(IWorldQuery query, int current, int next) {
             var source = Position(node: current);
             var destination = Position(node: next);
             var delta = (destination - source);

@@ -777,9 +777,14 @@ and checkpoints byte-for-byte.
 
 An optional `parent` names a static unit-scale placement frame (including its ancestors). Origin and grid X/Z
 axes follow that frame's position/yaw; surface probes remain vertical. `world.navigation` echoes the resolved
-origin/yaw. Geometry changes still rebuild conservatively; do not infer local SDF invalidation from a parent.
+origin/yaw. A domain retains its workspace only after matching tuning, capacity, and the complete fixed cell/edge
+bake against the replacement query, which it then uses for future checks. Medium retention also requires the same
+field provider and synchronized revision. Unproved domains rebuild; do not infer tile-level SDF invalidation.
 Dealt placement instances carry reserved `dealSlot` identities independently of their transforms. `deal.preserve`
-selects instance-owned transforms, prototypes, and facets. The granary module guide owns the footprint/reflow
+selects instance-owned transforms, prototypes, and facets. Spatial volumes distinguish occupation, shared clearance,
+and opaque influence channels; static planning does not ban dynamic facets from ordinary placements. Reflow previews
+travel through attributed queries and return an ordinary batch with spatial, named-input, and payment guards.
+The granary module guide owns the spatial/reflow
 authoring contract: `src/Puck.World/Assets/worlds/modules/README.md#grow-and-rearrange-the-court`.
 
 `WorldNavigation.cs` owns named finite domains. `surface` samples SDF ground,

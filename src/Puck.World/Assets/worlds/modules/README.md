@@ -47,8 +47,6 @@ gravity areas and cameras they inherit as basis deltas; re-siting them to the cr
 
 ## The partition granaries
 
-## granaries
-
 The granaries turn the platform's user-data storage accounts into a storeyard:
 timber buildings, green roofs, sealed side bins, and a beacon over the
 public-content anchor. Each building is one discovered account. The court and
@@ -78,62 +76,99 @@ placement door.
 
 ### Grow and rearrange the court
 
-The granaries declare `deal.preserve.transform` and `deal.preserve.facets`. Inventory owns membership;
-gameplay owns an existing building's local position, yaw, scale, and facets. These survive a later inventory
-refresh. `dealSlot` remains its allocation identity even after it moves. Variants still select the prototype;
-an author who wants gameplay to own that choice too enables `deal.preserve.prototype`. Removing the inventory
-cell removes the building and its customization. New buildings receive template defaults.
+The account inventory owns membership and each child's `dealSlot`. The template's `deal.preserve` lets an
+instance own its transform, prototype, and other facets independently. Removing an inventory cell removes its
+child; changing another account does not move an existing store. A child is still an ordinary placement.
 
-Use `world.placement.get <id>` to obtain a complete child row, then submit the edited row through
-`world.row.set placements <json>`. Increasing its scale grows both geometry and its layout footprint.
-The `footprint` declares local X/Z half-extents, world-unit `clearance`, and optional `pinned: true`.
-It is a planar occupation contract for layout proposals; physical contact still uses the solid geometry.
-Footprints use conservative envelopes under rotation, so a refusal does not prove that no tighter packing exists.
+A placement's `spatial` array describes named local volumes. `Occupation` reserves the building's space;
+`Clearance` reserves access around it. Occupation conflicts with occupation or clearance, while two clearance
+volumes may share space. `Influence` is nonblocking coverage on an author-defined channel. All three use finite
+boxes or spheres, including height, local offsets, placement scale, and yaw. A bridge can pass above a store,
+and diagonal boxes use their actual orientation. These authored volumes are planning contracts; the rendered
+creation and solid-field collision remain the physical geometry the author must keep aligned with them.
+Static queries require positive effective radii/extents on the Q48.16 grid and currently admit compiled
+coordinates and extents through ±4,194,304 world units. Geometry outside that numeric envelope is reported as
+unsupported; it never silently becomes a zero-sized blocker.
+
+The granary district supplies blue irrigation and gold power coverage. Ordinary rules read
+`$influence:water:granaryStores` or `$influence:power:granaryStores` with `key: "$each"` to address a dealt child.
+The result counts distinct other providers covering the center of the target's first occupation volume.
+Several matching volumes from one provider count once. A missing or unsupported target reads absent; a present
+target outside coverage reads zero. An unsupported provider makes its channel absent rather than falsely
+reporting complete coverage. Channel labels remain shared when a module is imported under an alias.
+
+Water and power each have three authored coverage sizes. A request selects a text vector from a keyed choice
+row; the provider's spatial extents and visible coverage marker bind to that same value. The rule commits the
+selected vector and displayed stage together. This uses the existing document-value binding system instead of
+replacing a whole placement for each size. Under the shipped `granaries` import:
+
+```text
+world.state.cell.set granaries_granaryIrrigationRequest $value 1
+world.state.cell.set granaries_granaryPowerRequest $value 2
+world.state granaries_granaryIrrigationStage
+world.state granaries_granaryWaterCoverage
+```
+
+Stages run from 0 through 2, including shrinking back to an earlier stage. The module exports these requests
+and the coverage rows for hosts to bind. The survey table is an authored landmark; it has no click or engagement
+handler. The current HUD reports stages and survey page, while the console provides the working control path.
+Coverage rows store provider counts and write only when a value changes. They catch up one tick after a coverage
+expansion; after an account is removed, its building disappears during the deal sweep and its coverage cells
+are cleaned on the following tick.
+
+Planning never changes the world. Start a preview, inspect its transforms and price, then commit or cancel:
 
 ```text
 world.reflow.preview granaryStores
 world.reflow.status
 world.reflow.commit
-world.placements
+world.reflow.cancel
 ```
 
-These boot-instance authoring commands keep one pending preview per principal. Planning runs off the simulation
-thread, with one worker per server and normal mutation admission metering. If status reports `planning`, read it
-again when ready; it shows the proposed local positions, price, and work before commit is enabled. Previews expire
-after five minutes; the bounded cache evicts its oldest entry when full, including abandoned sessions.
-Search prefers current positions, then nearby distribution offsets. Commit submits an
-ordinary guarded mutation batch through the ordered link. A failed or stale commit changes neither placements
-nor payment. Undo restores them together. The template, children, footprint census, ancestor frames, and their
-inventory/bound-value rows participate in the guard. New blockers invalidate the proposal; unrelated chairs,
-views, kits, and state counters do not. Full document validity, capacity, authority, and payment are checked at
-commit against the current world. A preview is a proposed layout, not a reservation of those capacities.
+The preview verb also accepts a JSON `WorldPlacementReflowRequest`: `templateId` selects the authored policy
+and distribution, `placementIds` optionally selects a bounded group, and `edits` supplies seed position, yaw,
+scale, or spatial-volume changes. A seed edit and its neighbors' rearrangement enter the same batch. For example,
+after reading a store's actual id from `world.placements`:
 
-`deal.reflow` authors `candidateBudget` (1..65536 work units) and optional `costPerMove`, `costRow`, and `costKey`.
-The shipped court charges zero. A paid policy names an Int state row; a keyed row also needs a key. The exact
-price must fit the balance and its state constraints at commit. Advancing balances and intervening deposits or
-withdrawals are allowed while sufficient funds remain; a clamp that prevents the exact debit refuses the whole
-batch. Search supports up to 64 static children; pinned children and other declared footprints stay
-fixed. It refuses unsupported moving or distributed blockers and budget exhaustion. A currently valid layout
-returns an unchanged-layout explanation rather than a chargeable proposal.
+```text
+world.reflow.preview {"templateId":"granaryStores","edits":[{"placementId":"granaryStores/bytrcstp001","scale":1.25}],"preserveInfluenceCoverage":true}
+```
 
-Sibling `dealSlot` values must be unique. A source-owned child cannot itself declare `deal`. Other authored facets
-remain available under their ordinary validation and capacity rules; moving or distributed children cannot
-participate in static reflow. Planar footprints deliberately reserve their X/Z column regardless of elevation,
-so this planner does not pack multiple storeys above one another.
+Use the imported placement names when the module has an alias. `preserveInfluenceCoverage` asks the planner to
+retain at least the existing number of providers on each channel at affected occupation targets; gains are allowed.
+Explicit groups share the selected template's parent frame and offsets. A preview is a proposal, not a reservation. Nearby new,
+moved, removed, or enlarged spatial volumes invalidate its spatial read. Its named template, membership, and
+state inputs are guarded separately; spatial guards also capture state-bound geometry. Distant changes and unrelated state counters remain independent. Current
+authority, whole-document validity, render capacity, and exact payment are checked again at commit. Failure
+changes neither layout nor payment. Undo restores the entire edit together.
 
-Moving or turning `granaryCourt` carries the child geometry, existing creation faces, and `granaryYard` navigation
-frame. `world.navigation` reports the resolved origin and yaw. Surface probes stay vertical. Geometry edits still
-rebuild navigation conservatively. Moving physical field lattices, expanding service networks, and solving
-utility coverage constraints are subsequent work; this slice does not make those contracts implicit in a footprint.
+`deal.reflow` authors the candidate work budget and optional Int `costPerMove`, `costRow`, and `costKey`.
+A paid operation guards current solvency and the exact debit, so an advancing balance or an intervening deposit
+is allowed when enough funds remain. The court's policy is free. Search is bounded to 64 static members and
+prefers current positions before nearby distribution offsets; it does not promise globally optimal packing.
+Pinned placements stay fixed. Selected members must have no child placements: subtree motion needs its own
+plan. Moving or otherwise unrepresented frames refuse static planning without
+restricting their use elsewhere in the world.
 
+Console controls are bindable. Programmatic clients use `WorldQuery.ReflowPreview`, `ReflowStatus`, and
+`ReflowCancel` through the attributed link. Status carries the same typed `WorldPlacementProposal` that the
+console reviews; its ordinary batch is the commit artifact. The console workflow currently addresses its local
+server; a federated console link without explicit-principal queries refuses that workflow. Cached proposals belong to the submitting principal,
+expire after five minutes, and are discarded without payment when cancelled.
+
+Moving or turning `granaryCourt` carries its children and the `granaryYard` navigation frame. Navigation retains
+workspaces and routes only after proving the same fixed cell and edge bake, then rebinds to the current solid
+query. Uncertain domains rebuild. This proof still samples geometry; it is not tile-level SDF invalidation.
+Coverage does not allocate finite supply, route pipes or wires, or resize a physical field lattice. Those remain
+separate authoring and simulation problems.
 Read back:
 
 ```text
 world.placements          # 'granaryStores' … dealt from granaryNames (<n> of 16); 'granaryStores/<name>' … dealt by granaryStores
 world.budget              # placements … 16 dealt offset(s) over 1 template(s)
-world.state granaryNames
-world.state.cell.set granaryNames bytrcstp004 bytrcstp004   # deals a fourth building on the next tick
-world.state.cell.remove granaryNames bytrcstp004            # removes it, the others stay put
+world.state granaries_granaryNames
+world.state.cell.set granaries_granaryNames bytrcstp004 bytrcstp004   # deals a building on the next tick
+world.state.cell.remove granaries_granaryNames bytrcstp004            # removes it, the others stay put
 ```
 
 ### Visit the live deployment
@@ -179,44 +214,14 @@ prototypes to reinterpret the same accounts. The court's title uses the
 hash-pinned font at `fonts/inter-regular.ttf`, resolved relative to the
 importing root world. The module exports its five rows as reads, spawns at
 `granaries-arrival` on the court's near edge, and walks the `granaryYard`
-surface domain.
-## What the metaphor means
+surface domain. It also exports coverage and expansion state, so a host can bind
+its own controls. World imports never enable Azure access themselves: the host
+configuration supplies that authority. A text world can consume the inventory
+rows without the court's creations and dealt placements.
 
-The beacon marks `bytrcstp001` because the checked-in hosting convention fixes
-public content to partition zero, whose account offset is one. Other buildings
-represent potential private user-data homes. The deployment's account inventory
-is not the active Orleans partition count: discovering five accounts does not
-prove five partitions are serving a running host. No bin fill level, request
-traffic, health, grain occupancy, or migration status is invented from inventory.
-
-An author could later use separately measured occupancy to fill bins, a confirmed
-migration to move a wagon, or a telemetry alarm to attract pests. Those events need
-their own explicit sources and gameplay rules. The current scene makes only the
-inventory claim it can substantiate.
-
-## Import and reinterpret
-
-The island imports `modules/granaries.world.json` under the alias `granaries` and restates
-`granaryCourt` on its plaza. Move `granaryCourt` to place the whole storeyard, or
-replace the three prototypes to reinterpret the same accounts. Generated buildings
-are children of the court, using its position and yaw. Keep its scale at one.
-The court's title uses the existing hash-pinned font at `fonts/inter-regular.ttf`,
-resolved relative to the importing root world; provide that asset when relocating
-the module.
-
-Copy the host configuration, set `world` to the importing document's exact ID,
-and retain or narrow its source scope and disclosure. World imports never enable
-Azure access themselves. A text world can use the tables alone by omitting
-`observations[].placements`. Different sources can project into different tables
-and reserved placement prefixes through the same mechanism.
-
-The example bounds inventory at 16 items and reserves 16 future placements at
-boot. The court is sized for the present two rows; enlarge its authored grounds
-for a larger deployment. Buildings use static per-shape rendering, with no body
-simulation, per-tick cloud calls, or unchanged-snapshot rebuilds. Complete changes
-are admitted as one batch. Sorting account keys fixes identity and ordering, while
-membership changes can reposition buildings in the grid. Reserve `granary-` for
-this source rather than placing unrelated authored rows under that prefix.
+Inventory is bounded at 16 accounts. Buildings use static rendering, with no body
+simulation, per-tick cloud calls, or unchanged-inventory rebuilds. Placement ids
+under `granaryStores/` belong to the deal; author unrelated furniture elsewhere.
 
 See [service composition](../../../../Puck.World.Server/ExtensionConfiguration.md)
 for projection authority and lifecycle, and the

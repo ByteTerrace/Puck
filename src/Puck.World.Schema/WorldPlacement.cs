@@ -251,8 +251,7 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// which every consumer of a placement's WORLD transform reads instead of this row's own Position/YawDegrees.
 /// Validated: must name a declared placement other than itself, must not close a cycle, and that placement must
 /// carry neither a <see cref="Distribution"/> nor a <see cref="Mirror"/> (an expanded row has no single frame to
-/// compose against) nor a <see cref="Scale"/> other than 1 (composition rotates and translates only — nothing
-/// composes a parent's scale into a child's local offset).</param>
+/// compose against). Parent scale multiplies the child's local offset and resolved scale.</param>
 /// <param name="Deal">The placement's deal facet (see <see cref="WorldPlacementDeal"/>) — the row is a template whose
 /// instances are dealt from a keyed state row as child placements over its own <see cref="Distribution"/> region, or
 /// <see langword="null"/> for an ordinary placement. A template renders nothing and collides with nothing itself.
@@ -260,7 +259,9 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// <see cref="Attach"/>, <see cref="Respond"/>, <see cref="Mirror"/>, and <see cref="FaceSources"/>.</param>
 /// <param name="DealSlot">A dealt child's reserved distribution slot, independent of its editable transform.
 /// Absent on ordinary placements and templates.</param>
-/// <param name="Footprint">Optional occupation and clearance contract used by layout proposals.</param>
+/// <param name="Spatial">Named occupation, clearance, and influence volumes in this placement's local frame. The
+/// compiled static-query eligibility is exposed by <see cref="WorldSpatialQueryIndex.Unsupported"/>; ordinary
+/// inhabit/attach/distribution facets remain legal and are reported there when they have no single static frame.</param>
 public sealed record WorldPlacement(
     string Id,
     string PrototypeId,
@@ -282,7 +283,7 @@ public sealed record WorldPlacement(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Parent = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementDeal? Deal = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? DealSlot = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementFootprint? Footprint = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacementSpatialVolume>? Spatial = null
 );
 /// <summary>Adapts placement document facets to the shared creation-stamp vocabulary.</summary>
 public static class WorldPlacementStamp {

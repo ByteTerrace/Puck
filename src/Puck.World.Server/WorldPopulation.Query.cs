@@ -308,8 +308,12 @@ public sealed partial class WorldPopulation {
             var shared = domain.Sharing is { } sharing ? $",shared={domain.SharedResidentGoals}/{sharing.GoalCapacity},expanded={domain.SharedExpandedLast}/{sharing.ExpandedNodesPerTick},paths={domain.SharedPathsLast},capacityRefusals={domain.SharedCapacityRefusalsLast}" : ",shared=none";
             rows[index] = $"{domain.Name}:{tuning.Kind.ToString().ToLowerInvariant()} {tuning.Width}x{tuning.Depth}x{tuning.Layers} clear={domain.WalkableCellCount}/{domain.CellCount} connectivity={tuning.Connectivity.ToString().ToLowerInvariant()} search<={tuning.MaxExpandedNodes} path<={tuning.MaxPathNodes} medium={(tuning.Medium ?? "none")}{shared}{frame}";
         }
-        return $"[world.navigation: {string.Join(separator: "; ", values: rows)}]";
+        return $"[world.navigation: retained={m_navigation.RetainedDomainCount},rebuilt={m_navigation.RebuiltDomainCount}; {string.Join(separator: "; ", values: rows)}]";
     }
+    /// <summary>Gets the number of navigation domains retained by the most recent population compile.</summary>
+    public int NavigationRetainedDomainCount => m_navigation.RetainedDomainCount;
+    /// <summary>Gets the number of navigation domains rebuilt by the most recent population compile.</summary>
+    public int NavigationRebuiltDomainCount => m_navigation.RebuiltDomainCount;
     /// <summary>Gets the compiled navigation cell total.</summary>
     public long NavigationCellCount => m_navigation.CellCount;
     /// <summary>Gets the fixed domain-search workspace allocated at compile time.</summary>

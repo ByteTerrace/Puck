@@ -134,6 +134,9 @@ public sealed partial class WorldServer {
         }
 
         if (query is WorldQuery.StateObservations observation) { return AnswerStateObservations(principal, observation.Row); }
+        if (query is WorldQuery.ReflowPreview or WorldQuery.ReflowStatus or WorldQuery.ReflowCancel) {
+            return AnswerReflowQuery(query, principal);
+        }
         return Answer(query: query);
     }
     // $distance: — the straight-line distance between two named bodies, read through WorldServer.Body(int)'s own
@@ -268,7 +271,7 @@ public sealed partial class WorldServer {
         if (
             !WorldStateReader.TryReadHandle(
             definition: m_definition,
-            catalog: m_definition.StateCatalog,
+            catalog: RuleReadCatalog,
             handle: handle,
             key: key,
             tick: tick,
@@ -294,7 +297,7 @@ public sealed partial class WorldServer {
     // LOWEST eligible index, deterministically. Returns -1 ("no body") when no cell is eligible.
     private int ResolveArgBody(StateHandle handle, StateReduceOp op, ulong tick, StateHandle filterHandle = default, bool hasFilter = false) {
         var winner = WorldStateReader.ArgExtremum(
-            catalog: m_definition.StateCatalog,
+            catalog: RuleReadCatalog,
             definition: m_definition,
             handle: handle,
             op: op,

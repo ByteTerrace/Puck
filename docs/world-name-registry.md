@@ -1169,6 +1169,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `kits.rows[].actions{*}.onPress.effects[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
 | `kits.rows[].actions{*}.onPress.effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `kits.rows[].actions{*}.onPress.gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
@@ -1188,6 +1190,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `kits.rows[].actions{*}.onRelease.effects[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
 | `kits.rows[].actions{*}.onRelease.effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `kits.rows[].actions{*}.onRelease.gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
@@ -1207,6 +1211,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `kits.rows[].actions{*}.onFact[].effects[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
 | `kits.rows[].actions{*}.onFact[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `kits.rows[].actions{*}.onFact[].gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
@@ -1233,6 +1239,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `placements.rows[].faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `placements.rows[].faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `placements.rows[].deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
+| `placements.rows[].spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
+| `placements.rows[].spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `speakers[].name` | `WorldSpeaker.Name` | a speaker name |
 | `speakers[][fixed].name` | `WorldSpeaker.Name` | a speaker name |
 | `speakers[][anchored].name` | `WorldSpeaker.Name` | a speaker name |
@@ -1307,6 +1315,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
+| `rules[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
+| `rules[].effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `rules[].effects[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
 | `rules[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `rules[].gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
@@ -1327,6 +1337,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `rules[].decision.options[].effects[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
 | `rules[].decision.options[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `rules[].decision.options[].gate[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
@@ -1347,6 +1359,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `rules[].decision.onNoChoice[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
 | `rules[].decision.onNoChoice[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `rules[].bindings[].name` | `RuleBinding.Name` | a binding name is local to its rule, read as $bind:<name> |
@@ -1378,6 +1392,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[machine].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `interactions.interactions[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
+| `interactions.interactions[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
+| `interactions.interactions[].effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
 | `interactions.interactions[].effects[][removePlacement].id` | `WorldEffect.RemovePlacement.Id` | a placement id |
 | `interactions.interactions[].effects[][setIdentityFact].fact` | `WorldEffect.SetIdentityFact.Fact` | a fact key on the identity's own row, outside every world namespace |
 | `generators[].generator.start` | `StateGenerator.Start` | a context key is local to its generator |

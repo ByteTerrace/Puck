@@ -100,6 +100,9 @@ namespace Puck.World;
 // member policies (see the converter's remarks).
 [JsonSerializable(typeof(WorldPrototype))]
 [JsonSerializable(typeof(WorldPlacement))]
+[JsonSerializable(typeof(WorldPlacementSpatialVolume))]
+[JsonSerializable(typeof(WorldPlacementReflowRequest))]
+[JsonSerializable(typeof(WorldSpatialShape))]
 // The editor/authoring policy row (the world.row.set authoring payload shape).
 [JsonSerializable(typeof(WorldPlacementPolicyDefaults))]
 // The contact-solver tuning (the world.row.set collision payload shape) and the velocity-response array (a kit row's

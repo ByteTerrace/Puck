@@ -82,7 +82,8 @@ installed. A cell write, push, board combine, write-set, or a transfer by
 first/last/key answers straight from the frame's value array — no document
 compose — and queues its mapped `WorldMutation` on one flat, firing-order list
 (`m_ruleFrameMutations`) that a rejected preflight scope truncates back to its
-own start. At the end of the tick's evaluation, `FoldRuleFrameMutations`
+own start. Placement and HUD effects join that same ordered list after their
+candidate passes the ordinary document checks. At the end of the tick's evaluation, `FoldRuleFrameMutations`
 installs that list as ONE mutation (a single member installs as itself,
 several as a `Batch`) through the ordinary door — one compose, one
 touched-row validation, one journal entry, one delivery — replayed from the
@@ -90,7 +91,7 @@ document the tick actually started on, never from whatever the frame's own
 cross-row path left `m_definition` at mid-tick. A tick that wrote nothing
 folds nothing.
 
-Four shapes a value frame cannot answer — a text cell (the frame holds only
+Shapes a value frame cannot answer — a text cell (the frame holds only
 raw integers), a cell removal, a generator draw (advances a row's own
 `DrawCursor`/`DrawnMasks`, not a cell value), a shuffle, and a transfer by
 `Random` or `Slice` (both need the generator stream `First`/`Last`/`Key`
@@ -99,7 +100,9 @@ fixed-size once built) all fall to `TryApplyCrossRowStateMutation`: it
 replays this tick's own queued mutations from the tick's starting document,
 composes the new one on top, and re-derives the frame from the result so a
 later same-tick read (another rule's gate, or the very next effect) sees it.
-Nothing here installs for real — the tick's own fold still owns that.
+Document effects use the same queued prefix when preparing their candidate,
+so a later effect sees earlier numeric writes as well as earlier placement or
+HUD changes. Nothing here installs for real — the tick's own fold still owns that.
 
 A preflight scope (an explicit `transaction` effect, or the transient
 validate-then-fire pass every top-level state effect takes before it commits
@@ -108,11 +111,12 @@ list, and a stamp of how many cross-row reloads have happened so far.
 Closing the scope compares that stamp: unchanged, an ordinary journal rewind
 (or commit) suffices; changed, the frame is re-derived from `m_definition` as
 the scope's own close already left it, since a cross-row reload's whole-frame
-`Load` bypasses the journal and a plain rewind cannot undo it. No shipped
-rule nests a cell/transform write ahead of a shuffle, generator draw, or cell
-removal inside one transaction; the tick's own installed result is correct
-either way, since the fold always replays the full ordered list from the
-tick's true starting document.
+`Load` bypasses the journal and a plain rewind cannot undo it. Committing a
+scope keeps its speculative candidate and ordered writes; it does not install
+a separate document half. Rejecting a transaction discards its state and
+placement changes together; authored transactions cannot contain another transaction.
+Compiled handles continue using the installed program's catalog during speculative
+document-value refreshes, because rule effects cannot change row declarations.
 
 `WorldMutation.Batch` composes as one edit
 (`WorldServer.MutationCompose.Batch.cs`). A cell write or removal lands in a
@@ -227,12 +231,15 @@ lattice's own representation.
 
 A domain's optional `parent` resolves its local origin and X/Z axes through the placement frame compilation;
 surface probes remain vertical. `world.navigation` includes the resolved origin and yaw. Moving a court thus
-rebuilds the domain in its new frame. Geometry edits still use conservative full rebuilds; this is not an
-incremental SDF invalidation scheme. The [granary authoring example](../Puck.World/Assets/worlds/modules/README.md#grow-and-rearrange-the-court)
+rebuilds the domain in its new frame. This is not incremental SDF invalidation: a domain is retained only when the
+replacement solid query proves every cell, clearance probe, and static edge query unchanged; later off-grid segment
+checks use the replacement query, and medium domains require the same field provider and synchronized revision.
+Capacity changes rebuild as well. The [granary authoring example](../Puck.World/Assets/worlds/modules/README.md#grow-and-rearrange-the-court)
 combines these frames with preserved dealt instances and guarded reflow.
 
-Changing a navigation definition, clearing designations, switching producers,
-or transferring authority clears a body's local route cache
+Changing a navigation definition, or an edit whose proof affects that domain,
+clears a body's local route cache; a retained domain keeps its route and shared
+search workspace. Clearing designations, switching producers, or transferring authority still clears a body's local route cache
 (`BodyNavigationState`); `WorldPopulationNavigationCheckpoint` carries the
 domain, goal cell, waypoint cursor, status, and expanded-node count, and
 `WorldAuthorityCheckpointCodec` validates every domain, node, waypoint,
@@ -1308,7 +1315,7 @@ whether the op succeeded (INCLUDING an unresolved engine — content is
 read/signed before engine resolution is even attempted, never left unpinned
 on that path), so a replay re-drive refuses by name if the file's on-disk
 state no longer matches what was recorded. A content path ending in
-`.cartridge.json` names an authored `puck.cartridge.v1` document: the host
+the .cartridge.json suffix names an authored `puck.cartridge.v1` document: the host
 compiles it through the engine's own forge once the engine resolves (the
 signature still covers the bytes read off disk), boots the compiled image,
 and records a `WorldMachineCartridge` (the source's canonical hash and the

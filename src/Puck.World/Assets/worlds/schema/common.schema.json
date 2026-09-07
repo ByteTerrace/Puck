@@ -6371,7 +6371,7 @@
           "default": 4096
         },
         "costPerMove": {
-          "description": "Nonnegative Int units charged for each changed transform.",
+          "description": "Nonnegative Int units charged for each changed placement, including a spatial seed edit.",
           "type": "integer",
           "default": 0
         },
@@ -6426,37 +6426,93 @@
       ],
       "additionalProperties": false
     },
-    "WorldPlacementFootprint": {
-      "description": "An authored rectangular occupation footprint in placement-local X/Z, with additional passage clearance. Used by layout proposals; physical collision remains the placement\u0027s solid geometry.",
+    "WorldSpatialShape": {
+      "description": "A placement-local bounded shape. Box yaw is measured about \u002BY; Y extents are part of the contract.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "The shape kind.",
+          "enum": [
+            "Box",
+            "Sphere"
+          ]
+        },
+        "center": {
+          "description": "The local shape center."
+        },
+        "halfExtents": {
+          "description": "Positive local half extents for a box; zero for a sphere."
+        },
+        "radius": {
+          "description": "Positive radius for a sphere; zero for a box.",
+          "type": "number",
+          "default": 0
+        },
+        "yawDegrees": {
+          "description": "The local box yaw, in degrees. Sphere yaw is ignored.",
+          "type": "number",
+          "default": 0
+        }
+      },
+      "required": [
+        "kind",
+        "center",
+        "halfExtents"
+      ],
+      "additionalProperties": false
+    },
+    "WorldPlacementSpatialVolume": {
+      "description": "A named spatial volume authored on one placement. The name is placement-local metadata; an influence channel is opaque to the engine and is never interpreted as water, power, or another game noun.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "halfWidth": {
-          "description": "Positive local X half-extent.",
-          "type": "number"
+        "name": {
+          "description": "The stable name returned by spatial queries.",
+          "type": "string"
         },
-        "halfDepth": {
-          "description": "Positive local Z half-extent.",
-          "type": "number"
+        "role": {
+          "description": "Whether the volume occupies, reserves clearance, or reports influence.",
+          "enum": [
+            "Occupation",
+            "Clearance",
+            "Influence"
+          ]
         },
-        "clearance": {
-          "description": "Nonnegative space reserved outside the footprint.",
-          "type": "number",
-          "default": 0
+        "shape": {
+          "$ref": "#/$defs/WorldSpatialShape",
+          "description": "The common bounded shape."
+        },
+        "channel": {
+          "description": "An author-defined influence label. Required only for influence volumes.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         },
         "pinned": {
-          "description": "Whether automatic layout must preserve this placement\u0027s transform.",
+          "description": "Whether layout policy must preserve this volume\u0027s placement transform.",
           "type": "boolean",
           "default": false
         }
       },
       "required": [
-        "halfWidth",
-        "halfDepth"
+        "name",
+        "role",
+        "shape"
       ],
       "additionalProperties": false
+    },
+    "WorldPlacementSpatialVolumeList": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/WorldPlacementSpatialVolume"
+      }
     },
     "WorldPlacement": {
       "description": "One placement instance row \u2014 a creation asset stamped into the world by reference: transform \u002B facets as data, addressed by its stable Id. A placement whose creation carries timeline frames is animated: it replays client-side on the render clock through the reserved dynamic-transform pool (distribution/mirror facets are static-stamp-only and reject on an animated row). A placement carrying an Inhabit facet is a live population body rather than furniture (see WorldPlacementInhabit); its declared creation eyes derive WorldCamera feeds and its declared faces derive screens (both at the delivery boundary, never written to the document).",
@@ -6542,7 +6598,7 @@
           "default": null
         },
         "parent": {
-          "description": "Another placement\u0027s Id this row\u0027s frame composes over, or null for a world-space row (today\u0027s behavior, unchanged). Position/YawDegrees become this row\u0027s own LOCAL offset/heading in the parent\u0027s composed frame: the parent\u0027s resolved yaw rotates the offset before adding the parent\u0027s resolved position (the same local-offset-rotated-by-orientation convention WorldPlacementAttach already uses), and yaw adds. Resolved ONCE, statically, by WorldPlacementFrameCompilation \u2014 never per tick \u2014 into PlacementFrames, which every consumer of a placement\u0027s WORLD transform reads instead of this row\u0027s own Position/YawDegrees. Validated: must name a declared placement other than itself, must not close a cycle, and that placement must carry neither a Distribution nor a Mirror (an expanded row has no single frame to compose against) nor a Scale other than 1 (composition rotates and translates only \u2014 nothing composes a parent\u0027s scale into a child\u0027s local offset).",
+          "description": "Another placement\u0027s Id this row\u0027s frame composes over, or null for a world-space row (today\u0027s behavior, unchanged). Position/YawDegrees become this row\u0027s own LOCAL offset/heading in the parent\u0027s composed frame: the parent\u0027s resolved yaw rotates the offset before adding the parent\u0027s resolved position (the same local-offset-rotated-by-orientation convention WorldPlacementAttach already uses), and yaw adds. Resolved ONCE, statically, by WorldPlacementFrameCompilation \u2014 never per tick \u2014 into PlacementFrames, which every consumer of a placement\u0027s WORLD transform reads instead of this row\u0027s own Position/YawDegrees. Validated: must name a declared placement other than itself, must not close a cycle, and that placement must carry neither a Distribution nor a Mirror (an expanded row has no single frame to compose against). Parent scale multiplies the child\u0027s local offset and resolved scale.",
           "type": [
             "string",
             "null"
@@ -6562,9 +6618,9 @@
           ],
           "default": null
         },
-        "footprint": {
-          "$ref": "#/$defs/WorldPlacementFootprint",
-          "description": "Optional occupation and clearance contract used by layout proposals.",
+        "spatial": {
+          "$ref": "#/$defs/WorldPlacementSpatialVolumeList",
+          "description": "Named occupation, clearance, and influence volumes in this placement\u0027s local frame. The compiled static-query eligibility is exposed by Unsupported; ordinary inhabit/attach/distribution facets remain legal and are reported there when they have no single static frame.",
           "default": null
         }
       },

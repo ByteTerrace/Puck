@@ -7,8 +7,18 @@
       "granaryKinds",
       "granarySkus"
     ],
-    "actions": [],
-    "bindings": []
+    "actions": [
+      "granarySurveyRequest",
+      "granaryIrrigationRequest",
+      "granaryPowerRequest"
+    ],
+    "bindings": [
+      "granaryWaterCoverage",
+      "granaryPowerCoverage",
+      "granarySurveyPage",
+      "granaryIrrigationStage",
+      "granaryPowerStage"
+    ]
   },
   "navigation": {
     "domains": [
@@ -37,6 +47,227 @@
       }
     ]
   },
+  "rules": [
+    {
+      "name": "granary-water-coverage-cleanup",
+      "forEach": "granaryWaterCoverage",
+      "gate": {
+        "$type": "not",
+        "predicate": {
+          "$type": "compareState",
+          "state": "$influence:water:granaryStores",
+          "key": "$each",
+          "comparison": "Equal",
+          "comparandState": "$influence:water:granaryStores",
+          "comparandKey": "$each"
+        }
+      },
+      "effects": [
+        {
+          "$type": "removeStateCell",
+          "state": "granaryWaterCoverage",
+          "key": "$each"
+        }
+      ],
+      "mode": "Level"
+    },
+    {
+      "name": "granary-power-coverage-cleanup",
+      "forEach": "granaryPowerCoverage",
+      "gate": {
+        "$type": "not",
+        "predicate": {
+          "$type": "compareState",
+          "state": "$influence:power:granaryStores",
+          "key": "$each",
+          "comparison": "Equal",
+          "comparandState": "$influence:power:granaryStores",
+          "comparandKey": "$each"
+        }
+      },
+      "effects": [
+        {
+          "$type": "removeStateCell",
+          "state": "granaryPowerCoverage",
+          "key": "$each"
+        }
+      ],
+      "mode": "Level"
+    },
+    {
+      "name": "granary-water-coverage",
+      "forEach": "granaryNames",
+      "gate": {
+        "$type": "not",
+        "predicate": {
+          "$type": "compareState",
+          "state": "granaryWaterCoverage",
+          "key": "$each",
+          "comparison": "Equal",
+          "comparandState": "$influence:water:granaryStores",
+          "comparandKey": "$each"
+        }
+      },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "granaryWaterCoverage",
+          "key": "$each",
+          "fromState": "$influence:water:granaryStores",
+          "fromKey": "$each"
+        }
+      ],
+      "mode": "Level"
+    },
+    {
+      "name": "granary-power-coverage",
+      "forEach": "granaryNames",
+      "gate": {
+        "$type": "not",
+        "predicate": {
+          "$type": "compareState",
+          "state": "granaryPowerCoverage",
+          "key": "$each",
+          "comparison": "Equal",
+          "comparandState": "$influence:power:granaryStores",
+          "comparandKey": "$each"
+        }
+      },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "granaryPowerCoverage",
+          "key": "$each",
+          "fromState": "$influence:power:granaryStores",
+          "fromKey": "$each"
+        }
+      ],
+      "mode": "Level"
+    },
+    {
+      "name": "granary-survey-cycle",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "granarySurveyApplied",
+          "expression": "granarySurveyRequest"
+        },
+        {
+          "$type": "setState",
+          "state": "granarySurveyPage",
+          "expression": "(granarySurveyPage + 1) % 3"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "granarySurveyRequest",
+            "comparison": "Greater",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "state": "granarySurveyRequest",
+            "comparandState": "granarySurveyApplied",
+            "comparison": "NotEqual"
+          }
+        ]
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "granary-irrigation-stage",
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "setState",
+              "state": "granaryIrrigationStage",
+              "expression": "granaryIrrigationRequest"
+            },
+            {
+              "$type": "setState",
+              "state": "granaryIrrigationSelected",
+              "fromState": "granaryIrrigationChoices",
+              "fromKey": "$expr:granaryIrrigationRequest"
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "state": "granaryIrrigationRequest",
+        "comparandState": "granaryIrrigationStage",
+        "comparison": "NotEqual"
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "granary-power-stage",
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "setState",
+              "state": "granaryPowerStage",
+              "expression": "granaryPowerRequest"
+            },
+            {
+              "$type": "setState",
+              "state": "granaryPowerSelected",
+              "fromState": "granaryPowerChoices",
+              "fromKey": "$expr:granaryPowerRequest"
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "state": "granaryPowerRequest",
+        "comparandState": "granaryPowerStage",
+        "comparison": "NotEqual"
+      },
+      "mode": "Level"
+    }
+  ],
+  "hud": {
+    "defaults": { "enabled": true },
+    "panels": [
+      {
+        "id": "granary-coverage",
+        "rect": { "x": 0.03, "y": 0.72, "width": 0.3, "height": 0.23 },
+        "layer": "Over",
+        "style": "Panel",
+        "elements": [
+          {
+            "id": "survey",
+            "kind": "Text",
+            "rect": { "x": 0.06, "y": 0.08, "width": 0.88, "height": 0.2 },
+            "style": "Primary",
+            "template": "GRANARY SURVEY {state.granarySurveyPage}"
+          },
+          {
+            "id": "irrigation",
+            "kind": "Text",
+            "rect": { "x": 0.06, "y": 0.34, "width": 0.88, "height": 0.2 },
+            "style": "Positive",
+            "template": "WATER EXPANSION {state.granaryIrrigationStage}"
+          },
+          {
+            "id": "power",
+            "kind": "Text",
+            "rect": { "x": 0.06, "y": 0.6, "width": 0.88, "height": 0.2 },
+            "style": "Warning",
+            "template": "POWER EXPANSION {state.granaryPowerStage}"
+          }
+        ]
+      }
+    ]
+  },
   "placements": {
     "rows": [
       {
@@ -47,6 +278,17 @@
           0,
           0
         ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "granarySurveyTable",
+        "prototypeId": "granarySurveyTable",
+        "parent": "granaryCourt",
+        "position": [-2, 0, 2.5],
         "yawDegrees": 0,
         "scale": 1,
         "solid": {
@@ -67,7 +309,26 @@
         "solid": {
           "margin": 0
         },
-        "footprint": { "halfWidth": 1.5, "halfDepth": 1.5, "clearance": 0.25 },
+        "spatial": [
+          {
+            "name": "store-occupation",
+            "role": "Occupation",
+            "shape": {
+              "kind": "Box",
+              "center": [0, 1.5, 0],
+              "halfExtents": [1.5, 1.5, 1.5]
+            }
+          },
+          {
+            "name": "store-clearance",
+            "role": "Clearance",
+            "shape": {
+              "kind": "Box",
+              "center": [0, 1.5, 0],
+              "halfExtents": [1.75, 1.5, 1.75]
+            }
+          }
+        ],
         "distribution": {
           "fill": {
             "name": "none",
@@ -95,6 +356,46 @@
             }
           }
         }
+      },
+      {
+        "id": "granaryIrrigation",
+        "prototypeId": "granaryIrrigation",
+        "parent": "granaryCourt",
+        "position": [-10, 0, -15],
+        "yawDegrees": 0,
+        "scale": 1,
+        "spatial": [
+          {
+            "name": "irrigation-coverage",
+            "role": "Influence",
+            "channel": "water",
+            "shape": {
+              "kind": "Box",
+              "center": [0, 1.5, 0],
+              "halfExtents": "state.granaries_granaryIrrigationSelected"
+            }
+          }
+        ]
+      },
+      {
+        "id": "granaryPower",
+        "prototypeId": "granaryPower",
+        "parent": "granaryCourt",
+        "position": [-10, 0, -15],
+        "yawDegrees": 0,
+        "scale": 1,
+        "spatial": [
+          {
+            "name": "power-coverage",
+            "role": "Influence",
+            "channel": "power",
+            "shape": {
+              "kind": "Box",
+              "center": [0, 1.5, 0],
+              "halfExtents": "state.granaries_granaryPowerSelected"
+            }
+          }
+        ]
       }
     ]
   },
@@ -706,6 +1007,178 @@
             "material": 5,
             "blend": "Union",
             "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "granaryIrrigation",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "granaryIrrigation",
+        "palette": [
+          { "color": "#2E9FD0" },
+          { "color": "#174E6A" }
+        ],
+        "shapes": [
+          {
+            "id": 2,
+            "name": "water-coverage-patch",
+            "type": "Box",
+            "position": [0, 0.05, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": "state.granaries_granaryIrrigationSelected",
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 0,
+            "name": "water-marker",
+            "type": "Box",
+            "position": [-2, 1, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.45, 1, 0.45],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 1,
+            "name": "water-cap",
+            "type": "Cylinder",
+            "position": [-2, 2.1, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.7, 0.15, 0.7],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "granaryPower",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "granaryPower",
+        "palette": [
+          { "color": "#E0B84C" },
+          { "color": "#76551B" }
+        ],
+        "shapes": [
+          {
+            "id": 2,
+            "name": "power-coverage-patch",
+            "type": "Box",
+            "position": [0, 0.05, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": "state.granaries_granaryPowerSelected",
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 0,
+            "name": "power-marker",
+            "type": "Box",
+            "position": [2, 1.2, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.5, 1.2, 0.5],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 1,
+            "name": "power-cap",
+            "type": "Box",
+            "position": [2, 2.55, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.75, 0.12, 0.75],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "granarySurveyTable",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "granarySurveyTable",
+        "palette": [
+          { "color": "#AE7144" },
+          { "color": "#E6D1A3" },
+          { "color": "#263D43" }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "survey-top",
+            "type": "Box",
+            "position": [0, 1.2, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [2.4, 0.16, 1.05],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 1,
+            "name": "survey-sign",
+            "type": "Box",
+            "position": [0, 1.85, -0.42],
+            "rotation": [0, 0, 0, 1],
+            "scale": [1.9, 0.5, 0.08],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 2,
+            "name": "survey-leg-left",
+            "type": "Box",
+            "position": [-1.75, 0.58, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.14, 0.58, 0.14],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 3,
+            "name": "survey-leg-right",
+            "type": "Box",
+            "position": [1.75, 0.58, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.14, 0.58, 0.14],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ],
+        "textRuns": [
+          {
+            "text": "SURVEY TABLE",
+            "position": [0, 1.88, -0.52],
+            "rotation": [0, 0, 0, 1],
+            "emHeight": 0.24,
+            "depth": 0.012,
+            "mode": "emboss",
+            "material": 1,
+            "align": "center"
+          },
+          {
+            "text": "WATER / POWER",
+            "position": [0, 1.58, -0.52],
+            "rotation": [0, 0, 0, 1],
+            "emHeight": 0.12,
+            "depth": 0.008,
+            "mode": "emboss",
+            "material": 1,
+            "align": "center"
           }
         ]
       }
@@ -1952,6 +2425,114 @@
         "kind": "text",
         "capacity": 16,
         "cells": [],
+        "visibility": {}
+      },
+      {
+        "name": "granaryWaterCoverage",
+        "kind": "int",
+        "capacity": 16,
+        "min": 0,
+        "max": 9223372036854775807,
+        "cells": [],
+        "visibility": {}
+      },
+      {
+        "name": "granaryPowerCoverage",
+        "kind": "int",
+        "capacity": 16,
+        "min": 0,
+        "max": 9223372036854775807,
+        "cells": [],
+        "visibility": {}
+      },
+      {
+        "name": "granaryIrrigationChoices",
+        "kind": "text",
+        "capacity": 3,
+        "cells": [
+          { "key": "0", "value": "[3.5, 2, 3.5]" },
+          { "key": "1", "value": "[6.5, 2, 6.5]" },
+          { "key": "2", "value": "[8, 2, 8]" }
+        ],
+        "visibility": {}
+      },
+      {
+        "name": "granaryIrrigationSelected",
+        "kind": "text",
+        "value": "[3.5, 2, 3.5]",
+        "visibility": {}
+      },
+      {
+        "name": "granaryPowerChoices",
+        "kind": "text",
+        "capacity": 3,
+        "cells": [
+          { "key": "0", "value": "[8.5, 2, 8.5]" },
+          { "key": "1", "value": "[10, 2, 10]" },
+          { "key": "2", "value": "[12, 2, 12]" }
+        ],
+        "visibility": {}
+      },
+      {
+        "name": "granaryPowerSelected",
+        "kind": "text",
+        "value": "[8.5, 2, 8.5]",
+        "visibility": {}
+      },
+      {
+        "name": "granarySurveyRequest",
+        "kind": "int",
+        "min": 0,
+        "max": 9223372036854775807,
+        "value": 0,
+        "visibility": {}
+      },
+      {
+        "name": "granarySurveyApplied",
+        "kind": "int",
+        "min": 0,
+        "max": 9223372036854775807,
+        "value": 0,
+        "visibility": {}
+      },
+      {
+        "name": "granarySurveyPage",
+        "kind": "int",
+        "min": 0,
+        "max": 2,
+        "value": 0,
+        "visibility": {}
+      },
+      {
+        "name": "granaryIrrigationRequest",
+        "kind": "int",
+        "min": 0,
+        "max": 2,
+        "value": 0,
+        "visibility": {}
+      },
+      {
+        "name": "granaryIrrigationStage",
+        "kind": "int",
+        "min": 0,
+        "max": 2,
+        "value": 0,
+        "visibility": {}
+      },
+      {
+        "name": "granaryPowerRequest",
+        "kind": "int",
+        "min": 0,
+        "max": 2,
+        "value": 0,
+        "visibility": {}
+      },
+      {
+        "name": "granaryPowerStage",
+        "kind": "int",
+        "min": 0,
+        "max": 2,
+        "value": 0,
         "visibility": {}
       }
     ]

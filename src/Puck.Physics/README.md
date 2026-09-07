@@ -279,6 +279,14 @@ expansion/path ceilings. Domain search workspace allocates once at
 construction; per-body route storage is a host concern, so a steady-state
 search allocates nothing here.
 
+When a host replaces its solid query, a domain workspace may be retained only
+after the replacement provider returns the same ground, occupancy, clearance,
+and every static edge result for the domain's complete grid. The retained
+workspace forwards later off-grid segment checks to the replacement provider;
+medium domains also require the same field revision. A failed proof compiles a
+fresh domain, and shared destination trees remain with the workspace only when
+that proof succeeds.
+
 A domain carrying `Shared` runs queued reverse-Dijkstra searches instead,
 with stable `(cost, nodeOrdinal)` ties and one aggregate expansion allowance
 per domain per simulation tick (each expansion inspects at most 26 edges).

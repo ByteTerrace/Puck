@@ -230,6 +230,28 @@ public sealed class RuleEvaluatorLawTests {
     }
 
     [Fact]
+    public void ForEachVisitsTextKeysWithoutReadingTheirValuesAndTracksMembership() {
+        var names = new StateRow(CellName.Parse("names"), CellKind.Text, Capacity: 8, Cells: [
+            new StateCell(CellName.Parse("west"), 0, Text: "West granary"),
+            new StateCell(CellName.Parse("east"), 0, Text: "East granary")]);
+        var rule = R("visit", null, forEach: "names", effects: new ActionEffect.AddState("visits", Value: 1, Key: "$each"));
+        var (host, evaluator, rules, latch) = Arrange([rule], [names, Keyed("visits")]);
+        Assert.True(evaluator.Evaluate(rules, latch, 1, 1));
+        Assert.Equal(1, host.Cell("visits", "west"));
+        Assert.Equal(1, host.Cell("visits", "east"));
+        Assert.True(host.TryApply(new StateMutation.RemoveCell("names", "west"), 2, false, out _));
+        Assert.True(evaluator.Evaluate(rules, latch, 2, 1));
+        Assert.Equal(1, host.Cell("visits", "west"));
+        Assert.Equal(2, host.Cell("visits", "east"));
+        Assert.Empty(evaluator.Diagnostics());
+
+        var scalar = names with { Capacity = null, Cells = [new StateCell(StateRow.SlotKey, 0, Text: "scalar")] };
+        Assert.Throws<RuleException>(() => Arrange([rule], [scalar, Keyed("visits")]));
+        var reduction = R("sum", null, effects: new ActionEffect.SetState("total", Expression: Expr("$reduce:sum:names")));
+        Assert.Throws<RuleException>(() => Arrange([reduction], [names, Slot("total", 0)]));
+    }
+
+    [Fact]
     public void AGateWhoseExpressionFaultsIsACountedRefusalNotASilentClose() {
         var (host, evaluator, rules, latch) = Arrange(
             rules: [R(name: "phantom", gate: new ActionPredicate.CompareValue(Left: Expr(text: "prime(999)"), Comparison: ActionStateComparison.Greater, Right: Expr(text: "0"), Kind: CellKind.Int), effects: new ActionEffect.AddState(State: "hits", Value: 1m))],

@@ -1599,12 +1599,14 @@ explicitly enabled Azure observation source. This is an authored storage metapho
 not evidence that the silo-hosted hub or live grain-placement telemetry is running.
 
 The constructable slice gives dealt children stable allocation slots and independently preserved transforms,
-prototypes, and facets. The granary court opts into transform/facet ownership and free bounded reflow; other
-authors can declare an Int payment. Preview produces an ordinary guarded mutation batch, with current authority,
-inventory, document dependencies, and payment checked at commit. Navigation domains can share a static placement
-frame, including yaw. Geometry-changing edits still rebuild navigation conservatively. Powered/watered network
-constraints, movable or resizable physical lattices, and incremental geometry invalidation remain future work;
-the larger estate and universal-world vision does not turn this bounded slice into their implementation.
+prototypes, and facets. Named finite spatial volumes separate occupation, shared clearance, and author-labeled
+influence. The granary court exercises water/power coverage through ordinary rules and bounded layout proposals.
+Growth, neighbor movement, and an optional exact Int payment share one guarded batch. Spatial reads detect newly
+entering obstacles; explicit input reads protect membership and policy. Navigation can retain a domain after
+proving its cell and edge bake unchanged, while rebinding to the current collision query. The authoring contract
+and controls live in the [granary module guide](../src/Puck.World/Assets/worlds/modules/README.md#grow-and-rearrange-the-court).
+Finite supply allocation, movable or resizable physical lattices, and tile-level SDF invalidation remain future
+work; the larger estate and universal-world vision does not turn this bounded slice into their implementation.
 
 **Client seam.** `PlayerRoster`'s loopback-only reads of the live server become a link query that works
 identically in-process and over the wire; no direct-object interface is minted for the shortcut, and
@@ -1699,8 +1701,8 @@ one owner's storage container is never reachable from another's. `WorldReference
 owner's published claim, verifies its chain against the reading world's own admission entries, and binds
 the verified subject to the reference's named owner before it can ever return a verified attestation.
 `storage.push` publishes that counterpart claim, and `storage.status` echoes it. The oracle endpoints
-behind this — key pairs, attestation, the counterpart trigger — live in `src/Web.Functions` (gitignored,
-in-tree, out of the architecture gate by stated predicate). Its live smoke against a real deployment is
+behind this — key pairs, attestation, the counterpart trigger — live in
+[`Puck.Azure.Functions`](../src/Puck.Azure.Functions/Puck.Azure.Functions.csproj). Its live smoke against a real deployment is
 owner-run and not yet done, so the wire path above is exercised locally, not against the deployed oracle.
 
 **The wire admits too early.** The hello proves protocol compatibility, then identity by a

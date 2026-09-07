@@ -97,7 +97,7 @@
             "default": null
           },
           "parent": {
-            "description": "Another placement\u0027s Id this row\u0027s frame composes over, or null for a world-space row (today\u0027s behavior, unchanged). Position/YawDegrees become this row\u0027s own LOCAL offset/heading in the parent\u0027s composed frame: the parent\u0027s resolved yaw rotates the offset before adding the parent\u0027s resolved position (the same local-offset-rotated-by-orientation convention WorldPlacementAttach already uses), and yaw adds. Resolved ONCE, statically, by WorldPlacementFrameCompilation \u2014 never per tick \u2014 into PlacementFrames, which every consumer of a placement\u0027s WORLD transform reads instead of this row\u0027s own Position/YawDegrees. Validated: must name a declared placement other than itself, must not close a cycle, and that placement must carry neither a Distribution nor a Mirror (an expanded row has no single frame to compose against) nor a Scale other than 1 (composition rotates and translates only \u2014 nothing composes a parent\u0027s scale into a child\u0027s local offset).",
+            "description": "Another placement\u0027s Id this row\u0027s frame composes over, or null for a world-space row (today\u0027s behavior, unchanged). Position/YawDegrees become this row\u0027s own LOCAL offset/heading in the parent\u0027s composed frame: the parent\u0027s resolved yaw rotates the offset before adding the parent\u0027s resolved position (the same local-offset-rotated-by-orientation convention WorldPlacementAttach already uses), and yaw adds. Resolved ONCE, statically, by WorldPlacementFrameCompilation \u2014 never per tick \u2014 into PlacementFrames, which every consumer of a placement\u0027s WORLD transform reads instead of this row\u0027s own Position/YawDegrees. Validated: must name a declared placement other than itself, must not close a cycle, and that placement must carry neither a Distribution nor a Mirror (an expanded row has no single frame to compose against). Parent scale multiplies the child\u0027s local offset and resolved scale.",
             "type": [
               "string",
               "null"
@@ -117,9 +117,9 @@
             ],
             "default": null
           },
-          "footprint": {
-            "$ref": "./common.schema.json#/$defs/WorldPlacementFootprint",
-            "description": "Optional occupation and clearance contract used by layout proposals.",
+          "spatial": {
+            "$ref": "./common.schema.json#/$defs/WorldPlacementSpatialVolumeList",
+            "description": "Named occupation, clearance, and influence volumes in this placement\u0027s local frame. The compiled static-query eligibility is exposed by Unsupported; ordinary inhabit/attach/distribution facets remain legal and are reported there when they have no single static frame.",
             "default": null
           }
         },

@@ -223,6 +223,9 @@ Nothing here carries a `World` name — a state library names no world.
   transform). A top-level effect preflights itself under a host scope and
   installs alone; a `transaction` preflights its whole branch as one candidate
   and the host commits that scope as one mutation (`TryCommitPreflight`).
+  `forEach` accepts a keyed row of any cell kind, including Text: iteration
+  visits keys without interpreting their values. Numeric reductions still
+  require numeric rows.
   The evaluator is the evaluation in flight — the tick, the bound forEach key
   and participants, the binding values — which the host's `IRuleReader`
   forwards to its operands. It also owns the trace (`RuleTraceEvaluation`,

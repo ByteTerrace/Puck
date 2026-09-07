@@ -384,6 +384,7 @@ public static class WorldRuleVocabulary {
             WorldRuleFacts.Population,
             WorldRuleFacts.PhysicsQuiescent,
             $"{WorldRuleFacts.RegionPrefix}<placementId>",
+            $"{WorldRuleFacts.InfluencePrefix}<channel>:<placementId>",
             $"{WorldRuleFacts.MachinePrefix}<screen>:<address>",
             $"{WorldRuleFacts.ArgMaxPrefix}<row>",
             $"{WorldRuleFacts.ArgMinPrefix}<row>",
@@ -411,6 +412,25 @@ public static class WorldRuleVocabulary {
             } else if (string.Equals(a: name, b: WorldRuleFacts.PhysicsQuiescent, comparisonType: StringComparison.Ordinal)) {
                 RuleCompiler.RefuseKeyOnReservedChannel(key: key, ruleName: ruleName, name: name, keyFieldLabel: site.KeyFieldLabel);
                 fact = PhysicsQuiescentOperand.Instance;
+            } else if (name.StartsWith(value: WorldRuleFacts.InfluencePrefix, comparisonType: StringComparison.Ordinal)) {
+                var parts = name[WorldRuleFacts.InfluencePrefix.Length..].Split(':');
+                if (parts.Length != 2 || !CellName.TryParse(parts[0], out _, out _) ||
+                    WorldDefinitionRows.FindPlacement(id: parts[1], placements: world.Definition.Placements) is not { } target) {
+                    throw new RuleException(WorldRuleRefusal.SpatialChannelMalformed, ruleName,
+                        $"'{name}' must spell '{WorldRuleFacts.InfluencePrefix}<channel>:<placementId>' with a declared placement");
+                }
+                CompiledCellRef? keyFrom = null;
+                if (key is not null) {
+                    if (target.Deal is null) {
+                        throw new RuleException(WorldRuleRefusal.SpatialChannelMalformed, ruleName, $"'{name}' accepts a child key only for a deal template");
+                    }
+                    if (RuleCompiler.TryResolveDynamicKey(key, ruleName, context, site.Verb, site.KeyFieldLabel, out var dynamicKey)) {
+                        keyFrom = dynamicKey;
+                    } else if (!CellName.TryParse(key, out _, out _)) {
+                        throw new RuleException(WorldRuleRefusal.SpatialChannelMalformed, ruleName, $"'{name}' has an invalid child key");
+                    }
+                }
+                fact = new PlacementInfluenceOperand(parts[0], parts[1], keyFrom is null ? key : null, keyFrom);
             } else if (name.StartsWith(value: WorldRuleFacts.RegionPrefix, comparisonType: StringComparison.Ordinal)) {
                 RuleCompiler.RefuseKeyOnReservedChannel(key: key, ruleName: ruleName, name: name, keyFieldLabel: site.KeyFieldLabel);
                 var placementId = name[WorldRuleFacts.RegionPrefix.Length..];

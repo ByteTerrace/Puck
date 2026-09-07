@@ -286,7 +286,7 @@ public sealed partial class WorldServer {
     // below, WorldServer.BoardEnforcement.cs) — the handle is handed back too, so a caller that walks the row's own
     // cells afterward reads each one through it rather than resolving the row by name again per cell.
     private bool TryResolveDocumentRow(string name, out StateHandle handle, out WorldStateRow? row) {
-        var catalog = m_definition.StateCatalog;
+        var catalog = RuleReadCatalog;
 
         if (
             catalog.TryResolve(lane: StateLane.Document, name: name, handle: out handle) &&
@@ -376,21 +376,10 @@ public sealed partial class WorldServer {
     // gate reads THIS tick, and two interactions cascade in their own declared order (interaction A tags a carrier
     // interaction B's gate then reads) on the identical terms a rule chain already does.
     //
-    // The rule/interaction ARRAY is snapshotted by the evaluator's loop (the m_rules/m_interactions read below), which
-    // is a different thing from the state the gates read: a rule's own effect installs a new definition, which
-    // reassigns m_rules/m_interactions. Every row declared at the top of the tick evaluates during this tick; a row
-    // ADDED by this tick's effects starts on the next one, the same next-tick boundary every other mutation lands on.
-    //
-    // Effects apply IMMEDIATELY, not at a boundary: the evaluator's state effects land in TryApplyRuleMutation, which
-    // calls TryApplyMutation and installs the composed definition on the spot. So a later rule's gate DOES read an earlier rule's same-tick write — and so
-    // does a later effect's live 'from' operand, which reads through the same ReadWorldFact walk. The rules in one
-    // tick are a sequence, not a simultaneous snapshot, and a chain (rule A sets a flag, rule B gates on it, rule C
-    // copies it) fires end to end within one tick. That is deterministic because document order is: the same
-    // document and the same input produce the same sequence on every run, machine, and backend.
-    //
-    // Effects install through TryApplyMutation directly, bypassing the pending-op queue and its per-step
-    // DeliverDefinition, so the delivery happens here: once per tick with at least one applied effect, the same
-    // once-per-step shape DrainPendingOps keeps. KEEP IN SYNC with DrainPendingOps' delivery.
+    // Rules and interactions use the installed compiled program for this tick. Their state and document writes
+    // become visible to later effects and gates in authored order, through the value frame and speculative
+    // definition. One end-of-evaluation fold installs the ordered mutations and delivers once, matching the
+    // once-per-step delivery shape of DrainPendingOps.
     private void EvaluateWorldRules(ulong tick, ulong stepTicks) {
         m_decisionWork = default;
         FreezeDecisionPerception(m_rules);
@@ -399,8 +388,8 @@ public sealed partial class WorldServer {
 
         applied |= m_evaluator.Evaluate(rules: m_interactions, latch: m_interactionGateHeld, tick: tick, stepTicks: stepTicks);
 
-        FoldRuleFrameMutations(tick: tick);
         m_ruleFrameActive = false;
+        FoldRuleFrameMutations(tick: tick);
 
         if (applied) {
             DeliverPending();
@@ -580,15 +569,13 @@ public sealed partial class WorldServer {
 
         return false;
     }
-    // The world's mutation door as the evaluator sees it. Outside preflight the ordinary pipeline installs, or
-    // refuses by name through its own mutation rejection. Under preflight the candidate composes and validates
-    // privately and becomes m_definition, so the next preflighted step reads it; the enclosing EndPreflight restores
-    // the installed document. Transaction steps cannot add or remove state rows, so their compiled row ordinals
-    // remain valid while cell values and keys move.
+    // During rule evaluation, document effects validate privately against the whole ordered prefix and become
+    // visible to subsequent effects. Scope rollback restores the prefix; the tick fold owns actual installation.
+    // Transaction steps cannot add or remove state rows, so compiled row ordinals remain valid as cells move.
     private bool TryApplyRuleMutation(WorldMutation mutation, ulong tick, bool preflight, out string reason) {
         reason = string.Empty;
 
-        if (!preflight) {
+        if (!preflight && !m_ruleFrameActive) {
             if (TryApplyMutation(mutation: mutation, tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false)) {
                 return true;
             }
@@ -598,19 +585,15 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        var current = m_definition;
-
-        if (!TryCompose(current: current, mutation: mutation, tick: tick, instanceIdentity: InstanceIdentity, candidate: out var candidate, reason: out reason, evictedKey: out _, patterns: m_patterns)) {
+        if (!TryComposeRuleFrameCandidate(next: mutation, tick: tick, candidate: out var candidate, reason: out reason)) {
             return false;
         }
-
-        candidate = RebaseCellTraits(candidate: candidate, mutation: mutation, original: current, tick: tick);
 
         if (!TryValidateMutationCandidate(candidate: candidate, mutation: mutation, reason: out reason, compilation: out _, retainCompilation: false)) {
             return false;
         }
 
-        if ((candidate.Adjacencies is { Count: > 0 }) && AdjacencyProofInputsChanged(candidate: candidate, current: current, mutation: mutation)) {
+        if ((candidate.Adjacencies is { Count: > 0 }) && AdjacencyProofInputsChanged(candidate: candidate, current: m_definition, mutation: mutation)) {
             reason = "the mutation changes an adjacency overlap input and requires world.load/world.reload";
         } else if (ExceedsBootDerivedFaceReservation(candidate: candidate, reason: out var reservationReason)) {
             reason = reservationReason;
@@ -627,9 +610,8 @@ public sealed partial class WorldServer {
         }
 
         m_definition = candidate;
-        if (m_preflightMutations.Count > 0) {
-            m_preflightMutations.Peek().Add(item: mutation);
-        }
+        QueueRuleFrameMutation(mutation: mutation);
+        ReloadRuleFrame(extraScopesToClose: 0);
 
         return true;
     }

@@ -68,12 +68,44 @@ public sealed class NavigationRuntimeLawTests {
     }
 
     // A minimal live-medium field the kernel drives purely through its own narrow seam.
-    private sealed class StubMediumField(Func<FixedVector3, bool> isWet) : INavigationMediumField {
-        public ulong ValueRevision(int field) => 0;
+    private sealed class StubMediumField(Func<FixedVector3, bool> isWet, ulong revision = 0) : INavigationMediumField {
+        private readonly ulong m_revision = revision;
+        public ulong ValueRevision(int field) => m_revision;
         public bool IsInsideMedium(int field, in FixedVector3 position, FixedQ4816 clearance) => isWet(position);
         public bool IsSegmentInsideMedium(int field, in FixedVector3 from, in FixedVector3 to, FixedQ4816 clearance, int maximumSubdivisions) =>
             isWet(from) && isWet(to);
         public bool TryFieldIndex(string name, out int field) { field = 0; return true; }
+    }
+
+    private static NavigationDomainInput SurfaceDomain() => new(
+        Name: "ground",
+        Kind: NavigationKind.Surface,
+        Origin: FixedVector3.Zero,
+        CellSize: FixedQ4816.One,
+        Width: 3,
+        Depth: 1,
+        Layers: 1,
+        Connectivity: NavigationConnectivity.Axis,
+        ProbeUp: FixedQ4816.FromInteger(value: 2),
+        ProbeDown: FixedQ4816.FromInteger(value: 2),
+        AgentRadius: FixedQ4816.FromDouble(value: 0.1),
+        AgentHeight: FixedQ4816.FromDouble(value: 2),
+        MaxStepHeight: FixedQ4816.FromInteger(value: 1),
+        MaximumSlopeRise: FixedQ4816.FromInteger(value: 1),
+        ArrivalDistance: FixedQ4816.FromDouble(value: 0.2),
+        MaxExpandedNodes: 256,
+        MaxPathNodes: 256,
+        Medium: null,
+        Shared: null
+    );
+
+    private sealed class SurfaceQuery(int? blockedX) : IWorldQuery {
+        public QueryCapabilities Capabilities => new(HasHeightfield: true, HasBlocked: true, HasOccupancy: false);
+        public bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) { hit = default; return false; }
+        public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) { hit = default; return false; }
+        public bool Overlap(FixedPosition center, FixedQ4816 radius) => blockedX is { } x && center.Local.X == FixedQ4816.FromInteger(x);
+        public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) { groundY = FixedQ4816.Zero; return true; }
+        public bool LineOfSight(FixedPosition from, FixedPosition to) => true;
     }
 
     private static SdfFieldEvaluator ThinWallAt(float x) {
@@ -112,6 +144,126 @@ public sealed class NavigationRuntimeLawTests {
 
         Assert.False(condition: domain.AdmitsLocomotion(from: origin, to: throughTheWall));
         Assert.True(condition: domain.AdmitsLocomotion(from: origin, to: shortOfTheWall));
+    }
+
+    [Fact]
+    public void RetainsEquivalentBakeAndForwardsOffGridQueriesToTheNewProvider() {
+        var row = VolumeDomain(width: 4);
+        var previous = new NavigationRuntime([row], new OpenQuery(), null, Capacity());
+        var replacementQuery = ThinWallAt(x: 2.5f);
+        var replacement = new NavigationRuntime([row], replacementQuery, null, Capacity(), previous);
+
+        Assert.Equal(1, replacement.RetainedDomainCount);
+        Assert.Equal(0, replacement.RebuiltDomainCount);
+        Assert.Same(previous[0], replacement[0]);
+        Assert.False(replacement[0].AdmitsLocomotion(
+            from: FixedVector3.Zero,
+            to: new FixedVector3(X: FixedQ4816.FromInteger(value: 3), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)));
+    }
+
+    [Fact]
+    public void RebuildsWhenACompileTimeCellBakeChanges() {
+        var row = VolumeDomain(width: 4);
+        var previous = new NavigationRuntime([row], new OpenQuery(), null, Capacity());
+        var replacement = new NavigationRuntime([row], ThinWallAt(x: 0f), null, Capacity(), previous);
+
+        Assert.Equal(0, replacement.RetainedDomainCount);
+        Assert.Equal(1, replacement.RebuiltDomainCount);
+        Assert.NotSame(previous[0], replacement[0]);
+    }
+
+    [Fact]
+    public void RetainsAnUnaffectedDomainWhileRebuildingTheAffectedDomain() {
+        var affected = VolumeDomain(width: 4);
+        var unaffected = affected with {
+            Name = "far",
+            Origin = new FixedVector3(X: FixedQ4816.FromInteger(value: 100), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)
+        };
+        var previous = new NavigationRuntime([affected, unaffected], new OpenQuery(), null, Capacity());
+        var replacement = new NavigationRuntime([affected, unaffected], ThinWallAt(x: 0f), null, Capacity(), previous);
+
+        Assert.Equal(1, replacement.RetainedDomainCount);
+        Assert.Equal(1, replacement.RebuiltDomainCount);
+        Assert.NotSame(previous[0], replacement[0]);
+        Assert.Same(previous[1], replacement[1]);
+    }
+
+    [Fact]
+    public void RetainedDomainKeepsSharedSearchState() {
+        var row = VolumeDomain(width: 6, shared: new NavigationSharing(GoalCapacity: 1, ExpandedNodesPerTick: 1));
+        var previous = new NavigationRuntime([row], new OpenQuery(), null, Capacity());
+        Span<int> path = stackalloc int[256];
+        _ = previous[0].RequestShared(start: 0, goal: 5, path: path, length: out _);
+        previous[0].AdvanceShared();
+        var before = previous[0].CaptureShared();
+
+        var replacement = new NavigationRuntime([row], new OpenQuery(), null, Capacity(), previous);
+
+        Assert.Same(previous[0], replacement[0]);
+        var after = replacement[0].CaptureShared();
+        Assert.Equal(before.Cursor, after.Cursor);
+        Assert.Equal(before.Trees.Length, after.Trees.Length);
+        Assert.Equal(before.Trees[0].Goal, after.Trees[0].Goal);
+        Assert.Equal(before.Trees[0].Nodes.Length, after.Trees[0].Nodes.Length);
+        Assert.Equal(before.Trees[0].Pending, after.Trees[0].Pending);
+    }
+
+    [Fact]
+    public void RetainsAnUnchangedSurfaceBakeIncludingItsBlockedCell() {
+        var row = SurfaceDomain();
+        var query = new SurfaceQuery(blockedX: 1);
+        var previous = new NavigationRuntime([row], query, null, Capacity());
+
+        Assert.Equal(2, previous[0].WalkableCellCount);
+        Assert.False(previous[0].TryCell(new FixedVector3(
+            X: FixedQ4816.One,
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.Zero), out _));
+
+        var replacement = new NavigationRuntime([row], new SurfaceQuery(blockedX: 1), null, Capacity(), previous);
+
+        Assert.Equal(1, replacement.RetainedDomainCount);
+        Assert.Equal(0, replacement.RebuiltDomainCount);
+        Assert.Same(previous[0], replacement[0]);
+    }
+
+    [Fact]
+    public void RebuildsWhenNavigationCapacityChanges() {
+        var row = VolumeDomain(width: 3);
+        var previous = new NavigationRuntime([row], new OpenQuery(), null, Capacity());
+        var changed = Capacity() with { MaxMediumSegmentSubdivisions = Capacity().MaxMediumSegmentSubdivisions + 1 };
+
+        var replacement = new NavigationRuntime([row], new OpenQuery(), null, changed, previous);
+
+        Assert.Equal(0, replacement.RetainedDomainCount);
+        Assert.Equal(1, replacement.RebuiltDomainCount);
+        Assert.NotSame(previous[0], replacement[0]);
+    }
+
+    [Fact]
+    public void RetainsAnUnchangedMediumDomainWithTheSameProviderAndRevision() {
+        var row = VolumeDomain(width: 3, medium: "water");
+        var query = new OpenQuery();
+        var field = new StubMediumField(isWet: static _ => true, revision: 17);
+        var previous = new NavigationRuntime([row], query, field, Capacity());
+
+        var replacement = new NavigationRuntime([row], query, field, Capacity(), previous);
+
+        Assert.Equal(1, replacement.RetainedDomainCount);
+        Assert.Equal(0, replacement.RebuiltDomainCount);
+        Assert.Same(previous[0], replacement[0]);
+    }
+
+    [Fact]
+    public void RebuildsMediumDomainWhenASeparateProviderReusesItsRevision() {
+        var row = VolumeDomain(width: 3, medium: "water");
+        var query = new OpenQuery();
+        var previous = new NavigationRuntime([row], query, new StubMediumField(static _ => true, revision: 17), Capacity());
+        var replacement = new NavigationRuntime([row], query, new StubMediumField(static _ => true, revision: 17), Capacity(), previous);
+
+        Assert.Equal(0, replacement.RetainedDomainCount);
+        Assert.Equal(1, replacement.RebuiltDomainCount);
+        Assert.NotSame(previous[0], replacement[0]);
     }
 
     [Fact]

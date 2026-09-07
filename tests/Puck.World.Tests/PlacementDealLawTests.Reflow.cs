@@ -110,12 +110,12 @@ public sealed partial class PlacementDealLawTests {
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void OnlyFootprintPlacementsInvalidateAnotherCourtsPreview(bool blocks) {
+    public void OnlyNearbySpatialPlacementsInvalidateAnotherCourtsPreview(bool blocks) {
         using var fixture = Fixtures.FreshServer(ReflowDocument());
         fixture.Step();
         OverlapChildren(fixture);
         Assert.True(fixture.Server.TryPreviewReflow(TemplateId, WorldPrincipal.Console, out var proposal, out var reason), reason);
-        var unrelated = Child(fixture.Server, "a") with { Id = "chair", Parent = null, DealSlot = null, Footprint = blocks ? new WorldPlacementFootprint(.4f, .4f) : null };
+        var unrelated = Child(fixture.Server, "a") with { Id = "chair", DealSlot = null, Spatial = blocks ? ReflowSpatial() : null };
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(WorldPrincipal.Console, unrelated));
         fixture.Step();
         Assert.Contains(fixture.Server.Definition.Placements, p => p.Id == "chair");
@@ -222,9 +222,14 @@ public sealed partial class PlacementDealLawTests {
         Assert.Equal(Child(fixture.Server, "a").Position, Child(fixture.Server, "b").Position);
         Assert.Equal(100, WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, "credits")!.Cells![0].Value);
     }
+    private static IReadOnlyList<WorldPlacementSpatialVolume> ReflowSpatial(bool pinned = false) => [
+        new("body", WorldPlacementSpatialRole.Occupation,
+            new WorldSpatialShape(WorldSpatialShapeKind.Box, System.Numerics.Vector3.Zero, new System.Numerics.Vector3(.4f)), Pinned: pinned)
+    ];
+
     private static WorldDefinition ReflowDocument() {
         var template = Template(new WorldPlacementDeal(RowName, Preserve: new WorldPlacementDealPreserve(Transform: true, Facets: true),
-            Reflow: new WorldPlacementReflow(CostPerMove: 5, CostRow: "credits"))) with { Footprint = new WorldPlacementFootprint(.4f, .4f) };
+            Reflow: new WorldPlacementReflow(CostPerMove: 5, CostRow: "credits"))) with { Spatial = ReflowSpatial() };
         var document = Document(template, AccountsRow("a", "b"));
         return document with { StateRaw = new WorldStateSection(World: [.. document.State,
             new WorldStateRow(Name: CellName.Parse("credits"), Kind: CellKind.Int, Min: 0, Max: 1000, Cells: [new StateCell(WorldStateRow.SlotKey, 100)])]) };
@@ -234,9 +239,9 @@ public sealed partial class PlacementDealLawTests {
         var a = Child(fixture.Server, "a");
         var b = Child(fixture.Server, "b");
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(WorldPrincipal.Console, b with {
-            Position = a.Position, Footprint = b.Footprint! with { Pinned = pinned }
+            Position = a.Position, Spatial = ReflowSpatial(pinned)
         }));
-        if (pinned) { fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(WorldPrincipal.Console, a with { Footprint = a.Footprint! with { Pinned = true } })); }
+        if (pinned) { fixture.Server.EnqueueMutation(new WorldMutation.UpsertPlacement(WorldPrincipal.Console, a with { Spatial = ReflowSpatial(true) })); }
         fixture.Step();
     }
 

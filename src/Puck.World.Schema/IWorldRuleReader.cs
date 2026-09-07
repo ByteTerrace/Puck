@@ -9,6 +9,7 @@ public interface IWorldRuleReader : IRuleReader {
     RuleFact Read(PhysicsQuiescentOperand operand);
     RuleFact Read(ClockOperand operand);
     RuleFact Read(RegionOccupancyOperand operand);
+    RuleFact Read(PlacementInfluenceOperand operand);
     RuleFact Read(MachineMemoryOperand operand);
     RuleFact Read(ArgBodyOperand operand);
     RuleFact Read(BodyDistanceOperand operand);

@@ -182,6 +182,9 @@ public static class WorldSubmissionCodec {
         WorldQuery.MusicState => 19,
         WorldQuery.InstrumentState => 21,
         WorldQuery.StateObservations => 22,
+        WorldQuery.ReflowPreview => 23,
+        WorldQuery.ReflowStatus => 24,
+        WorldQuery.ReflowCancel => 25,
         _ => throw UnknownLeaf(value: value),
     };
     private static Type? QueryType(byte kind) => kind switch {
@@ -206,6 +209,9 @@ public static class WorldSubmissionCodec {
         19 => typeof(WorldQuery.MusicState),
         21 => typeof(WorldQuery.InstrumentState),
         22 => typeof(WorldQuery.StateObservations),
+        23 => typeof(WorldQuery.ReflowPreview),
+        24 => typeof(WorldQuery.ReflowStatus),
+        25 => typeof(WorldQuery.ReflowCancel),
         _ => null,
     };
     private static WorldCommand ReadCommand(BinaryReader reader) {

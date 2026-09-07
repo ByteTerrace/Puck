@@ -6,8 +6,9 @@ sealed records — one coarse record per `WorldDefinition` section, addressed by
 stable id, whole-row upsert, never a field poke. A genre world arrives as
 different DATA through these same messages, never a new message shape.
 
-`Batch` can carry an `expectedDefinition` fingerprint, an optional `expectedStateRows` dependency selection,
-an optional `expectedLayoutTemplate` scope, and numeric `expectedCells` comparisons evaluated at commit time.
+`Batch` can carry a full `expectedDefinition` fingerprint, named placement/state `expectedInputs`, bounded
+three-dimensional `expectedSpatialReads`, and numeric `expectedCells` comparisons evaluated at commit time.
+Spatial reads include referenced state values and catch new or moved blockers entering the region.
 Each cell can also require an exact post-composition `change` and `kind`; failure discards the whole candidate.
 Observation grants cover guarded rows. Members must carry the enclosing principal, checked at codec and server
 admission. Reflow uses this ordinary batch and ordered submission path; Immediate preview starts bounded background work,
@@ -16,6 +17,11 @@ not a simulation write. Do not replace that submission with direct server enqueu
 what records the accepted payload for replay.
 Successful base rebuilds clear deal sweep memos so a reset or live replay materializes children even when
 the replacement inventory equals the prior session's. Ordinary edits and undo retain their reconciliation semantics.
+
+Rule-driven state, placement, and HUD mutations share one firing-order queue. Document effects validate a
+speculative candidate including earlier queued writes; scope rollback discards its entire tail. The end-of-rule
+fold installs through the ordinary mutation door once. Keep this boundary intact when adding an effect; see
+the [rule frame contract](../../../../src/Puck.World.Server/README.md#rule-effects-land-on-a-frame-worldserverrulehostcs-worldserverruleframecs).
 
 ## Contents
 

@@ -27,6 +27,11 @@ public sealed partial class WorldServer {
                     }
                 }
             }
+            if (batch.ExpectedInputs is { } inputs) {
+                foreach (var row in inputs.StateRows) {
+                    if (!TryAdmitGuardObservation(batch.Principal, row, out admission)) { return false; }
+                }
+            }
             for (var index = 0; index < batch.Mutations.Count; index++) {
                 if (!TryAdmitCompleteMutation(batch.Mutations[index], preMetered || (index > 0), out admission)) {
                     return false;

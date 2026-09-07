@@ -214,6 +214,13 @@ public static class WorldModuleNamespace {
         // Colon segments outside brackets are names; a bracketed span is a live-zone index, a cell key in its own
         // right. A $bind: read names a rule-local binding, never a row.
         private string RewriteReserved(string name) {
+            if (name.StartsWith(WorldRuleFacts.InfluencePrefix, StringComparison.Ordinal)) {
+                var separator = name.IndexOf(':', WorldRuleFacts.InfluencePrefix.Length);
+                // Influence labels are shared semantics, even if a module happens to declare a row of that name.
+                if (separator >= 0) {
+                    return name[..(separator + 1)] + RewriteReserved(name[(separator + 1)..]);
+                }
+            }
             if (name.StartsWith(value: RuleFacts.BindPrefix, comparisonType: StringComparison.Ordinal)) {
                 return name;
             }

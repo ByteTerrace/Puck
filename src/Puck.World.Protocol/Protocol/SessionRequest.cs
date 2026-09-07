@@ -61,6 +61,13 @@ public readonly record struct SessionReply(bool Accepted, int AssignedIndex, str
 /// <c>screen.state</c>): the server composes the answer string authoritatively so the client prints a byte-identical
 /// echo.</summary>
 public abstract record WorldQuery {
+    /// <summary>Starts bounded detached placement planning for the submitting principal. No simulation state changes.</summary>
+    public sealed record ReflowPreview(WorldPlacementReflowRequest Request) : WorldQuery;
+    /// <summary>Reviews the submitting principal's completed plan. Payload carries a detached
+    /// <see cref="Puck.World.Server.WorldPlacementProposal"/> whose batch is submitted through ordinary mutation admission.</summary>
+    public sealed record ReflowStatus : WorldQuery;
+    /// <summary>Discards the submitting principal's cached plan without payment or simulation changes.</summary>
+    public sealed record ReflowCancel : WorldQuery;
     /// <summary>Returns only the state observations admitted for the submission stamp; no caller-selected recipient.</summary>
     public sealed record StateObservations(string? Row = null) : WorldQuery;
     /// <summary>Returns the capability subject a submitted query must hold <see cref="WorldCapability.Observe"/>

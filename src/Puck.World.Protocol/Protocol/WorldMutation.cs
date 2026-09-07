@@ -642,13 +642,16 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// batch if its base changed after preview; permission and capacity checks still run normally.</param>
     /// <param name="ExpectedCells">Optional numeric reads checked at commit time, including advancing cell values.</param>
     /// <param name="ExpectedStateRows">Optional world-state dependency selection for ExpectedDefinition; null hashes every row.</param>
-    /// <param name="ExpectedLayoutTemplate">Optional layout-only fingerprint scope: this template, children, footprint census and ancestor frames.</param>
+    /// <param name="ExpectedSpatialReads">Optional bounded spatial read dependencies. Each region is re-queried at
+    /// commit, so occupation, clearance, extents, parent frames, and newly entering obstacles are guarded together.</param>
+    /// <param name="ExpectedInputs">Optional explicitly named placement and state input dependencies.</param>
     [MutationKind(ordinal: 81, section: WorldSection.State)]
     public sealed record Batch(WorldPrincipal Principal, [property: System.Text.Json.Serialization.JsonConverter(typeof(WorldMutationListJsonConverter))] IReadOnlyList<WorldMutation> Mutations,
         [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? ExpectedDefinition = null,
         [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldStateExpectation>? ExpectedCells = null,
         [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? ExpectedStateRows = null,
-        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? ExpectedLayoutTemplate = null) : WorldMutation(Principal) {
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSpatialReadDependency>? ExpectedSpatialReads = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldDefinitionReadDependency? ExpectedInputs = null) : WorldMutation(Principal) {
         /// <summary>Validates this batch's immediate members and guards. Nested batches pass the same check when
         /// admitted or decoded recursively; every member must carry the enclosing actor.</summary>
         /// <param name="reason">The structural refusal, or empty on success.</param>
@@ -660,7 +663,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
                 if (Mutations[index] is not { } member || member.Principal != Principal) { return false; }
             }
             if (ExpectedDefinition is { } hash && (hash.Length != 64 || hash.Any(c => !char.IsAsciiHexDigit(c)))) { return false; }
-            if (ExpectedLayoutTemplate is { } template && (string.IsNullOrWhiteSpace(template) || ExpectedDefinition is null || ExpectedStateRows is null)) { return false; }
+            if (ExpectedInputs is { } inputs && !inputs.TryValidate()) { return false; }
             if (ExpectedStateRows is { } rows) {
                 if (ExpectedDefinition is null) { return false; }
                 for (var index = 0; index < rows.Count; index++) {
@@ -671,6 +674,12 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
                 for (var index = 0; index < cells.Count; index++) {
                     if (cells[index] is not { } cell || string.IsNullOrWhiteSpace(cell.Row) || cell.Key is { Length: 0 } ||
                         !Enum.IsDefined(cell.Comparison) || (cell.Kind is { } kind && !Enum.IsDefined(kind))) { return false; }
+                }
+            }
+            if (ExpectedSpatialReads is { } spatial) {
+                if (spatial.Count == 0) { return false; }
+                for (var index = 0; index < spatial.Count; index++) {
+                    if (spatial[index] is not { } read || !read.TryValidate(out _)) { return false; }
                 }
             }
             reason = string.Empty;

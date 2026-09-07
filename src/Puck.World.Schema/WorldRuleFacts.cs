@@ -153,4 +153,9 @@ public static class WorldRuleFacts {
     /// per tick to recover a number the engine already tracks for free — a real regression for the one consumer that
     /// exists today. Kept as its own case, deliberately.</remarks>
     public const string RegionPrefix = "$region:";
+
+    /// <summary><c>$influence:&lt;channel&gt;:&lt;placementId&gt;</c> counts distinct other placements covering
+    /// the target with the named influence. An optional read key addresses a dealt child of the named template.
+    /// Channels are opaque shared labels, so importing a module does not rename them. A missing child reads absent.</summary>
+    public const string InfluencePrefix = "$influence:";
 }

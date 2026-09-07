@@ -29,10 +29,23 @@ public sealed partial class WorldServer {
 
         reason = string.Empty;
         evictedKey = null;
-        if (batch.ExpectedDefinition is { } expected && expected != WorldDefinitionFingerprint.Compute(current, batch.ExpectedStateRows, batch.ExpectedLayoutTemplate)) {
+        if (batch.ExpectedDefinition is { } expected && expected != WorldDefinitionFingerprint.Compute(current, batch.ExpectedStateRows)) {
             candidate = current;
             reason = "the proposal is stale: its base definition changed; preview again";
             return false;
+        }
+        if (batch.ExpectedInputs is { } inputs && inputs.Fingerprint != WorldDefinitionFingerprint.ComputeInputs(current, inputs.PlacementIds, inputs.StateRows)) {
+            candidate = current;
+            reason = "the proposal is stale: its named inputs changed; preview again";
+            return false;
+        }
+        foreach (var spatial in batch.ExpectedSpatialReads ?? []) {
+            var region = spatial.Region;
+            if (spatial.Fingerprint != WorldDefinitionFingerprint.ComputeSpatial(current, region)) {
+                candidate = current;
+                reason = "the proposal is stale: its spatial read changed; preview again";
+                return false;
+            }
         }
         foreach (var cell in batch.ExpectedCells ?? []) {
             if (!WorldStateReader.TryRead(current, cell.Row, cell.Key, tick, out var row, out var raw, out _) || raw is not { } value ||

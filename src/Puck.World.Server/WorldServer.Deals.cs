@@ -79,9 +79,8 @@ public sealed partial class WorldServer {
     private static string DescribeFacets(WorldPlacement placement) {
         var facets = string.Empty;
         if (placement.DealSlot is { } slot) { facets += $" dealSlot={slot}"; }
-        if (placement.Footprint is { } footprint) {
-            facets += string.Create(CultureInfo.InvariantCulture,
-                $" footprint=({footprint.HalfWidth:0.###},{footprint.HalfDepth:0.###}) clearance={footprint.Clearance:0.###} pinned={footprint.Pinned}");
+        if (placement.Spatial is { Count: > 0 } spatial) {
+            facets += $" spatial=({string.Join(",", spatial.Select(volume => $"{volume.Name}:{volume.Role}{(volume.Channel is { } channel ? $":{channel}" : string.Empty)}"))})";
         }
         if (placement.Deal?.Preserve is { } preserve) {
             facets += $" preserve=(transform:{preserve.Transform},prototype:{preserve.Prototype},facets:{preserve.Facets})";
@@ -529,6 +528,6 @@ public sealed partial class WorldServer {
         Grip: template.Grip,
         Parent: template.Id,
         DealSlot: slot,
-        Footprint: template.Footprint
+        Spatial: template.Spatial
     );
 }

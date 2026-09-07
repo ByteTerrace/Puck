@@ -14,6 +14,7 @@ public sealed partial class WorldPopulation {
     // motion tuning, kit producer parameters, kit rows and their fixed compilations, and the resolved seat-kit row. Shared by the
     // constructor and Rebuild so a live retune quantizes through exactly the same path.
     private void CompileFixedTables(WorldDefinition definition, WorldSolidField? solids) {
+        var previousNavigation = (m_navigation ?? null);
         LocalSeatCount = definition.Population.LocalSeats;
         var authoredMotion = definition.Motion;
 
@@ -127,7 +128,8 @@ public sealed partial class WorldPopulation {
                 MaxSurfaceClearanceSweeps: WorldNavigationCapacity.MaxSurfaceClearanceSweeps,
                 MaxMediumSegmentSubdivisions: WorldNavigationCapacity.MaxMediumSegmentSubdivisions,
                 MaxConcurrentRequesters: WorldBodiesLimits.CapacityCeiling
-            )
+            ),
+            previous: previousNavigation
         );
         m_seatKit = ResolveKit(name: definition.DefaultSeatKit);
         // The LOOK table: the authored rows, or the implicit single catalog look when the author declared none.
@@ -565,6 +567,8 @@ public sealed partial class WorldPopulation {
     public void Rebuild(WorldDefinition definition, WorldSolidField? solids) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
+        var previousNavigation = m_navigation;
+
         if (!CanInstallFields(
             definition: definition,
             reason: out var fieldReason
@@ -585,11 +589,28 @@ public sealed partial class WorldPopulation {
         );
 
         for (var bodyIndex = 0; (bodyIndex < m_entries.Length); bodyIndex++) {
-            // A route stores domain-local node ordinals. Even when a replacement keeps the same domain name and
-            // dimensions, changed geometry, medium truth, origin, or connectivity gives those ordinals new meaning.
-            // Drop every cached route at the same boundary that installs the new domain runtime; the next producer
-            // tick deterministically replans from its retained designation.
-            m_entries[bodyIndex].NavigationState.Clear();
+            var navigation = m_entries[bodyIndex].NavigationState;
+            var routeRetained = false;
+            if ((uint)navigation.DomainIndex < (uint)previousNavigation.Count) {
+                var oldName = previousNavigation[navigation.DomainIndex].Name;
+                if (TryFindRetainedDomain(oldName, out var currentIndex)) {
+                    navigation.DomainIndex = currentIndex;
+                    routeRetained = true;
+                }
+            }
+            // A route stores domain-local node ordinals. Keep it only when the replacement runtime proved the same
+            // complete static bake and rebound its dynamic query provider; all uncertain cases replan from the
+            // retained designation on the next producer tick.
+            if (!routeRetained) {
+                navigation.Clear();
+            }
+            var activeDomain = m_entries[bodyIndex].ProducerState.ActiveProducerNavigationDomainIndex;
+            if ((uint)activeDomain < (uint)previousNavigation.Count &&
+                TryFindRetainedDomain(previousNavigation[activeDomain].Name, out var reboundDomain)) {
+                m_entries[bodyIndex].ProducerState.ActiveProducerNavigationDomainIndex = reboundDomain;
+            } else if (activeDomain >= 0) {
+                m_entries[bodyIndex].ProducerState.ActiveProducerNavigationDomainIndex = -1;
+            }
             // Cadence periods and cached steering are compiled-kit products. A live kit/assignment rebuild must not
             // carry a partial interval or producer image authored under the previous row into the replacement.
             m_entries[bodyIndex].AutonomyState.Clear();
@@ -606,6 +627,17 @@ public sealed partial class WorldPopulation {
             }
 
             m_entries[bodyIndex].Designations = current;
+        }
+
+        bool TryFindRetainedDomain(string name, out int index) {
+            for (var candidate = 0; candidate < m_navigation.Count; candidate++) {
+                if (m_navigation.WasRetained(candidate) && string.Equals(m_navigation[candidate].Name, name, StringComparison.Ordinal)) {
+                    index = candidate;
+                    return true;
+                }
+            }
+            index = -1;
+            return false;
         }
 
         var assignmentRows = ResolveRows(

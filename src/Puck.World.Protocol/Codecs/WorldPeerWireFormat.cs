@@ -1,5 +1,6 @@
 using System.Text;
 using Puck.Networking;
+using Puck.World.Server;
 
 namespace Puck.World.Protocol;
 
@@ -15,8 +16,8 @@ namespace Puck.World.Protocol;
 /// snapshots/definitions/compositions/levers are not carried here).
 /// </summary>
 public static class WorldPeerWireFormat {
-    /// <summary>The hard cap on a downstream frame's total bytes — every v1 downstream case is a short status/text
-    /// reply, never a bulk payload.</summary>
+    /// <summary>The hard cap on a downstream frame's total bytes. Typed reflow proposals remain bounded by this
+    /// same cap and never become unbounded bulk payloads.</summary>
     public const int MaxDownstreamFrameBytes = (64 * 1024);
     /// <summary>The hard cap on an upstream frame's total bytes (prefix + payload) — generous enough for the largest
     /// leaf (<c>Definition</c>, 16 MiB) while still refusing an absurd length before allocating for it.</summary>
@@ -49,6 +50,10 @@ public static class WorldPeerWireFormat {
         /// <summary>The submitted frame refused before it ever became a typed result (a codec refusal, an
         /// unadmitted/mismatched principal, or a capacity refusal).</summary>
         Refusal,
+
+        /// <summary><see cref="WorldSubmissionResult.Query"/> carrying a typed
+        /// <see cref="WorldPlacementProposal"/> beside its review text.</summary>
+        QueryPlacementProposal,
     }
 
     private static byte[] EncodeText(string text) => Encoding.UTF8.GetBytes(s: (text ?? string.Empty));
@@ -193,6 +198,28 @@ public static class WorldPeerWireFormat {
                     );
                 }
             case WorldSubmissionResult.Query query: {
+                    if (query.Answer.Payload is WorldPlacementProposal) {
+                        if (!TryEncodePlacementProposalAnswer(
+                            answer: query.Answer,
+                            body: out var proposalBody,
+                            reason: out var proposalFailure
+                        )) {
+                            return WriteDownstreamAsync(
+                                stream: stream,
+                                kind: DownstreamKind.Refusal,
+                                body: EncodeText(text: proposalFailure),
+                                ct: ct
+                            );
+                        }
+
+                        return WriteDownstreamAsync(
+                            body: proposalBody,
+                            ct: ct,
+                            kind: DownstreamKind.QueryPlacementProposal,
+                            stream: stream
+                        );
+                    }
+
                     // [u8 Refused][u16 textLen][text utf8].
                     var writer = new WireWriter();
 
@@ -276,6 +303,79 @@ public static class WorldPeerWireFormat {
 
                     return true;
                 }
+            case DownstreamKind.QueryPlacementProposal: {
+                    if (body.Length > MaxDownstreamBodyBytes) {
+                        result = null;
+                        reason = $"typed reflow proposal carries {body.Length} bytes; cap is {MaxDownstreamBodyBytes}";
+
+                        return false;
+                    }
+
+                    var reader = new WireReader(bytes: body);
+                    var refused = reader.ReadBoolean();
+                    var text = reader.ReadString(field: "query completion text");
+                    var mutationBytes = reader.ReadBlock(
+                        field: "reflow proposal mutation",
+                        maxBytes: MaxDownstreamBodyBytes
+                    );
+                    var candidates = reader.ReadInt32();
+                    var moved = reader.ReadInt32();
+                    var cost = reader.ReadInt64();
+                    var affectedIds = ReadProposalStrings(
+                        field: "reflow proposal affected ids",
+                        reader: ref reader
+                    );
+                    var constraints = ReadProposalStrings(
+                        field: "reflow proposal constraints",
+                        reader: ref reader
+                    );
+
+                    if (!reader.TryFinish(failure: out var wireFailure)) {
+                        result = null;
+                        reason = wireFailure.Detail;
+
+                        return false;
+                    }
+                    if ((candidates < 0) || (moved < 0) || (cost < 0)) {
+                        result = null;
+                        reason = "reflow proposal metadata carries a negative count or cost";
+
+                        return false;
+                    }
+                    if (!WorldSubmissionCodec.TryDecodeMutation(
+                        bytes: mutationBytes,
+                        mutation: out var mutation,
+                        failure: out var mutationFailure
+                    ) || mutation is not WorldMutation.Batch batch) {
+                        result = null;
+                        reason = $"reflow proposal mutation is invalid: {mutationFailure}";
+
+                        return false;
+                    }
+                    if (!batch.TryValidateShape(out var batchReason)) {
+                        result = null;
+                        reason = $"reflow proposal batch is malformed: {batchReason}";
+
+                        return false;
+                    }
+
+                    result = new WorldSubmissionResult.Query(Answer: new QueryAnswer(
+                        Text: text,
+                        Refused: refused,
+                        Payload: new WorldPlacementProposal(
+                            Mutation: batch,
+                            Candidates: candidates,
+                            Moved: moved,
+                            Cost: cost
+                        ) {
+                            AffectedIds = affectedIds,
+                            Constraints = constraints
+                        }
+                    ));
+                    reason = string.Empty;
+
+                    return true;
+                }
             case DownstreamKind.Refusal:
                 result = null;
                 reason = DecodeText(body: body);
@@ -288,4 +388,93 @@ public static class WorldPeerWireFormat {
                 return false;
         }
     }
+
+    private const int MaxDownstreamBodyBytes = MaxDownstreamFrameBytes - sizeof(uint) - sizeof(byte);
+    private const int MaxProposalMetadataItems = 256;
+
+    private static bool TryEncodePlacementProposalAnswer(QueryAnswer answer, out byte[] body, out string reason) {
+        body = [];
+        reason = string.Empty;
+        if (answer.Payload is not WorldPlacementProposal proposal) {
+            reason = "query payload is not a placement proposal";
+
+            return false;
+        }
+        if (!WorldSubmissionCodec.TryEncodeMutation(
+            mutation: proposal.Mutation,
+            bytes: out var mutationBytes,
+            failure: out var mutationFailure
+        )) {
+            reason = $"reflow proposal mutation is not encodable: {mutationFailure}";
+
+            return false;
+        }
+        if (!proposal.Mutation.TryValidateShape(out var batchReason)) {
+            reason = $"reflow proposal batch is malformed: {batchReason}";
+
+            return false;
+        }
+        if (mutationBytes.Length > MaxDownstreamBodyBytes) {
+            reason = $"reflow proposal mutation carries {mutationBytes.Length} bytes; cap is {MaxDownstreamBodyBytes}";
+
+            return false;
+        }
+        if (!TryValidateProposalStrings(proposal.AffectedIds, "affected ids", out reason) ||
+            !TryValidateProposalStrings(proposal.Constraints, "constraints", out reason)) {
+            return false;
+        }
+
+        try {
+            var writer = new WireWriter(capacity: Math.Min(MaxDownstreamBodyBytes, mutationBytes.Length + 1024));
+            writer.WriteBoolean(value: answer.Refused);
+            writer.WriteString(value: answer.Text);
+            writer.WriteBlock(value: mutationBytes);
+            writer.WriteInt32(value: proposal.Candidates);
+            writer.WriteInt32(value: proposal.Moved);
+            writer.WriteInt64(value: proposal.Cost);
+            WriteProposalStrings(writer: writer, values: proposal.AffectedIds);
+            WriteProposalStrings(writer: writer, values: proposal.Constraints);
+            if (writer.Length > MaxDownstreamBodyBytes) {
+                reason = $"typed reflow proposal carries {writer.Length} bytes; cap is {MaxDownstreamBodyBytes}";
+
+                return false;
+            }
+
+            body = writer.ToArray();
+
+            return true;
+        } catch (ArgumentException exception) {
+            reason = $"reflow proposal metadata is not encodable: {exception.Message}";
+
+            return false;
+        }
+    }
+
+    private static bool TryValidateProposalStrings(IReadOnlyList<string>? values, string field, out string reason) {
+        if (values is null || values.Count > MaxProposalMetadataItems || values.Any(value => value is null)) {
+            reason = $"reflow proposal {field} exceed the metadata bound or contain null entries";
+
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
+
+    private static void WriteProposalStrings(WireWriter writer, IReadOnlyList<string> values) {
+        writer.WriteInt32(value: values.Count);
+        foreach (var value in values) { writer.WriteString(value: value); }
+    }
+
+    private static string[] ReadProposalStrings(string field, ref WireReader reader) {
+        var count = reader.ReadCount(field: field, minimum: 0, maximum: MaxProposalMetadataItems);
+        var values = new string[count];
+        for (var index = 0; index < count; index++) {
+            values[index] = reader.ReadString(field: $"{field}[{index}]");
+        }
+
+        return values;
+    }
+
 }

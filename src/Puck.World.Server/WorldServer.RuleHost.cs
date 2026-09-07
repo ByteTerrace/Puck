@@ -1,5 +1,3 @@
-using Puck.World.Protocol;
-
 namespace Puck.World.Server;
 
 /// <summary>The server as the rule evaluator's host: the state library's <see cref="IRuleHost"/> over the installed
@@ -16,14 +14,17 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
     // read outside the tick's own rule evaluation sees the document, never a mid-evaluation frame that this
     // tick's own fold has not yet installed.
     StateStore IRuleReader.Store => (m_ruleFrameActive ? EnsureRuleFrame() : (m_ruleFrameFallbackStore ??= new RowStore(rows: () => m_definition.State)));
-    StateCatalog IRuleReader.Catalog => m_definition.StateCatalog;
+    // Rule handles belong to the installed program. Speculative document-value refreshes may mint another
+    // catalog, but rules cannot change row declarations during their evaluation.
+    private StateCatalog RuleReadCatalog => m_ruleFrameActive ? m_ruleFrameTickBaseline!.StateCatalog : m_definition.StateCatalog;
+    StateCatalog IRuleReader.Catalog => RuleReadCatalog;
     // The frame's row ordinals are the document lane's ordinals: its layout is built from m_definition.State in
     // order. Outside the tick's own rule evaluation the host cannot say, so the evaluator evaluates in full.
     bool IRuleReader.TryRowVersion(StateHandle row, out ulong version) {
         if (
             m_ruleFrameActive &&
             (m_ruleFrame is { } frame) &&
-            m_definition.StateCatalog.TryGetDescriptor(handle: row, descriptor: out var descriptor) &&
+            RuleReadCatalog.TryGetDescriptor(handle: row, descriptor: out var descriptor) &&
             (descriptor.Ownership == StateLane.Document) &&
             (((uint)descriptor.LaneOrdinal) < ((uint)frame.Layout.RowCount))
         ) {
@@ -90,7 +91,7 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
                         return false;
                     }
 
-                    m_ruleFrameMutations.Add(item: MapStateMutation(mutation: mutation));
+                    QueueRuleFrameMutation(mutation: MapStateMutation(mutation: mutation));
 
                     return true;
                 }
@@ -102,7 +103,7 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
                     return false;
                 }
 
-                m_ruleFrameMutations.Add(item: MapStateMutation(mutation: mutation));
+                QueueRuleFrameMutation(mutation: MapStateMutation(mutation: mutation));
 
                 return true;
             }
@@ -111,7 +112,7 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
                     return false;
                 }
 
-                m_ruleFrameMutations.Add(item: MapStateMutation(mutation: mutation));
+                QueueRuleFrameMutation(mutation: MapStateMutation(mutation: mutation));
 
                 return true;
             }
@@ -127,7 +128,7 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
                     return false;
                 }
 
-                m_ruleFrameMutations.Add(item: MapStateMutation(mutation: mutation));
+                QueueRuleFrameMutation(mutation: MapStateMutation(mutation: mutation));
 
                 return true;
             }
@@ -136,7 +137,7 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
                     return false;
                 }
 
-                m_ruleFrameMutations.Add(item: MapStateMutation(mutation: mutation));
+                QueueRuleFrameMutation(mutation: MapStateMutation(mutation: mutation));
 
                 return true;
             }
@@ -145,7 +146,7 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
                     return false;
                 }
 
-                m_ruleFrameMutations.Add(item: MapStateMutation(mutation: mutation));
+                QueueRuleFrameMutation(mutation: MapStateMutation(mutation: mutation));
 
                 return true;
             }
@@ -157,38 +158,19 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
     }
     void IRuleHost.BeginPreflight() {
         m_preflightScopes.Push(item: m_definition);
-        m_preflightMutations.Push(item: []);
         BeginRuleFrameScope();
     }
     void IRuleHost.EndPreflight() {
         m_definition = m_preflightScopes.Pop();
-        _ = m_preflightMutations.Pop();
         EndRuleFrameScope();
     }
-    // One member installs as itself; several install as one Batch — one admission, validation, journal entry, and
-    // delivery for the whole transaction. A transaction whose members were all state mutations composes nothing
-    // here (the document-mechanism's own composed list stays empty) — its mutations already queued on the frame's
-    // flat list, folded once at the end of the tick alongside every other rule's, so a caller ORs this call's
-    // return against CommitRuleFrameScope's to learn whether the transaction applied at all.
+    // A preflight scope commits its queued state and document mutations into the one tick-ordered frame list. The
+    // ordinary mutation door runs once at the end of rule evaluation, so a mixed branch cannot install only its
+    // document suffix and then lose it when the state fold restores the clean baseline.
     bool IRuleHost.TryCommitPreflight(ulong tick, out string reason) {
-        m_definition = m_preflightScopes.Pop();
-        var composed = m_preflightMutations.Pop();
-        var stateApplied = CommitRuleFrameScope();
+        _ = m_preflightScopes.Pop();
         reason = string.Empty;
-
-        if (composed.Count == 0) {
-            return stateApplied;
-        }
-
-        var mutation = ((composed.Count == 1) ? composed[0] : new WorldMutation.Batch(Principal: WorldPrincipal.World, Mutations: composed));
-
-        if (TryApplyMutation(mutation: mutation, tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false)) {
-            return true;
-        }
-
-        reason = "the ordinary mutation door refused the transaction; its mutation rejection names the concrete reason";
-
-        return false;
+        return CommitRuleFrameScope();
     }
     // A decision evaluates on its own timers; an interaction evaluates once per bound carrier or pair, each through
     // the evaluator's own gate-and-fire under the latch binding the sweep chooses.

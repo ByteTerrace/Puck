@@ -1475,13 +1475,11 @@ public static partial class WorldDefinitionValidator {
                 errors: errors
             );
 
-            if (placement.Footprint is { } footprint) {
-                RequirePositive(footprint.HalfWidth, $"{path}.footprint.halfWidth", errors);
-                RequirePositive(footprint.HalfDepth, $"{path}.footprint.halfDepth", errors);
-                RequireNavigationFixedPositive(footprint.HalfWidth, $"{path}.footprint.halfWidth", errors);
-                RequireNavigationFixedPositive(footprint.HalfDepth, $"{path}.footprint.halfDepth", errors);
-                RequireNonNegative(footprint.Clearance, $"{path}.footprint.clearance", errors);
-            }
+            ValidatePlacementSpatial(
+                placement: placement,
+                path: path,
+                errors: errors
+            );
 
             // A dealt child is the one row whose id may spell the child separator, and only in the exact shape the
             // sweep mints — <template>/<cellKey> under a parent carrying the deal facet.
@@ -1953,8 +1951,8 @@ public static partial class WorldDefinitionValidator {
     private static void ValidatePlacementDeal(WorldPlacementDeal deal, WorldPlacement placement, WorldDefinition definition, HashSet<string> prototypeIds, string path, List<string> errors) {
         var dealPath = $"{path}.deal";
         if (deal.Reflow is { } reflow) {
-            if (deal.Preserve?.Transform != true || placement.Footprint is null) {
-                errors.Add($"{dealPath}.reflow requires preserve.transform and a footprint.");
+            if (deal.Preserve?.Transform != true || !HasOccupationSpatial(placement)) {
+                errors.Add($"{dealPath}.reflow requires preserve.transform and an occupation spatial volume.");
             }
             if (reflow.CandidateBudget is < 1 or > 65536 || reflow.CostPerMove < 0) {
                 errors.Add($"{dealPath}.reflow requires candidateBudget 1..65536 and nonnegative costPerMove.");
@@ -2064,6 +2062,9 @@ public static partial class WorldDefinitionValidator {
             );
         }
     }
+
+    private static bool HasOccupationSpatial(WorldPlacement placement) =>
+        placement.Spatial?.Any(static volume => volume.Role == WorldPlacementSpatialRole.Occupation) == true;
     // A deal's row reference: a declared state.world row that is keyed (a slot row deals nothing), of any cell kind.
     private static bool RequireDealtRow(string? name, WorldDefinition definition, string path, List<string> errors, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldStateRow? row) {
         row = null;

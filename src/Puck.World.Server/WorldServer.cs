@@ -243,8 +243,6 @@ public sealed partial class WorldServer : IWorldServerHost {
     };
     // The installed documents a preflight scope remembers, innermost last (IRuleHost.BeginPreflight/EndPreflight).
     private readonly Stack<WorldDefinition> m_preflightScopes = new();
-    // The mutations each open preflight scope composed, innermost last — what TryCommitPreflight installs as one Batch.
-    private readonly Stack<List<WorldMutation>> m_preflightMutations = new();
     // The value frame every state effect writes during EvaluateWorldRules (WorldServer.RuleFrame.cs), laid out from
     // the installed catalog and loaded fresh from the installed rows at the start of every tick's rule evaluation.
     private FrameLayout? m_ruleFrameLayout;
@@ -261,12 +259,12 @@ public sealed partial class WorldServer : IWorldServerHost {
     // The document EvaluateWorldRules started this tick from — what the once-per-tick fold replays m_ruleFrameMutations
     // against, so a mid-tick cross-row flush (TryApplyCrossRowStateMutation) never becomes the fold's own baseline.
     private WorldDefinition? m_ruleFrameTickBaseline;
-    // Every state effect fired this tick, in firing order, spanning every rule/interaction and every nested
-    // transaction alike — one flat sequence a nested scope's rejection truncates and the tick's own end folds as one
+    // Every state and document effect fired this tick, in firing order, spanning every rule/interaction and its
+    // preflight scopes — one flat sequence a scope's rejection truncates and the tick's own end folds as one
     // mutation. Reassigned (never cleared) once folded, since the fold may hand the SAME list to a WorldMutation.Batch.
     private List<WorldMutation> m_ruleFrameMutations = [];
     // Frame journal marks, one per currently open preflight scope (BeginRuleFrameScope/EndRuleFrameScope/CommitRuleFrameScope) —
-    // parallel in depth to m_preflightScopes/m_preflightMutations, though the frame's own scope is a SEPARATE journal.
+    // parallel in depth to m_preflightScopes, though the frame's own scope is a SEPARATE journal.
     private readonly Stack<int> m_ruleFrameJournalMarks = new();
     // Where in m_ruleFrameMutations each currently open scope started, so its own rejection truncates only its own tail.
     private readonly Stack<int> m_ruleFrameMutationMarks = new();

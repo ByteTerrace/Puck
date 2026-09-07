@@ -357,6 +357,8 @@ public static partial class WorldNameRegistry {
         new(typeof(WorldNavigationDomain), nameof(WorldNavigationDomain.Name), "a navigation domain name"),
         new(typeof(WorldPlacementReflow), nameof(WorldPlacementReflow.CostKey), "a literal payer cell key"),
         new(typeof(WorldNavigationDomain), nameof(WorldNavigationDomain.Parent), "a placement frame id"),
+        new(typeof(WorldPlacementSpatialVolume), nameof(WorldPlacementSpatialVolume.Name), "a placement-local spatial volume name"),
+        new(typeof(WorldPlacementSpatialVolume), nameof(WorldPlacementSpatialVolume.Channel), "an author-defined spatial influence channel"),
     ];
 
     /// <summary>Gets every registered name-bearing member.</summary>

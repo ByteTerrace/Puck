@@ -9,14 +9,15 @@ public sealed class BatchMutationCodecLawTests {
     public void GuardsRoundTripAndNestedActorsCannotEscalate() {
         var member = new WorldMutation.UpsertStateCell(WorldPrincipal.Console, "gold", "$value", 1, WorldDocumentWriteKind.Add);
         var valid = new WorldMutation.Batch(WorldPrincipal.Console, [member], new string('A', 64),
-            [new WorldStateExpectation("gold", null, 5, ActionStateComparison.GreaterOrEqual, 1, CellKind.Int)], ["gold"], "court");
+            [new WorldStateExpectation("gold", null, 5, ActionStateComparison.GreaterOrEqual, 1, CellKind.Int)], ["gold"],
+            [new WorldSpatialReadDependency(0, 0, 65536, 65536, new string('B', 64))]);
         Assert.True(WorldSubmissionCodec.TryEncodeMutation(valid, out var bytes, out var error), error.Detail);
         Assert.True(WorldSubmissionCodec.TryDecodeMutation(bytes, out var decoded, out error), error.Detail);
         var round = Assert.IsType<WorldMutation.Batch>(decoded);
         Assert.Equal(valid.ExpectedDefinition, round.ExpectedDefinition);
         Assert.Equal(valid.ExpectedCells, round.ExpectedCells);
         Assert.Equal(valid.ExpectedStateRows, round.ExpectedStateRows);
-        Assert.Equal(valid.ExpectedLayoutTemplate, round.ExpectedLayoutTemplate);
+        Assert.Equal(valid.ExpectedSpatialReads, round.ExpectedSpatialReads);
         var wrongActor = valid with { Principal = WorldPrincipal.Seat(0) };
         Assert.False(WorldSubmissionCodec.TryEncodeMutation(wrongActor, out _, out _));
         Assert.False(WorldSubmissionCodec.TryEncodeCommittedMutation(wrongActor, out _, out _));

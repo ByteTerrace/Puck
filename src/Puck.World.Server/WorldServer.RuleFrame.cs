@@ -20,7 +20,7 @@ public sealed partial class WorldServer {
             return m_ruleFrame!;
         }
 
-        var catalog = m_definition.StateCatalog;
+        var catalog = RuleReadCatalog;
 
         if ((m_ruleFrameLayout is null) || !m_ruleFrameLayout.Fits(rows: rows) || !ReferenceEquals(objA: m_ruleFrameCatalog, objB: catalog)) {
             m_ruleFrameLayout = new FrameLayout(rows: rows, topology: name => WorldTopologyCompilation.Find(m_definition, name));
@@ -34,8 +34,8 @@ public sealed partial class WorldServer {
 
         return m_ruleFrame!;
     }
-    // Loads the frame fresh from the installed document — once per tick, before any rule evaluates — remembers this
-    // tick's own starting document as the fold's replay baseline, holds the frame active for IRuleReader.Store
+    // Loads the frame fresh from the installed document — once per tick, before any rule evaluates — remembers the
+    // tick's starting document as the fold's replay baseline, holds the frame active for IRuleReader.Store
     // until EvaluateWorldRules releases it, so a read outside the tick's own rule evaluation never reaches it, and
     // mirrors every moved identity binding into the fact lane so this tick's rules read it.
     private void LoadRuleFrame(ulong tick) {
@@ -64,17 +64,19 @@ public sealed partial class WorldServer {
         // now discarding — that reload bypassed the journal, so rewinding it cannot undo the reload; the frame is
         // re-derived instead, from m_definition as the caller (EndPreflight) already restored it.
         if (m_ruleFrameReloadStamp != reloadMark) {
+            // The restored document may predate fast numeric writes before this scope. Replaying the retained
+            // queue restores those values too, without retaining any speculative document or text write.
+            if (!TryComposeRuleFrameCandidate(next: null, tick: m_evaluator.Tick, candidate: out var restored, reason: out var reason)) {
+                throw new InvalidOperationException($"The retained rule prefix could not be restored: {reason}");
+            }
+            m_definition = restored;
             ReloadRuleFrame(extraScopesToClose: 1);
         } else {
             m_ruleFrame!.RewindJournalScope(mark: journalMark);
         }
     }
-    // Keeps this scope's writes; returns whether it queued any state mutation, the state half of "did this scope
-    // apply anything" a caller ORs against the document-mechanism's own composed count. A commit never needs a
-    // resync: whether or not a cross-row mutation reloaded the frame mid-scope, the frame's CURRENT values are
-    // exactly what this scope produced (TryCommitPreflight resetting m_definition to the scope's own baseline is
-    // the document-mechanism's own concern, not the frame's — the frame keeps leading it until the tick's own
-    // fold, same as an ordinary committed cell write already does).
+    // Keeps this scope's speculative state and document writes. The frame already contains its latest values;
+    // the ordered queue remains the source for the eventual installation and any enclosing scope's rollback.
     private bool CommitRuleFrameScope() {
         var mutationMark = m_ruleFrameMutationMarks.Pop();
 
@@ -84,6 +86,11 @@ public sealed partial class WorldServer {
         CommitIdentityFactScope();
 
         return (m_ruleFrameMutations.Count > mutationMark);
+    }
+    // Records every rule mutation in authored order. State writes use the frame for same-tick reads; document writes
+    // use the speculative definition, and both are folded through the same ordinary mutation door at tick end.
+    private void QueueRuleFrameMutation(WorldMutation mutation) {
+        m_ruleFrameMutations.Add(item: mutation);
     }
     // Re-derives the frame from the CURRENT m_definition without disturbing how many preflight scopes remain
     // logically open: a reload needs zero open journal scopes (StateFrame.Load's own contract), so extraScopesToClose
@@ -130,6 +137,31 @@ public sealed partial class WorldServer {
         StateMutation.Apply apply => new WorldMutation.TransformState(WorldPrincipal.World, apply.Transform),
         _ => throw new InvalidOperationException(message: $"state mutation '{mutation.GetType().Name}' has no world mapping."),
     };
+    // Replays the one authored rule queue from the clean tick baseline. Fast numeric frame writes are represented
+    // only in m_ruleFrameMutations until the fold, while document leaves keep their speculative m_definition in sync;
+    // replaying both here gives every later preflight the same state the eventual ordinary Batch will install.
+    private bool TryComposeRuleFrameCandidate(WorldMutation? next, ulong tick, out WorldDefinition candidate, out string reason) {
+        candidate = m_ruleFrameTickBaseline!;
+        reason = string.Empty;
+
+        foreach (var queued in m_ruleFrameMutations) {
+            if (!TryCompose(current: candidate, mutation: queued, tick: tick, instanceIdentity: InstanceIdentity, candidate: out var replayed, reason: out reason, evictedKey: out _, patterns: m_patterns)) {
+                return false;
+            }
+
+            candidate = RebaseCellTraits(candidate: replayed, mutation: queued, original: candidate, tick: tick);
+        }
+
+        if (next is { } mutation) {
+            if (!TryCompose(current: candidate, mutation: mutation, tick: tick, instanceIdentity: InstanceIdentity, candidate: out var applied, reason: out reason, evictedKey: out _, patterns: m_patterns)) {
+                return false;
+            }
+
+            candidate = RebaseCellTraits(candidate: applied, mutation: mutation, original: candidate, tick: tick);
+        }
+
+        return true;
+    }
     // The mutation kinds a value frame cannot answer on its own: a text cell (the frame holds only raw longs), a
     // cell removal (structural — no row shrinks in place), a generator draw (advances the row's own DrawCursor/
     // DrawnMasks, not a cell value), and a shuffle (permutes a keyed row's member order through a generator
@@ -140,27 +172,17 @@ public sealed partial class WorldServer {
     // call resyncs the frame back to whatever m_definition it restores, rather than trusting a journal rewind the
     // reload already bypassed (EndRuleFrameScope/CommitRuleFrameScope).
     private bool TryApplyCrossRowStateMutation(WorldMutation mapped, ulong tick, out string reason) {
-        var candidate = m_ruleFrameTickBaseline!;
-
-        foreach (var queued in m_ruleFrameMutations) {
-            if (!TryCompose(current: candidate, mutation: queued, tick: tick, instanceIdentity: InstanceIdentity, candidate: out var replayed, reason: out reason, evictedKey: out _, patterns: m_patterns)) {
-                return false;
-            }
-
-            candidate = RebaseCellTraits(candidate: replayed, mutation: queued, original: candidate, tick: tick);
-        }
-
-        if (!TryCompose(current: candidate, mutation: mapped, tick: tick, instanceIdentity: InstanceIdentity, candidate: out var applied, reason: out reason, evictedKey: out _, patterns: m_patterns)) {
+        if (!TryComposeRuleFrameCandidate(next: mapped, tick: tick, candidate: out var candidate, reason: out reason)) {
             return false;
         }
 
-        m_definition = RebaseCellTraits(candidate: applied, mutation: mapped, original: candidate, tick: tick);
-        m_ruleFrameMutations.Add(item: mapped);
+        m_definition = candidate;
+        QueueRuleFrameMutation(mutation: mapped);
         ReloadRuleFrame(extraScopesToClose: 0);
 
         return true;
     }
-    // Installs this tick's queued state mutations as ONE real mutation through the ordinary door — one compose, one
+    // Installs this tick's queued rule mutations as ONE real mutation through the ordinary door — one compose, one
     // touched-row validation, one install, one journal entry, one echo — replayed from the document the tick
     // started on, never from whatever TryApplyCrossRowStateMutation left m_definition at. A tick that wrote nothing
     // composes nothing.
@@ -178,7 +200,7 @@ public sealed partial class WorldServer {
 
         if (!TryApplyMutation(mutation: mutation, tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false)) {
             if (m_output.HasNarrationSink) {
-                m_output.Narrate(channel: "world.rule", text: $"[world.rule: this tick's {m_ruleFrameMutations.Count} rule-written state mutations were refused as one; the document stays at its prior tick]");
+                m_output.Narrate(channel: "world.rule", text: $"[world.rule: this tick's {m_ruleFrameMutations.Count} rule-written mutations were refused as one; the document stays at its prior tick]");
             }
         }
 

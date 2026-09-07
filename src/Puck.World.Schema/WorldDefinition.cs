@@ -132,6 +132,11 @@ public sealed record WorldDefinition(
     /// WORLD transform reads THIS, never the row's own Position/YawDegrees directly.</summary>
     [JsonIgnore]
     public IReadOnlyDictionary<string, CompiledPlacementFrame> PlacementFrames => WorldPlacementFrameCompilation.Resolve(section: PlacementsRaw);
+    /// <summary>Gets the immutable fixed-point spatial query index compiled from the current placement rows. The
+    /// index is rebuilt when the placement section instance changes, and reports unsupported dynamic/distributed rows
+    /// explicitly instead of silently dropping their possible blockers.</summary>
+    [JsonIgnore]
+    public WorldSpatialQueryIndex SpatialQueryIndex => WorldSpatialQueryCompilation.Resolve(section: PlacementsRaw);
     /// <summary>Gets or initializes the placement policy through the placements section (see <see cref="KitRowsRaw"/>).</summary>
     [JsonIgnore]
     public WorldPlacementPolicyDefaults? AuthoringRaw { get => PlacementsRaw?.Policy; init => PlacementsRaw = ((PlacementsRaw ?? new WorldPlacementsSection()) with { Policy = value }); }

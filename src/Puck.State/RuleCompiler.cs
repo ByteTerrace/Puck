@@ -53,7 +53,7 @@ public static partial class RuleCompiler {
     }
 
     /// <summary>Opens a rule's per-compile scope on the context: the compiled <see cref="Rule.Zones"/> table, the
-    /// <c>$each</c> binding when the rule declares <see cref="Rule.ForEach"/> (proven to name a keyed numeric row, or
+    /// <c>$each</c> binding when the rule declares <see cref="Rule.ForEach"/> (proven to name a keyed row of any kind, or
     /// <c>$zones</c> over a declared table), and the forEach row name. A document project's compile surface calls
     /// this before composing the pieces itself and <see cref="RuleCompileContext.ClearScope"/> after.</summary>
     /// <param name="rule">The authored rule.</param>
@@ -70,7 +70,7 @@ public static partial class RuleCompiler {
                     throw new RuleException(refusal: RuleRefusal.ZoneTableMalformed, ruleName: rule.Name, detail: $"iterates 'forEach' over '{RuleFacts.ForEachZones}' but declares no 'zones' table");
                 }
             } else {
-                _ = ResolveNumericRow(
+                _ = ResolveRequiredRow(
                     channel: "forEach",
                     context: context,
                     malformed: RuleRefusal.StateRowUnknown,
@@ -778,7 +778,7 @@ public static partial class RuleCompiler {
     }
 
     /// <summary>Resolves a declared numeric row: it must exist and must not be kind=text. <paramref name="requireKeyed"/>
-    /// additionally demands the row be keyed — a read that yields a cell key (an extremum, a filter, a forEach) has no
+    /// additionally demands the row be keyed — a read that yields a cell key (an extremum or filter) has no
     /// key to yield from a slot row.</summary>
     /// <param name="name">The row name.</param>
     /// <param name="ruleName">The rule being compiled.</param>
@@ -787,12 +787,16 @@ public static partial class RuleCompiler {
     /// <param name="malformed">The refusal category for an undeclared or text row.</param>
     /// <param name="channel">The authored spelling, for refusal text.</param>
     public static StateRow ResolveNumericRow(string name, string ruleName, RuleCompileContext context, bool requireKeyed, Enum malformed, string channel) {
+        return ResolveRequiredRow(name, ruleName, context, requireKeyed, malformed, channel, requireNumeric: true);
+    }
+
+    private static StateRow ResolveRequiredRow(string name, string ruleName, RuleCompileContext context, bool requireKeyed, Enum malformed, string channel, bool requireNumeric = false) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
         var row = (context.FindRow(name: name)
             ?? throw new RuleException(refusal: malformed, ruleName: ruleName, detail: $"'{channel}' names row '{name}', which the document does not declare"));
 
-        if (row.Kind == CellKind.Text) {
+        if (requireNumeric && row.Kind == CellKind.Text) {
             throw new RuleException(refusal: malformed, ruleName: ruleName, detail: $"'{channel}' names row '{name}', which is kind=text — a reduction/extremum is numeric, never text");
         }
 
@@ -800,7 +804,7 @@ public static partial class RuleCompiler {
             throw new RuleException(
                 refusal: RuleRefusal.ArgRowNotKeyed,
                 ruleName: ruleName,
-                detail: $"'{channel}' names row '{name}', which is not keyed — an argmax/argmin yields a body, and a slot row's cell carries no body-index key; author a keyed row whose cell keys ARE body indices"
+                detail: $"'{channel}' names row '{name}', which is not keyed — author a keyed row to select or iterate its cell keys"
             );
         }
 
