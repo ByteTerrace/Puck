@@ -13069,6 +13069,114 @@
       ]
     },
     {
+      "Id": "Puck.Maths.Pcg32Extended.Advance(System.UInt64)",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.pcg-extended-advance-agrees-with-drawing"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Pcg32Extended.Clone()",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.pcg-extended-chosen-outputs"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Pcg32Extended.Create(System.UInt64,System.UInt64,System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.pcg-extended-delegation-and-refusals",
+        "sampling.pcg-extended-reference-vectors"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Pcg32Extended.Extension",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.pcg-extended-delegation-and-refusals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Pcg32Extended.GetExtension(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.pcg-extended-chosen-outputs",
+        "sampling.pcg-extended-delegation-and-refusals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Pcg32Extended.Increment",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.pcg-extended-delegation-and-refusals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Pcg32Extended.Multiplier",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.pcg-extended-delegation-and-refusals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Pcg32Extended.NextUInt32()",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.pcg-extended-base-equivalence",
+        "sampling.pcg-extended-delegation-and-refusals",
+        "sampling.pcg-extended-reference-vectors"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Pcg32Extended.NextUInt32(System.UInt32,System.UInt32)",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.pcg-extended-base-equivalence",
+        "sampling.pcg-extended-delegation-and-refusals",
+        "sampling.pcg-extended-reference-vectors"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Pcg32Extended.NextUnitFraction16()",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.pcg-extended-delegation-and-refusals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Pcg32Extended.NextUnitFraction32()",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.pcg-extended-delegation-and-refusals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Pcg32Extended.SetExtension(System.Int32,System.UInt32)",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.pcg-extended-base-equivalence",
+        "sampling.pcg-extended-chosen-outputs",
+        "sampling.pcg-extended-delegation-and-refusals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Pcg32Extended.SetExtension(System.ReadOnlySpan<System.UInt32>)",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.pcg-extended-base-equivalence",
+        "sampling.pcg-extended-chosen-outputs",
+        "sampling.pcg-extended-delegation-and-refusals"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Pcg32Extended.State",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.pcg-extended-chosen-outputs"
+      ]
+    },
+    {
       "Id": "Puck.Maths.Pcg32XshRr.Advance(System.UInt64)",
       "State": "covered",
       "CoveredBy": [
@@ -13098,6 +13206,13 @@
       "CoveredBy": [
         "sampling.pcg-reference-vector-and-state",
         "sampling.pcg-transcribed-reference-and-decorrelation"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Pcg32XshRr.Distance(Puck.Maths.Pcg32XshRr&)",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.pcg-distance-round-trip"
       ]
     },
     {
@@ -13173,6 +13288,20 @@
       "State": "covered",
       "CoveredBy": [
         "sampling.pcg-reference-vector-and-state"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Pcg32XshRr.Preimage(System.UInt32,System.UInt64)",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.pcg-preimage-and-seeking"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Pcg32XshRr.Seeking(System.UInt64,System.UInt64,System.UInt32,System.UInt64)",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.pcg-preimage-and-seeking"
       ]
     },
     {

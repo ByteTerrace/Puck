@@ -813,6 +813,7 @@ internal static partial class LawRegistry {
         .. SamplingRefusalCases(),
         .. DeepEdgeCrossCases(),
         .. PcgReferenceCases(),
+        .. PcgExtendedCases(),
         .. Log2GaussianAliasCases(),
         .. FieldNoiseCases(),
         .. CertifiedLowDiscrepancyCases(),

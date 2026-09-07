@@ -57,6 +57,28 @@ public struct Pcg32XshRr {
 
         return ((uint)(product >> 32));
     }
+    // O'Neill's logarithmic discrete-log over an affine LCG (state -> state*multiplier + increment), restricted to
+    // `mask`'s bits. Shared with Pcg32Extended, whose own table-tick bookkeeping runs this same search masked to
+    // its tick window rather than the full word.
+    internal static ulong Distance(ulong currentState, ulong newState, ulong multiplier, ulong increment, ulong mask) {
+        var theBit = 1UL;
+        var distance = 0UL;
+        var currentMultiplier = multiplier;
+        var currentIncrement = increment;
+
+        while ((currentState & mask) != (newState & mask)) {
+            if ((currentState & theBit) != (newState & theBit)) {
+                currentState = unchecked((currentState * currentMultiplier) + currentIncrement);
+                distance |= theBit;
+            }
+
+            theBit <<= 1;
+            currentIncrement = unchecked((currentMultiplier + 1UL) * currentIncrement);
+            currentMultiplier = unchecked(currentMultiplier * currentMultiplier);
+        }
+
+        return distance;
+    }
 
     /// <summary>Skips the generator forward by <paramref name="count"/> draws in logarithmic time.</summary>
     /// <param name="count">The number of single-draw advances to apply; <c>2⁶⁴ − n</c> steps backward by <c>n</c>.</param>
@@ -125,6 +147,38 @@ public struct Pcg32XshRr {
         _ = generator.NextUInt32();
 
         return generator;
+    }
+    /// <summary>Computes the number of draws from this generator's state to <paramref name="other"/>'s, on the same
+    /// stream.</summary>
+    /// <param name="other">The generator to measure the distance to; must share this generator's
+    /// <see cref="Increment"/> and <see cref="Multiplier"/>, or the distance is not defined.</param>
+    /// <returns>The raw forward distance in <c>[0, 2⁶⁴)</c>, reinterpreted as a signed <see cref="long"/>: a
+    /// non-negative result is that many draws forward to reach <paramref name="other"/>, and a negative result's
+    /// magnitude is the shorter number of draws backward. Reinterpreting the same bits as a <see cref="ulong"/>
+    /// (<c>unchecked((ulong)result)</c>) recovers the raw forward distance exactly in every case — the signed
+    /// reading is a convenience for the common case where one direction is short, not a different value — and
+    /// <c>this.Advance(unchecked((ulong)result))</c> reaches <paramref name="other"/> whichever reading is used.</returns>
+    /// <exception cref="ArgumentException"><paramref name="other"/> does not share this generator's
+    /// <see cref="Increment"/> and <see cref="Multiplier"/>.</exception>
+    /// <remarks>O'Neill's logarithmic discrete-log over the LCG: the affine step doubles by repeated squaring while
+    /// the result is assembled one bit at a time, so the cost is the same sixty-four halving steps regardless of how
+    /// far apart the two states are — the same structure <see cref="Advance"/> uses, run to recover the exponent
+    /// rather than to apply it.</remarks>
+    public readonly long Distance(in Pcg32XshRr other) {
+        if ((m_increment != other.m_increment) || (m_multiplier != other.m_multiplier)) {
+            throw new ArgumentException(
+                message: "the two generators must share the same stream (Increment) and Multiplier to compute a distance",
+                paramName: nameof(other)
+            );
+        }
+
+        return unchecked((long)Distance(
+            currentState: m_state,
+            increment: m_increment,
+            mask: ulong.MaxValue,
+            multiplier: m_multiplier,
+            newState: other.m_state
+        ));
     }
     /// <summary>Restores a generator from its exact raw state, as captured from <see cref="State"/>, <see cref="Increment"/>, and <see cref="Multiplier"/>.</summary>
     /// <param name="increment">The raw odd increment, as read from <see cref="Increment"/>.</param>
@@ -235,6 +289,92 @@ public struct Pcg32XshRr {
     /// <returns>A uniformly distributed <see cref="UnitFraction32"/>.</returns>
     public UnitFraction32 NextUnitFraction32() =>
         new(Value: NextUInt32());
+    /// <summary>Constructs a state whose next draw is exactly <paramref name="output"/>, by inverting the XSH-RR
+    /// output permutation.</summary>
+    /// <param name="output">The desired next draw.</param>
+    /// <param name="lowBits">Supplies the free bits of the preimage: the low five bits pick which of the thirty-two
+    /// states mapping to <paramref name="output"/> is returned (the rotation the draw applied), and the next
+    /// twenty-seven bits become the returned state's low twenty-seven bits, which the output never reads. Bits
+    /// above the low thirty-two are unused.</param>
+    /// <returns>A generator on stream zero (<see cref="Increment"/> of one) whose first draw is
+    /// <paramref name="output"/>. Every state this method can return draws the same value regardless of stream, so
+    /// build on a different stream with <see cref="FromRawBits"/> and the same <see cref="State"/>, or use
+    /// <see cref="Seeking"/> to place the value at a chosen draw index on a chosen stream directly.</returns>
+    /// <remarks>The output reads only the state's top thirty-seven bits (the xorshift-and-rotate stage): the low
+    /// twenty-seven are unconstrained, and the top five (the rotation amount) admit thirty-two equally valid
+    /// solutions — together the <c>2³²</c> choices <paramref name="lowBits"/> selects among.</remarks>
+    public static Pcg32XshRr Preimage(uint output, ulong lowBits) =>
+        FromRawBits(
+            increment: 1UL,
+            multiplier: DefaultMultiplier,
+            state: PreimageState(
+                lowBits: lowBits,
+                output: output
+            )
+        );
+    /// <summary>Constructs a generator on <paramref name="stream"/> whose draw number <paramref name="drawIndex"/>
+    /// (zero-based) is exactly <paramref name="output"/>.</summary>
+    /// <param name="stream">The stream id in <c>[0, <see cref="MaxStream"/>]</c>.</param>
+    /// <param name="drawIndex">The zero-based draw number that must equal <paramref name="output"/>.</param>
+    /// <param name="output">The value <paramref name="drawIndex"/>'s draw must produce.</param>
+    /// <param name="lowBits">Forwarded to <see cref="Preimage"/> to select which of its solutions is used; see its
+    /// remarks.</param>
+    /// <returns>A generator that reproduces <paramref name="output"/> at draw <paramref name="drawIndex"/> and
+    /// continues normally afterward.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="stream"/> exceeds <see cref="MaxStream"/>.</exception>
+    /// <remarks>Built from the preimage — a state whose next draw is <paramref name="output"/> — stepped back
+    /// <paramref name="drawIndex"/> draws with <c>Advance(2⁶⁴ − drawIndex)</c>, the same backward convention
+    /// <see cref="Advance"/> documents; a bounded draw or a shuffle consumes more than one advance per call, so
+    /// seeking past one of those must count advances, not calls.</remarks>
+    public static Pcg32XshRr Seeking(ulong stream, ulong drawIndex, uint output, ulong lowBits) {
+        if (stream > MaxStream) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: stream,
+                message: StreamError,
+                paramName: nameof(stream)
+            );
+        }
+
+        var generator = FromRawBits(
+            increment: ((stream << 1) | 1UL),
+            multiplier: DefaultMultiplier,
+            state: PreimageState(
+                lowBits: lowBits,
+                output: output
+            )
+        );
+
+        generator.Advance(count: unchecked(0UL - drawIndex));
+
+        return generator;
+    }
+    // Inverts NextUInt32's output function: given the desired output, recovers the sixty-four-bit state whose
+    // xorshift-and-rotate reaches it, filling the underdetermined bits from lowBits. See NextUInt32 for the forward
+    // direction this undoes.
+    private static ulong PreimageState(uint output, ulong lowBits) {
+        var rotation = ((int)(lowBits & 0x1FUL));
+        var stateLow27 = ((uint)((lowBits >> 5) & 0x7FFFFFFUL));
+
+        // Undo the rotation: the pre-rotation value is the xorshift stage's own output, y bits [27, 58].
+        var xored = uint.RotateLeft(value: output, rotateAmount: rotation);
+
+        // y bits [46, 58] are state bits [14, 26] directly (the xorshift's shift-by-18 never reaches this far).
+        var stateBits14To26 = ((xored >> 19) & 0x1FFFU);
+        var stateBits14To17 = (stateBits14To26 & 0xFU);
+        var stateBits18To26 = ((stateBits14To26 >> 4) & 0x1FFU);
+
+        // y bits [32, 45] = state bits [0, 13] XOR state bits [18, 31] (state bits [27, 31] being the rotation).
+        var stateBits0To13 = (((xored >> 5) & 0x3FFFU) ^ (stateBits18To26 | (((uint)rotation) << 9)));
+
+        // y bits [27, 31] = state bits [27, 31] XOR state bits [13, 17].
+        var stateBits13To17 = (((stateBits0To13 >> 13) & 0x1U) | (stateBits14To17 << 1));
+        var stateBits27To31 = ((xored & 0x1FU) ^ stateBits13To17);
+
+        var highWord = (stateBits0To13 | (stateBits14To17 << 14) | (stateBits18To26 << 18) | (((uint)rotation) << 27));
+        var lowWord = (stateLow27 | (stateBits27To31 << 27));
+
+        return ((((ulong)highWord) << 32) | lowWord);
+    }
     /// <summary>Shuffles <paramref name="values"/> in place into a uniformly random permutation.</summary>
     /// <typeparam name="TElement">The element type.</typeparam>
     /// <param name="values">The span to permute in place; each of its orderings becomes equally likely.</param>

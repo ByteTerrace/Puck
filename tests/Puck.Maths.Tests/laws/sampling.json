@@ -1429,5 +1429,226 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "sampling.pcg-extended-reference-vectors",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "Create" },
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "NextUInt32" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Pcg32Extended.Create(state: 42, stream: 54, k)'s opening six draws at three table sizes: k=1024 (pcg32_k1024), k=2 (pcg32_k2, the smallest published extended shape) and k=64 (pcg32_k64)",
+        "Against": "k=1024: 0x35101047, 0x038b320a, 0x2d64ba34, 0x5358b5f9, 0x94ec4dae, 0x1018b3a1. k=2: 0x23ad45d5, 0x6e2b9c53, 0x23cf9e33, 0x24e90350, 0x7a160dc4, 0x5cfeb7ad. k=64: 0xe85244a0, 0x7112822f, 0x9325f975, 0xf50dea01, 0x8cec9bba, 0xaa9fa4b3",
+        "Shared": "",
+        "Citation": "pcg-cpp's own published test output for the reference C++ implementation these three table sizes instantiate (rng(42u, 54u)): https://github.com/imneme/pcg-cpp/blob/master/test-high/expected/check-pcg32_k1024.out, .../check-pcg32_k2.out and .../check-pcg32_k64.out, driven by test-high/pcg-test.cpp. What a published vector states that no in-tree comparison can is that the SELF-SEEDING RECIPE and the base-XOR-extension output are the reference's, not merely self-consistent",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: six draws never reach a tick boundary (one fires only once every 65536 draws), so this leg pins the self-seeding recipe and the plain base-XOR-extension output only, never the per-word RXS-M-XS tick step; a one-line break of that step's own output permutation, mutation-probed, leaves this law green and reddens sampling.pcg-extended-advance-agrees-with-drawing instead, which is the gate that actually reaches it. OWED: no published pcg-cpp vector spanning a tick boundary was found (its own five-round dump stays in the low hundreds of draws per generator), so the tick step is pinned only by that law's self-consistency, never against an independent reference",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.pcg-extended-base-equivalence",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "NextUInt32" },
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "SetExtension" }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "Pcg32Extended over several full index wraps (5k + 3 draws, k=2, 64 and 1024), its whole extension table set to zero via SetExtension right after construction",
+        "Against": "Pcg32XshRr.FromRawBits built from the extended generator's own Increment, Multiplier and State",
+        "Shared": "Pcg32XshRr.NextUInt32 itself: the extended generator's base field IS a Pcg32XshRr, and XOR against an all-zero word is the identity, so agreement is carriage evidence that the extension wiring adds nothing when the table is zero, not independent evidence about NextUInt32's own permutation, which sampling.pcg-reference-vector-and-state already pins",
+        "Citation": "the base permutation's own evidence is sampling.pcg-reference-vector-and-state and sampling.pcg-transcribed-reference-and-decorrelation",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: the run length at each k stays well under 65536 draws, so no tick fires and the zeroed table is never touched by AdvanceTableByOne; a run that crossed a tick would turn the zero words nonzero and this equivalence would not hold past that point",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.pcg-extended-chosen-outputs",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "SetExtension" },
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "GetExtension" },
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "Clone" },
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "State" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "a cloned probe walks the next k draws (k=8) recording, at each step, the table index the pre-draw State selects; a second clone of the plain base generator (Pcg32XshRr.FromRawBits from the same Increment/Multiplier/State) draws the k base values that will land at those same steps; SetExtension(index, wanted XOR base) is called once per recorded index so every slot visited is set exactly once",
+        "Against": "the next k draws of the original generator equal the k independently-chosen wanted values, in order",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: this states that SetExtension is a raw table write with no on-the-fly XOR of its own (the caller supplies the already-XOR'd word) and that Clone's copy is independent enough to serve as the lookahead probe without disturbing the original's own state or table — it does not claim anything about draws past the kth, since a table of size k revisits every slot once per k draws and no leg here reads that far",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.pcg-extended-advance-agrees-with-drawing",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "Advance" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Advance(n) then one draw, compared against n sequential draws then one more — on the drawn VALUE and on State — at k=2, for n across a ladder crossing the 65536-draw tick boundary several times (0, 1, 100, 65534, 65535, 65536, 65537, 131072, 200003)",
+        "Against": "n sequential calls to NextUInt32 followed by one more, walked by an independently constructed generator from the same seed and stream",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ENVELOPE: this pins Advance as a correct shortcut for FORWARD, small-to-moderate counts across several tick crossings; it does not claim Advance(huge count) is a cheap way to step this generator backward the way it is for the bare Pcg32XshRr — the combined generator's period is far larger than the base's own 2⁶⁴, so a count near that period does not return the table to its starting values, and the type's own remarks say so",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.pcg-extended-delegation-and-refusals",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "NextUInt32" },
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "NextUnitFraction16" },
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "NextUnitFraction32" },
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "Increment" },
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "Multiplier" },
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "Extension" },
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "Create" },
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "GetExtension" },
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "SetExtension" }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "Transcription",
+        "Subject": "the bounded draw and both fraction adapters, restated against this type's own NextUInt32 over 256 draws",
+        "Against": "the bounded draw's declared shapes (a singleton range, a full range, swapped bounds) and the fraction adapters' shift and width, each checked against calls to this type's own NextUInt32 advanced in lockstep",
+        "Shared": "the subject's own rule — the raw draw and its top bits — restated against a generator advanced in lockstep, exactly the shape sampling.pcg-reference-vector-and-state uses for the base type",
+        "Citation": "none stands for the adapters themselves (Pcg32Extended.cs); the draw beneath them is what sampling.pcg-extended-reference-vectors pins",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal ladder: Create refuses k=0, k=3 (not a power of two), k=2048 (above 1024) and a stream above MaxStream, each naming the argument at fault (`k` or `stream`); GetExtension and the single-word SetExtension refuse an index at -1 and at k, naming `index`; the span SetExtension refuses a span one shorter and one longer than k, naming `words`. k=2 and k=1024 (both ends of the window) and stream=MaxStream are accepted",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Increment, Multiplier and State read the identical values the base Pcg32XshRr the type wraps would report from the same raw bits, and Extension's contents equal GetExtension at every index, both immediately after Create and again after a handful of draws and one SetExtension call",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.pcg-distance-round-trip",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Pcg32XshRr", "Name": "Distance" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Distance of a generator to its own Advance(n), for n drawn across the full 64-bit range at exponentially spaced magnitudes (0 and every power of two through 2⁶³, plus 2000 pseudorandomly drawn 64-bit values), reinterpreted as ulong bits",
+        "Against": "n itself: unchecked((ulong)generator.Distance(advanced)) equals n exactly, and re-advancing the original by that same reinterpreted distance lands on the advanced generator's own State",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the cross-stream and cross-multiplier refusal: two generators differing only in Increment, and two differing only in Multiplier, both throw ArgumentException naming `other`",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.pcg-preimage-and-seeking",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Pcg32XshRr", "Name": "Preimage" },
+      { "Type": "Puck.Maths.Pcg32XshRr", "Name": "Seeking" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Preimage(output, lowBits).NextUInt32() equals output over 5000 pseudorandomly drawn (output, lowBits) pairs spanning the full width of both",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Seeking(stream, drawIndex, output, lowBits), walked drawIndex draws and then drawn once more, over the same 5000 pairs at pseudorandomly drawn streams and draw indices up to a few thousand",
+        "Against": "the draw at index drawIndex equals output",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Seeking refuses a stream above MaxStream, naming `stream`; MaxStream itself is accepted",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]
