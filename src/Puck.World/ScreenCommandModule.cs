@@ -117,7 +117,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.state",
-            description: "Echoes a screen's live machine state: screen.state <index> — assigned/empty, the hosting engine id, bound/unbound (a nonzero source handle this frame), the stepped-frame count, the engaged players, and, for content compiled from a cartridge document, cartridge <path> hash <source hash> rom <rom hash>. A query (always echoes, even under wire.ack quiet) — the pipe-assertable machine state.",
+            description: "Echoes a screen's live machine state: screen.state <index> — assigned/empty, the hosting engine id, bound/unbound (a nonzero source handle this frame), the stepped-frame count, the engaged players, for content compiled from a cartridge document cartridge <path> hash <source hash> rom <rom hash>, and, for a screen declaring memory bindings, memory=0x<addr>:R|W=<value|none> per binding (the value each Read binding last mirrored into its cell, or each Write binding last poked into the machine — none before its first observed value). A query (always echoes, even under wire.ack quiet) — the pipe-assertable machine state.",
             handler: StateHandler
         );
         yield return CommandDefinition.WithWireArgs(
@@ -126,6 +126,20 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             description: "Reads one memory byte from a screen's machine: screen.peek <index> <addr> — <addr> a 0x-prefixed hex machine address (the gaming-brick's work RAM is [0xC000, 0xDFFF]). A read only, never a write into machine state, so a piped proof can assert a game's stored bytes. A query (always echoes). Errors when the screen carries no machine, or its machine has no memory-peek capability.",
             handler: PeekHandler
         );
+    }
+    // The declared screens row at the engine screen-surface index, or null when undeclared — screen.state's own
+    // memory-binding segment reads the DECLARED bindings (screens[].memory) rather than anything the machine host
+    // itself tracks, since a binding is document authoring, not live machine state.
+    private WorldScreen? DeclaredScreen(int index) {
+        var screens = m_server.Definition.Screens;
+
+        for (var position = 0; (position < screens.Count); position++) {
+            if (screens[position].Index == index) {
+                return screens[position];
+            }
+        }
+
+        return null;
     }
     private static CommandResult Denied(WorldPrincipal principal, string verb, int index) =>
         // The grant subject is ONE colon-joined token: `screen:{index}`, not `screen {index}` (which the parser refuses
@@ -909,6 +923,29 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
                 provider: CultureInfo.InvariantCulture,
                 handler: $" fault={fault}"
             );
+        }
+
+        if (DeclaredScreen(index: index)?.Memory is { Count: > 0 } bindings) {
+            _ = builder.Append(value: " memory=");
+
+            for (var bindingIndex = 0; (bindingIndex < bindings.Count); bindingIndex++) {
+                var binding = bindings[bindingIndex];
+
+                if (bindingIndex > 0) {
+                    _ = builder.Append(value: ',');
+                }
+
+                var tag = ((binding.Direction == WorldScreenMemoryDirection.Write) ? 'W' : 'R');
+                var text = (m_server.TryMachineMemoryObserved(screen: index, address: binding.Address, direction: binding.Direction, value: out var value)
+                    ? value.ToString(provider: CultureInfo.InvariantCulture)
+                    : "none"
+                );
+
+                _ = builder.Append(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"0x{binding.Address:X4}:{tag}={text}"
+                );
+            }
         }
 
         return new CommandResult(Output: builder.Append(value: ']').ToString());

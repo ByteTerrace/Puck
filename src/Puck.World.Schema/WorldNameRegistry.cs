@@ -231,6 +231,8 @@ public static partial class WorldNameRegistry {
         new(typeof(WorldPlacementResponseCondition.StateCondition), nameof(WorldPlacementResponseCondition.StateCondition.Key), WorldNameKind.State, WorldNameRole.Key),
         new(typeof(WorldPlacementResponseCondition.StateCondition), nameof(WorldPlacementResponseCondition.StateCondition.ComparandState), WorldNameKind.State, WorldNameRole.Names),
         new(typeof(WorldPlacementResponseCondition.StateCondition), nameof(WorldPlacementResponseCondition.StateCondition.ComparandKey), WorldNameKind.State, WorldNameRole.Key),
+        new(typeof(WorldScreenMemory), nameof(WorldScreenMemory.Row), WorldNameKind.State, WorldNameRole.Names),
+        new(typeof(WorldScreenMemory), nameof(WorldScreenMemory.Key), WorldNameKind.State, WorldNameRole.Key),
         new(typeof(WorldNavigationDomain), nameof(WorldNavigationDomain.Medium), WorldNameKind.Field, WorldNameRole.Names),
         new(typeof(WorldMarkerRing), nameof(WorldMarkerRing.Field), WorldNameKind.Field, WorldNameRole.Names),
         // Bindings: HUD, overlays, cameras, theme.

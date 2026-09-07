@@ -1004,6 +1004,11 @@ public sealed partial class WorldServer {
         // Fold this tick's routed intents into their targets BEFORE the snapshot is built.
         m_engagement.FoldTick();
 
+        // screens[].memory bindings poke a moved cell into its machine and mirror a machine's moved byte into its
+        // cell — see WorldServer.MachineMemory.cs. Runs right before the machine steps so a Write binding's poke
+        // reaches it before THIS tick's advance.
+        SyncMachineMemory(tick: tick);
+
         // Step every booted machine off THIS tick's freshly-folded pads: reads WorldEngagement.BuildPadSnapshot()
         // directly, in-process, no client/wire round-trip. Runs in EVERY boot shape via WorldServerStepShell.Step
         // (headless and windowed alike both call WorldServer.Step) — ROM state IS sim state, not presentation-fed.

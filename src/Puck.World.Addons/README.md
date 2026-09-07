@@ -26,7 +26,10 @@ own projects — `Puck.AdvancedGamingBrick`, `Puck.HumbleGamingBrick`,
 project's `IWorldMachineHost` seam and is constructed only from a
 composition root, never named directly by another Server file) — owns
 boot, per-tick stepping, cable-linking, live reconfiguration, and
-memory-peek for every declared screen's machine. `WorldScreenMachineEngines.All`
+memory-peek/poke for every declared screen's machine. `TryPokeMessage`
+forces one byte in through the SAME `IMachineMemoryPeek` capability
+`TryPeekMessage` reads through — `Server.WorldServer.MachineMemory.cs`'s
+`screens[].memory` Write bindings are its one caller. `WorldScreenMachineEngines.All`
 is the single source of truth for which `IScreenMachineEngine`s this build
 ships (the emulator cores, the Tune instrument), read by both composition
 roots' pre-container `WorldExtensionVocabularyHook` wiring so a

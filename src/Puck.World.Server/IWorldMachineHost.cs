@@ -159,6 +159,17 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <param name="value">The byte read, or 0 on failure.</param>
     /// <returns>A success flag and, on failure, a message.</returns>
     (bool Ok, string Message) TryPeekMessage(int index, int address, out byte value);
+    /// <summary>Forces one memory byte into a screen's machine — a <c>screens[].memory</c> write binding's poke
+    /// (<c>WorldServer.MachineMemory.cs</c>), through the same host poll <see cref="TryPeekMessage"/> uses rather
+    /// than a direct machine reference. A value outside the machine's writable space, or an unassigned machine, is
+    /// a silent no-op at the machine's own <see cref="IMachineMemoryPeek.PokeByte"/> — this seam reports success only
+    /// when a machine is present to receive the write, never whether the byte actually landed inside that machine's
+    /// own writable range.</summary>
+    /// <param name="index">The engine screen-surface index.</param>
+    /// <param name="address">A machine-defined memory address.</param>
+    /// <param name="value">The byte to store.</param>
+    /// <returns>A success flag and, on failure, a message.</returns>
+    (bool Ok, string Message) TryPokeMessage(int index, int address, byte value);
     /// <summary>Reads a live link's member screens by name.</summary>
     /// <param name="name">The link name.</param>
     /// <param name="members">The member screen indices in cable order, on success.</param>

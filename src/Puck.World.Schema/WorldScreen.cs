@@ -449,6 +449,9 @@ public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadi
 /// <param name="Magazine">The per-screen source magazine (the cycle primitive), or <see langword="null"/> for a screen
 /// with no magazine — nothing to cycle. Omitted from the wire when null — the whole-row <c>UpsertScreen</c>
 /// carries it for free, so no new mutation kind is needed.</param>
+/// <param name="Memory">The screen's live byte-window bindings between its booted machine's bus and ordinary
+/// <c>state.world</c> Int cells (see <see cref="WorldScreenMemory"/>), or <see langword="null"/> for a screen with
+/// none. Omitted from the wire when null.</param>
 public sealed record WorldScreen(
     int Index,
     DocumentVector3 Origin,
@@ -461,5 +464,6 @@ public sealed record WorldScreen(
     WorldScreenSource Source,
     WorldScreenRoute Route,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSolid? Solid = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenMagazine? Magazine = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenMagazine? Magazine = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScreenMemory>? Memory = null
 );
