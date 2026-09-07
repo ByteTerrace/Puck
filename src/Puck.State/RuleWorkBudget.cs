@@ -5,10 +5,24 @@ namespace Puck.State;
 /// <param name="Name">The rule's name.</param>
 /// <param name="IsInteraction">Whether the line is an interaction rather than a rule.</param>
 /// <param name="Multiplier">The evaluations per tick — one, the <c>forEach</c> row's capacity, or the pair count.</param>
-/// <param name="UnitCost">The work units one evaluation costs.</param>
-/// <param name="WorkUnits">The line's total: <paramref name="Multiplier"/> × <paramref name="UnitCost"/>, saturating.</param>
+/// <param name="Cost">The orthogonal rule cost components: setup, check, effects.</param>
+/// <param name="CheckUnits">The check units: Setup + Multiplier × Check, saturating.</param>
+/// <param name="FiringUnits">The firing units: Multiplier × Effects, saturating.</param>
+/// <param name="WorkUnits">The line's isolated total: CheckUnits + FiringUnits, saturating.</param>
 /// <param name="Discriminators">The literal cells the gate pins, in cell order.</param>
-public readonly record struct RuleWorkContributor(string Name, bool IsInteraction, long Multiplier, long UnitCost, long WorkUnits, IReadOnlyList<RulePinnedCell> Discriminators);
+public readonly record struct RuleWorkContributor(
+    string Name,
+    bool IsInteraction,
+    long Multiplier,
+    RuleCost Cost,
+    long CheckUnits,
+    long FiringUnits,
+    long WorkUnits,
+    IReadOnlyList<RulePinnedCell> Discriminators
+) {
+    /// <summary>Gets the total unit cost in isolation.</summary>
+    public long UnitCost => Cost.Total;
+}
 
 /// <summary>One literal cell a gate pins to a closed range; an empty range means the gate can never hold.</summary>
 /// <param name="Cell">The cell, as <c>row.key</c>.</param>
@@ -36,8 +50,8 @@ public readonly record struct RulePinnedCell(string Cell, long Low, long High) {
 }
 
 /// <summary>The static work sheet: the worst-case work units the rules can spend in one tick, tallied so that rules
-/// whose gates pin the same literal cells to disjoint ranges are charged their costliest members rather than their
-/// sum. A document project builds the contributor lines (it alone knows what a <c>forEach</c> row or a pair
+/// whose gates pin the same literal cells to disjoint ranges share firing costs while all checks still sum.
+/// These are heuristic units, not calibrated cycles. A document project builds the contributor lines (it alone knows what a <c>forEach</c> row or a pair
 /// co-occurrence multiplies by) and tallies them here.</summary>
 public static class RuleWorkBudget {
     /// <summary>Builds one contributor line from a compiled rule.</summary>
@@ -48,14 +62,19 @@ public static class RuleWorkBudget {
     public static RuleWorkContributor Contributor(CompiledRule rule, long multiplier, bool isInteraction, RuleCompileContext context) {
         ArgumentNullException.ThrowIfNull(argument: rule);
 
-        var unit = rule.Cost(context: context);
+        var cost = rule.CostBreakdown(context: context);
+        var checkUnits = SaturatingAdd(left: cost.Setup, right: SaturatingMultiply(left: multiplier, right: cost.Check));
+        var firingUnits = SaturatingMultiply(left: multiplier, right: cost.Effects);
+        var workUnits = SaturatingAdd(left: checkUnits, right: firingUnits);
 
         return new RuleWorkContributor(
             Name: rule.Name,
             IsInteraction: isInteraction,
             Multiplier: multiplier,
-            UnitCost: unit,
-            WorkUnits: SaturatingMultiply(left: multiplier, right: unit),
+            Cost: cost,
+            CheckUnits: checkUnits,
+            FiringUnits: firingUnits,
+            WorkUnits: workUnits,
             Discriminators: (isInteraction ? [] : PinnedCells(gate: rule.Gate, contradictory: out _))
         );
     }
@@ -131,7 +150,7 @@ public static class RuleWorkBudget {
     }
 
     /// <summary>Tallies the contributor lines: the evaluation slots (every multiplier summed) and the worst-case
-    /// work units. Each line sits at the node of the trie its pinned cells spell, in cell order; a node's worst
+    /// work units. Setup and checks always sum. Each line's firing cost sits at the node of the trie its pinned cells spell, in cell order; a node's worst
     /// case is its own lines plus, per further cell its children pin, the costliest points of that cell — the lines
     /// whose ranges contain one value, summed, taken for one value plus one more per rule evaluation that can write
     /// the cell during the tick, since effects apply immediately and a rule advancing a phase lets the next phase's
@@ -143,10 +162,12 @@ public static class RuleWorkBudget {
         ArgumentNullException.ThrowIfNull(argument: writers);
 
         var slots = 0L;
+        var checks = 0L;
         var root = new ExclusionNode();
 
         foreach (var contributor in contributors) {
             slots = SaturatingAdd(left: slots, right: contributor.Multiplier);
+            checks = SaturatingAdd(left: checks, right: contributor.CheckUnits);
 
             var node = root;
 
@@ -172,10 +193,12 @@ public static class RuleWorkBudget {
                 node = child;
             }
 
-            node.Own = SaturatingAdd(left: node.Own, right: contributor.WorkUnits);
+            node.Own = SaturatingAdd(left: node.Own, right: contributor.FiringUnits);
         }
 
-        return (slots, Worst(node: root, writers: writers));
+        var effects = Worst(node: root, writers: writers);
+
+        return (slots, SaturatingAdd(left: checks, right: effects));
     }
 
     /// <summary>Counts, per <c>row.key</c>, how many evaluations per tick can write the cell: each rule's write set
@@ -239,7 +262,7 @@ public static class RuleWorkBudget {
 
         foreach (var token in tokens) {
             if (token.LeftExpression is { } expression) {
-                cost = SaturatingAdd(left: cost, right: SaturatingAdd(left: 1L, right: SaturatingAdd(left: ExpressionCost(tokens: expression, context: context), right: ExpressionCost(tokens: token.RightExpression!, context: context))));
+                cost = SaturatingAdd(left: cost, right: SaturatingAdd(left: 1L, right: SaturatingAdd(left: ExpressionCost(tokens: expression, kind: token.ValueKind, context: context), right: ExpressionCost(tokens: token.RightExpression!, kind: token.ValueKind, context: context))));
                 continue;
             }
             if (token.Left is { } left) { cost = SaturatingAdd(left: cost, right: left.Cost(context: context)); }
@@ -249,20 +272,37 @@ public static class RuleWorkBudget {
         return cost;
     }
 
-    /// <summary>Returns the work units one non-operand operation token costs based on its static disassembly and execution complexity.</summary>
+    /// <summary>Returns the cost bound of one non-operand operation token.</summary>
+    /// <param name="operation">The operation.</param>
+    /// <param name="kind">The expression numeric kind.</param>
+    /// <param name="board">The compiled board query for board-shift operations.</param>
+    public static CostBound OperationCostBound(ExpressionOp operation, CellKind kind = CellKind.Int, BoardQuery? board = null) =>
+        ReferenceSchedule.OperationCostBound(operation: operation, kind: kind, board: board);
+
+    /// <summary>Returns the legacy heuristic work units for a non-operand token, not reference cycles.</summary>
     /// <param name="operation">The operation.</param>
     /// <param name="board">The compiled board query for board-shift operations.</param>
-    public static long OperationCost(ExpressionOp operation, BoardQuery? board = null) => operation switch {
-        // Tier 12: Topology shifts & transforms
-        ExpressionOp.BoardShift or ExpressionOp.BoardImage => (board is { } b ? (b.Topology.CellCount / 2 + b.Visits) : 24L),
-        // A fill is at most one shift per cell before the frontier empties.
-        ExpressionOp.BoardFill => (board is { } fill ? ((long)fill.Topology.CellCount * (fill.Topology.CellCount / 2 + fill.Visits)) : 1_536L),
+    public static long OperationCost(ExpressionOp operation, BoardQuery? board = null) =>
+        OperationCost(operation: operation, kind: CellKind.Int, board: board);
 
-        _ => ExpressionOperators.Find(operation)?.Cost ?? 1L,
+    /// <summary>Returns legacy heuristic work units. Numeric kind is carried for future calibration, but the
+    /// existing table does not distinguish kinds. Unknown operations receive the rejecting sentinel.</summary>
+    /// <param name="operation">The operation.</param>
+    /// <param name="kind">The numeric kind.</param>
+    /// <param name="board">The compiled board query for board-shift operations.</param>
+    public static long OperationCost(ExpressionOp operation, CellKind kind, BoardQuery? board = null) => operation switch {
+        ExpressionOp.Constant or ExpressionOp.Operand => 1L,
+        ExpressionOp.BoardShift or ExpressionOp.BoardImage => board is { } b ? b.Topology.CellCount / 2 + b.Visits : 24L,
+        ExpressionOp.BoardFill => board is { } fill ? (long)fill.Topology.CellCount * (fill.Topology.CellCount / 2 + fill.Visits) : 1_536L,
+        _ => ExpressionOperators.Find(operation)?.Cost ?? long.MaxValue,
     };
 
     /// <summary>Returns the work units an expression costs: the sum of its operations and live operand reads.</summary>
-    public static long ExpressionCost(CompiledExpressionToken[] tokens, RuleCompileContext context) {
+    public static long ExpressionCost(CompiledExpressionToken[] tokens, RuleCompileContext context) =>
+        ExpressionCost(tokens: tokens, kind: CellKind.Int, context: context);
+
+    /// <summary>Returns the work units an expression costs for a specific cell kind: the sum of its operations and live operand reads.</summary>
+    public static long ExpressionCost(CompiledExpressionToken[] tokens, CellKind kind, RuleCompileContext context) {
         ArgumentNullException.ThrowIfNull(argument: tokens);
 
         var cost = 0L;
@@ -270,7 +310,7 @@ public static class RuleWorkBudget {
         foreach (var token in tokens) {
             var tokenCost = ((token.Operand is { } operand)
                 ? operand.Cost(context: context)
-                : OperationCost(operation: token.Operation, board: token.Board));
+                : OperationCost(operation: token.Operation, kind: kind, board: token.Board));
             cost = SaturatingAdd(left: cost, right: tokenCost);
         }
 

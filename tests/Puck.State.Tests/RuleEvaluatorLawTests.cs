@@ -182,6 +182,31 @@ public sealed class RuleEvaluatorLawTests {
     }
 
     [Fact]
+    public void ClosedRulesStillEvaluateBindingsAndGatesBeforeFailing() {
+        var bindingExpr = Expr("counter + 5");
+        var rule = new Rule(
+            Name: CellName.Parse("closed"),
+            Effects: [new ActionEffect.AddState(State: "target", Value: 1m)],
+            Gate: new ActionPredicate.CompareState(State: "counter", Comparison: ActionStateComparison.Equal, Value: 999m),
+            Bindings: [new RuleBinding(Name: CellName.Parse("computed"), Kind: CellKind.Int, Expression: bindingExpr)]
+        );
+
+        var (host, evaluator, rules, latch) = Arrange(
+            rules: [rule],
+            rows: [Slot("counter", 10L), Slot("target", 0L)]
+        );
+
+        var applied = evaluator.Evaluate(rules: rules, latch: latch, tick: 1UL, stepTicks: 1UL);
+
+        // The gate evaluated to false, so the rule did not fire its effects.
+        Assert.False(applied);
+        Assert.Equal(0L, host.Cell("target"));
+
+        // However, the rule's binding expression was still evaluated during the check phase.
+        Assert.Equal(15L, evaluator.BindingValue(0));
+    }
+
+    [Fact]
     public void AnEdgeRuleFiresOnTheCrossingAloneAndReArmsWhenTheGateCloses() {
         var (host, evaluator, rules, latch) = Arrange(
             rules: [R(name: "strike", gate: new ActionPredicate.CompareState(State: "armed", Comparison: ActionStateComparison.Equal, Value: 1m), mode: ActionTriggerMode.Edge, effects: new ActionEffect.AddState(State: "hits", Value: 1m))],

@@ -11,6 +11,15 @@ package for the world document, so a card game, a turn-based resolver, or
 another engine's frontend can run authoritative rules over `Puck.Maths` and
 `Puck.State` alone.
 
+Rule budgeting currently uses heuristic work units. `RuleCost` separates the
+checks every candidate may perform from effects that fire, allowing mutually
+exclusive effects to share a budget without discarding closed-gate work.
+`CostModel` defines a portable abstract service policy; its reference operation
+and memory coefficients remain uncalibrated and return `CostBound.Unmodeled`.
+Heuristic weights cannot be converted to reference cycles. The
+[costing brief](../../docs/reviews/abstract-machine-costing.md) describes the
+portable capability baseline and evidence needed before cycle-based admission.
+
 `dotnet pack` produces `ByteTerrace.Puck.State`; the first NuGet.org release has
 not been published yet. The project depends on `ByteTerrace.Puck.Abstractions`,
 `ByteTerrace.Puck.Assets`, and `ByteTerrace.Puck.Maths`, each named directly, so

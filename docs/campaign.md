@@ -9,6 +9,11 @@ Read this before picking up work. It is the only document that says what we are 
 building; every other document under `docs/` is a reference you consult *while* building it, never a
 place to start.
 
+For the main character's visual implementation, use the
+[armored chibi hero brief](armored-chibi-hero-brief.md). It translates the requested
+chunky anime armor direction into proposed art defaults, staged work, and rendered
+acceptance evidence; it does not change the campaign's world model.
+
 ## The charter (owner-ratified 2026-08-06, binding)
 
 **Amended 2026-09-06 (owner ruling): one world.** Everything the charter below names, and everything the

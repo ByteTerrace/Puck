@@ -1708,13 +1708,15 @@ each rule's bindings by name and kind. The rule count itself has no ceiling of
 its own: the per-tick work budget is the bound. That budget is worst-case but
 not blind: rules whose gates pin the same literal cells to disjoint ranges (a
 phase id, a mode, `hp <= 0` against `hp > 0`, a phase and a subphase) cannot
-all fire on one tick, so the sheet prices them as a trie of the cells they pin
-— at each cell the costliest values of that cell (the lines whose ranges
+all fire on one tick without intervening writes, so the sheet prices their
+firing effects as a trie of the cells they pin. At each cell it takes the
+costliest values of that cell (the firing costs whose ranges
 contain it, summed), one value plus one more per rule that can write that cell
 during the tick (effects apply immediately, so a rule advancing the phase lets
 the next phase's rules fire in the same tick), and lines pinning a further
-cell nest under the lines pinning fewer. Rules whose ranges overlap, pinning
-different cells, or gated on anything else still sum. A gate whose
+cell nest under the lines pinning fewer. Setup and candidate checks, including
+bindings and closed gates, still sum across every rule. Firing costs for rules
+whose ranges overlap, pin different cells, or have other gates still sum. A gate whose
 comparisons pin a cell to an empty range can never hold and is refused by
 name. `world.budget.rules` shows each line's pinned cells.
 
@@ -2105,9 +2107,9 @@ fixed-point instruction path as authored body actions. `paintField` clips a
 sphere to the lattice, clamps every result to the field envelope, and caps its
 radius at eight cells, bounding one firing to at most 4,913 candidate visits.
 
-Rule execution has three independent ceilings: 128 ordinary rules, 64 top-level
-effects per rule/interaction, and 2,000,000 statically derived work units per
-tick. The cost includes gate/expression operands, keyed scans, `forEach`, the
+Rule execution admits at most 64 top-level effects per rule/interaction and
+2,000,000 statically derived heuristic work units per tick. There is no separate
+ordinary-rule count ceiling. The cost includes gate/expression operands, keyed scans, `forEach`, the
 quadratic worst case of distance interactions, mutation rebuild weights, nested
 transaction preflight, field-paint candidate visits, and flock-affinity expressions
 for every body's worst-case simultaneous initial sample. Validation refuses a
@@ -2115,14 +2117,21 @@ document above the aggregate ceiling, naming the three costliest lines with
 their multipliers; `world.budget` prints the current rule,
 interaction, evaluation-slot, and work-unit totals, and `world.budget.rules
 [top]` lists every rule's and interaction's line — multiplier, unit cost,
-total, and the cell it prices exclusively under — costliest first, so the
-total is traceable to the rows that make it up. A `forEach` line's multiplier
+total, and the cell its firing effects price exclusively under — costliest first,
+so the total is traceable to the rows that make it up. All candidate checks sum
+even when firing effects are mutually exclusive. A `forEach` line's multiplier
 is its row's capacity: a row left at the default room prices at 128 cells, a
 registry-sized row authors the capacity it needs. Interaction `range` is an
 exact JSON decimal lowered directly to fixed point, with no binary32 round trip.
 A distance interaction's `neighbours` (1..64) evaluates at most that many right
 carriers per left carrier — the nearest first, ties by the lower body index —
 and its line prices pairs at that budget instead of the population squared.
+
+The [portable costing brief](../../docs/reviews/abstract-machine-costing.md)
+defines the proposed replacement. Its cycle schedule remains uncalibrated.
+`WorldCostReport` exposes heuristic totals separately and reports unresolved
+cycle bounds, including search work; it cannot yet certify an abstract
+deadline. The ceilings above remain the current validator policy.
 
 Live effect failures are bounded diagnostics, not a Level-rule log flood.
 `world.rule.failures` reports one fixed counter per refusal category plus its

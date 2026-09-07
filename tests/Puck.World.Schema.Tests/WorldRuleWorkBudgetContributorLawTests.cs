@@ -31,10 +31,11 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
         Assert.Equal([$"phase.{WorldStateRow.SlotKey}=1"], lines[2].Discriminators.Select(pinned => pinned.Describe()));
         Assert.Empty(lines[0].Discriminators);
 
-        // p0 and p1 are exclusive on phase, so the total carries one of them, not both.
-        var unconditional = lines.Where(line => line.Discriminators.Count == 0).Sum(line => line.WorkUnits);
-        var exclusive = lines.Where(line => line.Discriminators.Count > 0).Max(line => line.WorkUnits);
-        Assert.Equal(unconditional + exclusive, WorldRuleWorkBudget.Measure(document).WorkUnitsPerTick);
+        // p0 and p1 are exclusive on phase, so all checks sum, but firing carries one of them, not both.
+        var totalChecks = lines.Sum(line => line.CheckUnits);
+        var unconditionalFiring = lines.Where(line => line.Discriminators.Count == 0).Sum(line => line.FiringUnits);
+        var exclusiveFiring = lines.Where(line => line.Discriminators.Count > 0).Max(line => line.FiringUnits);
+        Assert.Equal(totalChecks + unconditionalFiring + exclusiveFiring, WorldRuleWorkBudget.Measure(document).WorkUnitsPerTick);
     }
 
     [Fact]

@@ -128,13 +128,14 @@ public sealed record CompiledWorldRule(
     /// <summary>Adds the decision's cost: every option's gate, the costliest branch, the score of every retained
     /// candidate, and the perception sampling a neighbours option inspects.</summary>
     /// <inheritdoc/>
-    public override long Cost(RuleCompileContext context) {
-        var cost = base.Cost(context: context);
+    public override RuleCost CostBreakdown(RuleCompileContext context) {
+        var baseBreakdown = base.CostBreakdown(context: context);
 
         if (Decision is not { } decision) {
-            return cost;
+            return baseBreakdown;
         }
 
+        var check = baseBreakdown.Check;
         var currentGate = 0L;
         var branch = RuleWorkBudget.EffectsCost(effects: decision.OnNoChoice, context: context);
 
@@ -145,23 +146,28 @@ public sealed record CompiledWorldRule(
             currentGate = Math.Max(val1: currentGate, val2: gate);
             if (option.Neighbors is { } neighbors) {
                 // Physical sampling and eligibility inspect at most the candidate budget; only retained candidates score.
-                cost = RuleWorkBudget.SaturatingAdd(left: cost, right: RuleWorkBudget.SaturatingMultiply(left: neighbors.Source.CandidateBudget, right: RuleWorkBudget.SaturatingAdd(left: 1L, right: gate)));
-                cost = RuleWorkBudget.SaturatingAdd(left: cost, right: RuleWorkBudget.SaturatingMultiply(left: neighbors.Source.MaxCandidates, right: RuleWorkBudget.SaturatingAdd(left: 1L, right: score)));
-                cost = RuleWorkBudget.SaturatingAdd(left: cost, right: 27L); // Grid cell lookups, independent of crowd density.
+                check = RuleWorkBudget.SaturatingAdd(left: check, right: RuleWorkBudget.SaturatingMultiply(left: neighbors.Source.CandidateBudget, right: RuleWorkBudget.SaturatingAdd(left: 1L, right: gate)));
+                check = RuleWorkBudget.SaturatingAdd(left: check, right: RuleWorkBudget.SaturatingMultiply(left: neighbors.Source.MaxCandidates, right: RuleWorkBudget.SaturatingAdd(left: 1L, right: score)));
+                check = RuleWorkBudget.SaturatingAdd(left: check, right: 27L); // Grid cell lookups, independent of crowd density.
                 if (neighbors.Source.RequiresLineOfSight) {
-                    cost = RuleWorkBudget.SaturatingAdd(left: cost, right: neighbors.Source.CandidateBudget);
+                    check = RuleWorkBudget.SaturatingAdd(left: check, right: neighbors.Source.CandidateBudget);
                 }
             } else {
-                cost = RuleWorkBudget.SaturatingAdd(left: cost, right: RuleWorkBudget.SaturatingAdd(left: RuleWorkBudget.SaturatingAdd(left: 1L, right: gate), right: score));
+                check = RuleWorkBudget.SaturatingAdd(left: check, right: RuleWorkBudget.SaturatingAdd(left: RuleWorkBudget.SaturatingAdd(left: 1L, right: gate), right: score));
             }
             branch = Math.Max(val1: branch, val2: RuleWorkBudget.EffectsCost(effects: option.Effects, context: context));
         }
 
-        cost = RuleWorkBudget.SaturatingAdd(left: cost, right: currentGate);
-        cost = RuleWorkBudget.SaturatingAdd(left: cost, right: RuleWorkBudget.GateCost(tokens: (decision.Interrupt ?? []), context: context));
+        check = RuleWorkBudget.SaturatingAdd(left: check, right: currentGate);
+        check = RuleWorkBudget.SaturatingAdd(left: check, right: RuleWorkBudget.GateCost(tokens: (decision.Interrupt ?? []), context: context));
 
-        return RuleWorkBudget.SaturatingAdd(left: cost, right: branch);
+        var effects = RuleWorkBudget.SaturatingAdd(left: baseBreakdown.Effects, right: branch);
+
+        return new RuleCost(Setup: baseBreakdown.Setup, Check: check, Effects: effects);
     }
+
+    /// <inheritdoc/>
+    public override long Cost(RuleCompileContext context) => CostBreakdown(context: context).Total;
 }
 
 /// <summary>Hard bounds for the world's own rule arms; representation and per-tick work limits, never gameplay tuning.

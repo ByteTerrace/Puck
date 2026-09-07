@@ -95,18 +95,24 @@ public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate
         RuleDataflow.CollectEffectWrites(effects: Effects, into: into);
     }
 
+    /// <summary>Returns the orthogonal cost components: per-rule setup, per-evaluation check, and per-firing effects.</summary>
+    /// <param name="context">The compile context the rule was resolved against.</param>
+    public virtual RuleCost CostBreakdown(RuleCompileContext context) {
+        var check = RuleWorkBudget.SaturatingAdd(left: 1L, right: RuleWorkBudget.GateCost(tokens: Gate, context: context));
+
+        foreach (var binding in (Bindings ?? [])) {
+            check = RuleWorkBudget.SaturatingAdd(left: check, right: RuleWorkBudget.ExpressionCost(tokens: binding.Expression, kind: binding.Kind, context: context));
+        }
+
+        var effects = RuleWorkBudget.EffectsCost(effects: Effects, context: context);
+
+        return new RuleCost(Setup: 0L, Check: check, Effects: effects);
+    }
+
     /// <summary>Returns the conservative work units one evaluation costs: one for the visit, plus the gate, the
     /// bindings, and the effects.</summary>
     /// <param name="context">The compile context the rule was resolved against.</param>
-    public virtual long Cost(RuleCompileContext context) {
-        var cost = RuleWorkBudget.SaturatingAdd(left: 1L, right: RuleWorkBudget.GateCost(tokens: Gate, context: context));
-
-        foreach (var binding in (Bindings ?? [])) {
-            cost = RuleWorkBudget.SaturatingAdd(left: cost, right: RuleWorkBudget.ExpressionCost(tokens: binding.Expression, context: context));
-        }
-
-        return RuleWorkBudget.SaturatingAdd(left: cost, right: RuleWorkBudget.EffectsCost(effects: Effects, context: context));
-    }
+    public virtual long Cost(RuleCompileContext context) => CostBreakdown(context: context).Total;
 }
 /// <summary>One compiled <see cref="RuleBinding"/>: its ordinal is its slot in the evaluation's bound-value
 /// scratch, and its expression may read only bindings with a smaller ordinal.</summary>

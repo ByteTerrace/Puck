@@ -3,8 +3,8 @@ using Xunit;
 namespace Puck.State.Tests;
 
 /// <summary>
-/// THE LAW: Numeric expression costing is derived from static disassembly analysis, not wall-clock execution.
-/// Every operation has a strictly positive, calibrated work-unit cost matching its instruction footprint and loop bounds.
+/// THE LAW: Legacy expression work weights remain deterministic heuristics until calibration is substantiated.
+/// Every registered operation has a positive heuristic weight; those weights must not become reference cycles.
 /// Division costs more than multiplication, which costs more than single-cycle ALU. Combinatorial algorithms and
 /// iterative prime testing scale according to their static instruction and iteration complexity.
 /// </summary>
@@ -39,7 +39,18 @@ public sealed class ExpressionCostLawTests {
     }
 
     [Fact]
-    public void OperationsReflectDisassemblyTierOrdering() {
+    public void HeuristicWeightsCannotMasqueradeAsCalibratedCycles() {
+        foreach (var operation in Enum.GetValues<ExpressionOp>()) {
+            Assert.True(ReferenceSchedule.OperationCostBound(operation, CellKind.Int).IsUnmodeled);
+            Assert.True(ReferenceSchedule.OperationCostBound(operation, CellKind.Fixed).IsUnmodeled);
+            Assert.InRange(RuleWorkBudget.OperationCost(operation), 1L, long.MaxValue - 1L);
+        }
+        Assert.Null(CostModel.Default.EvidenceDigest);
+        Assert.True(new RuleCost(0, 1, 3).ToBound().IsUnmodeled);
+        Assert.Equal(long.MaxValue, RuleWorkBudget.OperationCost((ExpressionOp)byte.MaxValue));
+    }
+    [Fact]
+    public void HeuristicOperationsRetainTheirExistingTierOrdering() {
         var alu = RuleWorkBudget.OperationCost(operation: ExpressionOp.Add);
         var select = RuleWorkBudget.OperationCost(operation: ExpressionOp.Select);
         var popcnt = RuleWorkBudget.OperationCost(operation: ExpressionOp.PopCount);
