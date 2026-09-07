@@ -1,3 +1,6 @@
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+
 namespace Puck.Maths;
 
 /// <summary>
@@ -46,10 +49,14 @@ public struct Pcg32Extended {
 
     private Pcg32XshRr m_base;
     private readonly uint[] m_extension;
+    // The table length less one: the length is a power of two, so this masks a state's low bits straight into a
+    // valid index, and holding it here keeps the draw from re-deriving it from the array header.
+    private readonly ulong m_indexMask;
 
     private Pcg32Extended(Pcg32XshRr baseGenerator, uint[] extension) {
         m_base = baseGenerator;
         m_extension = extension;
+        m_indexMask = ((ulong)(extension.Length - 1));
     }
 
     // A nearly-divisionless bounded draw, built on this type's own NextUInt32 rather than the base generator's —
@@ -70,6 +77,7 @@ public struct Pcg32Extended {
         return ((uint)(product >> 32));
     }
     // The RXS-M-XS output permutation over a 32-bit state (pcg-cpp's rxs_m_xs_mixin<uint32_t, uint32_t>::output).
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint RxsMxsOutput(uint internalValue) {
         var reshift = ((internalValue >> 28) & 0xFU);
 
@@ -83,9 +91,9 @@ public struct Pcg32Extended {
         return result;
     }
     // The exact inverse of RxsMxsOutput (pcg-cpp's rxs_m_xs_mixin<uint32_t, uint32_t>::unoutput).
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint RxsMxsUnoutput(uint internalValue) {
         internalValue = Unxorshift32(
-            bits: 32,
             shift: 22,
             value: internalValue
         );
@@ -94,45 +102,27 @@ public struct Pcg32Extended {
         var reshift = ((internalValue >> 28) & 0xFU);
 
         internalValue = Unxorshift32(
-            bits: 32,
             shift: unchecked((int)(4U + reshift)),
             value: internalValue
         );
 
         return internalValue;
     }
-    // Inverts x ^= x >> shift over a `bits`-bit word (pcg_extras::unxorshift): the shift-xorshift step is a
-    // unit-lower-triangular map over GF(2), so it is invertible even though a right xorshift alone is not, in
-    // general, its own inverse.
-    private static uint Unxorshift32(uint value, int bits, int shift) {
-        if ((2 * shift) >= bits) {
-            return unchecked(value ^ (value >> shift));
+    // Inverts x ^= x >> shift over a 32-bit word (pcg_extras::unxorshift). The forward map is I + S for the shift
+    // matrix S, nilpotent over GF(2) with S^n = 0 once n·shift reaches the word, so its inverse is the finite series
+    // I + S + S² + …, folded as (I + S)(I + S²)(I + S⁴)… — one xorshift per doubling of the shift.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint Unxorshift32(uint value, int shift) {
+        for (; (shift < 32); shift <<= 1) {
+            value ^= (value >> shift);
         }
 
-        var lowMask1 = unchecked((uint)((1U << (bits - (shift * 2))) - 1U));
-        var highMask1 = ~lowMask1;
-        var top1 = value;
-        var bottom1 = (value & lowMask1);
-
-        top1 = unchecked(top1 ^ (top1 >> shift));
-        top1 &= highMask1;
-
-        var mixed = (top1 | bottom1);
-        var lowMask2 = unchecked((uint)((1U << (bits - shift)) - 1U));
-        var bottom2 = (mixed & lowMask2);
-
-        bottom2 = Unxorshift32(
-            bits: (bits - shift),
-            shift: shift,
-            value: bottom2
-        );
-        bottom2 &= lowMask1;
-
-        return (top1 | bottom2);
+        return value;
     }
     // The per-word "inside out" single step (pcg-cpp's inside_out<>::external_step): unoutput, advance the hidden
     // 32-bit state by one word-specific LCG step, output again. Returns whether the output landed on zero, which —
     // because this permutation fixes zero (RxsMxsOutput(0) == 0) — signals a carry into the next word.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool ExternalStep(ref uint word, int wordNumber) {
         var state = RxsMxsUnoutput(internalValue: word);
 
@@ -213,20 +203,18 @@ public struct Pcg32Extended {
     // second when the previous word's step carried, so the whole table behaves as a mixed-radix counter incremented
     // by exactly one.
     private void AdvanceTableByOne() {
+        ref var word = ref MemoryMarshal.GetArrayDataReference(array: m_extension);
         var carry = false;
 
         for (var index = 0; (index < m_extension.Length); ++index) {
+            ref var current = ref Unsafe.Add(source: ref word, elementOffset: index);
+            var wordNumber = (index + 1);
+
             if (carry) {
-                carry = ExternalStep(
-                    word: ref m_extension[index],
-                    wordNumber: (index + 1)
-                );
+                carry = ExternalStep(word: ref current, wordNumber: wordNumber);
             }
 
-            var secondCarry = ExternalStep(
-                word: ref m_extension[index],
-                wordNumber: (index + 1)
-            );
+            var secondCarry = ExternalStep(word: ref current, wordNumber: wordNumber);
 
             carry = (carry || secondCarry);
         }
@@ -345,25 +333,24 @@ public struct Pcg32Extended {
     /// <remarks>Reads (and, once every 65536 draws, advances) the extension table using the base state as it stood
     /// before this draw, then draws the base — the same order pcg-cpp's <c>extended&lt;&gt;::operator()</c> uses,
     /// though the two are independent: the base draw never depends on the table.</remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public uint NextUInt32() {
         var preDrawState = m_base.State;
-        var index = ((int)(preDrawState & ((ulong)(m_extension.Length - 1))));
 
         if ((preDrawState & TickMask) == 0UL) {
             AdvanceTableByOne();
         }
 
-        var extensionWord = m_extension[index];
+        // The table length is a power of two, so the masked index is always inside it: the bounds check is elided
+        // by construction, not by the JIT's proof.
+        var extensionWord = Unsafe.Add(
+            elementOffset: ((nint)(preDrawState & m_indexMask)),
+            source: ref MemoryMarshal.GetArrayDataReference(array: m_extension)
+        );
         var baseDraw = m_base.NextUInt32();
 
         return unchecked(baseDraw ^ extensionWord);
     }
-    /// <summary>Draws a uniformly random value from an inclusive range.</summary>
-    /// <param name="minimum">One end of the inclusive range.</param>
-    /// <param name="maximum">The other end of the inclusive range; the bounds may be given in either order.</param>
-    /// <returns>A uniformly distributed value in <c>[min(minimum, maximum), max(minimum, maximum)]</c>, unbiased.</returns>
-    /// <remarks>Built on this type's own <see cref="NextUInt32()"/> exactly the way <see cref="Pcg32XshRr.NextUInt32(uint, uint)"/>
-    /// is built on its; rejection sampling may consume more than one draw per call.</remarks>
     public uint NextUInt32(uint minimum, uint maximum) {
         if (maximum < minimum) {
             (minimum, maximum) = (maximum, minimum);
