@@ -47,8 +47,8 @@ SHA-256 hash before caching it (`official/byteStore.ts`, IndexedDB-backed
 with an in-memory fallback under Node). A manifest fetch that fails falls
 back to a previously verified offline copy; a hash mismatch refuses by name
 and caches nothing. `native/engineBoot.ts`'s `bootEngineFromOfficial` boots
-the engine from those same verified files (`'worker'` mode in the browser,
-`'inline'` mode for tests) and then requires `engine.version()` to report
+the engine from those same verified files (`'inline'` mode today in the
+browser and in tests — see the Worker note under limits) and then requires `engine.version()` to report
 the exact `schemaVersion`/`commit` the manifest's own build names — a
 mismatch disposes the engine and refuses by name rather than running a
 document against an engine build the manifest did not vouch for.
@@ -131,6 +131,18 @@ offline library; nothing here uploads, publishes, or generates a share link.
 
 ## Limits that remain
 
+- The engine is hosted inline (on the page's main thread). With the AOT
+  AppBundle, `dotnet.js` booted inside a module Worker loads every assembly,
+  logs `onRuntimeInitialized`, and then never resolves `create()` (verified
+  in Chromium on 2026-09-07 with diagnostic tracing; the same boot on the
+  main thread resolves in about 250 ms warm). Engine calls therefore block
+  the UI for their duration — about two seconds to compose or compile the
+  island. `WorldStudio.tsx` is the one switch; the Worker path
+  (`engine.worker.ts`, `workerBoot.ts`) stays built and Node-tested.
+- One runtime per page: `dotnet.js` refuses a second `create()` in a realm,
+  so `workerBoot.ts` memoizes the realm's boot by engine set (React's
+  StrictMode double-mount and HMR remounts join it) and refuses a different
+  engine set by name until a reload.
 - Wasm engine payload: the AOT `Puck.World.Browser` AppBundle is roughly
   40 MB; a first boot fetches and hash-verifies it in full (subsequent boots
   serve from the byte store).
