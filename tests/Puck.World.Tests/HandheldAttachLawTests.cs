@@ -20,14 +20,13 @@ namespace Puck.World.Tests;
 /// already carries is the only body-relative anchor a rig with no joint transforms can honor (see this suite's own
 /// finding recorded in <c>modules/README.md</c>'s handheld section).
 ///
-/// This mechanism is proven here rather than wired into the shipped <c>arcade.world.json</c>: each
-/// <c>upsertPlacement</c>/<c>removePlacement</c> firing costs a flat 32,768 rule-work unit
-/// (<see cref="Puck.World.UpsertPlacementEffect.Cost"/>), and the shipped <c>puck.world.json</c> already spends
-/// 1,967,916 of its 2,000,000-unit ceiling (<see cref="Puck.State.RuleCapacity.MaxWorkUnitsPerTick"/>) before either
-/// of these two rules lands — landing both overruns to 2,037,457 and refuses the whole world's boot (verified: every
-/// <see cref="AuthoredGameFixtures.Nexus"/>-backed law in this suite fails the same way). That ceiling and every
-/// other rule's own cost sit outside this task's file list, so the mechanism is authored and proven against an
-/// isolated document instead.
+/// Proven here against an isolated document first, then shipped for real in <c>modules/arcade.world.json</c>
+/// (<c>arcade_handheld-pickup</c>/<c>arcade_handheld-release</c> once composed under the island's <c>arcade</c>
+/// alias) — <see cref="RealArcadeModuleLawTests"/> below proves the shipped pair against the actual island document.
+/// An attach-only placement's <c>upsertPlacement</c> now costs <see cref="Puck.World.WorldPlacementEffectCost.DocumentCost"/>
+/// (<see cref="Puck.World.UpsertPlacementEffect.Cost"/> derives from what the row's own facets would rebuild, never a
+/// flat number), so shipping the pair fits comfortably under
+/// <see cref="Puck.State.RuleCapacity.MaxWorkUnitsPerTick"/>.
 /// </summary>
 public sealed class HandheldAttachLawTests {
     private const string StandRegion = "handheldStand";
@@ -224,5 +223,34 @@ public sealed class HandheldAttachLawTests {
                 ),
             ],
         };
+    }
+}
+
+/// <summary>Proves the handheld pair against the real, composed island document rather than an isolated one: the
+/// module's rules land under the <c>arcade</c> import alias, and shipping them still leaves the tick's rule-work
+/// sheet under its ceiling with room to spare.</summary>
+public sealed class RealArcadeModuleLawTests {
+    [Fact]
+    public void TheArcadeModuleShipsTheHandheldPairUnderItsImportAlias() {
+        var definition = AuthoredGameFixtures.Nexus;
+
+        var pickup = Assert.Single(definition.Rules!, rule => rule.Name.ToString() == "arcade_handheld-pickup");
+        var release = Assert.Single(definition.Rules!, rule => rule.Name.ToString() == "arcade_handheld-release");
+
+        Assert.Contains(pickup.Effects, effect => effect is WorldEffect.UpsertPlacement upsert && (upsert.Placement.Attach != null));
+        Assert.Contains(release.Effects, effect => effect is WorldEffect.UpsertPlacement upsert && (upsert.Placement.Attach == null));
+
+        var stand = Assert.Single(definition.Placements, row => row.Id == "handheldStand");
+        Assert.NotNull(stand.Region);
+    }
+
+    [Fact]
+    public void TheIslandsRuleWorkStaysUnderTheCeilingWithHeadroomAfterTheHandheldShips() {
+        var budget = WorldRuleWorkBudget.Measure(AuthoredGameFixtures.Nexus);
+
+        Assert.True(budget.WorkUnitsPerTick < RuleCapacity.MaxWorkUnitsPerTick);
+        // The headroom is a live measurement, not a knob; a future authoring change is free to spend it, but this
+        // pins that the pair did not eat it all.
+        Assert.True((RuleCapacity.MaxWorkUnitsPerTick - budget.WorkUnitsPerTick) > 10_000L);
     }
 }

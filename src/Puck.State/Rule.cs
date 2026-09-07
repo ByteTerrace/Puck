@@ -183,7 +183,11 @@ public static class RuleCapacity {
     /// <summary>The most bound values one rule may declare — the width of the per-evaluation scratch every evaluator
     /// carries for them.</summary>
     public const int MaxBindingsPerRule = 16;
-    /// <summary>The maximum statically derived rule work admitted for one simulation tick.</summary>
+    /// <summary>The maximum statically derived rule work admitted for one simulation tick — sized against the
+    /// tick's own budget at a consumer's shipped 30 Hz cadence (a 33.3 ms tick), not chosen independent of it. The
+    /// rule sweep is one of several passes a tick pays for; reserving roughly a tenth of the tick (~3.3 ms) as its
+    /// worst-case share and pricing one work unit at ~1.7 ns — a plausible cost for the fixed-point compare, read,
+    /// or write every rule/effect cost is built from — yields this ceiling.</summary>
     public const long MaxWorkUnitsPerTick = 2_000_000L;
     /// <summary>The most postfix tokens in one Boolean gate.</summary>
     public const int MaxPredicateTokens = 256;

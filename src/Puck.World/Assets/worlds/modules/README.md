@@ -487,8 +487,10 @@ Import it under the alias `arcade`:
 | `kits` | `arcadePad` | A pad map over the island's channels: forward and strafe to the left stick, turn to the right stick, jump to South, rise to East. Never worn by a body. |
 | `bodyMotionPrograms` | `arcadePad` | The kit's required program. |
 | `state.world` | `cgbScreen`, `agbScreen`, `handheldScreen` | Int slots holding the three screen indices; exported as reads and bindings. |
+| `state.world` | `handheldHeld` | 0/1: whether seat 1 currently holds the handheld. |
 | `spawnPoints` | `arcade-arrival` | Court-local `(0, 0, 2)`, facing the cabinets. |
 | `navigation.domains` | `arcadeFloor` | A `Surface` domain over the court floor. |
+| `rules` | `handheld-pickup`, `handheld-release` | Toggle the handheld's `attach` facet onto/off seat 1's body — see "The handheld" below. |
 
 Placement ids, kit names, spawn points, screens, and domains keep their bare
 spellings under the alias; only the state rows compose as `arcade_<name>`.
@@ -534,24 +536,28 @@ most precise anchor the engine can honor today).
 
 An ordinary pair of `rules` toggles `attach` live — the exact idiom
 `studio-look-cycle` already ships (`compareState` over a region and a channel,
-`Edge` mode): a body standing in the stand's region with the engage channel
-pressed gets `handheld` upserted with `attach` pointing at it; walking back out
-of the region upserts it back to the stand's authored pose. This is proven in
-`tests/Puck.World.Tests/HandheldAttachLawTests.cs` against an isolated
-document, not wired into this module's shipped `rules`: each `upsertPlacement`
-firing costs a flat 32,768 rule-work unit
-(`Puck.World.UpsertPlacementEffect.Cost`), and `puck.world.json`'s composed
-rule-work sheet already spends 1,967,916 of the 2,000,000-unit ceiling
-(`Puck.State.RuleCapacity.MaxWorkUnitsPerTick`) before either rule of the pair
-lands, so landing both here overruns the ceiling and refuses the whole world's
-boot. What still keeps this a fixed-index attach even once budget allows it:
-`upsertPlacement`'s embedded placement is a literal, compile-time constant —
-its `attach.bodyIndex` cannot resolve to `$left`/`$right` or any other live
-carrier the way a `setState`/`setBodyVerticalVelocity` effect's `key` can, so
-the body a rule attaches to must be a fixed seat index, never "whichever body
-engaged the screen." A `screens` row still does not ride a placement either —
-the slab is world-space, so the picture stays on the stand while the chassis
-leaves with the body.
+`Edge` mode): `handheldStand` carries a `region` (radius 1.5) a rule senses;
+seat 1's body standing in it with the `jump` channel pressed and
+`handheldHeld` at 0 gets `handheld` upserted with `attach` pointing at
+`body:0`; walking back out of the region with `handheldHeld` at 1 upserts it
+back to the stand's authored pose. `Puck.World.UpsertPlacementEffect.Cost`
+derives from what the row's own facets would rebuild rather than a flat
+number (`Puck.World.WorldPlacementEffectCost`) — the handheld carries neither
+`inhabit` nor `solid`, so each firing costs only the document-write floor
+(`WorldPlacementEffectCost.DocumentCost`), well inside
+`Puck.State.RuleCapacity.MaxWorkUnitsPerTick`'s headroom
+(`world.budget.rules` prints the composed total against the ceiling).
+`tests/Puck.World.Tests/HandheldAttachLawTests.cs` proves the mechanism
+against an isolated document; `RealArcadeModuleLawTests` in the same file
+proves the shipped pair against the composed island. What still keeps this a
+fixed-index attach: `upsertPlacement`'s embedded placement is a literal,
+compile-time constant — its `attach.bodyIndex` cannot resolve to
+`$left`/`$right` or any other live carrier the way a
+`setState`/`setBodyVerticalVelocity` effect's `key` can, so the body a rule
+attaches to must be a fixed seat index, never "whichever body engaged the
+screen." A `screens` row still does not ride a placement either — the slab is
+world-space, so the picture stays on the stand while the chassis leaves with
+the body.
 
 ## Verify
 

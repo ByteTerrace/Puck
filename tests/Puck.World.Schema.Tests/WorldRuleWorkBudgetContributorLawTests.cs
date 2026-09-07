@@ -1,3 +1,5 @@
+using System.Numerics;
+
 using Xunit;
 
 namespace Puck.World.Schema.Tests;
@@ -44,5 +46,54 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
         Assert.False(WorldDefinitionValidator.TryValidateLocally(definition: document, reason: out var reason));
         Assert.Contains("costliest: 'heavy' x4096 = ", reason, StringComparison.Ordinal);
         Assert.Contains("'light' x1 = ", reason, StringComparison.Ordinal);
+    }
+
+    private static WorldKit SolidKit(string name, float radius) => new(
+        Name: name,
+        BodyMotionProgram: "walk",
+        Motion: new WorldMotion(Speed: new WorldSpeed(Value: 4f), Turn: new WorldTurn(Rate: 2.5f)),
+        Collider: new WorldCollider.Capsule(Endpoint: new Vector3(x: 0f, y: 1f, z: 0f), Radius: radius),
+        BodyContact: WorldBodyContactMode.Solid
+    );
+    private static WorldPlacement RegionPlacement(string id, float radius) =>
+        new(Id: id, PrototypeId: id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Region: new WorldPlacementRegion(Radius: radius));
+    private static WorldInteraction RegionInteraction(string right) => new(
+        Name: CellName.Parse("touches"),
+        Left: "tagged",
+        Right: right,
+        CoOccurrence: WorldInteractionCoOccurrence.Region,
+        Range: 0m,
+        Effects: [new ActionEffect.SetState(State: "count", Value: 1m)]
+    );
+    private static WorldDefinition RegionDocument(float regionRadius, params WorldKit[] kits) => new(
+        Simulation: new WorldSimulationDefaults(RateHz: 240),
+        PopulationRaw: new WorldBodiesDefaults(CapacityRaw: 144),
+        Properties: new WorldPropertyRegistrySection(Names: ["tagged"]),
+        StateRaw: new WorldStateSection(World: [Keyed("tagged", 144), Slot("count")]),
+        KitsRaw: new WorldKitsSection(Rows: kits),
+        PlacementsRaw: new WorldPlacementsSection(Policy: null, Rows: [RegionPlacement(id: "spot", radius: regionRadius)]),
+        Interactions: new WorldInteractionsSection(Interactions: [RegionInteraction(right: "spot")])
+    );
+
+    [Fact]
+    public void ARegionInteractionsMultiplierIsThePackedFootprintWhenEveryKitIsSolid() {
+        // radius 1.2 packed with a 0.35 footprint: floor((1.2/0.35)^2) = 11, well under the 144-body population.
+        var document = RegionDocument(regionRadius: 1.2f, SolidKit(name: "walker", radius: 0.35f));
+        var line = WorldRuleWorkBudget.Contributors(document).Single();
+
+        Assert.Equal(11L, line.Multiplier);
+        Assert.True(line.Multiplier < document.Population.Capacity);
+    }
+
+    [Fact]
+    public void ARegionInteractionsMultiplierFallsBackToPopulationCapacityWhenAnyKitIsOverlap() {
+        // The same radius/footprint pair as above, but an Overlap kit (of any footprint) defeats the packing bound —
+        // two bodies depenetrate only when BOTH kits are Solid, so an Overlap kit's own bodies could co-locate
+        // without limit.
+        var overlap = SolidKit(name: "ghost", radius: 0.05f) with { BodyContact = WorldBodyContactMode.Overlap };
+        var document = RegionDocument(regionRadius: 1.2f, SolidKit(name: "walker", radius: 0.35f), overlap);
+        var line = WorldRuleWorkBudget.Contributors(document).Single();
+
+        Assert.Equal((long)document.Population.Capacity, line.Multiplier);
     }
 }

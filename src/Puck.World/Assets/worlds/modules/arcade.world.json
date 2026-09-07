@@ -157,6 +157,9 @@
         "scale": 1,
         "solid": {
           "margin": 0
+        },
+        "region": {
+          "radius": 1.5
         }
       },
       {
@@ -874,6 +877,111 @@
       }
     }
   ],
+  "rules": [
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "handheldHeld",
+          "value": 1
+        },
+        {
+          "$type": "upsertPlacement",
+          "placement": {
+            "attach": {
+              "bodyIndex": 0,
+              "localOffset": [
+                0.22,
+                1.02,
+                0.34
+              ],
+              "localYawDegrees": 0
+            },
+            "id": "handheld",
+            "parent": "handheldStand",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "prototypeId": "handheld",
+            "scale": 1,
+            "yawDegrees": 0
+          }
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "handheldHeld",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "state": "$region:handheldStand",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "state": "$channel:1:jump",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "handheld-pickup"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "handheldHeld",
+          "value": 0
+        },
+        {
+          "$type": "upsertPlacement",
+          "placement": {
+            "id": "handheld",
+            "parent": "handheldStand",
+            "position": [
+              0,
+              1.08,
+              0.03
+            ],
+            "prototypeId": "handheld",
+            "scale": 1,
+            "yawDegrees": 0
+          }
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "handheldHeld",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Less",
+            "state": "$region:handheldStand",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "handheld-release"
+    }
+  ],
   "screens": [
     {
       "index": 8,
@@ -1011,6 +1119,13 @@
         "min": 0,
         "name": "handheldScreen",
         "value": 10
+      },
+      {
+        "kind": "Int",
+        "max": 1,
+        "min": 0,
+        "name": "handheldHeld",
+        "value": 0
       }
     ]
   }

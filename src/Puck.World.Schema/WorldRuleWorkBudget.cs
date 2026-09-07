@@ -74,6 +74,49 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         return contributors;
     }
 
+    /// <summary>Describes why one contributor's multiplier is what it is — the forEach row's capacity, the
+    /// interaction's carrier/pair-count formula, or the region-capacity bound's own terms — for
+    /// <c>world.budget.rules --why</c>.</summary>
+    /// <param name="definition">The world.</param>
+    /// <param name="rule">The compiled rule or interaction.</param>
+    public static string DescribeMultiplier(WorldDefinition definition, CompiledWorldRule rule) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: rule);
+
+        var capacity = definition.Population.Capacity;
+
+        if (rule.Interaction is { } interaction) {
+            var others = Math.Max(val1: 0, val2: (capacity - 1));
+
+            return (interaction.CoOccurrence switch {
+                WorldInteractionCoOccurrence.Distance => $"distance carrier pairs: population {capacity} x min(neighbours {((interaction.Neighbours > 0) ? interaction.Neighbours.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) : "unbounded")}, others {others})",
+                WorldInteractionCoOccurrence.Region => DescribeRegionMultiplier(definition: definition, placementId: interaction.Right, capacity: capacity),
+                _ => $"population capacity {capacity}",
+            });
+        }
+
+        return ((rule.ForEach is { } forEach)
+            ? $"forEach '{forEach}' row capacity={RuleWorkBudget.ForEachCount(rule: rule, context: WorldRuleCompiler.Context(definition: definition))}"
+            : "no forEach — priced once"
+        );
+    }
+
+    private static string DescribeRegionMultiplier(WorldDefinition definition, string placementId, int capacity) {
+        var region = WorldDefinitionRows.FindPlacement(placements: definition.Placements, id: placementId)?.Region;
+
+        if (region is null) {
+            return $"region '{placementId}' undeclared — population capacity {capacity}";
+        }
+        if (SmallestKitFootprintRadius(definition: definition) is not { } footprint || (footprint <= 0f)) {
+            return $"region '{placementId}' radius={region.Radius} — no solid-only kit footprint resolvable, population capacity {capacity}";
+        }
+
+        var packed = (long)Math.Floor(((double)region.Radius * region.Radius) / ((double)footprint * footprint));
+        var clamped = Math.Clamp(value: packed, min: 1L, max: (long)capacity);
+
+        return $"region '{placementId}' radius={region.Radius}, smallest solid-kit footprint={footprint} -> floor((R/r)^2)={packed}, clamped to population {capacity} = {clamped}";
+    }
+
     /// <summary>Lists every rule whose gate pins a cell to an empty range, with that cell.</summary>
     /// <param name="definition">The world.</param>
     public static IReadOnlyList<(string Rule, string Cell)> ContradictoryGates(WorldDefinition definition) {
@@ -99,17 +142,66 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     /// <summary>Returns the work units an expression costs against a document.</summary>
     public static long ExpressionCost(CompiledExpressionToken[] tokens, WorldDefinition definition) => RuleWorkBudget.ExpressionCost(tokens: tokens, context: WorldRuleCompiler.Context(definition: definition));
 
+    // A rule carries no forEach at all when it reads only fixed cells — a literal seat's own channel
+    // ($channel:<seat>:*) included — so ForEachCount's default of 1 already prices a per-seat rule once, not once
+    // per body; nothing here needs to special-case that shape.
     private static long Multiplier(WorldDefinition definition, WorldRuleCompileContext context, CompiledWorldRule rule) {
         if (rule.Interaction is { } interaction) {
             var others = Math.Max(val1: 0, val2: (definition.Population.Capacity - 1));
 
-            return ((interaction.CoOccurrence == WorldInteractionCoOccurrence.Distance)
-                ? ((long)definition.Population.Capacity * ((interaction.Neighbours > 0) ? Math.Min(val1: interaction.Neighbours, val2: others) : others))
-                : definition.Population.Capacity);
+            return (interaction.CoOccurrence switch {
+                WorldInteractionCoOccurrence.Distance => ((long)definition.Population.Capacity * ((interaction.Neighbours > 0) ? Math.Min(val1: interaction.Neighbours, val2: others) : others)),
+                WorldInteractionCoOccurrence.Region => RegionCapacityBound(definition: definition, placementId: interaction.Right),
+                _ => definition.Population.Capacity,
+            });
         }
 
         return RuleWorkBudget.ForEachCount(rule: rule, context: context);
     }
+
+    /// <summary>Returns the most carriers a region interaction's own volume could ever hold — the smallest declared
+    /// kit footprint packed by area into the region's own disc (πR² / πr² = (R/r)², an upper bound on non-overlapping
+    /// circle packing since packing density never exceeds 1), clamped to the population capacity it replaces. Falls
+    /// back to the population capacity when the region is absent, or when <see cref="SmallestKitFootprintRadius"/>
+    /// cannot answer for it — the packing argument holds only among kits that mutually exclude each other, and a
+    /// property (the tag a region interaction's <c>left</c> names) carries no static link to a kit, so any body of
+    /// any kit could be the one standing in the region.</summary>
+    private static long RegionCapacityBound(WorldDefinition definition, string placementId) {
+        var capacity = (long)definition.Population.Capacity;
+        var region = WorldDefinitionRows.FindPlacement(placements: definition.Placements, id: placementId)?.Region;
+
+        if ((region is null) || (SmallestKitFootprintRadius(definition: definition) is not { } footprint) || (footprint <= 0f)) {
+            return capacity;
+        }
+
+        var ratio = ((double)region.Radius * region.Radius) / ((double)footprint * footprint);
+        var packed = (long)Math.Floor(ratio);
+
+        return Math.Clamp(value: packed, min: 1L, max: capacity);
+    }
+
+    // Two bodies depenetrate only when BOTH kits declare Solid contact (WorldBodyContactMode); an Overlap kit could
+    // co-locate any number of its own bodies at one point, so its mere presence in the document defeats a
+    // circle-packing bound for every region, not only the ones it could occupy.
+    private static float? SmallestKitFootprintRadius(WorldDefinition definition) {
+        float? smallest = null;
+
+        foreach (var kit in definition.Kits) {
+            if (kit.BodyContact != WorldBodyContactMode.Solid) { return null; }
+            if (FootprintRadius(collider: kit.Collider) is not { } radius || (radius <= 0f)) { continue; }
+            if ((smallest is null) || (radius < smallest)) { smallest = radius; }
+        }
+
+        return smallest;
+    }
+
+    // FromCreation carries no statically-derivable footprint; the caller falls back to the population capacity for it.
+    private static float? FootprintRadius(WorldCollider? collider) => collider switch {
+        WorldCollider.Sphere sphere => sphere.Radius,
+        WorldCollider.Capsule capsule => capsule.Radius,
+        WorldCollider.Box box => Math.Min(val1: box.HalfExtents.Value.X, val2: box.HalfExtents.Value.Z),
+        _ => null,
+    };
 
     private static List<(CompiledRule Rule, long Multiplier)> Multiplied(WorldDefinition definition, WorldRuleCompileContext context, CompiledWorldRule[] rules, CompiledWorldRule[] interactions) {
         var result = new List<(CompiledRule, long)>(capacity: (rules.Length + interactions.Length));

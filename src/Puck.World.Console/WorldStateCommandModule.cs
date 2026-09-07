@@ -319,6 +319,31 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             ? "?"
             : (char.ToLowerInvariant(c: generator.Source.ToString()[0]) + generator.Source.ToString()[1..])
         );
+    private static CommandResult DescribeWhy(WorldDefinition definition, string name) {
+        var rule = Array.Find(array: WorldRuleCompiler.CompileAll(definition: definition), match: candidate => string.Equals(a: candidate.Name, b: name, comparisonType: StringComparison.Ordinal));
+        var interaction = Array.Find(array: WorldRuleCompiler.CompileAllInteractions(definition: definition), match: candidate => string.Equals(a: candidate.Name, b: name, comparisonType: StringComparison.Ordinal));
+
+        if ((rule is null) && (interaction is null)) {
+            return CommandResult.Error(output: $"[world.budget.rules --why: '{name}' names no declared rule or interaction]");
+        }
+
+        var lines = new List<string>(capacity: 2);
+
+        if (rule is not null) { lines.Add(item: DescribeWhyLine(rule: rule, definition: definition, isInteraction: false)); }
+        if (interaction is not null) { lines.Add(item: DescribeWhyLine(rule: interaction, definition: definition, isInteraction: true)); }
+
+        return new CommandResult(Output: string.Join(separator: Environment.NewLine, values: lines));
+    }
+    private static string DescribeWhyLine(CompiledWorldRule rule, WorldDefinition definition, bool isInteraction) {
+        var context = WorldRuleCompiler.Context(definition: definition);
+        var effects = new List<string>(capacity: rule.Effects.Length);
+
+        foreach (var effect in rule.Effects) {
+            effects.Add(item: $"{effect.Describe}={effect.Cost(context)}");
+        }
+
+        return $"[world.budget.rules --why {rule.Name}{(isInteraction ? " interaction" : string.Empty)}: multiplier {WorldRuleWorkBudget.DescribeMultiplier(definition: definition, rule: rule)}; gate cost={RuleWorkBudget.GateCost(tokens: rule.Gate, context: context)}; effects [{string.Join(separator: ", ", values: effects)}]]";
+    }
     private static string DescribeState(WorldServer server) {
         var rows = server.Definition.State;
         var lines = new List<string>(capacity: (1 + rows.Count)) {
@@ -489,22 +514,28 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.budget.rules",
-            description: "Lists every rule's and interaction's worst-case work per tick, costliest first (Immediate): world.budget.rules [top]. Each line carries the evaluation multiplier (a forEach row's capacity, an interaction's carrier or pair count), the cost of one evaluation, the line's total, and — when the gate pins literal cells to ranges — the cells and ranges it prices exclusively under, so the total world.budget reports can be traced to the lines that make it up.",
+            description: "Lists every rule's and interaction's worst-case work per tick, costliest first (Immediate): world.budget.rules [top] | --why <rule>. Each line carries the evaluation multiplier (a forEach row's capacity, an interaction's carrier or pair count), the cost of one evaluation, the line's total, and — when the gate pins literal cells to ranges — the cells and ranges it prices exclusively under; a trailing total line reads work=<sum of the exclusion tree> of <RuleCapacity.MaxWorkUnitsPerTick>. '--why <rule>' prints one line's derivation terms instead: the multiplier's source and every effect's own cost.",
             handler: (context, args) => {
                 if (!authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.budget.rules")) {
                     return error;
                 }
+                if ((args.Count >= 1) && args[0].Equals(other: "--why", comparisonType: StringComparison.Ordinal)) {
+                    return ((args.Count == 2)
+                        ? DescribeWhy(definition: server.Definition, name: args[1].ToString())
+                        : CommandResult.Usage(form: "--why <rule>", verb: "world.budget.rules"));
+                }
                 var top = int.MaxValue;
                 if ((args.Count > 1) || ((args.Count == 1) && (!args.TryInt(index: 0, value: out top) || (top < 1)))) {
-                    return CommandResult.Usage(form: "[top]", verb: "world.budget.rules");
+                    return CommandResult.Usage(form: "[top] | --why <rule>", verb: "world.budget.rules");
                 }
                 var lines = WorldRuleWorkBudget.Contributors(definition: server.Definition);
                 var shown = Math.Min(top, lines.Count);
-                var output = new List<string>(capacity: shown + 1) { $"[world.budget.rules: {lines.Count} line(s), showing {shown}]" };
+                var output = new List<string>(capacity: (shown + 2)) { $"[world.budget.rules: {lines.Count} line(s), showing {shown}]" };
                 for (var index = 0; index < shown; index++) {
                     var line = lines[index];
                     output.Add(item: $"[world.budget.rules {line.Name}{(line.IsInteraction ? " interaction" : string.Empty)} x{line.Multiplier} unit={line.UnitCost} work={line.WorkUnits}{((line.Discriminators.Count > 0) ? $" exclusive {string.Join(separator: ",", values: line.Discriminators.Select(selector: static pinned => pinned.Describe()))}" : string.Empty)}]");
                 }
+                output.Add(item: $"[world.budget.rules total: work={WorldRuleWorkBudget.Measure(definition: server.Definition).WorkUnitsPerTick} of {RuleCapacity.MaxWorkUnitsPerTick}]");
                 return new CommandResult(Output: string.Join(separator: Environment.NewLine, values: output));
             },
             routing: CommandRouting.Immediate
