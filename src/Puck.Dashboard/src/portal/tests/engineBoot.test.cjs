@@ -51,8 +51,22 @@ if (!ready) {
     fs.cpSync(from, to, { recursive: true });
   }
 
-  /** Starts `puck official serve` over `treeDir` on `port` and resolves once it reports ready. */
-  function startServer(treeDir, port) {
+  /** Asks the OS for a free TCP port: a fixed port collides with whatever ephemeral connection happens to hold it. */
+  function freePort() {
+    return new Promise((resolve, reject) => {
+      const probe = require('node:net').createServer();
+      probe.unref();
+      probe.on('error', reject);
+      probe.listen(0, '127.0.0.1', () => {
+        const { port } = probe.address();
+        probe.close(() => resolve(port));
+      });
+    });
+  }
+
+  /** Starts `puck official serve` over `treeDir` on a free port and resolves once it reports ready. */
+  async function startServer(treeDir) {
+    const port = await freePort();
     return new Promise((resolve, reject) => {
       const proc = spawn(pckExe, ['official', 'serve', '--tree', treeDir, '--port', String(port)], { stdio: ['ignore', 'pipe', 'pipe'] });
       let settled = false;
@@ -83,7 +97,7 @@ if (!ready) {
   }
 
   test('bootEngineFromOfficial (inline) reaches version() with the manifest\'s own commit', async () => {
-    const { baseUrl } = await startServer(officialTreeDir, 61301);
+    const { baseUrl } = await startServer(officialTreeDir);
     const official = await loadOfficial(officialFor(baseUrl), fetch, createByteStore());
 
     const engine = await bootEngineFromOfficial(official, { mode: 'inline' });
@@ -98,7 +112,7 @@ if (!ready) {
   });
 
   test('a manifest whose build.commit disagrees with the running engine is refused by name', async () => {
-    const { baseUrl } = await startServer(officialTreeDir, 61302);
+    const { baseUrl } = await startServer(officialTreeDir);
     const resolved = officialFor(baseUrl);
 
     // Tamper only the manifest text handed to loadOfficial; every engine object is fetched from
@@ -138,7 +152,7 @@ if (!ready) {
     bytes[0] = bytes[0] ^ 0xff;
     fs.writeFileSync(objectPath, bytes);
 
-    const { baseUrl } = await startServer(tamperedTreeDir, 61303);
+    const { baseUrl } = await startServer(tamperedTreeDir);
     const official = await loadOfficial(officialFor(baseUrl), fetch, createByteStore());
 
     let engineRan = false;
@@ -159,7 +173,7 @@ if (!ready) {
   });
 
   test('the byte store is warm after the first boot: a second boot makes zero network fetches', async () => {
-    const { baseUrl } = await startServer(officialTreeDir, 61304);
+    const { baseUrl } = await startServer(officialTreeDir);
     const official = await loadOfficial(officialFor(baseUrl), fetch, createByteStore());
     const store = createByteStore();
 
@@ -183,7 +197,7 @@ if (!ready) {
   });
 
   test('worker-mode\'s pure core (workerBoot.ts) boots and refuses through a fake postMessage pair, exercising engine.worker.ts itself', async () => {
-    const { baseUrl } = await startServer(officialTreeDir, 61305);
+    const { baseUrl } = await startServer(officialTreeDir);
     const official = await loadOfficial(officialFor(baseUrl), fetch, createByteStore());
 
     // engine.worker.ts reads `self`/`postMessage` from the global scope - fake both so its own
@@ -213,7 +227,7 @@ if (!ready) {
       const bytes = fs.readFileSync(objectPath);
       bytes[0] = bytes[0] ^ 0xff;
       fs.writeFileSync(objectPath, bytes);
-      const { baseUrl: tamperedBaseUrl } = await startServer(tamperedTreeDir, 61306);
+      const { baseUrl: tamperedBaseUrl } = await startServer(tamperedTreeDir);
       const tamperedOfficial = await loadOfficial(officialFor(tamperedBaseUrl), fetch, createByteStore());
 
       // workerBoot.ts's default byte store is a module-level singleton (one warm cache per realm
