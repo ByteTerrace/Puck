@@ -46,8 +46,8 @@ internal static class WorldBenchmarks {
 
         // The validator asks which screen-machine engines ship and which compile a cartridge; a composition root
         // installs both, and this lane is its own root.
-        WorldExtensionVocabularyHook.ScreenMachineEngineCheck = WorldScreenMachineEngines.IsRegistered;
-        WorldExtensionVocabularyHook.ScreenMachineCartridgeCheck = WorldScreenMachineEngines.CompilesCartridges;
+        WorldExtensionVocabularyHook.ScreenMachineEngineCheck = id => WorldScreenMachineEngines.IsRegistered(id);
+        WorldExtensionVocabularyHook.ScreenMachineCartridgeCheck = id => WorldScreenMachineEngines.CompilesCartridges(id);
 
         if (!WorldDefinitionLoader.TryLoadFile(path: path, definition: out var definition, reason: out var reason)) {
             throw new InvalidOperationException(message: $"could not load the shipped world at {path}: {reason}");

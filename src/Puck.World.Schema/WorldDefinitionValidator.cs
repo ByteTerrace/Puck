@@ -912,7 +912,8 @@ public static partial class WorldDefinitionValidator {
 
         ValidateRenderExtensions(
             extensions: definition.Render.Extensions,
-            errors: errors
+            errors: errors,
+            deferred: deferredSink
         );
 
         ValidateRenderFarDistance(
@@ -1654,7 +1655,8 @@ public static partial class WorldDefinitionValidator {
         ValidateProbes(
             cameras: cameras,
             definition: definition,
-            errors: errors
+            errors: errors,
+            deferred: deferredSink
         );
 
         ValidateCaptures(
@@ -1810,7 +1812,8 @@ public static partial class WorldDefinitionValidator {
                     path: $"{path}.source",
                     scope: scope,
                     cablePermitted: true,
-                    errors: errors
+                    errors: errors,
+                    deferred: deferredSink
                 )) {
                     consoleLiveIndices.Add(item: screen.Index);
                 }
@@ -1827,7 +1830,8 @@ public static partial class WorldDefinitionValidator {
                     magazine: screen.Magazine,
                     path: $"{path}.magazine",
                     scope: scope,
-                    errors: errors
+                    errors: errors,
+                    deferred: deferredSink
                 );
 
                 // The screen's solidity facet — a box collider from the slab's frame + margin. The effective

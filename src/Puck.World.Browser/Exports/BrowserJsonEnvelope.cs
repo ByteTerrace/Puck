@@ -22,6 +22,9 @@ public readonly record struct BrowserCellsResult(bool Ok, IReadOnlyList<BrowserC
 public readonly record struct BrowserRowsResult(bool Ok, IReadOnlyList<BrowserRowSnapshot>? Rows, string? Error);
 /// <summary>The <c>Judge</c> export's result envelope.</summary>
 public readonly record struct BrowserJudgeExportResult(bool Ok, BrowserJudgeResult? Trace, string? Error);
+/// <summary>The <c>ComposeTree</c> export's result envelope — the same shape <see cref="BrowserComposeResult"/>
+/// carries, marshalled through this project's own camelCase JSON context.</summary>
+public readonly record struct BrowserComposeExportResult(bool Ok, string? Composed, string? Document, IReadOnlyList<BrowserErrorPath>? Errors, IReadOnlyList<string>? Deferred);
 
 /// <summary>The source-generated metadata for every JSON shape an export marshals — one context so a caller reading
 /// two different exports' output sees consistent property naming (camelCase) throughout.</summary>
@@ -36,6 +39,8 @@ public readonly record struct BrowserJudgeExportResult(bool Ok, BrowserJudgeResu
 [JsonSerializable(typeof(BrowserCellsResult))]
 [JsonSerializable(typeof(BrowserRowsResult))]
 [JsonSerializable(typeof(BrowserJudgeExportResult))]
+[JsonSerializable(typeof(BrowserComposeExportResult))]
+[JsonSerializable(typeof(Dictionary<string, string>))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 internal sealed partial class BrowserExportsJsonContext : JsonSerializerContext {
 }

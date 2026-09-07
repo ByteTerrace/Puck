@@ -55,6 +55,81 @@ public static class WorldDefinitionFileSource {
         }
     }
 
+    /// <summary>Resolves one document name — already combined against its referrer's directory and normalized (see
+    /// <see cref="ResolverDocumentSource"/>) — to its raw bytes, for the resolver-taking
+    /// <see cref="TryComposeDocumentTree(string,ReadOnlyMemory{byte},WorldDocumentResolver,out JsonObject?,out string)"/>
+    /// overload. Used by a caller with no filesystem of its own (a browser runtime holding every document of an
+    /// import tree in memory, keyed by its worlds-relative name).</summary>
+    /// <param name="resolvedName">The already-resolved document name.</param>
+    /// <param name="content">The document's raw bytes on success.</param>
+    /// <returns><see langword="true"/> when <paramref name="resolvedName"/> names a document the caller holds.</returns>
+    public delegate bool WorldDocumentResolver(string resolvedName, out ReadOnlyMemory<byte> content);
+
+    /// <summary>Combines <paramref name="name"/> against <paramref name="referrerName"/>'s own directory and
+    /// normalizes "."/".." segments — the same relative resolution <see cref="DirectoryDocumentSource"/> performs
+    /// through <see cref="Path.Combine(string,string)"/>/<see cref="Path.GetFullPath(string)"/>, replayed over
+    /// forward-slash-separated keys with no filesystem underneath, so a caller resolving a reference by name alone
+    /// (a browser runtime discovering which alias a document composed under) resolves it exactly as a directory load
+    /// would (a <c>games/*.world.json</c> fragment importing a sibling by bare name, a <c>shards/*.world.json</c>
+    /// shard naming its basis as <c>"../puck.world.json"</c>).</summary>
+    /// <param name="referrerName">The referring document's own resolved name.</param>
+    /// <param name="name">The authored reference, exactly as the document spells it.</param>
+    /// <returns>The resolved, normalized document name.</returns>
+    public static string CombineRelativeDocumentName(string referrerName, string name) {
+        var directory = referrerName.Replace(oldChar: '\\', newChar: '/');
+        var slash = directory.LastIndexOf(value: '/');
+        var combined = ((slash >= 0)
+            ? $"{directory[..slash]}/{name.Replace(oldChar: '\\', newChar: '/')}"
+            : name.Replace(oldChar: '\\', newChar: '/')
+        );
+
+        return NormalizeRelativeDocumentName(path: combined);
+    }
+    /// <summary>Collapses "."/".." segments in a forward-slash-separated relative document name.</summary>
+    /// <param name="path">The combined, not-yet-normalized relative path.</param>
+    /// <returns>The normalized path.</returns>
+    public static string NormalizeRelativeDocumentName(string path) {
+        var segments = new List<string>();
+
+        foreach (var segment in path.Split(separator: '/')) {
+            if ((segment.Length == 0) || (segment == ".")) {
+                continue;
+            }
+
+            if (segment == "..") {
+                if (segments.Count > 0) {
+                    segments.RemoveAt(index: (segments.Count - 1));
+                }
+
+                continue;
+            }
+
+            segments.Add(item: segment);
+        }
+
+        return string.Join(separator: "/", values: segments);
+    }
+    // The IWorldDocumentSource backing the resolver-taking TryComposeDocumentTree overload: resolves a reference
+    // exactly like DirectoryDocumentSource (relative combination against the referrer, normalized), then hands the
+    // final resolved name to the caller's own resolver instead of touching a real filesystem.
+    private sealed class ResolverDocumentSource(WorldDocumentResolver resolver) : IWorldDocumentSource {
+        public bool TryRead(string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
+            resolvedName = CombineRelativeDocumentName(referrerName: referrerName, name: name);
+
+            if (!resolver(resolvedName, out var bytes)) {
+                content = null;
+                reason = $"document {resolvedName} (named by {referrerName}) resolves to nothing this caller can supply.";
+
+                return false;
+            }
+
+            content = bytes.ToArray();
+            reason = string.Empty;
+
+            return true;
+        }
+    }
+
     // Mirrors File.ReadAllText's own encoding detection (BOM-sniffed, UTF-8 default), so a chain link read through
     // any IWorldDocumentSource decodes exactly like a load through File.ReadAllText would.
     private static string DecodeJson(byte[] bytes) {
@@ -909,29 +984,67 @@ public static class WorldDefinitionFileSource {
         try {
             var bytes = File.ReadAllBytes(path: path);
 
-            if (!TryComposeLayers(
-                ancestors: [],
+            return TryComposeDocumentTreeCore(
                 bytes: bytes,
-                composed: out var composed,
                 reason: out reason,
                 resolvedPath: Path.GetFullPath(path: path),
                 source: new DirectoryDocumentSource(),
-                stack: out _,
-                touched: out _
-            )) {
-                return false;
-            }
-
-            tree = composed;
-            reason = string.Empty;
-
-            return true;
+                tree: out tree
+            );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)) {
             tree = null;
             reason = $"cannot compose {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
         }
+    }
+    /// <summary>Composes <paramref name="rootBytes"/>' whole basis-and-imports graph purely from memory —
+    /// <paramref name="resolver"/> answers every reference instead of a real filesystem, resolved by the SAME
+    /// relative-combination rule <see cref="TryComposeDocumentTree(string,out JsonObject?,out string)"/> applies on
+    /// disk (a reference is combined against its referrer's own directory and "."/".." segments are collapsed), so a
+    /// caller holding an import tree's documents keyed by their worlds-relative names (<c>"puck.world.json"</c>,
+    /// <c>"games/tictactoe.world.json"</c>) composes identically to a directory load of the same tree.</summary>
+    /// <param name="rootName">The root document's own worlds-relative name — seeds relative resolution for its own
+    /// basis/imports references and cycle detection.</param>
+    /// <param name="rootBytes">The root document's own raw bytes.</param>
+    /// <param name="resolver">Resolves every basis/imports reference the root's graph names, by its resolved name.</param>
+    /// <param name="tree">The composed tree (basis/imports members stripped) on success; <see langword="null"/> on failure.</param>
+    /// <param name="reason">The one-line refusal reason, or empty on success.</param>
+    /// <returns><see langword="true"/> when the graph composed (or the root names neither basis nor imports).</returns>
+    public static bool TryComposeDocumentTree(string rootName, ReadOnlyMemory<byte> rootBytes, WorldDocumentResolver resolver, out JsonObject? tree, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: resolver);
+
+        return TryComposeDocumentTreeCore(
+            bytes: rootBytes.ToArray(),
+            reason: out reason,
+            resolvedPath: NormalizeRelativeDocumentName(path: rootName),
+            source: new ResolverDocumentSource(resolver: resolver),
+            tree: out tree
+        );
+    }
+    // The shared core both TryComposeDocumentTree overloads call: compose the graph over whichever
+    // IWorldDocumentSource the caller supplied (disk-backed or resolver-backed), never duplicating
+    // TryComposeLayers' walk itself.
+    private static bool TryComposeDocumentTreeCore(byte[] bytes, string resolvedPath, IWorldDocumentSource source, out JsonObject? tree, out string reason) {
+        tree = null;
+
+        if (!TryComposeLayers(
+            ancestors: [],
+            bytes: bytes,
+            composed: out var composed,
+            reason: out reason,
+            resolvedPath: resolvedPath,
+            source: source,
+            stack: out _,
+            touched: out _
+        )) {
+            return false;
+        }
+
+        tree = composed;
+        reason = string.Empty;
+
+        return true;
     }
     // Shares TryComposeLayers' cycle/depth walk and basis-then-imports-then-own-body recursion order, but collects
     // a (path, own top-level keys) entry per file instead of merging JSON — the read-back `world.imports` prints.

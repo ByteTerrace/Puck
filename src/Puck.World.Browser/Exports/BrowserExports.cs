@@ -42,6 +42,39 @@ public static partial class BrowserExports {
     /// <returns>The same shape as <see cref="Parse"/>.</returns>
     [JSExport]
     public static string Canonicalize(string json) => Write(value: BrowserParser.Canonicalize(utf8Json: Utf8(text: json)), info: BrowserExportsJsonContext.Default.BrowserParseResult);
+    /// <summary>Composes a whole basis-and-imports graph from an in-memory map of worlds-relative document names to
+    /// their JSON text, then parses and validates the result.</summary>
+    /// <param name="rootName">The root document's own worlds-relative name (a key of <paramref name="documentsJson"/>,
+    /// unless it is itself <paramref name="editedName"/>).</param>
+    /// <param name="documentsJson">Every document of the import tree as a JSON object mapping its worlds-relative
+    /// name to its JSON text.</param>
+    /// <param name="editedName">The document whose text <paramref name="editedJson"/> replaces during this
+    /// composition, or an empty string to compose <paramref name="documentsJson"/> unmodified.</param>
+    /// <param name="editedJson">The edited document's candidate JSON text; ignored when <paramref name="editedName"/>
+    /// is empty.</param>
+    /// <returns><c>{ok, composed, document, deferred[]}</c> on success, or <c>{ok:false, errors:[{path,message}], deferred[]}</c>.</returns>
+    [JSExport]
+    public static string ComposeTree(string rootName, string documentsJson, string editedName, string editedJson) {
+        Dictionary<string, string>? texts;
+
+        try {
+            texts = JsonSerializer.Deserialize(json: documentsJson, jsonTypeInfo: BrowserExportsJsonContext.Default.DictionaryStringString);
+        } catch (JsonException exception) {
+            return Write(
+                value: new BrowserComposeExportResult(Ok: false, Composed: null, Document: null, Errors: [new BrowserErrorPath(Path: null, Message: $"documents is not valid JSON: {exception.Message}")], Deferred: null),
+                info: BrowserExportsJsonContext.Default.BrowserComposeExportResult
+            );
+        }
+
+        var documents = (texts ?? []).ToDictionary(keySelector: static entry => entry.Key, elementSelector: static entry => Utf8(text: entry.Value), comparer: StringComparer.Ordinal);
+        var editedNameOrNull = (string.IsNullOrEmpty(value: editedName) ? null : editedName);
+        var result = BrowserComposer.ComposeTree(rootName: rootName, documents: documents, editedName: editedNameOrNull, editedUtf8: ((editedNameOrNull is null) ? null : Utf8(text: editedJson)));
+
+        return Write(
+            value: new BrowserComposeExportResult(Ok: result.Ok, Composed: result.Composed, Document: result.Document, Errors: result.Errors, Deferred: result.Deferred),
+            info: BrowserExportsJsonContext.Default.BrowserComposeExportResult
+        );
+    }
 
     /// <summary>Parses, validates, and compiles a standalone document, installing it behind a fresh handle.</summary>
     /// <param name="json">The candidate document's UTF-8 JSON text.</param>

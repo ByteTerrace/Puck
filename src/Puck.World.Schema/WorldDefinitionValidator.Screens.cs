@@ -111,7 +111,7 @@ public static partial class WorldDefinitionValidator {
     }
     // The per-screen magazine: at least one entry, a selected index in range, and each entry crossing the SAME source
     // gate as a declared source.
-    private static void ValidateMagazine(WorldDefinition definition, WorldScreenMagazine? magazine, string path, ValidationScope scope, List<string> errors) {
+    private static void ValidateMagazine(WorldDefinition definition, WorldScreenMagazine? magazine, string path, ValidationScope scope, List<string> errors, ICollection<string>? deferred) {
         if (magazine is not { } value) {
             return;
         }
@@ -139,7 +139,8 @@ public static partial class WorldDefinitionValidator {
                 path: $"{path}.entries[{index}]",
                 scope: scope,
                 cablePermitted: false,
-                errors: errors
+                errors: errors,
+                deferred: deferred
             );
         }
     }
@@ -789,7 +790,7 @@ public static partial class WorldDefinitionValidator {
     // The one screen-source gate, shared by a declared source and every magazine entry — a pure extraction that closes a
     // real duplication risk (a magazine entry could otherwise name an undeclared camera). Returns whether the source is a
     // live CONSOLE (the caller counts these against the one-live ceiling).
-    private static bool ValidateScreenSource(WorldDefinition definition, WorldScreenSource source, string path, ValidationScope scope, bool cablePermitted, List<string> errors) {
+    private static bool ValidateScreenSource(WorldDefinition definition, WorldScreenSource source, string path, ValidationScope scope, bool cablePermitted, List<string> errors, ICollection<string>? deferred) {
         var cameras = scope.Cameras;
         var destinationNames = scope.DestinationNames;
         var fontNames = scope.FontNames;
@@ -813,19 +814,31 @@ public static partial class WorldDefinitionValidator {
 
                 if (string.IsNullOrWhiteSpace(value: machine.Engine)) {
                     errors.Add(item: $"{path}.machine.engine is required.");
-                } else if (!WorldExtensionVocabularyHook.IsRegisteredScreenMachineEngine(engineId: machine.Engine)) {
-                    // Deny-by-default: an engine key the host never registered refuses HERE, at load, by name — not a
-                    // per-slot boot fault discovered only once WorldMachineHost tries to resolve it (screen.state
-                    // reported the fault, but boot itself succeeded regardless). The hook is REQUIRED, never skipped
-                    // when absent: an unchecked key is the one outcome this refusal exists to prevent.
-                    errors.Add(item: $"{path}.machine.engine '{machine.Engine}' names no registered screen-machine engine.");
-                } else if (
-                    machine.NamesCartridgeDocument &&
-                    !WorldExtensionVocabularyHook.IsCartridgeCompilingScreenMachineEngine(engineId: machine.Engine)
-                ) {
-                    // A cartridge document is compiled at bind through the engine's own forge; an engine with no forge
-                    // would boot the JSON bytes as a ROM. Refused here, by name, like an unregistered engine key.
-                    errors.Add(item: $"{path}.machine.contentPath '{machine.ContentPath}' names a cartridge document ({WorldScreenSource.Machine.CartridgeDocumentSuffix}), but engine '{machine.Engine}' compiles none.");
+                } else {
+                    // Deny-by-default: an engine key a host WITH A CATALOG never registered refuses HERE, at load,
+                    // by name — not a per-slot boot fault discovered only once WorldMachineHost tries to resolve it
+                    // (screen.state reported the fault, but boot itself succeeded regardless). A host with NO
+                    // catalog at all (Puck.World.Browser) defers the answer instead — never a refusal, never a
+                    // silent pass. The hook is REQUIRED, never skipped when absent: an unchecked key is the one
+                    // outcome this refusal exists to prevent.
+                    var engineRegistered = WorldExtensionVocabularyHook.IsRegisteredScreenMachineEngine(engineId: machine.Engine);
+
+                    if (engineRegistered == false) {
+                        errors.Add(item: $"{path}.machine.engine '{machine.Engine}' names no registered screen-machine engine.");
+                    } else if (engineRegistered is null) {
+                        deferred?.Add(item: $"{path}.machine.engine: screen-machine engine '{machine.Engine}' registration deferred — this host carries no screen-machine engine catalog.");
+                    } else if (machine.NamesCartridgeDocument) {
+                        // A cartridge document is compiled at bind through the engine's own forge; an engine with no
+                        // forge would boot the JSON bytes as a ROM. Refused here, by name, like an unregistered
+                        // engine key; deferred, like the engine check above, on a host with no catalog at all.
+                        var cartridgeCompiling = WorldExtensionVocabularyHook.IsCartridgeCompilingScreenMachineEngine(engineId: machine.Engine);
+
+                        if (cartridgeCompiling == false) {
+                            errors.Add(item: $"{path}.machine.contentPath '{machine.ContentPath}' names a cartridge document ({WorldScreenSource.Machine.CartridgeDocumentSuffix}), but engine '{machine.Engine}' compiles none.");
+                        } else if (cartridgeCompiling is null) {
+                            deferred?.Add(item: $"{path}.machine.contentPath: engine '{machine.Engine}' cartridge-compilation registration deferred — this host carries no screen-machine engine catalog.");
+                        }
+                    }
                 }
 
                 // An empty contentPath is a valid "unconfigured" screen; the binder faults the slot gracefully at boot.

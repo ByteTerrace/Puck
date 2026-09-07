@@ -8,8 +8,9 @@ namespace Puck.World.Browser.Tests;
 /// a browser-wasm exe cannot be referenced), over real shipped documents: <c>standard.basis.json</c> composed with
 /// <c>games/tictactoe.world.json</c> as the primary "does the whole pipeline run" fixture, and the flagship
 /// <c>puck.world.json</c> to pin the one verified, honest scope boundary this engine has today (a
-/// <c>screens[].source.machine</c> engine key never resolves — see <see cref="BrowserExtensionVocabulary"/>'s own
-/// remarks; nothing here carries an emulator core).</summary>
+/// <c>screens[].source.machine</c> engine key never resolves to a real catalog, so its registration is DEFERRED
+/// rather than refused or silently admitted — see <see cref="BrowserExtensionVocabulary"/>'s own remarks; nothing
+/// here carries an emulator core).</summary>
 public sealed class BrowserEngineTests {
     private static string RepositoryRoot() {
         var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
@@ -49,13 +50,16 @@ public sealed class BrowserEngineTests {
         Assert.Null(@object: result.Errors);
     }
     [Fact]
-    public void Parse_composed_puck_world_refuses_its_unregistered_machine_engines() {
-        // The verified, honest boundary: Puck.World.Browser carries no emulator core, so a document whose screens
-        // author a real gaming-brick engine refuses by name rather than booting a slot nothing can run.
+    public void Parse_composed_puck_world_defers_its_unregistered_machine_engines() {
+        // The verified, honest boundary: Puck.World.Browser carries no screen-machine engine catalog at all, so a
+        // document whose screens author real gaming-brick engines DEFERS the answer (never refuses, never silently
+        // passes) rather than either booting a slot nothing can run or rejecting a document a cataloged host admits.
         var result = BrowserParser.Parse(utf8Json: ComposedPuckWorldBytes());
 
-        Assert.False(condition: result.Ok);
-        Assert.Contains(collection: result.Errors!, filter: error => error.Message.Contains(value: "names no registered screen-machine engine", comparisonType: StringComparison.Ordinal));
+        Assert.True(condition: result.Ok, userMessage: string.Join(separator: "; ", values: (result.Errors ?? []).Select(selector: error => error.Message)));
+        Assert.NotNull(@object: result.Document);
+        Assert.Contains(collection: result.Deferred!, filter: message => message.Contains(value: "screen-machine engine 'gaming-brick' registration deferred", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: result.Deferred!, filter: message => message.Contains(value: "screen-machine engine 'advanced-gaming-brick' registration deferred", comparisonType: StringComparison.Ordinal));
     }
     [Fact]
     public void Parse_wrong_schema_refuses_by_name() {

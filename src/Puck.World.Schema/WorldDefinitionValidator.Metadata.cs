@@ -943,7 +943,7 @@ public static partial class WorldDefinitionValidator {
     // load, by name and index — not a silent no-op discovered only once the composition root tries to compose the
     // chain. Each entry's own Config is opaque here; the manifest's declared config schema validates it at boot,
     // refusing with the set id and reason on a malformed value.
-    private static void ValidateRenderExtensions(IReadOnlyList<WorldRenderExtensionEntry>? extensions, List<string> errors) {
+    private static void ValidateRenderExtensions(IReadOnlyList<WorldRenderExtensionEntry>? extensions, List<string> errors, ICollection<string>? deferred) {
         if (extensions is null) {
             return;
         }
@@ -960,8 +960,17 @@ public static partial class WorldDefinitionValidator {
 
             if (string.IsNullOrWhiteSpace(value: entry.Id)) {
                 errors.Add(item: $"{path}.id is required.");
-            } else if (!WorldExtensionVocabularyHook.IsRegisteredPostRenderExtension(extensionId: entry.Id)) {
-                errors.Add(item: $"{path}.id '{entry.Id}' names no registered post-render extension.");
+            } else {
+                switch (WorldExtensionVocabularyHook.IsRegisteredPostRenderExtension(extensionId: entry.Id)) {
+                    case false:
+                        errors.Add(item: $"{path}.id '{entry.Id}' names no registered post-render extension.");
+
+                        break;
+                    case null:
+                        deferred?.Add(item: $"{path}.id: post-render extension '{entry.Id}' registration deferred — this host carries no post-render extension catalog.");
+
+                        break;
+                }
             }
         }
     }

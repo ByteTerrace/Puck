@@ -3,14 +3,18 @@
 The engine embedded in a browser tab: a `browser-wasm` publish of `Puck.World.Schema` +
 `Puck.State` behind a JSON-string `[JSExport]` surface. The studio
 (`src/Puck.Dashboard`) loads this AppBundle as its native validator and rule tick,
-replacing its TypeScript twin.
+replacing its TypeScript twin, through the TypeScript facade at
+`src/Puck.Dashboard/src/portal/src/native/` (`engineTypes.ts`/`engineHost.ts`/
+`inlineHost.ts`/`engine.worker.ts` — see that directory's own remarks).
 
 ## Layout
 
 ```
 Engine/       Pure C# core — no [JSExport], no JS-interop attribute. Linked as
               source into tests/Puck.World.Browser.Tests (a browser-wasm exe
-              cannot be referenced as an ordinary assembly).
+              cannot be referenced as an ordinary assembly). BrowserComposer.cs
+              is the ComposeTree export's own core, over BrowserParser.cs'
+              shared parse-validate pipeline.
 Exports/      The [JSExport] marshalling shim alone (BrowserExports + the JSON
               envelope types/converters it serializes through).
 main.mjs      The one entry point the studio and the Node harness both import:
@@ -52,8 +56,8 @@ AppBundle/
     dotnet.native.wasm                    1,523,626 B
     dotnet.runtime.js                       198,480 B
     dotnet.runtime.js.map                   276,757 B
-    Puck.World.Browser.wasm                 148,245 B
-    Puck.World.Schema.wasm                4,801,289 B   <- the document model + validator
+    Puck.World.Browser.wasm                 161,557 B
+    Puck.World.Schema.wasm                4,917,513 B   <- the document model + validator
     Puck.World.Authoring.wasm               173,317 B
     Puck.State.wasm                         557,317 B
     Puck.Assets.wasm                         97,029 B
@@ -71,7 +75,7 @@ AppBundle/
     (+ ~30 more BCL assemblies and 14 System.CommandLine resource satellites)
 ```
 
-**Total AppBundle size: 12,428,589 bytes (11.85 MiB), uncompressed.** No
+**Total AppBundle size: 12,600,621 bytes (12.02 MiB), uncompressed.** No
 mimalloc native binary lands in the AppBundle (see "mimalloc" below) — the
 `_framework/*.wasm` set above is the complete network payload. `System.CommandLine`
 and its 14 locale resource satellites (~117 KiB combined) ride in only because
@@ -105,8 +109,9 @@ session lives behind an opaque decimal-string handle in
 
 ```csharp
 string Version();                                                          // {schemaVersion, engine, commit}
-string Parse(string json);                                                 // {ok, document, deferred[]} | {ok:false, errors:[{path,message}]}
+string Parse(string json);                                                 // {ok, document, deferred[]} | {ok:false, errors:[{path,message}], deferred[]}
 string ParseFragment(string fragmentJson, string hostJson, string alias);  // same shape as Parse, alias-stripped errors
+string ComposeTree(string rootName, string documentsJson, string editedName, string editedJson); // documentsJson: {name: text}; editedName "" for none -> {ok, composed, document, deferred[]} | {ok:false, errors[], deferred[]}
 string Canonicalize(string json);                                          // same shape as Parse
 string Compile(string json);                                               // {ok, handle} | {ok:false, errors[]}
 string Release(string handle);                                             // {ok}
@@ -171,34 +176,41 @@ Only `games/tictactoe.world.json` composes standalone under
 program that only the island's own body supplies, never the bare basis
 alone); the two canary fixtures are two scripted-write cases over that one
 document rather than two different fragments. The flagship `puck.world.json`
-itself refuses standalone `Parse` too — see "Verified scope boundary" below —
-so it is not a canary fixture.
+parses and validates too (see "Verified scope boundary" below) but stays
+outside the canary fixtures above, which are scoped to the one document pair
+both runtimes already cross-check.
 
 ## Verified scope boundary: no emulator core, no shader catalog, no probe kinds
 
-`WorldDefinitionValidator` requires four injection seams installed before any
-document parses — `WorldExtensionVocabularyHook.PostRenderExtensionCheck`,
+`WorldDefinitionValidator` reads four injection seams before any document
+parses — `WorldExtensionVocabularyHook.PostRenderExtensionCheck`,
 `.ScreenMachineEngineCheck`, `.ScreenMachineCartridgeCheck`, and
 `WorldProbeVocabularyHook.ProbeKindCheck` — normally wired by a composition
 root's module initializer (`Puck.World.Client.WorldSchemaVocabularyHooks` for
-the desktop client). `Engine/BrowserExtensionVocabulary.cs` installs its own
-module initializer answering every one of those `false`: this build carries
-no emulator core, shipped shader catalog, or probe-kind catalog of its own
-(Architecture.props' exact-closure profile denies `Puck.World.Protocol` and
-every extension-owning assembly), so "not registered" is the honest answer
-rather than a stub that would silently admit a document naming a capability
-this engine cannot run.
+the desktop client) to a real catalog answering `true`/`false`. Each is REQUIRED
+(never absent-tolerant: an uninstalled hook throws), but answers `bool?` —
+`true`/`false` from a host with a real catalog, or `null` from a host that
+carries no catalog for that vocabulary AT ALL, which the validator routes to
+its `deferred` collection rather than a refusal. `Engine/BrowserExtensionVocabulary.cs`
+installs its own module initializer answering every one of those `null`: this
+build carries no emulator core, shipped shader catalog, or probe-kind catalog
+of its own (Architecture.props' exact-closure profile denies
+`Puck.World.Protocol` and every extension-owning assembly), so "this host has
+no catalog to check against" is the honest answer — distinct from a real
+catalog's `false` refusal, and never a stub that would silently admit a
+document naming a capability this engine cannot run.
 
-**Verified consequence**: `Parse()` on the composed flagship island
-(`puck.world.json` over `standard.basis.json`) refuses by name —
-`screens[0].source.machine.engine 'gaming-brick' names no registered
-screen-machine engine.` (and two more, for `advanced-gaming-brick` and a
-second `gaming-brick` screen) — because `modules/arcade.world.json`, one of
-the island's sixteen imports, authors three real GamingBrick console screens.
+**Verified consequence**: `Parse()`/`ComposeTree()` on the composed flagship
+island (`puck.world.json` over `standard.basis.json`) succeeds, its `deferred[]`
+naming every one of the three real GamingBrick console screens
+`modules/arcade.world.json` (one of the island's sixteen imports) authors —
+`screens[0].source.machine.engine: screen-machine engine 'gaming-brick'
+registration deferred — this host carries no screen-machine engine catalog.`
+(and two more, for `advanced-gaming-brick` and a second `gaming-brick` screen).
 This is confirmed, expected behavior, not a defect:
-`BrowserEngineTests.Parse_composed_puck_world_refuses_its_unregistered_machine_engines`
+`BrowserEngineTests.Parse_composed_puck_world_defers_its_unregistered_machine_engines`
 pins it. A district or game fragment that authors no `screens[].source.machine`
-row (most of the catalog) parses and compiles cleanly.
+row (most of the catalog) parses and compiles cleanly with no deferral at all.
 
 ## Trim baseline
 

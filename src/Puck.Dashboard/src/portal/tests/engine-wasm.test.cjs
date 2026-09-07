@@ -133,4 +133,56 @@ if (!fs.existsSync(mainMjs)) {
       engine.Release(handle);
     }
   });
+
+  test('ComposeTree() composes the real island and defers its unregistered machine engines', async () => {
+    const engine = await engineReady;
+    const documents = {};
+    for (const file of fs.readdirSync(worldsDir, { recursive: true })) {
+      if (!file.endsWith('.json')) continue;
+      documents[file.split(path.sep).join('/')] = fs.readFileSync(path.join(worldsDir, file), 'utf8');
+    }
+
+    const result = JSON.parse(engine.ComposeTree('puck.world.json', JSON.stringify(documents), '', ''));
+
+    assert.equal(result.ok, true, JSON.stringify(result.errors));
+    assert.ok(result.composed);
+    assert.ok(result.document);
+    assert.ok(result.deferred.some(m => m.includes("screen-machine engine 'gaming-brick' registration deferred")));
+  });
+
+  // Duplicates the fragment's first rule object by TEXT surgery, never JSON.parse/stringify of the whole document —
+  // tictactoe.world.json carries Int64.Min/MaxValue sentinels (state row min/max) JavaScript's own JSON round trip
+  // cannot preserve exactly (see documentValidation.ts's own remarks); splicing the raw text leaves every other
+  // byte, including those sentinels, untouched.
+  function withADuplicatedFirstRule(fragmentJson) {
+    const arrayOpen = fragmentJson.indexOf('[', fragmentJson.indexOf('"rules"'));
+    const rulesStart = fragmentJson.indexOf('{', arrayOpen);
+    let depth = 0, ruleEnd = rulesStart;
+    for (let i = rulesStart; i < fragmentJson.length; i++) {
+      if (fragmentJson[i] === '{') depth++;
+      else if (fragmentJson[i] === '}' && --depth === 0) { ruleEnd = i + 1; break; }
+    }
+    const firstRule = fragmentJson.slice(rulesStart, ruleEnd);
+
+    return fragmentJson.slice(0, rulesStart) + firstRule + ',' + fragmentJson.slice(rulesStart);
+  }
+
+  test('ComposeTree() with an edited document reports its own diagnostic, not another document\'s', async () => {
+    const engine = await engineReady;
+    const basisJson = fs.readFileSync(path.join(worldsDir, 'standard.basis.json'), 'utf8');
+    const fragmentJson = fs.readFileSync(path.join(worldsDir, 'games', 'tictactoe.world.json'), 'utf8');
+    const rootJson = JSON.stringify({ basis: 'standard.basis.json', imports: [{ document: 'games/tictactoe.world.json' }] });
+    const documents = { 'test-root.json': rootJson, 'standard.basis.json': basisJson, 'games/tictactoe.world.json': fragmentJson };
+
+    const result = JSON.parse(engine.ComposeTree(
+      'test-root.json',
+      JSON.stringify(documents),
+      'games/tictactoe.world.json',
+      withADuplicatedFirstRule(fragmentJson),
+    ));
+
+    assert.equal(result.ok, false);
+    assert.ok(result.errors.some(e => e.message.includes('ttt-place-mark') && e.message.includes("duplicates an earlier rule's name")));
+    assert.ok(!result.errors.some(e => e.message.includes('test-root.json:')));
+  });
 }

@@ -6,16 +6,17 @@ namespace Puck.World.Browser.Engine;
 /// parses — a composition root's job everywhere else (<c>Puck.World.Client.WorldSchemaVocabularyHooks</c> is the
 /// desktop client's, <c>Puck.World.Silo</c>'s own installer the other). Puck.World.Browser references neither
 /// <c>Puck.World.Protocol</c> nor any extension-owning assembly (Architecture.props' exact-closure profile), so
-/// every predicate here honestly answers "not registered" rather than reaching for a catalog this build does not
-/// ship — a document naming a screen-machine engine, a post-render extension, or a probe kind refuses by name here,
-/// the same refusal a Schema-only host with no engine cores wired would give.</summary>
+/// every predicate here honestly answers <see langword="null"/> — this host carries no catalog at all for a
+/// screen-machine engine, a post-render extension, or a probe kind, rather than a real <see langword="false"/>
+/// refusal a Schema-only host WITH a (empty) catalog would give. The validator routes a <see langword="null"/>
+/// answer into its deferred collection instead of refusing.</summary>
 internal static class BrowserExtensionVocabulary {
     /// <summary>Installs every REQUIRED (never absent-tolerant) hook the validator throws on when unset.</summary>
     [ModuleInitializer]
     public static void Install() {
-        WorldExtensionVocabularyHook.PostRenderExtensionCheck = static _ => false;
-        WorldExtensionVocabularyHook.ScreenMachineCartridgeCheck = static _ => false;
-        WorldExtensionVocabularyHook.ScreenMachineEngineCheck = static _ => false;
-        WorldProbeVocabularyHook.ProbeKindCheck = static _ => false;
+        WorldExtensionVocabularyHook.PostRenderExtensionCheck = static _ => null;
+        WorldExtensionVocabularyHook.ScreenMachineCartridgeCheck = static _ => null;
+        WorldExtensionVocabularyHook.ScreenMachineEngineCheck = static _ => null;
+        WorldProbeVocabularyHook.ProbeKindCheck = static _ => null;
     }
 }

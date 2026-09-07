@@ -14,7 +14,7 @@ public static partial class WorldDefinitionValidator {
     // and index. A channel name is never checkable here (the manifest lives behind WorldProbeVocabularyHook, which
     // answers only "is this kind registered", not "what channels does it declare") — the host checks it by name at
     // boot, the same precedent an extension's own config field follows.
-    private static void ValidateProbes(WorldDefinition definition, HashSet<string> cameras, List<string> errors) {
+    private static void ValidateProbes(WorldDefinition definition, HashSet<string> cameras, List<string> errors, ICollection<string>? deferred) {
         if (definition.ProbesRaw is not { } probes) {
             return;
         }
@@ -45,8 +45,17 @@ public static partial class WorldDefinitionValidator {
 
             if (string.IsNullOrWhiteSpace(value: probe.Kind)) {
                 errors.Add(item: $"{path}.kind is required.");
-            } else if (!WorldProbeVocabularyHook.IsRegisteredProbeKind(kindId: probe.Kind)) {
-                errors.Add(item: $"{path}.kind '{probe.Kind}' names no registered probe kind.");
+            } else {
+                switch (WorldProbeVocabularyHook.IsRegisteredProbeKind(kindId: probe.Kind)) {
+                    case false:
+                        errors.Add(item: $"{path}.kind '{probe.Kind}' names no registered probe kind.");
+
+                        break;
+                    case null:
+                        deferred?.Add(item: $"{path}.kind: probe kind '{probe.Kind}' registration deferred — this host carries no probe-kind catalog.");
+
+                        break;
+                }
             }
 
             if (

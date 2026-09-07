@@ -41,9 +41,12 @@ public static class WorldSchemaVocabularyHooks {
         InputSourceVocabularyHook.IsKnownSourceId = InputSourceVocabulary.IsKnownSourceId;
         Protocol.MutationKindVocabularyHook.Describe = Protocol.WorldMutationKindCatalog.DescribeMask;
         Protocol.MutationKindVocabularyHook.TryParse = Protocol.WorldMutationKindCatalog.TryParseMask;
-        WorldExtensionVocabularyHook.PostRenderExtensionCheck = postRenderExtensionCheck;
-        WorldExtensionVocabularyHook.ScreenMachineCartridgeCheck = screenMachineCartridgeCheck;
-        WorldExtensionVocabularyHook.ScreenMachineEngineCheck = screenMachineEngineCheck;
-        WorldProbeVocabularyHook.ProbeKindCheck = probeKindCheck;
+        // These roots always carry a real catalog (never "no catalog at all"), so each wraps its plain bool
+        // predicate as the three-way bool? the hook now declares — never answering null itself. Only
+        // Puck.World.Browser's own installer answers null.
+        WorldExtensionVocabularyHook.PostRenderExtensionCheck = id => postRenderExtensionCheck(id);
+        WorldExtensionVocabularyHook.ScreenMachineCartridgeCheck = id => screenMachineCartridgeCheck(id);
+        WorldExtensionVocabularyHook.ScreenMachineEngineCheck = id => screenMachineEngineCheck(id);
+        WorldProbeVocabularyHook.ProbeKindCheck = id => probeKindCheck(id);
     }
 }
