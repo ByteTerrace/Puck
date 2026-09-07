@@ -3,9 +3,9 @@
   "title": "A single process rings all four Four Corners ground worlds by named instance",
   "bootShape": "headless",
   "requirements": [],
-  "seconds": 12,
+  "seconds": 29,
   "timeoutSeconds": 60,
-  "binding": "One process, one world (quilt-nw), no companion authority and no federation: each hop poses and drives the SAME traveler inside the next ground world's own named instance (instance:6~global2~<id>), and the automatic adjacency crossing that follows closes the ring \u00e2\u20ac\u201d nw's east edge into ne, ne's own south edge into se, se's own west edge into sw, sw's own north edge back onto boot (nw) \u00e2\u20ac\u201d with zero rejected commands throughout. The discriminating leg poses the traveler at the same four spots but never drives it, so no crossing ever fires and every named instance beyond the first stays unmaterialized: addressing it is cleanly refused (six refusals, in the same shape the positive leg never sees).",
+  "binding": "One process, one world (quilt-nw), no companion authority and no federation: each hop poses and drives the same traveler inside the next ground world's own named instance (instance:6~global2~<id>), five units inside that world's own ground on the outgoing face's centre line, and the automatic adjacency crossing that follows closes the ring \u2014 nw's east face at x=66 into ne, ne's own south face at z=66 into se, se's own west face at x=-66 into sw, sw's own north face at z=-66 back onto boot (nw) \u2014 with zero rejected commands throughout. Each drive runs two seconds at the fixed four-units-per-second flight speed, so eight units of travel clears a five-unit inset with margin. The discriminating leg poses the traveler at the same four spots but never drives it, so no crossing ever fires and every named instance beyond the first stays unmaterialized: addressing it is cleanly refused (six refusals, in the same shape the positive leg never sees).",
   "fixtures": [],
   "positive": {
     "world": "src/Puck.World/Assets/worlds/shards/quilt-nw.world.json",
@@ -32,7 +32,7 @@
         "outcome": "accepted"
       },
       {
-        "verb": "body.press",
+        "verb": "body.fly",
         "occurrence": 1,
         "outcome": "accepted"
       },
@@ -63,7 +63,7 @@
       },
       {
         "verb": "body.fly",
-        "occurrence": 1,
+        "occurrence": 2,
         "outcome": "accepted"
       },
       {
@@ -88,7 +88,7 @@
       },
       {
         "verb": "body.fly",
-        "occurrence": 2,
+        "occurrence": 3,
         "outcome": "accepted"
       },
       {
@@ -113,7 +113,7 @@
       },
       {
         "verb": "body.fly",
-        "occurrence": 3,
+        "occurrence": 4,
         "outcome": "accepted"
       },
       {
@@ -310,7 +310,7 @@
         "name": "an unreached named instance refuses to pose",
         "stream": "stderr",
         "match": "contains",
-        "text": "is not active \u00e2\u20ac\u201d see world.instance.seats",
+        "text": "is not active \u2014 see world.instance.seats",
         "present": true
       },
       {

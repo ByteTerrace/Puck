@@ -4,19 +4,12 @@ world.adjacencies
 world.wait 30
 world.adjacencies
 replay.record fourcorners
-body.pose -2 0 -12 0 0 0 0
-body.fly 0 1 0 0 0 0 1 0
+body.pose 61 0 -99 0 0 0 0
+body.fly 0 1 0 0 0 0 4 0
 world.wait 120
 body.where 0
 world.adjacencies
-body.fly -1 0 0 0 0 0 2 0
-world.wait 180
-body.where 0
-body.fly 0 -1 0 0 0 0 2 0
-world.wait 180
-body.where 0
-body.fly 1 0 0 0 0 0 2.5 0
-world.wait 210
+world.wait 60
 body.where 0
 world.adjacencies
 replay.stop
