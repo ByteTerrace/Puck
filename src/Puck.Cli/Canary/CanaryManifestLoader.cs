@@ -12,7 +12,7 @@ internal static class CanaryManifestLoader {
     private static readonly Func<string, Exception> Refusal = static message => new CanaryManifestRefusal(message: message);
 
     /// <summary>Loads every manifest under <c>tests/Puck.World.Canaries</c>. <paramref name="strict"/> true (the
-    /// <c>--list</c> shape) refuses the WHOLE discovery on the first bad manifest, naming exactly that one — the
+    /// <c>--list</c> shape) refuses the whole discovery on the first bad manifest, naming exactly that one — the
     /// shape an author curating manifests wants, so a refusal always points at a single, unambiguous cause.
     /// <paramref name="strict"/> false (every running shape) instead SKIPS a manifest that refuses to load, collects
     /// its reason into <paramref name="refused"/> keyed by directory name, and keeps loading the rest: one rotten

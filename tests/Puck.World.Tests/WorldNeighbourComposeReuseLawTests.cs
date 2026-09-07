@@ -173,7 +173,7 @@ public sealed class WorldNeighbourComposeReuseLawTests {
             tree: out _
         ), userMessage: headReason);
 
-        // One document above the head pushes the SAME subtree one link past the rule. The image the head left
+        // One document above the head pushes the same subtree one link past the rule. The image the head left
         // behind carries how far it reaches, so it declines to answer here and the walk refuses by name — a reuse
         // that ignored its own reach would compose a chain the rule forbids.
         var above = files.WriteText(

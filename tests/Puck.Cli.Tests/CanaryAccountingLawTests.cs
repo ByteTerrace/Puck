@@ -7,7 +7,7 @@ namespace Puck.Cli.Tests;
 /// <summary>
 /// Proves <c>CanaryCommand</c>'s per-verb response accounting against synthetic transcripts — no real
 /// <c>Puck.World</c> boot. Each fact pins one shape the runner must read correctly: a bare colon answer, a
-/// space- or dot-led multi-line answer, two adjacent calls of the same verb that must NOT merge, and a verb whose
+/// space- or dot-led multi-line answer, two adjacent calls of the same verb that must not merge, and a verb whose
 /// only signal is the universal mutation narration rather than its own bracket.
 /// </summary>
 public sealed class CanaryAccountingLawTests {
@@ -49,7 +49,7 @@ public sealed class CanaryAccountingLawTests {
     }
     [Fact]
     public void TwoSeparateSpaceLedCallsOfAGenericVerbWithNoGapBetweenThemStillMergeAsOneEvent() {
-        // The general bracket reading cannot tell two back-to-back calls of the SAME generic space-led verb apart
+        // The general bracket reading cannot tell two back-to-back calls of the same generic space-led verb apart
         // from one call's own multi-line answer — only a verb the runner keys on (world.state, world.symmetry)
         // gets that disambiguation. No shipped script calls world.rule.trace twice with nothing between the two
         // calls (arena-attack's own two occurrences are separated by body.press/world.wait), so this stays a
@@ -64,7 +64,7 @@ public sealed class CanaryAccountingLawTests {
     }
     [Fact]
     public void AWorldStateRowHeaderAlwaysOpensFreshEvenRightAfterAnotherRowsCells() {
-        // Two row-only "world.state <row>" calls back to back — each row header can only ever be the FIRST line
+        // Two row-only "world.state <row>" calls back to back — each row header can only ever be the first line
         // of its own answer, so the second must never be read as a continuation of the first row's cell run.
         var lines = new[] {
             Line(text: "[world.state.row 'a' kind=Int value=1 domain=slot]", sequence: 1),

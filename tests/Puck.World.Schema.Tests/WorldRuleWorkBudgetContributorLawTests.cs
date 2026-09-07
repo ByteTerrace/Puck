@@ -102,7 +102,7 @@ public sealed class WorldRuleWorkBudgetContributorLawTests {
     [Fact]
     public void ARegionInteractionsMultiplierFallsBackToPopulationCapacityWhenAnyKitIsOverlap() {
         // The same radius/footprint pair as above, but an Overlap kit (of any footprint) defeats the packing bound —
-        // two bodies depenetrate only when BOTH kits are Solid, so an Overlap kit's own bodies could co-locate
+        // two bodies depenetrate only when both kits are Solid, so an Overlap kit's own bodies could co-locate
         // without limit.
         var overlap = SolidKit(name: "ghost", radius: 0.05f) with { BodyContact = WorldBodyContactMode.Overlap };
         var document = RegionDocument(regionRadius: 1.2f, SolidKit(name: "walker", radius: 0.35f), overlap);

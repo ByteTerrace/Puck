@@ -82,7 +82,7 @@ public sealed class BatchComposeLawTests {
         Assert.Equal(expected: ["c5", "c6", "c7"], actual: Keys(definition: batched.Server.Definition, row: "slicePile"));
         Assert.Equal(expected: sequential.DefinitionBytes(), actual: batched.DefinitionBytes());
     }
-    // A batch of many independent cell writes over the SAME workspace copy composes byte-identically to applying
+    // A batch of many independent cell writes over the same workspace copy composes byte-identically to applying
     // each write on its own — the shared-workspace fast path (TryComposeBatch's OpenWorkspace/PlaceRow) can never
     // diverge from the one-by-one door it exists only to avoid repeating.
     [Fact]

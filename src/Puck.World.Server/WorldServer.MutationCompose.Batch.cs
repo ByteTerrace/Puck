@@ -241,7 +241,7 @@ public sealed partial class WorldServer {
     }
     // Rehydrates the running candidate when a document value is bound to the written row, collecting the
     // referenced-row set on the first state member that asks and reusing it until a member that can change it
-    // drops it. Collecting the set is a structural read (which rows a document VALUE names, never their live
+    // drops it. Collecting the set is a structural read (which rows a document value names, never their live
     // content), so it never needs a workspace sync; only an actual hit — the rehydration below — does, since that
     // reads the written row's current value back out of `working`.
     private static bool TryRefreshReferenced(ref WorldDefinition working, ref HashSet<string>? referencedRows, string rowName, List<WorldStateRow>? workspace, ref bool workspaceDirty, out string reason) {

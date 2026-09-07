@@ -811,7 +811,7 @@ internal static partial class CanaryCommand {
     // Per-verb command-claim accounting shared by a single-process leg and a federated mesh leg's primary
     // authority: every authored occurrence's response is ResponseEvents' own reading for that verb (either
     // stream; OutputLines carries both, sequence-ordered) — checked against its declared stream (accepted implies
-    // stdout unless StreamOverride says otherwise, EXCEPT a narrated verb — see NarratedMutationVerbs — whose only
+    // stdout unless StreamOverride says otherwise, except a narrated verb — see NarratedMutationVerbs — whose only
     // signal is engine narration and so is always stderr; refused always implies stderr). wire.errors additionally
     // carries the runner-owned terminal call, one beyond whatever occurrences the script itself authored.
     internal static IReadOnlyList<CanaryAssertionResult> EvaluateCommandAccounting(IReadOnlyList<CanaryCommandClaim> commands, IReadOnlyList<CliProcessOutputLine> outputLines) {
@@ -875,10 +875,10 @@ internal static partial class CanaryCommand {
             ? CanaryStream.Stdout
             : CanaryStream.Stderr);
     // A verb whose space-led answer opens with an inline key ("[world.symmetry node=5 …]") rather than a bracketed
-    // name reads the SAME as any other spaced answer EXCEPT for one ambiguity BracketResponseEvents cannot resolve
+    // name reads the same as any other spaced answer except for one ambiguity BracketResponseEvents cannot resolve
     // on its own: two SEPARATE calls back to back (no other command between them) are indistinguishable from one
     // call's own multi-line answer by prefix alone, since both are runs of "[verb …]" lines with nothing else
-    // between them. The key value breaks the tie — a second line still naming the SAME key is the SAME call's own
+    // between them. The key value breaks the tie — a second line still naming the same key is the same call's own
     // further output (world.symmetry's second line echoes the identical node its first line answered for); a key
     // change can only be a fresh call.
     private static readonly IReadOnlyDictionary<string, string> KeyedSpacedVerbs = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
@@ -956,8 +956,8 @@ internal static partial class CanaryCommand {
     // read-back is one summary line followed by a run of detail lines under the same prefix (world.rule.trace's
     // read-back names its rule instead of a bare colon: "[world.rule.trace <rule>: N/N captured]" then one
     // "[world.rule.trace <rule> tick=…]" line per evaluation — a space-led run exactly like a dot-led facet run).
-    // A "[verb." or "[verb " line NOT already inside a run of its own verb opens one; two such lines in a row
-    // continue the SAME answer, since the only way to tell separate answers apart from bracket text alone is a
+    // A "[verb." or "[verb " line not already inside a run of its own verb opens one; two such lines in a row
+    // continue the same answer, since the only way to tell separate answers apart from bracket text alone is a
     // non-matching line between them.
     private static List<CliProcessOutputLine> BracketResponseEvents(IReadOnlyList<CliProcessOutputLine> outputLines, string verb) {
         var exact = $"[{verb}:";
@@ -987,10 +987,10 @@ internal static partial class CanaryCommand {
     // "[world.state.row '<row>' …]" header followed by that row's own "[world.state.cell '<row>'.'<key>' …]"
     // lines (one answer), "world.state <row> <key>" prints ONLY the cell line with no header at all (also one
     // answer), and "world.state" alone prints an EXACT "[world.state: rows N/…]" header followed by every row's
-    // OWN header-then-cells run in turn (still one answer, the whole dump). A row header can only ever be the
-    // FIRST line of ITS OWN answer, so one immediately following another row's cell lines — the row-only form
-    // called back to back — must always open fresh; the one case it must NOT is a header inside the "world.state"
-    // dump's own already-open run, where every row's header is a further line of the SAME answer. A cell line
+    // own header-then-cells run in turn (still one answer, the whole dump). A row header can only ever be the
+    // first line of its own answer, so one immediately following another row's cell lines — the row-only form
+    // called back to back — must always open fresh; the one case it must not is a header inside the "world.state"
+    // dump's own already-open run, where every row's header is a further line of the same answer. A cell line
     // continues the run only when the run's own open row already names it — the dump's own exact-opened run
     // (whose "open row" tracks whichever header struck last) or a prior cell line reporting the identical row (the
     // row+key single-cell form has no header to open on, so its first cell line is what opens it).

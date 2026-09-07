@@ -181,7 +181,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         );
     }
 
-    // Two bodies depenetrate only when BOTH kits declare Solid contact (WorldBodyContactMode); an Overlap kit could
+    // Two bodies depenetrate only when both kits declare Solid contact (WorldBodyContactMode); an Overlap kit could
     // co-locate any number of its own bodies at one point, so its mere presence in the document defeats a
     // circle-packing bound for every region, not only the ones it could occupy.
     private static float? SmallestKitFootprintRadius(WorldDefinition definition) {
