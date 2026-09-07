@@ -191,3 +191,36 @@ same seed make the same choice.
 [BackgammonLawTests](../../../../../tests/Puck.World.Tests/BackgammonLawTests.cs)
 proves the document: the bar-occupied refusal (with its control — a checker's
 own bar entry stays legal) and the same position with a clear bar.
+## Chinese Checkers — chains and many seats
+
+[chinese-checkers.world.json](chinese-checkers.world.json) is the market's probe for two `search`
+primitives: the `jump` shape's chain (a candidate is 1..`maxHops` hops, each over an occupied cell onto an
+empty one, never revisiting a cell) and an n-seat `scores` row (a level maximizes the mover seat's own
+entry rather than negating the reply — max-n, no zero-sum assumption). Unlike its siblings this document
+is self-bootable (`schema`/`documentId` authored directly) rather than a bare fragment, so `--world` can
+run it standing alone; it is not yet imported into `puck.world.json`.
+
+The board is a `hex` topology of radius 3 (37 cells); three seats (0, 1, 2) each hold two pieces in a
+home cluster near one of the hexagon's corners and race for the cluster at the opposite corner. `pieceCell`
+is the search's `tokens` row; `pieceCellPrev` mirrors it one commit behind so the judge rule can read which
+token moved and by how far without a reserved channel for it — `moverSeat`, `moverFrom`, `moverCell`,
+`movedCount`, and `collisionCount` are that comparison's own terms, all ordinary rows. A candidate is
+accepted when exactly one token moved, it belongs to the seat whose `turn` it is, nothing else already
+stood where it landed, and the hop was either adjacent (a step) or an even distance (a chain the `jump`
+shape's own geometry already verified before the judge ever ran — see the schema's search section for what
+the shape checks and what the judge must). `scores` holds one cell per seat: a piece count on its own
+target cluster times 100, less its pieces' summed `hexDistance` to a representative cell of that cluster.
+`ccSearch`'s landed `best` is applied by a second rule (`cc-apply-best`), gated on `best` differing from
+what was last applied, which also advances the real `turn` and re-syncs `pieceCellPrev` — the judge rule's
+own turn flip lives entirely inside the search's hypothetical frame and never needs to reach the real one.
+`home0`/`home1`/`home2` and `winner` are the win-condition read-back: a seat's row reaching its own piece
+count sets `winner` to that seat, checked by
+[ChineseCheckersLawTests](../../../../../tests/Puck.World.Tests/ChineseCheckersLawTests.cs). The chain
+shape and the max-n fold are exercised in isolation, against hand-built boards with no document at all, by
+[SearchChainLawTests](../../../../../tests/Puck.State.Tests/SearchChainLawTests.cs).
+
+Two things this probe does not do: `maxHops` is 2, not deep enough to force the long multi-jump chains a
+tournament board invites, and `Relocate`'s own geometry admits any cell, so a step's adjacency and a
+chain's even distance are both judged after the fact by the rule above rather than by the shape refusing a
+non-adjacent single step outright — a genuine `Relocate` distance-2 move with nothing to jump over reads
+as legal here. Both are probe-scale simplifications, not the shape's own limits.

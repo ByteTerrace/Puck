@@ -36,7 +36,7 @@ internal static class AuthoredGameFixtures {
     public static WorldDefinition Program(string module) {
         var source = JsonNode.Parse(File.ReadAllText(Path.Combine(Root, $"src/Puck.World/Assets/worlds/games/{module}.world.json")))!;
         var host = JsonNode.Parse(Fixtures.DefaultWorldBytes())!.AsObject();
-        foreach (var field in new[] { "state", "rules", "patterns", "tables" }) {
+        foreach (var field in new[] { "state", "rules", "patterns", "tables", "search" }) {
             if (source[field] is { } value) { host[field] = value.DeepClone(); }
         }
         return WorldDefinitionSerialization.Deserialize(System.Text.Encoding.UTF8.GetBytes(host.ToJsonString()));

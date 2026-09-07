@@ -39,11 +39,15 @@ public abstract record WorldSearchShape {
     /// enters any cell no other token stands on.</summary>
     public sealed record Drop : WorldSearchShape;
     /// <summary>The walked token steps two cells along one topology direction, over a token standing on the
-    /// intermediate cell — which leaves the board — onto an empty destination; a direction with no such occupied
-    /// intermediate, or whose destination is not empty, is not a candidate.</summary>
+    /// intermediate cell onto an empty destination; a direction with no such occupied intermediate, or whose
+    /// destination is not empty, is not a candidate. Past <see cref="MaxHops"/> 1 (the default, this shape's
+    /// original single hop, which evicts the token it steps over), one candidate chains 1..<see cref="MaxHops"/>
+    /// such hops as a single move, never revisiting a cell of the chain (the token's own starting cell included)
+    /// and evicting nothing along the way.</summary>
     /// <param name="Over">The directions tried, in the topology's own vocabulary (<c>CompiledTopology.Direction</c>).
     /// The single-element list <c>["any"]</c> tries every direction the topology declares.</param>
-    public sealed record Jump(IReadOnlyList<string> Over) : WorldSearchShape;
+    /// <param name="MaxHops">How many hops one candidate may chain.</param>
+    public sealed record Jump(IReadOnlyList<string> Over, int MaxHops = 1) : WorldSearchShape;
     /// <summary>The walked token relocates to the target cell and a second, fixed token — named by <see cref="With"/>,
     /// a cell key of <see cref="WorldSearchRow.Tokens"/> — relocates by the same lattice translation
     /// (<c>CompiledTopology.TryTranslation</c>: the axial step on a grid, ring, hex, or box), provided its own
@@ -112,14 +116,22 @@ public sealed record WorldSearchChance(string Row, int AtDepth);
 /// past one asks what the position is worth after the ply, not merely whether it is legal, and requires
 /// <paramref name="Score"/>.</param>
 /// <param name="Score">An infix expression, in the rule expression grammar, evaluated over the frame after a ply from
-/// the perspective of the side that made it; iterative-deepening negamax with alpha-beta compares it across plies.
-/// Required when <paramref name="Depth"/> exceeds one, or <paramref name="Best"/> is authored.</param>
+/// the perspective of the side that made it; iterative-deepening negamax with alpha-beta compares it across plies —
+/// the two-sided, zero-sum reading of what a ply is worth. Exactly one of this and <paramref name="Scores"/> is
+/// authored when a score is needed; required when <paramref name="Depth"/> exceeds one, or <paramref name="Best"/>
+/// is authored, and refused with <see cref="SearchMethod.Tree"/> unauthored alongside it.</param>
 /// <param name="Best">A keyed integer row receiving the deepest completed depth's answer: <c>token</c> (the mover's
-/// ordinal in <paramref name="Tokens"/>), <c>to</c> (its destination cell), and <c>score</c> (the negamax value).</param>
+/// ordinal in <paramref name="Tokens"/>), <c>to</c> (its destination cell), and <c>score</c> (the negamax value, or,
+/// with <paramref name="Scores"/> authored, the root mover's own seat's value).</param>
 /// <param name="Method">How plies are compared by the score: <see cref="SearchMethod.Negamax"/> to the depth cap,
 /// or <see cref="SearchMethod.Tree"/>, which reads the score where no candidate is accepted or at the cap.</param>
 /// <param name="Iterations">How many tree iterations a <see cref="SearchMethod.Tree"/> job runs before it lands.</param>
 /// <param name="Chance">The job's chance node, or <see langword="null"/> for a job with none.</param>
+/// <param name="Scores">A keyed integer row, one cell per seat in <paramref name="Turn"/>'s own ordinal order,
+/// holding each seat's own current score — the n-seat reading of what a ply is worth: a level maximizes the mover
+/// seat's own entry rather than negating the reply, so no seat's gain is assumed to be another's loss (max-n).
+/// Exactly one of this and <paramref name="Score"/> is authored when a score is needed; refused with
+/// <see cref="SearchMethod.Tree"/>, whose outcome backprop alternates sign along the path.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldSearchRow(
     string Name,
@@ -139,7 +151,8 @@ public sealed record WorldSearchRow(
     string? Best = null,
     SearchMethod Method = SearchMethod.Negamax,
     int Iterations = 256,
-    WorldSearchChance? Chance = null
+    WorldSearchChance? Chance = null,
+    string? Scores = null
 ) {
     /// <summary>The one candidate shape a job with none authored enumerates: a plain relocation that evicts
     /// whatever stood on the target — this section's original, unconditional behavior.</summary>
@@ -267,8 +280,27 @@ public static class WorldSearchCompilation {
                             directions[index2] = resolved;
                         }
                     }
+                    if ((jump.MaxHops < 1) || (jump.MaxHops > SearchCapacity.MaxJumpHops)) {
+                        reason = $"search '{row.Name}' shape[{index}] jump maxHops {jump.MaxHops} must lie in 1..{SearchCapacity.MaxJumpHops}";
 
-                    compiled[index] = new SearchShapePlan(Kind: SearchShapeKind.Jump, Displace: false, Directions: directions, PairWithIndex: -1);
+                        return false;
+                    }
+                    if ((jump.MaxHops > 1) && (row.Method == SearchMethod.Tree)) {
+                        reason = $"search '{row.Name}' shape[{index}] jump chains (maxHops > 1) are not resolved by the tree method's own root-move decoder; use negamax";
+
+                        return false;
+                    }
+
+                    var jumpShape = new SearchShapePlan(Kind: SearchShapeKind.Jump, Displace: false, Directions: directions, PairWithIndex: -1, MaxHops: jump.MaxHops);
+                    var chainCount = jumpShape.CandidateCount(cellCount: topology!.CellCount);
+
+                    if (chainCount > SearchCapacity.MaxNodesPerTick) {
+                        reason = $"search '{row.Name}' shape[{index}] jump chains to {jump.MaxHops} hops over {directions.Length} directions enumerates {chainCount} candidates per token, more than the {SearchCapacity.MaxNodesPerTick} node ceiling";
+
+                        return false;
+                    }
+
+                    compiled[index] = jumpShape;
 
                     break;
                 }
@@ -498,8 +530,18 @@ public static class WorldSearchCompilation {
 
             return false;
         }
-        if (((row.Depth > 1) || (row.Best is not null) || (row.Method == SearchMethod.Tree)) && (row.Score is null)) {
-            reason = $"search '{row.Name}' names no score — a depth past one, a best row, or the tree method needs one to compare plies by";
+        if (((row.Depth > 1) || (row.Best is not null) || (row.Method == SearchMethod.Tree)) && (row.Score is null) && (row.Scores is null)) {
+            reason = $"search '{row.Name}' names no score or scores — a depth past one, a best row, or the tree method needs one to compare plies by";
+
+            return false;
+        }
+        if ((row.Score is not null) && (row.Scores is not null)) {
+            reason = $"search '{row.Name}' names both score and scores; author exactly one";
+
+            return false;
+        }
+        if ((row.Scores is not null) && (row.Method == SearchMethod.Tree)) {
+            reason = $"search '{row.Name}' scores is a per-seat row the tree method's outcome backprop does not read; author score instead, or use negamax";
 
             return false;
         }
@@ -551,6 +593,13 @@ public static class WorldSearchCompilation {
                 }
             }
         }
+        if (row.Scores is { } scoresName) {
+            if (WorldDefinitionRows.FindStateRow(rows: definition.State, name: scoresName) is not { IsKeyed: true, Kind: CellKind.Int } scoresRow || ((scoresRow.Cells?.Count ?? 0) < 2)) {
+                reason = $"search '{row.Name}' scores '{scoresName}' must be a keyed integer row with at least two cells, one per seat";
+
+                return false;
+            }
+        }
 
         var derived = (int)Math.Min(val1: (leftover / judgeCost), val2: SearchCapacity.MaxNodesPerTick);
 
@@ -587,7 +636,7 @@ public static class WorldSearchCompilation {
             Name: row.Name, Tokens: row.Tokens, Topology: topology, Zones: zones, CellCount: cellCount, Turn: turnName, Verdict: verdictName, Off: off,
             Nodes: (row.Nodes ?? derived), JudgeCost: judgeCost, Depth: row.Depth, Score: score, Best: row.Best, Shapes: shapes,
             Legal: row.Legal, Reach: row.Reach, Held: row.Held, Counts: row.Counts,
-            Accept: (binding?.Accept ?? 1L), Method: row.Method, Iterations: row.Iterations, Chance: chance
+            Accept: (binding?.Accept ?? 1L), Method: row.Method, Iterations: row.Iterations, Chance: chance, Scores: row.Scores
         );
         reason = string.Empty;
 

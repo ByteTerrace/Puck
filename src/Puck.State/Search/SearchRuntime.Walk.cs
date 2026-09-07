@@ -47,14 +47,19 @@ public sealed partial class SearchRuntime {
         var verdict = StateRows.FindStateRow(rows: rows, name: plan.Verdict);
         var cells = plan.CellCount;
         var shapes = plan.Shapes;
+        var scoresRow = ((plan.Scores is { } scoresName) ? StateRows.FindStateRow(rows: rows, name: scoresName) : null);
+        var scoreCells = scoresRow?.Cells;
 
-        if ((tokens?.Cells is not { } tokenCells) || (turn is null) || (verdict is null) || (tokenCells.Count != job.Legal.Length)) {
+        if (
+            (tokens?.Cells is not { } tokenCells) || (turn is null) || (verdict is null) || (tokenCells.Count != job.Legal.Length) ||
+            ((plan.Scores is not null) && (scoreCells is null))
+        ) {
             job.Running = false;
 
             return;
         }
 
-        var hasScore = ((plan.Score is not null) && (plan.Method == SearchMethod.Negamax));
+        var hasScore = (((plan.Score is not null) || (scoresRow is not null)) && (plan.Method == SearchMethod.Negamax));
         var wideWords = ((job.Wide is not null) ? WideWordsPerToken(cellCount: cells) : 0);
         var budget = plan.Nodes;
 
@@ -84,11 +89,20 @@ public sealed partial class SearchRuntime {
                         ResetPass(job: job);
                     }
                 } else {
-                    var value = -CursorBest(job: job, p: p);
                     var parent = (p - 1);
 
-                    StoreTransposition(job: job, level: job.Levels[p - 1], remaining: (job.PassDepth - p));
-                    Fold(job: job, p: parent, value: value, token: CursorToken(job: job, p: parent), target: CursorTarget(job: job, p: parent));
+                    if (scoresRow is not null) {
+                        // The completed ply's own frame carries the best line's vector -- the leaf's, if one was
+                        // ever folded here, or, when no candidate was ever accepted, the frozen position's own
+                        // (never overwritten) scores, exactly what a static evaluation of a side with no move reads.
+                        FoldSeatVector(job: job, p: parent, source: job.Levels[p - 1].Frame, scores: scoresRow, scoreCells: scoreCells!, token: CursorToken(job: job, p: parent), target: CursorTarget(job: job, p: parent));
+                    } else {
+                        var value = -CursorBest(job: job, p: p);
+
+                        StoreTransposition(job: job, level: job.Levels[p - 1], remaining: (job.PassDepth - p));
+                        Fold(job: job, p: parent, value: value, token: CursorToken(job: job, p: parent), target: CursorTarget(job: job, p: parent));
+                    }
+
                     AdvanceCandidate(job: job, p: parent, shapes: shapes, cellCount: cells, tokenCount: tokenCells.Count);
                     job.Active = parent;
                 }
@@ -180,10 +194,16 @@ public sealed partial class SearchRuntime {
                 SetCursorTarget(job: job, p: next, value: 0);
                 SetCursorBest(job: job, p: next, value: -SearchCapacity.MateScore);
                 SetCursorBestMove(job: job, p: next, token: -1, target: -1);
-                SetCursorAlpha(job: job, p: next, value: -CursorBeta(job: job, p: p));
-                SetCursorBeta(job: job, p: next, value: -CursorAlpha(job: job, p: p));
+                // A max-n level never prunes on another seat's bound -- one seat's gain is not another's loss -- so
+                // it descends the full window rather than the negamax negate-and-swap; alpha, never bumped by
+                // FoldSeatVector, then never reaches beta and AdvanceCandidate's cutoff never fires.
+                SetCursorAlpha(job: job, p: next, value: ((scoresRow is not null) ? -SearchCapacity.MateScore : -CursorBeta(job: job, p: p)));
+                SetCursorBeta(job: job, p: next, value: ((scoresRow is not null) ? SearchCapacity.MateScore : -CursorAlpha(job: job, p: p)));
                 SetCursorBaseTurn(job: job, p: next, value: Slot(store: scratch, name: plan.Turn));
                 job.Active = next;
+            } else if (hasScore && accepted && (scoresRow is not null)) {
+                FoldSeatVector(job: job, p: p, source: scratch, scores: scoresRow, scoreCells: scoreCells!, token: token, target: target);
+                AdvanceCandidate(job: job, p: p, shapes: shapes, cellCount: cells, tokenCount: tokenCells.Count);
             } else if (hasScore && accepted) {
                 var value = EvaluateScore(plan: plan, tick: tick);
 
@@ -265,7 +285,7 @@ public sealed partial class SearchRuntime {
 
                 return true;
             }
-            case SearchShapeKind.Jump: {
+            case SearchShapeKind.Jump when (shape.MaxHops <= 1): {
                 var direction = shape.Directions[candidateIndex];
                 var midCell = plan.Topology!.Neighbour(cell: (int)from, direction: direction);
 
@@ -290,6 +310,8 @@ public sealed partial class SearchRuntime {
 
                 return true;
             }
+            case SearchShapeKind.Jump:
+                return TryResolveJumpChain(shape: shape, plan: plan, frame: frame, tokens: tokens, tokenCells: tokenCells, token: token, from: from, candidateIndex: candidateIndex, target: out target);
             case SearchShapeKind.Pair: {
                 if (candidateIndex == from) {
                     return false;
@@ -328,6 +350,81 @@ public sealed partial class SearchRuntime {
         }
     }
 
+    // A jump chain (SearchShapePlan.MaxHops > 1): a candidate is a whole sequence of 1..MaxHops hops, each over an
+    // occupied cell onto an empty one, never revisiting a cell of the chain (the token's own starting cell
+    // included), with no eviction along the way -- unlike the single-hop case above, nothing the chain hops over
+    // leaves the board. The index is read as a base-(directions + 1) digit string, one digit per hop slot: 0 stops
+    // the chain there, and a digit past the first 0 must also be 0, the only canonical spelling of a chain shorter
+    // than MaxHops -- so exactly one index names each real hop sequence, and every other index in
+    // CandidateCount's range is refused here as not a candidate, the same way an occupied landing is above.
+    private static bool TryResolveJumpChain(SearchShapePlan shape, SearchPlan plan, StateFrame frame, StateRow tokens, IReadOnlyList<StateCell> tokenCells, int token, long from, int candidateIndex, out int target) {
+        var radix = (shape.Directions.Length + 1);
+        var topology = plan.Topology!;
+        var visited = (stackalloc int[shape.MaxHops + 1]);
+        var visitedCount = 1;
+        var current = (int)from;
+        var index = candidateIndex;
+        var stopped = false;
+        var hops = 0;
+
+        visited[0] = current;
+        target = -1;
+
+        for (var slot = 0; slot < shape.MaxHops; slot++) {
+            var digit = (index % radix);
+
+            index /= radix;
+
+            if (digit == 0) {
+                stopped = true;
+
+                continue;
+            }
+            if (stopped) {
+                return false;
+            }
+
+            var direction = shape.Directions[digit - 1];
+            var midCell = topology.Neighbour(cell: current, direction: direction);
+
+            if (midCell < 0) {
+                return false;
+            }
+
+            var targetCell = topology.Neighbour(cell: midCell, direction: direction);
+
+            if (targetCell < 0) {
+                return false;
+            }
+            if (!AnyTokenAt(frame: frame, tokens: tokens, tokenCells: tokenCells, cell: midCell, excludeA: token, excludeB: -1)) {
+                return false;
+            }
+            if (AnyTokenAt(frame: frame, tokens: tokens, tokenCells: tokenCells, cell: targetCell, excludeA: token, excludeB: -1)) {
+                return false;
+            }
+
+            var revisited = false;
+
+            for (var visit = 0; visit < visitedCount; visit++) {
+                revisited |= (visited[visit] == targetCell);
+            }
+            if (revisited) {
+                return false;
+            }
+
+            visited[visitedCount++] = targetCell;
+            current = targetCell;
+            hops++;
+        }
+        if (hops == 0) {
+            return false;
+        }
+
+        target = current;
+
+        return true;
+    }
+
     // Where a token stands: its value on a board job; on a zone job, the index of the zone holding it, or -1 in none.
     private static long TokenCell(Job job, StateFrame frame, StateRow tokens, IReadOnlyList<StateCell> tokenCells, int token) {
         if (job.ZoneRows is not { } zones) {
@@ -364,7 +461,9 @@ public sealed partial class SearchRuntime {
                 EvictAt(frame: frame, scratch: scratch, tokens: tokens, tokenCells: tokenCells, cell: target, exclude: token, off: plan.Off);
 
                 break;
-            case SearchShapeKind.Jump:
+            case SearchShapeKind.Jump when (mid >= 0):
+                // A chain candidate (SearchShapePlan.MaxHops > 1) resolves with mid at its -1 default: nothing it
+                // hops over leaves the board.
                 EvictAt(frame: frame, scratch: scratch, tokens: tokens, tokenCells: tokenCells, cell: mid, exclude: token, off: plan.Off);
 
                 break;
@@ -466,6 +565,41 @@ public sealed partial class SearchRuntime {
 
     private long EvaluateScore(SearchPlan plan, ulong tick) =>
         (m_host!.Evaluator.TryEvaluateExpression(program: plan.Score!, kind: CellKind.Int, tick: tick, value: out var value) ? value : 0L);
+
+    // Reads seat's own cell of the scores row, in the row's declared cell order -- the same convention a token's
+    // ordinal indexes tokenCells by. Out of range (a mover value the row's cell count does not cover) reads 0
+    // rather than throwing, since a document's own Turn envelope is validated against the row it names.
+    private static long SeatScore(StateFrame frame, StateRow scores, IReadOnlyList<StateCell> scoreCells, long seat) =>
+        (((seat >= 0) && (seat < scoreCells.Count) && frame.TryStoredAt(row: scores, index: (int)seat, value: out var value)) ? value : 0L);
+
+    // Copies every seat's score from source into destination's own cells of the same row -- the vector a ply
+    // remembers as its own best line's outcome, so its parent can later read its own seat's entry back out.
+    private static void CopySeatScores(StateFrame source, StateFrame destination, StateRow scores, IReadOnlyList<StateCell> scoreCells) {
+        for (var seat = 0; seat < scoreCells.Count; seat++) {
+            if (source.TryStoredAt(row: scores, index: seat, value: out var value)) {
+                _ = destination.TryWrite(row: scores, key: scoreCells[seat].Key, value: value, write: StateWriteKind.Set, reason: out _);
+            }
+        }
+    }
+
+    // Max-n's own fold: ply p's mover maximizes its OWN seat's entry of the vector source carries, never a negated
+    // reply -- one seat's gain need not be another's loss. An improving candidate's whole vector is remembered in
+    // p's own level frame (repurposing its scores cells as the ply's memo of its current best line, since nothing
+    // else reads them once the ply's own candidates are all that touches that frame) so a later fold-up to p's
+    // parent, past p == 0, reads the parent's own seat back out of it.
+    private static void FoldSeatVector(Job job, int p, StateFrame source, StateRow scores, IReadOnlyList<StateCell> scoreCells, int token, int target) {
+        var mover = CursorBaseTurn(job: job, p: p);
+        var value = SeatScore(frame: source, scores: scores, scoreCells: scoreCells, seat: mover);
+
+        if (value > CursorBest(job: job, p: p)) {
+            SetCursorBest(job: job, p: p, value: value);
+            SetCursorBestMove(job: job, p: p, token: token, target: target);
+
+            if (p > 0) {
+                CopySeatScores(source: source, destination: job.Levels[p - 1].Frame, scores: scores, scoreCells: scoreCells);
+            }
+        }
+    }
 
     private static void AdvanceCandidate(Job job, int p, SearchShapePlan[] shapes, int cellCount, int tokenCount) {
         var shapeIndex = CursorShape(job: job, p: p);

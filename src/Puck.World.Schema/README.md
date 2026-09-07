@@ -2519,7 +2519,11 @@ names or the single-element list `["any"]` for every direction the topology
 declares — the walked token steps two cells along one, over a token standing
 on the intermediate cell, which leaves the board, onto an empty destination;
 a direction with no such occupied intermediate, or whose destination is not
-empty, is not a candidate), and `pair` (`with`, a cell key of `tokens` — the
+empty, is not a candidate. Past `maxHops` 1 (the default, this shape's
+original single hop), one candidate chains 1..`maxHops` such hops as a single
+move, never revisiting a cell of the chain and evicting nothing along the
+way; the tree method's own root-move decoder does not resolve a chained
+candidate, so `maxHops` past 1 is refused with it), and `pair` (`with`, a cell key of `tokens` — the
 walked token relocates to the target and the named companion relocates by the
 same lattice translation, `CompiledTopology.TryTranslation`: the axial step on
 a grid, ring, hex, or box, provided its own destination is empty; a graph or
@@ -2598,6 +2602,17 @@ suspend it at any node and a checkpoint carries it byte-for-byte (per-ply
 cursor, window, and best-so-far, plus the ply's own frame values). Depth
 completes before landing: the running best is overwritten every pass, so
 whatever it holds when the final depth finishes is that depth's answer.
+
+`scores` is the n-seat reading of what a ply is worth, authored instead of
+`score` (exactly one of the two, when a score is needed; `scores` is refused
+with the `tree` method, whose outcome backprop assumes two sides): a keyed
+integer row, one cell per seat in `turn`'s own ordinal order, holding each
+seat's own current score. A level maximizes the mover seat's own entry
+rather than negating the reply — no seat's gain is assumed to be another's
+loss (max-n) — so it descends the full window rather than pruning on another
+seat's bound, and folding a value up to a non-root ply remembers the whole
+vector (in that ply's own frame, since nothing else reads it once the ply's
+candidates are its own) so the parent can read its own seat back out of it.
 
 `method` picks how plies are compared by the one `score`: `negamax` (the
 default, above) or `tree`, for a game whose score is only a terminal outcome.

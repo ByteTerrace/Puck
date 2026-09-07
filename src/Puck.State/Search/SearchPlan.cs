@@ -16,6 +16,8 @@ public static class SearchCapacity {
     public const int MaxDepth = 32;
     /// <summary>The most codes one <c>promote</c> shape offers.</summary>
     public const int MaxPromotions = 8;
+    /// <summary>The most hops one <c>jump</c> shape's chain may take in a single candidate.</summary>
+    public const int MaxJumpHops = 12;
     /// <summary>The transposition table's entries per job with a score: a power of two, indexed by the low bits of a
     /// position's frame hash.</summary>
     public const int TranspositionEntries = 1_024;
@@ -71,16 +73,41 @@ public enum SearchShapeKind : byte {
 /// <param name="PromoteTo">The codes a <see cref="SearchShapeKind.Promote"/> offers, or <see langword="null"/>.</param>
 /// <param name="Selector">The zone end a <see cref="SearchShapeKind.Transfer"/> moves from.</param>
 /// <param name="InsertFirst">Whether a <see cref="SearchShapeKind.Transfer"/> lands first rather than last.</param>
-public sealed record SearchShapePlan(SearchShapeKind Kind, bool Displace, int[] Directions, int PairWithIndex, string? Codes = null, long[]? PromoteTo = null, ZoneSelector Selector = ZoneSelector.Last, bool InsertFirst = false) {
+/// <param name="MaxHops">How many hops a <see cref="SearchShapeKind.Jump"/> candidate may chain: 1 (the default)
+/// is the section's original single hop; past 1, one candidate is a whole chain of 1..<paramref name="MaxHops"/>
+/// hops, each over an occupied cell onto an empty one never repeating a cell of the chain (including the token's
+/// own starting cell), and none of the chain's intermediate cells are evicted.</param>
+public sealed record SearchShapePlan(SearchShapeKind Kind, bool Displace, int[] Directions, int PairWithIndex, string? Codes = null, long[]? PromoteTo = null, ZoneSelector Selector = ZoneSelector.Last, bool InsertFirst = false, int MaxHops = 1) {
     /// <summary>Gets how many candidates this shape enumerates per token: every cell (a board's cells, or a zone
     /// job's zones) for every kind but <see cref="SearchShapeKind.Jump"/>, which enumerates its resolved directions
-    /// instead, and <see cref="SearchShapeKind.Promote"/>, which offers every code on every cell.</summary>
+    /// alone at <see cref="MaxHops"/> 1, or every base-(directions + 1) digit string of length
+    /// <see cref="MaxHops"/> past it (digit 0 stops the chain; every digit past the first 0 must also be 0, so
+    /// exactly one index names each hop sequence of length 1..<see cref="MaxHops"/> — most are refused as not a
+    /// candidate at resolve time, the same way an occupied landing or an off-board companion is), and
+    /// <see cref="SearchShapeKind.Promote"/>, which offers every code on every cell.</summary>
     /// <param name="cellCount">The job's cell count.</param>
     public int CandidateCount(int cellCount) => Kind switch {
-        SearchShapeKind.Jump => Directions.Length,
+        SearchShapeKind.Jump => ((MaxHops <= 1) ? Directions.Length : ChainCandidateCount(directions: Directions.Length, maxHops: MaxHops)),
         SearchShapeKind.Promote => (cellCount * (PromoteTo?.Length ?? 0)),
         _ => cellCount,
     };
+
+    // A base-(directions + 1) count, saturating at int.MaxValue rather than throwing — validation keeps a real
+    // document's product far under this ceiling; the saturated value only ever reaches a caller as an early refusal.
+    private static int ChainCandidateCount(int directions, int maxHops) {
+        var radix = ((long)directions + 1);
+        var total = 1L;
+
+        for (var hop = 0; hop < maxHops; hop++) {
+            total *= radix;
+
+            if (total > int.MaxValue) {
+                return int.MaxValue;
+            }
+        }
+
+        return (int)total;
+    }
 }
 
 /// <summary>One search job's baked chance node: the ply whose move choice the job's search averages over instead of
@@ -113,7 +140,9 @@ public sealed record SearchChancePlan(string Row, int AtDepth, int CellCount, lo
 /// <param name="Nodes">The relocations judged per tick.</param>
 /// <param name="JudgeCost">The work units one judge run costs.</param>
 /// <param name="Depth">How many plies the job searches ahead.</param>
-/// <param name="Score">The compiled score program, or <see langword="null"/> when the job carries none.</param>
+/// <param name="Score">The compiled score program a two-sided negamax job compares plies by, negated for the
+/// side that did not just move; <see langword="null"/> when <paramref name="Scores"/> carries the job's scoring
+/// instead, or the job carries none.</param>
 /// <param name="Best">The best-move output row, or <see langword="null"/>.</param>
 /// <param name="Shapes">The compiled candidate shapes, in declared order.</param>
 /// <param name="Legal">The row keyed by <paramref name="Tokens"/> receiving each token's accepted-cell bitmask, or
@@ -127,6 +156,12 @@ public sealed record SearchChancePlan(string Row, int AtDepth, int CellCount, lo
 /// <param name="Method">How the job compares plies by its score.</param>
 /// <param name="Iterations">The tree iterations a <see cref="SearchMethod.Tree"/> job runs.</param>
 /// <param name="Chance">The job's baked chance node, or <see langword="null"/> for a job with none.</param>
+/// <param name="Scores">A keyed integer row, one cell per seat in <paramref name="Turn"/>'s own ordinal order,
+/// holding each seat's own current score; <see langword="null"/> when <paramref name="Score"/> carries the job's
+/// scoring instead. A level maximizes the mover seat's own entry rather than negating the reply, so an n-seat
+/// job never assumes one seat's gain is another's loss (max-n); mutually exclusive with <paramref name="Score"/>,
+/// and, since the outcome the tree method backpropagates alternates sign along the path, not authored with
+/// <see cref="SearchMethod.Tree"/>.</param>
 public sealed record SearchPlan(
     string Name,
     string Tokens,
@@ -149,7 +184,8 @@ public sealed record SearchPlan(
     long Accept = 1L,
     SearchMethod Method = SearchMethod.Negamax,
     int Iterations = 0,
-    SearchChancePlan? Chance = null
+    SearchChancePlan? Chance = null,
+    string? Scores = null
 );
 
 /// <summary>One state write a finished search job wants applied, through whatever mutation door the document

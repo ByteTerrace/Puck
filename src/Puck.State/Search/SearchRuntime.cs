@@ -664,7 +664,7 @@ public sealed partial class SearchRuntime {
             status[index] = new SearchStatus(
                 Name: job.Plan.Name, Running: job.Running, Done: job.Done, Token: job.Token, Tokens: job.Legal.Length, Target: job.Target,
                 Cells: job.Plan.CellCount, Count: job.Count, Nodes: job.Nodes, NodesPerTick: job.Plan.Nodes, JudgeCost: job.Plan.JudgeCost, JudgeRules: m_judge.Length,
-                HasScore: ((job.Plan.Score is not null) && (job.Plan.Method == SearchMethod.Negamax)), Depth: job.Plan.Depth, PassDepth: job.PassDepth, BestScore: job.Best, BestToken: job.BestToken, BestTarget: job.BestTarget,
+                HasScore: (((job.Plan.Score is not null) || (job.Plan.Scores is not null)) && (job.Plan.Method == SearchMethod.Negamax)), Depth: job.Plan.Depth, PassDepth: job.PassDepth, BestScore: job.Best, BestToken: job.BestToken, BestTarget: job.BestTarget,
                 HasOutcome: (job.Plan.Method == SearchMethod.Tree), Iteration: job.Iteration, Iterations: job.Plan.Iterations
             );
         }
