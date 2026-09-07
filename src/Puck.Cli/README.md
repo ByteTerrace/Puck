@@ -20,6 +20,7 @@ with hand-rolled first-positional verb dispatch:
 | [`puck packages`](#puck-packages--published-nuget-package-report) | the published `ByteTerrace.Puck.*` NuGet package report — id/description/tags — checked and regenerated against `docs/site/index.html`. |
 | [`puck wasm-stdlib`](#puck-wasm-stdlib--wasm-standard-library-sources) | regenerates every generated Rust source of the WASM standard library — currently `FixedQ4816`'s Rust port and known-answer vectors. |
 | [`puck worktree-base`](#puck-worktree-base--worktree-base-guard) | puts a worktree's HEAD at a named base commit, refusing rather than resetting a dirty tree. |
+| [`puck official`](#puck-official--the-local-official-tree-producer) | builds, serves, and verifies a local `puck.official.v1` tree — the shipped engine, world documents, and their assets, content-addressed. No upload, no signing, no GitHub workflow. |
 
 Unlike its retired `tools/` predecessors, this project is a **first-class member
 of `Puck.slnx`** and joins the full root build regime (warnings-as-errors,
@@ -61,6 +62,31 @@ sibling) beside the executable. That is the out-of-process build host
 `contentFiles` copied to the output. Adding `ExcludeAssets` or
 `PrivateAssets=contentfiles` to either workspace package reference would silently
 remove it and break every `references` run.
+
+---
+
+## `puck official` — the local official tree producer
+
+```sh
+puck official build --out <dir> --channel <name> --engine <AppBundle dir> [--worlds <dir>] [--allow-dirty]
+puck official verify --base <dir> --channel <name> [--expect-commit <hex>]
+puck official serve --tree <dir> [--port 61102]
+```
+
+Writes, serves, and verifies a `puck.official.v1` tree: the shipped browser-wasm
+engine (a `dotnet publish src/Puck.World.Browser -c Release -r browser-wasm`
+AppBundle), the world schema bundle (the same `WorldSchema.Export`/`Bundle` path
+`puck schema --bundle` uses), every world document under the worlds directory,
+the one fully-composed root world (`puck.world.json`, resolved through its whole
+basis-and-imports graph, parsed, migrated, validated, and re-serialized), and
+every off-disk asset a music/table/tune/patch row references — all
+content-addressed under `<out>/objects/sha256/<hex[0..2]>/<hex64>` (the same
+layout `puck publish`'s dry-run and `Puck.Launcher.Release.DirectoryReleaseSource`
+already read) and hash-checked, so `verify` and a client both catch a mismatch
+by name. `build` refuses unless `puck schema --check` and `puck registry --check`
+both pass, and unless the working tree is clean (or `--allow-dirty` is given).
+No sub-verb here uploads, signs, or drives a GitHub workflow — publishing a
+signed release to a real channel is a separate, later concern.
 
 ---
 

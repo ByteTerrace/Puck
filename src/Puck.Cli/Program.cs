@@ -10,6 +10,7 @@ using Puck.Cli.Format;
 using Puck.Cli.FontAtlas;
 using Puck.Cli.Landing;
 using Puck.Cli.Lengths;
+using Puck.Cli.Official;
 using Puck.Cli.Packaging;
 using Puck.Cli.Parity;
 using Puck.Cli.PublishRelease;
@@ -39,6 +40,7 @@ return args switch {
     ["font-atlas", .. var fontAtlasArgs] => FontAtlasCommand.Run(args: fontAtlasArgs),
     ["landing", .. var landingArgs] => LandingCommand.Run(args: landingArgs),
     ["lengths", .. var lengthsArgs] => LengthsCommand.Run(args: lengthsArgs),
+    ["official", .. var officialArgs] => OfficialCommand.Run(args: officialArgs),
     ["packages", .. var packagesArgs] => PackagesCommand.Run(args: packagesArgs),
     ["parity", .. var parityArgs] => ParityCommand.Run(args: parityArgs),
     ["publish", .. var publishArgs] => PublishCommand.Run(args: publishArgs),
@@ -70,6 +72,7 @@ static int Usage() {
               font-atlas    managed OpenType font/collection to SDF atlas generation
               landing       refuse a commit that drops a landing you never worked from
               lengths       the file-length ledger FileLengthAnalyzer reads: --check or --write
+              official      local official tree producer: build | serve | verify (no upload, no signing)
               packages      published ByteTerrace.Puck.* NuGet package report, id/description/tags
               parity        cross-backend composed-frame comparison against the real Puck.World
               publish       write an unsigned puck.release.v1 release-source tree from a built RID's output
