@@ -8292,6 +8292,20 @@
       ]
     },
     {
+      "Id": "Puck.Maths.FixedSaturate.Add(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.fixed-saturate-clamps-to-the-extremes"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.FixedSaturate.ToInt64(System.Int128)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.fixed-saturate-clamps-to-the-extremes"
+      ]
+    },
+    {
       "Id": "Puck.Maths.FixedScalarRing..ctor(Puck.Maths.FixedQ4816)",
       "State": "uncovered"
     },

@@ -13,7 +13,7 @@ adversarial review's job, not this file's.
 
 | leg kind | flavor | legs | statements |
 | --- | --- | --- | --- |
-| classical | — | 801 | 522 |
+| classical | — | 802 | 523 |
 | presented-twin | — | 9 | 8 |
 | in-tree-independent | — | 31 | 25 |
 | shared-substrate | fused-substrate | 36 | 34 |
@@ -23,15 +23,15 @@ adversarial review's job, not this file's.
 | shared-substrate | intra-presented | 82 | 47 |
 | shared-substrate | shared-upstream | 22 | 15 |
 | relative-canary | — | 18 | 17 |
-| structural | — | 1177 | 586 |
-| **total** | | **2268** | **742** |
+| structural | — | 1178 | 587 |
+| **total** | | **2270** | **743** |
 
 ## Counts by surface
 
 | surface | statements | agreement legs | structural legs | statements with no independent leg |
 | --- | --- | --- | --- | --- |
 | law: Deep | 112 | 148 | 123 | 21 |
-| law: Default | 601 | 872 | 1053 | 183 |
+| law: Default | 602 | 873 | 1054 | 183 |
 | law: Exhaustive | 7 | 23 | 11 | 1 |
 | law: Smoke | 22 | 30 | 8 | 2 |
 
@@ -266,6 +266,8 @@ adversarial review's job, not this file's.
 | core.factorization-full-width-sweep | law: Exhaustive | classical | — | the ADVERSARIAL shape a random stream essentially never draws: 2,000 semiprimes built from a pool of 256 primes near 2^31, whose least factor is beyond any trial division and whose product fills the carrier | the two primes the product was BUILT from, each located independently by Oracles.ExactPrimality, compared as the whole expected sequence in ascending order. This is where the cycle walk's fourth-root cost is actually put to work rather than small factors doing it: core.big-integer-prime-factors-vs-word-kernel records outright that NO hard semiprime of two large primes is swept there, and its widest operand's least factor is 193,707,721 | — | — |
 | core.factorization-full-width-sweep | law: Exhaustive | classical | — | six hand-built vectors of every shape the carrier admits: 2^63, 10^19, the Mersenne prime 2^61−1 reporting itself, 2^64−1 and 2^64−2 | the published factorizations, written out beside each operand rather than read back from the subject — 2^64−1 as 3·5·17·257·641·65537·6700417, the product of the first five Fermat numbers, and 2^63−1 as 7²·73·127·337·92737·649657. The two pure-power rows are spelled as repeat COUNTS rather than as pasted runs of literals, so a miscounted paste cannot make either row pass for the wrong reason | — | the Fermat-number factorization of 2^64−1 and the factorization of the composite Mersenne 2^63−1 are published constants, transcribed from the literature and derived nowhere in this repository |
 | core.factorization-full-width-sweep | law: Exhaustive | structural | — | ENVELOPE. This law is the coverage core.big-integer-prime-factors-vs-word-kernel cites its word-sized reference on. Measured cost: about twelve seconds. What it does NOT reach: nothing here pins the splitter's TERMINATION TIME on an adversarial operand, only its correctness; the semiprime rows bound the cost at two 2^31-scale factors and say nothing about a worse shape. PrimeExtensions.Factorize's undersized-destination refusal is owned by core.prime-extensions-vs-trial-division and is not restated here | — | — | — |
+| core.fixed-saturate-clamps-to-the-extremes | law: Default | classical | — | FixedSaturate.Add over swept raw pairs at width 4, and FixedSaturate.ToInt64 over an Int128 accumulator built from each pair (the left raw shifted one bit past the long range plus the right raw), so every pair exercises an in-range and a far-out narrowing | Exact BigInteger addition clamped to [long.MinValue, long.MaxValue] in the claim: no Int128 comparison is shared with the subject, which decides on Int128 against the long extremes | — | — |
+| core.fixed-saturate-clamps-to-the-extremes | law: Default | structural | — | The seams the clamp decides on: Int128.MinValue and MaxValue, each long extreme and its two neighbours, zero, and Add at FixedQ4816.MaxValue + Epsilon and MinValue - one raw unit | The literal expected narrowings: a wrap at either seam, or a clamp one unit early, fails by name | — | — |
 | core.fixed-tick-conversion-exact-refuses-inexact-decimals | law: Default | classical | — | FixedTickConversion.TryDurationEngineTicksExact at a curated edge set (zero; a negative duration; every dyadic value already authored in a shipped or scenario document — 0.25, 0.5, 1.0, 3.0; the finest terminating-decimal grid that is ALWAYS exact — 0.00125 (1/800 s) and eleven further multiples of it; each of 50400's non-trivial divisors expressed as a terminating decimal — 0.1, 0.01, 0.02, 0.04, 0.05, 0.2, 0.5; curated INEXACT decimals at 3-6 fraction digits, including a decimal approximation of 1/24 s and of 35/12 s; and exact values whose tick counts exceed UInt64, including Decimal.MaxValue) plus a dense sweep of every 37th millisecond (0.001 s steps, mostly inexact since 1000 does not divide 50400) across the first two seconds | an independent BigInteger recomputation that never calls decimal multiplication or Truncate: decimal.GetBits decomposes the authored value into its sign, base-10 scale, and unscaled 96-bit integer with no precision loss, then unscaled * TicksPerSecond is tested for exact divisibility by 10^scale via BigInteger remainder — the SAME question the subject answers through decimal arithmetic, transcribed from the definition through a completely different numeric path | — | — |
 | core.fixed-tick-conversion-exact-refuses-inexact-decimals | law: Default | structural | — | this is the exactness seam owner ruling 2026-08-08 (authored-duration engine-tick storage) added: Puck.World.Data's WorldRuleCompiler.ResolveWrite calls this member for every world-rule 'valueSeconds' countdown/cooldown, refusing (WorldRuleRefusal.DurationNotExactEngineTicks) rather than silently rounding when it returns false — the law's coverage of the member is what keeps that refusal decision, and the nearest-exact-bounds arithmetic the refusal message itself performs with the SAME TicksPerSecond constant, honest as the member changes | — | — | — |
 | core.fixed-tick-conversion-rounds-up-against-rational-arithmetic | law: Default | classical | — | FixedTickConversion.DurationTicks at rates 0, 1, 7, 24, 30, 60, 120, 240, 1000, and 50400 (TicksPerSecond) — and DurationEngineTicks held equal to the 50400 case — at a curated edge set (zero, the smallest positive raw, long.MinValue/MaxValue, the one-second boundary 65536 and its two neighbours, the five-second boundary and its two neighbours, and small negative raws) plus a dense sweep of every 97th raw across the first five positive seconds and every 251st raw across the first negative second | an independent BigInteger recomputation of the round-up rule transcribed from the definition — ceil(raw * ratePerSecond / 65536) via exact rational ceiling division on BigInteger, sharing no line with BinaryIntegerFunctions.CeilingDivide<T> or the subject's own Int128 arithmetic; non-positive raws are pinned to zero by the same independent check | — | — |

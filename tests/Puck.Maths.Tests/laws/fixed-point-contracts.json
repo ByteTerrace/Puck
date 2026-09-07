@@ -364,5 +364,39 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "core.fixed-saturate-clamps-to-the-extremes",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSaturate",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.FixedSaturate",
+        "Name": "ToInt64"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSaturate.Add over swept raw pairs at width 4, and FixedSaturate.ToInt64 over an Int128 accumulator built from each pair (the left raw shifted one bit past the long range plus the right raw), so every pair exercises an in-range and a far-out narrowing",
+        "Against": "Exact BigInteger addition clamped to [long.MinValue, long.MaxValue] in the claim: no Int128 comparison is shared with the subject, which decides on Int128 against the long extremes",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The seams the clamp decides on: Int128.MinValue and MaxValue, each long extreme and its two neighbours, zero, and Add at FixedQ4816.MaxValue + Epsilon and MinValue - one raw unit",
+        "Against": "The literal expected narrowings: a wrap at either seam, or a clamp one unit early, fails by name",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
   }
 ]

@@ -805,6 +805,7 @@ internal static partial class LawRegistry {
         .. SymmetricSolveCases(),
         .. MixedScaleCases(),
         .. DirectedRoundingCases(),
+        .. FixedSaturateCases(),
         .. MassPropertiesCases(),
         .. BinaryPolynomialRingCases(),
         .. BinaryFieldQuotientCases(),
