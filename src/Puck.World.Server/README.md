@@ -520,7 +520,7 @@ floored by `collision.bodyContacts.rigidSubstepMinimumTravel`), capped by
 `world.budget`'s `rigid` segment and `RigidStaticSubstepsThisTick`.
 
 `WorldBody.ScaleRigid` derives a scale-consistent copy of the compiled facet
-from the body's own live `Scale` (`Server.WorldBody.Scale.cs`) on every read:
+from the body's own live `Scale` (`WorldBody.Scale.cs`) on every read:
 mass ∝ `Scale`³ against the authored mass at scale 1 (a uniformly bigger body
 of the same material is heavier by its volume ratio), inertia (mass·length²)
 ∝ `Scale`⁵ so inverse mass/inertia scale by `Scale`⁻³/`Scale`⁻⁵, and the

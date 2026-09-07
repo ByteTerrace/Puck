@@ -158,9 +158,8 @@ gate (see the gotcha below).
 
 Everything past park-with-grace/body-resume/`$parked:` above is an ordinary
 authored `WorldRule` — no further engine surface exists or is needed.
-`Assets/scenarios/reconnect.world.json` (the reconnect-policy wave,
-2026-08-06) is the worked forcing-function demo, mirroring
-`combat.world.json`'s role: a CC countdown (`stunRemaining`, a plain
+The retired `reconnect.world.json` scenario (git history; deleted 2026-09-06 with `combat.world.json`,
+whose rules now live in `modules/arena.world.json`) was the worked forcing-function demo: a CC countdown (`stunRemaining`, a plain
 `Level`-mode decrement rule) keeps ticking through a park because rule
 evaluation never consults occupancy (see "Park-with-grace" above); a
 periodic-attack rule gated on `$argmax:threat` resolving to the PARKED body
@@ -169,7 +168,7 @@ window; and a `$parked:body:<n>` threshold gate (`Edge` mode, paired with
 its own clear-on-resume `Edge` rule) demonstrates a rule reacting to the
 LIVE remaining-grace value, not just its parked/unparked boolean. Nothing
 here is a new predicate, effect, or reserved channel — it is the SAME
-substrate `combat.world.json`'s `mob-target-mirror`/`mob-attacks-p1` rules
+substrate the arena district's targeting and attack rules
 already exercise, aimed at `$parked:` instead of `$distance:`/`$argmax:`
 alone. `reconnectGraceSeconds: 0` is the standing break-once control: the
 SAME document with that one field zeroed tears the body down immediately on

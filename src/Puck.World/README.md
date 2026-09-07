@@ -1099,70 +1099,11 @@ own declared range; a parameter binding targeting the same field overwrites a
 single-instance row's one instance is written and a seat-relative row's every
 live instance is written; with a suffix, only that one instance.
 
-`Assets/worlds/brio-probe.world.json` (basis `brio-dual.world.json`) is the
-end-to-end vertical: the `ir-blob` probe over the BRIO's infrared stream,
-bound to the seat's `turn` channel through an ordinary binding overlay
-(`probe.head-x`), `sdf-film-grain.intensity` (a presentation parameter), and
-`brightness` (a camera control). Run it windowed, in front of the camera:
-
-```
-dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-probe.world.json --exit-after-seconds 16
-```
-
-`Assets/worlds/brio-faerie.world.json` (basis `brio-dual.world.json`) is the
-full vertical, all three shipped kinds over one BRIO stream: the `ir-marker`
-probe frames a strip of retroreflective tape on the wall as a painting quad
-(eight `probe`-target parameter bindings into the `faerie` probe's
-`paintingX0..paintingY3` config), the `ir-blob` probe steers the `faerie`
-probe's anchor from the tracked head (two more `probe`-target bindings), and
-the `faerie` probe relights the color frame and, through its optional
-`painting` socket — a `view` export of the world's own `gallery` camera —
-shows that camera's own feed as the framed canvas. An `axis` binding publishes
-the `faerie` probe's own `portal` channel as `probe.faerie-portal`; a binding
-overlay routes it onto the world's `portal` command channel, and a
-`compareState($channel:1:portal, GreaterOrEqual, 1)` world rule upserts a
-`faerie-glow` placement (kit `faerieKit`, a steering producer that approaches
-a sensed target) once
-`probe.set faerie journey 1` carries the light into the painting far enough to
-cross the kind's own `portalThreshold`. Screen 0 shows the faerie probe's
-output beside the raw infrared and color feeds:
-
-```
-dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-faerie.world.json --exit-after-seconds 16
-```
-
-`Assets/worlds/brio-faerie-authored.world.json` (basis
-`brio-faerie.world.json`) is the no-tape leg, for an author with nothing
-retroreflective on the wall: it drops the `ir-marker` row (and with it, the
-eight painting-corner bindings that lived on it) and pins the `faerie`
-probe's `paintingX0..paintingY3` config to a hand-authored rectangle instead —
-the same corners `ir-marker` would otherwise track live. The head-anchored
-faerie and the `journey`/`portal` spawn are unchanged:
-
-```
-dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-faerie-authored.world.json --exit-after-seconds 16
-```
-
-`Assets/worlds/brio-probe-track.world.json` (basis `brio-probe.world.json`)
-swaps the `head` probe's input for the checked-in
-`Assets/probes/tracks/brio-head.probe-track.json` recording — the
-hardware-free leg, runnable headless on a machine with no camera:
-
-```
-dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-probe-track.world.json --headless --exit-after-seconds 6
-```
-
-`Assets/worlds/brio-seats.world.json` (basis `brio-probe.world.json`) declares
-two local seats to exercise seat-relative instancing directly: run it
-windowed, join a second, console-only seat (`player.join 1`), and
-`probe.status` shows two instances, `head@1` (the machine's own BRIO,
-default-seated at boot) running and `head@2` idle with a no-camera-assigned
-fault — a second local seat with no camera of its own, never a crash or a
-silently-shared reading:
-
-```
-dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-seats.world.json --exit-after-seconds 16
-```
+The probe worlds that carried these examples (`brio-probe`, `brio-dual`, `brio-faerie`, `brio-seats`) retired
+with the prototype fold; the checked-in track `Assets/probes/tracks/brio-head.probe-track.json` and the verbs
+above are the surviving surface. A district that needs a camera reading authors its `probes` rows on the one world
+and proves them with `probe.status`, `body.channels`, and `wire.errors` as the retired worlds did; the kernel's own
+numbers are pinned hardware-free by `tests/Puck.Platform.Windows.Tests/ProbeKernelTests.cs`.
 
 ## Graphics options
 

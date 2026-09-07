@@ -143,10 +143,9 @@ decision's price stays legible instead of a silent frame tax. The document vocab
 `kits`/`looks`/`placements` are dealt-row sections (`{rows, assignment}`/`{rows, policy}`, authoring
 dissolved into placements' own policy block); `prototypes` (`prototypeId` references) replaces
 `creations`; `bodies` replaces `population`; `seatDefaults`/`seatCameraFeel` replace
-`playerDefaults`/`seatLook`. `puck.world.frozen.json` (the frozen diorama — see
-the 2026-08-31 reset below) is the worked example: the island lattice burns,
-freezes, melts, and evaporates on the folded spelling, and its bodies carry the
-hp/targeting/attack, elemental-status, and state-driven-look suites. A value that turns with the tick is a `cycle` trait on a state row (`WorldStateCycle`, beside `advance` and `dynamics`), driven by a generator of the symmetry lattice's reflection group (`Puck.Maths.SymmetryWord`: an authored word of mirrors whose derived order is the period, or the lattice's own thirty-step `Puck.Maths.CyclicRotation` cycle) and, for its lattice outputs, `Puck.Maths.SymmetryLattice` — a looping animation, a twelve-position dial, a phase or a ring-slot address enters the game as a row every draw, rule, binding and HUD element already reads, never as a shader-side clock; rules read the lattice's own pairing through `$symmetry:innerProduct`, and a `symmetryOrbit` generator source deals a ring or a word's orbit as a shuffle bag.
+`playerDefaults`/`seatLook`. The dive district (`modules/dive.world.json`) is the worked example of the
+field spelling (a medium pool lattice a diver kit settles in) and the arena district
+(`modules/arena.world.json`) carries the hp/targeting/attack, elemental-status, and state-driven-look suites. A value that turns with the tick is a `cycle` trait on a state row (`WorldStateCycle`, beside `advance` and `dynamics`), driven by a generator of the symmetry lattice's reflection group (`Puck.Maths.SymmetryWord`: an authored word of mirrors whose derived order is the period, or the lattice's own thirty-step `Puck.Maths.CyclicRotation` cycle) and, for its lattice outputs, `Puck.Maths.SymmetryLattice` — a looping animation, a twelve-position dial, a phase or a ring-slot address enters the game as a row every draw, rule, binding and HUD element already reads, never as a shader-side clock; rules read the lattice's own pairing through `$symmetry:innerProduct`, and a `symmetryOrbit` generator source deals a ring or a word's orbit as a shuffle bag.
 
 **Gravity authoring names acceleration independently of geometry.** A world may
 author a uniform acceleration directly, retain explicit placement-plus-mass
@@ -177,27 +176,22 @@ produced it, because a status sentence with no check behind it is how a reader e
 capability exists. This is the whole reason the old per-capability register was deleted and must not
 come back.
 
-**Verified 2026-08-15, on the branch that split the projects** (rows citing
-`Assets/worlds/prototypes/*.world.json` describe documents retired in the world
-fold — git history only — and rows citing `puck.world.json` describe what is now
-`puck.world.frozen.json`; see the 2026-08-31 reset below):
+**Verified 2026-08-15, on the branch that split the projects** (rows that described the retired prototype
+worlds, the frozen diorama, the quilt deltas, and the scenario documents are gone with those documents;
+the island's own claims are in the 2026-09-06 entry above):
 
 | Claim | The check |
 |---|---|
 | Every shipped world document boots | `dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/<name>.world.json --exit-after-seconds 2`, audit STDERR — exit code 0 is NOT success (the only bracketed lines are the by-design `world.screen … recursion refused` notices for session mirrors) |
-| The nexus authors a floating island, five planetoids, four portals, dark arcade cabinet | read `src/Puck.World/Assets/worlds/prototypes/nexus.world.json`'s `placements` — `island` and `planetoid-*` plus `arcade-cabinet` and `dive-portal`/`kart-portal`/`jump-portal`/`studio-portal` |
-| The one world (`puck.world.json`) authors a natural floating island above the quadrant center — a noise-relieved grass crown and rock root (the `puck.creation.v1` `noise` facet), an oak/pine forest, bushes, grass tufts, boulders, and drifting shards via placement `distribution` scatter/noise regions | read its `prototypes`/`placements`; boot it, `world.budget` echoes the noise's march multiplier, and `body.pose -4 39 16 0 0 0 0` + `world.screenshot` shows the forest |
 | Every world authors per-body action logic | the same documents' `actions` lanes carry `predicates`/`effects`; a quilt variant inherits its base's lanes through `basis` instead of repeating them |
-| **No shipped world authors WORLD-SCOPE rules** — none carries a `rules` or `interactions` section; the two scenario documents under `Assets/scenarios/` do | the same read; `rules.schema.json` and `interactions.schema.json` both exist |
-| Similar worlds compose instead of redefining everything — the five quilts are `basis` deltas over the `quilt-base` template | read any `quilt-*.world.json`'s `basis` member; `world.status` echoes `basis <path>`; `tests/Puck.World.Tests/DocumentBasisLawTests.cs` |
 | A camera reading reaches per-tick input and a presentation parameter — the `ir-blob` probe's `x` lands as seat 1's `turn` channel and its `luminance` drives `sdf-film-grain.intensity` | windowed on the BRIO: `(sleep 8; echo probe.status; echo 'body.channels 0'; echo wire.errors; sleep 3) \| dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-probe.world.json --exit-after-seconds 16` — `probe.status` echoes `state=running tier=gpu`, its `axis head-x … captured=<v>` equals `body.channels`' `turn … h=<v>`, `parameter … writes=` is positive, `wire.errors: 0`; hardware-free: the same verbs against `brio-probe-track.world.json --headless` (the recorded `Assets/probes/tracks/brio-head.probe-track.json` drives the axis; parameter writes stay 0 headless by design); `tests/Puck.Platform.Windows.Tests/ProbeKernelTests.cs` proves the kernel's numbers on a synthetic frame |
 
 **Verified 2026-09-06 (the One World wave):** `puck.world.json` composes the island and ten districts under aliases (`world.imports` names granaries, arcade, dive, kart, jump, arena, studio beside the bare game imports); a headless boot exits 0 with no refusal; `body.pose spawn:<alias>-arrival` then `body.where 0` reads `grounded` in every district; `world.state.hash` is identical across two boots at ticks 31 and 151; the World suite is green with the island laws (`IslandLawTests`) in it. The frozen diorama, its basis, `granaries.world.json`, the two scenario documents, and `experimental/Puck.Demo` are deleted. Not yet: the island authors no `adjacencies` (the quilt shards under `Assets/worlds/shards/` and the file neighbour resolver are landed but the seams must be re-sited to the crown's extent and the shards re-validated as basis deltas), the inhabit count read from a cell (only its law exists), and three cuts the derived limits forced, recorded in `modules/README.md`.
 
-**Verified 2026-08-25 (the medium/flow/ecosystem wave):** `puck.world.frozen.json`'s island carries a lattice
-`water` field marked `medium` (a 5-unit pool) beside the existing fire/char chemistry, transported by a
-`flow` reaction that spills its edge share into `falls-flux`, which gates a `falls-mist` rule — plus
-`fish`/`critter` placements and `pond-cam`/`south-fall-cam` view layouts. `puck canary medium-submersion`
+**Verified 2026-08-25 (the medium/flow/ecosystem wave), re-homed 2026-09-06:** the dive district's pool is a
+lattice `water` field marked `medium` a diver kit settles in, with fish inhabiting it (`modules/dive.world.json`;
+its canary is `dive-medium`); the fire/char chemistry, the `flow` spill into a gated rule, and the falls view layouts
+left with the frozen diorama and return with a district that needs them. `puck canary medium-submersion`
 proves a medium hold's `InMedium` fact flips both ways off `WorldPopulation.SampleMediumSurfaces`; `puck
 canary flow-conservation-live` proves a spill row climbs strictly, live, only while a reaction keeps
 feeding its source. `puck parity` (both backends) holds unchanged — the parity world authors neither
@@ -549,7 +543,8 @@ NOT create a sixth.** Its reasoning: world rules, interactions, the property voc
 combat caller ALREADY EXIST; what is missing is charter-world EXERCISE, so a sixth horizontal
 "content later" track would add a lane without adding a capability. It also verified that the Phase A
 nouns survive on the rebased tree (`WorldStateAdvance`, `WorldOwnership`, properties, rules,
-interactions) and that `combat.world.json` and `reconnect.world.json` booted headlessly at the time —
+interactions) and that `combat.world.json` and `reconnect.world.json` booted headlessly at the time (both deleted 2026-09-06; the
+arena district carries combat's rules) —
 track 5 must re-verify this before relying on it: both scenario docs have since drifted behind several
 schema generations (stale basis reference, placement-policy fields, motion shape, kit vocabulary, host
 fields — partially repaired in the garden/w1 integration) and, as things stand, refuse validation

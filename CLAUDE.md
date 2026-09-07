@@ -117,12 +117,10 @@ correct them where they live.
    (pixels, hashes, parity, determinism), never internal structure.
 3. **The game is greenfield; Post gates the engine.** `Puck.World` — the
    overworld and everything under `src/Puck.World/` — is the playground: expected
-   to churn, never settled precedent. (`Puck.Demo` is **quarantined at
-   `experimental/Puck.Demo`** by owner ruling 2026-08-01 — out of the solution
-   and the root build. READ it as prior art and retire it as it is eclipsed,
-   per `experimental/` above; never build, run, fix, or revive it in place.
-   Capabilities that once lived only there are simply absent from
-   `Puck.World`, and no plan of record sequences bringing them over.) Verify
+   to churn, never settled precedent. (`Puck.Demo` was quarantined under `experimental/` on 2026-08-01 and
+   deleted on 2026-09-06 once every folder had a live home; the ledger naming
+   each folder's successor is in `experimental/README.md`. Its capabilities
+   live in `Puck.World`'s districts and the brick forges, or nowhere.) Verify
    game/overworld changes by RUNNING `Puck.World`
    (`dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2`;
    0 or less runs until the window is closed). Narrow deterministic headless
