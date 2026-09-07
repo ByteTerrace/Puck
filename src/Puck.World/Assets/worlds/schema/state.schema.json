@@ -12,6 +12,7 @@
       ],
       "default": null,
       "items": {
+        "title": "WorldStateRow",
         "type": "object",
         "properties": {
           "name": {
@@ -148,6 +149,7 @@
               "source": {
                 "description": "The declared source to draw from, by name \u2014 or null when StateGenerator inlines one.",
                 "default": null,
+                "title": "CellName",
                 "type": [
                   "string",
                   "null"
@@ -165,11 +167,13 @@
                   "TickPeriod",
                   "Event"
                 ],
-                "default": "Boot"
+                "default": "Boot",
+                "title": "DrawTiming"
               },
               "secret": {
                 "description": "An authority-provisioned 256-bit secret for an independently keyed streamDraw sample at each cursor. Never sent in observations.",
-                "default": null
+                "default": null,
+                "title": "ClosedBitset256"
               },
               "skip": {
                 "description": "An authored seek, non-negative, default 0: a rebuild advances the generator by (skip \u002B cursor) * cost rather than cursor * cost. Authored data, the same class as the seed ladder\u0027s own rungs \u2014 it never writes the persisted DrawCursor, which keeps counting samples from zero exactly as an unskipped site\u0027s does.",
@@ -251,7 +255,8 @@
                     "const": "slot"
                   }
                 },
-                "additionalProperties": false
+                "additionalProperties": false,
+                "title": "StateDomainSlot"
               },
               {
                 "description": "Explicit author-keyed cells (StateRow.Capacity and Cells carry the shape); no omitted-key address exists. The token-domain declaration row (the old dedicated tokens facet) is simply a row of this case whose Capacity is the domain\u0027s token-count ceiling \u2014 other rows address its keys through KeysOf rather than through a second facet of their own. Carries no data, so InferDomain answers with the single Instance rather than allocating one per unauthored keyed row.",
@@ -260,7 +265,8 @@
                     "const": "keys"
                   }
                 },
-                "additionalProperties": false
+                "additionalProperties": false,
+                "title": "StateDomainKeys"
               },
               {
                 "description": "The row\u0027s key domain is another row\u0027s keys (see Keys). Ordered true gives the old zone semantics \u2014 cell order is pile order, first/last selection has gameplay meaning \u2014 while false gives the old plain keysFrom attribute-row semantics (a numeric fact per token, no pile order). The one shape two different authored roles used to spell as two different facets.",
@@ -270,6 +276,7 @@
                   },
                   "row": {
                     "description": "The row whose keys this row\u0027s own keys are drawn from.",
+                    "title": "CellName",
                     "type": "string"
                   },
                   "ordered": {
@@ -281,7 +288,8 @@
                 "required": [
                   "row"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "title": "StateDomainKeysOf"
               },
               {
                 "description": "One value per cell of a named state.lattices topology \u2014 the old board and lattice facets\u0027 shared shape. Which of the two storage strategies a row actually gets (sparse cells overlaying Empty, or the dense physical-field composite) is an implementation choice keyed on the row\u0027s own Kind \u2014 a Fixed row over a Field-kind topology compiles into the host\u0027s dense field storage, every other combination is the sparse board \u2014 never two authored traits.",
@@ -302,7 +310,8 @@
                 "required": [
                   "topology"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "title": "StateDomainCellsOf"
               },
               {
                 "description": "The history ring: the row keeps the last Capacity pushed values in slots keyed 0..Capacity-1, oldest overwritten first \u2014 the old history facet.",
@@ -323,7 +332,8 @@
                 "required": [
                   "capacity"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "title": "StateDomainRing"
               }
             ]
           },
@@ -333,10 +343,12 @@
             "properties": {
               "tokens": {
                 "description": "The keyed Int row whose cell values name cells of the board\u0027s topology \u2014 a value naming no cell means that token is off the board.",
+                "title": "CellName",
                 "type": "string"
               },
               "codes": {
                 "description": "The row giving each token\u0027s code, keyed the same as Tokens \u2014 the same cell keys, in the same order, so index i of one names the same token as index i of the other.",
+                "title": "CellName",
                 "type": "string"
               }
             },
@@ -372,7 +384,8 @@
               "y0",
               "v0"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "StateDynamics"
           },
           "cycle": {
             "$ref": "./common.schema.json#/$defs/StateCycle"
@@ -464,7 +477,8 @@
                         "maxX",
                         "maxZ"
                       ],
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "title": "WorldLatticeFillRect"
                     },
                     {
                       "description": "Patchy fill: fixed-point hash-lattice fBm over the CELL INDEX decides each cell. Where the octave sum n (in [0, 1]) reaches Threshold, the cell takes Value \u00B7 (n \u2212 Threshold) / (1 \u2212 Threshold) -- a smooth patch interior rising to the full value. The hash folds the fill\u0027s Seed with the world seed (the generation section\u0027s reroll lever), and every blend runs in Q48.16, so two boots of one document at one seed are bit-identical.",
@@ -504,7 +518,8 @@
                         "value",
                         "frequency"
                       ],
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "title": "WorldLatticeFillNoise"
                     },
                     {
                       "description": "Scattered discs: one jittered point per Spacing-cell block (integer-hash offset), and every cell within Radius cells of a point takes Value -- the CPU boot-fill sibling of the renderer\u0027s CellJitter scatter.",
@@ -539,7 +554,8 @@
                         "value",
                         "spacing"
                       ],
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "title": "WorldLatticeFillScatter"
                     },
                     {
                       "description": "Every cell drawn from a numeric authored-randomness source \u2014 the per-cell lattice draw. The fill is one pass of the row\u0027s own draw stream (seeded through the same ladder as a state-row site, under the row\u0027s state.\u003Crow\u003E descriptor): cell k, in cell-index order, takes the sample a site at drawCursor \u002B k would draw, so a weighted source under an exhausting mode draws its units across the field and restarts as it goes. The row\u0027s DrawCursor/DrawnMasks name the pass currently painted; generate \u003Crow\u003E advances them one whole pass and repaints. Draw occupies its authored paint position (overwriting earlier fills and preceding later fills); boot, rebuild, load/reset, and a draw-rewinding undo repaint the pass the document names.",
@@ -550,6 +566,7 @@
                         "source": {
                           "description": "A declared generators row, or null when Generator is inlined.",
                           "default": null,
+                          "title": "CellName",
                           "type": [
                             "string",
                             "null"
@@ -565,9 +582,11 @@
                           "type": "string"
                         }
                       },
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "title": "WorldLatticeFillDraw"
                     }
-                  ]
+                  ],
+                  "title": "WorldLatticeFill"
                 },
                 "default": null
               },
@@ -578,7 +597,8 @@
                   "null"
                 ],
                 "additionalProperties": false,
-                "default": null
+                "default": null,
+                "title": "WorldLatticeMedium"
               }
             },
             "additionalProperties": false
@@ -1019,7 +1039,8 @@
                   "Y",
                   "Both"
                 ],
-                "default": "None"
+                "default": "None",
+                "title": "TopologyWrap"
               },
               "band": {
                 "description": "The vertical half-extent about the origin\u0027s Y a position must lie within to resolve to a cell (cellOf); 0 resolves any height, so a piece on the floor beneath a table still reads as on its square.",
@@ -1068,7 +1089,8 @@
               "origin",
               "cellSize"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "LatticeTopologyGrid"
           },
           {
             "description": "A cyclic sequence, indexed from zero \u2014 always wraps.",
@@ -1121,7 +1143,8 @@
               "origin",
               "cellSize"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "LatticeTopologyRing"
           },
           {
             "description": "A hexagonal disk of the given radius, indexed in HexagonalIndex order: rings outward from the origin, consecutive indices adjacent.",
@@ -1174,7 +1197,8 @@
               "origin",
               "cellSize"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "LatticeTopologyHex"
           },
           {
             "description": "A box of width by layers by depth cells with the 26 space directions, indexed by (layer times depth plus z) times width plus x.",
@@ -1242,7 +1266,8 @@
               "origin",
               "cellSize"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "LatticeTopologyBox"
           },
           {
             "description": "An explicit graph. Cell i is cells[i]; its centre is relative to origin in world units, and cellSize is the resolution radius \u2014 a position within half a cell size of a centre resolves to it, nearest first. Every direction is a slot: an edge from a cell along a direction fills that slot, and unless OneWay also fills the destination\u0027s slot along the direction\u0027s opposite, so a cell with k neighbours needs k distinct directions among its edges. Symmetry is the identity alone.",
@@ -1273,7 +1298,8 @@
                     "id",
                     "centre"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "title": "GraphCell"
                 }
               },
               "directions": {
@@ -1299,7 +1325,8 @@
                     "name",
                     "opposite"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "title": "GraphDirection"
                 }
               },
               "edges": {
@@ -1335,7 +1362,8 @@
                     "to",
                     "direction"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "title": "GraphEdge"
                 }
               },
               "name": {
@@ -1359,7 +1387,8 @@
               "origin",
               "cellSize"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "LatticeTopologyGraph"
           },
           {
             "description": "A tiling generated within a radius \u2014 the tiles whose centres lie within radius edge lengths of the origin, cellSize being the edge length in world units. It is the GraphGenerate materializes: cell i is the i-th tile outward from the origin, directions are the edge normals by angle (a0, a30, \u2026, counterclockwise from \u002BX), and a position resolves to the nearest tile centre within half an edge. The symmetry group is the identity.",
@@ -1378,7 +1407,8 @@
                   "ElongatedTriangular",
                   "TruncatedTrihexagonal",
                   "Penrose"
-                ]
+                ],
+                "title": "TilingFamily"
               },
               "radius": {
                 "description": "The patch radius in edge lengths, at least 1.",
@@ -1404,7 +1434,8 @@
               "origin",
               "cellSize"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "LatticeTopologyTiling"
           },
           {
             "description": "The physical state.lattices topology: a scalar field over the lattice\u0027s footprint, evolved by reactions each StepEveryTicks \u2014 the document\u0027s own case of LatticeTopology, registered under the field discriminator beside the engine\u0027s discrete cases.",
@@ -1457,14 +1488,16 @@
                           "type": "string"
                         },
                         "rate": {
-                          "description": "The fraction per step, in [0, 1]."
+                          "description": "The fraction per step, in [0, 1].",
+                          "title": "WorldLatticeScalar"
                         }
                       },
                       "required": [
                         "field",
                         "rate"
                       ],
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "title": "WorldReactionDiffuse"
                     },
                     {
                       "description": "Scales each cell toward zero: v -= v\u00B7rate.",
@@ -1477,14 +1510,16 @@
                           "type": "string"
                         },
                         "rate": {
-                          "description": "The fraction per step, in [0, 1]."
+                          "description": "The fraction per step, in [0, 1].",
+                          "title": "WorldLatticeScalar"
                         }
                       },
                       "required": [
                         "field",
                         "rate"
                       ],
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "title": "WorldReactionDecay"
                     },
                     {
                       "description": "Where every condition holds at a cell, applies every write at that cell \u2014 ignition, melting, evaporation, freezing are rows of this shape.",
@@ -1511,7 +1546,8 @@
                                 "description": "The comparison."
                               },
                               "value": {
-                                "description": "The scalar compared against (literal or state-row reference)."
+                                "description": "The scalar compared against (literal or state-row reference).",
+                                "title": "WorldLatticeScalar"
                               }
                             },
                             "required": [
@@ -1519,7 +1555,8 @@
                               "comparison",
                               "value"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "title": "WorldFieldCondition"
                           }
                         },
                         "then": {
@@ -1541,10 +1578,12 @@
                                 "enum": [
                                   "Set",
                                   "Add"
-                                ]
+                                ],
+                                "title": "WorldFieldWriteOp"
                               },
                               "value": {
-                                "description": "The constant written or added; the result clamps to the field\u0027s range."
+                                "description": "The constant written or added; the result clamps to the field\u0027s range.",
+                                "title": "WorldLatticeScalar"
                               }
                             },
                             "required": [
@@ -1552,7 +1591,8 @@
                               "op",
                               "value"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": false,
+                            "title": "WorldFieldWrite"
                           }
                         }
                       },
@@ -1560,7 +1600,8 @@
                         "when",
                         "then"
                       ],
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "title": "WorldReactionTransform"
                     },
                     {
                       "description": "Every active body whose cell in the keyed state row Tag reads nonzero adds Amount to Field at the cell it occupies \u2014 a burning body is a heat source.",
@@ -1577,7 +1618,8 @@
                           "type": "string"
                         },
                         "amount": {
-                          "description": "The amount per step; the cell clamps to the field\u0027s range."
+                          "description": "The amount per step; the cell clamps to the field\u0027s range.",
+                          "title": "WorldLatticeScalar"
                         }
                       },
                       "required": [
@@ -1585,7 +1627,8 @@
                         "field",
                         "amount"
                       ],
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "title": "WorldReactionEmit"
                     },
                     {
                       "description": "Writes 1 or 0 into Row\u0027s cell for every active body, by whether Field at the body\u0027s cell satisfies the comparison \u2014 a body standing in a burning cell becomes tagged, and body-level chemistry takes it from there.",
@@ -1602,7 +1645,8 @@
                           "description": "The comparison."
                         },
                         "value": {
-                          "description": "The constant compared against."
+                          "description": "The constant compared against.",
+                          "title": "WorldLatticeScalar"
                         },
                         "row": {
                           "description": "The keyed int state row written, keyed by body index.",
@@ -1615,7 +1659,8 @@
                         "value",
                         "row"
                       ],
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "title": "WorldReactionExpose"
                     },
                     {
                       "description": "Moves Field downhill, cell to cell, over the combined surface height of Over plus Field\u0027s own value -- mass-conserving except where a cell\u0027s clamp to its declared [min, max] binds. Every cell donates an equal share of its previous-step value to each of the lattice\u0027s active-axis directions (four on a ground lattice, six in a volume -- the SAME count for every cell, whether a direction reaches a neighbour or the lattice edge), and sends that share only along a direction that is strictly downhill; a level or uphill direction moves nothing.",
@@ -1628,7 +1673,8 @@
                           "type": "string"
                         },
                         "rate": {
-                          "description": "The fraction of a cell\u0027s per-direction share that actually moves each step, in [0, 1]."
+                          "description": "The fraction of a cell\u0027s per-direction share that actually moves each step, in [0, 1].",
+                          "title": "WorldLatticeScalar"
                         },
                         "over": {
                           "description": "The other lattice rows forming the terrain basis a downhill direction is measured against; empty or omitted means the field flows over its own height alone.",
@@ -1657,9 +1703,11 @@
                         "field",
                         "rate"
                       ],
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "title": "WorldReactionFlow"
                     }
-                  ]
+                  ],
+                  "title": "WorldReaction"
                 },
                 "default": null
               },
@@ -1683,13 +1731,16 @@
               "origin",
               "cellSize"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "WorldFieldTopology"
           }
-        ]
+        ],
+        "title": "LatticeTopology"
       },
       "default": null
     }
   },
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldStateSection"
 }

@@ -119,6 +119,11 @@ export type WorldRenderScaleTier = "Native" | "ThreeQuarter" | "Half" | "Quarter
 export type WorldRenderExtensionEntry = WorldRenderExtensionEntry1;
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "BindableColor".
+ */
+export type BindableColor = string;
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "DocumentVector2".
  */
 export type DocumentVector2 = [number, number] | string;
@@ -157,6 +162,11 @@ export type WorldScreenProjection = "Camera" | "Window";
  * via the `definition` "StringList".
  */
 export type StringList = (string | null)[];
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldScreenMemoryDirection".
+ */
+export type WorldScreenMemoryDirection = "Read" | "Write";
 /**
  * WHERE a placeable thing rides — the one shared pose-target vocabulary a placeable WorldCamera and a placeable WorldSpeaker both consume through the SAME resolver, distinct from HOW the thing looks at or emits from that pose (a WorldCameraProgram, a feed). The $type string is the JSON discriminator; a new anchor kind is a new derived record plus its JsonDerivedTypeAttribute line.
  *
@@ -664,6 +674,7 @@ export type ActionEffect =
   | WorldEffectSetBodyVerticalVelocity
   | WorldEffectScaleBodyVerticalVelocity
   | WorldEffectApplyBodyImpulse
+  | WorldEffectApplyRigidImpulse
   | WorldEffectDesignateBody
   | WorldEffectPaintField
   | WorldEffectUpsertHudPanel
@@ -778,6 +789,11 @@ export type WorldFrameSourceNonNullable =
  * via the `definition` "WorldHudElementList".
  */
 export type WorldHudElementList = WorldHudElement[];
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldPlacementInhabitCount".
+ */
+export type WorldPlacementInhabitCount = number | {};
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldPortalTravel".
@@ -1534,11 +1550,6 @@ export type WorldReaction =
   | WorldReactionFlow;
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
- * via the `definition` "BindableColor".
- */
-export type BindableColor = string;
-/**
- * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldMarkerSource".
  */
 export type WorldMarkerSource = WorldMarkerSourceSpeakers | WorldMarkerSourcePoint;
@@ -1855,9 +1866,9 @@ export interface WorldRenderSun {
    */
   weight?: number | null;
   /**
-   * The sun's linear #RRGGBB color.
+   * The sun's linear color — a #RRGGBB/#RRGGBBAA literal, or a state.<row>[.<key>] binding naming a Text cell that holds one (alpha is ignored; the render path is opaque).
    */
-  color?: string | null;
+  color?: BindableColor | null;
 }
 /**
  * The ambient (hemisphere) term. Every field is optional individually — absent resolves to SdfFrame's pinned default for that field.
@@ -1875,9 +1886,9 @@ export interface WorldRenderAmbient {
    */
   hemisphere?: number | null;
   /**
-   * The ambient linear #RRGGBB color.
+   * The ambient linear color — BindableColor's grammar, on the same terms as Color.
    */
-  color?: string | null;
+  color?: BindableColor | null;
 }
 /**
  * The procedural sky — a three-stop gradient, sun disc, star field, and distance fog, authored as world data. Absent is a hard gate: every existing world renders the pinned two-stop gradient and 0.015 fog density bit-exactly, as before this section existed, until it authors one.
@@ -1887,17 +1898,17 @@ export interface WorldRenderAmbient {
  */
 export interface WorldRenderSky {
   /**
-   * The straight-up sky color, as #RRGGBB. Optional; absent takes the pinned zenith.
+   * BindableColor's grammar: the straight-up sky color. Optional; absent takes the pinned zenith.
    */
-  zenith?: string | null;
+  zenith?: BindableColor | null;
   /**
-   * The horizon-band color (the gradient's middle stop), as #RRGGBB. Optional; absent takes the midpoint between the pinned ground and zenith.
+   * BindableColor's grammar: the horizon-band color (the gradient's middle stop). Optional; absent takes the midpoint between the pinned ground and zenith.
    */
-  horizon?: string | null;
+  horizon?: BindableColor | null;
   /**
-   * The straight-down (nadir) color, as #RRGGBB. Optional; absent takes the pinned ground.
+   * BindableColor's grammar: the straight-down (nadir) color. Optional; absent takes the pinned ground.
    */
-  ground?: string | null;
+  ground?: BindableColor | null;
   /**
    * The exponential distance-fog density fading toward the sky color. Optional; absent takes the pinned 0.015 — the exact value the fog term used before this field existed.
    */
@@ -1999,9 +2010,9 @@ export interface WorldRenderSkyClouds {
    */
   seed: number;
   /**
-   * The cloud colour, as #RRGGBB or a state.<row>.<key> binding. Optional; absent is white.
+   * BindableColor's grammar: the cloud colour. Optional; absent is white.
    */
-  color?: string | null;
+  color?: BindableColor | null;
   /**
    * The layer's wind, in layer units per second along world X and Z, integrated on the tick clock. Optional; absent holds still.
    */
@@ -2106,6 +2117,10 @@ export interface WorldScreen {
    * The per-screen source magazine (the cycle primitive), or null for a screen with no magazine — nothing to cycle. Omitted from the wire when null — the whole-row UpsertScreen carries it for free, so no new mutation kind is needed.
    */
   magazine?: WorldScreenMagazine | null;
+  /**
+   * The screen's live byte-window bindings between its booted machine's bus and ordinary state.world Int cells (see WorldScreenMemory), or null for a screen with none. Omitted from the wire when null.
+   */
+  memory?: (WorldScreenMemory | null)[] | null;
 }
 /**
  * No provider is bound — the engine lights the slot with its procedural no-signal fallback (an animated test-card / striped no-signal look, never black).
@@ -2536,6 +2551,32 @@ export interface WorldScreenMagazine {
    * Whether advancing past the last entry returns to the first (the arcade cabinet's wrapping cycle); when false the selector clamps at both ends.
    */
   wrap?: boolean;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldScreenMemory".
+ */
+export interface WorldScreenMemory {
+  /**
+   * The machine bus address the window starts at. Validated within 0..(MaxAddress - Width + 1) — outside the engine's addressable memory refuses by name at validation, never at runtime (a machine's own IMachineMemoryPeek silently reads/no-ops out of its own smaller readable/writable range instead, exactly as it does for any other peek/poke).
+   */
+  address: number;
+  /**
+   * How many bytes the window spans, little-endian (the low byte at Address): 1 or 2.
+   */
+  width: number;
+  /**
+   * The declared state.world row this binding mirrors to/from — must resolve to a kind=Int row.
+   */
+  row: string;
+  /**
+   * The cell inside Row, or null for its slot cell. Refused when Row is keyed and this is absent, or unkeyed and this is present — the same (row, key) pair rule every other named-cell reference in this document follows. Omitted from the wire when null.
+   */
+  key?: string | null;
+  /**
+   * Which way the binding moves a value.
+   */
+  direction?: WorldScreenMemoryDirection;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -6241,6 +6282,31 @@ export interface WorldEffectApplyBodyImpulse {
   durationSeconds: number;
 }
 /**
+ * Applies the same instantaneous world-space rigid impulse body.impulse fires (Δv = impulse / mass, through the server's rigid-body solver — never a second impulse mechanism) to a Key-addressed body, along HeadingKey's own body's forward facing, scaled by a live kind=Fixed state cell's magnitude. The cue gesture's one honest path: billiards charges MagnitudeState by hold duration and fires this on release. Refused by name when the struck body resolves to no active body or carries no 'rigid' kit facet, the heading body resolves to no active body, or the resulting impulse is not representable or exceeds the world's declared rigid speed ceiling.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldEffectApplyRigidImpulse".
+ */
+export interface WorldEffectApplyRigidImpulse {
+  $type?: "applyRigidImpulse";
+  /**
+   * The struck body reference — body:<n>, argmax:<row>/ argmin:<row>, or placement:<id> (see BodyRefVocabulary).
+   */
+  key: string;
+  /**
+   * The body reference whose forward facing supplies the impulse direction — the same reference grammar as Key.
+   */
+  headingKey: string;
+  /**
+   * The declared kind=Fixed row naming the impulse's magnitude.
+   */
+  magnitudeState: string;
+  /**
+   * The row's cell key, or null for an unkeyed row.
+   */
+  magnitudeKey?: string | null;
+}
+/**
  * Designates or clears a world-addressed body's target register.
  *
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -6583,9 +6649,9 @@ export interface WorldPlacementInhabit {
    */
   source: IntentSource;
   /**
-   * How many bodies, bounded by the world's authored peer capacity.
+   * How many bodies: an authored literal, or a live cell reference naming an Int state.world row whose value the population admits and retires bodies to track (WorldPopulation.ReconcileInhabitCounts) — the spawner primitive a crawl's mob generator rides. Either way, bounded by the world's authored peer capacity; a cell reference is additionally bounded by Distribution's own sample count, the tighter of the two winning. Absent is an authored literal of 1 — see ResolvedCount.
    */
-  count?: number;
+  count?: WorldPlacementInhabitCount;
   /**
    * The region and deterministic fill sequence that place the bodies relative to the placement root.
    */
@@ -7318,6 +7384,10 @@ export interface WorldBindingOverlay {
    * The on-screen bar policy carried with this binding layer; null carries no policy on this layer, so bar resolution falls through to the world-authored policy, and to Absent (no bar drawn) when neither an identity nor the world authors one.
    */
   bindingBar?: WorldBindingBarAuthoring | null;
+  /**
+   * The condition this layer composes under; null always composes it (today's behavior). Reuses StateCondition's field convention rather than a second reading of "compare a state cell" — the same state/key/comparison/value shape a placement's own response facet speaks. Re-evaluated whenever the routed definition changes, never per frame.
+   */
+  when?: WorldPlacementResponseConditionStateConditionBare | null;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -7717,6 +7787,36 @@ export interface WorldBindingBarAnchor {
    * The gap between that edge and the nearest plate edge of everything anchored here, in button pitches — the same ruler every plate position uses. Along the other axis the group is centered.
    */
   inset?: number;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldPlacementResponseConditionStateConditionBare".
+ */
+export interface WorldPlacementResponseConditionStateConditionBare {
+  /**
+   * The state row compared — any declared state.world row of a numeric kind (never Text).
+   */
+  state: string;
+  /**
+   * The comparison.
+   */
+  comparison: ActionStateComparison;
+  /**
+   * The literal comparand, or null when ComparandState spells the comparand instead.
+   */
+  value?: number | null;
+  /**
+   * The cell inside State, or null for its slot cell. Refused when State is keyed and this is absent, or unkeyed and this is present.
+   */
+  key?: string | null;
+  /**
+   * Another declared state.world row, read live and compared instead of Value. Must share State's cell kind (refused by name otherwise).
+   */
+  comparandState?: string | null;
+  /**
+   * The cell inside ComparandState, on the same terms as Key. Refused when ComparandState is absent.
+   */
+  comparandKey?: string | null;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -8929,6 +9029,10 @@ export interface WorldStateRow1 {
      * An authority-provisioned 256-bit secret for an independently keyed streamDraw sample at each cursor. Never sent in observations.
      */
     secret?: ClosedBitset256;
+    /**
+     * An authored seek, non-negative, default 0: a rebuild advances the generator by (skip + cursor) * cost rather than cursor * cost. Authored data, the same class as the seed ladder's own rungs — it never writes the persisted DrawCursor, which keeps counting samples from zero exactly as an unskipped site's does.
+     */
+    skip?: number;
   };
   /**
    * How many samples this site's Draw has ever consumed — engine-minted bookkeeping and the position the engine re-seeks to (GeneratorEngine.AdvancesPerSample scales it into Pcg32XshRr advances, so resuming is an exact O(1) advance rather than a replay of the earlier draws). Stored in the document, so world.undo, world.save, and replay rewind a site's draw position with the same whole-document restore that rewinds an ordinary counter. Zero when Draw is null; refused negative.
@@ -9160,6 +9264,10 @@ export interface StateGenerator {
    * SymmetryOrbit beside Node only: the word of reflections (one to eight mirror nodes, applied first to last) the orbit is taken under, or null for the lattice's own cycle — the same generator vocabulary a StateCycle authors.
    */
   word?: number[] | null;
+  /**
+   * The extended-generator facet (see GeneratorExtended), or null for the ordinary Pcg32XshRr generator every other source draws through.
+   */
+  extended?: GeneratorExtended | null;
 }
 /**
  * One named context of a StateGenerator — the state the walk may be sitting in and the weighted alternatives it may pick while there. A context declaring NO alternatives is TERMINAL: reaching it ends the emission.
@@ -9220,6 +9328,26 @@ export interface GeneratorWeightedNumeric {
    * How many units of this outcome one pass holds, at least one; null is one. Under WithReplacement a multiplicity only scales the weight; under an exhausting mode each unit is drawn once per pass, so an outcome that should come out twice per pass declares 2 rather than being authored twice. A source's units total at most MaxEntriesPerSet.
    */
   multiplicity?: number | null;
+}
+/**
+ * A source's extended-generator facet: an authored Pcg32Extended table replacing that generator's own self-seeding, so a site drawing from it is k-dimensionally equidistributed rather than merely 1-dimensionally so. The table is document data, exactly one rebuild cost (GeneratorEngine caches the built generator beside the cursor it corresponds to) — nothing about the site's persisted shape changes.
+ *
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "GeneratorExtended".
+ */
+export interface GeneratorExtended {
+  /**
+   * The extension table size: a power of two in [2, 1024].
+   */
+  k: number;
+  /**
+   * The whole extension table, exactly K words — or null when Script authors it instead.
+   */
+  table?: number[] | null;
+  /**
+   * Up to K values in the source's own output space, authoring the site's first draws directly — or null when Table is authored instead.
+   */
+  script?: number[] | null;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -11910,11 +12038,11 @@ export interface WorldSearchRow {
    */
   depth?: number;
   /**
-   * An infix expression, in the rule expression grammar, evaluated over the frame after a ply from the perspective of the side that made it; iterative-deepening negamax with alpha-beta compares it across plies. Required when Depth exceeds one, or Best is authored.
+   * An infix expression, in the rule expression grammar, evaluated over the frame after a ply from the perspective of the side that made it; iterative-deepening negamax with alpha-beta compares it across plies — the two-sided, zero-sum reading of what a ply is worth. Exactly one of this and Scores is authored when a score is needed; required when Depth exceeds one, or Best is authored, and refused with Tree unauthored alongside it.
    */
   score?: string | null;
   /**
-   * A keyed integer row receiving the deepest completed depth's answer: token (the mover's ordinal in Tokens), to (its destination cell), and score (the negamax value).
+   * A keyed integer row receiving the deepest completed depth's answer: token (the mover's ordinal in Tokens), to (its destination cell), and score (the negamax value, or, with Scores authored, the root mover's own seat's value).
    */
   best?: string | null;
   /**
@@ -11925,6 +12053,14 @@ export interface WorldSearchRow {
    * How many tree iterations a Tree job runs before it lands.
    */
   iterations?: number;
+  /**
+   * The job's chance node, or null for a job with none.
+   */
+  chance?: WorldSearchChance | null;
+  /**
+   * A keyed integer row, one cell per seat in Turn's own ordinal order, holding each seat's own current score — the n-seat reading of what a ply is worth: a level maximizes the mover seat's own entry rather than negating the reply, so no seat's gain is assumed to be another's loss (max-n). Exactly one of this and Score is authored when a score is needed; refused with Tree, whose outcome backprop alternates sign along the path.
+   */
+  scores?: string | null;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -11954,6 +12090,10 @@ export interface WorldSearchShapeJump {
    * The directions tried, in the topology's own vocabulary (CompiledTopology.Direction). The single-element list ["any"] tries every direction the topology declares.
    */
   over: (string | null)[];
+  /**
+   * How many hops one candidate may chain.
+   */
+  maxHops?: number;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -11995,6 +12135,20 @@ export interface WorldSearchShapeTransferred {
    * Whether the token lands first in the destination rather than last.
    */
   insertFirst?: boolean;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "WorldSearchChance".
+ */
+export interface WorldSearchChance {
+  /**
+   * The keyed integer row a chosen outcome writes.
+   */
+  row: string;
+  /**
+   * Negamax: the absolute ply (0 = root) whose move choice is replaced, 0..depth-1. Tree: the 1-based playout ply the chance draw replaces.
+   */
+  atDepth: number;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema

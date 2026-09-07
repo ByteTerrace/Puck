@@ -80,6 +80,7 @@
         "color": {
           "description": "The sun\u0027s linear color \u2014 a #RRGGBB/#RRGGBBAA literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding naming a Text cell that holds one (alpha is ignored; the render path is opaque).",
           "default": null,
+          "title": "BindableColor",
           "type": [
             "string",
             "null"
@@ -115,6 +116,7 @@
         "color": {
           "description": "The ambient linear color \u2014 BindableColor\u0027s grammar, on the same terms as Color.",
           "default": null,
+          "title": "BindableColor",
           "type": [
             "string",
             "null"
@@ -273,6 +275,7 @@
         "color": {
           "description": "BindableColor\u0027s grammar: the cloud colour. Optional; absent is white.",
           "default": null,
+          "title": "BindableColor",
           "type": [
             "string",
             "null"
@@ -324,6 +327,7 @@
         "zenith": {
           "description": "BindableColor\u0027s grammar: the straight-up sky color. Optional; absent takes the pinned zenith.",
           "default": null,
+          "title": "BindableColor",
           "type": [
             "string",
             "null"
@@ -332,6 +336,7 @@
         "horizon": {
           "description": "BindableColor\u0027s grammar: the horizon-band color (the gradient\u0027s middle stop). Optional; absent takes the midpoint between the pinned ground and zenith.",
           "default": null,
+          "title": "BindableColor",
           "type": [
             "string",
             "null"
@@ -340,6 +345,7 @@
         "ground": {
           "description": "BindableColor\u0027s grammar: the straight-down (nadir) color. Optional; absent takes the pinned ground.",
           "default": null,
+          "title": "BindableColor",
           "type": [
             "string",
             "null"
@@ -1640,7 +1646,7 @@
         "subject"
       ],
       "additionalProperties": false,
-      "title": "WorldCameraProgramOpAnchor"
+      "title": "WorldCameraProgramOpAnchorBare"
     },
     "WorldCameraProgramOpBlendNullable": {
       "description": "Evaluates two other authored programs by name and linearly interpolates their resolved eye, target, and field of view \u2014 the whole document\u0027s camera-program table (every cameras[].rig plus views.seatRig/views.cameraRig) is the namespace A/B resolve against. At most one per program; refused when it would create a reference cycle.",
@@ -1679,7 +1685,7 @@
         "weight"
       ],
       "additionalProperties": false,
-      "title": "WorldCameraProgramOpBlend"
+      "title": "WorldCameraProgramOpBlendBare"
     },
     "WorldCameraProgramOpClampPitchNullable": {
       "description": "Clamps the effective pitch the NEXT Orbit op resolves with (its authored Pitch plus any live seat delta) to [MinPitch, MaxPitch]. At most one per program; must precede the Orbit op it governs. A joined seat\u0027s own views.seatControl band already clamps its LIVE delta before this ever runs \u2014 this op exists for a program with no seat behind it (a named camera orbiting a state-bound pitch).",
@@ -1709,7 +1715,7 @@
         "maxPitch"
       ],
       "additionalProperties": false,
-      "title": "WorldCameraProgramOpClampPitch"
+      "title": "WorldCameraProgramOpClampPitchBare"
     },
     "WorldCameraProgramOpFovNullable": {
       "description": "Sets the rendered vertical field of view, radians \u2014 a literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding so a world rule can pull focus or frame a moment (decisions in the sim, framing in presentation). At most one per program.",
@@ -1738,7 +1744,7 @@
         "fieldOfViewRadians"
       ],
       "additionalProperties": false,
-      "title": "WorldCameraProgramOpFov"
+      "title": "WorldCameraProgramOpFovBare"
     },
     "WorldCameraProgramOpLookAtNullable": {
       "description": "Sets the aim target.",
@@ -1778,7 +1784,7 @@
         "subject"
       ],
       "additionalProperties": false,
-      "title": "WorldCameraProgramOpLookAt"
+      "title": "WorldCameraProgramOpLookAtBare"
     },
     "WorldCameraProgramOpOffsetNullable": {
       "description": "Places the eye at an offset from the current subject\u0027s pose.",
@@ -1813,7 +1819,7 @@
         "value"
       ],
       "additionalProperties": false,
-      "title": "WorldCameraProgramOpOffset"
+      "title": "WorldCameraProgramOpOffsetBare"
     },
     "WorldCameraProgramOpOrbitNullable": {
       "description": "Orbits the eye about its pivot. Yaw and Pitch are live-bindable like Fov\u0027s field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell changes \u2014 look behind is state.look.behind flipping between 0 and \u03C0 \u2014 while the seat\u0027s facing (what steering and movement resolve against) is untouched, because the facing never includes the rig\u0027s offsets.",
@@ -1861,7 +1867,7 @@
         "pitch"
       ],
       "additionalProperties": false,
-      "title": "WorldCameraProgramOpOrbit"
+      "title": "WorldCameraProgramOpOrbitBare"
     },
     "WorldCameraProgramOpPathNullable": {
       "description": "Establishes the CURRENT subject at a point sampled from a named curves row by arc-length fraction, and re-seeds the eye there \u2014 the same subject-seeding role Anchor plays, so at most one of the two may appear in a program, and when present this must be the first operation. The sampled subject\u0027s orientation faces the curve\u0027s own tangent direction at that point. A following Offset with WorldAxes: false (the default) rotates its offset into that tangent frame, and a following LookAt with no subject of its own looks ahead along it; a following Orbit pivots at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the tangent \u2014 it never reads the subject\u0027s orientation. A dollied eye is path \u002B LookAt \u002B Fov; a dollied pivot is path \u002B Orbit with an authored yaw that already accounts for the curve\u0027s own heading. Composes with Dynamics\u0027s boom follower untouched. Carries no rate field: a constant-rate dolly binds Fraction to a state row carrying the advance trait (base \u002B rate\u00B7ticks) rather than duplicating a rate spelling here.",
@@ -1895,7 +1901,7 @@
         "fraction"
       ],
       "additionalProperties": false,
-      "title": "WorldCameraProgramOpPath"
+      "title": "WorldCameraProgramOpPathBare"
     },
     "WorldCameraProgramOpDynamicsNullable": {
       "description": "Sets the second-order response the resolved eye/target boom eases through. Read by the caller after resolving a frame \u2014 never affects the resolved pose itself. At most one per program.",
@@ -1920,7 +1926,7 @@
         "row"
       ],
       "additionalProperties": false,
-      "title": "WorldCameraProgramOpDynamics"
+      "title": "WorldCameraProgramOpDynamicsBare"
     },
     "WorldCameraProgramOpSelectNullable": {
       "description": "Evaluates exactly one of several other named programs, chosen by a live key \u2014 the state-driven counterpart of Blend\u0027s two-way continuous mix: a rule-advanced integer row selects a whole framing outright rather than easing toward one, so a document can drive which of N stations a single camera program shows without a per-frame console override. The winning program\u0027s eye, target, field of view, and dynamics response pass through unchanged (no lerp). At most one per program; refused when it would create a reference cycle.",
@@ -1959,7 +1965,7 @@
         "default"
       ],
       "additionalProperties": false,
-      "title": "WorldCameraProgramOpSelect"
+      "title": "WorldCameraProgramOpSelectBare"
     },
     "WorldCameraProgram": {
       "description": "An authored camera program \u2014 the ordered op list a rig resolves through every frame.",
@@ -5798,16 +5804,8 @@
       "additionalProperties": false,
       "title": "WorldEffectApplyBodyImpulse"
     },
-    "WorldBodyDesignationKind": {
-      "description": "How a rule-triggered body designation chooses its target.",
-      "enum": [
-        "Body",
-        "Clear"
-      ],
-      "title": "WorldBodyDesignationKind"
-    },
     "WorldEffectApplyRigidImpulse": {
-      "description": "Applies the SAME instantaneous world-space rigid impulse body.impulse fires (\u0394v = impulse / mass, through the server\u0027s rigid-body solver \u2014 never a second impulse mechanism) to a Key-addressed body, along HeadingKey\u0027s own body\u0027s forward facing, scaled by a live kind=Fixed state cell\u0027s magnitude. The cue gesture\u0027s one honest path: billiards charges MagnitudeState by hold duration and fires this on release. Refused by name when the struck body resolves to no active body or carries no \u0027rigid\u0027 kit facet, the heading body resolves to no active body, or the resulting impulse is not representable or exceeds the world\u0027s declared rigid speed ceiling.",
+      "description": "Applies the same instantaneous world-space rigid impulse body.impulse fires (\u0394v = impulse / mass, through the server\u0027s rigid-body solver \u2014 never a second impulse mechanism) to a Key-addressed body, along HeadingKey\u0027s own body\u0027s forward facing, scaled by a live kind=Fixed state cell\u0027s magnitude. The cue gesture\u0027s one honest path: billiards charges MagnitudeState by hold duration and fires this on release. Refused by name when the struck body resolves to no active body or carries no \u0027rigid\u0027 kit facet, the heading body resolves to no active body, or the resulting impulse is not representable or exceeds the world\u0027s declared rigid speed ceiling.",
       "properties": {
         "$type": {
           "const": "applyRigidImpulse"
@@ -5838,7 +5836,16 @@
         "headingKey",
         "magnitudeState"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldEffectApplyRigidImpulse"
+    },
+    "WorldBodyDesignationKind": {
+      "description": "How a rule-triggered body designation chooses its target.",
+      "enum": [
+        "Body",
+        "Clear"
+      ],
+      "title": "WorldBodyDesignationKind"
     },
     "WorldEffectDesignateBody": {
       "description": "Designates or clears a world-addressed body\u0027s target register.",
@@ -6312,6 +6319,7 @@
         "count": {
           "description": "How many bodies: an authored literal, or a live cell reference naming an Int state.world row whose value the population admits and retires bodies to track (WorldPopulation.ReconcileInhabitCounts) \u2014 the spawner primitive a crawl\u0027s mob generator rides. Either way, bounded by the world\u0027s authored peer capacity; a cell reference is additionally bounded by Distribution\u0027s own sample count, the tighter of the two winning. Absent is an authored literal of 1 \u2014 see ResolvedCount.",
           "default": null,
+          "title": "WorldPlacementInhabitCount",
           "type": [
             "integer",
             "object"
@@ -8019,7 +8027,8 @@
       "required": [
         "k"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "GeneratorExtended"
     },
     "StateGenerator": {
       "description": "An authored stochastic source \u2014 the vocabulary for every randomness declaration in the document: a name generator, a dialogue line, a loot roll, a flat weighted draw, a multiset sample, a random census, and a drawn host backend all reduce to a source of this family, sampled at an authored moment into an authored site (see Draw).",

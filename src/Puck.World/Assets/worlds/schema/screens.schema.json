@@ -97,7 +97,8 @@
             ]
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldScreenRoute"
       },
       "solid": {
         "$ref": "./common.schema.json#/$defs/WorldSolid",
@@ -157,7 +158,8 @@
                 {
                   "$ref": "./common.schema.json#/$defs/WorldScreenSourceProbe"
                 }
-              ]
+              ],
+              "title": "WorldScreenSource"
             }
           },
           "selected": {
@@ -175,7 +177,8 @@
           "entries"
         ],
         "additionalProperties": false,
-        "default": null
+        "default": null,
+        "title": "WorldScreenMagazine"
       },
       "memory": {
         "description": "The screen\u0027s live byte-window bindings between its booted machine\u0027s bus and ordinary state.world Int cells (see WorldScreenMemory), or null for a screen with none. Omitted from the wire when null.",
@@ -216,7 +219,8 @@
                 "Read",
                 "Write"
               ],
-              "default": "Read"
+              "default": "Read",
+              "title": "WorldScreenMemoryDirection"
             }
           },
           "required": [
@@ -224,7 +228,8 @@
             "width",
             "row"
           ],
-          "additionalProperties": false
+          "additionalProperties": false,
+          "title": "WorldScreenMemory"
         },
         "default": null
       }
@@ -241,7 +246,8 @@
       "source",
       "route"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldScreen"
   },
   "default": null
 }

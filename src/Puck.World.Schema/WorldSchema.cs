@@ -1419,6 +1419,49 @@ public static partial class WorldSchema {
     // NamespacePrefixedTitle, so the collision resolves the same way regardless of which occurrence the walk
     // happened to reach first. A prefixed spelling that still collides names two types this scheme cannot tell
     // apart — refused rather than silently handing one title to both.
+    // A derived record is emitted in two shapes: as a polymorphic arm (a site declared as the base type carries the
+    // "$type" const the discriminator adds) and bare (a site declared as the derived type itself carries none).
+    // Both are the same CLR type, so ResolveTitleCollisions sees no collision, yet the bundle cannot name two
+    // shapes with one title: the bare shape takes the suffix "Bare", and the arm keeps the type's own name.
+    private static void ResolveDiscriminatorSplits(Dictionary<JsonNode, Type> typesByNode) {
+        var nodesByTitle = new Dictionary<string, List<JsonObject>>(comparer: StringComparer.Ordinal);
+
+        foreach (var (node, _) in typesByNode) {
+            if (
+                (node is not JsonObject obj) ||
+                (obj["title"] is not JsonValue titleValue) ||
+                !titleValue.TryGetValue<string>(value: out var title)
+            ) {
+                continue;
+            }
+
+            if (!nodesByTitle.TryGetValue(
+                key: title,
+                value: out var list
+            )) {
+                list = [];
+                nodesByTitle[title] = list;
+            }
+
+            list.Add(item: obj);
+        }
+
+        foreach (var (title, nodes) in nodesByTitle) {
+            if (!nodes.Any(predicate: CarriesDiscriminator) || nodes.All(predicate: CarriesDiscriminator)) {
+                continue;
+            }
+
+            foreach (var obj in nodes) {
+                if (!CarriesDiscriminator(obj: obj)) {
+                    obj["title"] = $"{title}Bare";
+                }
+            }
+        }
+    }
+
+    private static bool CarriesDiscriminator(JsonObject obj) =>
+        ((obj["properties"] is JsonObject properties) && (properties["$type"] is JsonObject discriminator) && discriminator.ContainsKey(propertyName: "const"));
+
     private static void ResolveTitleCollisions(Dictionary<JsonNode, Type> typesByNode) {
         var typesByTitle = new Dictionary<string, HashSet<Type>>(comparer: StringComparer.Ordinal);
 
@@ -1954,6 +1997,8 @@ public static partial class WorldSchema {
         var (merged, typesByNode) = ExportMergedWithTypes();
 
         ResolveTitleCollisions(typesByNode: typesByNode);
+
+        ResolveDiscriminatorSplits(typesByNode: typesByNode);
 
         ApplySelfIdentification(
             root: merged,

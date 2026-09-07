@@ -295,7 +295,8 @@
               "atDepth"
             ],
             "additionalProperties": false,
-            "default": null
+            "default": null,
+            "title": "WorldSearchChance"
           },
           "scores": {
             "description": "A keyed integer row, one cell per seat in Turn\u0027s own ordinal order, holding each seat\u0027s own current score \u2014 the n-seat reading of what a ply is worth: a level maximizes the mover seat\u0027s own entry rather than negating the reply, so no seat\u0027s gain is assumed to be another\u0027s loss (max-n). Exactly one of this and Score is authored when a score is needed; refused with Tree, whose outcome backprop alternates sign along the path.",

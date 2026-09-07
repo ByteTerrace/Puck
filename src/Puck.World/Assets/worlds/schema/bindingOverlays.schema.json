@@ -68,7 +68,8 @@
                 "id",
                 "sources"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "title": "BindingModifierDefinition"
             }
           },
           "chords": {
@@ -80,6 +81,7 @@
               ],
               "properties": {
                 "group": {
+                  "title": "DocumentIdentifier",
                   "type": "string"
                 },
                 "chord": {
@@ -113,7 +115,8 @@
                       "default": null
                     },
                     "channel": {
-                      "default": null
+                      "default": null,
+                      "title": "ChannelRef"
                     },
                     "scale": {
                       "type": [
@@ -141,14 +144,16 @@
                       "default": null
                     },
                     "value": {
-                      "default": null
+                      "default": null,
+                      "title": "CommandValue"
                     },
                     "mode": {
                       "enum": [
                         "Hold",
                         "Toggle"
                       ],
-                      "default": "Hold"
+                      "default": "Hold",
+                      "title": "BindingEntryMode"
                     },
                     "text": {
                       "type": [
@@ -159,7 +164,8 @@
                     }
                   },
                   "additionalProperties": false,
-                  "default": null
+                  "default": null,
+                  "title": "BindingCommandDefinition"
                 },
                 "held": {
                   "type": [
@@ -178,7 +184,8 @@
               "required": [
                 "group"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "title": "BindingChordDefinition"
             }
           },
           "contexts": {
@@ -199,6 +206,7 @@
                   "type": "string"
                 },
                 "group": {
+                  "title": "DocumentIdentifier",
                   "type": "string"
                 }
               },
@@ -207,7 +215,8 @@
                 "state",
                 "group"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "title": "BindingContextDefinition"
             },
             "default": null
           },
@@ -226,6 +235,7 @@
                   "type": "string"
                 },
                 "group": {
+                  "title": "DocumentIdentifier",
                   "type": "string"
                 },
                 "holdPages": {
@@ -255,14 +265,16 @@
                         "Angle",
                         "HitTarget"
                       ],
-                      "default": "Angle"
+                      "default": "Angle",
+                      "title": "BindingWheelSpatialSelectionMode"
                     },
                     "placement": {
                       "enum": [
                         "Pointer",
                         "ViewportCenter"
                       ],
-                      "default": "Pointer"
+                      "default": "Pointer",
+                      "title": "BindingWheelPlacement"
                     },
                     "deadZoneFraction": {
                       "type": "number",
@@ -289,7 +301,8 @@
                         "Explicit",
                         "Excursion"
                       ],
-                      "default": "Explicit"
+                      "default": "Explicit",
+                      "title": "BindingWheelRingSelectionMode"
                     },
                     "excursion": {
                       "type": [
@@ -320,7 +333,8 @@
                         "thresholds"
                       ],
                       "additionalProperties": false,
-                      "default": null
+                      "default": null,
+                      "title": "BindingWheelExcursionDefinition"
                     },
                     "axisDeadZone": {
                       "type": "number",
@@ -344,7 +358,8 @@
                     }
                   },
                   "additionalProperties": false,
-                  "default": null
+                  "default": null,
+                  "title": "BindingWheelStyleDefinition"
                 },
                 "labelRow": {
                   "type": [
@@ -367,7 +382,8 @@
                 "holdPages",
                 "rings"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "title": "BindingWheelDefinition"
             },
             "default": null
           },
@@ -407,7 +423,8 @@
               }
             },
             "additionalProperties": false,
-            "default": null
+            "default": null,
+            "title": "BindingBarPreferences"
           }
         },
         "required": [
@@ -415,7 +432,8 @@
           "modifiers",
           "chords"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "BindingProfileDocument"
       },
       "bindingBar": {
         "description": "The on-screen bar policy carried with this binding layer; null carries no policy on this layer, so bar resolution falls through to the world-authored policy, and to Absent (no bar drawn) when neither an identity nor the world authors one.",
@@ -470,7 +488,8 @@
                 "pageId",
                 "alpha"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "title": "WorldBindingBarBank"
             }
           },
           "enabled": {
@@ -566,7 +585,8 @@
                         "x",
                         "y"
                       ],
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "title": "WorldBindingBarSlotPlacement"
                     }
                   },
                   "default": null
@@ -624,7 +644,8 @@
                           "required": [
                             "table"
                           ],
-                          "additionalProperties": false
+                          "additionalProperties": false,
+                          "title": "WorldBindingBarPiece"
                         }
                       },
                       "anchor": {
@@ -636,7 +657,8 @@
                     "required": [
                       "pieces"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "title": "WorldBindingBarBankPlacement"
                   },
                   "default": null
                 },
@@ -750,7 +772,8 @@
                   "default": null
                 }
               },
-              "additionalProperties": false
+              "additionalProperties": false,
+              "title": "WorldBindingBarLayout"
             },
             "default": null
           },
@@ -789,7 +812,8 @@
           "banks"
         ],
         "additionalProperties": false,
-        "default": null
+        "default": null,
+        "title": "WorldBindingBarAuthoring"
       },
       "when": {
         "description": "The condition this layer composes under; null always composes it (today\u0027s behavior). Reuses StateCondition\u0027s field convention rather than a second reading of \u0022compare a state cell\u0022 \u2014 the same state/key/comparison/value shape a placement\u0027s own response facet speaks. Re-evaluated whenever the routed definition changes, never per frame.",
@@ -844,14 +868,16 @@
           "comparison"
         ],
         "additionalProperties": false,
-        "default": null
+        "default": null,
+        "title": "WorldPlacementResponseConditionStateConditionBare"
       }
     },
     "required": [
       "id",
       "document"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldBindingOverlay"
   },
   "default": null
 }
