@@ -1,5 +1,7 @@
 using Puck.Assets.Documents;
+using System.Globalization;
 using System.Numerics;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.World.Authoring;
 using Puck.Maths;
@@ -60,16 +62,147 @@ public sealed record WorldPlacementMirror(DocumentVector3 Normal, float Offset);
 /// <param name="Look">The <see cref="WorldLook.Name"/> the bodies wear, or null to wear an implicit creation look on
 /// this placement's own <c>PrototypeId</c>.</param>
 /// <param name="Source">The live, idle, or named producer source the bodies wake on.</param>
-/// <param name="Count">How many bodies, bounded by the world's authored peer capacity.</param>
+/// <param name="Count">How many bodies: an authored literal, or a live cell reference naming an Int
+/// <c>state.world</c> row whose value the population admits and retires bodies to track
+/// (<c>WorldPopulation.ReconcileInhabitCounts</c>) — the spawner primitive a crawl's mob generator
+/// rides. Either way, bounded by the world's authored peer capacity; a cell reference is additionally bounded by
+/// <see cref="Distribution"/>'s own sample count, the tighter of the two winning. Absent is an authored literal of
+/// 1 — see <see cref="ResolvedCount"/>.</param>
 /// <param name="Distribution">The region and deterministic fill sequence that place the bodies relative to the
 /// placement root.</param>
 public sealed record WorldPlacementInhabit(
     string? Kit,
     string? Look,
     Puck.World.Protocol.IntentSource Source,
-    int Count = 1,
+    WorldPlacementInhabitCount? Count = null,
     WorldDistribution? Distribution = null
-);
+) {
+    /// <summary>Gets <see cref="Count"/> as authored — an absent field reads as a literal 1, exactly as before this
+    /// facet's count could name a cell.</summary>
+    [JsonIgnore]
+    public WorldPlacementInhabitCount ResolvedCount => (Count ?? new WorldPlacementInhabitCount(Literal: 1));
+
+    /// <summary>The largest live count this facet could ever admit — the document-global dynamic-instance
+    /// ceiling's own worst-case term for this row: the authored literal, or, for a cell reference whose live value
+    /// the ceiling cannot know at author time, the tighter of <paramref name="peerCapacity"/> and
+    /// <see cref="Distribution"/>'s own declared sample count (the identical two bounds
+    /// <c>WorldPopulation.ReconcileInhabitCounts</c> clamps a live cell against).</summary>
+    /// <param name="peerCapacity">The world's authored peer capacity (population capacity minus local seats).</param>
+    public int DeclaredMax(int peerCapacity) {
+        if (Count?.Row is not null) {
+            var sampleCount = ((Distribution?.Region as WorldDistributionRegion.Disc)?.SampleCount);
+
+            return Math.Clamp(value: (sampleCount ?? peerCapacity), min: 0, max: peerCapacity);
+        }
+
+        return Math.Clamp(value: (ResolvedCount.Literal ?? 1), min: 0, max: peerCapacity);
+    }
+}
+/// <summary>An inhabit facet's declared body count: an authored integer literal, or a live cell reference
+/// (<c>{"row": "&lt;row&gt;"[, "key": "&lt;key&gt;"]}</c>) naming an Int <c>state.world</c> row. Unlike
+/// <see cref="BindableScalar"/>'s single <c>state.&lt;row&gt;[.&lt;key&gt;]</c> string token, a cell reference here
+/// is its own object shape, so the reconcile path holds the parsed (row, key) pair directly rather than re-parsing
+/// a binding token on the tick path.</summary>
+/// <param name="Literal">The authored literal count, or <see langword="null"/> when <see cref="Row"/> names a cell
+/// instead.</param>
+/// <param name="Row">The bound <c>state.world</c> row's name, or <see langword="null"/> for a literal.</param>
+/// <param name="Key">The cell inside <see cref="Row"/>, or <see langword="null"/> for its slot cell. Meaningless
+/// alongside <see cref="Literal"/>.</param>
+[JsonConverter(typeof(WorldPlacementInhabitCountJsonConverter))]
+public sealed record WorldPlacementInhabitCount(int? Literal = null, string? Row = null, string? Key = null) {
+    /// <summary>The refusal every inhabit count field shares.</summary>
+    public const string Grammar = "must be an integer, or {\"row\": \"<row>\"[, \"key\": \"<key>\"]} naming an Int cell";
+
+    /// <summary>Resolves this count against the live document: the authored literal, or the referenced cell's live
+    /// raw value — <see langword="null"/> when this names an undeclared row (the validator refuses that at author
+    /// time; a live document edit that drops the row reads defensively as absent rather than throwing).</summary>
+    /// <param name="definition">The document to resolve against.</param>
+    /// <param name="tick">The tick this read answers as of.</param>
+    public long? Resolve(WorldDefinition definition, ulong tick = 0UL) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        if (Row is not { } row) {
+            return Literal;
+        }
+
+        return (WorldStateReader.TryRead(definition: definition, key: Key, rawValue: out var raw, row: out _, rowName: row, tick: tick, text: out _)
+            ? raw
+            : null
+        );
+    }
+    /// <inheritdoc/>
+    public override string ToString() => (Row is { } row
+        ? ((Key is { } key) ? $"{row}.{key}" : row)
+        : (Literal ?? 1).ToString(provider: CultureInfo.InvariantCulture)
+    );
+
+    /// <summary>Lets an authored literal be written as a plain <see cref="int"/> everywhere this type is
+    /// constructed from C# — every pre-existing literal-count call site keeps compiling unchanged.</summary>
+    public static implicit operator WorldPlacementInhabitCount(int literal) => new(Literal: literal);
+}
+/// <summary>Reads/writes <see cref="WorldPlacementInhabitCount"/> as a JSON integer (literal) or object
+/// (<c>{"row": ..., "key": ...}</c>, a cell reference).</summary>
+public sealed class WorldPlacementInhabitCountJsonConverter : JsonConverter<WorldPlacementInhabitCount>, IJsonSchemaTypeConverter {
+    private static readonly string[] AcceptedSchemaTypes = ["integer", "object"];
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string> SchemaTypes => AcceptedSchemaTypes;
+
+    /// <inheritdoc/>
+    public override WorldPlacementInhabitCount Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        if (reader.TokenType == JsonTokenType.Number) {
+            return new WorldPlacementInhabitCount(Literal: reader.GetInt32());
+        }
+
+        if (reader.TokenType != JsonTokenType.StartObject) {
+            throw new JsonException(message: $"Expected {nameof(WorldPlacementInhabitCount)} to be an integer or an object ({WorldPlacementInhabitCount.Grammar}).");
+        }
+
+        string? row = null;
+        string? key = null;
+
+        while (reader.Read() && (reader.TokenType != JsonTokenType.EndObject)) {
+            if (reader.TokenType != JsonTokenType.PropertyName) {
+                throw new JsonException(message: $"Unexpected token inside {nameof(WorldPlacementInhabitCount)} ({WorldPlacementInhabitCount.Grammar}).");
+            }
+
+            var propertyName = reader.GetString();
+
+            reader.Read();
+
+            if (string.Equals(a: propertyName, b: "row", comparisonType: StringComparison.Ordinal)) {
+                row = reader.GetString();
+            } else if (string.Equals(a: propertyName, b: "key", comparisonType: StringComparison.Ordinal)) {
+                key = reader.GetString();
+            } else {
+                throw new JsonException(message: $"{nameof(WorldPlacementInhabitCount)} does not declare a '{propertyName}' member ({WorldPlacementInhabitCount.Grammar}).");
+            }
+        }
+
+        if (row is not { Length: > 0 }) {
+            throw new JsonException(message: $"{nameof(WorldPlacementInhabitCount)}'s object form must name \"row\" ({WorldPlacementInhabitCount.Grammar}).");
+        }
+
+        return new WorldPlacementInhabitCount(Row: row, Key: key);
+    }
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, WorldPlacementInhabitCount value, JsonSerializerOptions options) {
+        ArgumentNullException.ThrowIfNull(argument: value);
+
+        if (value.Row is { } row) {
+            writer.WriteStartObject();
+            writer.WriteString(propertyName: "row", value: row);
+
+            if (value.Key is { } key) {
+                writer.WriteString(propertyName: "key", value: key);
+            }
+
+            writer.WriteEndObject();
+        } else {
+            writer.WriteNumberValue(value: (value.Literal ?? 1));
+        }
+    }
+}
 /// <summary>A per-instance override of one declared creation face's feed — the face twin of the emission facet's
 /// per-instance override channel.</summary>
 /// <param name="Face">The declared <see cref="Puck.World.Authoring.CreationFaceDocument.Name"/> to override.</param>

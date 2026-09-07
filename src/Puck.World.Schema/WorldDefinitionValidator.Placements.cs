@@ -957,12 +957,20 @@ public static partial class WorldDefinitionValidator {
             val1: 0,
             val2: (definition.Population.Capacity - definition.Population.LocalSeats)
         );
+        var count = inhabit.ResolvedCount;
 
-        if (
-            (inhabit.Count < 1) ||
-            (inhabit.Count > peerCapacity)
+        if (count.Row is { } countRow) {
+            var countRowDeclaration = WorldDefinitionRows.FindStateRow(definition.State, countRow);
+
+            if (countRowDeclaration is not { Kind: CellKind.Int } || (countRowDeclaration.IsKeyed != (count.Key is not null))) {
+                errors.Add(item: $"{path}.count must name a declared Int row with a matching key shape.");
+            }
+        } else if (
+            (count.Literal is not { } literal) ||
+            (literal < 1) ||
+            (literal > peerCapacity)
         ) {
-            errors.Add(item: $"{path}.count {inhabit.Count} is outside 1..{peerCapacity} for the authored population capacity.");
+            errors.Add(item: $"{path}.count {count.Literal} is outside 1..{peerCapacity} for the authored population capacity.");
         }
 
         ValidateDistribution(
@@ -1745,8 +1753,10 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path} INHABITS — its creation's noise relief is a static-stamp facet the stamp pool cannot render.");
                 }
 
-                if (inhabit.Count > 0) {
-                    dynamicInstanceCount += inhabit.Count;
+                var inhabitMax = inhabit.DeclaredMax(peerCapacity: Math.Max(val1: 0, val2: (definition.Population.Capacity - definition.Population.LocalSeats)));
+
+                if (inhabitMax > 0) {
+                    dynamicInstanceCount += inhabitMax;
                 }
             }
 

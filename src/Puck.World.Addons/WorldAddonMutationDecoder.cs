@@ -508,7 +508,9 @@ internal static class WorldAddonMutationDecoder {
             Width: width
         );
     }
-    // Kit/look name resolution and population-wide bounds stay with the document validator.
+    // Kit/look name resolution and population-wide bounds stay with the document validator. An addon-authored
+    // count is always a literal — the cell-reference shape (Puck.World.WorldPlacementInhabitCount.Row) is not part
+    // of this wire grammar.
     private static WorldPlacementInhabit DecodeInhabit(JsonElement element, string context) {
         if (element.ValueKind != JsonValueKind.Object) {
             throw new AddonMutationDecodeException(message: $"{context}: must be an object");
@@ -584,7 +586,7 @@ internal static class WorldAddonMutationDecoder {
         );
 
         return new WorldPlacementInhabit(
-            Count: count,
+            Count: new WorldPlacementInhabitCount(Literal: count),
             Distribution: distribution,
             Kit: kit,
             Look: look,

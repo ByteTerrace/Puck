@@ -8,7 +8,7 @@ public sealed partial class WorldPopulation {
     // Join one inhabited body at a claimed peer slot: mint its body from the resolved kit spawned at the placement's
     // scatter pose, seat its intent source, and tag the peer with the placement back-reference (the entry stays a
     // NetworkPeer — an inhabitant is a peer, not a separate kind).
-    private void ActivateInhabitant(WorldDefinition definition, int index, WorldPlacement placement, WorldPlacementInhabit inhabit, byte kitIndex, int ordinal) {
+    private void ActivateInhabitant(WorldDefinition definition, int index, WorldPlacement placement, WorldPlacementInhabit inhabit, byte kitIndex, int ordinal, int desiredCount) {
         var entry = m_entries[index];
         var kit = m_kits[kitIndex];
         var body = new WorldBody(
@@ -41,7 +41,7 @@ public sealed partial class WorldPopulation {
             frame: frame,
             distribution: inhabit.Distribution!,
             ordinal: ordinal,
-            count: inhabit.Count
+            count: desiredCount
         );
         var altitude = FixedQ4816.FromDouble(value: frame.Position.Y);
         var yaw = FixedQ4816.FromDouble(value: (frame.YawDegrees * (Math.PI / 180.0)));
@@ -677,7 +677,10 @@ public sealed partial class WorldPopulation {
     /// renumbers; admission is bounded only by the table itself and rejects loudly when it is genuinely full — there is no
     /// census-fit reservation. Diff-by-placement: retire an entry whose row vanished, lost its facet, or changed
     /// creation/kit; keep a matching one (its pose survives an unrelated placement edit); admit new bodies at the highest
-    /// free slots. The census ceiling (<see cref="MaxSimulated"/>) follows all non-census physical occupancy, and the
+    /// free slots — except a facet whose <see cref="WorldPlacementInhabit.Count"/> names a cell
+    /// (<see cref="WorldPlacementInhabitCount.Row"/>), which this pass never grows: it starts at zero and is
+    /// admitted only by <c>WorldPopulation.Step.cs</c>'s <c>ReconcileInhabitCounts</c>, tracking the cell's own
+    /// live value. The census ceiling (<see cref="MaxSimulated"/>) follows all non-census physical occupancy, and the
     /// census is re-clamped without renumbering an inhabitant or transferred entity.</summary>
     /// <param name="definition">The delivered definition (its placements, creations, kits, and look table).</param>
     /// <param name="admitted">Optional sink for the peer generations admitted by the reconciliation.</param>
@@ -735,10 +738,15 @@ public sealed partial class WorldPopulation {
             );
         }
 
-        // Pass 2 — grow/shrink each inhabited placement to its declared count, at the highest free slots (document order).
+        // Pass 2 — grow/shrink each LITERAL-count inhabited placement to its declared count, at the highest free
+        // slots (document order). A cell-driven count (Count.Row set) is skipped here on purpose: it starts at
+        // zero live bodies through every structural install (boot included) and is grown/shrunk exclusively by the
+        // per-tick WorldPopulation.Step.cs.ReconcileInhabitCounts, gated on the bound cell's own value actually
+        // moving — a structural edit that leaves the cell untouched must not silently re-fan a live census.
         foreach (var placement in definition.Placements) {
             if (
                 (placement.Inhabit is not { } inhabit) ||
+                (inhabit.Count?.Row is not null) ||
                 (ResolveInhabitKit(
                 definition: definition,
                 placement: placement
@@ -749,48 +757,93 @@ public sealed partial class WorldPopulation {
             }
 
             var desired = Math.Clamp(
-                value: inhabit.Count,
+                value: (inhabit.ResolvedCount.Literal ?? 1),
                 min: 0,
                 max: PeerCapacity
             );
-            var live = CountInhabitants(placementId: placement.Id);
 
-            for (var ordinal = live; (ordinal < desired); ordinal++) {
-                var slot = HighestFreeSlot();
-
-                if (slot < 0) {
-                    if (NarrationHub is { HasNarrationSink: true }) {
-                        NarrationHub?.Narrate(channel: "world.placement", text: $"[world.placement: inhabited '{placement.Id}' has no free entity slot — the {Capacity}-slot table is full]");
-                    }
-
-                    break;
-                }
-
-                ActivateInhabitant(
-                    definition: definition,
-                    index: slot,
-                    inhabit: inhabit,
-                    kitIndex: kitIndex,
-                    ordinal: ordinal,
-                    placement: placement
-                );
-                admitted?.Add(item: PeerEventEntry(index: slot));
-            }
-
-            for (var extra = desired; (extra < live); extra++) {
-                var slot = LowestInhabitant(placementId: placement.Id);
-
-                if (slot >= 0) {
-                    disconnected?.Add(item: PeerEventEntry(index: slot));
-                    RetireInhabitant(index: slot);
-                }
-            }
+            ReconcileOneInhabitedCount(
+                admitted: admitted,
+                definition: definition,
+                desired: desired,
+                disconnected: disconnected,
+                inhabit: inhabit,
+                kitIndex: kitIndex,
+                placement: placement
+            );
         }
 
         // Re-clamp the census against every entity-table slot now owned by an inhabitant or transferred authority.
         _ = SetSimulatedCount(count: m_simulatedCount);
         RebuildPlacementOrdinalTable(definition: definition);
+        // A structural install can reorder or replace placements at a fixed ordinal without changing their COUNT
+        // (WorldPopulation.Step.cs.ReconcileInhabitCounts' own cache resize gate misses that), so every structural
+        // pass invalidates the whole cache — the next per-tick reconcile re-resolves each cell-driven facet fresh
+        // rather than trusting a raw value that may now belong to a different row entirely.
+        InvalidateInhabitCountCache();
         m_revision++;
+    }
+    // Grows or shrinks one inhabited placement's live census to `desired`: growth claims the highest free slots in
+    // document order (HighestFreeSlot's own remarks — the first body admitted always lands at the highest index), and
+    // shrink retires the lowest surviving index that is NOT currently a seat's own claimed body (Entry.IsRemoteHuman)
+    // — since admission always fills the highest slot first, the lowest index is always the first one admitted, and
+    // skipping a human-occupied one here is what keeps a possessed inhabitant standing through a shrink instead of
+    // being torn out from under its player. Shared by the structural (literal-count) pass above and the cell-driven
+    // per-tick reconcile (WorldPopulation.Step.cs.ReconcileInhabitCounts).
+    private void ReconcileOneInhabitedCount(WorldDefinition definition, WorldPlacement placement, WorldPlacementInhabit inhabit, byte kitIndex, int desired, List<WorldPeerEventEntry>? admitted, List<WorldPeerEventEntry>? disconnected) {
+        var live = CountInhabitants(placementId: placement.Id);
+
+        for (var ordinal = live; (ordinal < desired); ordinal++) {
+            var slot = HighestFreeSlot();
+
+            if (slot < 0) {
+                if (NarrationHub is { HasNarrationSink: true }) {
+                    NarrationHub?.Narrate(channel: "world.placement", text: $"[world.placement: inhabited '{placement.Id}' has no free entity slot — the {Capacity}-slot table is full]");
+                }
+
+                return;
+            }
+
+            ActivateInhabitant(
+                definition: definition,
+                desiredCount: desired,
+                index: slot,
+                inhabit: inhabit,
+                kitIndex: kitIndex,
+                ordinal: ordinal,
+                placement: placement
+            );
+            admitted?.Add(item: PeerEventEntry(index: slot));
+        }
+
+        for (var extra = desired; (extra < live); extra++) {
+            var slot = LowestRetirableInhabitant(placementId: placement.Id);
+
+            if (slot < 0) {
+                // Every remaining inhabitant is seat-driven — nothing left this pass can retire.
+                return;
+            }
+
+            disconnected?.Add(item: PeerEventEntry(index: slot));
+            RetireInhabitant(index: slot);
+        }
+    }
+    // The shrink half of ReconcileOneInhabitedCount's own retire loop — LOWEST-index match that is not a seat's own
+    // claimed body, never LowestInhabitant's plain scan (which would retire a possessed inhabitant out from under
+    // its player).
+    private int LowestRetirableInhabitant(string placementId) {
+        for (var index = LocalSeatCount; (index < Capacity); index++) {
+            var entry = m_entries[index];
+
+            if (
+                !entry.IsRemoteHuman &&
+                string.Equals(a: entry.PlacementId, b: placementId, comparisonType: StringComparison.Ordinal)
+            ) {
+                return index;
+            }
+        }
+
+        return -1;
     }
     // The placement:<id> body-reference token's ordinal table — see m_placementOrdinalToBody's own remarks. Rebuilt
     // here rather than incrementally: ReconcileInhabitants already walks every inhabited placement in the SAME

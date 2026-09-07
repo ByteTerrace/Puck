@@ -50,7 +50,7 @@ public sealed class WorldRuleCompileContext : RuleCompileContext {
             if (!string.Equals(a: placements[ordinal].Id, b: placementId, comparisonType: StringComparison.Ordinal)) {
                 continue;
             }
-            if (placements[ordinal].Inhabit is not { Count: 1 }) {
+            if ((placements[ordinal].Inhabit is not { } inhabit) || (inhabit.ResolvedCount is not { Row: null, Literal: 1 })) {
                 throw new RuleException(refusal: WorldRuleRefusal.SpatialChannelMalformed, ruleName: ruleName, detail: $"'{channel}' names 'placement:{placementId}', which does not carry an inhabit facet with count 1");
             }
 

@@ -594,7 +594,12 @@ facet contribute/sense/sound nothing rather than at a stale point.
 `Distribution`/`Mirror` (static-stamp-only) and `Inhabit` (a row cannot both
 spawn its own bodies and ride another's) stay refused, and `Solid` stays
 refused under the FIELD contact provider (it compiles every solid row's
-geometry once into one SDF program, never rebuilt per tick).
+geometry once into one SDF program, never rebuilt per tick). `Inhabit.Count`
+(`WorldPlacementInhabitCount`) is an authored literal or a `{"row", "key"}`
+cell reference naming a declared Int row — a cell reference is bounded (never
+statically checked) to the world's peer capacity and validated only for the
+row's kind and key shape; `Server/WorldPopulation.ReconcileInhabitCounts`
+admits and retires the live census to track the cell.
 `Contribution` (`WorldPlacementContribution`) makes the row a SLOT: the host
 authors the frame (`Tenure` — `Presence`/`Endowed` — plus `SlotCreationId`, the
 watched `Link` adjacency row name, and `GraceSeconds`), and a federation partner

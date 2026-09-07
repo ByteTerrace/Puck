@@ -114,7 +114,7 @@ public sealed partial class WorldServer {
         }
 
         if (placement.Inhabit is { } inhabit) {
-            facets += $" inhabit={inhabit.Count}";
+            facets += $" inhabit={inhabit.ResolvedCount}";
         }
 
         if (placement.Attach is { } attach) {

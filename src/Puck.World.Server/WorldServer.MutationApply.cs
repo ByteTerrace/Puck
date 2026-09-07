@@ -936,6 +936,11 @@ public sealed partial class WorldServer {
     // journal/save source while retaining the compiled rule/catalog/group/machine products that depend only on
     // declarations; only state-sensitive grants and field reactions observe the new values immediately. The
     // drive-gate rescan runs only when a touched row gates drive.
+    // Reused across every InstallRuntimeStateValue call so a state mutation unrelated to any cell-driven inhabit
+    // facet — the overwhelming majority — costs zero list allocation: Clear() keeps the backing array.
+    private readonly List<WorldPeerEventEntry> m_inhabitCountAdmitted = [];
+    private readonly List<WorldPeerEventEntry> m_inhabitCountDisconnected = [];
+
     private void InstallRuntimeStateValue(WorldDefinition definition, WorldMutation mutation) {
         m_definition = definition;
         m_pendingStateDelivery = true;
@@ -946,6 +951,28 @@ public sealed partial class WorldServer {
 
         m_population.InstallFields(definition: definition);
         m_population.SyncBodyScale(definition: definition);
+
+        // A cell-driven inhabit count's row lives on this same state catalog, so a value-only mutation is exactly
+        // the moment its live raw value could have moved (a rule frame's end-of-tick fold, or a direct console
+        // write) — ReconcileInhabitCounts itself compares against its own cache and is a no-op walk when the
+        // touched row is unrelated to any tracked inhabit facet.
+        m_population.ReconcileInhabitCounts(
+            admitted: m_inhabitCountAdmitted,
+            definition: definition,
+            disconnected: m_inhabitCountDisconnected,
+            tick: NextInputTick
+        );
+
+        if ((m_inhabitCountAdmitted.Count > 0) || (m_inhabitCountDisconnected.Count > 0)) {
+            ApplyLifecycleEvents(
+                admitted: m_inhabitCountAdmitted,
+                disconnected: m_inhabitCountDisconnected,
+                ordered: true
+            );
+        }
+
+        m_inhabitCountAdmitted.Clear();
+        m_inhabitCountDisconnected.Clear();
     }
     private bool TouchesDriveGate(WorldDefinition definition, WorldMutation mutation) {
         m_touchedRows.Clear();

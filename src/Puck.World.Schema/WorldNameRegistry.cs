@@ -203,6 +203,8 @@ public static partial class WorldNameRegistry {
         new(typeof(WorldPlacementBoard), nameof(WorldPlacementBoard.Verdict), WorldNameKind.State, WorldNameRole.Names),
         new(typeof(WorldPlacementBoard), nameof(WorldPlacementBoard.Move), WorldNameKind.State, WorldNameRole.Names),
         new(typeof(WorldPlacementBoard), nameof(WorldPlacementBoard.Plan), WorldNameKind.State, WorldNameRole.Names),
+        new(typeof(WorldPlacementInhabitCount), nameof(WorldPlacementInhabitCount.Row), WorldNameKind.State, WorldNameRole.Names),
+        new(typeof(WorldPlacementInhabitCount), nameof(WorldPlacementInhabitCount.Key), WorldNameKind.State, WorldNameRole.Key),
         new(typeof(WorldPlacementDeal), nameof(WorldPlacementDeal.Row), WorldNameKind.State, WorldNameRole.Names),
         new(typeof(WorldPlacementReflow), nameof(WorldPlacementReflow.CostRow), WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action),
         new(typeof(WorldPlacementDealVariants), nameof(WorldPlacementDealVariants.Row), WorldNameKind.State, WorldNameRole.Names),

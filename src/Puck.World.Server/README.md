@@ -426,7 +426,31 @@ client reads the same row live and folds it into the rendered rig. Only the
 self-collision sweep (`WorldBody.Step.cs`'s `ResolveProgramContacts`) reads
 the scaled volumes — body-vs-body contact, overlap events, adjacency transfer
 sweeps, and the cross-boundary continuum trajectory still read the kit's
-shared unscaled copy. Bodies advance against the one contact-resolution seam
+shared unscaled copy.
+
+A placement's `Inhabit.Count` (`Puck.World.WorldPlacementInhabitCount`) is
+either an authored literal or a cell reference (`{"row", "key"}` naming an Int
+`state.world` row) — the spawner primitive a rule-written cell rides. A
+literal-count placement grows/shrinks under the ordinary structural
+`WorldPopulation.ReconcileInhabitants` pass, exactly as before; a cell-driven
+placement is skipped there and starts every structural install (boot
+included) with zero live bodies, admitted only by
+`WorldPopulation.ReconcileInhabitCounts` — called from
+`WorldServer.InstallRuntimeStateValue` on every state-only mutation apply, so
+a rule's end-of-tick fold reconciles on the same tick it writes the cell. The
+method caches the last raw value it resolved per placement ordinal and skips
+a placement whose cell has not moved, so an unrelated state write (or a
+document with no cell-driven inhabit facet at all) costs one bounded array
+scan and no allocation; a structural install invalidates the whole cache,
+since a placement's ordinal can carry a different row reference after a
+reorder without its overall count changing. Growth claims the highest free
+slot in document order (mirroring the literal path); shrink retires the
+lowest surviving index that is not a seat's own claimed body
+(`Entry.IsRemoteHuman`), so a possessed inhabitant never gets torn out from
+under its player. The resolved count clamps to the tighter of the world's
+peer capacity and the distribution's own sample count, echoing the clamp on
+the `world.placement` narration channel (`count <n> of <cell> (clamped by
+<bound>)`) when it actually bites. Bodies advance against the one contact-resolution seam
 `IContactField.cs`, which has two providers: the analytic `WorldColliderSet`
 (document-derived convex colliders) and the SDF-backed `WorldSolidField.cs`.
 Both include solid scene rows, screen frames, and the shapes emitted by solid

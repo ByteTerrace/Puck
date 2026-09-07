@@ -989,4 +989,95 @@ Replan:
             Registers: registers
         );
     }
+    // Sentinel meaning "no cell-driven inhabit count has ever been read for this placement ordinal" — distinct from
+    // every representable raw cell value, including 0 (an authored count cell legitimately starts empty).
+    private const long NoInhabitCountObserved = long.MinValue;
+    // Per-placement-ordinal cache of the last raw cell value ReconcileInhabitCounts resolved for a cell-driven
+    // inhabit facet — a placement with no such facet, or a literal count, is never written here. Resized (and its
+    // fresh slots re-seeded to NoInhabitCountObserved) only when the placement count itself changes, which already
+    // allocates elsewhere in the SAME structural install; a quiet tick that touches no relevant cell reads this
+    // array and writes nothing.
+    private long[] m_inhabitCountCache = [];
+
+    // Forces the next ReconcileInhabitCounts call to re-resolve every cell-driven placement from scratch — a
+    // structural install's own defensive reset (ReconcileInhabitants), since a placement's ordinal can carry a
+    // different row reference after a reorder or replacement without its overall COUNT changing.
+    private void InvalidateInhabitCountCache() => Array.Fill(array: m_inhabitCountCache, value: NoInhabitCountObserved);
+
+    /// <summary>Reconciles every cell-driven inhabit facet's live count against its bound cell's current value —
+    /// the per-tick half of the count-cell primitive (<see cref="ReconcileInhabitants"/> is the structural half,
+    /// and never grows a cell-referencing placement: such a placement starts at zero live bodies through every
+    /// install, including boot, and is admitted here on the first call that finds its cell non-empty). Skips a
+    /// placement whose bound cell has not moved since the last call — the frame's own per-row version lives only
+    /// inside the rule evaluator's short-lived state frame, unreachable from here, so this compares the resolved
+    /// raw value directly, which answers the identical question ("did anything change") at the cost of one cached
+    /// long per tracked placement. A document with no cell-driven inhabit facet, or one whose cell simply has not
+    /// changed this tick, walks a bounded array scan and allocates nothing.</summary>
+    /// <param name="definition">The live definition.</param>
+    /// <param name="tick">The tick this reconcile answers as of.</param>
+    /// <param name="admitted">Optional sink for the peer generations admitted by the reconciliation.</param>
+    /// <param name="disconnected">Optional sink for the peer generations disconnected by the reconciliation.</param>
+    public void ReconcileInhabitCounts(WorldDefinition definition, ulong tick, List<WorldPeerEventEntry>? admitted = null, List<WorldPeerEventEntry>? disconnected = null) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var placements = definition.Placements;
+
+        if (m_inhabitCountCache.Length != placements.Count) {
+            var cache = new long[placements.Count];
+
+            Array.Fill(array: cache, value: NoInhabitCountObserved);
+            m_inhabitCountCache = cache;
+        }
+
+        var changed = false;
+
+        for (var ordinal = 0; (ordinal < placements.Count); ordinal++) {
+            var placement = placements[ordinal];
+
+            if (
+                (placement.Inhabit is not { } inhabit) ||
+                (inhabit.Count?.Row is not { } row) ||
+                (ResolveInhabitKit(
+                definition: definition,
+                placement: placement
+            ) is not { } kitName) ||
+                (ResolveKitOrNull(name: kitName) is not { } kitIndex)
+            ) {
+                continue;
+            }
+
+            var raw = (inhabit.Count.Resolve(definition: definition, tick: tick) ?? 0L);
+
+            if (raw == m_inhabitCountCache[ordinal]) {
+                continue;
+            }
+
+            m_inhabitCountCache[ordinal] = raw;
+            changed = true;
+
+            var sampleCount = ((inhabit.Distribution?.Region as WorldDistributionRegion.Disc)?.SampleCount);
+            var bound = Math.Min(val1: PeerCapacity, val2: (sampleCount ?? PeerCapacity));
+            var desired = (int)Math.Clamp(value: raw, min: 0L, max: (long)bound);
+
+            if ((desired != raw) && (NarrationHub is { HasNarrationSink: true })) {
+                NarrationHub?.Narrate(channel: "world.placement", text: $"[world.placement: inhabited '{placement.Id}' count {desired} of {row} (clamped by {bound})]");
+            }
+
+            ReconcileOneInhabitedCount(
+                admitted: admitted,
+                definition: definition,
+                desired: desired,
+                disconnected: disconnected,
+                inhabit: inhabit,
+                kitIndex: kitIndex,
+                placement: placement
+            );
+        }
+
+        if (changed) {
+            _ = SetSimulatedCount(count: m_simulatedCount);
+            RebuildPlacementOrdinalTable(definition: definition);
+            m_revision++;
+        }
+    }
 }
