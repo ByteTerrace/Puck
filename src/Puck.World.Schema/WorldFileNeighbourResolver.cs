@@ -66,6 +66,10 @@ public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
             return WorldNeighbourResolution.Unavailable(reason: $"no local copy at '{path}'");
         }
 
+        // Asked before the composition, never after: a held image that still stands for this path is exactly what
+        // the composition below is about to answer from, so this reads the outcome rather than a record of one.
+        var shared = WorldDefinitionFileSource.HoldsComposedDocument(resolvedPath: path);
+
         // Composes the neighbour's basis chain (a flat file passes through untouched), so a neighbour authored as a
         // delta proves its border with the same composed document it boots as.
         if (!WorldDefinitionFileSource.TryComposeDocumentTree(
@@ -111,7 +115,10 @@ public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
             return WorldNeighbourResolution.Unavailable(reason: $"'{path}' holds a state reference nothing fills — {referenceReason}");
         }
 
-        return WorldNeighbourResolution.Resolved(definition: drawn);
+        return WorldNeighbourResolution.Resolved(
+            definition: drawn,
+            shared: shared
+        );
     }
     // A references row's locator is relative to the document that authors it, the rule basis and imports follow;
     // the reader resolves it from its own base directory. A sibling's bare spelling re-expresses to itself. An

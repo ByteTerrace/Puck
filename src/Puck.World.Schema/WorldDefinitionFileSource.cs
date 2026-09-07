@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -14,6 +15,191 @@ namespace Puck.World;
 /// Puck.World.Server depends on Puck.World.Schema already, so this is the lowest layer both can reach without a new
 /// project reference.</summary>
 public static class WorldDefinitionFileSource {
+    // A composed image, held per resolved document path, so a second reach for the same document merges nothing.
+    // One quilt shard names the island as its own basis and again as an adjacency neighbour, and each derived
+    // corner reaches it once more, so a single boot used to ask for the same twenty-one-document merge scores of
+    // times and pay for it every time. An image records every file its composition read and the exact bytes it read
+    // from each, and it is offered again only when all of them still hold those bytes, so an edit to the document
+    // itself, to a basis several hops above it, or to any import recomposes rather than serving a stale merge, and
+    // a file that has since vanished or turned unreadable does the same. Identity is the resolved path, freshness
+    // is content: no clock takes part in either.
+    private static readonly ConcurrentDictionary<string, ComposedDocument> s_composedDocuments = new(comparer: StringComparer.OrdinalIgnoreCase);
+    private static long s_documentsComposed;
+    private static long s_documentCompositionsShared;
+    // One file a composition read, with the bytes it read from it.
+    private readonly record struct ComposedDocumentLink(string Path, byte[] Bytes);
+    // A held image: the chain it composed from, its final tree as UTF-8 JSON (parsed on every reuse, so no reader
+    // is ever handed a tree an earlier reader may have edited), and `Reach` — how many further ancestor slots the
+    // subtree beneath this document occupies. Reach is what stops reuse from quietly widening the composition-depth
+    // rule: an image first composed at the top of a chain is offered to a reader deeper in one only while that
+    // reader's own depth plus the reach still fits inside WorldDocumentBasis.MaxChainDepth, exactly as a fresh walk
+    // of the same subtree would have had to.
+    private sealed record ComposedDocument(IReadOnlyList<ComposedDocumentLink> Chain, byte[] ComposedJson, int Reach);
+
+    /// <summary>Gets how many document compositions this process has performed — one per document whose basis and
+    /// imports were merged, counting every document a composition walked into, not only the ones a caller named.</summary>
+    public static long DocumentsComposed => Interlocked.Read(location: ref s_documentsComposed);
+    /// <summary>Gets how many document compositions this process answered from an image it had already composed,
+    /// rather than merging the same tree again.</summary>
+    public static long DocumentCompositionsShared => Interlocked.Read(location: ref s_documentCompositionsShared);
+    /// <summary>Gets how many distinct document paths this process currently holds a composed image of.</summary>
+    public static int ComposedDocumentsHeld => s_composedDocuments.Count;
+
+    /// <summary>Whether this process already holds a composed image of <paramref name="resolvedPath"/> whose whole
+    /// chain still carries the bytes it composed from — so the next composition of that path is answered from the
+    /// image instead of merging again. The fact a read-back names per neighbour: asked before a load, it says
+    /// whether that load's document will be shared or composed fresh.</summary>
+    /// <param name="resolvedPath">The absolute, normalized path a composition would resolve against.</param>
+    /// <returns><see langword="true"/> when a held image stands for the path.</returns>
+    public static bool HoldsComposedDocument(string resolvedPath) {
+        if (
+            string.IsNullOrEmpty(value: resolvedPath) ||
+            !s_composedDocuments.TryGetValue(
+            key: resolvedPath,
+            value: out var image
+        )
+        ) {
+            return false;
+        }
+
+        byte[] bytes;
+
+        try {
+            bytes = File.ReadAllBytes(path: resolvedPath);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            return false;
+        }
+
+        return ImageStillStands(
+            image: image,
+            ownBytes: bytes
+        );
+    }
+    /// <summary>Drops every held composed image and zeroes the composition accounting — the door a host teardown
+    /// and a law that needs a genuinely first composition both reach for. Correctness never rests on it: an image
+    /// is re-proved against its chain's bytes before every reuse regardless.</summary>
+    public static void ForgetComposedDocuments() {
+        s_composedDocuments.Clear();
+        _ = Interlocked.Exchange(
+            location1: ref s_documentsComposed,
+            value: 0L
+        );
+        _ = Interlocked.Exchange(
+            location1: ref s_documentCompositionsShared,
+            value: 0L
+        );
+    }
+    // Whether a held image still answers for a reader whose own bytes are `ownBytes`: every file the image read
+    // must still hold the bytes it read. The image's own document is the chain's first link and the reader has
+    // already read it, so that link is compared against what the reader holds rather than read a second time.
+    // This one question also settles the cycle rule, which the walk above no longer gets to ask on a reuse: a
+    // document already on the reader's resolution path can only appear inside an image if that document reaches
+    // back into the image's own root, and an image exists only for a document whose own walk COMPLETED — a walk
+    // that would have met exactly that cycle and refused. The only way the two could disagree is a file that has
+    // changed since, which is what this check is.
+    private static bool ImageStillStands(ComposedDocument image, byte[] ownBytes) {
+        for (var index = 0; (index < image.Chain.Count); index++) {
+            var link = image.Chain[index];
+
+            byte[] current;
+
+            if (index == 0) {
+                current = ownBytes;
+            } else {
+                try {
+                    current = File.ReadAllBytes(path: link.Path);
+                } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+                    return false;
+                }
+            }
+
+            if (!current.AsSpan().SequenceEqual(other: link.Bytes)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+    // The one reader of s_composedDocuments on the composition path. A held image answers only when it still stands
+    // for this reader (ImageStillStands) and its subtree still fits under the depth rule from where this reader
+    // stands. The tree is parsed out of the image's own UTF-8 JSON, never handed out by reference: whoever receives
+    // it edits it (a merge one level up, the neighbour resolver's reference re-expression), and the image has to
+    // stay usable for the next reader.
+    private static bool TryServeComposedImage(string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach) {
+        composed = null;
+        touched = [];
+        touchedPaths = [];
+        reach = 0;
+
+        if (!s_composedDocuments.TryGetValue(
+            key: resolvedPath,
+            value: out var image
+        )) {
+            return false;
+        }
+
+        if (
+            ((ancestors.Count + image.Reach) >= WorldDocumentBasis.MaxChainDepth) ||
+            !ImageStillStands(
+            image: image,
+            ownBytes: bytes
+        )
+        ) {
+            return false;
+        }
+
+        JsonObject? tree;
+
+        try {
+            tree = (JsonNode.Parse(utf8Json: new MemoryStream(buffer: image.ComposedJson)) as JsonObject);
+        } catch (JsonException) {
+            tree = null;
+        }
+
+        if (tree is null) {
+            _ = s_composedDocuments.TryRemove(
+                key: resolvedPath,
+                value: out _
+            );
+
+            return false;
+        }
+
+        foreach (var link in image.Chain) {
+            touched.Add(item: link.Bytes);
+            touchedPaths.Add(item: link.Path);
+        }
+
+        composed = tree;
+        reach = image.Reach;
+        _ = Interlocked.Increment(location: ref s_documentCompositionsShared);
+
+        return true;
+    }
+    // The one writer of s_composedDocuments: both of TryComposeLayers' success exits hold what they are about to
+    // return, so the next reader of the same path meets an image recorded together with the chain it was composed
+    // from. A composition over any byte source other than the directory one is never held — its names are not paths
+    // this class could re-read to prove the image still stands.
+    private static void HoldComposedImage(IWorldDocumentSource source, string resolvedPath, JsonObject composed, List<byte[]> touched, List<string> touchedPaths, int reach) {
+        if (source is not DirectoryDocumentSource) {
+            return;
+        }
+
+        var chain = new List<ComposedDocumentLink>(capacity: touched.Count);
+
+        for (var index = 0; (index < touched.Count); index++) {
+            chain.Add(item: new ComposedDocumentLink(
+                Bytes: touched[index],
+                Path: touchedPaths[index]
+            ));
+        }
+
+        s_composedDocuments[resolvedPath] = new ComposedDocument(
+            Chain: chain,
+            ComposedJson: Encoding.UTF8.GetBytes(s: composed.ToJsonString()),
+            Reach: reach
+        );
+    }
     // The directory-backed IWorldDocumentSource every local load walks over — the one place Path.Combine/
     // Path.GetFullPath/File.Exists/File.ReadAllBytes for a basis reference live, so TryLoad's directory behavior and
     // TryResolveChainFiles' push-side walk can never drift apart.
@@ -636,10 +822,12 @@ public static class WorldDefinitionFileSource {
     // import layer) — what a derivation-preserving save diffs a target against; `composed` is the final tree.
     // `ancestors` is the resolution path from the top down to (not including) `resolvedPath`: a stack, not a global
     // visited set, so two imports independently reaching the same shared ancestor (a diamond) is never a cycle.
-    private static bool TryComposeLayers(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, out JsonObject? stack, out JsonObject? composed, out List<byte[]> touched, out string reason) {
+    private static bool TryComposeLayers(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, out JsonObject? stack, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason) {
         stack = null;
         composed = null;
         touched = [bytes];
+        touchedPaths = [resolvedPath];
+        reach = 0;
 
         if (ancestors.Contains(
             value: resolvedPath,
@@ -657,6 +845,28 @@ public static class WorldDefinitionFileSource {
             reason = $"composition chain exceeds {WorldDocumentBasis.MaxChainDepth} documents at {resolvedPath}.";
 
             return false;
+        }
+
+        // The held image answers here, after the two walk rules above have had their say and before any parsing —
+        // a reuse skips the merge, never a refusal the walk itself owes. `serveHeldImage` is false only for the
+        // caller that wants this document's own pre-own-body layer, which an image does not carry; its children
+        // are still served, so that caller pays for one merge rather than a whole graph.
+        if (serveHeldImage && TryServeComposedImage(
+            ancestors: ancestors,
+            bytes: bytes,
+            composed: out var held,
+            reach: out var heldReach,
+            resolvedPath: resolvedPath,
+            touched: out var heldTouched,
+            touchedPaths: out var heldTouchedPaths
+        )) {
+            composed = held;
+            reach = heldReach;
+            touched = heldTouched;
+            touchedPaths = heldTouchedPaths;
+            reason = string.Empty;
+
+            return true;
         }
 
         JsonObject? root;
@@ -686,6 +896,15 @@ public static class WorldDefinitionFileSource {
             stack = new JsonObject();
             composed = ((JsonObject)root.DeepClone());
             reason = string.Empty;
+            _ = Interlocked.Increment(location: ref s_documentsComposed);
+            HoldComposedImage(
+                composed: composed,
+                reach: reach,
+                resolvedPath: resolvedPath,
+                source: source,
+                touched: touched,
+                touchedPaths: touchedPaths
+            );
 
             return true;
         }
@@ -721,17 +940,25 @@ public static class WorldDefinitionFileSource {
                 ancestors: nextAncestors,
                 bytes: basisContent!,
                 composed: out var basisResult,
+                reach: out var basisReach,
                 reason: out reason,
                 resolvedPath: basisResolvedName,
+                serveHeldImage: true,
                 source: source,
                 stack: out _,
-                touched: out var basisTouched
+                touched: out var basisTouched,
+                touchedPaths: out var basisTouchedPaths
             )) {
                 return false;
             }
 
             basisComposed = basisResult!;
+            reach = Math.Max(
+                val1: reach,
+                val2: (basisReach + 1)
+            );
             touched.AddRange(collection: basisTouched);
+            touchedPaths.AddRange(collection: basisTouchedPaths);
         }
 
         var ownBody = ((JsonObject)root.DeepClone());
@@ -779,14 +1006,22 @@ public static class WorldDefinitionFileSource {
                     ancestors: nextAncestors,
                     bytes: importContent!,
                     composed: out var importResult,
+                    reach: out var importReach,
                     reason: out reason,
                     resolvedPath: importResolvedName,
+                    serveHeldImage: true,
                     source: source,
                     stack: out _,
-                    touched: out var importTouched
+                    touched: out var importTouched,
+                    touchedPaths: out var importTouchedPaths
                 )) {
                     return false;
                 }
+
+                reach = Math.Max(
+                    val1: reach,
+                    val2: (importReach + 1)
+                );
 
                 if ((importAlias is not null) && !WorldModuleNamespace.TryApply(
                     alias: importAlias,
@@ -814,6 +1049,7 @@ public static class WorldDefinitionFileSource {
                 modules.Add(item: (importDescription, importResult!, exports));
                 importTrees.Add(item: (importDescription, importResult!));
                 touched.AddRange(collection: importTouched);
+                touchedPaths.AddRange(collection: importTouchedPaths);
             }
 
             if (!WorldModuleExports.TryCheckLayers(
@@ -869,6 +1105,15 @@ public static class WorldDefinitionFileSource {
 
         composed = final;
         reason = string.Empty;
+        _ = Interlocked.Increment(location: ref s_documentsComposed);
+        HoldComposedImage(
+            composed: composed!,
+            reach: reach,
+            resolvedPath: resolvedPath,
+            source: source,
+            touched: touched,
+            touchedPaths: touchedPaths
+        );
 
         return true;
     }
@@ -918,11 +1163,14 @@ public static class WorldDefinitionFileSource {
             ancestors: [],
             bytes: rootBytes,
             composed: out var result,
+            reach: out _,
             reason: out reason,
             resolvedPath: rootResolvedName,
+            serveHeldImage: true,
             source: source,
             stack: out _,
-            touched: out var touched
+            touched: out var touched,
+            touchedPaths: out _
         )) {
             return false;
         }
@@ -950,11 +1198,14 @@ public static class WorldDefinitionFileSource {
                 ancestors: [],
                 bytes: bytes,
                 composed: out _,
+                reach: out _,
                 reason: out reason,
                 resolvedPath: Path.GetFullPath(path: path),
+                serveHeldImage: false,
                 source: new DirectoryDocumentSource(),
                 stack: out var result,
-                touched: out _
+                touched: out _,
+                touchedPaths: out _
             )) {
                 return false;
             }
@@ -1032,11 +1283,14 @@ public static class WorldDefinitionFileSource {
             ancestors: [],
             bytes: bytes,
             composed: out var composed,
+            reach: out _,
             reason: out reason,
             resolvedPath: resolvedPath,
+            serveHeldImage: true,
             source: source,
             stack: out _,
-            touched: out _
+            touched: out _,
+            touchedPaths: out _
         )) {
             return false;
         }
@@ -1343,11 +1597,14 @@ public static class WorldDefinitionFileSource {
             ancestors: [],
             bytes: Encoding.UTF8.GetBytes(s: root.ToJsonString()),
             composed: out composed,
+            reach: out _,
             reason: out reason,
             resolvedPath: "(in-memory fragment composition)",
+            serveHeldImage: true,
             source: new InMemoryDocumentSource(host: hostBytes, fragment: fragmentBytes),
             stack: out _,
-            touched: out _
+            touched: out _,
+            touchedPaths: out _
         );
     }
     /// <summary>Reads the document at <paramref name="path"/> just far enough to resolve its <c>basis</c> member —

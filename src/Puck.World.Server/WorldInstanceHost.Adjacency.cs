@@ -564,6 +564,18 @@ public sealed partial class WorldInstanceHost {
 
         return true;
     }
+    /// <summary>Read-back for <c>world.adjacencies</c>: whether one started authority's own document came from a
+    /// composed image this process already held, rather than one that start merged itself — the fact naming a
+    /// shard's shared basis, or a corner destination reached a second time, as <c>composed=shared</c> instead of
+    /// <c>composed=fresh</c>.</summary>
+    /// <param name="name">The instance name.</param>
+    /// <param name="shared">Whether the instance's document came from a held image.</param>
+    /// <returns><see langword="true"/> when the instance is running and its outcome was recorded.</returns>
+    public bool TryDescribeDocumentSharing(string name, out bool shared) =>
+        m_documentShared.TryGetValue(
+            key: name,
+            value: out shared
+        );
     /// <summary>Finds the local roster seat currently following one concrete instance-local seat. This is the
     /// instance-addressed <c>player.leave</c> join: a raw instance leave must not bypass the roster/router half when
     /// the named body is the local traveler's current embodiment.</summary>

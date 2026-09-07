@@ -103,6 +103,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     private readonly string m_stateRoot;
 
     private readonly Dictionary<string, WorldInstance> m_instances = new(comparer: StringComparer.Ordinal);
+    // Whether the instance's own document came from a composed image this process already held when the instance
+    // started, rather than one that start merged itself. Read back per neighbour by world.adjacencies, through
+    // TryDescribeDocumentSharing.
+    private readonly Dictionary<string, bool> m_documentShared = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, WorldRemoteAuthority> m_remoteAuthorities = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<(string Source, string Destination, string Endpoint), WorldRemoteAuthority> m_recoveredRemoteAuthorities = new();
     private readonly Dictionary<string, WorldAuthorityEndpoint> m_authorityEndpoints = new(comparer: StringComparer.Ordinal);
@@ -949,6 +953,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             ? instanceDirectory
             : AppContext.BaseDirectory));
 
+        // Asked before the load, which is when the answer is still a prediction of what the load will do rather
+        // than a trace of what it did: a held image standing for this path is what the load is about to compose from.
+        var documentShared = WorldDefinitionFileSource.HoldsComposedDocument(resolvedPath: resolvedPath);
+
         // The instance's own NAME is the seed ladder's instance rung, so two instances of one document draw
         // independently while each stays reproducible from (document, instance name, draw history).
         if (!WorldDefinitionLoader.TryLoadFile(
@@ -960,6 +968,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         )) {
             return false;
         }
+
+        m_documentShared[name] = documentShared;
 
         var machines = m_machineHostFactory(
             [],
@@ -1070,6 +1080,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         }
 
         _ = m_instances.Remove(key: name);
+        _ = m_documentShared.Remove(key: name);
         RemoveSourceForwarding(instance.Server);
         foreach (var forwarded in m_forwardedBodies.Values) {
             if (forwarded.Authority is WorldDeferredForwardedAuthority deferred &&

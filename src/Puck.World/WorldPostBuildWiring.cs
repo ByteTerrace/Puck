@@ -457,6 +457,13 @@ internal static class WorldPostBuildWiring {
             return false;
         }
 
+        // The document-composition read-back, stated once beside the other origin lines: how many basis-and-imports
+        // merges this boot actually performed, how many it answered from a document it had already composed, and how
+        // many distinct documents it is holding an image of. A shard boot is the shape this counts for — its own
+        // basis, its four adjacency neighbours and every derived corner all name the same island document, and the
+        // shared figure is what says so out loud instead of leaving it to a wall-clock reading of the boot.
+        Console.Error.WriteLine(value: $"[world.documents] {WorldDefinitionFileSource.DocumentsComposed} composed, {WorldDefinitionFileSource.DocumentCompositionsShared} shared, {WorldDefinitionFileSource.ComposedDocumentsHeld} held");
+
         return true;
     }
 }
