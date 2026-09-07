@@ -20,9 +20,24 @@ public sealed class WorldDefinitionCompilationShapeLawTests(ITestOutputHelper ou
                 : row
         )).ToArray();
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        var updated = original.WithWorldState(rows: rows);
-        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
+        // The bound is on the STEADY-STATE cost of one value-only change, so the smallest of several identical
+        // calls is what it reads. WithWorldState registers the new section in a process-wide
+        // ConditionalWeakTable, and that table's own growth is paid inside whichever call happens to trigger it —
+        // a cost belonging to every WorldDefinition the process has built, not to this one. Measuring a single
+        // call makes this law's verdict depend on how many other tests ran before it.
+        var updated = original;
+        var allocated = long.MaxValue;
+
+        for (var attempt = 0; (attempt < 5); attempt++) {
+            var before = GC.GetAllocatedBytesForCurrentThread();
+
+            updated = original.WithWorldState(rows: rows);
+
+            allocated = Math.Min(
+                val1: allocated,
+                val2: (GC.GetAllocatedBytesForCurrentThread() - before)
+            );
+        }
 
         output.WriteLine(message: $"WithWorldState value-only change allocated {allocated} bytes.");
 

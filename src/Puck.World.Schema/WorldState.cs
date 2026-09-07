@@ -41,8 +41,14 @@ public sealed record WorldStateSection(
     IReadOnlyList<IStateSlot>? IStateSection.IdentitySlots => Identity;
 
     // The one freeze site every construction and every `with` routes through — a section can never expose a list
-    // the caller still holds a live, writable reference to.
-    private static IReadOnlyList<T>? Freeze<T>(IReadOnlyList<T>? items) => ((items is null) ? null : items.ToImmutableArray());
+    // the caller still holds a live, writable reference to. A list that is ALREADY an immutable array is handed
+    // straight back, box and all: copying it would produce an equal value, and re-boxing it would allocate on
+    // every `with` for each of the three members the caller did not change.
+    private static IReadOnlyList<T>? Freeze<T>(IReadOnlyList<T>? items) => (items switch {
+        null => null,
+        ImmutableArray<T> => items,
+        _ => items.ToImmutableArray(),
+    });
 }
 /// <summary>
 /// One row of the document's <c>state</c> section: a <see cref="StateRow"/> plus the two traits only a world reads —

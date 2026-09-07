@@ -65,5 +65,11 @@ public sealed record StateSection(
     IReadOnlyList<IStateSlot>? IStateSection.ParticipantSlots => ParticipantSlots;
     IReadOnlyList<IStateSlot>? IStateSection.IdentitySlots => IdentitySlots;
 
-    private static IReadOnlyList<T>? Freeze<T>(IReadOnlyList<T>? items) => ((items is null) ? null : items.ToImmutableArray());
+    // A list that is ALREADY an immutable array is handed straight back, box and all: copying it would produce an
+    // equal value, and re-boxing it would allocate on every `with` for each member the caller did not change.
+    private static IReadOnlyList<T>? Freeze<T>(IReadOnlyList<T>? items) => (items switch {
+        null => null,
+        ImmutableArray<T> => items,
+        _ => items.ToImmutableArray(),
+    });
 }
