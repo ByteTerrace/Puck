@@ -1,32 +1,104 @@
-export interface ValueAppearance { label: string; color: string; hidden?: boolean; shape?: "cube" | "sphere" | "diamond" }
-export interface PresentationBindings { [stateName: string]: { [value: string]: ValueAppearance } }
-const palette = ["#74c9ba", "#efaf91", "#a8b8f8", "#dfaad5", "#d5c67d", "#92bed4"];
-export function appearanceFor(value: number, bindings?: Record<string, ValueAppearance>): ValueAppearance {
-  return bindings?.[String(value)] ?? { label: String(value), color: value === 0 ? "#718497" : palette[Math.abs(value) % palette.length] };
+/**
+ * The studio's own per-value presentation bag, carried in `metadata.custom.puckStudioPresentation`
+ * — `metadata.custom` is a native nested object bag in the generated schema
+ * (`{[k: string]: {[k: string]: unknown}}`, see `worldDefinition.generated.ts`'s own `metadata`
+ * member), so no JSON-string encoding step is needed the way an ad hoc string extension would need
+ * one. Bindings are keyed by state row name, then by the cell VALUE as a decimal string (`bigint`
+ * cannot be an object key, and every engine value is a `bigint` — see `documentTools.ts`'s own
+ * header), so a huge Int64 value binds exactly like a small one.
+ */
+import type { JsonPath } from "../document/jsonPath";
+
+export const PRESENTATION_KEY = "puckStudioPresentation";
+
+export interface ValueAppearance {
+  readonly label: string;
+  readonly color: string;
+  readonly hidden?: boolean;
+  readonly shape?: "cube" | "sphere" | "diamond";
 }
-/** Studio metadata uses the native custom string extension; no renderer objects are serialized. */
-export function readPresentation(world: any): PresentationBindings {
-  const text = world.metadata?.custom?.puckStudioPresentation;
-  if (text === undefined) return {};
-  if (typeof text !== "string") throw new Error("Studio presentation metadata must be a JSON string.");
-  const data = JSON.parse(text);
-  if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Invalid studio presentation bindings.");
-  for (const entries of Object.values(data)) {
-    if (!entries || typeof entries !== "object" || Array.isArray(entries)) throw new Error("Invalid state presentation binding.");
+
+/** State row name -> decimal cell-value string -> its appearance. */
+export type PresentationBindings = Readonly<Record<string, Readonly<Record<string, ValueAppearance>>>>;
+
+const PALETTE = ["#74c9ba", "#efaf91", "#a8b8f8", "#dfaad5", "#d5c67d", "#92bed4"];
+const SHAPES: readonly ValueAppearance["shape"][] = ["cube", "sphere", "diamond"];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isValueAppearance(value: unknown): value is ValueAppearance {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    typeof value.label === "string" && value.label.length > 0 && value.label.length <= 80 &&
+    typeof value.color === "string" && /^#[\da-f]{6}$/i.test(value.color) &&
+    (value.hidden === undefined || typeof value.hidden === "boolean") &&
+    (value.shape === undefined || (SHAPES as readonly unknown[]).includes(value.shape))
+  );
+}
+
+/** A default appearance for a value with no authored binding — a deterministic color from the
+ * shared palette, so an unbound board still reads at a glance. */
+export function appearanceFor(value: bigint, bindings?: Readonly<Record<string, ValueAppearance>>): ValueAppearance {
+  const bound = bindings?.[value.toString()];
+  if (bound) {
+    return bound;
+  }
+  if (value === 0n) {
+    return { label: "0", color: "#718497" };
+  }
+  const magnitude = value < 0n ? -value : value;
+  const index = Number(magnitude % BigInt(PALETTE.length));
+  return { label: value.toString(), color: PALETTE[index] };
+}
+
+/** Reads and validates the studio's own presentation bag. Throws a descriptive error on a
+ * malformed bag rather than silently discarding author intent; returns `{}` when the document
+ * carries none yet (including a document not yet shaped like a `WorldDefinition` at all). */
+export function readPresentation(document: unknown): PresentationBindings {
+  if (!isRecord(document) || !isRecord(document.metadata) || !isRecord(document.metadata.custom)) {
+    return {};
+  }
+  const bag = document.metadata.custom[PRESENTATION_KEY];
+  if (bag === undefined) {
+    return {};
+  }
+  if (!isRecord(bag)) {
+    throw new Error("metadata.custom.puckStudioPresentation must be an object.");
+  }
+  for (const [stateName, entries] of Object.entries(bag)) {
+    if (!isRecord(entries)) {
+      throw new Error(`metadata.custom.puckStudioPresentation.${stateName} must be an object.`);
+    }
     for (const [value, entry] of Object.entries(entries)) {
-      const binding = entry as ValueAppearance;
-      if (!/^-?\d+$/.test(value) || !Number.isSafeInteger(Number(value)) || !binding || typeof binding.label !== "string" || binding.label.length > 80 ||
-          !/^#[\da-f]{6}$/i.test(binding.color) || (binding.hidden !== undefined && typeof binding.hidden !== "boolean") || (binding.shape !== undefined && !["cube", "sphere", "diamond"].includes(binding.shape))) throw new Error("Presentation entries require an integer value, a short label, a hex color, and an optional shape or hidden flag.");
+      if (!/^-?\d+$/.test(value) || !isValueAppearance(entry)) {
+        throw new Error(`metadata.custom.puckStudioPresentation.${stateName}.${value} is not a valid appearance binding.`);
+      }
     }
   }
-  return data;
+  return bag as unknown as PresentationBindings;
 }
-export function bindAppearance(world: any, stateName: string, value: number, appearance: ValueAppearance): any {
-  if (!world.state.world.some((row: any) => row.name === stateName && row.domain)) throw new Error("Choose a cell state to bind.");
-  const bindings = readPresentation(world);
-  const result = { ...world, metadata: { ...world.metadata, custom: { ...world.metadata?.custom,
-    puckStudioPresentation: JSON.stringify({ ...bindings, [stateName]: { ...bindings[stateName], [value]: appearance } }),
-  } } };
-  readPresentation(result);
-  return result;
+
+/** Builds the `EDIT_DOCUMENT` path/value/label for binding `value`'s appearance on `stateName` —
+ * the caller sends `{type: "EDIT_DOCUMENT", ...}` itself; this module never touches `StudioContext`
+ * (see this package's own boundary). Re-validates the merged bag before returning, so a caller
+ * that applies the edit can trust `readPresentation` will accept it back unchanged. */
+export function presentationEdit(
+  document: unknown,
+  stateName: string,
+  value: bigint,
+  appearance: ValueAppearance,
+): { path: JsonPath; value: unknown; label: string } {
+  const bindings = readPresentation(document);
+  const nextForState = { ...(bindings[stateName] ?? {}), [value.toString()]: appearance };
+  const edited = { ...bindings, [stateName]: nextForState };
+  readPresentation({ metadata: { custom: { [PRESENTATION_KEY]: edited } } });
+  return {
+    path: ["metadata", "custom", PRESENTATION_KEY, stateName],
+    value: nextForState,
+    label: `bind ${stateName}=${value} appearance`,
+  };
 }

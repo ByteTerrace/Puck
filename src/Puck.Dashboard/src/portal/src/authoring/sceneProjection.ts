@@ -1,60 +1,181 @@
-import { getTopologyCoordinates, getCoordinateIndexMap, type TopologyCoordinate, type TopologyDefinition } from "../engine/evaluator";
-import type { CellReference } from "./documentTools";
+/**
+ * A pure projection of the engine's own cell geometry (`EngineCell[]` — world-space cell centres
+ * `WorldEngine.cells()` already computes, per `Puck.World.Browser.Engine.BrowserTopology`; see
+ * `documentTools.ts`'s own header) into render-space: cells grouped into layers along the world Y
+ * axis, with an optional visual separation multiplier that is purely presentational (it never
+ * touches simulation state or the document); a 2D column/row rank per cell for the accessible grid
+ * view; and — only for an axis-aligned topology (`grid`/`box`, whose direction steps are exact
+ * multiples of `cellSize`/one layer) — the line segments an authored direction overlay draws. A
+ * `hex`, `ring`, `graph`, or `tiling` topology's own neighbour relation is the engine's own
+ * axial/graph math; this module never re-derives it, so those kinds carry no direction overlay
+ * rather than an approximated one. No ordinal-from-topology-kind math lives here at all: every
+ * position comes from the engine's `EngineCell`, never computed from a topology's own
+ * `$type`/`width`/`radius`/etc — see `documentTools.ts`'s header on `WorldTopology` for why.
+ */
+import type { EngineCell } from "../native/engineTypes";
+import { topologyDirections, type WorldTopology } from "./documentTools";
 
-export type Point3 = [number, number, number];
-export interface SceneCell { ref: CellReference; coordinate: TopologyCoordinate; position: Point3 }
-export interface SceneProjection { cells: SceneCell[]; layers: number[]; bounds: { min: Point3; max: Point3 }; unit: number }
+export type Point3 = readonly [number, number, number];
 
-/** Presentation coordinates only. Native cell ordinals and logical coordinates remain untouched. */
-export function projectTopology(topology: TopologyDefinition, separation = 1): SceneProjection {
-  const coords = getTopologyCoordinates(topology);
-  const positive = (n: number | undefined, fallback: number) => {
-    if (n === undefined) return fallback;
-    if (!Number.isFinite(n) || n <= 0) throw new Error("Cell size and layer height must be finite positive numbers.");
-    return n;
-  };
-  const unit = positive(topology.cellSize, 1);
-  const height = positive(topology.layerHeight, unit) * Math.max(1, Math.min(4, separation));
-  const origin = topology.origin ?? [0, 0, 0];
-  if (origin.length !== 3 || !origin.every(Number.isFinite)) throw new Error("Topology origin needs three finite coordinates.");
-  const cells = coords.map((coordinate, index): SceneCell => {
-    const { x, y, z } = coordinate;
-    let px = x * unit, pz = y * unit;
-    if (topology.$type === "hex") { px = (x - y / 2) * unit; pz = y * Math.sqrt(3) / 2 * unit; }
-    if (topology.$type === "ring") {
-      const angle = index / Math.max(1, coords.length) * Math.PI * 2;
-      const radius = Math.max(unit, coords.length * unit / (Math.PI * 2));
-      px = Math.sin(angle) * radius; pz = -Math.cos(angle) * radius;
-    }
-    return { ref: { topology: topology.name, index }, coordinate, position: [px + origin[0], z * height + origin[2], pz + origin[1]] };
-  });
-  if (cells.some(cell => cell.position.some(n => !Number.isFinite(n)))) throw new Error("Topology placement cannot be displayed as finite coordinates.");
-  const min: Point3 = [0, 0, 0], max: Point3 = [0, 0, 0];
-  for (let axis = 0; axis < 3; axis++) {
-    min[axis] = cells.length ? Math.min(...cells.map(c => c.position[axis])) - unit / 2 : -unit;
-    max[axis] = cells.length ? Math.max(...cells.map(c => c.position[axis])) + unit / 2 : unit;
-  }
-  // Center the presentation near the origin to retain GPU precision for translated documents.
-  const center = min.map((n, axis) => n + (max[axis] - n) / 2);
-  for (const cell of cells) cell.position = cell.position.map((n, axis) => n - center[axis]) as Point3;
-  return { cells, layers: [...new Set(coords.map(c => c.z))].sort((a, b) => a - b),
-    bounds: { min: min.map((n, a) => n - center[a]) as Point3, max: max.map((n, a) => n - center[a]) as Point3 }, unit };
+export interface SceneCell {
+  readonly ordinal: number;
+  readonly key: string;
+  /** Render-space position: the engine's own world X/Z, world Y replaced by
+   * `layerIndex * layerGap` for visual legibility, the whole scene re-centered near the origin to
+   * preserve GPU float precision for a topology authored far from world origin. */
+  readonly position: Point3;
+  /** Index into `SceneProjection.layers` — this cell's rank among the scene's distinct world-Y
+   * values, ascending. */
+  readonly layerIndex: number;
+  /** This cell's rank among the scene's distinct world-X ("col") and world-Z ("row") values,
+   * ascending — an accessible-grid layout, not a claim about the topology's own logical shape
+   * (exact for an axis-aligned grid/box; an approximation for hex/ring/tiling/graph, good enough
+   * for keyboard paging). */
+  readonly grid: { readonly col: number; readonly row: number };
 }
 
-/** Optional authored direction overlay, bounded independently from scene instances. */
-export function projectRelationships(topology: TopologyDefinition, scene: SceneProjection): Float32Array {
-  const coords = getTopologyCoordinates(topology), lookup = getCoordinateIndexMap(coords);
-  const seen = new Set<string>(), points: number[] = [];
-  for (const cell of scene.cells) for (const direction of topology.directions ?? []) {
-    const c = cell.coordinate;
-    const index = topology.$type === "ring"
-      ? ((cell.ref.index + direction.x) % coords.length + coords.length) % coords.length
-      : lookup.get([c.x + direction.x, c.y + direction.y, c.z + direction.z].join(","));
-    if (index === undefined || index === cell.ref.index) continue;
-    const key = [Math.min(index, cell.ref.index), Math.max(index, cell.ref.index)].join(":");
-    if (seen.has(key)) continue;
-    if (seen.size >= 16384) break;
-    seen.add(key); points.push(...cell.position, ...scene.cells[index].position);
+export interface SceneProjection {
+  readonly cells: readonly SceneCell[];
+  /** Distinct world-Y values the source cells carried, ascending — one per `layerIndex`. */
+  readonly layers: readonly number[];
+  readonly bounds: { readonly min: Point3; readonly max: Point3 };
+  readonly unit: number;
+  /** The render-space distance between adjacent `layerIndex` values — `unit * clamp(separation, 1, 4)`. */
+  readonly layerGap: number;
+  readonly gridColumns: number;
+  readonly gridRows: number;
+}
+
+const EMPTY_PROJECTION: SceneProjection = {
+  cells: [],
+  layers: [],
+  bounds: { min: [-0.5, -0.5, -0.5], max: [0.5, 0.5, 0.5] },
+  unit: 1,
+  layerGap: 1,
+  gridColumns: 1,
+  gridRows: 1,
+};
+
+/** Buckets a float to 4 decimal places — robust against the float32->float64 promotion noise the
+ * engine's own `BrowserCellGeometry` (a `float` triple) introduces, while still distinguishing any
+ * cellSize an author would realistically choose. */
+function bucket(value: number): number {
+  return Math.round(value * 10_000) / 10_000;
+}
+
+function rankOf(sorted: readonly number[], value: number): number {
+  const index = sorted.indexOf(bucket(value));
+  return index < 0 ? 0 : index;
+}
+
+/** True when `cells` occupies more than one world-Y layer — the "volumetric" test a viewport uses
+ * to choose `SpatialTopology3D` over `UniversalTopologyView`, independent of the authoring
+ * topology's own `$type` (a `graph` topology's cells may carry genuinely 3D `centre`s too). */
+export function isVolumetric(cells: readonly EngineCell[]): boolean {
+  return new Set(cells.map((cell) => bucket(cell.y))).size > 1;
+}
+
+/**
+ * Projects the engine's `cells` into render-space. `unit` should be the topology's own `cellSize`
+ * (a positive finite number; anything else falls back to 1). `separation` (clamped to [1, 4])
+ * scales the vertical gap BETWEEN layers only — it never touches a single layer's own X/Z spacing,
+ * which is already exactly the engine's own geometry.
+ */
+export function projectScene(cells: readonly EngineCell[], unit = 1, separation = 1): SceneProjection {
+  if (cells.length === 0) {
+    return EMPTY_PROJECTION;
+  }
+  const cellUnit = (Number.isFinite(unit) && unit > 0) ? unit : 1;
+  const layerGap = cellUnit * Math.max(1, Math.min(4, separation));
+
+  const layers = [...new Set(cells.map((cell) => bucket(cell.y)))].sort((a, b) => a - b);
+  const cols = [...new Set(cells.map((cell) => bucket(cell.x)))].sort((a, b) => a - b);
+  const rows = [...new Set(cells.map((cell) => bucket(cell.z)))].sort((a, b) => a - b);
+
+  const raw = cells.map((cell) => ({
+    ordinal: cell.ordinal,
+    key: cell.key,
+    layerIndex: rankOf(layers, cell.y),
+    grid: { col: rankOf(cols, cell.x), row: rankOf(rows, cell.z) },
+    position: [cell.x, rankOf(layers, cell.y) * layerGap, cell.z] as [number, number, number],
+  }));
+
+  const xs = raw.map((cell) => cell.position[0]);
+  const ys = raw.map((cell) => cell.position[1]);
+  const zs = raw.map((cell) => cell.position[2]);
+  const min: [number, number, number] = [Math.min(...xs) - cellUnit / 2, Math.min(...ys) - cellUnit / 2, Math.min(...zs) - cellUnit / 2];
+  const max: [number, number, number] = [Math.max(...xs) + cellUnit / 2, Math.max(...ys) + cellUnit / 2, Math.max(...zs) + cellUnit / 2];
+  const center: Point3 = [min[0] + (max[0] - min[0]) / 2, min[1] + (max[1] - min[1]) / 2, min[2] + (max[2] - min[2]) / 2];
+
+  const recentered: SceneCell[] = raw.map((cell) => ({
+    ...cell,
+    position: [cell.position[0] - center[0], cell.position[1] - center[1], cell.position[2] - center[2]],
+  }));
+
+  return {
+    cells: recentered,
+    layers,
+    bounds: {
+      min: [min[0] - center[0], min[1] - center[1], min[2] - center[2]],
+      max: [max[0] - center[0], max[1] - center[1], max[2] - center[2]],
+    },
+    unit: cellUnit,
+    layerGap,
+    gridColumns: cols.length,
+    gridRows: rows.length,
+  };
+}
+
+function positionKey(position: Point3): string {
+  return `${bucket(position[0])},${bucket(position[1])},${bucket(position[2])}`;
+}
+
+/**
+ * Line-segment endpoint pairs (flattened `[x0,y0,z0,x1,y1,z1,...]`) for `topology`'s own authored
+ * `directions`, drawn only when `topology` is axis-aligned (`grid`/`box`) — the one case where a
+ * direction's `(x, y, z)` step is an EXACT multiple of `unit`/one layer rather than the engine's
+ * own axial/graph math (see this module's header). Every other topology kind returns an empty
+ * array rather than an approximated line. `scene` must be `projectScene`'s own answer for the same
+ * cells this topology names, so the direction's step and the scene's own render-space spacing
+ * agree exactly.
+ */
+export function projectDirections(topology: WorldTopology, scene: SceneProjection): Float32Array {
+  if (topology.$type !== "grid" && topology.$type !== "box") {
+    return new Float32Array(0);
+  }
+  const directions = topologyDirections(topology);
+  if (directions.length === 0 || scene.cells.length === 0) {
+    return new Float32Array(0);
+  }
+
+  const index = new Map<string, SceneCell>();
+  for (const cell of scene.cells) {
+    index.set(positionKey(cell.position), cell);
+  }
+
+  const seen = new Set<string>();
+  const points: number[] = [];
+  outer: for (const cell of scene.cells) {
+    for (const direction of directions) {
+      const target: Point3 = [
+        cell.position[0] + direction.x * scene.unit,
+        cell.position[1] + (direction.z ?? 0) * scene.layerGap,
+        cell.position[2] + direction.y * scene.unit,
+      ];
+      const neighbor = index.get(positionKey(target));
+      if (!neighbor || neighbor.ordinal === cell.ordinal) {
+        continue;
+      }
+      const pairKey = `${Math.min(cell.ordinal, neighbor.ordinal)}:${Math.max(cell.ordinal, neighbor.ordinal)}`;
+      if (seen.has(pairKey)) {
+        continue;
+      }
+      if (seen.size >= 16384) {
+        break outer;
+      }
+      seen.add(pairKey);
+      points.push(...cell.position, ...neighbor.position);
+    }
   }
   return new Float32Array(points);
 }

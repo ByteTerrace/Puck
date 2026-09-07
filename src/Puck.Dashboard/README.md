@@ -147,10 +147,18 @@ deadline. Rollouts allow at most 200 games and 128 ticks per game. Their random
 results are observations of this preview, not replay proofs or deadlock proofs.
 
 The implementation lives under `src/portal/src`: `engine` owns intake and bounded
-execution and demo input adapters; `authoring` owns cell references, immutable
-paint candidates, presentation bindings, scene projection, and JSON addressing.
-`machines/worldSimulationMachine.ts` owns document transactions and the separate
-preview history. `components/world` owns editing and inspection, with Three.js
-objects confined to `SpatialTopology3D.tsx`, and
-`clients/worldStorageClient.ts` owns local document persistence. The TypeScript
-tests are exercised by Node's test runner in `src/portal/tests`.
+execution and demo input adapters; `authoring` owns typed helpers over the
+generated `WorldDefinition` document shape (topology/row lookup, ordinal cell
+addressing), a pure projection of the engine's own `cells()` geometry into
+render-space, presentation bindings, and JSON addressing — no topology-kind
+ordinal math of its own; that geometry always comes from the engine.
+`machines/worldSimulationMachine.ts` (the old JS-only preview machine) owns
+document transactions and the separate preview history for the still-mounted
+`AuthoringWorkspace`/`WorldWorkbench` JSON-editor components; `machines/studioMachine.ts`
+is the newer statechart (see its own header) that `WorldWorkbench.tsx`,
+`UniversalTopologyView.tsx`, `SpatialTopology3D.tsx`, and `StateMatrixView.tsx`
+are bound to instead, once a `StudioContext.Provider` mounts one. `components/world`
+owns editing and inspection, with Three.js objects confined to
+`SpatialTopology3D.tsx`, and `clients/worldStorageClient.ts` owns local document
+persistence. The TypeScript tests are exercised by Node's test runner in
+`src/portal/tests`.

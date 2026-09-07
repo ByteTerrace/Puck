@@ -315,16 +315,7 @@ const WorldStudioInner: React.FC = () => {
             {/* Tab 7: Raw World JSON Workbench */}
             <Tabs.Panel
               value="workbench">
-              <WorldWorkbench
-                reference={jsonReference}
-                worldJson={worldJsonText}
-                draft={draft}
-                onDraftChange={setDraft}
-                onWorldJsonChange={(newJson) => {
-                  simActor.send({ type: "APPLY_DOCUMENT", worldJsonText: newJson });
-                  if (!simActor.getSnapshot().context.error) setSelectedPresetId("custom");
-                }}
-              />
+              <WorldWorkbench />
             </Tabs.Panel>
           </Tabs>}
       </details>

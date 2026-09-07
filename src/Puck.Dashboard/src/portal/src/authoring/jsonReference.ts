@@ -1,30 +1,20 @@
-/** Locate an applied document address without depending on whitespace or property order. */
-export function findJsonRange(text: string, path: (string | number)[]): [number, number] | null {
-  try { JSON.parse(text); } catch { return null; }
-  const tokens = [...text.matchAll(/"(?:\\.|[^"\\])*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null|[{}\[\]:,]/g)];
-  let cursor = 0;
-  let found: [number, number] | null = null;
-  function visit(location: (string | number)[]) {
-    if (location.length > 128) throw new Error("JSON reveal depth exceeded.");
-    const start = cursor, token = tokens[cursor++][0];
-    if (token === "{") {
-      while (tokens[cursor][0] !== "}") {
-        const key = JSON.parse(tokens[cursor++][0]); cursor++;
-        visit([...location, key]);
-        if (tokens[cursor][0] === ",") cursor++;
-      }
-      cursor++;
-    } else if (token === "[") {
-      let index = 0;
-      while (tokens[cursor][0] !== "]") {
-        visit([...location, index++]);
-        if (tokens[cursor][0] === ",") cursor++;
-      }
-      cursor++;
-    }
-    if (location.length === path.length && location.every((part, i) => part === path[i])) {
-      const last = tokens[cursor - 1]; found = [tokens[start].index!, last.index! + last[0].length];
-    }
+/**
+ * Where "Reveal in JSON" points a selected cell at: the row's own `cells[]` entry when the cell
+ * carries an authored value, else the row object itself — so revealing an un-authored,
+ * default-value cell still lands somewhere sensible in the document rather than nowhere.
+ */
+import type { JsonPath } from "../document/jsonPath";
+import { listStateRows } from "./documentTools";
+
+export function cellJsonPath(document: unknown, rowName: string, ordinal: number): JsonPath | null {
+  const rows = listStateRows(document);
+  const rowIndex = rows.findIndex((row) => row.name === rowName);
+  if (rowIndex < 0) {
+    return null;
   }
-  try { visit([]); return found; } catch { return null; }
+  const row = rows[rowIndex];
+  const cellIndex = row.cells?.findIndex((cell) => cell.key === String(ordinal)) ?? -1;
+  return (cellIndex >= 0)
+    ? ["state", "world", rowIndex, "cells", cellIndex]
+    : ["state", "world", rowIndex];
 }

@@ -1,64 +1,66 @@
 import React, { useEffect, useId, useRef, useState } from "react";
 import { Button, Group, Text } from "@mantine/core";
 import type { SceneCell } from "../../authoring/sceneProjection";
-import type { CellReference } from "../../authoring/documentTools";
 import { appearanceFor, type ValueAppearance } from "../../authoring/presentation";
 
+const PAGE_SIZE = 144;
+
 export interface UniversalTopologyViewProps {
-  cells: SceneCell[];
-  values: Record<number, number>;
-  empty: number;
-  selection: Set<number>;
-  highlights: Set<number>;
-  bindings?: Record<string, ValueAppearance>;
-  hex: boolean;
-  onSelect: (ref: CellReference, additive: boolean) => void;
+  cells: readonly SceneCell[];
+  values: ReadonlyMap<number, bigint>;
+  empty: bigint;
+  selection: ReadonlySet<number>;
+  highlights?: ReadonlySet<number>;
+  bindings?: Readonly<Record<string, ValueAppearance>>;
+  onSelect: (ordinal: number, additive: boolean) => void;
 }
-/** Accessible, paged view of the same document addresses used by the spatial renderer. */
-function UniversalTopologyView({ cells, values, empty, selection, highlights, bindings, hex, onSelect }: UniversalTopologyViewProps) {
+
+/** Accessible, paged view of the same document addresses used by the spatial renderer — a
+ * column/row grid built from each `SceneCell`'s own `grid` rank (see `sceneProjection.ts`), never
+ * a topology-`$type`-specific layout formula. */
+function UniversalTopologyView({ cells, values, empty, selection, highlights, bindings, onSelect }: UniversalTopologyViewProps) {
   const helpId = useId();
-  const firstSelected = cells.findIndex(cell => selection.has(cell.ref.index));
-  const [page, setPage] = useState(Math.max(0, Math.floor(firstSelected / 144)));
-  const [focused, setFocused] = useState(firstSelected < 0 ? cells[0]?.ref.index : cells[firstSelected].ref.index);
+  const firstSelected = cells.findIndex((cell) => selection.has(cell.ordinal));
+  const [page, setPage] = useState(Math.max(0, Math.floor(firstSelected / PAGE_SIZE)));
+  const [focused, setFocused] = useState<number | undefined>(firstSelected >= 0 ? cells[firstSelected].ordinal : cells[0]?.ordinal);
   const buttons = useRef(new Map<number, HTMLButtonElement>());
-  const pageCount = Math.max(1, Math.ceil(cells.length / 144)), currentPage = Math.min(page, pageCount - 1);
-  const visible = cells.slice(currentPage * 144, (currentPage + 1) * 144);
+  const pageCount = Math.max(1, Math.ceil(cells.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const visible = cells.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
   // Address selection in the inspector also reveals the appropriate page.
-  useEffect(() => { if (firstSelected >= 0) setPage(Math.floor(firstSelected / 144)); }, [firstSelected]);
-  const columns = Math.min(12, Math.max(1, new Set(visible.map(c => c.coordinate.x)).size));
-  const spatialHex = hex && pageCount === 1;
-  const minX = Math.min(...visible.map(c => 2 * c.coordinate.x - c.coordinate.y));
-  const minY = Math.min(...visible.map(c => c.coordinate.y));
-  const hexColumns = Math.max(...visible.map(c => 2 * c.coordinate.x - c.coordinate.y)) - minX + 2;
-  const focusIndex = visible.some(c => c.ref.index === focused) ? focused : visible[0]?.ref.index;
+  useEffect(() => { if (firstSelected >= 0) setPage(Math.floor(firstSelected / PAGE_SIZE)); }, [firstSelected]);
+  const minCol = visible.length ? Math.min(...visible.map((cell) => cell.grid.col)) : 0;
+  const minRow = visible.length ? Math.min(...visible.map((cell) => cell.grid.row)) : 0;
+  const columns = visible.length ? (Math.max(...visible.map((cell) => cell.grid.col)) - minCol + 1) : 1;
+  const focusOrdinal = visible.some((cell) => cell.ordinal === focused) ? focused : visible[0]?.ordinal;
   return <div className="studio-plan-view">
     <div className="studio-board-surface">
-      <div role="group" aria-label="Topology cells" aria-describedby={helpId} className="studio-cell-grid" data-hex={spatialHex || undefined}
-        style={{ gridTemplateColumns: spatialHex ? "repeat(" + hexColumns + ", 24px)" : "repeat(" + columns + ", minmax(44px, 1fr))" }}>
+      <div role="group" aria-label="Topology cells" aria-describedby={helpId} className="studio-cell-grid"
+        style={{ gridTemplateColumns: "repeat(" + columns + ", minmax(44px, 1fr))" }}>
         {visible.map((cell, position) => {
-          const { index } = cell.ref, c = cell.coordinate;
-          const appearance = appearanceFor(values[index] ?? empty, bindings);
-          return <button key={index} type="button" className="studio-cell" aria-pressed={selection.has(index)}
-            style={{ color: appearance.color, ...(spatialHex ? { gridColumn: (2 * c.x - c.y - minX + 1) + " / span 2", gridRow: c.y - minY + 1, aspectRatio: "1", minHeight: 48 } : {}) }}
-            data-highlighted={highlights.has(index) || undefined}
-            ref={node => { if (node) buttons.current.set(index, node); else buttons.current.delete(index); }}
-            tabIndex={focusIndex === index ? 0 : -1}
-            aria-label={"Cell " + index + ", x " + c.x + ", y " + c.y + ", z " + c.z + ", value " + appearance.label}
-            onFocus={() => setFocused(index)} onClick={e => onSelect(cell.ref, e.shiftKey || e.ctrlKey || e.metaKey)}
+          const { ordinal } = cell;
+          const appearance = appearanceFor(values.get(ordinal) ?? empty, bindings);
+          return <button key={ordinal} type="button" className="studio-cell" aria-pressed={selection.has(ordinal)}
+            style={{ color: appearance.color, gridColumn: (cell.grid.col - minCol + 1), gridRow: (cell.grid.row - minRow + 1) }}
+            data-highlighted={highlights?.has(ordinal) || undefined}
+            ref={node => { if (node) buttons.current.set(ordinal, node); else buttons.current.delete(ordinal); }}
+            tabIndex={focusOrdinal === ordinal ? 0 : -1}
+            aria-label={"Cell " + ordinal + ", value " + appearance.label}
+            onFocus={() => setFocused(ordinal)} onClick={e => onSelect(ordinal, e.shiftKey || e.ctrlKey || e.metaKey)}
             onKeyDown={event => {
-              const delta: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -columns, ArrowDown: columns, Home: -position, End: visible.length - position - 1 };
-              if (!(event.key in delta)) return;
+              if (event.key === "Home") { event.preventDefault(); buttons.current.get(visible[0]?.ordinal)?.focus(); return; }
+              if (event.key === "End") { event.preventDefault(); buttons.current.get(visible[visible.length - 1]?.ordinal)?.focus(); return; }
+              const step: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+              const delta = step[event.key];
+              if (!delta) return;
               event.preventDefault();
-              let next = visible[Math.max(0, Math.min(visible.length - 1, position + delta[event.key]))];
-              if (spatialHex && event.key.startsWith("Arrow")) {
-                const dx = event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0;
-                const dy = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
-                const candidates = visible.filter(other => dx ? ((2 * other.coordinate.x - other.coordinate.y) - (2 * c.x - c.y)) * dx > 0 && other.coordinate.y === c.y : (other.coordinate.y - c.y) * dy > 0);
-                next = candidates.sort((a, b) => (Math.abs(a.coordinate.y - c.y) * 100 + Math.abs(2 * a.coordinate.x - a.coordinate.y - (2 * c.x - c.y))) - (Math.abs(b.coordinate.y - c.y) * 100 + Math.abs(2 * b.coordinate.x - b.coordinate.y - (2 * c.x - c.y))))[0] ?? cell;
-              }
-              buttons.current.get(next.ref.index)?.focus();
+              const [dCol, dRow] = delta;
+              const targetCol = cell.grid.col + dCol, targetRow = cell.grid.row + dRow;
+              const next = visible.find(candidate => candidate.grid.col === targetCol && candidate.grid.row === targetRow)
+                ?? visible[Math.max(0, Math.min(visible.length - 1, position + dCol + dRow * columns))];
+              buttons.current.get(next.ordinal)?.focus();
             }}>
-            <span className="studio-cell-index">{index}</span><span className="studio-cell-value" aria-hidden="true">{appearance.label}</span>
+            <span className="studio-cell-index">{ordinal}</span><span className="studio-cell-value" aria-hidden="true">{appearance.label}</span>
           </button>;
         })}
       </div>

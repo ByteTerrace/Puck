@@ -1,72 +1,91 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Button, Card, Group, ScrollArea, Stack, Table, Text, TextInput } from "@mantine/core";
-import { StateDelta } from "../../engine/tickRunner";
-import { StateRowDefinition } from "../../authoring/documentTools";
-export interface StateMatrixViewProps {
-  stateDefinitions: StateRowDefinition[];
-  currentState: Record<string, any>;
-  lastDeltas?: StateDelta[];
-  onStateChange: (stateName: string, newValue: any) => void;
-  onResetState?: () => void;
-  onHoverMask?: (mask: bigint | null) => void;
+import { StudioContext, useStudioDocument, useStudioPreview } from "../../context/StudioContext";
+import { listStateRows, type CellsOfDomain, type WorldStateRow } from "../../authoring/documentTools";
+import type { RowInfo } from "../../native/engineTypes";
+
+function isScalarLive(row: RowInfo | undefined): boolean {
+  return row !== undefined && !row.keyed;
 }
-function RegisterInput({ row, value, onChange }: {
-  row: StateRowDefinition;
-  value: any;
-  onChange: (value: any) => void;
+
+function RegisterInput({ name, value, disabled, onApply }: {
+  name: string;
+  value: bigint;
+  disabled: boolean;
+  onApply: (value: bigint) => void;
 }) {
-  const [draft, setDraft] = useState(String(value));
+  const [draft, setDraft] = useState(value.toString());
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { setDraft(String(value)); setError(null); }, [value]);
+  useEffect(() => { setDraft(value.toString()); setError(null); }, [value]);
   const apply = () => {
-    try {
-      let number: bigint;
-      if(row.kind === "bool") {
-        if(!["true", "false", "0", "1"].includes(draft))
-          throw new Error("Use true, false, 0 or 1.");
-        number = draft === "true" || draft === "1" ? 1n : 0n;
-      }
-      else {
-        if(!/^-?\d+$/.test(draft))
-          throw new Error("Enter a whole number.");
-        number = BigInt(draft);
-      }
-      if(number < -(1n << 63n) || number >= (1n << 64n))
-        throw new Error("Value exceeds preview's 64-bit range.");
-      if((row.nonNegative && number < 0n) || (row.min !== undefined && number < BigInt(row.min)) || (row.max !== undefined && number > BigInt(row.max)))
-        throw new Error("Value is outside declared bounds.");
-      onChange(row.kind === "bool" ? number !== 0n : number >= BigInt(Number.MIN_SAFE_INTEGER) && number <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(number) : number);
-      setError(null);
+    const trimmed = draft.trim();
+    if (!/^-?\d+$/.test(trimmed)) {
+      setError("Enter a whole number.");
+      return;
     }
-    catch(e) {
-      setError((e as Error).message);
-    }
+    onApply(BigInt(trimmed));
+    setError(null);
   };
   return <Group
     gap={6}
     wrap="nowrap"
     align="flex-start"><TextInput
-      aria-label={"Preview value for " + row.name}
+      aria-label={"Preview value for " + name}
       value={draft}
+      disabled={disabled}
       onChange={e => setDraft(e.currentTarget.value)}
       error={error}
       onKeyDown={e => {
         if(e.key === "Enter")
           apply(); if(e.key === "Escape") {
-            setDraft(String(value));
+            setDraft(value.toString());
             setError(null);
           }
       }}
       styles={{ input: { fontFamily: "ui-monospace,monospace" } }}
       style={{ minWidth: 100, flex: 1 }} /><Button
         variant="default"
-        aria-label={"Apply preview value for " + row.name}
-        disabled={draft === String(value)}
+        aria-label={"Apply preview value for " + name}
+        disabled={disabled || draft === value.toString()}
         onClick={apply}>Apply</Button></Group>;
 }
-export const StateMatrixView: React.FC<StateMatrixViewProps> = ({ stateDefinitions, currentState, lastDeltas = [], onStateChange, onResetState, onHoverMask }) => {
-  const changed = new Set(lastDeltas.map(d => d.target));
-  const [mask, setMask] = useState<string | null>(null);
+
+/**
+ * The rows table: every authored `state.world[]` row (name, kind, keyed, cell count, min/max),
+ * and — while a preview session is running — the LIVE values from `useStudioPreview().rows`
+ * (`RowInfo[]`, straight off the engine — no "mask" name heuristic and no 64-bit range check of
+ * this component's own: the engine itself refuses an out-of-range write). A row that changed
+ * between the previous and current preview snapshot is highlighted; a scalar (non-keyed) row's
+ * value is editable in place through `PREVIEW_WRITE`.
+ */
+export const StateMatrixView: React.FC = () => {
+  const document = useStudioDocument();
+  const preview = useStudioPreview();
+  const actor = StudioContext.useActorRef();
+
+  const authoredRows = useMemo(() => listStateRows(document.value), [document.value]);
+  const liveByName = useMemo(() => new Map(preview.rows.map(row => [row.name, row])), [preview.rows]);
+  const previousByName = useMemo(() => {
+    const previous = preview.snapshots[preview.cursor - 1];
+    return previous ? new Map(previous.rows.map(row => [row.name, row])) : null;
+  }, [preview.snapshots, preview.cursor]);
+
+  const previewActive = preview.status === "ready";
+
+  const changed = useMemo(() => {
+    if (!previousByName) return new Set<string>();
+    const names = new Set<string>();
+    for (const row of preview.rows) {
+      const before = previousByName.get(row.name);
+      if (!before || JSON.stringify(before.cells) !== JSON.stringify(row.cells)) {
+        names.add(row.name);
+      }
+    }
+    return names;
+  }, [preview.rows, previousByName]);
+
+  const boundRows = authoredRows.filter((row: WorldStateRow) => !row.domain || row.domain.$type === "slot");
+
   return <Card
     withBorder
     radius="md"
@@ -78,41 +97,42 @@ export const StateMatrixView: React.FC<StateMatrixViewProps> = ({ stateDefinitio
           size="md"
           fw={650}>Preview registers</Text><Button
             variant="subtle"
-            onClick={onResetState}>Reset preview</Button></Group>
+            disabled={!previewActive}
+            onClick={() => actor.send({ type: "RESET_WORLD" })}>Reset preview</Button></Group>
       <Text
         size="sm"
         c="var(--ink-soft)">Apply a value to advance one preview tick. These edits do not change the authored document.</Text>
       <ScrollArea
         h={350}
         offsetScrollbars><Table
-          verticalSpacing="sm"><Table.Thead><Table.Tr><Table.Th>Register</Table.Th><Table.Th>Value</Table.Th></Table.Tr></Table.Thead><Table.Tbody>
-            {stateDefinitions.filter(row => !row.domain).map(row => <Table.Tr
-              key={row.name}
-              style={{ background: changed.has(row.name) ? "var(--quote-bg)" : undefined }}><Table.Td><Text
-                size="sm"
-                ff="monospace">{row.name}</Text><Text
-                  size="xs"
-                  c="var(--ink-soft)">{row.kind ?? "int"}{changed.has(row.name) ? " · changed" : ""}</Text>
-                {row.name.toLowerCase().includes("mask") && <Button
-                  size="compact-sm"
-                  variant="subtle"
-                  aria-pressed={mask === row.name}
-                  onClick={() => {
-                    const next = mask === row.name ? null : row.name; setMask(next); try {
-                      onHoverMask?.(next ? BigInt(currentState[row.name] ?? 0) : null);
-                    }
-                      catch {
-                        onHoverMask?.(null);
-                      }
-                  }}>Highlight mask</Button>}
-              </Table.Td><Table.Td><RegisterInput
-                row={row}
-                value={currentState[row.name] ?? row.value ?? 0}
-                onChange={value => onStateChange(row.name, value)} /></Table.Td></Table.Tr>)}
+          verticalSpacing="sm"><Table.Thead><Table.Tr><Table.Th>Register</Table.Th><Table.Th>Kind</Table.Th><Table.Th>Value</Table.Th></Table.Tr></Table.Thead><Table.Tbody>
+            {boundRows.map(row => {
+              const live = liveByName.get(row.name);
+              const scalar = isScalarLive(live);
+              const value = live?.cells[0]?.value ?? 0n;
+              return <Table.Tr
+                key={row.name}
+                style={{ background: changed.has(row.name) ? "var(--quote-bg)" : undefined }}><Table.Td><Text
+                  size="sm"
+                  ff="monospace">{row.name}</Text>{changed.has(row.name) && <Text
+                    size="xs"
+                    c="var(--ink-soft)">changed</Text>}
+              </Table.Td><Table.Td><Text
+                size="xs"
+                c="var(--ink-soft)">{row.kind}</Text></Table.Td><Table.Td>{previewActive && scalar
+                ? <RegisterInput
+                  name={row.name}
+                  value={value}
+                  disabled={false}
+                  onApply={next => actor.send({ type: "PREVIEW_WRITE", row: row.name, value: next, write: "set" })} />
+                : <Text
+                  size="sm"
+                  ff="monospace">{live ? (scalar ? value.toString() : live.cells.length + " cells") : (row.value ?? row.min ?? "—")}</Text>}</Table.Td></Table.Tr>;
+            })}
           </Table.Tbody></Table></ScrollArea>
       <Text
         size="xs"
-        c="var(--ink-soft)">{stateDefinitions.filter(row => row.domain).map(row => row.name + " on " + row.domain?.topology).join(" · ")}</Text>
+        c="var(--ink-soft)">{authoredRows.filter(row => row.domain?.$type === "cellsOf").map(row => row.name + " on " + (row.domain as CellsOfDomain).topology).join(" · ")}</Text>
     </Stack></Card>;
 };
 export default React.memo(StateMatrixView);
