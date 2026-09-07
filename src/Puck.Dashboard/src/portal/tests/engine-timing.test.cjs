@@ -89,34 +89,24 @@ if (!fs.existsSync(mainMjs)) {
       // original bytes for this reason).
       const compiled = await time('Compile (composed island)', () => engine.compile(composed.composed));
       assert.equal(compiled.ok, true, JSON.stringify(compiled));
-      // Release immediately, never Judge: the full island's own dive/kart/jump modules author rules
-      // that read world-scoped operand facts (e.g. PhysicsQuiescentOperand) only an IWorldRuleReader
-      // resolves (see Puck.World.Schema/IWorldRuleReader.cs) — BrowserSession's FrameHost (Puck.State,
-      // generic) is not one, by this engine's own deliberate scope (README's "Verified scope
-      // boundary"). Judging the composed island throws Arg_InvalidCastException at the first such
-      // rule; not a performance question and not this package's boundary to fix — see the README's
-      // "Performance" section and this task's own OPEN report.
-      await engine.release(compiled.handle);
+      const handle = compiled.handle;
 
-      // Judge/StateHash: the tictactoe fragment instead of the full island, for the reason just
-      // above — the same document every other Judge-exercising test in this tree already uses
-      // (tests/native.test.cjs, BrowserParityRecordingTests), composed standalone under
-      // standard.basis.json exactly as native.test.cjs's own composeTicTacToeText helper does.
-      const tttRootJson = JSON.stringify({ basis: 'standard.basis.json', imports: [{ document: 'games/tictactoe.world.json' }] });
-      const tttComposed = await engine.composeTree('ttt-root.json', {
-        'ttt-root.json': tttRootJson,
-        'standard.basis.json': basisJson,
-        'games/tictactoe.world.json': fragmentJson,
-      });
-      assert.equal(tttComposed.ok, true, JSON.stringify(tttComposed.errors));
-      const tttCompiled = await engine.compile(tttComposed.composed);
-      assert.equal(tttCompiled.ok, true, JSON.stringify(tttCompiled));
-      const handle = tttCompiled.handle;
+      // Judge: the composed island itself, not a tictactoe stand-in — BrowserRuleReader (Puck.World.Browser/
+      // Engine/BrowserRuleReader.cs) answers the dive/kart/jump modules' world-scoped operand reads (e.g.
+      // PhysicsQuiescentOperand) with this build's own honest hostless facts instead of throwing, and reports
+      // each such read back on the trace's own hostFacts[] (see that type's own remarks and the project
+      // README's "Verified scope boundary"). Three ticks, not one: an effect that reads a world-scoped
+      // operand only inside its own fire (rather than a binding or gate conjunct) may not fire on tick 1
+      // alone — BrowserHostlessIslandTests.cs judges the same three ticks for the same reason.
+      let hostFactCount = 0;
+      for (const tick of [1n, 2n, 3n]) {
+        const judged = await time(`Judge (tick ${tick}, composed island)`, () => engine.judge(handle, tick));
+        assert.equal(judged.ok, true, judged.error);
+        hostFactCount += (judged.trace.hostFacts || []).length;
+      }
+      console.log(`hostFacts recorded across ticks 1-3 (composed island): ${hostFactCount}`);
 
-      const judged = await time('Judge (tick 1, tictactoe)', () => engine.judge(handle, 1n));
-      assert.equal(judged.ok, true, judged.error);
-
-      const hash = await time('StateHash (tictactoe)', () => engine.stateHash(handle));
+      const hash = await time('StateHash (composed island)', () => engine.stateHash(handle));
       assert.equal(typeof hash, 'string');
       assert.ok(hash.length > 0);
 

@@ -150,6 +150,32 @@ if (!fs.existsSync(mainMjs)) {
     assert.ok(result.deferred.some(m => m.includes("screen-machine engine 'gaming-brick' registration deferred")));
   });
 
+  test('Judge() over the composed island runs ticks 1-3 and reports hostFacts for a world-scoped read', async () => {
+    const engine = await engineReady;
+    const documents = {};
+    for (const file of fs.readdirSync(worldsDir, { recursive: true })) {
+      if (!file.endsWith('.json')) continue;
+      documents[file.split(path.sep).join('/')] = fs.readFileSync(path.join(worldsDir, file), 'utf8');
+    }
+
+    const composed = JSON.parse(engine.ComposeTree('puck.world.json', JSON.stringify(documents), '', ''));
+    assert.equal(composed.ok, true, JSON.stringify(composed.errors));
+
+    const compiled = JSON.parse(engine.Compile(composed.composed));
+    assert.equal(compiled.ok, true, JSON.stringify(compiled.errors));
+
+    const hostFacts = [];
+    for (const tick of ['1', '2', '3']) {
+      const judged = JSON.parse(engine.Judge(compiled.handle, tick));
+      assert.equal(judged.ok, true, judged.error);
+      hostFacts.push(...(judged.trace.hostFacts || []));
+    }
+    engine.Release(compiled.handle);
+
+    assert.ok(hostFacts.length > 0, 'the composed island\'s dive/kart/jump rules must read at least one world-scoped operand');
+    assert.ok(hostFacts.some(f => (f.operand.includes('Physics') || f.operand.includes('Body'))));
+  });
+
   // Duplicates the fragment's first rule object by TEXT surgery, never JSON.parse/stringify of the whole document —
   // tictactoe.world.json carries Int64.Min/MaxValue sentinels (state row min/max) JavaScript's own JSON round trip
   // cannot preserve exactly (see documentValidation.ts's own remarks); splicing the raw text leaves every other

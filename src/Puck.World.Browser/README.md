@@ -207,19 +207,39 @@ This is confirmed, expected behavior, not a defect:
 pins it. A district or game fragment that authors no `screens[].source.machine`
 row (most of the catalog) parses and compiles cleanly with no deferral at all.
 
-**`Judge()` on the composed flagship island throws.** `BrowserSession`'s
-`FrameHost` (`Puck.State`, generic) is not an `IWorldRuleReader`
-(`Puck.World.Schema/IWorldRuleReader.cs`) — the widened reader "the evaluator
-that owns bodies, regions, machines, and channels implements", per that
-interface's own remarks — so any rule reading a world-scoped operand fact
-(`PhysicsQuiescentOperand`, `RegionOccupancyOperand`, `ArgBodyOperand`, …)
-throws `Arg_InvalidCastException` the moment it evaluates. `puck.world.json`'s
-own `dive`/`kart`/`jump` modules author such rules, so `Judge()` on the
-composed island (unlike `games/tictactoe.world.json`, which authors none)
-fails today, regardless of build configuration. `Compile()` still succeeds
-(it never evaluates a rule); every `Judge`-exercising test and harness in this
-tree (`BrowserParityRecordingTests`, `engine-timing.test.cjs`) judges
-`games/tictactoe.world.json` for this reason, never the composed island.
+**`Judge()` on the composed flagship island judges hostlessly, honestly.**
+`BrowserSession`'s rule reader (`Engine/BrowserRuleReader.cs`) wraps a
+`Puck.State.FrameHost` for every state read and write, and itself widens to
+`IWorldRuleReader` (`Puck.World.Schema/IWorldRuleReader.cs`) — the world's
+sixteen operand facts (`PhysicsQuiescentOperand`, `RegionOccupancyOperand`,
+`ArgBodyOperand`, …) plus the two body-reference resolutions
+`Puck.World.Server.WorldServer` answers from real bodies, machines, a clock,
+and adjacencies. This engine ships none of those, so `BrowserRuleReader`
+answers each one the honest vacuous fact a world with no bodies, no machines,
+no clock, and no adjacencies gives — the same convention each
+`WorldRuleFacts` prefix's own remarks and `WorldServer.RuleHost.cs`'s "no such
+body"/"no such machine" reads already commit to for an absent host, applied
+here for "there is no host at all": population `0`, physics vacuously
+quiescent, no region occupants, no machine byte, no argmax/argmin/nearest
+body (`-1`), the engine's largest representable distance between two bodies
+that do not exist, no line of sight, never parked, perfectly upright, a link
+never established, a zero channel, and no navigation state.
+`PlacementInfluenceOperand` alone reads `RuleFact.Absent` — an unrepresented
+influence provider is unknowable, never a falsely safe zero, exactly as
+`WorldServer.Influence.cs` already answers it for the one real case that
+reads `Absent` today. `puck.world.json`'s own `dive`/`kart`/`jump` modules
+author rules reading these facts, so every such hostless read is recorded
+onto the judged tick's own trace as `hostFacts[]`
+(`{rule, operand, answer}`) — how an author sees which rules lean on a fact
+this engine cannot supply from a real host, without the
+`Arg_InvalidCastException` a bare `FrameHost` used to throw the moment such a
+rule evaluated. `BrowserHostlessIslandTests` judges the composed island over
+ticks 1-3 and pins both that no such throw occurs and that `hostFacts[]`
+names a physics/body operand; `engine-timing.test.cjs` and
+`engine-wasm.test.cjs` judge the composed island itself now, not a tictactoe
+stand-in — only `BrowserParityRecordingTests`/`engine-wasm.test.cjs`'s own
+determinism-hash fixtures still use `games/tictactoe.world.json`, for their
+own fixed-baseline reason, unrelated to this boundary.
 
 ## Trim baseline
 

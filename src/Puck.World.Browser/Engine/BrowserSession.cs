@@ -40,8 +40,9 @@ public readonly record struct BrowserRefusal(
     string Detail
 );
 /// <summary>One <c>Judge</c> call's whole trace: every armed rule's captured evaluations, the frame's own before/after
-/// diff, and the evaluator's cumulative refusal ledger.</summary>
-public readonly record struct BrowserJudgeResult(IReadOnlyList<BrowserRuleTrace> Rules, IReadOnlyList<BrowserWrite> Writes, IReadOnlyList<BrowserRefusal> Refusals);
+/// diff, the evaluator's cumulative refusal ledger, and every hostless world-operand read this tick's own rules made
+/// (see <see cref="BrowserRuleReader"/>'s own remarks).</summary>
+public readonly record struct BrowserJudgeResult(IReadOnlyList<BrowserRuleTrace> Rules, IReadOnlyList<BrowserWrite> Writes, IReadOnlyList<BrowserRefusal> Refusals, IReadOnlyList<BrowserHostFact> HostFacts);
 /// <summary>One <c>ReadRow</c> result: whether the cell exists in the frame, and its value (numeric rows) or text
 /// (a text row's own cell, read straight through the row rather than the frame — see <see cref="StateFrame"/>'s
 /// own remarks on an unframed row).</summary>
@@ -67,7 +68,7 @@ public static class BrowserJudgeLimits {
 /// <c>[JSExport]</c>/marshalling concern lives here; <c>Puck.World.Browser.Exports.BrowserExports</c> is the
 /// only caller.</summary>
 public sealed class BrowserSession {
-    private readonly FrameHost m_host;
+    private readonly BrowserRuleReader m_host;
     private CompiledWorldRule[] m_rules;
     private WorldRuleCompileContext m_expressionContext;
 
@@ -89,7 +90,7 @@ public sealed class BrowserSession {
 
         var layout = new FrameLayout(rows: definition.State, topology: name => WorldTopologyCompilation.Find(definition: definition, name: name));
 
-        m_host = new FrameHost(layout: layout, rows: definition.State, catalog: definition.StateCatalog, patterns: patterns!, tables: compilation.Tables);
+        m_host = new BrowserRuleReader(frameHost: new FrameHost(layout: layout, rows: definition.State, catalog: definition.StateCatalog, patterns: patterns!, tables: compilation.Tables));
 
         LoadRows(rows: definition.State);
     }
@@ -153,10 +154,11 @@ public sealed class BrowserSession {
             Effect: diagnostic.Effect,
             Detail: diagnostic.Detail
         )).ToArray();
+        var hostFacts = m_host.HostFacts.ToArray();
 
         m_host.Evaluator.DisarmTrace();
 
-        return new BrowserJudgeResult(Rules: rules, Writes: writes, Refusals: refusals);
+        return new BrowserJudgeResult(Rules: rules, Writes: writes, Refusals: refusals, HostFacts: hostFacts);
     }
 
     private BrowserRuleTrace[] GroupTrace(IReadOnlyList<RuleTraceEvaluation> captured) {
