@@ -113,9 +113,14 @@ raw integers), a cell removal, a generator draw (advances a row's own
 `Random` or `Slice` (both need the generator stream `First`/`Last`/`Key`
 never touch) — and minting a new cell of a keyed row (a frame's layout is
 fixed-size once built) all fall to `TryApplyCrossRowStateMutation`: it
-replays this tick's own queued mutations from the tick's starting document,
-composes the new one on top, and re-derives the frame from the result so a
-later same-tick read (another rule's gate, or the very next effect) sees it.
+replays this tick's own queued mutations plus the new one as one
+`WorldMutation.Batch` through the batch workspace below, from the tick's
+starting document, and re-derives the frame from the result so a later
+same-tick read (another rule's gate, or the very next effect) sees it. A cell
+write or removal among the replayed members shares that one workspace row-list
+copy instead of paying for a fresh whole-document compose per member, so a
+tick with many cross-row writes (a Klondike deal) no longer recomposes its
+whole prefix once per already-queued member.
 Document effects use the same queued prefix when preparing their candidate,
 so a later effect sees earlier numeric writes as well as earlier placement or
 HUD changes. Nothing here installs for real — the tick's own fold still owns that.

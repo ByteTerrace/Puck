@@ -137,30 +137,50 @@ public sealed partial class WorldServer {
         StateMutation.Apply apply => new WorldMutation.TransformState(WorldPrincipal.World, apply.Transform),
         _ => throw new InvalidOperationException(message: $"state mutation '{mutation.GetType().Name}' has no world mapping."),
     };
-    // Replays the one authored rule queue from the clean tick baseline. Fast numeric frame writes are represented
-    // only in m_ruleFrameMutations until the fold, while document leaves keep their speculative m_definition in sync;
-    // replaying both here gives every later preflight the same state the eventual ordinary Batch will install.
+    // Scratch for TryComposeRuleFrameCandidate's own combined member list — cleared and refilled on every call
+    // rather than allocated fresh, so a tick with many cross-row writes (a Klondike deal) pays for the list once
+    // per call, never once per member replayed.
+    private readonly List<WorldMutation> m_ruleFrameReplayScratch = [];
+    // Replays the one authored rule queue from the clean tick baseline through the batch workspace — the same
+    // vehicle an externally submitted WorldMutation.Batch composes through, which guarantees the document it hands
+    // back is byte-identical to composing the same members one by one (TryComposeBatch's own contract). A cell
+    // write or removal among the replayed members then shares ONE workspace row-list copy instead of paying for a
+    // fresh whole-document compose per member, so a tick with many cross-row writes (a Klondike deal) composes its
+    // prefix once per call rather than once per member replayed. `next` is appended to the replay rather than
+    // queued first, so a caller sees whether the WHOLE candidate — prefix plus the pending member — composes before
+    // deciding to keep it.
     private bool TryComposeRuleFrameCandidate(WorldMutation? next, ulong tick, out WorldDefinition candidate, out string reason) {
-        candidate = m_ruleFrameTickBaseline!;
+        var baseline = m_ruleFrameTickBaseline!;
+
         reason = string.Empty;
 
-        foreach (var queued in m_ruleFrameMutations) {
-            if (!TryCompose(current: candidate, mutation: queued, tick: tick, instanceIdentity: InstanceIdentity, candidate: out var replayed, reason: out reason, evictedKey: out _, patterns: m_patterns)) {
-                return false;
-            }
+        if ((m_ruleFrameMutations.Count == 0) && (next is null)) {
+            candidate = baseline;
 
-            candidate = RebaseCellTraits(candidate: replayed, mutation: queued, original: candidate, tick: tick);
+            return true;
         }
+
+        IReadOnlyList<WorldMutation> members;
 
         if (next is { } mutation) {
-            if (!TryCompose(current: candidate, mutation: mutation, tick: tick, instanceIdentity: InstanceIdentity, candidate: out var applied, reason: out reason, evictedKey: out _, patterns: m_patterns)) {
-                return false;
-            }
-
-            candidate = RebaseCellTraits(candidate: applied, mutation: mutation, original: candidate, tick: tick);
+            m_ruleFrameReplayScratch.Clear();
+            m_ruleFrameReplayScratch.AddRange(collection: m_ruleFrameMutations);
+            m_ruleFrameReplayScratch.Add(item: mutation);
+            members = m_ruleFrameReplayScratch;
+        } else {
+            members = m_ruleFrameMutations;
         }
 
-        return true;
+        return TryComposeBatch(
+            batch: new WorldMutation.Batch(Principal: WorldPrincipal.World, Mutations: members),
+            candidate: out candidate,
+            current: baseline,
+            evictedKey: out _,
+            instanceIdentity: InstanceIdentity,
+            reason: out reason,
+            tick: tick,
+            patterns: m_patterns
+        );
     }
     // The mutation kinds a value frame cannot answer on its own: a text cell (the frame holds only raw longs), a
     // cell removal (structural — no row shrinks in place), a generator draw (advances the row's own DrawCursor/

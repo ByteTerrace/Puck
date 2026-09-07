@@ -119,11 +119,12 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
     }
     // Charges the calling thread only: the suite runs tests in parallel, so a process-wide counter would fold a
     // sibling test into this window. The denominator is rule-written cells, not journal entries, so a tick that
-    // folds many effects into one entry does not divide by a shrinking count and hide what this law pins. A real
-    // deal spends most of its ticks on one or two cells apiece, and its transfers take the cross-row path, which
-    // replays the tick's queued members one by one for every cross-row effect, so the per-install pipeline's own
-    // fixed cost for a document this size still dominates the average — CellsFoldIntoOneInstallWithBoundedPerCellCost
-    // below isolates the batch compose's own cost on a tick that writes many cells at once.
+    // folds many effects into one entry does not divide by a shrinking count and hide what this law pins. Klondike's
+    // own authored rules never queue more than one cross-row write per tick (a deal spends most of its ticks on one
+    // or two cells apiece), so this bound is dominated by the once-per-tick install pipeline's own fixed cost for a
+    // document this size, not by how many members one cross-row replay composes — ManyCrossRowWritesInOneTickShareOneWorkspaceCopy
+    // below isolates that cost directly, and CellsFoldIntoOneInstallWithBoundedPerCellCost isolates the batch
+    // compose's own cost on a tick that writes many frame-fast cells at once.
     [Fact]
     public void KlondikeDealAllocatesFarLessThanWholeDocumentValidation() {
         using var fixture = Fixtures.FreshServer(definition: Game(game: "solitaireKlondike"));
@@ -182,6 +183,45 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
         output.WriteLine(message: $"{rowCount} independent cells, one tick: {installs} install, {allocated} bytes allocated, {perCell:F0} bytes/cell");
 
         Assert.True(condition: (perCell < (4 * 1024)), userMessage: $"expected under 4 KiB per rule-written cell; measured {perCell:F0} bytes/cell over {cells} cells");
+    }
+    // The shape KlondikeDealAllocatesFarLessThanWholeDocumentValidation's own comment describes but does not itself
+    // reach: many cross-row writes (text, so each mints through TryApplyCrossRowStateMutation rather than the
+    // frame's numeric array) queued in the SAME tick. Before routing that replay through the batch workspace, the
+    // Nth cross-row write recomposed the whole document once per already-queued member — quadratic in the tick's own
+    // cross-row count; the workspace makes it one shared row-list copy per replay instead.
+    [Fact]
+    public void ManyCrossRowWritesInOneTickShareOneWorkspaceCopy() {
+        const int rowCount = 32;
+        var rows = new WorldStateRow[rowCount];
+        var effects = new ActionEffect[rowCount];
+
+        for (var index = 0; index < rowCount; index++) {
+            rows[index] = new WorldStateRow(Name($"text{index}"), CellKind.Text, Cells: [new StateCell(WorldStateRow.SlotKey, 0, Text: "")]);
+            effects[index] = new ActionEffect.SetState(State: $"text{index}", Text: "written");
+        }
+
+        var definition = Document(rows) with { Rules = [new WorldRule(Name("advance"), effects, Mode: ActionTriggerMode.Level)] };
+        using var fixture = Fixtures.FreshServer(definition: definition);
+
+        var installs = 0;
+        var cells = 0;
+        fixture.Server.MutationJournalTap = (_, mutation) => { installs++; cells += CountCells(mutation: mutation); };
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        fixture.Step();
+        var allocated = (GC.GetAllocatedBytesForCurrentThread() - before);
+
+        Assert.Equal(expected: 1, actual: installs);
+        Assert.Equal(expected: rowCount, actual: cells);
+        for (var index = 0; index < rowCount; index++) {
+            Assert.Equal(expected: "written", actual: Row(f: fixture, name: $"text{index}").Cells!.Single().Text);
+        }
+
+        var perCell = (allocated / (double)cells);
+
+        output.WriteLine(message: $"{rowCount} cross-row text cells, one tick: {installs} install, {allocated} bytes allocated, {perCell:F0} bytes/cell");
+
+        Assert.True(condition: (perCell < (80 * 1024)), userMessage: $"expected under 80 KiB per cross-row cell; measured {perCell:F0} bytes/cell over {cells} cells");
     }
     private static int CountCells(WorldMutation mutation) => (mutation is WorldMutation.Batch batch ? batch.Mutations.Sum(selector: CountCells) : 1);
 
