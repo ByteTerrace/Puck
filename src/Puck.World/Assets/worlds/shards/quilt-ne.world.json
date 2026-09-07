@@ -1,6 +1,23 @@
 {
   "basis": "../puck.world.json",
   "documentId": "quilt-ne",
+  "gravity": {
+    "areas": []
+  },
+  "navigation": {
+    "domains": [
+      {
+        "name": "granaryYard",
+        "$drop": true
+      }
+    ]
+  },
+  "cameras": [
+    {
+      "name": "studioStage",
+      "$drop": true
+    }
+  ],
   "references": [
     {
       "name": "ne",
@@ -45,13 +62,13 @@
       "counterpart": "east",
       "boundary": {
         "center": [
-          24.0,
+          66.0,
           0,
-          0
+          0.0
         ],
         "outwardYawDegrees": -90,
         "outwardPitchDegrees": 0,
-        "width": 48.0,
+        "width": 132.0,
         "height": 16.0
       },
       "unavailable": "Closed"
@@ -62,9 +79,9 @@
       "counterpart": "east",
       "boundary": {
         "center": [
-          24.0,
+          66.0,
           0,
-          -36.0
+          -99.0
         ],
         "outwardYawDegrees": -90,
         "outwardPitchDegrees": 0,
@@ -79,9 +96,9 @@
       "counterpart": "north",
       "boundary": {
         "center": [
-          36.0,
+          99.0,
           0,
-          24.0
+          66.0
         ],
         "outwardYawDegrees": 0,
         "outwardPitchDegrees": 0,
@@ -95,9 +112,9 @@
     {
       "id": "quilt-ne-arrival",
       "position": [
-        36.0,
+        99.0,
         0,
-        0
+        0.0
       ],
       "yawDegrees": -90
     }
@@ -132,9 +149,9 @@
             ],
             "rotation": "state.transforms.identity",
             "scale": [
-              12.0,
+              33.0,
               0.5,
-              36.0
+              99.0
             ],
             "smooth": 0,
             "type": "Box"
@@ -176,9 +193,9 @@
       {
         "id": "quiltGround",
         "position": [
-          36.0,
+          99.0,
           -1.0,
-          -12.0
+          -33.0
         ],
         "prototypeId": "quiltGround",
         "scale": 1,

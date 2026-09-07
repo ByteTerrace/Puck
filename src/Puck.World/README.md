@@ -350,7 +350,16 @@ Facts a script needs:
   state, the safety net under everything at y = -64, and its debug texture);
   its districts under `worlds/modules/` (`modules/README.md`) and the tabletop
   games under `worlds/games/`, each an imported fragment; the corner shards
-  under `worlds/shards/`, each a `basis` delta over the island; see
+  under `worlds/shards/`, each a `basis` delta over the island. The island
+  owns the reciprocal half of the seam: `references`/`destinations` name each
+  shard (`nw`/`ne`/`se`/`sw`), and four `adjacencies` rows (`north`/`east`/
+  `south`/`west`) site the invisible ownership boundary at the island's own
+  ground edge beyond the dive/kart/jump/studio lobes. A shard's own mutual
+  ring to its two neighbours scales its edge/spawn/ground geometry uniformly
+  from the ring's authored numbers, keeping every derived-corner diamond
+  closed against the island's own (much larger) edge placement; each shard
+  also drops the one imported-module navigation domain and camera its
+  wholesale `placements` replacement leaves dangling. See
   `src/Puck.World.Schema/README.md`, "Document composition"), the default recording document
   (`recordings/`), two shipped
   WASM addons (`addons/`: `default`, `hudbuilder`; mounted by no shipped world

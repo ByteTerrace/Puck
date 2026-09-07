@@ -10932,6 +10932,50 @@
       "version": "puck.camera.v1"
     }
   },
+  "references": [
+    {
+      "name": "nw",
+      "document": "shards/quilt-nw.world.json"
+    },
+    {
+      "name": "ne",
+      "document": "shards/quilt-ne.world.json"
+    },
+    {
+      "name": "se",
+      "document": "shards/quilt-se.world.json"
+    },
+    {
+      "name": "sw",
+      "document": "shards/quilt-sw.world.json"
+    }
+  ],
+  "destinations": [
+    {
+      "name": "nw",
+      "reference": "nw",
+      "durability": "persisted",
+      "scope": "global"
+    },
+    {
+      "name": "ne",
+      "reference": "ne",
+      "durability": "persisted",
+      "scope": "global"
+    },
+    {
+      "name": "se",
+      "reference": "se",
+      "durability": "persisted",
+      "scope": "global"
+    },
+    {
+      "name": "sw",
+      "reference": "sw",
+      "durability": "persisted",
+      "scope": "global"
+    }
+  ],
   "admission": [
     {
       "domain": "*",
@@ -10954,6 +10998,76 @@
           "budget": 64
         }
       ]
+    }
+  ],
+  "adjacencies": [
+    {
+      "name": "north",
+      "destination": "nw",
+      "counterpart": "island",
+      "boundary": {
+        "center": [
+          0,
+          0,
+          -66.0
+        ],
+        "outwardYawDegrees": 180,
+        "outwardPitchDegrees": 0,
+        "width": 132.0,
+        "height": 16.0
+      },
+      "unavailable": "Closed"
+    },
+    {
+      "name": "east",
+      "destination": "ne",
+      "counterpart": "island",
+      "boundary": {
+        "center": [
+          66.0,
+          0,
+          0
+        ],
+        "outwardYawDegrees": 90,
+        "outwardPitchDegrees": 0,
+        "width": 132.0,
+        "height": 16.0
+      },
+      "unavailable": "Closed"
+    },
+    {
+      "name": "south",
+      "destination": "se",
+      "counterpart": "island",
+      "boundary": {
+        "center": [
+          0,
+          0,
+          66.0
+        ],
+        "outwardYawDegrees": 0,
+        "outwardPitchDegrees": 0,
+        "width": 132.0,
+        "height": 16.0
+      },
+      "unavailable": "Closed"
+    },
+    {
+      "name": "west",
+      "destination": "sw",
+      "counterpart": "island",
+      "boundary": {
+        "center": [
+          -66.0,
+          0,
+          0
+        ],
+        "outwardYawDegrees": -90,
+        "outwardPitchDegrees": 0,
+        "width": 132.0,
+        "height": 16.0
+      },
+      "unavailable": "Closed"
     }
   ]
 }
