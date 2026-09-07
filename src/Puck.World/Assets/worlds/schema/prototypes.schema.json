@@ -12,10 +12,12 @@
     "properties": {
       "id": {
         "description": "The row\u0027s stable string id \u2014 its mutation address and the handle placements reference \u2014 authored literally or through a Text state cell.",
+        "title": "DocumentIdentifier",
         "type": "string"
       },
       "document": {
         "description": "The canonical (validated \u002B normalized) creation document.",
+        "title": "CreationDocument",
         "type": [
           "object",
           "null"
@@ -736,7 +738,8 @@
               }
             },
             "additionalProperties": false,
-            "default": null
+            "default": null,
+            "title": "CreationBehaviorDocument"
           },
           "textRuns": {
             "type": [
@@ -900,7 +903,8 @@
               "amplitude"
             ],
             "additionalProperties": false,
-            "default": null
+            "default": null,
+            "title": "CreationNoiseDocument"
           },
           "drivers": {
             "type": [
@@ -1069,7 +1073,8 @@
       "id",
       "document"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldPrototype"
   },
   "default": null
 }

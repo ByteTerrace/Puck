@@ -42,7 +42,8 @@
           "name",
           "feed"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldSpeakerFixed"
       },
       {
         "description": "A speaker anchored to a WorldAnchor \u2014 the entity/part/placement pose it rides supplies the live position; Offset is the exact attachment point in the anchor\u0027s local axes on top of that. Unlike cameras, speakers resolve every anchor kind, placements included (the placement\u0027s stamped transform is reachable client-side from the definition plus the animator state).",
@@ -78,7 +79,8 @@
           "name",
           "feed"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldSpeakerAnchored"
       },
       {
         "description": "An ambient bed \u2014 a region presence, not a position: center-panned, its gain an envelope of the listener\u0027s distance from Center \u2014 full inside InnerRadius, zero at Radius \u2014 with its presence slew bounded by FadeSeconds. Box extents become a later $type only if a sphere proves dishonest.",
@@ -126,9 +128,11 @@
           "name",
           "feed"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldSpeakerBed"
       }
-    ]
+    ],
+    "title": "WorldSpeaker"
   },
   "default": null
 }

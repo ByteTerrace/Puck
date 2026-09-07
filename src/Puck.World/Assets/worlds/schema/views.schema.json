@@ -17,7 +17,8 @@
           "enum": [
             "World",
             "Body"
-          ]
+          ],
+          "title": "WorldSeatYawReference"
         },
         "minPitch": {
           "description": "The minimum live pitch offset in radians.",
@@ -48,7 +49,8 @@
             "rate"
           ],
           "additionalProperties": false,
-          "default": null
+          "default": null,
+          "title": "WorldSeatFollow"
         }
       },
       "required": [
@@ -56,7 +58,8 @@
         "minPitch",
         "maxPitch"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldSeatViewControl"
     },
     "cameraRig": {
       "description": "The program a seat\u0027s view resolves through while its published mode state targets CameraTarget \u2014 null for a world that authors no camera-targeting mode state. Resolved through the ordinary Puck.World.Client.WorldCameraRigCompiler pipeline against whichever body the seat currently perceives from (the possessed camera body \u2014 see Puck.World.Server.WorldEngagement), exactly like SeatRig resolves against the seat\u0027s own avatar; no bespoke per-frame integrator reads this field.",
@@ -124,7 +127,8 @@
         "operations"
       ],
       "additionalProperties": false,
-      "default": null
+      "default": null,
+      "title": "WorldCameraProgram"
     },
     "layouts": {
       "description": "Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
@@ -183,7 +187,8 @@
                   ]
                 }
               },
-              "additionalProperties": false
+              "additionalProperties": false,
+              "title": "WorldViewSlot"
             }
           }
         },
@@ -194,7 +199,8 @@
           "transitionRenderScale",
           "slots"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldViewLayout"
       }
     }
   },
@@ -204,5 +210,6 @@
     "layouts"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldViewDefaults"
 }

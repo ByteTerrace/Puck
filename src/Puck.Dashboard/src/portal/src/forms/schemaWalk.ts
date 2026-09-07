@@ -94,6 +94,40 @@ function isNullableSchema(schema: JsonSchema): boolean {
   return false;
 }
 
+/**
+ * A reference site's own shape: `{ anyOf: [{ $ref }, { type: "null" }?] }` — the ONLY form the
+ * bundle ever names a shared def by (see `WorldSchema.Bundle`'s own `BuildReferenceSite`; a bare
+ * `{ $ref }` with no sibling never appears wrapped, so this pattern is unambiguous). Recognized by
+ * shape alone — an arm carrying anything beyond its own single keyword (a REAL union arm, which
+ * always adds `properties`/`const`/a description) never matches, so a genuine multi-arm
+ * discriminated union is never mistaken for this.
+ */
+function extractRefSite(schema: JsonSchema): { ref: string; nullable: boolean } | undefined {
+  if (!Array.isArray(schema.anyOf) || schema.anyOf.length === 0 || schema.anyOf.length > 2) return undefined;
+  let ref: string | undefined;
+  let nullable = false;
+  for (const arm of schema.anyOf) {
+    if (!arm || typeof arm !== "object") return undefined;
+    const keys = Object.keys(arm);
+    if (keys.length === 1 && keys[0] === "$ref" && typeof arm.$ref === "string") {
+      if (ref !== undefined) return undefined;
+      ref = arm.$ref;
+    } else if (keys.length === 1 && keys[0] === "type" && arm.type === "null") {
+      nullable = true;
+    } else {
+      return undefined;
+    }
+  }
+  return ref === undefined ? undefined : { ref, nullable };
+}
+
+/** Merges `"null"` into an existing `type` (absent, a bare string, or already an array). */
+function mergeNullType(type: unknown): string | string[] {
+  if (type === undefined) return "null";
+  const list = normalizeTypeList(type);
+  return list.includes("null") ? list : [...list, "null"];
+}
+
 function stripAnyOf(schema: JsonSchema): JsonSchema {
   const { anyOf: _anyOf, ...rest } = schema;
   return rest;
@@ -252,10 +286,23 @@ function makeDeref(bundle: JsonSchema): (schema: JsonSchema) => JsonSchema {
   return function deref(schema: JsonSchema): JsonSchema {
     let current = schema;
     let hops = 0;
-    while (current && typeof current === "object" && typeof current.$ref === "string" && hops < MAX_REF_HOPS) {
-      const target = lookupPointer(bundle, current.$ref);
-      const { $ref: _ref, ...siblings } = current;
-      current = { ...target, ...siblings };
+    while (current && typeof current === "object" && hops < MAX_REF_HOPS) {
+      if (typeof current.$ref === "string") {
+        const target = lookupPointer(bundle, current.$ref);
+        const { $ref: _ref, ...siblings } = current;
+        current = { ...target, ...siblings };
+        hops++;
+        continue;
+      }
+      const refSite = extractRefSite(current);
+      if (!refSite) break;
+      const target = lookupPointer(bundle, refSite.ref);
+      const { anyOf: _anyOf, ...siblings } = current;
+      current = {
+        ...target,
+        ...siblings,
+        ...(refSite.nullable ? { type: mergeNullType(target.type) } : {}),
+      };
       hops++;
     }
     return current;
@@ -393,17 +440,18 @@ export function resolve(bundle: JsonSchema): SchemaWalker {
   }
 
   // The row schema for each state lane (`state.world`/`state.body`/`state.identity`) is a
-  // stable object reference straight from the bundle: the array node and its `items` node
-  // carry no `$ref`/`anyOf`/`allOf` of their own, so `atPath` never clones them and this
-  // reference stays valid for every row, in every array, for the life of this walker. That
-  // makes it a clean SCHEMA-LOCATION handle for "is this the cells array of a state row" —
-  // comparing against it (further down, in `isCellsField`) never depends on how a row or its
-  // cells happen to be spelled in an authored document, unlike a name-based guess (checking a
-  // row's own `name`, or assuming any `{key, value}`-shaped array anywhere is a cells table).
-  const stateNode = bundle.properties?.state;
+  // stable object reference: `state` itself is a bundle $ref (resolved through `atPath`, which
+  // this depends on), but its OWN "properties" object is never re-spread by `deref` — only the
+  // wrapping node is — so `properties[lane].items`, read straight off the wrapper's target, is
+  // the exact same reference on every call. That makes it a clean SCHEMA-LOCATION handle for "is
+  // this the cells array of a state row" — comparing against it (further down, in
+  // `isCellsField`) never depends on how a row or its cells happen to be spelled in an authored
+  // document, unlike a name-based guess (checking a row's own `name`, or assuming any
+  // `{key, value}`-shaped array anywhere is a cells table).
+  const stateSchema = atPath(["state"]).schema;
   const rowItemSchemas = new Set<JsonSchema>(
     ["world", "body", "identity"]
-      .map(lane => stateNode?.properties?.[lane]?.items)
+      .map(lane => stateSchema.properties?.[lane]?.items)
       .filter((schema): schema is JsonSchema => !!schema),
   );
 

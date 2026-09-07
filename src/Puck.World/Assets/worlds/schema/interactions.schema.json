@@ -16,6 +16,7 @@
         "properties": {
           "name": {
             "description": "The interaction\u0027s stable name \u2014 unique within the section (a separate namespace from Name, so the two may coincide without colliding). A CellName, never $-prefixed \u2014 that prefix marks what the engine mints, and nothing mints an interaction.",
+            "title": "CellName",
             "type": "string"
           },
           "left": {
@@ -31,7 +32,8 @@
             "enum": [
               "Distance",
               "Region"
-            ]
+            ],
+            "title": "WorldInteractionCoOccurrence"
           },
           "range": {
             "description": "The distance threshold, for Distance alone \u2014 an exact JSON decimal lowered directly to deterministic fixed point, with no binary32 intermediate. Ignored (and unchecked) under Region.",
@@ -50,7 +52,8 @@
               "Level",
               "Edge"
             ],
-            "default": "Edge"
+            "default": "Edge",
+            "title": "ActionTriggerMode"
           },
           "neighbours": {
             "type": [
@@ -68,7 +71,8 @@
           "range",
           "effects"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldInteraction"
       }
     }
   },
@@ -76,5 +80,6 @@
     "interactions"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldInteractionsSection"
 }

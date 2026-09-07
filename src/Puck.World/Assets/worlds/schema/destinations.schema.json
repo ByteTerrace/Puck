@@ -12,6 +12,7 @@
     "properties": {
       "name": {
         "description": "The destination\u0027s own name \u2014 SafeName-shaped, unique within the section. A Destination facet resolves against this name (see WorldDefinitionValidator).",
+        "title": "SafeName",
         "type": "string"
       },
       "reference": {
@@ -20,6 +21,7 @@
       },
       "durability": {
         "description": "How this destination\u0027s target instance is minted (see WorldDestinationDurability).",
+        "title": "WorldDestinationDurability",
         "type": "string",
         "enum": [
           "ephemeral",
@@ -29,6 +31,7 @@
       "scope": {
         "description": "Which scoped identity/generation this destination selects (see WorldDestinationScope). Absent resolves to Global \u2014 today\u0027s behavior, unchanged for every row authored before this member existed. Trailing member: the same widen-without-moving-existing-members shape WorldLatticeMedium\u0027s own remarks describe.",
         "default": "global",
+        "title": "WorldDestinationScope",
         "type": "string",
         "enum": [
           "user",
@@ -60,7 +63,8 @@
             "required": [
               "group"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "WorldGroupSelectorNamed"
           },
           {
             "description": "Selects the traveler\u0027s unique verified membership claim carrying Tag \u2014 zero matching memberships and multiple matching memberships are distinct named refusals; the engine never picks one silently (see Tags).",
@@ -76,10 +80,12 @@
             "required": [
               "tag"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "WorldGroupSelectorTagged"
           }
         ],
-        "default": null
+        "default": null,
+        "title": "WorldGroupSelector"
       }
     },
     "required": [
@@ -87,7 +93,8 @@
       "reference",
       "durability"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldDestination"
   },
   "default": null
 }

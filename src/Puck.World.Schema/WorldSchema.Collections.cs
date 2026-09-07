@@ -68,6 +68,10 @@ public static partial class WorldSchema {
         var obj = new JsonObject();
 
         typesByNode[obj] = elementType;
+        StampTitle(
+            obj: obj,
+            type: elementType
+        );
 
         ApplyConverterVocabulary(
             index: index,

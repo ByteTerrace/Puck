@@ -13,5 +13,6 @@
     "rateHz"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldSimulationDefaults"
 }

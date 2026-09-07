@@ -9,15 +9,19 @@
       "type": "object",
       "properties": {
         "surfaceBase": {
+          "title": "BindableColor",
           "type": "string"
         },
         "surfacePanel": {
+          "title": "BindableColor",
           "type": "string"
         },
         "surfaceRaised": {
+          "title": "BindableColor",
           "type": "string"
         },
         "surfaceInset": {
+          "title": "BindableColor",
           "type": "string"
         },
         "scrimPanel": {
@@ -30,60 +34,79 @@
           "$ref": "./common.schema.json#/$defs/WorldThemeScrim"
         },
         "lineHair": {
+          "title": "BindableColor",
           "type": "string"
         },
         "lineSoft": {
+          "title": "BindableColor",
           "type": "string"
         },
         "lineStrong": {
+          "title": "BindableColor",
           "type": "string"
         },
         "lineInset": {
+          "title": "BindableColor",
           "type": "string"
         },
         "textPrimary": {
+          "title": "BindableColor",
           "type": "string"
         },
         "textDim": {
+          "title": "BindableColor",
           "type": "string"
         },
         "textMute": {
+          "title": "BindableColor",
           "type": "string"
         },
         "accent": {
+          "title": "BindableColor",
           "type": "string"
         },
         "accentQuiet": {
+          "title": "BindableColor",
           "type": "string"
         },
         "accentLine": {
+          "title": "BindableColor",
           "type": "string"
         },
         "accentInk": {
+          "title": "BindableColor",
           "type": "string"
         },
         "positive": {
+          "title": "BindableColor",
           "type": "string"
         },
         "warning": {
+          "title": "BindableColor",
           "type": "string"
         },
         "danger": {
+          "title": "BindableColor",
           "type": "string"
         },
         "phosphor": {
+          "title": "BindableColor",
           "type": "string"
         },
         "phosphorDim": {
+          "title": "BindableColor",
           "type": "string"
         },
         "phosphorCyan": {
+          "title": "BindableColor",
           "type": "string"
         },
         "badgeDark": {
+          "title": "BindableColor",
           "type": "string"
         },
         "badgeLight": {
+          "title": "BindableColor",
           "type": "string"
         }
       },
@@ -115,7 +138,8 @@
         "badgeDark",
         "badgeLight"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldThemeColor"
     },
     "space": {
       "description": "The spacing grid and component heights.",
@@ -188,7 +212,8 @@
         "heightTrackerBar",
         "heightTrackerCell"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldThemeSpace"
     },
     "radius": {
       "description": "The radius scale.",
@@ -209,7 +234,8 @@
         "radius2",
         "radius3"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldThemeRadius"
     },
     "type": {
       "description": "The type scale.",
@@ -302,7 +328,8 @@
         "titleTracking",
         "titleWeight"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldThemeType"
     },
     "elevation": {
       "description": "The two-tier elevation recipe.",
@@ -315,6 +342,7 @@
           "type": "number"
         },
         "bloomHaloAlpha": {
+          "title": "BindableScalar",
           "type": [
             "number",
             "string"
@@ -324,18 +352,21 @@
           "type": "number"
         },
         "bloomRingAlpha": {
+          "title": "BindableScalar",
           "type": [
             "number",
             "string"
           ]
         },
         "bloomNeutralHaloAlpha": {
+          "title": "BindableScalar",
           "type": [
             "number",
             "string"
           ]
         },
         "bloomNeutralRingAlpha": {
+          "title": "BindableScalar",
           "type": [
             "number",
             "string"
@@ -348,6 +379,7 @@
           "type": "number"
         },
         "bloomHeldInsetAlpha": {
+          "title": "BindableScalar",
           "type": [
             "number",
             "string"
@@ -375,6 +407,7 @@
           "type": "number"
         },
         "pressHeldGlowColor": {
+          "title": "BindableColor",
           "type": "string"
         },
         "pressHeldShadowBlur": {
@@ -387,6 +420,7 @@
           "type": "number"
         },
         "pressHeldShadowColor": {
+          "title": "BindableColor",
           "type": "string"
         },
         "shadowSeatBlur": {
@@ -402,15 +436,18 @@
           "type": "number"
         },
         "shadowSeatColor": {
+          "title": "BindableColor",
           "type": "string"
         },
         "shadowSeatStripColor": {
+          "title": "BindableColor",
           "type": "string"
         },
         "catchlightOffsetY": {
           "type": "number"
         },
         "catchlightColor": {
+          "title": "BindableColor",
           "type": "string"
         },
         "chipRestOpacity": {
@@ -462,28 +499,35 @@
         "ringStatusWidth",
         "ringStatusAlpha"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldThemeElevation"
     },
     "diegetic": {
       "description": "The diegetic material recipe.",
       "type": "object",
       "properties": {
         "plateTop": {
+          "title": "BindableColor",
           "type": "string"
         },
         "plateMid": {
+          "title": "BindableColor",
           "type": "string"
         },
         "plateBottom": {
+          "title": "BindableColor",
           "type": "string"
         },
         "plateStripeColor": {
+          "title": "BindableColor",
           "type": "string"
         },
         "embossFill": {
+          "title": "BindableColor",
           "type": "string"
         },
         "engraveFill": {
+          "title": "BindableColor",
           "type": "string"
         },
         "embossShadowDropAlpha": {
@@ -517,18 +561,23 @@
           "type": "number"
         },
         "screenWellOuter": {
+          "title": "BindableColor",
           "type": "string"
         },
         "screenWellInner": {
+          "title": "BindableColor",
           "type": "string"
         },
         "bezelOuter": {
+          "title": "BindableColor",
           "type": "string"
         },
         "bezelInner": {
+          "title": "BindableColor",
           "type": "string"
         },
         "bezelEdge": {
+          "title": "BindableColor",
           "type": "string"
         },
         "phosphorGlowBlur": {
@@ -559,7 +608,8 @@
         "bezelEdge",
         "phosphorGlowBlur"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldThemeDiegetic"
     },
     "motion": {
       "description": "The motion recipe.",
@@ -592,7 +642,8 @@
         "easeStd",
         "easeOut"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldThemeMotion"
     },
     "icon": {
       "description": "The procedural icon feel.",
@@ -606,7 +657,8 @@
       "required": [
         "strokeHalfWidth"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldThemeIcon"
     },
     "chrome": {
       "description": "The CPU writers\u0027 own opacity/px chrome.",
@@ -690,7 +742,8 @@
         "wheelMarkerGapRatio",
         "wheelHubLabelGap"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldThemeChrome"
     }
   },
   "required": [
@@ -705,5 +758,6 @@
     "chrome"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldThemeSection"
 }

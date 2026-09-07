@@ -48,5 +48,6 @@
       "default": null
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "title": "WorldExports"
 }

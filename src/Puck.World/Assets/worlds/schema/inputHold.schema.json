@@ -40,7 +40,8 @@
           "seconds",
           "equalized"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldInputHoldParticipantAuthoring"
       }
     }
   },
@@ -52,5 +53,6 @@
     "participants"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldInputHoldAuthoring"
 }

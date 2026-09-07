@@ -42,7 +42,8 @@
             "tangentYaw",
             "curvature"
           ],
-          "additionalProperties": false
+          "additionalProperties": false,
+          "title": "WorldCurveKnot"
         }
       },
       "closed": {
@@ -55,7 +56,8 @@
       "name",
       "knots"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldCurveRow"
   },
   "default": null
 }

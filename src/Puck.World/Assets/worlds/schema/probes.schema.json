@@ -114,7 +114,8 @@
                 "channel",
                 "source"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "title": "WorldProbeBindingAxis"
             },
             {
               "description": "Writes a channel into a presentation-float shader-extension config field, lerped over Range. Presentation-only \u2014 the destination never feeds simulation state.",
@@ -152,7 +153,8 @@
                         "id",
                         "field"
                       ],
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "title": "WorldProbeParameterTargetExtension"
                     },
                     {
                       "description": "Writes a config field of another declared probe\u0027s kind, live, into its running kernel \u2014 one probe\u0027s reading steering another\u0027s computation (a tracked centroid placing a relighting kind\u0027s light).",
@@ -173,9 +175,11 @@
                         "id",
                         "field"
                       ],
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "title": "WorldProbeParameterTargetProbe"
                     }
-                  ]
+                  ],
+                  "title": "WorldProbeParameterTarget"
                 },
                 "range": {
                   "$ref": "./common.schema.json#/$defs/DocumentVector2",
@@ -192,7 +196,8 @@
                 "target",
                 "range"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "title": "WorldProbeBindingParameter"
             },
             {
               "description": "Writes a channel onto the existing WorldCameraControls surface, mapped over [Minimum, Maximum].",
@@ -228,9 +233,11 @@
                 "minimum",
                 "maximum"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "title": "WorldProbeBindingControl"
             }
-          ]
+          ],
+          "title": "WorldProbeBinding"
         },
         "default": null
       }
@@ -240,7 +247,8 @@
       "kind",
       "rateHz"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldProbe"
   },
   "default": null
 }

@@ -44,7 +44,8 @@
           "required": [
             "name"
           ],
-          "additionalProperties": false
+          "additionalProperties": false,
+          "title": "WorldSeatModeState"
         }
       }
     },
@@ -53,7 +54,8 @@
       "defaultState",
       "states"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldSeatModeFamily"
   },
   "default": null
 }

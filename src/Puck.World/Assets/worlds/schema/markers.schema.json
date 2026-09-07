@@ -28,7 +28,8 @@
                 "const": "speakers"
               }
             },
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "WorldMarkerSourceSpeakers"
           },
           {
             "description": "One static world-space chip at an authored position \u2014 tracks no document section.",
@@ -44,9 +45,11 @@
             "required": [
               "position"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "WorldMarkerSourcePoint"
           }
-        ]
+        ],
+        "title": "WorldMarkerSource"
       },
       "icon": {
         "description": "The icon name, resolved through icons.icons.",
@@ -58,6 +61,7 @@
         "properties": {
           "chipAlpha": {
             "description": "The icon chip\u0027s opacity, in [0, 1].",
+            "title": "BindableScalar",
             "type": [
               "number",
               "string"
@@ -70,6 +74,7 @@
           "ringColor": {
             "description": "The ring\u0027s stroke color. Required exactly when Ring is authored; omitted otherwise.",
             "default": null,
+            "title": "BindableColor",
             "type": [
               "string",
               "null"
@@ -78,6 +83,7 @@
           "ringAlpha": {
             "description": "The ring\u0027s opacity, in [0, 1]. Required exactly when Ring is authored; omitted otherwise.",
             "default": null,
+            "title": "BindableScalar",
             "type": [
               "number",
               "string",
@@ -89,7 +95,8 @@
           "chipAlpha",
           "size"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldMarkerStyle"
       },
       "ring": {
         "description": "The radius-ring policy, or null for no ring.",
@@ -107,7 +114,8 @@
           "field"
         ],
         "additionalProperties": false,
-        "default": null
+        "default": null,
+        "title": "WorldMarkerRing"
       }
     },
     "required": [
@@ -116,7 +124,8 @@
       "icon",
       "style"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldMarkerRow"
   },
   "default": null
 }

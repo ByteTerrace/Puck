@@ -20,7 +20,8 @@
           "Bipolar",
           "Unipolar",
           "Binary"
-        ]
+        ],
+        "title": "ChannelShape"
       },
       "role": {
         "description": "The engine motion role this channel claims, or null for a composition channel.",
@@ -39,7 +40,8 @@
           "MoveZ",
           null
         ],
-        "default": null
+        "default": null,
+        "title": "ChannelRole"
       },
       "composition": {
         "description": "Whether this channel is a kit-composition trigger. Exactly one of Role or this must be set.",
@@ -61,14 +63,16 @@
           "Camera",
           "Heading"
         ],
-        "default": "World"
+        "default": "World",
+        "title": "ChannelFrame"
       }
     },
     "required": [
       "name",
       "shape"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldChannel"
   },
   "default": null
 }

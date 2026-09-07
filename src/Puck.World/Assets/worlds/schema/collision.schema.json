@@ -12,7 +12,8 @@
         "enum": [
           "SmoothUnionContact",
           "GradientDerivedUp"
-        ]
+        ],
+        "title": "WorldContactRequirement"
       }
     },
     "contactSkin": {
@@ -60,7 +61,8 @@
         }
       },
       "additionalProperties": false,
-      "default": null
+      "default": null,
+      "title": "WorldCollisionEvents"
     },
     "bodyContacts": {
       "description": "The bounded dynamic-body depenetration policy. ABSENT takes Default. This is independent of overlap events.",
@@ -131,7 +133,8 @@
         }
       },
       "additionalProperties": false,
-      "default": null
+      "default": null,
+      "title": "WorldBodyContactPolicy"
     },
     "gridCellSize": {
       "description": "The world-space cell edge of the distance grid the solid field bakes its program into, so a query far from every surface reads a corner bound instead of marching the program; 0 (the default) bakes no grid and every query reads the exact program. A smaller cell tightens the bound and enlarges the grid. Meaningful only when a requirement selects field contact.",
@@ -147,5 +150,6 @@
     "gradientProbe"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldCollision"
 }

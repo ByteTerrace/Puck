@@ -77,13 +77,7 @@ public static partial class WorldSchema {
     /// <param name="Common">The <c>common.schema.json</c> document: a single <c>$defs</c> object holding every
     /// subschema referenced from more than one place, named after the CLR type it came from where that is
     /// recoverable.</param>
-    /// <param name="DefAnchors">Per-def bundling hint, keyed by the same name <see cref="Common"/> uses: the
-    /// document-absolute JSON pointer <see cref="Bundle"/> re-inlines that def's content at (reproducing exactly
-    /// where the un-split generator originally put it) when the exporter itself recognized the shape as repeated,
-    /// or <see langword="null"/> when it did not (a polymorphic union arm regenerated fresh at every occurrence,
-    /// e.g. <c>ActionPredicate.CompareState</c>) — <see cref="Bundle"/> then fully duplicates that def's content at
-    /// every site instead of sharing one copy, matching what the un-split generator actually produced.</param>
-    public sealed record SplitSchema(JsonObject Root, IReadOnlyList<(string Name, JsonNode Node)> Sections, JsonObject Common, IReadOnlyDictionary<string, string?> DefAnchors);
+    public sealed record SplitSchema(JsonObject Root, IReadOnlyList<(string Name, JsonNode Node)> Sections, JsonObject Common);
     /// <summary>One shipped post-render extension — a shader set's id and its config JSON Schema — spliced into
     /// <c>render.extensions[]</c> so an entry's <c>config</c> validates by its <c>id</c>.</summary>
     /// <param name="Id">The extension id a document's <c>render.extensions[].id</c> names.</param>
@@ -1211,150 +1205,6 @@ public static partial class WorldSchema {
             }
         }
     }
-    // Inlines every reference to a NON-recursive def at every site it appears (full duplication, undoing the
-    // split's dedup — exactly what the un-split generator would have produced). A recursive def gets exactly one
-    // physical expansion (the first the walk reaches); every other reference to it, including its own internal
-    // self-reference, is repointed at that one location's absolute path — the same shape the un-split generator's
-    // own cycle-breaking $ref already takes.
-    private static JsonNode InlineBundleRefs(JsonNode node, string currentPath, JsonObject defs, IReadOnlyDictionary<string, string?> anchors, Dictionary<string, string> liveAnchors) {
-        if (node is JsonObject obj) {
-            string? name = null;
-
-            if (IsCommonFileRef(
-                name: out var commonName,
-                obj: obj
-            )) {
-                name = commonName;
-            } else if (IsLocalDefRef(
-                name: out var localName,
-                obj: obj
-            )) {
-                name = localName;
-            }
-
-            if (name is not null) {
-                var anchored = (anchors.TryGetValue(
-                    key: name,
-                    value: out var anchorPath
-                ) && (anchorPath is not null));
-
-                // An anchored def (exporter-recognized as repeated) gets exactly one physical expansion, at its
-                // first encounter in walk order — everywhere else (including its own nested self-reference, which
-                // by then finds the live anchor set) becomes a plain pointer to that one position. An unanchored
-                // def is fully duplicated at every site instead.
-                if (
-                    anchored &&
-                    liveAnchors.TryGetValue(
-                    key: name,
-                    value: out var liveAnchor
-                )
-                ) {
-                    // A ref site carries its own re-sited occurrence annotations ("description"/"default") beside
-                    // "$ref" — exactly how the exporter's un-split output spells the same site.
-                    var refNode = new JsonObject { ["$ref"] = liveAnchor };
-
-                    foreach (var (key, value) in obj) {
-                        if (!string.Equals(
-                            a: key,
-                            b: "$ref",
-                            comparisonType: StringComparison.Ordinal
-                        )) {
-                            refNode[key] = value?.DeepClone();
-                        }
-                    }
-
-                    return refNode;
-                }
-
-                if (anchored) {
-                    liveAnchors[name] = currentPath;
-                }
-
-                var inlined = InlineBundleRefs(
-                    node: defs[name]!,
-                    currentPath: currentPath,
-                    defs: defs,
-                    anchors: anchors,
-                    liveAnchors: liveAnchors
-                );
-
-                // A fully-expanded site takes its own occurrence annotations back onto the inlined content (a site
-                // description replaces the def's type-level one, matching what the un-split exporter would have
-                // annotated in place).
-                if (inlined is JsonObject inlinedObj) {
-                    foreach (var (key, value) in obj) {
-                        if (string.Equals(
-                            a: key,
-                            b: "$ref",
-                            comparisonType: StringComparison.Ordinal
-                        )) {
-                            continue;
-                        }
-
-                        inlinedObj.Remove(propertyName: key);
-
-                        if (
-                            string.Equals(
-                            a: key,
-                            b: "description",
-                            comparisonType: StringComparison.Ordinal
-                        ) &&
-                            (value is not null)
-                        ) {
-                            Prepend(
-                                obj: inlinedObj,
-                                propertyName: "description",
-                                value: value.GetValue<string>()
-                            );
-                        } else {
-                            inlinedObj[key] = value?.DeepClone();
-                        }
-                    }
-                }
-
-                return inlined;
-            }
-
-            var newObj = new JsonObject();
-
-            foreach (var (key, value) in obj) {
-                newObj[key] = ((value is not null)
-                    ? InlineBundleRefs(
-                        node: value,
-                        currentPath: $"{currentPath}/{EscapePointerSegment(segment: key)}",
-                        defs: defs,
-                        anchors: anchors,
-                        liveAnchors: liveAnchors
-                    )
-                    : null
-                );
-            }
-
-            return newObj;
-        }
-
-        if (node is JsonArray arr) {
-            var newArr = new JsonArray();
-
-            for (var i = 0; (i < arr.Count); i++) {
-                var value = arr[i];
-
-                newArr.Add(item: ((value is not null)
-                    ? InlineBundleRefs(
-                        anchors: anchors,
-                        currentPath: $"{currentPath}/{i}",
-                        defs: defs,
-                        liveAnchors: liveAnchors,
-                        node: value
-                    )
-                    : null));
-            }
-
-            return newArr;
-        }
-
-        return node.DeepClone()!;
-    }
     private static bool IsCollectionLike(Type genericDefinition) =>
         ((genericDefinition == typeof(List<>)) ||
         (genericDefinition == typeof(IReadOnlyList<>)) ||
@@ -1363,52 +1213,13 @@ public static partial class WorldSchema {
         (genericDefinition == typeof(ICollection<>)) ||
         (genericDefinition == typeof(IList<>)));
     // ---- bundling --------------------------------------------------------------------------------------------
+    // Bundle() and its own titled-shape hoist live in WorldSchema.Bundle.cs.
 
-    private static bool IsCommonFileRef(JsonObject obj, out string name) {
-        const string Prefix = $"./{CommonDefsFileName}#/$defs/";
-
-        if (ContainsRefKey(obj: obj)) {
-            var value = ((JsonValue)obj["$ref"]!).GetValue<string>();
-
-            if (value.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: Prefix
-            )) {
-                name = value[Prefix.Length..];
-
-                return true;
-            }
-        }
-
-        name = string.Empty;
-
-        return false;
-    }
     // A hoist candidate is a genuine named SHAPE — an object type (has "properties"), an enum, or a $type union
     // (has "anyOf") — never a bare leaf (a plain {"type":"string"} with a coincidentally-matching description
     // isn't a shared concept worth a name), and long enough that a $ref costs fewer bytes than it saves.
     private static bool IsHoistCandidate(JsonObject obj) =>
         (obj.ContainsKey(propertyName: "properties") || obj.ContainsKey(propertyName: "enum") || obj.ContainsKey(propertyName: "anyOf"));
-    private static bool IsLocalDefRef(JsonObject obj, out string name) {
-        const string Prefix = "#/$defs/";
-
-        if (ContainsRefKey(obj: obj)) {
-            var value = ((JsonValue)obj["$ref"]!).GetValue<string>();
-
-            if (value.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: Prefix
-            )) {
-                name = value[Prefix.Length..];
-
-                return true;
-            }
-        }
-
-        name = string.Empty;
-
-        return false;
-    }
     private static bool IsPlaceholderRef(JsonObject obj, out string name) {
         if (ContainsRefKey(obj: obj)) {
             var value = ((JsonValue)obj["$ref"]!).GetValue<string>();
@@ -1426,6 +1237,23 @@ public static partial class WorldSchema {
         name = string.Empty;
 
         return false;
+    }
+    // The universe StampTitle draws a def-worthy name from: a document-model type this repository declares, never
+    // a collection (its element gets its own node and title), a generic instantiation, an array, or a BCL/System.Text.Json
+    // type (JsonElement, JsonNode, string, DateTime, Guid, ...) — none of which live under the Puck namespace.
+    private static bool IsTitledType(Type type) {
+        var underlying = (Nullable.GetUnderlyingType(nullableType: type) ?? type);
+
+        return (
+            !underlying.IsGenericType &&
+            !underlying.IsArray &&
+            (underlying.Namespace is { } ns) &&
+            ns.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "Puck"
+        ) &&
+            (underlying.IsClass || underlying.IsValueType || underlying.IsEnum)
+        );
     }
     // Every listed file must load: a missing one would silently drop every description its assembly owns, and
     // the schema check would then fail on content rather than name the absent file.
@@ -1494,6 +1322,16 @@ public static partial class WorldSchema {
     }
     private static string MemberDocId(MemberInfo member) =>
         $"P:{FormatDeclaringType(type: member.DeclaringType!)}.{member.Name}";
+    // The disambiguated spelling ResolveTitleCollisions falls back to when two distinct CLR types share a
+    // FriendlyTypeName — deterministic from the type's own identity, never from where StampTitle happened to visit
+    // it first, so the same collision resolves to the same two names on every run.
+    private static string NamespacePrefixedTitle(Type type) {
+        var segment = (type.Namespace ?? string.Empty)
+            .Split(separator: '.')
+            .LastOrDefault(predicate: static part => (part.Length > 0)) ?? string.Empty;
+
+        return $"{segment}{FriendlyTypeName(type: type)}";
+    }
     // Rebuilds obj with propertyName first, for human-readable output (a description reads best leading an
     // object, ahead of its type/properties/required keywords). JsonObject preserves insertion order, and Clear()
     // detaches every child so each can be re-added to the same object without a "node already has a parent" error.
@@ -1574,6 +1412,78 @@ public static partial class WorldSchema {
             : null
         );
     }
+    // Runs once, over the whole merged document, after every node has its provisional StampTitle spelling —
+    // a bare FriendlyTypeName, blind to any other type sharing it. Groups every stamped title by the DISTINCT
+    // CLR types it names (Nullable<T> and T unwrap to the same type, so a nullable/non-nullable pair of one type
+    // never counts as a collision); a group naming more than one type gets every one of its members rewritten to
+    // NamespacePrefixedTitle, so the collision resolves the same way regardless of which occurrence the walk
+    // happened to reach first. A prefixed spelling that still collides names two types this scheme cannot tell
+    // apart — refused rather than silently handing one title to both.
+    private static void ResolveTitleCollisions(Dictionary<JsonNode, Type> typesByNode) {
+        var typesByTitle = new Dictionary<string, HashSet<Type>>(comparer: StringComparer.Ordinal);
+
+        foreach (var (node, type) in typesByNode) {
+            if (
+                (node is not JsonObject obj) ||
+                (obj["title"] is not JsonValue titleValue) ||
+                !titleValue.TryGetValue<string>(value: out var title)
+            ) {
+                continue;
+            }
+
+            var underlying = (Nullable.GetUnderlyingType(nullableType: type) ?? type);
+
+            if (!typesByTitle.TryGetValue(
+                key: title,
+                value: out var set
+            )) {
+                set = [];
+                typesByTitle[title] = set;
+            }
+
+            set.Add(item: underlying);
+        }
+
+        var colliding = typesByTitle
+            .Where(predicate: kv => (kv.Value.Count > 1))
+            .Select(selector: kv => kv.Key)
+            .ToHashSet(comparer: StringComparer.Ordinal);
+
+        if (colliding.Count == 0) {
+            return;
+        }
+
+        var resolved = new Dictionary<Type, string>();
+
+        foreach (var (node, type) in typesByNode) {
+            if (
+                (node is not JsonObject obj) ||
+                (obj["title"] is not JsonValue titleValue) ||
+                !titleValue.TryGetValue<string>(value: out var title) ||
+                !colliding.Contains(item: title)
+            ) {
+                continue;
+            }
+
+            var underlying = (Nullable.GetUnderlyingType(nullableType: type) ?? type);
+
+            if (!resolved.TryGetValue(
+                key: underlying,
+                value: out var newTitle
+            )) {
+                newTitle = NamespacePrefixedTitle(type: underlying);
+                resolved[underlying] = newTitle;
+            }
+
+            obj["title"] = newTitle;
+        }
+
+        foreach (var group in resolved.GroupBy(keySelector: kv => kv.Value, comparer: StringComparer.Ordinal)) {
+            if (group.Count() > 1) {
+                throw new InvalidOperationException(message: $"schema: types {string.Join(separator: ", ", values: group.Select(selector: kv => kv.Key.FullName))} all disambiguate to the same title '{group.Key}' — rename one of the CLR types.");
+            }
+        }
+    }
     private static void RestoreSkippedProperty(JsonObject propertyObject, Type ownerType, string jsonName, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode, NestedExports? nested) {
         var property = FindPropertyByJsonName(
             jsonName: jsonName,
@@ -1585,6 +1495,10 @@ public static partial class WorldSchema {
         }
 
         typesByNode[propertyObject] = property.PropertyType;
+        StampTitle(
+            obj: propertyObject,
+            type: property.PropertyType
+        );
 
         ApplyCollectionVocabulary(
             index: index,
@@ -1691,7 +1605,7 @@ public static partial class WorldSchema {
             : body
         );
     }
-    private static SplitSchema Split(JsonObject reduced, JsonObject common, Dictionary<string, string?> defAnchors) {
+    private static SplitSchema Split(JsonObject reduced, JsonObject common) {
         var propsObj = ((JsonObject)reduced["properties"]!);
         var sectionNames = propsObj.Select(selector: kv => kv.Key).ToList();
         var sections = new List<(string Name, JsonNode Node)>(capacity: sectionNames.Count);
@@ -1733,9 +1647,20 @@ public static partial class WorldSchema {
         return new SplitSchema(
             Root: finalRoot,
             Sections: sections,
-            Common: new JsonObject { ["$defs"] = common },
-            DefAnchors: defAnchors
+            Common: new JsonObject { ["$defs"] = common }
         );
+    }
+    // Names a node after the CLR type it came from, so json-schema-to-typescript (via the bundle's own $defs, see
+    // Bundle) and a person reading the schema both see WorldStateRow rather than an anonymous literal. Every
+    // occurrence of a titled type is stamped alike; ResolveTitleCollisions corrects a same-name clash across
+    // distinct types once the whole document is known. Left untouched for anything IsTitledType refuses — a
+    // collection, a primitive, or a converter-hidden shape with no CLR identity of its own worth naming.
+    private static void StampTitle(JsonObject obj, Type type) {
+        var underlying = (Nullable.GetUnderlyingType(nullableType: type) ?? type);
+
+        if (IsTitledType(type: underlying)) {
+            obj["title"] = FriendlyTypeName(type: underlying);
+        }
     }
     // Runs once per exported node, bottom-up (children before parents). Attaches a description resolved from the
     // assembly's XML documentation, teaches a custom-converted node its own "type"/"enum" (see
@@ -1766,6 +1691,15 @@ public static partial class WorldSchema {
         }
 
         typesByNode[obj] = context.TypeInfo.Type;
+
+        // The document root carries its own hand-written title ("Puck world definition (puck.world.def.v1)" and
+        // its projection/silo counterparts, added after Transform runs) — StampTitle would collide with it.
+        if (context.Path.Length > 0) {
+            StampTitle(
+                obj: obj,
+                type: context.TypeInfo.Type
+            );
+        }
 
         ApplyCollectionVocabulary(
             index: index,
@@ -2011,47 +1945,6 @@ public static partial class WorldSchema {
     private static string TypeDocId(Type type) =>
         $"T:{FormatDeclaringType(type: type)}";
 
-    /// <summary>Re-inlines a <see cref="SplitSchema"/> into the single-file equivalent — the un-split generator's
-    /// own representation style. Every section <c>$ref</c> is substituted with its content. A shared-shape
-    /// <c>$ref</c> follows <see cref="SplitSchema.DefAnchors"/>: a def the exporter itself recognized as repeated
-    /// (its anchor entry is non-null) gets exactly one physical copy, at its first encounter in walk order, with
-    /// every other reference — including a recursive shape's own self-reference — repointed at that position by
-    /// plain JSON pointer, the same device the un-split generator's own TypeInfo cache uses; a def with no anchor
-    /// (an independently-regenerated polymorphic union arm, e.g. <c>ActionPredicate.CompareState</c>, which the
-    /// exporter's cache never catches) is fully duplicated at every site instead.</summary>
-    public static JsonObject Bundle(SplitSchema split) {
-        var root = ((JsonObject)split.Root.DeepClone()!);
-
-        StampBundleCommit(root: root);
-        var sectionsByName = split.Sections.ToDictionary(
-            keySelector: s => s.Name,
-            elementSelector: s => s.Node,
-            comparer: StringComparer.Ordinal
-        );
-        var propertiesObject = ((JsonObject)root["properties"]!);
-        var defs = ((JsonObject)((JsonObject)split.Common.DeepClone()!)["$defs"]!);
-        // An anchored def's single physical position is assigned LAZILY, at its first encounter in walk order, so
-        // the position is reachable by construction — one def can serve several recursion roots, and a
-        // pre-computed origin path can sit inside a subtree the walk pointer-replaces (a path that would then
-        // never materialize).
-        var liveAnchors = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-
-        foreach (var name in propertiesObject.Select(selector: kv => kv.Key).ToList()) {
-            propertiesObject.Remove(propertyName: name);
-
-            var sectionContent = ((JsonNode)sectionsByName[name].DeepClone()!);
-
-            propertiesObject[name] = InlineBundleRefs(
-                node: sectionContent,
-                currentPath: $"#/properties/{EscapePointerSegment(segment: name)}",
-                defs: defs,
-                anchors: split.DefAnchors,
-                liveAnchors: liveAnchors
-            );
-        }
-
-        return root;
-    }
     /// <summary>Exports the split JSON Schema for <see cref="WorldDefinition"/>.</summary>
     /// <param name="postRenderExtensions">The shipped post-render extensions: <c>render.extensions[].id</c> becomes an
     /// enum over their ids and each entry's <c>config</c> validates against the schema of the set its id names.</param>
@@ -2059,6 +1952,8 @@ public static partial class WorldSchema {
         ArgumentNullException.ThrowIfNull(postRenderExtensions);
 
         var (merged, typesByNode) = ExportMergedWithTypes();
+
+        ResolveTitleCollisions(typesByNode: typesByNode);
 
         ApplySelfIdentification(
             root: merged,
@@ -2201,32 +2096,9 @@ public static partial class WorldSchema {
             insideCommon: true
         );
 
-        // Several origins can map to the same def name — every member of the group gets an entry in
-        // OriginalPathToDefName, not just the exporter's own canonical one. Prefer whichever origin the exporter
-        // ITSELF had already pointed a $ref at; fall back to null (always fully duplicate at bundle time) only
-        // when none of the group's origins qualify. When a group holds SEVERAL exporter origins (one def serving
-        // two recursion roots), the FIRST in insertion order wins — insertion follows document order, and first
-        // expansions nest consistently (a later origin's subtree is pointer-replaced at bundle time, so an anchor
-        // inside it would name a path that never materializes).
-        var defAnchors = new Dictionary<string, string?>(comparer: StringComparer.Ordinal);
-
-        foreach (var (origin, name) in state.OriginalPathToDefName) {
-            if (exporterRefTargets.Contains(item: origin)) {
-                if (!(defAnchors.TryGetValue(
-                    key: name,
-                    value: out var anchored
-                ) && (anchored is not null))) {
-                    defAnchors[name] = origin;
-                }
-            } else if (!defAnchors.ContainsKey(key: name)) {
-                defAnchors[name] = null;
-            }
-        }
-
         return Split(
             reduced: reduced,
-            common: state.CommonDefs,
-            defAnchors: defAnchors
+            common: state.CommonDefs
         );
     }
     /// <summary>Exports the JSON Schema for <see cref="WorldProjectionDocument"/> as one document. Unsplit,

@@ -27,7 +27,8 @@
               "Surface",
               "Volume",
               "Medium"
-            ]
+            ],
+            "title": "WorldNavigationKind"
           },
           "origin": {
             "description": "The center of cell (0,0,0), relative to Parent when present and world-space otherwise; for a surface domain, resolved world Y is the ground-probe baseline.",
@@ -78,7 +79,8 @@
               "FacesAndEdges",
               "Full"
             ],
-            "default": "Full"
+            "default": "Full",
+            "title": "WorldNavigationConnectivity"
           },
           "probeUp": {
             "description": "For a surface domain, the ground-search distance above origin Y.",
@@ -134,7 +136,8 @@
               "expandedNodesPerTick"
             ],
             "additionalProperties": false,
-            "default": null
+            "default": null,
+            "title": "WorldNavigationSharing"
           },
           "parent": {
             "description": "Optional static placement frame. Origin and grid axes are local to that frame; probes remain vertical. The frame must be undistributed and unit scale.",
@@ -157,11 +160,13 @@
           "maxExpandedNodes",
           "maxPathNodes"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldNavigationDomain"
       },
       "default": null
     }
   },
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldNavigationSection"
 }

@@ -20,7 +20,8 @@
         "enum": [
           "Eager",
           "OnDemand"
-        ]
+        ],
+        "title": "SeatActivationPolicy"
       }
     },
     "networkPlayers": {
@@ -81,7 +82,8 @@
             "Radius",
             "SelfOnly"
           ],
-          "default": "All"
+          "default": "All",
+          "title": "WorldObserverDisclosureMode"
         },
         "radius": {
           "description": "The disclosure radius in metres for Radius; authored only for that mode.",
@@ -97,7 +99,8 @@
           "default": 0.03
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldObserverDisclosure"
     },
     "scaleRow": {
       "type": [
@@ -110,5 +113,6 @@
     }
   },
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldBodiesDefaults"
 }

@@ -12,6 +12,7 @@
     "properties": {
       "name": {
         "description": "This document\u0027s stable name for the edge.",
+        "title": "SafeName",
         "type": "string"
       },
       "destination": {
@@ -54,14 +55,16 @@
           "width",
           "height"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldAdjacencyBoundary"
       },
       "unavailable": {
         "description": "The authored failure treatment.",
         "enum": [
           "Closed"
         ],
-        "default": "Closed"
+        "default": "Closed",
+        "title": "WorldAdjacencyUnavailable"
       },
       "onUnavailable": {
         "description": "Optional declared channel pressed once on the body after the engine applies the failure treatment. Use a kit action on this channel for authored sound, animation, state, or other feedback; ownership safety never depends on the binding.",
@@ -91,7 +94,8 @@
       "counterpart",
       "boundary"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldAdjacency"
   },
   "default": null
 }

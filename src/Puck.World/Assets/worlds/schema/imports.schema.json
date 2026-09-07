@@ -27,6 +27,7 @@
     "required": [
       "document"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldImport"
   }
 }

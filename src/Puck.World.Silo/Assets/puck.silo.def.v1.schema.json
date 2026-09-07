@@ -29,6 +29,7 @@
           },
           "world": {
             "description": "The world id under that owner\u0027s container \u2014 the grain key\u0027s own extension.",
+            "title": "SafeName",
             "type": "string"
           },
           "federation": {
@@ -43,7 +44,8 @@
             "required": [
               "keyFile"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "WorldSiloFederation"
           },
           "pinned": {
             "description": "Whether this row activates at silo start and never idle-deactivates.",
@@ -56,7 +58,8 @@
           "world",
           "federation"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldSiloWorldRow"
       }
     },
     "doors": {
@@ -71,7 +74,8 @@
       "required": [
         "budget"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldSiloDoors"
     },
     "store": {
       "description": "The checkpoint/journal/definition backend.",
@@ -82,7 +86,8 @@
           "enum": [
             "Directory",
             "Azure"
-          ]
+          ],
+          "title": "WorldSiloStoreKind"
         },
         "directoryPath": {
           "description": "The root directory \u2014 required when Kind is Directory, otherwise absent.",
@@ -104,7 +109,8 @@
       "required": [
         "kind"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldSiloStore"
     },
     "stateDir": {
       "description": "The root every activated row\u0027s container-ephemeral owned-world store resolves its own directory under \u2014 the --state-dir counterpart.",
@@ -119,7 +125,8 @@
           "enum": [
             "Localhost",
             "Table"
-          ]
+          ],
+          "title": "WorldSiloClusteringKind"
         },
         "tableName": {
           "description": "The Storage Table name \u2014 required when Kind is Table, otherwise absent (a local run names no table).",
@@ -133,7 +140,8 @@
       "required": [
         "kind"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldSiloClustering"
     },
     "schema": {
       "description": "Gets the document schema tag \u2014 SchemaVersion for a well-formed document.",

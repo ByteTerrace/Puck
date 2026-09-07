@@ -12,6 +12,7 @@
     "properties": {
       "name": {
         "description": "The pattern name a rule references.",
+        "title": "CellName",
         "type": "string"
       },
       "kind": {
@@ -21,7 +22,8 @@
           "Fixed",
           "Bool",
           "Text"
-        ]
+        ],
+        "title": "CellKind"
       },
       "symbols": {
         "description": "The alphabet, 1..32 named value ranges.",
@@ -35,6 +37,7 @@
           "properties": {
             "name": {
               "description": "The symbol name a pattern node references.",
+              "title": "CellName",
               "type": "string"
             },
             "min": {
@@ -51,7 +54,8 @@
             "min",
             "max"
           ],
-          "additionalProperties": false
+          "additionalProperties": false,
+          "title": "PatternSymbol"
         }
       },
       "pattern": {
@@ -83,7 +87,8 @@
       "symbols",
       "pattern"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "PatternRow"
   },
   "default": null
 }

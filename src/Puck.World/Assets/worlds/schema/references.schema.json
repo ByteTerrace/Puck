@@ -12,6 +12,7 @@
     "properties": {
       "name": {
         "description": "The reference\u0027s own name \u2014 SafeName-shaped, unique within the section.",
+        "title": "SafeName",
         "type": "string"
       },
       "document": {
@@ -34,6 +35,7 @@
       "world": {
         "description": "The remote world\u0027s own SafeName-shaped id within its owner\u0027s account. Required together with Owner; refused alone.",
         "default": null,
+        "title": "SafeName",
         "type": [
           "string",
           "null"
@@ -43,7 +45,8 @@
     "required": [
       "name"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldReference"
   },
   "default": null
 }

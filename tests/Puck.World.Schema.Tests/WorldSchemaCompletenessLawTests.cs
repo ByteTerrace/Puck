@@ -12,38 +12,27 @@ namespace Puck.World.Schema.Tests;
 /// <see cref="StateRowJsonConverter{TRow}.Shape"/>, the root and silo self-identify, and the composed island plus
 /// every shipped fragment validates against the bundle.</summary>
 public sealed class WorldSchemaCompletenessLawTests {
-    // A property this walk found with no "type"/"enum"/"const"/"anyOf"/"oneOf"/"$comment"/"$ref" of its own —
-    // every one a converter this WP did not touch (DocumentVector2/DocumentVector3/DocumentQuaternion/
-    // DocumentScalar/BindableScalar's own free-value arm, and a handful of $type union arms sharing the same
-    // gap). Named by pointer rather than silently accepted, so a NEW untyped leaf fails this law and a FIXED one
-    // must be removed here (see <see cref="TheAllowlistNamesNoAlreadyTypedLeaf"/>).
+    // A property this walk found with no "type"/"enum"/"const"/"anyOf"/"oneOf"/"$comment"/"$ref" of its own — a
+    // converter this WP did not touch, left fully permissive by the exporter. Named by the def each now lives
+    // under (the bundle's own $defs, not an inline path — see WorldSchema.Bundle), never a raw inline path — a
+    // shape reached from several sites now names ONE entry instead of one per site, the bundle's own dedup.
+    // Every gap the split's OWN converter-hidden types (DocumentVector2/3, BindableScalar's free-value arm,
+    // WorldLatticeScalar, ...) used to leave here is now a NAMED empty def a $ref points at instead — genuinely
+    // typed by this law's own IsTyped test, even though the referenced def itself still carries no constraint —
+    // so those entries are gone, not silently accepted; only a leaf with NO $ref/anyOf at all remains named here.
+    // Named by pointer, so a NEW untyped leaf fails this law and a FIXED one must be removed here (see
+    // <see cref="TheAllowlistNamesNoAlreadyTypedLeaf"/>).
     private static readonly HashSet<string> UntypedAllowlist = new(comparer: StringComparer.Ordinal) {
-        "#/properties/screens/items/properties/source/anyOf/8/properties/resolution",
-        "#/properties/screens/items/properties/magazine/properties/entries/items/anyOf/8/properties/resolution",
-        "#/properties/kits/properties/rows/items/properties/actions/additionalProperties/properties/onPress/properties/effects/items/anyOf/23/properties/placement/properties/faceSources/items/properties/source/anyOf/8/properties/resolution",
-        "#/properties/kits/properties/rows/items/properties/actions/additionalProperties/properties/onPress/properties/effects/items/anyOf/23/properties/placement/properties/respond/items/properties/when/anyOf/0/properties/value",
-        "#/properties/bindingOverlays/items/properties/document/properties/chords/items/properties/page/properties/entries/items/properties/channel",
-        "#/properties/bindingOverlays/items/properties/document/properties/chords/items/properties/page/properties/entries/items/properties/value",
-        "#/properties/bindingOverlays/items/properties/document/properties/chords/items/properties/command/properties/channel",
-        "#/properties/bindingOverlays/items/properties/document/properties/chords/items/properties/command/properties/value",
-        "#/properties/prototypes/items/properties/document/properties/shapes/items/properties/domain/items/anyOf/1/properties/limit",
-        "#/properties/prototypes/items/properties/document/properties/shapes/items/properties/domain/items/anyOf/3/properties/limit",
-        "#/properties/prototypes/items/properties/document/properties/shapes/items/properties/swings/items/properties/phase",
-        "#/properties/prototypes/items/properties/document/properties/shapes/items/properties/slides/items/properties/phase",
-        "#/properties/prototypes/items/properties/document/properties/shapes/items/properties/joint",
-        "#/properties/prototypes/items/properties/document/properties/effectors/items/properties/target/properties/direction",
-        "#/properties/prototypes/items/properties/document/properties/effectors/items/properties/target/properties/reach",
-        "#/properties/prototypes/items/properties/document/properties/effectors/items/properties/target/properties/standoff",
-        "#/properties/prototypes/items/properties/document/properties/effectors/items/properties/target/properties/offset",
-        "#/properties/prototypes/items/properties/document/properties/effectors/items/properties/weight",
-        "#/properties/state/properties/world/items/properties/draw/properties/secret",
-        "#/properties/state/properties/lattices/items/anyOf/6/properties/reactions/items/anyOf/0/properties/rate",
-        "#/properties/state/properties/lattices/items/anyOf/6/properties/reactions/items/anyOf/1/properties/rate",
-        "#/properties/state/properties/lattices/items/anyOf/6/properties/reactions/items/anyOf/2/properties/when/items/properties/value",
-        "#/properties/state/properties/lattices/items/anyOf/6/properties/reactions/items/anyOf/2/properties/then/items/properties/value",
-        "#/properties/state/properties/lattices/items/anyOf/6/properties/reactions/items/anyOf/3/properties/amount",
-        "#/properties/state/properties/lattices/items/anyOf/6/properties/reactions/items/anyOf/4/properties/value",
-        "#/properties/state/properties/lattices/items/anyOf/6/properties/reactions/items/anyOf/5/properties/rate",
+        "#/$defs/WorldPrototype/properties/document/properties/shapes/items/properties/domain/items/anyOf/1/properties/limit",
+        "#/$defs/WorldPrototype/properties/document/properties/shapes/items/properties/domain/items/anyOf/3/properties/limit",
+        "#/$defs/WorldPrototype/properties/document/properties/shapes/items/properties/swings/items/properties/phase",
+        "#/$defs/WorldPrototype/properties/document/properties/shapes/items/properties/slides/items/properties/phase",
+        "#/$defs/WorldPrototype/properties/document/properties/shapes/items/properties/joint",
+        "#/$defs/WorldPrototype/properties/document/properties/effectors/items/properties/target/properties/direction",
+        "#/$defs/WorldPrototype/properties/document/properties/effectors/items/properties/target/properties/reach",
+        "#/$defs/WorldPrototype/properties/document/properties/effectors/items/properties/target/properties/standoff",
+        "#/$defs/WorldPrototype/properties/document/properties/effectors/items/properties/target/properties/offset",
+        "#/$defs/WorldPrototype/properties/document/properties/effectors/items/properties/weight",
     };
 
     private static readonly Lazy<JsonObject> BundleHolder = new(valueFactory: BuildBundle);
@@ -97,7 +86,9 @@ public sealed class WorldSchemaCompletenessLawTests {
     // A bundled $ref is always a plain document-absolute JSON pointer (Bundle() never leaves a "$defs" reference
     // behind) — its target is visited at its OWN position in this same walk, so a $ref node itself never needs
     // recursing into. Cycle-safe by construction: a genuinely recursive shape's own self-reference is exactly such
-    // a $ref, never dereferenced here.
+    // a $ref, never dereferenced here. A node carrying its own "$id" opens a self-contained embedded document
+    // schema (e.g. puck.creation.v1 — see WorldSchema.Bundle) the bundle leaves untouched; visited once but never
+    // recursed into, matching that.
     private static void Walk(JsonNode? node, string pointer, HashSet<JsonNode> visited, Action<JsonObject, string> visit) {
         if (node is JsonObject obj) {
             if (obj.ContainsKey(propertyName: "$ref") || !visited.Add(item: obj)) {
@@ -105,6 +96,10 @@ public sealed class WorldSchemaCompletenessLawTests {
             }
 
             visit(arg1: obj, arg2: pointer);
+
+            if (obj.ContainsKey(propertyName: "$id")) {
+                return;
+            }
 
             if (obj["properties"] is JsonObject properties) {
                 foreach (var (name, value) in properties) {
@@ -139,8 +134,71 @@ public sealed class WorldSchemaCompletenessLawTests {
             }
         }
     }
+    // Walk covers everything a $ref can point at ONLY when it also walks $defs — the bundle's own root now
+    // carries just $ref markers at every titled shape's site (see WorldSchema.Bundle), so a walk over the root
+    // alone would visit almost nothing.
+    private static void WalkBundle(JsonObject bundle, Action<JsonObject, string> visit) {
+        var visited = new HashSet<JsonNode>(comparer: ReferenceEqualityComparer.Instance);
+
+        Walk(
+            node: bundle,
+            pointer: "#",
+            visited: visited,
+            visit: visit
+        );
+
+        if (bundle["$defs"] is JsonObject defs) {
+            foreach (var (name, defNode) in defs) {
+                Walk(
+                    node: defNode,
+                    pointer: $"#/$defs/{name}",
+                    visited: visited,
+                    visit: visit
+                );
+            }
+        }
+    }
     private static JsonNode ParseFragment(string path) =>
         (JsonNode.Parse(json: File.ReadAllText(path: path)) ?? throw new InvalidDataException(message: $"{path} did not parse as JSON."));
+    // Follows a site straight to its shape: a bare "#/$defs/X" $ref resolves to that def's own content; a
+    // nullable site ("anyOf": [{"$ref"}, {"type":"null"}], see WorldSchema.Bundle) resolves through its $ref arm.
+    // A node that is neither is already a shape — returned as-is.
+    private static JsonObject ResolveDef(JsonNode node) {
+        if (node is not JsonObject obj) {
+            throw new InvalidOperationException(message: $"{node} is not an object node.");
+        }
+
+        if (
+            (obj["$ref"] is JsonValue refValue) &&
+            refValue.TryGetValue<string>(value: out var pointer)
+        ) {
+            return ResolvePointer(pointer: pointer);
+        }
+
+        if (obj["anyOf"] is JsonArray arms) {
+            foreach (var arm in arms) {
+                if ((arm is JsonObject armObject) && armObject.ContainsKey(propertyName: "$ref")) {
+                    return ResolveDef(node: armObject);
+                }
+            }
+        }
+
+        return obj;
+    }
+    private static JsonObject ResolvePointer(string pointer) {
+        const string Prefix = "#/$defs/";
+
+        if (!pointer.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: Prefix
+        )) {
+            throw new InvalidOperationException(message: $"'{pointer}' is not a bundle-local $defs pointer.");
+        }
+
+        var name = pointer[Prefix.Length..];
+
+        return (JsonObject)((Bundle["$defs"] as JsonObject)?[name] ?? throw new InvalidOperationException(message: $"$defs/{name} is missing from the bundle."));
+    }
     private static void AssertValidatesAgainstBundle(JsonNode instance, string label) {
         var results = CompiledBundle.Evaluate(root: instance, options: new EvaluationOptions { OutputFormat = OutputFormat.List });
 
@@ -159,7 +217,7 @@ public sealed class WorldSchemaCompletenessLawTests {
     public void EveryArrayDeclaresItems() {
         var violations = new List<string>();
 
-        Walk(node: Bundle, pointer: "#", visited: new HashSet<JsonNode>(comparer: ReferenceEqualityComparer.Instance), visit: (node, pointer) => {
+        WalkBundle(bundle: Bundle, visit: (node, pointer) => {
             if (DeclaresArrayType(node: node) && !node.ContainsKey(propertyName: "items")) {
                 violations.Add(item: pointer);
             }
@@ -171,7 +229,7 @@ public sealed class WorldSchemaCompletenessLawTests {
     public void EveryClosedObjectPropertyIsTypedOrAllowlisted() {
         var violations = new List<string>();
 
-        Walk(node: Bundle, pointer: "#", visited: new HashSet<JsonNode>(comparer: ReferenceEqualityComparer.Instance), visit: (node, pointer) => {
+        WalkBundle(bundle: Bundle, visit: (node, pointer) => {
             if (!IsClosedObject(node: node) || (node["properties"] is not JsonObject properties)) {
                 return;
             }
@@ -191,7 +249,7 @@ public sealed class WorldSchemaCompletenessLawTests {
     public void TheAllowlistNamesNoAlreadyTypedLeaf() {
         var typed = new List<string>();
 
-        Walk(node: Bundle, pointer: "#", visited: new HashSet<JsonNode>(comparer: ReferenceEqualityComparer.Instance), visit: (node, pointer) => {
+        WalkBundle(bundle: Bundle, visit: (node, pointer) => {
             if (node["properties"] is not JsonObject properties) {
                 return;
             }
@@ -211,7 +269,9 @@ public sealed class WorldSchemaCompletenessLawTests {
     public void StateWorldItemsMatchTheRowConverterShape() {
         var converter = (StateRowJsonConverter<WorldStateRow>)(WorldJsonContext.Default.Options.GetConverter(typeToConvert: typeof(WorldStateRow)) ?? throw new InvalidOperationException(message: "WorldStateRow has no registered converter."));
         var shape = converter.Shape;
-        var items = (JsonObject)(Bundle["properties"]?["state"]?["properties"]?["world"]?["items"] ?? throw new InvalidOperationException(message: "state.world.items is missing from the bundle."));
+        var stateSection = ResolveDef(node: Bundle["properties"]?["state"] ?? throw new InvalidOperationException(message: "properties.state is missing from the bundle."));
+        var worldProperty = (JsonObject)(stateSection["properties"]?["world"] ?? throw new InvalidOperationException(message: "state.world is missing from the bundle."));
+        var items = ResolveDef(node: worldProperty["items"] ?? throw new InvalidOperationException(message: "state.world.items is missing from the bundle."));
         var properties = (JsonObject)(items["properties"] ?? throw new InvalidOperationException(message: "state.world.items carries no properties."));
         var names = properties.Select(selector: static kv => kv.Key).ToList();
 
@@ -253,4 +313,147 @@ public sealed class WorldSchemaCompletenessLawTests {
     [MemberData(memberName: nameof(ModuleFragmentPaths))]
     public void EveryModuleFragmentValidatesAgainstTheBundle(string path) =>
         AssertValidatesAgainstBundle(instance: ParseFragment(path: path), label: path);
+    [Fact]
+    public void EveryRefResolvesToADef() {
+        var violations = new List<string>();
+        var defs = ((Bundle["$defs"] as JsonObject) ?? throw new InvalidOperationException(message: "the bundle carries no $defs."));
+
+        WalkRefs(node: Bundle, pointer: "#", visit: (refValue, pointer) => {
+            const string Prefix = "#/$defs/";
+
+            if (!refValue.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: Prefix
+            )) {
+                violations.Add(item: $"{pointer}: $ref '{refValue}' is not a bundle-local #/$defs/ pointer");
+
+                return;
+            }
+
+            var name = refValue[Prefix.Length..];
+
+            if (!defs.ContainsKey(propertyName: name)) {
+                violations.Add(item: $"{pointer}: $ref '{refValue}' names no $defs entry");
+            }
+        });
+
+        Assert.True(condition: (violations.Count == 0), userMessage: string.Join(separator: "\n", values: violations));
+    }
+    [Fact]
+    public void EveryDefTitleEqualsItsKey() {
+        var defs = ((Bundle["$defs"] as JsonObject) ?? throw new InvalidOperationException(message: "the bundle carries no $defs."));
+        var violations = new List<string>();
+
+        foreach (var (name, defNode) in defs) {
+            if ((defNode as JsonObject)?["title"] is not JsonValue titleValue || !titleValue.TryGetValue<string>(value: out var title) || !string.Equals(a: title, b: name, comparisonType: StringComparison.Ordinal)) {
+                violations.Add(item: $"$defs/{name} carries title '{(defNode as JsonObject)?["title"]}'");
+            }
+        }
+
+        Assert.True(condition: (violations.Count == 0), userMessage: string.Join(separator: "\n", values: violations));
+    }
+    // Every named shape lives in exactly one place: a $defs entry, or the bundle root itself (which keeps its own
+    // hand-written title — see WorldSchema.Bundle). An object with "properties" found anywhere else would mean a
+    // titled shape the bundle-time hoist missed.
+    [Fact]
+    public void EveryObjectWithPropertiesIsADefOrTheRoot() {
+        var violations = new List<string>();
+
+        WalkBundle(bundle: Bundle, visit: (node, pointer) => {
+            if (!node.ContainsKey(propertyName: "properties")) {
+                return;
+            }
+
+            if (string.Equals(
+                a: pointer,
+                b: "#",
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return;
+            }
+
+            if (
+                pointer.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "#/$defs/"
+            ) &&
+                !pointer["#/$defs/".Length..].Contains(value: '/')
+            ) {
+                return;
+            }
+
+            // A node carrying its own "$id" IS its own schema root (a self-contained embedded document, e.g.
+            // puck.creation.v1 — see WorldSchema.Bundle and Walk's own "$id" stop); Walk never recurses past it,
+            // so this is the one site such a node is ever visited from.
+            if (node.ContainsKey(propertyName: "$id")) {
+                return;
+            }
+
+            // WorldStateRow's own shape is hand-assembled by StateRowJsonConverter<TRow> (an
+            // IJsonSchemaNodeConverter) — its "allOf"/"if"/"then" kind-conditional structure and every property
+            // nested under it are constructed directly in C#, never through Transform, so none of it carries a
+            // CLR type StampTitle could name. The def itself is still a def; only its OWN interior is exempt.
+            if (
+                pointer.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "#/$defs/WorldStateRow/"
+            )
+            ) {
+                return;
+            }
+
+            violations.Add(item: pointer);
+        });
+
+        Assert.True(condition: (violations.Count == 0), userMessage: string.Join(separator: "\n", values: violations));
+    }
+    // A document the old, fully-inlined bundle refused stays refused: additionalProperties:false at the root
+    // (preserved verbatim by both the old inlining and the new $defs form) rejects a key the document model never
+    // declared.
+    [Fact]
+    public void ADocumentTheOldBundleRefusedStillRefuses() {
+        var path = Path.Combine(RepositoryRoot(), "src", "Puck.World", "Assets", "worlds", "puck.world.json");
+
+        Assert.True(condition: WorldDefinitionFileSource.TryComposeDocumentTree(path: path, tree: out var tree, reason: out var reason), userMessage: reason);
+
+        var corrupted = ((JsonObject)tree!.DeepClone()!);
+
+        corrupted["thisPropertyWasNeverDeclaredByTheDocumentModel"] = true;
+
+        var results = CompiledBundle.Evaluate(root: corrupted, options: new EvaluationOptions { OutputFormat = OutputFormat.List });
+
+        Assert.False(condition: results.IsValid, userMessage: "an undeclared top-level property validated — additionalProperties:false regressed.");
+    }
+    // A $ref node is never recursed into (its target is visited at its own $defs position); everything else is
+    // walked looking for its own "$ref" key.
+    private static void WalkRefs(JsonNode? node, string pointer, Action<string, string> visit) {
+        if (node is JsonObject obj) {
+            if (
+                (obj["$ref"] is JsonValue refValue) &&
+                refValue.TryGetValue<string>(value: out var target)
+            ) {
+                visit(arg1: target, arg2: pointer);
+
+                return;
+            }
+
+            foreach (var (key, value) in obj) {
+                if (value is not null) {
+                    WalkRefs(
+                        node: value,
+                        pointer: $"{pointer}/{key}",
+                        visit: visit
+                    );
+                }
+            }
+        } else if (node is JsonArray array) {
+            for (var index = 0; (index < array.Count); index++) {
+                WalkRefs(
+                    node: array[index],
+                    pointer: $"{pointer}/{index}",
+                    visit: visit
+                );
+            }
+        }
+    }
 }

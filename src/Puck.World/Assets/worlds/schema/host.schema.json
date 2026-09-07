@@ -10,7 +10,8 @@
         "Windowed",
         "None",
         "Offscreen"
-      ]
+      ],
+      "title": "WorldHostPresentation"
     },
     "width": {
       "description": "The window client width in pixels.",
@@ -22,6 +23,7 @@
     },
     "surfaceFormat": {
       "description": "The swapchain surface format (Unknown is rejected by the validator).",
+      "title": "SurfaceFormat",
       "type": "string",
       "enum": [
         "r8g8b8a8",
@@ -39,7 +41,8 @@
         "Mailbox",
         "Immediate",
         "Adaptive"
-      ]
+      ],
+      "title": "PresentMode"
     },
     "targetHertz": {
       "description": "The boot present-pacing target in Hz; 0 selects automatic display pacing. The world.target live lever owns \u0022now\u0022 thereafter.",
@@ -82,6 +85,7 @@
     "backend": {
       "description": "The preferred graphics backend (Auto is OS-portable), or null when BackendRow reads it from a row \u2014 omitting both reads as Auto.",
       "default": null,
+      "title": "WorldBackendPreference",
       "type": [
         "string",
         "null"
@@ -122,5 +126,6 @@
     "listen"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldHostDefaults"
 }

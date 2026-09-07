@@ -1,6 +1,7 @@
 {
   "$defs": {
     "DocumentVector3": {
+      "title": "DocumentVector3",
       "anyOf": [
         {
           "type": "array",
@@ -25,7 +26,8 @@
         "Half",
         "Quarter",
         "Eighth"
-      ]
+      ],
+      "title": "WorldRenderScaleTier"
     },
     "WorldQualityPreset": {
       "type": [
@@ -40,7 +42,8 @@
             "Low",
             "Medium",
             "High"
-          ]
+          ],
+          "title": "ShadowTier"
         },
         "ambientOcclusion": {
           "description": "Whether the preset enables ambient occlusion.",
@@ -51,7 +54,8 @@
           "description": "The render-scale tier the preset selects."
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldQualityPreset"
     },
     "WorldRenderSun": {
       "description": "One directional sun. Every field is optional individually \u2014 absent resolves to SdfFrame\u0027s pinned default for that field.",
@@ -82,7 +86,8 @@
           ]
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldRenderSun"
     },
     "WorldRenderAmbient": {
       "description": "The ambient (hemisphere) term. Every field is optional individually \u2014 absent resolves to SdfFrame\u0027s pinned default for that field.",
@@ -116,7 +121,8 @@
           ]
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldRenderAmbient"
     },
     "WorldRenderLighting": {
       "description": "The scene\u0027s directional sun and ambient term \u2014 threads unchanged into the engine\u0027s existing per-frame lighting fields (SdfFrame.SunDirection/SunWeight/SunColor/AmbientBase/ AmbientHemisphere/AmbientColor). Every field, at every level, is optional individually \u2014 an absent one resolves to SdfFrame\u0027s pinned default for that field, so an unauthored section, or a partially authored one, renders exactly as a world that declares neither.",
@@ -136,7 +142,8 @@
           "default": null
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldRenderLighting"
     },
     "WorldRenderSkySun": {
       "description": "The visible sun disc \u2014 an additive highlight about the lighting sun\u0027s direction.",
@@ -158,7 +165,8 @@
         "discRadians",
         "intensity"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldRenderSkySun"
     },
     "WorldRenderSkyTwinkle": {
       "description": "Scintillation: a hash-chosen share of the stars dip and recover on the simulation clock, each at its own harmonic and phase of one authored rate, so no two twinkle in step. Presentation-only, keyed on the tick.",
@@ -185,7 +193,8 @@
         "depth",
         "rate"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldRenderSkyTwinkle"
     },
     "WorldRenderSkyStars": {
       "description": "The procedural star field: a deterministic per-cell hash over an octahedral sky projection. No texture, no session state \u2014 the identical density/seed always draws the identical field.",
@@ -217,9 +226,11 @@
         "brightness",
         "seed"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldRenderSkyStars"
     },
     "DocumentVector2": {
+      "title": "DocumentVector2",
       "anyOf": [
         {
           "type": "array",
@@ -300,7 +311,8 @@
         "scale",
         "seed"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldRenderSkyClouds"
     },
     "WorldRenderSky": {
       "description": "The procedural sky \u2014 a three-stop gradient, sun disc, star field, and distance fog, authored as world data. Absent is a hard gate: every existing world renders the pinned two-stop gradient and 0.015 fog density bit-exactly, as before this section existed, until it authors one.",
@@ -357,7 +369,8 @@
           "default": null
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldRenderSky"
     },
     "WorldScreenSourceNone": {
       "description": "No provider is bound \u2014 the engine lights the slot with its procedural no-signal fallback (an animated test-card / striped no-signal look, never black).",
@@ -366,7 +379,8 @@
           "const": "none"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldScreenSourceNone"
     },
     "WorldScreenSourceTestPattern": {
       "description": "The deterministic animated test pattern (Puck.SdfVm.Views.TestPatternSource), rendered from the world\u0027s sim tick (never the wall clock) into a CPU buffer and uploaded each frame.",
@@ -387,7 +401,8 @@
         "width",
         "height"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldScreenSourceTestPattern"
     },
     "WorldMachineCable": {
       "description": "One machine\u0027s cable-port declaration \u2014 the machine-tier home of cable linking. A cable is the SET of declared machine sources naming the same cable name, derived by MachineCableGroups; no port ever points at another port, so reciprocity holds by construction and a one-port cable is a validation refusal rather than a dangling half-pair.",
@@ -409,7 +424,8 @@
         "name",
         "position"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldMachineCable"
     },
     "WorldScreenSourceMachine": {
       "description": "An arbitrary deterministic machine\u0027s unresampled framebuffer \u2014 resolved against a registered IScreenMachineEngine by Engine id. The world never names a concrete machine: the engine owns its Options vocabulary (a GamingBrick reads a dmg/cgb/agb model \u002B a dmgspeed pin).",
@@ -443,7 +459,8 @@
         "contentPath",
         "options"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldScreenSourceMachine"
     },
     "WorldFeedProfile": {
       "type": [
@@ -464,7 +481,8 @@
           "type": "integer"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldFeedProfile"
     },
     "WorldCameraVendorControl": {
       "description": "One raw vendor-extension write on the shared camera (see WorldCameraControls\u0027s Vendor member): a byte-sized selector on the device\u0027s vendor unit and the value to write. Deliberately semantics-free \u2014 the honest vocabulary for device controls no standard names.",
@@ -486,7 +504,8 @@
         "id",
         "value"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraVendorControl"
     },
     "WorldCameraControls": {
       "description": "The authored control state for the shared physical camera \u2014 one device-wide state across its color and infrared streams \u2014 and the standard UVC camera/image controls (pan/tilt/zoom, exposure, focus, color). Every member is optional: an ABSENT member leaves that control at the device\u0027s own driver default (automatic where the device supports it), and a PRESENT member drives the control manually at that value. The device remains authoritative \u2014 a value outside the device\u0027s reported range is clamped (and step-snapped) at apply, a control the device lacks is skipped, and screen.camera reads the resulting live state (each control\u0027s device range, mode, and current value) back over the pipe. Removing a previously authored member restores that control\u0027s driver default on the next apply. Ranges are device-specific by design, so validation admits any integer rather than guessing one device\u0027s envelope.",
@@ -611,7 +630,8 @@
           "default": null
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraControls"
     },
     "WorldScreenSourceCamera": {
       "description": "The platform\u0027s default live camera feed. The platform may negotiate a nearby extent; every screen and probe socket naming the same sensor shares one feed, opened at the richest profile any screen row requests.",
@@ -635,7 +655,8 @@
             "Color",
             "Infrared"
           ],
-          "default": "Color"
+          "default": "Color",
+          "title": "WorldCameraSensor"
         },
         "seat": {
           "description": "The 1-based local seat this row names \u2014 a camera is an input device seated like a pad, never hardware named directly. null means the enclosing seat scope (an identity\u0027s HUD panel, a seat-scoped probe socket) or seat 1 at world scope \u2014 the same explicit-index convention $channel:\u003Cseat\u003E and axis bindings already use. Validated within 1..population.localSeats when present. Omitted from the wire when null.",
@@ -646,7 +667,8 @@
           "default": null
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldScreenSourceCamera"
     },
     "WorldScreenSourceView": {
       "description": "A named view from the presentation view stack, such as a monitor showing another camera\u0027s output.",
@@ -662,7 +684,8 @@
       "required": [
         "cameraName"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldScreenSourceView"
     },
     "WorldFeedProfileNonNullable": {
       "description": "A live screen feed\u0027s requested output policy. It belongs to the source declaration rather than the binder, so two window captures can choose different extents and cadences. Camera extents are preferences because a physical device remains authoritative for its negotiated format.",
@@ -681,7 +704,8 @@
           "type": "integer"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldFeedProfile"
     },
     "WorldScreenSourceCapture": {
       "description": "A live compositor capture feed \u2014 a desktop window keyed by title, or a whole monitor keyed by index. The selector is the altitude of the primitive: MonitorIndex null is window mode; non-null is whole-monitor mode (and WindowTitle is unused).",
@@ -710,7 +734,8 @@
         "windowTitle",
         "profile"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldScreenSourceCapture"
     },
     "WorldScreenSourceConsole": {
       "description": "A screen showing the developer console as an object in the world \u2014 the diegetic half of the control plane the unification contract names (\u0022the on-screen panel and process stdin\u0022). The frame is CPU-composed into a CRT-styled framebuffer and pushed through IGpuSurfaceUpload, exactly as the ported console feed does; nothing about it is a render-graph node. Complementary to \u2014 never a duplicate of \u2014 ConsoleTape, which publishes the same content to the screen-space overlay. At most one console source may be live (declared) at a time; an unselected console entry sitting in a magazine is legal.",
@@ -734,7 +759,8 @@
           "default": false
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldScreenSourceConsole"
     },
     "WorldScreenSourceQr": {
       "description": "An authorable QR code (ISO/IEC 18004) \u2014 the document names a payload string and the engine derives the scannable module grid (QrEncoder), rendered CPU-side into a static B8G8R8A8 framebuffer and uploaded once, never re-derived from the tick like TestPattern. The driving case is a link one human hands another off an in-world screen. This record is the document-authored half only \u2014 nothing here mints a payload at runtime; screen.source \u003Cindex\u003E qr is the live-authoring twin, and world.identify is the one caller that mints its payload (the running world\u0027s own documentId and content-address pin) rather than being handed one.",
@@ -760,7 +786,16 @@
       "required": [
         "payload"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldScreenSourceQr"
+    },
+    "WorldScreenProjection": {
+      "description": "How a Session face\u0027s destination render projects onto the face \u2014 an ordinary head-on camera image, or a WINDOW whose image shears with the viewer\u0027s own eye so the destination scene parallaxes against the aperture the way a real opening would.",
+      "enum": [
+        "Camera",
+        "Window"
+      ],
+      "title": "WorldScreenProjection"
     },
     "WorldScreenSourceSession": {
       "description": "A live rendered view of another world, resolved through a destinations row (docs/vision.md, \u0022Observation and display\u0022). The face/screen resolves the same resolver-owned identity a portal crossing at the same door would land in (WorldSessionResolver), attaches an observation lease to the resolved instance\u0027s server, and mirrors just enough of its delivered definition/snapshots to render its static authored geometry through CameraName (or the destination\u0027s default projection). It never re-derives durability/scope/generation itself \u2014 those are the destination row\u0027s own facts.",
@@ -781,22 +816,21 @@
           "default": null
         },
         "projection": {
+          "$ref": "#/$defs/WorldScreenProjection",
           "description": "How the destination render projects onto this face (see WorldScreenProjection). Default Camera \u2014 unauthored worlds and every session facet authored before this member existed render byte-identically. Optional and trailing (the same widen-without-moving-existing-members shape CameraName itself already follows). Window requires this same face\u0027s Portal to author Mapped with a Counterpart \u2014 refused by name otherwise (see WorldDefinitionValidator); a top-level screens row or magazine entry carries no face to pair with, so window is refused there unconditionally.",
-          "enum": [
-            "Camera",
-            "Window"
-          ],
           "default": "Camera"
         },
         "resolution": {
           "description": "The offscreen target\u0027s [width, height] in pixels, or null for the engine default (Puck.SdfVm.Views.WorldSessionView.DefaultWidth x DefaultHeight \u2014 today\u0027s 160x144 panel, unchanged for an unauthored facet). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.",
-          "default": null
+          "default": null,
+          "title": "WorldScreenResolution"
         }
       },
       "required": [
         "destination"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldScreenSourceSession"
     },
     "StringList": {
       "type": "array",
@@ -861,7 +895,8 @@
       "required": [
         "lines"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldScreenSourceText"
     },
     "WorldScreenSourceProbe": {
       "description": "A declared probe\u0027s texture output \u2014 the frame a kind that declares an output writes each cycle (a relit camera frame, a mask), published like a camera feed. The probe must be a probes row of this document; whether its kind writes a texture is checked at boot against the kind\u0027s manifest.",
@@ -877,7 +912,8 @@
       "required": [
         "id"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldScreenSourceProbe"
     },
     "WorldScreenSource": {
       "description": "The signal carried by a WorldScreen\u0027s lit face. A source declares which provider feeds a slot; the engine resolves and samples it. The $type string is the JSON discriminator; a new source kind is a new derived record plus its JsonDerivedTypeAttribute line.",
@@ -919,7 +955,8 @@
         {
           "$ref": "#/$defs/WorldScreenSourceProbe"
         }
-      ]
+      ],
+      "title": "WorldScreenSource"
     },
     "WorldSolid": {
       "description": "A row\u0027s solidity facet \u2014 it participates in contact resolution using its own declared shape. Presence is the whole switch; null means decoration \u2014 the row is drawn but bodies pass through it.",
@@ -936,7 +973,8 @@
       "required": [
         "margin"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldSolid"
     },
     "WorldAnchorEntity": {
       "description": "Rides one population entity\u0027s ROOT pose \u2014 a walking avatar\u0027s whole-body position and orientation.",
@@ -952,7 +990,8 @@
       "required": [
         "index"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldAnchorEntity"
     },
     "WorldAnchorEntityPart": {
       "description": "Rides one entity look\u0027s authored part pose rather than its whole-body root. The active look publishes the mapping from PartId to its packed transform slot; the slot remains an engine detail.",
@@ -973,7 +1012,8 @@
         "index",
         "partId"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldAnchorEntityPart"
     },
     "WorldAnchorPlacement": {
       "description": "Rides a placement INSTANCE\u0027s stamped transform \u2014 a creation stamped into the world by reference (the same placement-reference shape CreationCameraDocument uses), optionally narrowed to one of its own authored shapes rather than the stamp\u0027s root.",
@@ -997,7 +1037,8 @@
         "placementId",
         "shapeId"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldAnchorPlacement"
     },
     "Int32List": {
       "type": [
@@ -1027,7 +1068,8 @@
         "indices",
         "smoothRate"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldAnchorGroup"
     },
     "WorldAnchorSeat": {
       "description": "Rides a local seat\u0027s avatar \u2014 the body the seat perceives as its own, so possession follows \u2014 at its root or at a named part. Numbernull is the enclosing seat scope (the seat a HUD frame or view is being resolved for), an explicit number is 1-based. Presentation-only: a camera or speaker on this anchor is resolved per seat.",
@@ -1050,7 +1092,8 @@
           "default": null
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldAnchorSeat"
     },
     "WorldAnchorRecentSpeaker": {
       "description": "Rides the body that most recently spoke (see OverlayPredicate.Speaking), at its root or a named part; resolves nothing until something has spoken.",
@@ -1066,7 +1109,8 @@
           "default": null
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldAnchorRecentSpeaker"
     },
     "WorldCameraSubjectReference": {
       "description": "The program\u0027s externally supplied reference pose \u2014 a named camera\u0027s own WorldAnchor, or a seat rig\u0027s currently perceived body (the seat\u0027s own avatar, or a possessed camera body). Resolved outside the program and handed to it as the SdfAnchor the compiled rig receives every frame.",
@@ -1075,7 +1119,8 @@
           "const": "reference"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraSubjectReference"
     },
     "WorldCameraSubjectPlacement": {
       "description": "Rides a placement\u0027s authored stamped transform (position only \u2014 a placement carries no live facing through this static resolve, the same limitation a placeable camera\u0027s own Placement arm and a speaker share).",
@@ -1099,7 +1144,8 @@
       "required": [
         "placementId"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraSubjectPlacement"
     },
     "WorldCameraSubjectWorldPoint": {
       "description": "A fixed world-space point.",
@@ -1115,7 +1161,8 @@
       "required": [
         "point"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraSubjectWorldPoint"
     },
     "WorldCameraSubject": {
       "description": "The subject an Anchor/LookAt op resolves against \u2014 the closed \u0022what a camera program can key off\u0022 vocabulary. Distinct from WorldAnchor (WHERE a whole placeable camera or speaker rides, resolved OUTSIDE the program and handed in as one reference pose): this is presentation math INSIDE the program, so it stays float and needs no live entity table \u2014 a placement\u0027s pose resolves through the same static stamped-transform math a placeable camera\u0027s own anchor and a speaker read (Puck.World.Client.WorldAnchorGeometry).",
@@ -1133,7 +1180,8 @@
         {
           "$ref": "#/$defs/WorldCameraSubjectWorldPoint"
         }
-      ]
+      ],
+      "title": "WorldCameraSubject"
     },
     "WorldCameraProgramOpAnchor": {
       "description": "Establishes the CURRENT subject \u2014 the pose Offset/Orbit place the eye relative to, and LookAt aims along the facing of when it names no subject of its own. Also re-seeds the eye at the resolved subject\u0027s own position (the \u0022first person\u0022 default before any Offset/Orbit runs). At most one per program, and it must be the first operation when present; a program that omits it starts from Reference implicitly.",
@@ -1156,7 +1204,8 @@
       "required": [
         "subject"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpAnchor"
     },
     "WorldCameraProgramOpOffset": {
       "description": "Places the eye at an offset from the current subject\u0027s pose.",
@@ -1189,7 +1238,8 @@
       "required": [
         "value"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpOffset"
     },
     "WorldCameraSubjectNullable": {
       "description": "The subject an Anchor/LookAt op resolves against \u2014 the closed \u0022what a camera program can key off\u0022 vocabulary. Distinct from WorldAnchor (WHERE a whole placeable camera or speaker rides, resolved OUTSIDE the program and handed in as one reference pose): this is presentation math INSIDE the program, so it stays float and needs no live entity table \u2014 a placement\u0027s pose resolves through the same static stamped-transform math a placeable camera\u0027s own anchor and a speaker read (Puck.World.Client.WorldAnchorGeometry).",
@@ -1210,7 +1260,8 @@
         {
           "$ref": "#/$defs/WorldCameraSubjectWorldPoint"
         }
-      ]
+      ],
+      "title": "WorldCameraSubject"
     },
     "WorldCameraProgramOpLookAt": {
       "description": "Sets the aim target.",
@@ -1248,7 +1299,8 @@
       "required": [
         "subject"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpLookAt"
     },
     "WorldCameraProgramOpOrbit": {
       "description": "Orbits the eye about its pivot. Yaw and Pitch are live-bindable like Fov\u0027s field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell changes \u2014 look behind is state.look.behind flipping between 0 and \u03C0 \u2014 while the seat\u0027s facing (what steering and movement resolve against) is untouched, because the facing never includes the rig\u0027s offsets.",
@@ -1262,6 +1314,7 @@
         },
         "yaw": {
           "description": "The orbit heading in radians, as a literal or numeric state binding.",
+          "title": "BindableScalar",
           "type": [
             "number",
             "string"
@@ -1269,6 +1322,7 @@
         },
         "pitch": {
           "description": "The orbit tilt in radians, as a literal or numeric state binding.",
+          "title": "BindableScalar",
           "type": [
             "number",
             "string"
@@ -1292,7 +1346,8 @@
         "yaw",
         "pitch"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpOrbit"
     },
     "WorldCameraProgramOpPath": {
       "description": "Establishes the CURRENT subject at a point sampled from a named curves row by arc-length fraction, and re-seeds the eye there \u2014 the same subject-seeding role Anchor plays, so at most one of the two may appear in a program, and when present this must be the first operation. The sampled subject\u0027s orientation faces the curve\u0027s own tangent direction at that point. A following Offset with WorldAxes: false (the default) rotates its offset into that tangent frame, and a following LookAt with no subject of its own looks ahead along it; a following Orbit pivots at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the tangent \u2014 it never reads the subject\u0027s orientation. A dollied eye is path \u002B LookAt \u002B Fov; a dollied pivot is path \u002B Orbit with an authored yaw that already accounts for the curve\u0027s own heading. Composes with Dynamics\u0027s boom follower untouched. Carries no rate field: a constant-rate dolly binds Fraction to a state row carrying the advance trait (base \u002B rate\u00B7ticks) rather than duplicating a rate spelling here.",
@@ -1306,6 +1361,7 @@
         },
         "fraction": {
           "description": "The curve\u0027s arc-length fraction to sample, in [0, 1] for an open row (values outside clamp) or unrestricted for a closed row (values wrap) \u2014 a literal, or a state binding.",
+          "title": "BindableScalar",
           "type": [
             "number",
             "string"
@@ -1323,7 +1379,8 @@
         "curve",
         "fraction"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpPath"
     },
     "WorldCameraProgramOpDynamics": {
       "description": "Sets the second-order response the resolved eye/target boom eases through. Read by the caller after resolving a frame \u2014 never affects the resolved pose itself. At most one per program.",
@@ -1346,7 +1403,8 @@
       "required": [
         "row"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpDynamics"
     },
     "WorldCameraProgramOpClampPitch": {
       "description": "Clamps the effective pitch the NEXT Orbit op resolves with (its authored Pitch plus any live seat delta) to [MinPitch, MaxPitch]. At most one per program; must precede the Orbit op it governs. A joined seat\u0027s own views.seatControl band already clamps its LIVE delta before this ever runs \u2014 this op exists for a program with no seat behind it (a named camera orbiting a state-bound pitch).",
@@ -1374,7 +1432,8 @@
         "minPitch",
         "maxPitch"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpClampPitch"
     },
     "WorldCameraProgramOpFov": {
       "description": "Sets the rendered vertical field of view, radians \u2014 a literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding so a world rule can pull focus or frame a moment (decisions in the sim, framing in presentation). At most one per program.",
@@ -1384,6 +1443,7 @@
         },
         "fieldOfViewRadians": {
           "description": "The field of view.",
+          "title": "BindableScalar",
           "type": [
             "number",
             "string"
@@ -1400,7 +1460,8 @@
       "required": [
         "fieldOfViewRadians"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpFov"
     },
     "WorldCameraProgramOpBlend": {
       "description": "Evaluates two other authored programs by name and linearly interpolates their resolved eye, target, and field of view \u2014 the whole document\u0027s camera-program table (every cameras[].rig plus views.seatRig/views.cameraRig) is the namespace A/B resolve against. At most one per program; refused when it would create a reference cycle.",
@@ -1418,6 +1479,7 @@
         },
         "weight": {
           "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding.",
+          "title": "BindableScalar",
           "type": [
             "number",
             "string"
@@ -1436,7 +1498,8 @@
         "b",
         "weight"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpBlend"
     },
     "WorldCameraSelectCase": {
       "description": "One Select candidate: the program named by Program wins when the op\u0027s key rounds to Value.",
@@ -1458,7 +1521,8 @@
         "value",
         "program"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraSelectCase"
     },
     "WorldCameraSelectCaseList": {
       "type": "array",
@@ -1474,6 +1538,7 @@
         },
         "key": {
           "description": "The selecting value \u2014 a literal, or (the intended use) a state.\u003Crow\u003E[.\u003Ckey\u003E] binding \u2014 rounded to the nearest whole number and matched against Cases.",
+          "title": "BindableScalar",
           "type": [
             "number",
             "string"
@@ -1500,7 +1565,8 @@
         "cases",
         "default"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpSelect"
     },
     "WorldCameraProgramOp": {
       "description": "One instruction in an authored camera program\u0027s ordered op list \u2014 the presentation-side pose algebra bodyMotionPrograms established for sim-side movement, promoted to cameras: an authored rig is an ordered list of these trivial ops rather than a bespoke closed motion/aim union, so a new camera behavior is authored data, never new engine code. This is the AUTHORING vocabulary only: Puck.World.Client.WorldCameraRigCompiler translates it to Puck.SdfVm.Views.SdfCameraOp and resolves each frame\u0027s bindings and subject poses, and Puck.SdfVm.Views.SdfCameraProgramEvaluator \u2014 which parses no document \u2014 walks the result. Floats throughout; presentation carries no fixed-point burden.",
@@ -1542,7 +1608,8 @@
         {
           "$ref": "#/$defs/WorldCameraProgramOpSelect"
         }
-      ]
+      ],
+      "title": "WorldCameraProgramOp"
     },
     "WorldCameraProgramOpList": {
       "type": "array",
@@ -1572,7 +1639,8 @@
       "required": [
         "subject"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpAnchor"
     },
     "WorldCameraProgramOpBlendNullable": {
       "description": "Evaluates two other authored programs by name and linearly interpolates their resolved eye, target, and field of view \u2014 the whole document\u0027s camera-program table (every cameras[].rig plus views.seatRig/views.cameraRig) is the namespace A/B resolve against. At most one per program; refused when it would create a reference cycle.",
@@ -1591,6 +1659,7 @@
         },
         "weight": {
           "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding.",
+          "title": "BindableScalar",
           "type": [
             "number",
             "string"
@@ -1609,7 +1678,8 @@
         "b",
         "weight"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpBlend"
     },
     "WorldCameraProgramOpClampPitchNullable": {
       "description": "Clamps the effective pitch the NEXT Orbit op resolves with (its authored Pitch plus any live seat delta) to [MinPitch, MaxPitch]. At most one per program; must precede the Orbit op it governs. A joined seat\u0027s own views.seatControl band already clamps its LIVE delta before this ever runs \u2014 this op exists for a program with no seat behind it (a named camera orbiting a state-bound pitch).",
@@ -1638,7 +1708,8 @@
         "minPitch",
         "maxPitch"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpClampPitch"
     },
     "WorldCameraProgramOpFovNullable": {
       "description": "Sets the rendered vertical field of view, radians \u2014 a literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding so a world rule can pull focus or frame a moment (decisions in the sim, framing in presentation). At most one per program.",
@@ -1649,6 +1720,7 @@
       "properties": {
         "fieldOfViewRadians": {
           "description": "The field of view.",
+          "title": "BindableScalar",
           "type": [
             "number",
             "string"
@@ -1665,7 +1737,8 @@
       "required": [
         "fieldOfViewRadians"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpFov"
     },
     "WorldCameraProgramOpLookAtNullable": {
       "description": "Sets the aim target.",
@@ -1704,7 +1777,8 @@
       "required": [
         "subject"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpLookAt"
     },
     "WorldCameraProgramOpOffsetNullable": {
       "description": "Places the eye at an offset from the current subject\u0027s pose.",
@@ -1738,7 +1812,8 @@
       "required": [
         "value"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpOffset"
     },
     "WorldCameraProgramOpOrbitNullable": {
       "description": "Orbits the eye about its pivot. Yaw and Pitch are live-bindable like Fov\u0027s field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell changes \u2014 look behind is state.look.behind flipping between 0 and \u03C0 \u2014 while the seat\u0027s facing (what steering and movement resolve against) is untouched, because the facing never includes the rig\u0027s offsets.",
@@ -1753,6 +1828,7 @@
         },
         "yaw": {
           "description": "The orbit heading in radians, as a literal or numeric state binding.",
+          "title": "BindableScalar",
           "type": [
             "number",
             "string"
@@ -1760,6 +1836,7 @@
         },
         "pitch": {
           "description": "The orbit tilt in radians, as a literal or numeric state binding.",
+          "title": "BindableScalar",
           "type": [
             "number",
             "string"
@@ -1783,7 +1860,8 @@
         "yaw",
         "pitch"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpOrbit"
     },
     "WorldCameraProgramOpPathNullable": {
       "description": "Establishes the CURRENT subject at a point sampled from a named curves row by arc-length fraction, and re-seeds the eye there \u2014 the same subject-seeding role Anchor plays, so at most one of the two may appear in a program, and when present this must be the first operation. The sampled subject\u0027s orientation faces the curve\u0027s own tangent direction at that point. A following Offset with WorldAxes: false (the default) rotates its offset into that tangent frame, and a following LookAt with no subject of its own looks ahead along it; a following Orbit pivots at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the tangent \u2014 it never reads the subject\u0027s orientation. A dollied eye is path \u002B LookAt \u002B Fov; a dollied pivot is path \u002B Orbit with an authored yaw that already accounts for the curve\u0027s own heading. Composes with Dynamics\u0027s boom follower untouched. Carries no rate field: a constant-rate dolly binds Fraction to a state row carrying the advance trait (base \u002B rate\u00B7ticks) rather than duplicating a rate spelling here.",
@@ -1798,6 +1876,7 @@
         },
         "fraction": {
           "description": "The curve\u0027s arc-length fraction to sample, in [0, 1] for an open row (values outside clamp) or unrestricted for a closed row (values wrap) \u2014 a literal, or a state binding.",
+          "title": "BindableScalar",
           "type": [
             "number",
             "string"
@@ -1815,7 +1894,8 @@
         "curve",
         "fraction"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpPath"
     },
     "WorldCameraProgramOpDynamicsNullable": {
       "description": "Sets the second-order response the resolved eye/target boom eases through. Read by the caller after resolving a frame \u2014 never affects the resolved pose itself. At most one per program.",
@@ -1839,7 +1919,8 @@
       "required": [
         "row"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpDynamics"
     },
     "WorldCameraProgramOpSelectNullable": {
       "description": "Evaluates exactly one of several other named programs, chosen by a live key \u2014 the state-driven counterpart of Blend\u0027s two-way continuous mix: a rule-advanced integer row selects a whole framing outright rather than easing toward one, so a document can drive which of N stations a single camera program shows without a per-frame console override. The winning program\u0027s eye, target, field of view, and dynamics response pass through unchanged (no lerp). At most one per program; refused when it would create a reference cycle.",
@@ -1850,6 +1931,7 @@
       "properties": {
         "key": {
           "description": "The selecting value \u2014 a literal, or (the intended use) a state.\u003Crow\u003E[.\u003Ckey\u003E] binding \u2014 rounded to the nearest whole number and matched against Cases.",
+          "title": "BindableScalar",
           "type": [
             "number",
             "string"
@@ -1876,7 +1958,8 @@
         "cases",
         "default"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpSelect"
     },
     "WorldCameraProgram": {
       "description": "An authored camera program \u2014 the ordered op list a rig resolves through every frame.",
@@ -1940,7 +2023,8 @@
         "version",
         "operations"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldCameraProgram"
     },
     "WorldAnchor": {
       "description": "WHERE a placeable thing rides \u2014 the one shared pose-target vocabulary a placeable WorldCamera and a placeable WorldSpeaker both consume through the SAME resolver, distinct from HOW the thing looks at or emits from that pose (a WorldCameraProgram, a feed). The $type string is the JSON discriminator; a new anchor kind is a new derived record plus its JsonDerivedTypeAttribute line.",
@@ -1967,7 +2051,8 @@
         {
           "$ref": "#/$defs/WorldAnchorRecentSpeaker"
         }
-      ]
+      ],
+      "title": "WorldAnchor"
     },
     "OverlayFact": {
       "description": "A presentation fact an overlay element\u0027s OverlayPredicate reads. Every fact is per local seat and never enters the simulation; a world-scope element (a hud.panels row) reads a fact as true when it holds for any joined local seat.",
@@ -1977,7 +2062,8 @@
         "WheelOpen",
         "ConsoleOpen",
         "SeatCameraApplication"
-      ]
+      ],
+      "title": "OverlayFact"
     },
     "OverlayPredicateNow": {
       "description": "The fact holds this frame.",
@@ -1992,7 +2078,8 @@
       "required": [
         "fact"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "OverlayPredicateNow"
     },
     "OverlayPredicateRecently": {
       "description": "The fact held within the last WindowSeconds.",
@@ -2018,7 +2105,8 @@
         "fact",
         "windowSeconds"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "OverlayPredicateRecently"
     },
     "OverlayPredicateAll": {
       "description": "Every predicate holds.",
@@ -2033,7 +2121,8 @@
       "required": [
         "predicates"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "OverlayPredicateAll"
     },
     "OverlayPredicateList": {
       "type": "array",
@@ -2054,7 +2143,8 @@
       "required": [
         "predicates"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "OverlayPredicateAny"
     },
     "OverlayPredicateNot": {
       "description": "The predicate does not hold.",
@@ -2069,7 +2159,8 @@
       "required": [
         "predicate"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "OverlayPredicateNot"
     },
     "OverlaySubjectSeat": {
       "description": "A local seat\u0027s avatar \u2014 null is the enclosing seat scope (the seat whose panel, bar, or camera is being evaluated), an explicit number is 1-based like Camera.Seat.",
@@ -2085,7 +2176,8 @@
           "default": null
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "OverlaySubjectSeat"
     },
     "OverlaySubjectPlacement": {
       "description": "A placement instance, optionally one of its shapes.",
@@ -2107,7 +2199,8 @@
       "required": [
         "placementId"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "OverlaySubjectPlacement"
     },
     "OverlaySubjectEntity": {
       "description": "A population entity by 0-based index.",
@@ -2122,7 +2215,8 @@
       "required": [
         "index"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "OverlaySubjectEntity"
     },
     "OverlaySubjectAnySeat": {
       "description": "Any joined local seat\u0027s avatar \u2014 the predicate holds when it holds for at least one.",
@@ -2131,7 +2225,8 @@
           "const": "anySeat"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "OverlaySubjectAnySeat"
     },
     "OverlaySubjectRecentSpeaker": {
       "description": "The body that most recently spoke (see Speaking); nothing until something has.",
@@ -2140,7 +2235,8 @@
           "const": "recentSpeaker"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "OverlaySubjectRecentSpeaker"
     },
     "OverlaySubject": {
       "description": "Who a subject-bearing presentation predicate is about \u2014 a seat\u0027s avatar, a placement, an entity, or a quantifier over seats or speakers. Presentation-only: a subject resolves to a body through the seat\u0027s perceived body (so possession follows) and never enters the simulation.",
@@ -2164,7 +2260,8 @@
         {
           "$ref": "#/$defs/OverlaySubjectRecentSpeaker"
         }
-      ]
+      ],
+      "title": "OverlaySubject"
     },
     "OverlayPredicateSpeaking": {
       "description": "The subject spoke within the last WindowSeconds \u2014 a chat line, a dialogue line, a live voice: every speech path stamps the same presentation clock, so the predicate reads one fact whatever produced it. Presence eases across FadeSeconds after the window like Recently.",
@@ -2187,7 +2284,8 @@
         "subject",
         "windowSeconds"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "OverlayPredicateSpeaking"
     },
     "OverlaySubjectNullable": {
       "description": "Who a subject-bearing presentation predicate is about \u2014 a seat\u0027s avatar, a placement, an entity, or a quantifier over seats or speakers. Presentation-only: a subject resolves to a body through the seat\u0027s perceived body (so possession follows) and never enters the simulation.",
@@ -2214,7 +2312,8 @@
         {
           "$ref": "#/$defs/OverlaySubjectRecentSpeaker"
         }
-      ]
+      ],
+      "title": "OverlaySubject"
     },
     "OverlayPredicateNear": {
       "description": "The subject is within Distance world units of Of (the enclosing seat\u0027s avatar when null), read off the presentation poses each frame; an unresolvable subject is infinitely far.",
@@ -2237,7 +2336,8 @@
         "subject",
         "distance"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "OverlayPredicateNear"
     },
     "ActionStateComparison": {
       "description": "A fixed comparison admitted by a compiled state predicate.",
@@ -2248,7 +2348,8 @@
         "LessOrEqual",
         "Greater",
         "GreaterOrEqual"
-      ]
+      ],
+      "title": "ActionStateComparison"
     },
     "OverlayPredicateState": {
       "description": "A state cell compares to a literal: Binding is state.\u003Crow\u003E[.\u003Ckey\u003E], and exactly one of Value (numeric rows) or Text (text rows, compared ordinally; only Equal/NotEqual) is authored. The same cell a bar\u0027s layoutCell or a wheel sector writes.",
@@ -2281,7 +2382,8 @@
       "required": [
         "binding"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "OverlayPredicateState"
     },
     "OverlayPredicate": {
       "description": "An overlay element\u0027s visibility condition \u2014 the presentation twin of ActionPredicate, over OverlayFacts. Absent on an element means always visible.",
@@ -2314,7 +2416,8 @@
         {
           "$ref": "#/$defs/OverlayPredicateState"
         }
-      ]
+      ],
+      "title": "OverlayPredicate"
     },
     "OverlayPredicateNullable": {
       "description": "An overlay element\u0027s visibility condition \u2014 the presentation twin of ActionPredicate, over OverlayFacts. Absent on an element means always visible.",
@@ -2350,7 +2453,8 @@
         {
           "$ref": "#/$defs/OverlayPredicateState"
         }
-      ]
+      ],
+      "title": "OverlayPredicate"
     },
     "OverlayPredicateListNonNullable": {
       "type": "array",
@@ -2375,6 +2479,7 @@
       "additionalProperties": false
     },
     "IntentSource": {
+      "title": "IntentSource",
       "anyOf": [
         {
           "type": "string",
@@ -2410,7 +2515,8 @@
       "required": [
         "radius"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldDistributionRegionDisc"
     },
     "WorldDistributionRegionPoints": {
       "description": "A cycle of authored spawn poses, each expanded by a planar square.",
@@ -2437,7 +2543,8 @@
         "names",
         "halfExtent"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldDistributionRegionPoints"
     },
     "WorldDistributionRegionLattice": {
       "description": "A finite two-axis lattice local to a placement.",
@@ -2468,7 +2575,8 @@
         "stepB",
         "countB"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldDistributionRegionLattice"
     },
     "WorldDistributionRegionNoise": {
       "description": "Deterministic hash-lattice fBm patch admission over a placement-local grid, centered on the placement \u2014 one instance at the center of every admitted cell. The placement twin of Noise: same fixed-point fBm, same seed fold against generation.worldSeed, same threshold semantics; here admission stamps a creation copy instead of writing a field value.",
@@ -2514,7 +2622,8 @@
         "depth",
         "frequency"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldDistributionRegionNoise"
     },
     "WorldDistributionRegionScatter": {
       "description": "One jittered instance per Spacing-cell block over a placement-local grid, centered on the placement. The placement twin of Scatter: same integer PCG3D block jitter, same seed fold \u2014 every block materializes exactly the one jittered point (never a filled neighborhood), so the instance count is exact and seed-independent: ceil(Width/Spacing) x ceil(Depth/Spacing).",
@@ -2555,7 +2664,8 @@
         "depth",
         "spacing"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldDistributionRegionScatter"
     },
     "WorldDistributionRegion": {
       "description": "A closed spatial region vocabulary consumed by WorldDistribution.",
@@ -2579,7 +2689,8 @@
         {
           "$ref": "#/$defs/WorldDistributionRegionScatter"
         }
-      ]
+      ],
+      "title": "WorldDistributionRegion"
     },
     "WorldSequence": {
       "description": "A deterministic index-to-sample declaration shared by distributions, row assignment, color, and population variation. The document selects the sequence and its phase; the engine owns its exact arithmetic.",
@@ -2603,7 +2714,8 @@
         "offset",
         "step"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldSequence"
     },
     "WorldDistribution": {
       "description": "A spatial region composed with the deterministic sequence that fills it.",
@@ -2625,7 +2737,8 @@
         "region",
         "fill"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldDistribution"
     },
     "WorldPopulationVariation": {
       "description": "The three independently authored sequences that seed a body\u0027s producer state.",
@@ -2652,7 +2765,8 @@
         "weave",
         "activity"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPopulationVariation"
     },
     "WorldSequenceNullable": {
       "description": "A deterministic index-to-sample declaration shared by distributions, row assignment, color, and population variation. The document selects the sequence and its phase; the engine owns its exact arithmetic.",
@@ -2679,7 +2793,8 @@
         "offset",
         "step"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldSequence"
     },
     "ActionPredicateCompareState": {
       "description": "Compares a named state cell against either a fixed authored value, or another named state cell/reserved channel read live at the same evaluation. Both spellings are authorable; exactly one of Value and ComparandState may be present (refused by name when both or neither are). The comparand-row spelling is what lets a gate track a moving threshold \u2014 $tick compared against a schedule row the rule\u0027s own effects advance is \u0022every N ticks\u0022; a round row compared against a declared length row is a round boundary \u2014 composition over the same two-sided comparison, never a new mechanism.",
@@ -2732,7 +2847,8 @@
         "state",
         "comparison"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ActionPredicateCompareState"
     },
     "ValueTokenConstant": {
       "description": "An exact authored decimal, converted to the destination row\u0027s numeric kind at compile time.",
@@ -2748,7 +2864,8 @@
       "required": [
         "value"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenConstant"
     },
     "ValueTokenState": {
       "description": "A live state cell or reserved world-rule channel.",
@@ -2772,7 +2889,8 @@
       "required": [
         "name"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenState"
     },
     "ValueTokenAdd": {
       "description": "Consumes two values and pushes their sum.",
@@ -2781,7 +2899,8 @@
           "const": "add"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenAdd"
     },
     "ValueTokenSubtract": {
       "description": "Consumes two values and pushes left minus right.",
@@ -2790,7 +2909,8 @@
           "const": "subtract"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSubtract"
     },
     "ValueTokenMultiply": {
       "description": "Consumes two values and pushes their product in the destination row\u0027s numeric domain.",
@@ -2799,7 +2919,8 @@
           "const": "multiply"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenMultiply"
     },
     "ValueTokenDivide": {
       "description": "Consumes two values and pushes left divided by right; zero fails evaluation. The caller closes a gate, rejects an effect/decision candidate, or supplies zero affinity according to its own contract.",
@@ -2808,7 +2929,8 @@
           "const": "divide"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenDivide"
     },
     "ValueTokenMin": {
       "description": "Consumes two values and pushes the lesser.",
@@ -2817,7 +2939,8 @@
           "const": "min"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenMin"
     },
     "ValueTokenMax": {
       "description": "Consumes two values and pushes the greater.",
@@ -2826,7 +2949,8 @@
           "const": "max"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenMax"
     },
     "ValueTokenClamp": {
       "description": "Consumes value, minimum, maximum (in that authored order) and pushes the inclusive clamp.",
@@ -2835,7 +2959,8 @@
           "const": "clamp"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenClamp"
     },
     "ValueTokenModulo": {
       "description": "Consumes two values and pushes the remainder of left divided by right, truncating toward zero (Int: 37 % 40 = 37; Fixed: the raw remainder, so 2.5 % 1 = 0.5). A zero divisor fails evaluation; a divisor of -1 yields zero.",
@@ -2844,7 +2969,8 @@
           "const": "modulo"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenModulo"
     },
     "ValueTokenBitAnd": {
       "description": "Consumes two Int values and pushes their bitwise AND. Int expressions only.",
@@ -2853,7 +2979,8 @@
           "const": "bitAnd"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenBitAnd"
     },
     "ValueTokenBitOr": {
       "description": "Consumes two Int values and pushes their bitwise OR. Int expressions only.",
@@ -2862,7 +2989,8 @@
           "const": "bitOr"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenBitOr"
     },
     "ValueTokenBitXor": {
       "description": "Consumes two Int values and pushes their bitwise XOR. Int expressions only.",
@@ -2871,7 +2999,8 @@
           "const": "bitXor"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenBitXor"
     },
     "ValueTokenBitNot": {
       "description": "Consumes one Int value and pushes its bitwise complement. Int expressions only.",
@@ -2880,7 +3009,8 @@
           "const": "bitNot"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenBitNot"
     },
     "ValueTokenShiftLeft": {
       "description": "Consumes value, count and pushes value shifted left by count bits; bits leave the top without refusal, so 1 shiftLeft 63 is the sign bit. A count outside 0..63 fails evaluation. Int only.",
@@ -2889,7 +3019,8 @@
           "const": "shiftLeft"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenShiftLeft"
     },
     "ValueTokenShiftRight": {
       "description": "Consumes value, count and pushes the arithmetic (sign-propagating) right shift. A count outside 0..63 fails evaluation. Int only.",
@@ -2898,7 +3029,8 @@
           "const": "shiftRight"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenShiftRight"
     },
     "ValueTokenShiftRightLogical": {
       "description": "Consumes value, count and pushes the logical (zero-filling) right shift, the bitboard walk. A count outside 0..63 fails evaluation. Int only.",
@@ -2907,7 +3039,8 @@
           "const": "shiftRightLogical"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenShiftRightLogical"
     },
     "ValueTokenEqual": {
       "description": "Consumes two same-kind values and pushes Int 1 when equal, else 0.",
@@ -2916,7 +3049,8 @@
           "const": "equal"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenEqual"
     },
     "ValueTokenNotEqual": {
       "description": "Consumes two same-kind values and pushes Int 1 when unequal, else 0.",
@@ -2925,7 +3059,8 @@
           "const": "notEqual"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenNotEqual"
     },
     "ValueTokenLess": {
       "description": "Consumes two same-kind values and pushes Int 1 when left is less than right, else 0.",
@@ -2934,7 +3069,8 @@
           "const": "less"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenLess"
     },
     "ValueTokenLessOrEqual": {
       "description": "Consumes two same-kind values and pushes Int 1 when left is at most right, else 0.",
@@ -2943,7 +3079,8 @@
           "const": "lessOrEqual"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenLessOrEqual"
     },
     "ValueTokenGreater": {
       "description": "Consumes two same-kind values and pushes Int 1 when left is greater than right, else 0.",
@@ -2952,7 +3089,8 @@
           "const": "greater"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenGreater"
     },
     "ValueTokenGreaterOrEqual": {
       "description": "Consumes two same-kind values and pushes Int 1 when left is at least right, else 0.",
@@ -2961,7 +3099,8 @@
           "const": "greaterOrEqual"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenGreaterOrEqual"
     },
     "ValueTokenSelect": {
       "description": "Consumes condition, whenTrue, whenFalse (in that authored order) and pushes whenTrue when the Int condition is nonzero, else whenFalse. The two branches must share a kind; the result takes it.",
@@ -2970,7 +3109,8 @@
           "const": "select"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSelect"
     },
     "ValueTokenPopCount": {
       "description": "Consumes one Int value and pushes the number of set bits (0..64): a bitboard\u0027s piece count. Int only.",
@@ -2979,7 +3119,8 @@
           "const": "popCount"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenPopCount"
     },
     "ValueTokenLeadingZeroCount": {
       "description": "Consumes one Int value and pushes the count of zero bits above the highest set bit (64 for zero): 63 - leadingZeroCount is the highest set square, the integer log2. Int only.",
@@ -2988,7 +3129,8 @@
           "const": "leadingZeroCount"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenLeadingZeroCount"
     },
     "ValueTokenTrailingZeroCount": {
       "description": "Consumes one Int value and pushes the count of zero bits below the lowest set bit (64 for zero): the lowest occupied square\u0027s index. Int only.",
@@ -2997,7 +3139,8 @@
           "const": "trailingZeroCount"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenTrailingZeroCount"
     },
     "ValueTokenLowestSetBit": {
       "description": "Consumes one Int value and pushes its lowest set bit alone (x \u0026 -x; zero for zero): the next piece to visit. Int only.",
@@ -3006,7 +3149,8 @@
           "const": "lowestSetBit"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenLowestSetBit"
     },
     "ValueTokenClearLowestSetBit": {
       "description": "Consumes one Int value and pushes it with its lowest set bit cleared (x \u0026 (x - 1)): the remaining pieces after a visit. Int only.",
@@ -3015,7 +3159,8 @@
           "const": "clearLowestSetBit"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenClearLowestSetBit"
     },
     "ValueTokenRotateLeft": {
       "description": "Consumes value, count and pushes the 64-bit left rotation; a count outside 0..63 fails evaluation. Int only.",
@@ -3024,7 +3169,8 @@
           "const": "rotateLeft"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenRotateLeft"
     },
     "ValueTokenRotateRight": {
       "description": "Consumes value, count and pushes the 64-bit right rotation; a count outside 0..63 fails evaluation. Int only.",
@@ -3033,7 +3179,8 @@
           "const": "rotateRight"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenRotateRight"
     },
     "ValueTokenByteSwap": {
       "description": "Consumes one Int value and pushes its eight bytes in reverse order: on an 8x8 bitboard, the board flipped rank for rank (a vertical mirror). Int only.",
@@ -3042,7 +3189,8 @@
           "const": "byteSwap"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenByteSwap"
     },
     "ValueTokenBitReverse": {
       "description": "Consumes one Int value and pushes its 64 bits in reverse order: on an 8x8 bitboard, the board rotated a half turn. Int only.",
@@ -3051,7 +3199,8 @@
           "const": "bitReverse"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenBitReverse"
     },
     "ValueTokenReplicationMask": {
       "description": "Consumes an Int block width and pushes a 64-bit mask with one bit at each block\u0027s bottom. Widths are 1, 2, 4, 8, 16, 32, or 64; other widths fail evaluation. Int expressions only.",
@@ -3060,7 +3209,8 @@
           "const": "replicationMask"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenReplicationMask"
     },
     "ValueTokenRepeatBits": {
       "description": "Consumes an Int pattern and block width, in that order, and repeats the pattern across 64 bits. The width must divide 64 and the pattern must have no set bits outside its block; otherwise evaluation fails. Width 64 accepts every bit pattern unchanged. Int expressions only; the result may be negative.",
@@ -3069,7 +3219,8 @@
           "const": "repeatBits"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenRepeatBits"
     },
     "ValueTokenNegate": {
       "description": "Consumes one value and pushes its negation in the same kind; the carrier\u0027s minimum fails evaluation.",
@@ -3078,7 +3229,8 @@
           "const": "negate"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenNegate"
     },
     "ValueTokenAbs": {
       "description": "Consumes one value and pushes its magnitude in the same kind; the carrier\u0027s minimum fails evaluation.",
@@ -3087,7 +3239,8 @@
           "const": "abs"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenAbs"
     },
     "ValueTokenSign": {
       "description": "Consumes one value of either kind and pushes Int -1, 0, or 1 by its sign.",
@@ -3096,7 +3249,8 @@
           "const": "sign"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSign"
     },
     "ValueTokenParallelBitExtract": {
       "description": "Consumes value, mask and pushes the bits of value at the mask\u0027s set positions, packed toward bit 0 in order (pext): a bitboard\u0027s occupancy along a chosen set of squares as a dense index. Int only.",
@@ -3105,7 +3259,8 @@
           "const": "parallelBitExtract"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenParallelBitExtract"
     },
     "ValueTokenParallelBitDeposit": {
       "description": "Consumes value, mask and pushes the low bits of value scattered to the mask\u0027s set positions in order (pdep): a dense index back onto its squares. Int only.",
@@ -3114,7 +3269,8 @@
           "const": "parallelBitDeposit"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenParallelBitDeposit"
     },
     "ValueTokenBitField": {
       "description": "Consumes value, offset, width and pushes the unsigned field of width bits starting at bit offset; width outside 1..64 or offset \u002B width above 64 fails evaluation. Int only.",
@@ -3123,7 +3279,8 @@
           "const": "bitField"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenBitField"
     },
     "ValueTokenBitInsert": {
       "description": "Consumes value, field, offset, width and pushes value with the width bits at offset replaced by the low bits of field; the same bounds as BitField. Int only.",
@@ -3132,7 +3289,8 @@
           "const": "bitInsert"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenBitInsert"
     },
     "ValueTokenBoardShift": {
       "description": "Consumes one Int mask over the named topology\u0027s cells (bit c is cell ordinal c, at most 64 cells) and pushes it with every set bit moved to that cell\u0027s neighbour in the named direction; a cell with no neighbour that way drops its bit instead of wrapping, so an attack map never crosses an edge. Int only.",
@@ -3153,7 +3311,8 @@
         "topology",
         "direction"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenBoardShift"
     },
     "ValueTokenBoardFill": {
       "description": "Consumes one Int mask over the named topology\u0027s cells and pushes the union of that mask and every repeated shift of it in the named direction until no bit has a neighbour that way \u2014 a whole file, rank, or diagonal from one seed bit (boardFill(1, board, N)), so no author hand-writes a wrap constant. Int only.",
@@ -3174,7 +3333,8 @@
         "topology",
         "direction"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenBoardFill"
     },
     "ValueTokenBoardImage": {
       "description": "Consumes one Int mask over the named topology\u0027s cells and pushes it carried through a point-group element of that topology (a rotation or mirror of the board), so a rule authored from one side\u0027s view reads the other side\u0027s board through the half turn. Int only.",
@@ -3195,7 +3355,8 @@
         "topology",
         "element"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenBoardImage"
     },
     "ValueTokenPair": {
       "description": "Szudzik\u0027s pairing of two non-negative integers into one; pairX/pairY invert it.",
@@ -3204,7 +3365,8 @@
           "const": "pair"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenPair"
     },
     "ValueTokenPairX": {
       "description": "The first component of a paired value.",
@@ -3213,7 +3375,8 @@
           "const": "pairX"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenPairX"
     },
     "ValueTokenPairY": {
       "description": "The second component of a paired value.",
@@ -3222,7 +3385,8 @@
           "const": "pairY"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenPairY"
     },
     "ValueTokenPairSwap": {
       "description": "The pair with its components exchanged, computed without unpairing.",
@@ -3231,7 +3395,8 @@
           "const": "pairSwap"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenPairSwap"
     },
     "ValueTokenPairMax": {
       "description": "The larger component of a paired value.",
@@ -3240,7 +3405,8 @@
           "const": "pairMax"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenPairMax"
     },
     "ValueTokenPairMin": {
       "description": "The smaller component of a paired value.",
@@ -3249,7 +3415,8 @@
           "const": "pairMin"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenPairMin"
     },
     "ValueTokenPairSum": {
       "description": "The sum of a paired value\u0027s components.",
@@ -3258,7 +3425,8 @@
           "const": "pairSum"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenPairSum"
     },
     "ValueTokenPairDifference": {
       "description": "The absolute difference of a paired value\u0027s components.",
@@ -3267,7 +3435,8 @@
           "const": "pairDifference"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenPairDifference"
     },
     "ValueTokenPairTranslate": {
       "description": "The pair with both components moved by the second argument.",
@@ -3276,7 +3445,8 @@
           "const": "pairTranslate"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenPairTranslate"
     },
     "ValueTokenPairScale": {
       "description": "The pair with both components multiplied by the second argument.",
@@ -3285,7 +3455,8 @@
           "const": "pairScale"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenPairScale"
     },
     "ValueTokenMorton": {
       "description": "Bit-interleaves two non-negative integers below 2^31 (x on the even bits); mortonX/mortonY invert it.",
@@ -3294,7 +3465,8 @@
           "const": "morton"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenMorton"
     },
     "ValueTokenMortonX": {
       "description": "The even-bit component of a Morton code.",
@@ -3303,7 +3475,8 @@
           "const": "mortonX"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenMortonX"
     },
     "ValueTokenMortonY": {
       "description": "The odd-bit component of a Morton code.",
@@ -3312,7 +3485,8 @@
           "const": "mortonY"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenMortonY"
     },
     "ValueTokenHilbert": {
       "description": "The distance along the Hilbert curve of the given order (1..31) to (x, y); hilbertX/hilbertY invert it.",
@@ -3321,7 +3495,8 @@
           "const": "hilbert"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenHilbert"
     },
     "ValueTokenHilbertX": {
       "description": "The x of the point at a Hilbert distance for the given order.",
@@ -3330,7 +3505,8 @@
           "const": "hilbertX"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenHilbertX"
     },
     "ValueTokenHilbertY": {
       "description": "The y of the point at a Hilbert distance for the given order.",
@@ -3339,7 +3515,8 @@
           "const": "hilbertY"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenHilbertY"
     },
     "ValueTokenHexIndex": {
       "description": "The ring-ordered index of the hex cell at Eisenstein coordinates (q, r); hexQ/hexR invert it.",
@@ -3348,7 +3525,8 @@
           "const": "hex"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenHexIndex"
     },
     "ValueTokenHexQ": {
       "description": "The q coordinate of a hex index.",
@@ -3357,7 +3535,8 @@
           "const": "hexQ"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenHexQ"
     },
     "ValueTokenHexR": {
       "description": "The r coordinate of a hex index.",
@@ -3366,7 +3545,8 @@
           "const": "hexR"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenHexR"
     },
     "ValueTokenHexRadius": {
       "description": "The ring a hex index lies on.",
@@ -3375,7 +3555,8 @@
           "const": "hexRadius"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenHexRadius"
     },
     "ValueTokenHexEuclideanSquared": {
       "description": "The Eisenstein squared straight-line distance from the origin q\u00B2 \u2212 q\u00B7r \u002B r\u00B2 of a hex index.",
@@ -3384,7 +3565,8 @@
           "const": "hexEuclideanSquared"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenHexEuclideanSquared"
     },
     "ValueTokenHexDistance": {
       "description": "The step distance between two hex indices.",
@@ -3393,7 +3575,8 @@
           "const": "hexDistance"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenHexDistance"
     },
     "ValueTokenHexNeighbor": {
       "description": "The hex index one step away in direction 0..5 (counterclockwise from \u002Bq; any integer, taken modulo 6).",
@@ -3402,7 +3585,8 @@
           "const": "hexNeighbor"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenHexNeighbor"
     },
     "ValueTokenHexRotate": {
       "description": "The hex index rotated about the origin by sixth turns (any integer, taken modulo 6).",
@@ -3411,7 +3595,8 @@
           "const": "hexRotate"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenHexRotate"
     },
     "ValueTokenHexMirror": {
       "description": "The hex index reflected across the q axis.",
@@ -3420,7 +3605,8 @@
           "const": "hexMirror"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenHexMirror"
     },
     "ValueTokenHexSwap": {
       "description": "The hex index with q and r exchanged.",
@@ -3429,7 +3615,8 @@
           "const": "hexSwap"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenHexSwap"
     },
     "ValueTokenHexAdd": {
       "description": "The hex index of the coordinate sum.",
@@ -3438,7 +3625,8 @@
           "const": "hexAdd"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenHexAdd"
     },
     "ValueTokenHexSubtract": {
       "description": "The hex index of the coordinate difference.",
@@ -3447,7 +3635,8 @@
           "const": "hexSubtract"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenHexSubtract"
     },
     "ValueTokenHexMultiply": {
       "description": "The hex index of the Eisenstein product.",
@@ -3456,7 +3645,8 @@
           "const": "hexMultiply"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenHexMultiply"
     },
     "ValueTokenHexScale": {
       "description": "The hex index scaled by an integer.",
@@ -3465,7 +3655,8 @@
           "const": "hexScale"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenHexScale"
     },
     "ValueTokenHexTranslate": {
       "description": "The hex index moved by (q, r).",
@@ -3474,7 +3665,8 @@
           "const": "hexTranslate"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenHexTranslate"
     },
     "ValueTokenLayer": {
       "description": "The layer holding an index in a layer sequence (index, start, step, seed): a core of seed indices wrapped by layers of start, start\u002Bstep, \u2026 indices.",
@@ -3483,7 +3675,8 @@
           "const": "layer"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenLayer"
     },
     "ValueTokenLayerOffset": {
       "description": "The position of an index within its layer, for the same (index, start, step, seed) sequence.",
@@ -3492,7 +3685,8 @@
           "const": "layerOffset"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenLayerOffset"
     },
     "ValueTokenLayerStart": {
       "description": "The first index of a layer, for a (layer, start, step, seed) sequence.",
@@ -3501,7 +3695,8 @@
           "const": "layerStart"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenLayerStart"
     },
     "ValueTokenLayerSize": {
       "description": "The index count of a layer, for a (layer, start, step, seed) sequence.",
@@ -3510,7 +3705,8 @@
           "const": "layerSize"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenLayerSize"
     },
     "ValueTokenSquareRoot": {
       "description": "The square root: the floor root of a non-negative int, or the fixed-point root of a non-negative fixed value.",
@@ -3519,7 +3715,8 @@
           "const": "sqrt"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSquareRoot"
     },
     "ValueTokenSine": {
       "description": "The sine of a fixed-point angle in radians; fixed expressions only.",
@@ -3528,7 +3725,8 @@
           "const": "sin"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSine"
     },
     "ValueTokenCosine": {
       "description": "The cosine of a fixed-point angle in radians; fixed expressions only.",
@@ -3537,7 +3735,8 @@
           "const": "cos"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenCosine"
     },
     "ValueTokenSquareIndex": {
       "description": "The shell-ordered index of the square cell at Gaussian coordinates (x, y); squareX/squareY invert it.",
@@ -3546,7 +3745,8 @@
           "const": "square"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSquareIndex"
     },
     "ValueTokenSquareX": {
       "description": "The x coordinate of a square index.",
@@ -3555,7 +3755,8 @@
           "const": "squareX"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSquareX"
     },
     "ValueTokenSquareY": {
       "description": "The y coordinate of a square index.",
@@ -3564,7 +3765,8 @@
           "const": "squareY"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSquareY"
     },
     "ValueTokenSquareRadius": {
       "description": "The shell a square index lies on: its Chebyshev distance from the origin.",
@@ -3573,7 +3775,8 @@
           "const": "squareRadius"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSquareRadius"
     },
     "ValueTokenSquareLength": {
       "description": "The Manhattan distance of a square index from the origin.",
@@ -3582,7 +3785,8 @@
           "const": "squareLength"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSquareLength"
     },
     "ValueTokenSquareEuclideanSquared": {
       "description": "The Gaussian squared straight-line distance from the origin x\u00B2 \u002B y\u00B2 of a square index.",
@@ -3591,7 +3795,8 @@
           "const": "squareEuclideanSquared"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSquareEuclideanSquared"
     },
     "ValueTokenSquareDistance": {
       "description": "The Manhattan (rook-step) distance between two square indices.",
@@ -3600,7 +3805,8 @@
           "const": "squareDistance"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSquareDistance"
     },
     "ValueTokenSquareChebyshev": {
       "description": "The Chebyshev (king-step) distance between two square indices.",
@@ -3609,7 +3815,8 @@
           "const": "squareChebyshev"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSquareChebyshev"
     },
     "ValueTokenSquareNeighbor": {
       "description": "The square index one step away in direction 0..3 (east, north, west, south; any integer, taken modulo 4).",
@@ -3618,7 +3825,8 @@
           "const": "squareNeighbor"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSquareNeighbor"
     },
     "ValueTokenSquareRotate": {
       "description": "The square index rotated about the origin by quarter turns (any integer, taken modulo 4).",
@@ -3627,7 +3835,8 @@
           "const": "squareRotate"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSquareRotate"
     },
     "ValueTokenSquareMirror": {
       "description": "The square index reflected across the x axis.",
@@ -3636,7 +3845,8 @@
           "const": "squareMirror"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSquareMirror"
     },
     "ValueTokenSquareSwap": {
       "description": "The square index with x and y exchanged.",
@@ -3645,7 +3855,8 @@
           "const": "squareSwap"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSquareSwap"
     },
     "ValueTokenSquareAdd": {
       "description": "The square index of the coordinate sum.",
@@ -3654,7 +3865,8 @@
           "const": "squareAdd"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSquareAdd"
     },
     "ValueTokenSquareSubtract": {
       "description": "The square index of the coordinate difference.",
@@ -3663,7 +3875,8 @@
           "const": "squareSubtract"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSquareSubtract"
     },
     "ValueTokenSquareMultiply": {
       "description": "The square index of the Gaussian product.",
@@ -3672,7 +3885,8 @@
           "const": "squareMultiply"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSquareMultiply"
     },
     "ValueTokenSquareScale": {
       "description": "The square index scaled by an integer.",
@@ -3681,7 +3895,8 @@
           "const": "squareScale"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSquareScale"
     },
     "ValueTokenSquareTranslate": {
       "description": "The square index moved by (x, y).",
@@ -3690,7 +3905,8 @@
           "const": "squareTranslate"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSquareTranslate"
     },
     "ValueTokenGreatestCommonDivisor": {
       "description": "The greatest common divisor of two integers\u0027 magnitudes; gcd(dx, dy) == 1 is a lattice line with no interior point.",
@@ -3699,7 +3915,8 @@
           "const": "gcd"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenGreatestCommonDivisor"
     },
     "ValueTokenLeastCommonMultiple": {
       "description": "The least common multiple of two integers\u0027 magnitudes.",
@@ -3708,7 +3925,8 @@
           "const": "lcm"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenLeastCommonMultiple"
     },
     "ValueTokenFloorModulo": {
       "description": "The floored remainder of a by m: for a positive m the value in [0, m) congruent to a, whatever a\u0027s sign.",
@@ -3717,7 +3935,8 @@
           "const": "mod"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenFloorModulo"
     },
     "ValueTokenCycleForward": {
       "description": "The forward (clockwise) distance from a to b around an m-cycle: mod(b \u2212 a, m).",
@@ -3726,7 +3945,8 @@
           "const": "cycleForward"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenCycleForward"
     },
     "ValueTokenCycleDistance": {
       "description": "The shortest distance between a and b around an m-cycle, in either direction.",
@@ -3735,7 +3955,8 @@
           "const": "cycleDistance"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenCycleDistance"
     },
     "ValueTokenSmallestMissing": {
       "description": "The smallest non-negative integer missing from a 64-bit set \u2014 the lowest clear bit (the Sprague\u2013Grundy value of a position whose options\u0027 values are the set).",
@@ -3744,7 +3965,8 @@
           "const": "smallestMissing"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSmallestMissing"
     },
     "ValueTokenIsPrime": {
       "description": "Whether a non-negative integer is prime, decided exactly over the whole 64-bit range in bounded work.",
@@ -3753,7 +3975,8 @@
           "const": "isPrime"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenIsPrime"
     },
     "ValueTokenPrime": {
       "description": "The i-th prime for i in 0..255 (2, 3, 5, \u2026 1619): the bounded table a G\u00F6del multiset or a coprime stride reaches for.",
@@ -3762,7 +3985,8 @@
           "const": "prime"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenPrime"
     },
     "ValueTokenChoose": {
       "description": "n choose k, exact; zero when k exceeds n.",
@@ -3771,7 +3995,8 @@
           "const": "choose"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenChoose"
     },
     "ValueTokenFactorial": {
       "description": "n! for n in 0..20.",
@@ -3780,7 +4005,8 @@
           "const": "factorial"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenFactorial"
     },
     "ValueTokenSubsetRank": {
       "description": "The colexicographic rank of a k-subset of 0..n\u22121 given as a bitmask (bit e set = element e chosen), in [0, choose(n, k)); n at most 64.",
@@ -3789,7 +4015,8 @@
           "const": "subsetRank"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSubsetRank"
     },
     "ValueTokenSubsetAt": {
       "description": "The k-subset of 0..n\u22121 at a colexicographic rank, as a bitmask; the inverse of subsetRank.",
@@ -3798,7 +4025,8 @@
           "const": "subsetAt"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSubsetAt"
     },
     "ValueTokenSubsetMember": {
       "description": "The i-th smallest element (i from 0) of the k-subset of 0..n\u22121 at a colexicographic rank, without building the subset.",
@@ -3807,7 +4035,8 @@
           "const": "subsetMember"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenSubsetMember"
     },
     "ValueTokenArrangementRank": {
       "description": "The lexicographic (Lehmer) rank of a permutation of 0..n\u22121 packed as nibbles \u2014 position i in bits 4i..4i\u002B3 \u2014 in [0, n!); n at most 16.",
@@ -3816,7 +4045,8 @@
           "const": "arrangementRank"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenArrangementRank"
     },
     "ValueTokenArrangementAt": {
       "description": "The permutation of 0..n\u22121 at a lexicographic rank, packed as nibbles; the inverse of arrangementRank.",
@@ -3825,7 +4055,8 @@
           "const": "arrangementAt"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenArrangementAt"
     },
     "ValueTokenArrangementMember": {
       "description": "The element at position i of the permutation of 0..n\u22121 at a lexicographic rank.",
@@ -3834,7 +4065,8 @@
           "const": "arrangementMember"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ValueTokenArrangementMember"
     },
     "ValueToken": {
       "description": "One authored token in a ValueExpression.",
@@ -4191,7 +4423,8 @@
         {
           "$ref": "#/$defs/ValueTokenArrangementMember"
         }
-      ]
+      ],
+      "title": "ValueToken"
     },
     "ValueExpressionTokens": {
       "description": "The postfix object spelling of a ValueExpression: { \u0022tokens\u0022: [...] }. The converter reads this shape when an expression is authored as tokens and writes it back for an expression that carries no infix text.",
@@ -4212,6 +4445,7 @@
     },
     "ValueExpression": {
       "description": "A bounded postfix numeric expression evaluated by a world rule, decision, or flock affinity. Each token either pushes a value or consumes preceding values; the compiler proves stack shape and numeric kind before simulation begins. Authored either as an infix string (ExpressionSpelling, \u0022min(damage, hp) * 2\u0022) or as the postfix { \u0022tokens\u0022: [...] } object; both parse to the same tokens and each writes back in its own spelling.",
+      "title": "ValueExpression",
       "anyOf": [
         {
           "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, replicationMask(width), repeatBits(pattern, width), rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
@@ -4250,7 +4484,8 @@
             "Bool",
             "Text"
           ],
-          "default": "Fixed"
+          "default": "Fixed",
+          "title": "CellKind"
         }
       },
       "required": [
@@ -4258,7 +4493,8 @@
         "comparison",
         "right"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ActionPredicateCompareValue"
     },
     "ActionPredicateAll": {
       "description": "Every inner predicate holds (conjunction).",
@@ -4273,7 +4509,8 @@
       "required": [
         "predicates"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ActionPredicateAll"
     },
     "ActionPredicateList": {
       "type": "array",
@@ -4295,7 +4532,8 @@
       "required": [
         "predicates"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ActionPredicateAny"
     },
     "ActionPredicateAnyNonNullable": {
       "description": "At least one inner predicate holds (disjunction). The list must be non-empty.",
@@ -4310,7 +4548,8 @@
       "required": [
         "predicates"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ActionPredicateAny"
     },
     "ActionPredicateNot": {
       "description": "Inverts one predicate.",
@@ -4325,7 +4564,8 @@
       "required": [
         "predicate"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ActionPredicateNot"
     },
     "ActionFact": {
       "enum": [
@@ -4339,7 +4579,8 @@
         "HoldingUnwalkable",
         "Unsupported",
         "Resting"
-      ]
+      ],
+      "title": "ActionFact"
     },
     "WorldPredicateNow": {
       "description": "The fact holds this tick.",
@@ -4355,7 +4596,8 @@
       "required": [
         "fact"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPredicateNow"
     },
     "WorldPredicateRecently": {
       "description": "The fact held within the last WindowSeconds \u2014 a per-instance recency clock, refreshed while the fact holds and decaying otherwise (coyote time is Recently(Grounded, w)).",
@@ -4376,7 +4618,8 @@
         "fact",
         "windowSeconds"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPredicateRecently"
     },
     "WorldPredicateTimerElapsed": {
       "description": "Whether a named timer slot has drained.",
@@ -4392,7 +4635,8 @@
       "required": [
         "state"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPredicateTimerElapsed"
     },
     "WorldPredicateHeld": {
       "description": "The named composition channel\u0027s own live read is at or above its declared threshold. Legitimate only inside a kit\u0027s shaping-row gate, where the world\u0027s channel table resolves Channel to an ordinal at kit-compile time.",
@@ -4408,7 +4652,8 @@
       "required": [
         "channel"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPredicateHeld"
     },
     "ActionPredicate": {
       "description": "A data-composable gate over named state. A rule fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; the arms declared here are the ones this library owns, and a document project appends its own derived arms through a RuleVocabulary (see ExtendJson) rather than by editing this list.",
@@ -4444,7 +4689,8 @@
         {
           "$ref": "#/$defs/WorldPredicateHeld"
         }
-      ]
+      ],
+      "title": "ActionPredicate"
     },
     "ActionPredicateNotNonNullable": {
       "description": "Inverts one predicate.",
@@ -4460,7 +4706,8 @@
       "required": [
         "predicate"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ActionPredicateNot"
     },
     "ActionPredicateNullable": {
       "description": "A data-composable gate over named state. A rule fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; the arms declared here are the ones this library owns, and a document project appends its own derived arms through a RuleVocabulary (see ExtendJson) rather than by editing this list.",
@@ -4499,7 +4746,8 @@
         {
           "$ref": "#/$defs/WorldPredicateHeld"
         }
-      ]
+      ],
+      "title": "ActionPredicate"
     },
     "ActionPredicateListNonNullable": {
       "type": "array",
@@ -4544,7 +4792,17 @@
         {
           "$ref": "#/$defs/WorldPredicateHeld"
         }
-      ]
+      ],
+      "title": "ActionPredicate"
+    },
+    "ActionTarget": {
+      "description": "The participant an action effect addresses. A document-scope rule has no participant to select, so only Self is admitted there; the other members belong to a host\u0027s per-participant action programs, which share the SetState/AddState shapes with the rule compiler and therefore carry the member on the wire.",
+      "enum": [
+        "Self",
+        "ProducerTarget",
+        "AffectingSubject"
+      ],
+      "title": "ActionTarget"
     },
     "ActionEffectSetState": {
       "description": "Writes a named state cell \u2014 a state-section row\u0027s cell at rule scope, a counter slot inside a host\u0027s per-participant action program.",
@@ -4565,12 +4823,8 @@
           "default": null
         },
         "target": {
+          "$ref": "#/$defs/ActionTarget",
           "description": "The addressed participant \u2014 meaningful only inside a host\u0027s per-participant program; a non-Self target is refused at rule scope, where there is no participant to select.",
-          "enum": [
-            "Self",
-            "ProducerTarget",
-            "AffectingSubject"
-          ],
           "default": "Self"
         },
         "key": {
@@ -4622,7 +4876,8 @@
       "required": [
         "state"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ActionEffectSetState"
     },
     "ActionEffectAddState": {
       "description": "Adds to a named state cell \u2014 the same shape as SetState, here the source is the addend rather than the replacement.",
@@ -4643,12 +4898,8 @@
           "default": null
         },
         "target": {
+          "$ref": "#/$defs/ActionTarget",
           "description": "The addressed participant \u2014 see Target.",
-          "enum": [
-            "Self",
-            "ProducerTarget",
-            "AffectingSubject"
-          ],
           "default": "Self"
         },
         "key": {
@@ -4692,7 +4943,8 @@
       "required": [
         "state"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ActionEffectAddState"
     },
     "ActionEffectPushState": {
       "description": "Pushes one numeric value into a history row\u0027s ring (see Ring), the same source spellings as SetState minus text: exactly one of Value, FromState, or Expression.",
@@ -4737,7 +4989,19 @@
       "required": [
         "state"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ActionEffectPushState"
+    },
+    "ZoneSelector": {
+      "description": "Selection of a single token from a zone.",
+      "enum": [
+        "Key",
+        "First",
+        "Last",
+        "Random",
+        "Slice"
+      ],
+      "title": "ZoneSelector"
     },
     "StateTransformTransfer": {
       "description": "Moves selected tokens, preserving identity. A random draw advances only when the whole transfer commits.",
@@ -4754,14 +5018,8 @@
           "type": "string"
         },
         "selector": {
+          "$ref": "#/$defs/ZoneSelector",
           "description": "The source selector.",
-          "enum": [
-            "Key",
-            "First",
-            "Last",
-            "Random",
-            "Slice"
-          ],
           "default": "Key"
         },
         "key": {
@@ -4795,7 +5053,8 @@
         "from",
         "to"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "StateTransformTransfer"
     },
     "StateTransformSetRay": {
       "description": "Writes the longest run a patterns row accepts, walked from the origin outward: the same prefix semantics as the $match operand\u0027s prefix facet, landed back on the board instead of read as a fact. Refuses when the accepted prefix is empty, so an author closes a run with the required symbol (a bracket capture is plus(through) . symbol(until)) rather than an unbounded one running off the board.",
@@ -4831,7 +5090,8 @@
         "pattern",
         "value"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "StateTransformSetRay"
     },
     "StateTransformShuffle": {
       "description": "Reorders a row\u0027s cells by value in place by one Fisher-Yates pass over the named redrawable integer streamDraw site: n cells consume n - 1 samples, so the site\u0027s cursor advances by exactly that and a replay reproduces the permutation.",
@@ -4852,7 +5112,8 @@
         "row",
         "draw"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "StateTransformShuffle"
     },
     "SortKey": {
       "description": "One key of a zone sort: a keyed numeric attribute row over the zone\u0027s token domain.",
@@ -4874,7 +5135,8 @@
       "required": [
         "row"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "SortKey"
     },
     "StateTransformSortZone": {
       "description": "Reorders an ordered zone by attribute rows over its token domain, stably: the first key decides and each later key breaks the ties before it. The canonical order a pattern reads a hand in.",
@@ -4898,7 +5160,8 @@
         "row",
         "by"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "StateTransformSortZone"
     },
     "StateTransformSortKeyed": {
       "description": "Reorders a keyed numeric row by its own cell values, stably.",
@@ -4919,7 +5182,8 @@
       "required": [
         "row"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "StateTransformSortKeyed"
     },
     "StateTransformWriteSet": {
       "description": "Writes one value into every cell of a board whose bit is set in a cell-set mask read from a state cell: the way a set built from $board:mask and the and/or/xor/not/shift/image expression ops lands back on the board. The one board-writing form for every topology of at most 64 cells; a wider topology has no transform of its own and composes through per-cell rules instead.",
@@ -4953,7 +5217,8 @@
         "row",
         "set"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "StateTransformWriteSet"
     },
     "BoardCombineOp": {
       "description": "What BoardCombine writes into its board, cell by cell. A cell is a member of a board when its value is not the board\u0027s declared empty.",
@@ -4968,7 +5233,8 @@
         "Not",
         "Shift",
         "Image"
-      ]
+      ],
+      "title": "BoardCombineOp"
     },
     "StateTransformBoardCombine": {
       "description": "Rewrites a board from one or two boards over the same topology, cell by cell, in one journaled mutation: the set algebra $board:mask and the bit operators give a board of at most 64 cells, for a board of any size. A cell is a member when its value is not its board\u0027s empty; every member of the result is written as Value and every other cell as the board\u0027s empty.",
@@ -5026,7 +5292,8 @@
         "row",
         "operation"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "StateTransformBoardCombine"
     },
     "StateTransformArrange": {
       "description": "Reorders an ordered zone of at most 20 tokens into the arrangement at a Lehmer rank read from an integer cell \u2014 the inverse of $reduce:arrangementRank: rank 0 is the token domain\u0027s own order, and a rank at or past k! refuses.",
@@ -5055,7 +5322,8 @@
         "row",
         "from"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "StateTransformArrange"
     },
     "StateTransformPush": {
       "description": "Appends one value to a history row\u0027s ring, overwriting the oldest slot once the ring is full, and advances its cursor by one.",
@@ -5076,7 +5344,8 @@
         "row",
         "value"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "StateTransformPush"
     },
     "StateTransformClearEnclosed": {
       "description": "Clears every group of cells valued Lower..Upper beside the cell From names that has no empty cell beside it, writing the board\u0027s empty value over their members. The write-path twin of $board:enclosedAt, applied after the value lands.",
@@ -5107,7 +5376,8 @@
         "lower",
         "upper"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "StateTransformClearEnclosed"
     },
     "StateTransformObserve": {
       "description": "Refreshes a knowledge board from its declared source and visibility mask; authority only.",
@@ -5122,7 +5392,8 @@
       "required": [
         "row"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "StateTransformObserve"
     },
     "StateTransform": {
       "description": "The closed set of atomic state transforms. Each folds one candidate document and journals once.",
@@ -5164,7 +5435,8 @@
         {
           "$ref": "#/$defs/StateTransformObserve"
         }
-      ]
+      ],
+      "title": "StateTransform"
     },
     "ActionEffectTransformState": {
       "description": "Applies a bounded state transform through the ordinary mutation pipeline.",
@@ -5180,7 +5452,8 @@
       "required": [
         "transform"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ActionEffectTransformState"
     },
     "ActionEffectCountdownState": {
       "description": "Decrements a state countdown by the current simulation step\u0027s engine-tick width, saturating at zero. The destination must be a kind=Int nonNegative=true row. Unlike an authored AddState constant, this effect consumes the runtime step width, so changing the document\u0027s authored tick rate never retunes the duration. When the remaining duration is shorter than one step, the computed decrement is exactly the remaining value; it reaches zero without asking the explicit-write door to admit a negative candidate.",
@@ -5204,7 +5477,8 @@
       "required": [
         "state"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ActionEffectCountdownState"
     },
     "ActionEffectGenerate": {
       "description": "Redraws a draw site (a state row declaring a Draw). A draw\u0027s moment is authored through the rule that fires this: a TickPeriod site redraws on an ordinary $tick-scheduled rule and a Event site on an event-gated one, so timing costs no mutation ordinal.",
@@ -5220,7 +5494,8 @@
       "required": [
         "row"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ActionEffectGenerate"
     },
     "ActionEffectRemoveStateCell": {
       "description": "Removes one addressed cell from a declared state row.",
@@ -5244,7 +5519,8 @@
       "required": [
         "state"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ActionEffectRemoveStateCell"
     },
     "ActionEffectScheduleState": {
       "description": "Writes an absolute simulation due tick into an integer state cell. The delay is converted against the document\u0027s authored simulation rate and rounded up, so it never fires early. A companion rule compares $tick against the cell and removes it after handling, forming a bounded, document-backed scheduler.",
@@ -5273,7 +5549,8 @@
         "state",
         "delaySeconds"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ActionEffectScheduleState"
     },
     "ActionEffectTransaction": {
       "description": "Applies a bounded list of effects atomically after preflight. When any effect refuses, none apply and OnFailure runs instead. The compiler refuses nested transactions and effects a document project has not admitted through AllowsTransaction.",
@@ -5303,7 +5580,8 @@
       "required": [
         "effects"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ActionEffectTransaction"
     },
     "WorldEffectSetVerticalVelocity": {
       "description": "Writes the body\u0027s vertical-velocity channel (the jump launch / the surge).",
@@ -5315,18 +5593,15 @@
           "type": "number"
         },
         "target": {
-          "enum": [
-            "Self",
-            "ProducerTarget",
-            "AffectingSubject"
-          ],
+          "$ref": "#/$defs/ActionTarget",
           "default": "Self"
         }
       },
       "required": [
         "velocity"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldEffectSetVerticalVelocity"
     },
     "WorldEffectScaleVerticalVelocity": {
       "description": "Multiplies the body\u0027s vertical velocity (the jump cut; gate on Rising).",
@@ -5338,18 +5613,15 @@
           "type": "number"
         },
         "target": {
-          "enum": [
-            "Self",
-            "ProducerTarget",
-            "AffectingSubject"
-          ],
+          "$ref": "#/$defs/ActionTarget",
           "default": "Self"
         }
       },
       "required": [
         "factor"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldEffectScaleVerticalVelocity"
     },
     "WorldEffectPlanarImpulse": {
       "description": "A timed planar velocity overlay (the dash): BodyDirection is rotated by the body\u0027s attitude at fire time and ridden as authored, never normalized, at Speed for DurationSeconds.",
@@ -5367,11 +5639,7 @@
           "type": "number"
         },
         "target": {
-          "enum": [
-            "Self",
-            "ProducerTarget",
-            "AffectingSubject"
-          ],
+          "$ref": "#/$defs/ActionTarget",
           "default": "Self"
         }
       },
@@ -5380,7 +5648,8 @@
         "speed",
         "durationSeconds"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldEffectPlanarImpulse"
     },
     "WorldEffectStartTimer": {
       "description": "Starts a named timer slot with an authored duration.",
@@ -5395,11 +5664,7 @@
           "type": "number"
         },
         "target": {
-          "enum": [
-            "Self",
-            "ProducerTarget",
-            "AffectingSubject"
-          ],
+          "$ref": "#/$defs/ActionTarget",
           "default": "Self"
         }
       },
@@ -5407,7 +5672,8 @@
         "state",
         "seconds"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldEffectStartTimer"
     },
     "WorldEffectDesignate": {
       "description": "Submits the selected subject into a named target register.",
@@ -5420,19 +5686,16 @@
           "type": "string"
         },
         "target": {
+          "$ref": "#/$defs/ActionTarget",
           "description": "The subject source.",
-          "enum": [
-            "Self",
-            "ProducerTarget",
-            "AffectingSubject"
-          ],
           "default": "AffectingSubject"
         }
       },
       "required": [
         "register"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldEffectDesignate"
     },
     "WorldEffectEmitCue": {
       "description": "Emits a deterministic presentation-neutral cue (WorldGameplayCue).",
@@ -5464,7 +5727,8 @@
       "required": [
         "name"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldEffectEmitCue"
     },
     "WorldEffectSetBodyVerticalVelocity": {
       "description": "Writes a world-addressed body\u0027s vertical velocity.",
@@ -5483,7 +5747,8 @@
         "key",
         "velocity"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldEffectSetBodyVerticalVelocity"
     },
     "WorldEffectScaleBodyVerticalVelocity": {
       "description": "Scales a world-addressed body\u0027s vertical velocity.",
@@ -5502,7 +5767,8 @@
         "key",
         "factor"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldEffectScaleBodyVerticalVelocity"
     },
     "WorldEffectApplyBodyImpulse": {
       "description": "Rides a unit BodyDirection at Speed on a world-addressed body for an exact whole-engine-tick duration.",
@@ -5529,7 +5795,16 @@
         "speed",
         "durationSeconds"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldEffectApplyBodyImpulse"
+    },
+    "WorldBodyDesignationKind": {
+      "description": "How a rule-triggered body designation chooses its target.",
+      "enum": [
+        "Body",
+        "Clear"
+      ],
+      "title": "WorldBodyDesignationKind"
     },
     "WorldEffectApplyRigidImpulse": {
       "description": "Applies the SAME instantaneous world-space rigid impulse body.impulse fires (\u0394v = impulse / mass, through the server\u0027s rigid-body solver \u2014 never a second impulse mechanism) to a Key-addressed body, along HeadingKey\u0027s own body\u0027s forward facing, scaled by a live kind=Fixed state cell\u0027s magnitude. The cue gesture\u0027s one honest path: billiards charges MagnitudeState by hold duration and fires this on release. Refused by name when the struck body resolves to no active body or carries no \u0027rigid\u0027 kit facet, the heading body resolves to no active body, or the resulting impulse is not representable or exceeds the world\u0027s declared rigid speed ceiling.",
@@ -5578,10 +5853,7 @@
           "type": "string"
         },
         "kind": {
-          "enum": [
-            "Body",
-            "Clear"
-          ]
+          "$ref": "#/$defs/WorldBodyDesignationKind"
         },
         "targetKey": {
           "type": [
@@ -5596,7 +5868,8 @@
         "register",
         "kind"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldEffectDesignateBody"
     },
     "WorldEffectPaintField": {
       "description": "Paints one lattice field cell, or the cube of Radius around it.",
@@ -5624,7 +5897,8 @@
             "Set",
             "Add"
           ],
-          "default": "Set"
+          "default": "Set",
+          "title": "WorldFieldWriteOp"
         },
         "radius": {
           "type": "integer",
@@ -5638,7 +5912,8 @@
         "z",
         "value"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldEffectPaintField"
     },
     "WorldHudRect": {
       "description": "A normalized rect (origin top-left, Y down) \u2014 a WorldHudPanel\u0027s rect is in screen space [0, 1] \u00D7 [0, 1]; a WorldHudElement\u0027s rect is in its owning panel\u0027s local [0, 1] \u00D7 [0, 1] space.",
@@ -5661,7 +5936,27 @@
           "type": "number"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldHudRect"
+    },
+    "WorldHudPanelStyle": {
+      "description": "A WorldHudPanel\u0027s chrome recipe \u2014 the authored twin of Puck.Overlays.OverlayPanelStyle (Puck.World.Schema must not reference Puck.Overlays; the renderer maps this token to the concrete style).",
+      "enum": [
+        "Panel",
+        "Strip",
+        "Chip"
+      ],
+      "title": "WorldHudPanelStyle"
+    },
+    "WorldHudElementKind": {
+      "description": "A WorldHudElement\u0027s rendered kind \u2014 the schema\u2192render expansion cost differs per kind (see WorldHudCapacity).",
+      "enum": [
+        "Rect",
+        "Text",
+        "Gauge",
+        "Frame"
+      ],
+      "title": "WorldHudElementKind"
     },
     "WorldHudStyleToken": {
       "description": "A WorldHudElement\u0027s color role \u2014 a curated authored subset of Puck.Overlays.OverlayColorRole (Puck.World.Schema must not reference Puck.Overlays; the renderer maps this token to the concrete role).",
@@ -5672,7 +5967,8 @@
         "Positive",
         "Warning",
         "Danger"
-      ]
+      ],
+      "title": "WorldHudStyleToken"
     },
     "WorldFrameSource": {
       "description": "The WorldScreenSource arms that produce a sampled frame \u2014 Camera, View, Probe, and Capture \u2014 carrying its own JsonPolymorphicAttribute over the SAME four discriminators (camera/view/probe/capture) their parent union uses, so a member declared as this narrower type round-trips the identical JSON a full WorldScreenSource screen row does. A WorldProbe socket is the driving consumer: it plugs one of these into each named input rather than the wider union, which would legally admit a decal/machine/console/qr/text/none source no probe kernel can sample.",
@@ -5696,7 +5992,17 @@
         {
           "$ref": "#/$defs/WorldScreenSourceCapture"
         }
-      ]
+      ],
+      "title": "WorldFrameSource"
+    },
+    "WorldHudFrameFit": {
+      "description": "How a Frame element maps its sampled frame\u0027s aspect ratio onto its own rect \u2014 the same uv-mapping choice a screen material or a UI image element makes.",
+      "enum": [
+        "Cover",
+        "Contain",
+        "Stretch"
+      ],
+      "title": "WorldHudFrameFit"
     },
     "WorldFrameSourceNonNullable": {
       "description": "The WorldScreenSource arms that produce a sampled frame \u2014 Camera, View, Probe, and Capture \u2014 carrying its own JsonPolymorphicAttribute over the SAME four discriminators (camera/view/probe/capture) their parent union uses, so a member declared as this narrower type round-trips the identical JSON a full WorldScreenSource screen row does. A WorldProbe socket is the driving consumer: it plugs one of these into each named input rather than the wider union, which would legally admit a decal/machine/console/qr/text/none source no probe kernel can sample.",
@@ -5717,7 +6023,8 @@
         {
           "$ref": "#/$defs/WorldScreenSourceCapture"
         }
-      ]
+      ],
+      "title": "WorldFrameSource"
     },
     "WorldHudFrameCandidate": {
       "description": "One ranked source candidate of a Frame element: the frame shown while When holds. Candidates are walked in authored order every frame and the first holding one wins; a null predicate always holds, so the last row is the default.",
@@ -5739,7 +6046,8 @@
       "required": [
         "source"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldHudFrameCandidate"
     },
     "WorldHudElement": {
       "description": "One HUD element row inside a WorldHudPanel \u2014 a stable id (unique within the owning panel), its kind, its local rect, its color role, an authored literal string (meaningful for Text), and an optional binding into the closed HudBindingVocabulary (meaningful for Text and Gauge \u2014 a bound text element\u0027s live value replaces the authored literal; a bound gauge element\u0027s live value drives its fill; an unbound gauge draws empty).",
@@ -5753,13 +6061,8 @@
           "type": "string"
         },
         "kind": {
-          "description": "The element\u0027s rendered kind.",
-          "enum": [
-            "Rect",
-            "Text",
-            "Gauge",
-            "Frame"
-          ]
+          "$ref": "#/$defs/WorldHudElementKind",
+          "description": "The element\u0027s rendered kind."
         },
         "rect": {
           "$ref": "#/$defs/WorldHudRect",
@@ -5799,12 +6102,8 @@
           "default": null
         },
         "fit": {
+          "$ref": "#/$defs/WorldHudFrameFit",
           "description": "A Frame element\u0027s aspect-fit policy. Ignored for every other kind. Omitted from the wire at its default (Cover).",
-          "enum": [
-            "Cover",
-            "Contain",
-            "Stretch"
-          ],
           "default": "Cover"
         },
         "mirror": {
@@ -5845,7 +6144,8 @@
         "rect",
         "style"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldHudElement"
     },
     "WorldHudElementList": {
       "type": "array",
@@ -5871,15 +6171,12 @@
             "Under",
             "Over",
             "Replace"
-          ]
+          ],
+          "title": "WorldHudLayer"
         },
         "style": {
-          "description": "The panel\u0027s chrome recipe.",
-          "enum": [
-            "Panel",
-            "Strip",
-            "Chip"
-          ]
+          "$ref": "#/$defs/WorldHudPanelStyle",
+          "description": "The panel\u0027s chrome recipe."
         },
         "visible": {
           "$ref": "#/$defs/OverlayPredicateNullable",
@@ -5898,7 +6195,8 @@
         "style",
         "elements"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldHudPanel"
     },
     "WorldEffectUpsertHudPanel": {
       "description": "Upserts a HUD panel document row.",
@@ -5913,7 +6211,8 @@
       "required": [
         "panel"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldEffectUpsertHudPanel"
     },
     "WorldEffectRemoveHudPanel": {
       "description": "Removes a HUD panel document row by id.",
@@ -5928,7 +6227,8 @@
       "required": [
         "id"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldEffectRemoveHudPanel"
     },
     "WorldPlacementMirror": {
       "description": "A reflection plane in a placement\u0027s local frame.",
@@ -5950,7 +6250,8 @@
         "normal",
         "offset"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPlacementMirror"
     },
     "WorldEmission": {
       "description": "An emission facet \u2014 a synth voice a world row itself makes (phenomena sound like themselves; a creek is not a speaker). Nullable on WorldPlacement \u2014 a facet edit is the row\u0027s existing whole-row upsert. Under a repeat facet the emission binds to the placement root only (an 8\u00D78 lattice must not become 64 voices; a per-copy flag is a future facet field, not a schema fork).",
@@ -5980,7 +6281,8 @@
         "patchId",
         "level"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldEmission"
     },
     "WorldPlacementInhabit": {
       "description": "A placement\u0027s inhabit facet \u2014 the row\u0027s binding to live population bodies. An inhabited placement is a normal entry in the entity table: it holds a Puck.World.Server.WorldBody, integrates under the named kit, and is addressable as Entity like any avatar. Its stamp rides the body\u0027s pose instead of the row\u0027s static transform; the row\u0027s position/yaw become its spawn pose. Absent (null) = decoration, the unchanged furniture behaviour.",
@@ -6026,7 +6328,29 @@
         "look",
         "source"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPlacementInhabit"
+    },
+    "WorldPortalTravel": {
+      "title": "WorldPortalTravel",
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "party",
+        "body",
+        null
+      ]
+    },
+    "WorldPortalArrival": {
+      "description": "Where a traveler lands at a WorldPlacementPortal\u0027s destination \u2014 the positional-continuity decision a portal facet authors on top of which destination it names.",
+      "title": "WorldPortalArrival",
+      "type": "string",
+      "enum": [
+        "spawn",
+        "mapped"
+      ]
     },
     "WorldPlacementPortal": {
       "description": "A WorldPlacementFace\u0027s portal facet \u2014 the authored decision that a face is a door: which WorldDestination row it leads to, and under what travel scope. Absent (the default) means the face is not a door \u2014 nothing here fires anything by itself; turning the decision into a diegetic step-into trigger is WorldInstanceHost.TriggerPortal\u0027s job, never this facet\u0027s. Durability, scope, and process-local instance selection live on the named WorldDestination row this facet points at, not here \u2014 a facet composes one destination selection with a travel scope, never re-authors how that destination is minted. Extensible deliberately (an optional-member record, the same widen-without-moving-existing-members shape WorldLatticeMedium\u0027s own remarks describe): a future fact-gate field (an authored predicate a traveler must satisfy to pass) adds cleanly as a new trailing member.",
@@ -6040,26 +6364,14 @@
           "type": "string"
         },
         "travel": {
+          "$ref": "#/$defs/WorldPortalTravel",
           "description": "Who travels through (see WorldPortalTravel). Absent resolves against the world\u0027s own portals.portalDefaults.travel (see WorldPortalsSection), or Body when the world declares no portals section at all \u2014 see WorldDefinitionValidator\u0027s resolution order, echoed by world.portals. Omitted from the wire when null.",
-          "default": null,
-          "type": [
-            "string",
-            "null"
-          ],
-          "enum": [
-            "party",
-            "body",
-            null
-          ]
+          "default": null
         },
         "arrival": {
+          "$ref": "#/$defs/WorldPortalArrival",
           "description": "Where a traveler lands at the destination (see WorldPortalArrival). Default Spawn \u2014 unauthored worlds and every facet authored before this member existed are unchanged. Optional and trailing (the same widen-without-moving-existing-members shape Travel itself already follows).",
-          "default": "spawn",
-          "type": "string",
-          "enum": [
-            "spawn",
-            "mapped"
-          ]
+          "default": "spawn"
         },
         "counterpart": {
           "description": "The destination document\u0027s border face this facet\u0027s frame maps onto under Mapped \u2014 \u0022\u003CplacementId\u003E/\u003Cface\u003E\u0022, the placement id and declared face name whose own placement transform (position \u002B yaw) is the arrival anchor. Required exactly when Arrival is Mapped (refused by name otherwise, in either direction \u2014 see WorldDefinitionValidator). No boot-time cross-document existence check: the named document is not resolved at boot (same reason Destination is not), so an absent placement/face refuses at transfer time instead, against the destination\u0027s own delivered definition (see WorldPortalCounterpart). Omitted from the wire when null.",
@@ -6081,7 +6393,8 @@
       "required": [
         "destination"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPlacementPortal"
     },
     "WorldPlacementFace": {
       "description": "A per-instance override of one declared creation face\u0027s feed \u2014 the face twin of the emission facet\u0027s per-instance override channel.",
@@ -6108,7 +6421,8 @@
         "face",
         "source"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPlacementFace"
     },
     "WorldPlacementFaceList": {
       "type": [
@@ -6134,7 +6448,8 @@
       "required": [
         "radius"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPlacementRegion"
     },
     "WorldPlacementAttach": {
       "description": "A placement\u0027s attach facet \u2014 binds the row\u0027s stamp to a live population body\u0027s transform, so the resolved world pose follows that body every tick (an avatar\u0027s hat, held item, nameplate, or aura) instead of sitting at the row\u0027s own authored Position/YawDegrees. The offset rides the body\u0027s own local frame \u2014 rotated by the body\u0027s orientation before adding, the Puck.SdfVm.Views.OrientedFollowRig/FirstPersonRig convention for a moving anchor, never the world-axis FollowRig shape a fixed subject would use. The resolved pose is never written back into the document, and it is derived twice, at two clocks, from the one authored facet: the authoritative answer is fixed point \u2014 the body\u0027s fixed-point pose composed with this facet\u0027s authored (float, quantized at resolution like every other placement field) offset, by Puck.World.Server.WorldPlacementAttachment.TryResolve, on demand by world.attachments and once per tick by attached local gravity areas;the rendered pose is presentation float \u2014 the same composition over the client\u0027s interpolated body pose, packed every frame by Client.WorldStampPool, which is what makes an attached row visibly ride its body as smoothly as the body itself. An attached row draws through that reserved stamp pool and not as a static stamp (Client.WorldPlacementStamper.IsStaticStamp), and it charges MaxStampRegistrations like an animated row does. Region, solid (under the analytic contact provider), and emission were once refused on the same row as this one because each read the row\u0027s own static transform \u2014 all three now read the same resolved dynamic pose instead (Server.WorldEventFeed.CollectRegions, Server.WorldColliderSet.RefreshAttached, Server.WorldGravityField.RefreshAttachedAreas, Client.WorldStampPool.TryShapePosition/RootPose), so a region\u0027s aura, an analytic collider\u0027s hitbox, and an emission\u0027s voice all track the carrier: an equipped item\u0027s sensing sphere, hitbox, or source point rides the body it is attached to. What stays refused: distribution/mirror (static-stamp-only, the same rule an animated or inhabited row already enforces), inhabit (a row cannot both spawn its own driven bodies and ride another\u0027s), and solid specifically under the field contact provider (it compiles every solid row\u0027s geometry once into one SDF program and never rebuilds it per tick) \u2014 refused by name rather than defining a blend (see WorldDefinitionValidator).",
@@ -6161,7 +6476,16 @@
         "bodyIndex",
         "localOffset"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPlacementAttach"
+    },
+    "WorldContributionTenure": {
+      "description": "How long a filled WorldPlacementContribution slot keeps the piece a federation partner put in it.",
+      "enum": [
+        "Presence",
+        "Endowed"
+      ],
+      "title": "WorldContributionTenure"
     },
     "WorldPlacementContribution": {
       "description": "A placement\u0027s contribution facet: the row is a slot whose frame (id, pose, scale, and these lifecycle terms) is host-authored and whose creation a federation partner supplies through ordinary mutations. Null is an ordinary placement.",
@@ -6171,11 +6495,8 @@
       ],
       "properties": {
         "tenure": {
-          "description": "The authored lifecycle.",
-          "enum": [
-            "Presence",
-            "Endowed"
-          ]
+          "$ref": "#/$defs/WorldContributionTenure",
+          "description": "The authored lifecycle."
         },
         "slotCreationId": {
           "description": "The host-owned Id the slot shows while unfilled and returns to on retraction. Must resolve to a declared creation row.",
@@ -6184,6 +6505,7 @@
         "link": {
           "description": "The authored adjacencies row name the presence check watches \u2014 the same key the $link:\u003CadjacencyName\u003E reserved rule channel reads. Required for Presence, refused beside Endowed.",
           "default": null,
+          "title": "SafeName",
           "type": [
             "string",
             "null"
@@ -6197,6 +6519,7 @@
         "contributor": {
           "description": "Server-stamped. The acting principal that filled the slot; null while unfilled. Never accepted from a submitted payload or an authored document.",
           "default": null,
+          "title": "WorldPrincipal",
           "type": [
             "string",
             "null"
@@ -6215,7 +6538,8 @@
         "tenure",
         "slotCreationId"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPlacementContribution"
     },
     "WorldPlacementResponseConditionFieldCondition": {
       "description": "The original lattice-field condition, unchanged from before this union existed: the named field read at the placement\u0027s own coupled cell, compared against a literal or another row\u0027s slot cell.",
@@ -6232,7 +6556,8 @@
           "description": "The comparison."
         },
         "value": {
-          "description": "The scalar compared against (literal or state-row reference) \u2014 the same WorldLatticeScalar grammar a fields.reactions Transform/Expose condition already uses."
+          "description": "The scalar compared against (literal or state-row reference) \u2014 the same WorldLatticeScalar grammar a fields.reactions Transform/Expose condition already uses.",
+          "title": "WorldLatticeScalar"
         }
       },
       "required": [
@@ -6240,7 +6565,8 @@
         "comparison",
         "value"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPlacementResponseConditionFieldCondition"
     },
     "WorldPlacementResponseConditionStateCondition": {
       "description": "A state-cell condition: compares State\u0027s cell (its slot cell when Key is absent, else the cell at Key) against Value, or \u2014 when ComparandState is authored instead \u2014 against another declared row\u0027s cell, read live at the same evaluation. Exactly one of Value and ComparandState may be present, the same one-comparand rule CompareState already enforces for a rule\u0027s own gate \u2014 this facet reuses that field convention rather than inventing a second reading of \u0022compare a state cell.\u0022 Independent of the placement\u0027s position, and of whether the document declares a fields section at all.",
@@ -6293,7 +6619,8 @@
         "state",
         "comparison"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPlacementResponseConditionStateCondition"
     },
     "WorldPlacementResponseCondition": {
       "description": "The closed union a response entry\u0027s When speaks. Both arms evaluate against the SAME per-tick document the rule frame folds a rule\u0027s writes into before this sweep runs (Server.WorldServer.SweepPlacementResponses runs after EvaluateWorldRules\u0027 own end-of-tick fold), so a cell a rule wrote this tick already reads through StateCondition on the same tick\u0027s sweep.",
@@ -6308,7 +6635,8 @@
         {
           "$ref": "#/$defs/WorldPlacementResponseConditionStateCondition"
         }
-      ]
+      ],
+      "title": "WorldPlacementResponseCondition"
     },
     "WorldPlacementResponse": {
       "description": "One entry of a placement\u0027s response trait: while When holds, the row\u0027s rendered/collided prototype becomes PrototypeId instead of its currently authored one \u2014 the bridge that lets a placement react to live simulation state (a burning tree becomes a charred stump; a filled account swaps a granary\u0027s face). Absent Respond is today\u0027s behavior exactly: the placement always shows its own authored PrototypeId.",
@@ -6330,7 +6658,8 @@
         "when",
         "prototypeId"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPlacementResponse"
     },
     "WorldPlacementResponseList": {
       "type": [
@@ -6356,7 +6685,16 @@
       "required": [
         "holdable"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPlacementGrip"
+    },
+    "WorldBoardEnforcement": {
+      "description": "How a tabletop board binding treats an illegal move \u2014 the author\u0027s choice per table, engine-side and game-agnostic: the judge that computes Verdict is authored per world, and this field only decides what the engine itself does once that verdict refuses.",
+      "enum": [
+        "Record",
+        "Return"
+      ],
+      "title": "WorldBoardEnforcement"
     },
     "WorldPlacementBoard": {
       "description": "A placement\u0027s board facet \u2014 the tabletop primitive. Anchors a state.lattices Grid topology (which already carries its own world-space origin/cellSize frame) to this placement, so a chess set, a checkers board, or a card table is one placement/body carrying one topology \u2014 carriable as a unit once an attachment primitive picks it up. A topology is carried by at most one placement (validated). Occupancy is the only row the engine reads; Turn/Verdict/ Move/Plan are author-named convenience bindings world.tabletop echoes together \u2014 ordinary declared rows, never engine-interpreted, so this facet stays a reusable primitive rather than a chess-specific feature.",
@@ -6406,11 +6744,8 @@
           "default": null
         },
         "enforcement": {
+          "$ref": "#/$defs/WorldBoardEnforcement",
           "description": "What the engine itself does once Verdict refuses a move.",
-          "enum": [
-            "Record",
-            "Return"
-          ],
           "default": "Record"
         },
         "accept": {
@@ -6423,7 +6758,8 @@
         "topology",
         "occupancy"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPlacementBoard"
     },
     "WorldPlacementDealVariants": {
       "description": "A deal facet\u0027s variant selection: a keyed row read at the dealt cell\u0027s key, and the map from that cell\u0027s text to the prototype the child is dealt with.",
@@ -6451,7 +6787,8 @@
         "row",
         "map"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPlacementDealVariants"
     },
     "WorldPlacementDealPreserve": {
       "description": "Instance-owned properties which reconciliation seeds at creation and subsequently preserves. Membership and the allocated deal slot remain owned by the source row.",
@@ -6476,7 +6813,8 @@
           "default": false
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPlacementDealPreserve"
     },
     "WorldPlacementReflow": {
       "description": "Author-selected work and payment policy for rearranging a deal template\u0027s children.",
@@ -6512,7 +6850,8 @@
           "default": null
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPlacementReflow"
     },
     "WorldPlacementDeal": {
       "description": "A placement\u0027s deal facet: the row is a template whose instances are dealt from a keyed state row, one child placement per cell, laid out over the template\u0027s own Distribution region in cell order. The template itself renders nothing and collides with nothing; its prototype and its Solid/Grip/Region/ Emission facets are what every child is stamped with. A child is an ordinary placement row named \u003Ctemplate\u003E/\u003CcellKey\u003E (ChildId) with Parent naming the template and the region\u0027s dealt offset as its local position, written and removed through ordinary UpsertPlacement/RemovePlacement mutations under WorldPrincipal.World by the per-tick sweep (Server.WorldServer.SweepPlacementDeals), so a dealt instance journals, undoes, replays, and rebuilds colliders through the one placement door.",
@@ -6544,7 +6883,17 @@
       "required": [
         "row"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPlacementDeal"
+    },
+    "WorldPlacementSpatialRole": {
+      "description": "The contract a named placement-local spatial volume contributes to queries.",
+      "enum": [
+        "Occupation",
+        "Clearance",
+        "Influence"
+      ],
+      "title": "WorldPlacementSpatialRole"
     },
     "WorldSpatialShape": {
       "description": "A placement-local bounded shape. Box yaw is measured about \u002BY; Y extents are part of the contract.",
@@ -6555,7 +6904,8 @@
           "enum": [
             "Box",
             "Sphere"
-          ]
+          ],
+          "title": "WorldSpatialShapeKind"
         },
         "center": {
           "$ref": "#/$defs/DocumentVector3",
@@ -6581,7 +6931,8 @@
         "center",
         "halfExtents"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldSpatialShape"
     },
     "WorldPlacementSpatialVolume": {
       "description": "A named spatial volume authored on one placement. The name is placement-local metadata; an influence channel is opaque to the engine and is never interpreted as water, power, or another game noun.",
@@ -6595,12 +6946,8 @@
           "type": "string"
         },
         "role": {
-          "description": "Whether the volume occupies, reserves clearance, or reports influence.",
-          "enum": [
-            "Occupation",
-            "Clearance",
-            "Influence"
-          ]
+          "$ref": "#/$defs/WorldPlacementSpatialRole",
+          "description": "Whether the volume occupies, reserves clearance, or reports influence."
         },
         "shape": {
           "$ref": "#/$defs/WorldSpatialShape",
@@ -6625,7 +6972,8 @@
         "role",
         "shape"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPlacementSpatialVolume"
     },
     "WorldPlacementSpatialVolumeList": {
       "type": [
@@ -6754,7 +7102,8 @@
         "yawDegrees",
         "scale"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPlacement"
     },
     "WorldEffectUpsertPlacement": {
       "description": "Upserts a placement document row; inside a transaction it must sit in the closing suffix.",
@@ -6769,7 +7118,8 @@
       "required": [
         "placement"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldEffectUpsertPlacement"
     },
     "WorldEffectRemovePlacement": {
       "description": "Removes a placement document row by id; inside a transaction it must sit in the closing suffix.",
@@ -6784,7 +7134,8 @@
       "required": [
         "id"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldEffectRemovePlacement"
     },
     "WorldEffectSave": {
       "description": "Saves the world through the host\u0027s save tap.",
@@ -6793,7 +7144,8 @@
           "const": "save"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldEffectSave"
     },
     "WorldEffectPose": {
       "description": "Teleports a world-addressed body to a spawn point, or to a literal position with angles; exactly one of SpawnPoint and Position is authored.",
@@ -6831,7 +7183,8 @@
       "required": [
         "key"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldEffectPose"
     },
     "WorldEffectSetIdentityFact": {
       "description": "Writes one fact on the identity a world-addressed body drives under: the body\u0027s cell in the world\u0027s reserved WorldIdentityFactLane row and the identity\u0027s own persisted facts row, together. Exactly one of Value and Expression is authored; a body driving under no owned identity refuses the write rather than minting one.",
@@ -6865,7 +7218,8 @@
         "key",
         "fact"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldEffectSetIdentityFact"
     },
     "ActionEffect": {
       "description": "An authored effect row a rule fires when its gate holds. The arms declared here are the ones this library owns \u2014 every one addresses a state row and nothing else; a document project appends its own derived arms (a participant\u0027s kinematics, a presentation cue, a whole-row document upsert) through a RuleVocabulary (see ExtendJson) rather than by editing this list.",
@@ -6961,7 +7315,8 @@
         {
           "$ref": "#/$defs/WorldEffectSetIdentityFact"
         }
-      ]
+      ],
+      "title": "ActionEffect"
     },
     "ActionEffectList": {
       "type": "array",
@@ -6994,11 +7349,13 @@
       "required": [
         "effects"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ActionTrigger"
     },
     "DocumentIdentifierList": {
       "type": "array",
       "items": {
+        "title": "DocumentIdentifier",
         "type": "string"
       }
     },
@@ -7022,7 +7379,29 @@
         "sequence",
         "rows"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldRowAssignment"
+    },
+    "WorldCapability": {
+      "description": "The coarse capability verbs a WorldGrant confers \u2014 the closed set the server checks a submission\u0027s WorldPrincipal against at each write boundary. A genre world arrives as different data (new subjects, new sections), never a new capability.",
+      "enum": [
+        "Drive",
+        "Observe",
+        "Control",
+        "Mutate",
+        "Edit"
+      ],
+      "title": "WorldCapability"
+    },
+    "CommandPhase": {
+      "enum": [
+        "Started",
+        "Active",
+        "Completed",
+        "Canceled",
+        null
+      ],
+      "title": "CommandPhase"
     },
     "BindingActivatorDefinition": {
       "type": [
@@ -7044,7 +7423,8 @@
             "Held",
             "Tapped"
           ],
-          "default": "Held"
+          "default": "Held",
+          "title": "BindingActivatorMode"
         },
         "timeoutTicks": {
           "type": [
@@ -7057,7 +7437,8 @@
       "required": [
         "sequence"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "BindingActivatorDefinition"
     },
     "BindingPageEntryDefinition": {
       "type": [
@@ -7085,7 +7466,8 @@
           "default": null
         },
         "channel": {
-          "default": null
+          "default": null,
+          "title": "ChannelRef"
         },
         "scale": {
           "type": [
@@ -7095,13 +7477,7 @@
           "default": null
         },
         "activateOn": {
-          "enum": [
-            "Started",
-            "Active",
-            "Completed",
-            "Canceled",
-            null
-          ],
+          "$ref": "#/$defs/CommandPhase",
           "default": null
         },
         "label": {
@@ -7119,7 +7495,8 @@
           "default": null
         },
         "value": {
-          "default": null
+          "default": null,
+          "title": "CommandValue"
         },
         "text": {
           "type": [
@@ -7137,13 +7514,15 @@
             "Hold",
             "Toggle"
           ],
-          "default": "Hold"
+          "default": "Hold",
+          "title": "BindingEntryMode"
         }
       },
       "required": [
         "sources"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "BindingPageEntryDefinition"
     },
     "BindingPageEntryDefinitionList": {
       "type": "array",
@@ -7189,7 +7568,17 @@
         "id",
         "entries"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "BindingPageDefinition"
+    },
+    "BindingBarEdge": {
+      "enum": [
+        "Bottom",
+        "Top",
+        "Left",
+        "Right"
+      ],
+      "title": "BindingBarEdge"
     },
     "WorldBindingBarAnchor": {
       "description": "Where a bar hangs: a viewport edge and how far in from it. Every bank anchored to the same edge and inset shares one frame \u2014 their plates are laid out together on one pitch grid and the nearest plate of the whole group sits at the inset \u2014 so a nested crossbar is five banks on one anchor, and a strip with side columns is three groups on three.",
@@ -7199,13 +7588,8 @@
       ],
       "properties": {
         "edge": {
+          "$ref": "#/$defs/BindingBarEdge",
           "description": "The viewport edge.",
-          "enum": [
-            "Bottom",
-            "Top",
-            "Left",
-            "Right"
-          ],
           "default": "Bottom"
         },
         "inset": {
@@ -7214,7 +7598,18 @@
           "default": 0
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldBindingBarAnchor"
+    },
+    "WorldSpeakerSourceNone": {
+      "description": "No signal is bound \u2014 honest silence (the emitter holds its place; audio.emitters reads the state).",
+      "properties": {
+        "$type": {
+          "const": "none"
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldSpeakerSourceNone"
     },
     "WorldSpeakerSourceMachine": {
       "description": "A live screen-hosted machine\u0027s audio, identified by screen slot \u2014 screen index is machine identity for screen-hosted machines. The validator checks only that the screen row exists, never that its declared source is $type machine (runtime inserts overlay declared sources); no live machine at drain time is silence plus a state echo, never a reject.",
@@ -7230,7 +7625,8 @@
       "required": [
         "screenIndex"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldSpeakerSourceMachine"
     },
     "WorldSpeakerSourceTune": {
       "description": "A tune asset (WorldTune) played through a headless machine host \u2014 acquired while any speaker references it, released when orphaned (a runtime derivation, never a data concept).",
@@ -7246,7 +7642,8 @@
       "required": [
         "tuneId"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldSpeakerSourceTune"
     },
     "WorldSpeakerSourceSynth": {
       "description": "The world voice synth playing a patch asset (WorldPatch). Patches are mono by construction: the feed\u0027s channel selectors degenerate to mix \u2014 documented, never rejected.",
@@ -7262,7 +7659,8 @@
       "required": [
         "patchId"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldSpeakerSourceSynth"
     },
     "WorldSpeakerSource": {
       "description": "The signal a WorldSpeaker\u0027s feed taps \u2014 a shared source identity, never an inline payload: the runtime drains each distinct source once per mix block and every feed tapping it shares that one pull, so \u0022stereo = two rows sharing a source\u0022 costs one drain. The $type string is the JSON discriminator, matching WorldScreenSource\u0027s convention; a new source kind is a new derived record plus its JsonDerivedTypeAttribute line.",
@@ -7272,8 +7670,7 @@
       ],
       "anyOf": [
         {
-          "$ref": "#/$defs/WorldScreenSourceNone",
-          "description": "No signal is bound \u2014 honest silence (the emitter holds its place; audio.emitters reads the state)."
+          "$ref": "#/$defs/WorldSpeakerSourceNone"
         },
         {
           "$ref": "#/$defs/WorldSpeakerSourceMachine"
@@ -7284,7 +7681,8 @@
         {
           "$ref": "#/$defs/WorldSpeakerSourceSynth"
         }
-      ]
+      ],
+      "title": "WorldSpeakerSource"
     },
     "WorldSpeakerFeed": {
       "description": "A speaker\u0027s feed \u2014 what it plays: a shared source identity, a stereo channel selector, and a gain. Stereo separation is two independent speaker rows sharing one source with left/right selectors and different geometry \u2014 no group/attachment construct. Mono sources (the synth) degenerate every selector to ChannelMix.",
@@ -7308,7 +7706,8 @@
         "channel",
         "gain"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldSpeakerFeed"
     },
     "WorldSpeakerAttenuation": {
       "description": "A point speaker\u0027s distance-attenuation policy, or null on the row to coalesce to the WorldAudioDefaults section (DefaultSpeakerRadius/DefaultCurve).",
@@ -7333,7 +7732,8 @@
         "radius",
         "curve"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldSpeakerAttenuation"
     },
     "ShapeNonNullable": {
       "anyOf": [
@@ -7383,7 +7783,8 @@
         "ProjectionX",
         "ProjectionY",
         "Ring"
-      ]
+      ],
+      "title": "CycleOutput"
     },
     "StateCycle": {
       "description": "A row\u0027s or cell\u0027s tick-indexed rotation trait: the value is a pure function of the server tick through a generator of the symmetry lattice\u0027s reflection group \u2014 Puck.Maths.SymmetryWord, the lattice\u0027s own thirty-step cycle when no Word is authored \u2014 raised to Power once per step. The generator\u0027s order is the loop\u0027s period, derived from the word rather than authored: a word of order twelve is a twelve-position dial, one of order twenty-four a day. Nothing accumulates and nothing is rebased: the mapping is tick-absolute, so a replay, a reconnect, or a fresh read at any tick lands on the same bits.",
@@ -7428,6 +7829,15 @@
       },
       "additionalProperties": false
     },
+    "HiddenCells": {
+      "description": "What an observer learns about a row\u0027s cells it may not read.",
+      "enum": [
+        "Omit",
+        "Count",
+        "Placeholder"
+      ],
+      "title": "HiddenCells"
+    },
     "StateVisibility": {
       "description": "Opt-in observation policy. Null readers means public; an empty list means authority only. Row and cell policies intersect. Replica-tier authorities remain fully trusted.",
       "type": "object",
@@ -7444,12 +7854,8 @@
           "default": null
         },
         "hidden": {
+          "$ref": "#/$defs/HiddenCells",
           "description": "What an observer who may read the row learns about the cells it may not.",
-          "enum": [
-            "Omit",
-            "Count",
-            "Placeholder"
-          ],
           "default": "Omit"
         },
         "readersFrom": {
@@ -7475,7 +7881,8 @@
         "WeightedNumeric",
         "StreamDraw",
         "SymmetryOrbit"
-      ]
+      ],
+      "title": "GeneratorSource"
     },
     "GeneratorAlternative": {
       "description": "One weighted alternative of a GeneratorContext: the token it emits, its relative weight, and the context the walk moves into after it is picked. The authored Next is what makes this a real Markov process rather than a bag of independent draws \u2014 the context key is the process state, so an author folds exactly as much history into it as the chain needs.",
@@ -7491,6 +7898,7 @@
         },
         "next": {
           "description": "The context the walk moves into after this alternative is picked. Must name a declared Key; naming a context that declares NO alternatives ends the emission (a terminal is a context with nothing to say, never a reserved token spelling).",
+          "title": "CellName",
           "type": "string"
         },
         "multiplicity": {
@@ -7507,7 +7915,8 @@
         "weight",
         "next"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "GeneratorAlternative"
     },
     "GeneratorContext": {
       "description": "One named context of a StateGenerator \u2014 the state the walk may be sitting in and the weighted alternatives it may pick while there. A context declaring NO alternatives is TERMINAL: reaching it ends the emission.",
@@ -7515,6 +7924,7 @@
       "properties": {
         "key": {
           "description": "The stable context key, unique within the generator.",
+          "title": "CellName",
           "type": "string"
         },
         "alternatives": {
@@ -7532,7 +7942,8 @@
       "required": [
         "key"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "GeneratorContext"
     },
     "GeneratorMode": {
       "description": "How a StateGenerator\u0027s entries \u2014 a Markov context\u0027s alternatives, or a weighted numeric source\u0027s outcomes \u2014 are consumed: the multiset-sampling vocabulary. Authored, never inferred: exhaustion behaviour is a declaration, not a fallback the engine picks.",
@@ -7540,7 +7951,8 @@
         "WithReplacement",
         "WithoutReplacement",
         "RestartOnExhaustion"
-      ]
+      ],
+      "title": "GeneratorMode"
     },
     "GeneratorWeightedNumeric": {
       "description": "One numeric outcome of a WeightedNumeric source: the raw value it writes and its relative weight \u2014 the numeric twin of GeneratorAlternative, minus Token (nothing to join into text) and Next (a numeric draw is one terminal pick, never a walk).",
@@ -7567,7 +7979,8 @@
         "value",
         "weight"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "GeneratorWeightedNumeric"
     },
     "GeneratorExtended": {
       "description": "A source\u0027s extended-generator facet: an authored Pcg32Extended table replacing that generator\u0027s own self-seeding, so a site drawing from it is k-dimensionally equidistributed rather than merely 1-dimensionally so. The table is document data, exactly one rebuild cost (GeneratorEngine caches the built generator beside the cursor it corresponds to) \u2014 nothing about the site\u0027s persisted shape changes.",
@@ -7623,6 +8036,7 @@
         "start": {
           "description": "Markov only: the context every emission begins from. Must name a declared context.",
           "default": null,
+          "title": "CellName",
           "type": [
             "string",
             "null"
@@ -7709,7 +8123,8 @@
           "default": null
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "StateGenerator"
     },
     "ActionFactNullable": {
       "enum": [
@@ -7724,7 +8139,8 @@
         "Unsupported",
         "Resting",
         null
-      ]
+      ],
+      "title": "ActionFact"
     },
     "ActionStateEnvelopeRange": {
       "description": "An inclusive numeric interval.",
@@ -7745,7 +8161,8 @@
         "minimum",
         "maximum"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ActionStateEnvelopeRange"
     },
     "ActionStateEnvelopeSet": {
       "description": "A closed numeric set. Values are authored labels encoded in the slot\u0027s deterministic numeric domain.",
@@ -7764,7 +8181,8 @@
       "required": [
         "values"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ActionStateEnvelopeSet"
     },
     "ActionStateEnvelope": {
       "description": "The authored values a player-writable durable slot admits in this world.",
@@ -7782,7 +8200,8 @@
         {
           "$ref": "#/$defs/ActionStateEnvelopeSet"
         }
-      ]
+      ],
+      "title": "ActionStateEnvelope"
     },
     "ActionStateSlot": {
       "description": "Declares one named body-state slot shared by every kit action in the world. The carrying WorldStateSection lane selects whether it belongs to the body or its identity.",
@@ -7800,7 +8219,8 @@
           "enum": [
             "Counter",
             "Timer"
-          ]
+          ],
+          "title": "ActionStateKind"
         },
         "initial": {
           "description": "The initial counter value or timer duration in seconds.",
@@ -7827,7 +8247,8 @@
         "name",
         "kind"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "ActionStateSlot"
     },
     "TopologyDirection": {
       "description": "One authored direction of a discrete LatticeTopology: the (X, Y, Z) cell step a neighbour walk, ray, or leaper offset takes, and the case-sensitive token a rule or $board:/$match: channel names it by. X/Y are the topology\u0027s own planar axes (a Grid\u0027s column/row, a Hex\u0027s q/r); Z is a Box\u0027s layer step and must be zero on every other kind.",
@@ -7859,7 +8280,8 @@
         "x",
         "y"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "TopologyDirection"
     },
     "TopologyElementAlias": {
       "description": "A friendlier name for one point-group element, resolved by Element alongside its canonical signed-axis spelling (ElementName always answers the canonical form).",
@@ -7881,7 +8303,8 @@
         "name",
         "element"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "TopologyElementAlias"
     },
     "WorldThemeScrim": {
       "description": "One scrim\u0027s fill color plus its own alpha, split apart so a world can retheme opacity independent of hue \u2014 the two knobs a scrim (a translucent panel/strip/chip backing) actually varies. Alpha is clamped to ScrimMinAlpha at resolve time when it is a state binding (see WorldDefinitionValidator\u0027s theme validation for the literal-authoring floor).",
@@ -7889,10 +8312,12 @@
       "properties": {
         "color": {
           "description": "The scrim\u0027s opaque fill color.",
+          "title": "BindableColor",
           "type": "string"
         },
         "alpha": {
           "description": "The scrim\u0027s opacity, in [0, 1].",
+          "title": "BindableScalar",
           "type": [
             "number",
             "string"
@@ -7903,7 +8328,8 @@
         "color",
         "alpha"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldThemeScrim"
     },
     "WorldThemeBloomHue": {
       "description": "One elevation bloom hue\u0027s lit ring \u002B outer halo pair (see Puck.Overlays.DesignTokens.Elevation for the composite rule). Each color carries its own baked alpha (#RRGGBBAA).",
@@ -7911,10 +8337,12 @@
       "properties": {
         "ring": {
           "description": "The 1px lit ring color.",
+          "title": "BindableColor",
           "type": "string"
         },
         "halo": {
           "description": "The outer distance-falloff halo color.",
+          "title": "BindableColor",
           "type": "string"
         }
       },
@@ -7922,7 +8350,8 @@
         "ring",
         "halo"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldThemeBloomHue"
     },
     "WorldThemeCubicBezier": {
       "description": "One of the two settled cubic-bezier easings a theme\u0027s motion section authors.",
@@ -7945,7 +8374,8 @@
           "type": "number"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldThemeCubicBezier"
     },
     "PatternNodeSymbol": {
       "description": "One token whose value falls in the named symbol.",
@@ -7960,7 +8390,8 @@
       "required": [
         "name"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "PatternNodeSymbol"
     },
     "PatternNodeAnySymbol": {
       "description": "One token of any value, named symbols and the unnamed remainder alike.",
@@ -7969,7 +8400,8 @@
           "const": "any"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "PatternNodeAnySymbol"
     },
     "PatternNodeExcept": {
       "description": "One token whose value falls outside the named symbol.",
@@ -7984,7 +8416,8 @@
       "required": [
         "name"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "PatternNodeExcept"
     },
     "PatternNodeNothing": {
       "description": "The empty word.",
@@ -7993,7 +8426,18 @@
           "const": "empty"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "PatternNodeNothing"
+    },
+    "PatternNodeNone": {
+      "description": "The empty language: no word at all, the zero of choice and the annihilator of sequence.",
+      "properties": {
+        "$type": {
+          "const": "none"
+        }
+      },
+      "additionalProperties": false,
+      "title": "PatternNodeNone"
     },
     "PatternNodeSequence": {
       "description": "The items matched one after another.",
@@ -8008,7 +8452,8 @@
       "required": [
         "items"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "PatternNodeSequence"
     },
     "PatternNodeList": {
       "type": "array",
@@ -8029,7 +8474,8 @@
       "required": [
         "items"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "PatternNodeChoice"
     },
     "PatternNodeBoth": {
       "description": "Every item at once: the word is in each item\u0027s language.",
@@ -8044,7 +8490,8 @@
       "required": [
         "items"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "PatternNodeBoth"
     },
     "PatternNodeComplement": {
       "description": "Every word the item does not match.",
@@ -8059,7 +8506,8 @@
       "required": [
         "item"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "PatternNodeComplement"
     },
     "PatternNodeOptional": {
       "description": "The item or nothing.",
@@ -8074,7 +8522,8 @@
       "required": [
         "item"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "PatternNodeOptional"
     },
     "PatternNodeStar": {
       "description": "The item zero or more times.",
@@ -8089,7 +8538,8 @@
       "required": [
         "item"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "PatternNodeStar"
     },
     "PatternNodePlus": {
       "description": "The item one or more times.",
@@ -8104,7 +8554,8 @@
       "required": [
         "item"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "PatternNodePlus"
     },
     "PatternNodeRepeat": {
       "description": "The item between Min and Max times.",
@@ -8127,7 +8578,8 @@
         "min",
         "max"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "PatternNodeRepeat"
     },
     "PatternNode": {
       "description": "The closed pattern vocabulary over a row\u0027s cell values, matched against the whole word. Complement and intersection are first-class, so \u0022no two adjacent kings\u0022 and \u0022holds a 2 and a 5\u0022 are single patterns rather than rule arithmetic.",
@@ -8149,8 +8601,7 @@
           "$ref": "#/$defs/PatternNodeNothing"
         },
         {
-          "$ref": "#/$defs/WorldScreenSourceNone",
-          "description": "The empty language: no word at all, the zero of choice and the annihilator of sequence."
+          "$ref": "#/$defs/PatternNodeNone"
         },
         {
           "$ref": "#/$defs/PatternNodeSequence"
@@ -8176,7 +8627,8 @@
         {
           "$ref": "#/$defs/PatternNodeRepeat"
         }
-      ]
+      ],
+      "title": "PatternNode"
     },
     "PatternNodeNullable": {
       "description": "The closed pattern vocabulary over a row\u0027s cell values, matched against the whole word. Complement and intersection are first-class, so \u0022no two adjacent kings\u0022 and \u0022holds a 2 and a 5\u0022 are single patterns rather than rule arithmetic.",
@@ -8201,8 +8653,7 @@
           "$ref": "#/$defs/PatternNodeNothing"
         },
         {
-          "$ref": "#/$defs/WorldScreenSourceNone",
-          "description": "The empty language: no word at all, the zero of choice and the annihilator of sequence."
+          "$ref": "#/$defs/PatternNodeNone"
         },
         {
           "$ref": "#/$defs/PatternNodeSequence"
@@ -8228,7 +8679,8 @@
         {
           "$ref": "#/$defs/PatternNodeRepeat"
         }
-      ]
+      ],
+      "title": "PatternNode"
     },
     "PatternNodeListNonNullable": {
       "type": "array",

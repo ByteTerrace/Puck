@@ -20,7 +20,8 @@
         "type": "number"
       }
     },
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldSpawnPoint"
   },
   "default": null
 }

@@ -42,7 +42,8 @@
           {
             "$ref": "./common.schema.json#/$defs/WorldAnchorRecentSpeaker"
           }
-        ]
+        ],
+        "title": "WorldAnchor"
       },
       "rig": {
         "$ref": "./common.schema.json#/$defs/WorldCameraProgram",
@@ -82,7 +83,8 @@
           "required": [
             "anchor"
           ],
-          "additionalProperties": false
+          "additionalProperties": false,
+          "title": "WorldCameraAnchorCandidate"
         },
         "default": null
       }
@@ -94,7 +96,8 @@
       "renderWidth",
       "renderHeight"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldCamera"
   },
   "default": null
 }

@@ -51,7 +51,8 @@
                       }
                     },
                     "additionalProperties": false,
-                    "default": null
+                    "default": null,
+                    "title": "MotionScalarEnvelope"
                   },
                   "held": {
                     "description": "The held-multiplier channel (a \u0022boost\u0022/\u0022sprint\u0022), or null for a kit with no held speed multiplier. The multiplier applies AFTER Envelope clamps the resolved value: the envelope pins the base rate, the multiplier rides on top.",
@@ -74,13 +75,15 @@
                       "multiplier"
                     ],
                     "additionalProperties": false,
-                    "default": null
+                    "default": null,
+                    "title": "WorldSpeedHeld"
                   }
                 },
                 "required": [
                   "value"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "title": "WorldSpeed"
               },
               "turn": {
                 "description": "The kit\u0027s steering rate (see WorldTurn).",
@@ -117,7 +120,8 @@
                 "required": [
                   "rate"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "title": "WorldTurn"
               },
               "shaping": {
                 "description": "The ordered velocity-shaping table (see WorldShaping) the ShapeVelocity operation reads \u2014 the first row whose when gate opens governs. Required (non-empty) for a kit whose program selects ShapeVelocity; null for a kit whose program never shapes planar velocity through it (a free-flight kit that owns its whole velocity channel directly).",
@@ -178,7 +182,8 @@
                         }
                       },
                       "additionalProperties": false,
-                      "default": null
+                      "default": null,
+                      "title": "WorldShapingAlong"
                     },
                     "across": {
                       "description": "The across facet \u2014 see WorldShapingAcross \u2014 selecting the drive decomposition, or null for a row that shapes the whole vector. Refused paired with Dynamics or without Along.",
@@ -197,7 +202,8 @@
                         }
                       },
                       "additionalProperties": false,
-                      "default": null
+                      "default": null,
+                      "title": "WorldShapingAcross"
                     },
                     "dynamics": {
                       "description": "The dynamics row a second-order follower shapes velocity through instead of Along, or null (the default) for the response/drive law. Exactly one of the two is authored per row.",
@@ -213,7 +219,8 @@
                       "default": 1
                     }
                   },
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "title": "WorldShaping"
                 },
                 "default": null
               },
@@ -223,7 +230,8 @@
                   "Heading",
                   "World"
                 ],
-                "default": "World"
+                "default": "World",
+                "title": "MotionMoveFrame"
               },
               "facingSnap": {
                 "description": "Under World only: whether the body\u0027s drawn ATTITUDE snaps to Atan2 of the commanded planar direction every tick that carries input (no turn-rate ramp, no skid) \u2014 the body angles toward its travel, a strafe included \u2014 while its HEADING (the Turn role\u0027s integral, WorldBody.FixedYaw, the frame a Heading pair moves in) holds, and the attitude returns to the heading the tick movement stops. Only the Face roles turn the heading itself. Ignored under Heading, where attitude is the integrated heading by construction. true is the default.",
@@ -253,7 +261,8 @@
                         "Surface",
                         "Free",
                         "Medium"
-                      ]
+                      ],
+                      "title": "BodyHoldBond"
                     },
                     "hold": {
                       "description": "What holds the body once the row is taken.",
@@ -262,7 +271,8 @@
                         "Gravity",
                         "Pull",
                         "Lift"
-                      ]
+                      ],
+                      "title": "BodyHoldKind"
                     },
                     "cone": {
                       "$ref": "./common.schema.json#/$defs/DocumentVector2",
@@ -304,7 +314,8 @@
                         "Intent",
                         "Velocity"
                       ],
-                      "default": "Heading"
+                      "default": "Heading",
+                      "title": "BodyHoldForward"
                     },
                     "onDrive": {
                       "description": "Whether driving into an admitted face takes this row with no channel press.",
@@ -345,7 +356,8 @@
                         "ratePerSecond"
                       ],
                       "additionalProperties": false,
-                      "default": null
+                      "default": null,
+                      "title": "WorldHoldSpend"
                     },
                     "medium": {
                       "description": "The medium\u0027s own displacement law. Required for Medium and refused on every other bond.",
@@ -373,7 +385,8 @@
                         "settleRate"
                       ],
                       "additionalProperties": false,
-                      "default": null
+                      "default": null,
+                      "title": "WorldHoldMedium"
                     },
                     "gravity": {
                       "description": "The vertical arc this row falls under. Required for Gravity and Lift; refused for Pull, None, and every Medium row.",
@@ -396,7 +409,8 @@
                         "fall"
                       ],
                       "additionalProperties": false,
-                      "default": null
+                      "default": null,
+                      "title": "WorldHoldGravity"
                     },
                     "envelope": {
                       "description": "The vertical-channel envelope Gravity\u0027s terminal fall speed and Medium\u0027s terminal rise/sink speeds share. Required for a Medium bond and for a Gravity/Lift hold short of full lift; refused otherwise.",
@@ -420,7 +434,8 @@
                         }
                       },
                       "additionalProperties": false,
-                      "default": null
+                      "default": null,
+                      "title": "WorldHoldEnvelope"
                     },
                     "thrust": {
                       "description": "The fraction of the kit\u0027s resolved move speed the MoveUp role commands vertically while this row holds, in every bond \u2014 0 (the default) is no vertical thrust at all, 1 is fully isotropic. A non-Medium row commanding thrust takes the vertical channel outright for the tick, clearing the ballistic carry; a medium row folds it into the medium\u0027s own displacement before that law\u0027s convergence runs.",
@@ -433,7 +448,8 @@
                     "bond",
                     "hold"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "title": "WorldHold"
                 },
                 "default": null
               },
@@ -456,7 +472,8 @@
                   }
                 },
                 "additionalProperties": false,
-                "default": null
+                "default": null,
+                "title": "WorldUpTurnRates"
               },
               "obstruction": {
                 "description": "The non-walkable contact witness\u0027s latch tuning \u2014 see WorldObstructionLatch. Omitted (null) reproduces the engine\u0027s own latch exactly; read the effective latch from Obstruction.",
@@ -482,7 +499,8 @@
                   }
                 },
                 "additionalProperties": false,
-                "default": null
+                "default": null,
+                "title": "WorldObstructionLatch"
               },
               "groundStick": {
                 "description": "The inward speed (world units/second) a grounded body on a curving surface (the up policy is not world-up) is held against while it is not already moving into it at least that fast \u2014 depenetration removes whatever the surface curves away, so a walker\u0027s own speed cannot carry it clean off a convex surface between ticks. Independent of Speed: scaling this bias with a kit\u0027s own resolved move speed over-corrects a shallow slope, where a larger inward bias converts into downhill drift under depenetration faster than it converts into held contact. The default reproduces the engine\u0027s old hardcoded constant. Must remain positive after Q48.16 compilation.",
@@ -494,7 +512,8 @@
               "speed",
               "turn"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "WorldMotion"
           },
           "producers": {
             "type": [
@@ -557,7 +576,8 @@
                       "enum": [
                         "Tangent",
                         "Volume"
-                      ]
+                      ],
+                      "title": "WorldFlockSpace"
                     },
                     "separation": {
                       "description": "Local repulsion weight in [0,1].",
@@ -627,14 +647,16 @@
                     "requiresLineOfSight"
                   ],
                   "additionalProperties": false,
-                  "default": null
+                  "default": null,
+                  "title": "WorldFlockProfile"
                 }
               },
               "required": [
                 "scalars",
                 "channels"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "title": "BodyProgramParameters"
             },
             "default": null
           },
@@ -695,19 +717,22 @@
                           "Level",
                           "Edge"
                         ],
-                        "default": "Level"
+                        "default": "Level",
+                        "title": "ActionTriggerMode"
                       }
                     },
                     "required": [
                       "fact",
                       "effects"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "title": "ActionFactTrigger"
                   },
                   "default": null
                 }
               },
-              "additionalProperties": false
+              "additionalProperties": false,
+              "title": "ActionSpec"
             },
             "default": null
           },
@@ -734,7 +759,8 @@
                 "required": [
                   "radius"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "title": "WorldColliderSphere"
               },
               {
                 "description": "A capsule whose lower sphere rests on the body root.",
@@ -755,7 +781,8 @@
                   "endpoint",
                   "radius"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "title": "WorldColliderCapsule"
               },
               {
                 "description": "An oriented box resting on the body root before its local rotation is applied.",
@@ -769,6 +796,7 @@
                   },
                   "rotation": {
                     "description": "The body-local orientation.",
+                    "title": "DocumentQuaternion",
                     "anyOf": [
                       {
                         "type": "array",
@@ -790,7 +818,8 @@
                   "halfExtents",
                   "rotation"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "title": "WorldColliderBox"
               },
               {
                 "description": "The finite primitive bounds emitted by a creation, composed into one compound body collider.",
@@ -806,17 +835,20 @@
                 "required": [
                   "prototypeId"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "title": "WorldColliderFromCreation"
               }
             ],
-            "default": null
+            "default": null,
+            "title": "WorldCollider"
           },
           "bodyContact": {
             "enum": [
               "Overlap",
               "Solid"
             ],
-            "default": "Overlap"
+            "default": "Overlap",
+            "title": "WorldBodyContactMode"
           },
           "mass": {
             "type": "number",
@@ -862,7 +894,8 @@
               "mass"
             ],
             "additionalProperties": false,
-            "default": null
+            "default": null,
+            "title": "WorldRigid"
           },
           "carry": {
             "type": [
@@ -894,7 +927,8 @@
               "massEquivalent"
             ],
             "additionalProperties": false,
-            "default": null
+            "default": null,
+            "title": "WorldCarry"
           },
           "tether": {
             "type": [
@@ -963,7 +997,8 @@
               "minLength"
             ],
             "additionalProperties": false,
-            "default": null
+            "default": null,
+            "title": "WorldTether"
           },
           "pad": {
             "type": [
@@ -991,7 +1026,8 @@
                 "RightShoulder",
                 "Start",
                 "Back"
-              ]
+              ],
+              "title": "WorldPadElement"
             },
             "default": null
           },
@@ -1013,7 +1049,8 @@
               }
             },
             "additionalProperties": false,
-            "default": null
+            "default": null,
+            "title": "WorldAutonomyCadence"
           }
         },
         "required": [
@@ -1021,7 +1058,8 @@
           "bodyMotionProgram",
           "motion"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldKit"
       },
       "default": null
     },
@@ -1032,5 +1070,6 @@
     }
   },
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldKitsSection"
 }

@@ -41,21 +41,17 @@
           "type": "object",
           "properties": {
             "capability": {
-              "description": "The capability requested.",
-              "enum": [
-                "Drive",
-                "Observe",
-                "Control",
-                "Mutate",
-                "Edit"
-              ]
+              "$ref": "./common.schema.json#/$defs/WorldCapability",
+              "description": "The capability requested."
             },
             "subject": {
               "description": "The subject requested.",
+              "title": "GrantSubject",
               "type": "string"
             }
           },
-          "additionalProperties": false
+          "additionalProperties": false,
+          "title": "WorldCapabilityRequest"
         },
         "default": null
       },
@@ -90,7 +86,8 @@
             "address",
             "length"
           ],
-          "additionalProperties": false
+          "additionalProperties": false,
+          "title": "WorldAddonMemoryWatch"
         },
         "default": null
       },
@@ -107,7 +104,8 @@
       "fuel",
       "enabled"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldAddonRow"
   },
   "default": null
 }

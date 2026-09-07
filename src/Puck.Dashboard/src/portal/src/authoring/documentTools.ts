@@ -13,30 +13,43 @@
  * defensive posture — never throwing on a document mid-edit or freshly opened.
  */
 import type { EngineCell } from "../native/engineTypes";
-import type { Items3, WorldDefinition } from "../document/worldDefinition.generated";
-
-/** `WorldDefinition` itself is `{...} | null` (the generated root type), so every indexed-access
- * type below starts from `NonNullable<WorldDefinition>` — indexing the nullable union directly is
- * a TypeScript error ("null has no property"), not a document-shape question. */
-type WorldDocument = NonNullable<WorldDefinition>;
-type WorldState = NonNullable<WorldDocument["state"]>;
+import type {
+  LatticeTopology,
+  LatticeTopologyBox,
+  LatticeTopologyGrid,
+  LatticeTopologyHex,
+  LatticeTopologyRing,
+  StateDomainCellsOf,
+  TopologyDirection,
+  WorldStateRow as GeneratedWorldStateRow,
+} from "../document/worldDefinition.generated";
 
 /** One `state.lattices[]` entry — grid/ring/hex/box/graph/tiling/field, whichever `$type` the
  * document authors. */
-export type WorldTopology = NonNullable<WorldState["lattices"]>[number];
+export type WorldTopology = LatticeTopology;
 
 /** One `state.world[]` row. */
-export type WorldStateRow = NonNullable<WorldState["world"]>[number];
+export type WorldStateRow = GeneratedWorldStateRow;
 
-/** One authored `state.world[].cells[]` entry. */
+/** One authored `state.world[].cells[]` entry. `cells` itself carries no title of its own
+ * (StateRowJsonConverter — an IJsonSchemaNodeConverter — hand-assembles WorldStateRow's whole
+ * shape rather than exporting it property-by-property, so it never reaches the bundle's own
+ * $defs pool), hence the indexed-access here rather than a named import. */
 export type WorldStateCell = NonNullable<WorldStateRow["cells"]>[number];
 
-/** One authored direction of a discrete lattice topology (`Items3`, non-null). */
-export type WorldDirection = NonNullable<Items3>;
+/** One authored direction of a discrete lattice topology. */
+export type WorldDirection = TopologyDirection;
 
 /** A `state.world[]` row's `cellsOf` domain variant — the shape `rowsBoundToTopology`/`canPaintRow`/
  * `emptyValueFor` narrow to. */
-export type CellsOfDomain = Extract<NonNullable<WorldStateRow["domain"]>, { $type?: "cellsOf" }>;
+export type CellsOfDomain = StateDomainCellsOf;
+
+/** The `state.lattices[]` arms that carry `directions` — `topologyDirections`' own narrowing
+ * target. Every arm's own `$type` is optional (the JSON discriminator, present at rest but not
+ * required by the schema itself), so structural narrowing over `WorldTopology` by `$type`
+ * equality alone cannot prove a graph/tiling/field arm excluded — an explicit cast after the
+ * SAME runtime `$type` check stands in for it. */
+type LatticeTopologyWithDirections = LatticeTopologyGrid | LatticeTopologyRing | LatticeTopologyHex | LatticeTopologyBox;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -84,7 +97,7 @@ export function topologyDirections(topology: WorldTopology): readonly WorldDirec
   if (topology.$type !== "grid" && topology.$type !== "ring" && topology.$type !== "hex" && topology.$type !== "box") {
     return [];
   }
-  const directions: (Items3)[] | null | undefined = topology.directions;
+  const directions = (topology as LatticeTopologyWithDirections).directions;
   return (directions ?? []).filter((direction): direction is WorldDirection => direction != null);
 }
 

@@ -6,6 +6,7 @@
   "properties": {
     "id": {
       "description": "The stable owned-world id.",
+      "title": "SafeName",
       "type": "string"
     },
     "name": {
@@ -18,10 +19,12 @@
     },
     "moveSpeedState": {
       "description": "The fixed state row supplying locomotion speed.",
+      "title": "CellName",
       "type": "string"
     },
     "turnSpeedState": {
       "description": "The fixed state row supplying turn speed.",
+      "title": "CellName",
       "type": "string"
     },
     "controllers": {
@@ -39,10 +42,12 @@
         "properties": {
           "machineState": {
             "description": "The row containing the machine id.",
+            "title": "CellName",
             "type": "string"
           },
           "deviceState": {
             "description": "The row containing the device id.",
+            "title": "CellName",
             "type": "string"
           }
         },
@@ -50,7 +55,8 @@
           "machineState",
           "deviceState"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldControllerStateSlots"
       },
       "default": null
     },
@@ -79,7 +85,8 @@
         }
       },
       "additionalProperties": false,
-      "default": null
+      "default": null,
+      "title": "WorldVoiceProfile"
     },
     "facts": {
       "description": "The facts row this identity carries and its capacity, or null for Default.",
@@ -90,6 +97,7 @@
       "properties": {
         "state": {
           "description": "The keyed Int row on the identity\u0027s document holding the facts.",
+          "title": "CellName",
           "type": "string"
         },
         "capacity": {
@@ -102,7 +110,8 @@
         "capacity"
       ],
       "additionalProperties": false,
-      "default": null
+      "default": null,
+      "title": "WorldIdentityFacts"
     }
   },
   "required": [
@@ -113,5 +122,6 @@
     "turnSpeedState"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldIdentityDefinition"
 }

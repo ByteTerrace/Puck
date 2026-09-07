@@ -12,6 +12,7 @@
     "properties": {
       "name": {
         "description": "The source\u0027s name, unique within the section, and the spelling a site\u0027s Source resolves against.",
+        "title": "CellName",
         "type": "string"
       },
       "generator": {
@@ -26,6 +27,7 @@
           "start": {
             "description": "Markov only: the context every emission begins from. Must name a declared context.",
             "default": null,
+            "title": "CellName",
             "type": [
               "string",
               "null"
@@ -51,6 +53,7 @@
               "properties": {
                 "key": {
                   "description": "The stable context key, unique within the generator.",
+                  "title": "CellName",
                   "type": "string"
                 },
                 "alternatives": {
@@ -76,6 +79,7 @@
                       },
                       "next": {
                         "description": "The context the walk moves into after this alternative is picked. Must name a declared Key; naming a context that declares NO alternatives ends the emission (a terminal is a context with nothing to say, never a reserved token spelling).",
+                        "title": "CellName",
                         "type": "string"
                       },
                       "multiplicity": {
@@ -92,7 +96,8 @@
                       "weight",
                       "next"
                     ],
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "title": "GeneratorAlternative"
                   },
                   "default": null
                 }
@@ -100,7 +105,8 @@
               "required": [
                 "key"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "title": "GeneratorContext"
             },
             "default": null
           },
@@ -159,7 +165,8 @@
                 "value",
                 "weight"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "title": "GeneratorWeightedNumeric"
             },
             "default": null
           },
@@ -196,14 +203,16 @@
             "default": null
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "StateGenerator"
       }
     },
     "required": [
       "name",
       "generator"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "GeneratorRow"
   },
   "default": null
 }

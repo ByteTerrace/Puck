@@ -131,7 +131,8 @@
           "yawDegrees",
           "scale"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldPlacement"
       },
       "default": null
     },
@@ -186,9 +187,11 @@
         "derivedFaceScreens"
       ],
       "additionalProperties": false,
-      "default": null
+      "default": null,
+      "title": "WorldPlacementPolicyDefaults"
     }
   },
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldPlacementsSection"
 }

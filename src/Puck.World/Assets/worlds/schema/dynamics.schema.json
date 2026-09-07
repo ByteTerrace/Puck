@@ -33,7 +33,8 @@
       "zeta",
       "r"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "DynamicsRow"
   },
   "default": null
 }

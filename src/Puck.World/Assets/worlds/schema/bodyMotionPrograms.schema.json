@@ -24,7 +24,8 @@
           "Motion",
           "Producer",
           null
-        ]
+        ],
+        "title": "BodyProgramKind"
       },
       "operations": {
         "description": "The selected domain operations; their phases are intrinsic and cannot be reordered.",
@@ -56,7 +57,8 @@
             "StartTimer",
             "Designate",
             "Generate"
-          ]
+          ],
+          "title": "BodyMotionOp"
         }
       },
       "target": {
@@ -78,7 +80,8 @@
                 "enum": [
                   "Seats",
                   "Bodies"
-                ]
+                ],
+                "title": "BodyTargetScope"
               },
               "range": {
                 "type": "number"
@@ -96,7 +99,8 @@
               "halfAngleDegrees",
               "requiresLineOfSight"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "BodyTargetSourceSensed"
           },
           {
             "properties": {
@@ -110,7 +114,8 @@
             "required": [
               "register"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "BodyTargetSourceDesignated"
           },
           {
             "properties": {
@@ -128,7 +133,8 @@
               "curve",
               "rate"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "BodyTargetSourceCurveFollow"
           },
           {
             "properties": {
@@ -146,10 +152,12 @@
               "domain",
               "register"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "BodyTargetSourceNavigated"
           }
         ],
-        "default": null
+        "default": null,
+        "title": "BodyTargetSource"
       }
     },
     "required": [
@@ -158,7 +166,8 @@
       "kind",
       "operations"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "BodyMotionProgram"
   },
   "default": null
 }

@@ -9,20 +9,16 @@
     "properties": {
       "principal": {
         "description": "The acting identity the grant is for.",
+        "title": "WorldPrincipal",
         "type": "string"
       },
       "capability": {
-        "description": "The capability conferred.",
-        "enum": [
-          "Drive",
-          "Observe",
-          "Control",
-          "Mutate",
-          "Edit"
-        ]
+        "$ref": "./common.schema.json#/$defs/WorldCapability",
+        "description": "The capability conferred."
       },
       "subject": {
         "description": "The subject the capability scopes to.",
+        "title": "GrantSubject",
         "type": "string"
       },
       "exclusive": {
@@ -38,6 +34,7 @@
       },
       "reach": {
         "description": "An untrusted contributor\u0027s channel reach on a Drive row, carried alone: which declared ordinals this contributor may touch at all. Reach is not consent; a reached channel contributes nothing until the occupying seat authors a positive ceiling for it.",
+        "title": "ChannelReachMask",
         "type": [
           "integer",
           "null"
@@ -45,6 +42,7 @@
       },
       "consent": {
         "description": "The ordinals named by the occupying seat\u0027s ceiling gesture on its own Drive row. The seat may issue the gesture repeatedly to give different channels different ceilings; each gesture writes only the ordinals it names and leaves the rest unchanged, while revocation clears the whole ceiling value.",
+        "title": "ChannelConsentMask",
         "type": [
           "integer",
           "null"
@@ -59,6 +57,7 @@
       },
       "kindMask": {
         "description": "The MutationKindMask a row admits \u2014 legal only on a Mutate row over a concrete Section, Creation, or Placement subject, or an Edit row over a concrete State subject (never the wildcard \u2014 \u0022which kinds\u0022 presupposes one bounded target \u2014 and never any other capability). The grant door refuses a bit outside the target\u0027s own declared kind set (WorldMutationKindCatalog.KindsOf(section), where a row-scoped subject resolves to the section that owns it, or KindsOf(WorldSection.State) for an Edit row) and refuses an effective mask of zero (an admitted-but-inert bit set is a grant that lies \u2014 the identical \u0022grant nothing instead\u0022 rule Budget\u0027s 0 and Ceiling\u0027s 0 already enforce). On an Edit row this is what separates bumping a state row from redefining it: verbs:UpsertStateCell,RemoveStateCell admits the per-cell writes while denying the whole-row UpsertStateRow/RemoveStateRow that could re-author the row\u0027s envelope. An unmasked Edit row keeps full reach over its subject, so deny-by-default plus opt-in narrowing holds and no seeded row changes meaning. A null mask on a re-grant of the same (Principal, Capability, Subject) row clears a previously-recorded mask \u2014 unlike Budget/Reach, which only ever write when the incoming grant carries one and otherwise leave the prior value untouched; a mask a re-grant does not repeat is a mask the operator meant to take back, not one this door defaults into surviving silently. Revoking the row clears it outright. When a principal holds both a concrete row and the (trusted-only) wildcard row, the deciding row from Rule governs which mask applies \u2014 ConcreteHold beats WildcardHold, exactly as it does for the bare allow/deny check.",
+        "title": "MutationKindMask",
         "type": "string"
       },
       "eventBudget": {
@@ -77,11 +76,13 @@
       },
       "writeMask": {
         "description": "The DocumentWriteMask a row admits on the cross-document durable-state write-back channel \u2014 legal only on a Mutate row over a concrete State subject, the one door that speaks WorldDocumentWriteKind operations (see Server.WorldOwnedWorlds.Decide). A separate field from KindMask, not a second reading of it: the two vocabularies share a bit-lane shape and nothing else, and collapsing them into one ulong made bit 0 mean UpsertKit on one row and Set on another. Same zero/inadmissible-bit refusals and same clear-on-re-grant rule as KindMask.",
+        "title": "DocumentWriteMask",
         "type": "string",
         "pattern": "^(Set|Add)(,(Set|Add))*$"
       }
     },
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldGrant"
   },
   "default": null
 }

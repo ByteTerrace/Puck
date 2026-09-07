@@ -34,7 +34,8 @@
                 "TextDim",
                 "Accent",
                 "Phosphor"
-              ]
+              ],
+              "title": "WorldHudCursorRole"
             },
             "visible": {
               "$ref": "./common.schema.json#/$defs/OverlayPredicateNullable",
@@ -48,7 +49,8 @@
             "role"
           ],
           "additionalProperties": false,
-          "default": null
+          "default": null,
+          "title": "WorldHudCursor"
         },
         "visible": {
           "$ref": "./common.schema.json#/$defs/OverlayPredicateNullable",
@@ -59,7 +61,8 @@
       "required": [
         "enabled"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldHudDefaults"
     },
     "panels": {
       "description": "Gets the authored world-scope panels. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
@@ -85,15 +88,12 @@
               "Under",
               "Over",
               "Replace"
-            ]
+            ],
+            "title": "WorldHudLayer"
           },
           "style": {
-            "description": "The panel\u0027s chrome recipe.",
-            "enum": [
-              "Panel",
-              "Strip",
-              "Chip"
-            ]
+            "$ref": "./common.schema.json#/$defs/WorldHudPanelStyle",
+            "description": "The panel\u0027s chrome recipe."
           },
           "visible": {
             "$ref": "./common.schema.json#/$defs/OverlayPredicateNullable",
@@ -112,7 +112,8 @@
           "style",
           "elements"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldHudPanel"
       }
     }
   },
@@ -121,5 +122,6 @@
     "panels"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldHudSection"
 }

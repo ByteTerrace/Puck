@@ -38,5 +38,6 @@
     }
   },
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldUpdateDefaults"
 }

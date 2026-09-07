@@ -60,7 +60,8 @@
           "patchId",
           "placement"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldAudioCue"
       }
     }
   },
@@ -73,5 +74,6 @@
     "cues"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldAudioDefaults"
 }

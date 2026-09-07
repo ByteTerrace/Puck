@@ -19,6 +19,7 @@
         "properties": {
           "name": {
             "description": "The look\u0027s stable kebab-case name, authored literally or through a Text state cell; it is unique within the definition and assignable by the look table.",
+            "title": "DocumentIdentifier",
             "type": "string"
           },
           "source": {
@@ -45,7 +46,8 @@
                 "required": [
                   "index"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "title": "WorldLookSourceCatalog"
               },
               {
                 "description": "A sculpted creation worn by the body \u2014 resolved against the world\u0027s WorldPrototype rows.",
@@ -55,15 +57,18 @@
                   },
                   "prototypeId": {
                     "description": "The referenced Id, authored literally or through a Text state cell; it must resolve at validation.",
+                    "title": "DocumentIdentifier",
                     "type": "string"
                   }
                 },
                 "required": [
                   "prototypeId"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "title": "WorldLookSourceCreation"
               }
-            ]
+            ],
+            "title": "WorldLookSource"
           },
           "scale": {
             "description": "The uniform render scale. Appearance only \u2014 it does not resize the body\u0027s motion tuning or its collision volume.",
@@ -127,7 +132,8 @@
                     "frame",
                     "holdSeconds"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "title": "WorldLookCue"
                 }
               },
               "dynamics": {
@@ -151,7 +157,8 @@
                 }
               }
             },
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "WorldLookMotion"
           }
         },
         "required": [
@@ -160,7 +167,8 @@
           "scale",
           "motion"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldLook"
       },
       "default": null
     },
@@ -171,5 +179,6 @@
     }
   },
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldLooksSection"
 }

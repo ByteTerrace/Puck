@@ -36,14 +36,7 @@
                   "description": "The capabilities a member acting under this role may be granted through the group principal. Never empty \u2014 a role reaching nothing is a role that could not exist without lying about what it is for.",
                   "type": "array",
                   "items": {
-                    "description": "The coarse capability verbs a WorldGrant confers \u2014 the closed set the server checks a submission\u0027s WorldPrincipal against at each write boundary. A genre world arrives as different data (new subjects, new sections), never a new capability.",
-                    "enum": [
-                      "Drive",
-                      "Observe",
-                      "Control",
-                      "Mutate",
-                      "Edit"
-                    ]
+                    "$ref": "./common.schema.json#/$defs/WorldCapability"
                   }
                 }
               },
@@ -51,7 +44,8 @@
                 "name",
                 "capabilities"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "title": "WorldGroupRole"
             }
           },
           "ownershipPolicy": {
@@ -61,21 +55,24 @@
               "LeaderDecides",
               "RoundRobin",
               "FreeForAll"
-            ]
+            ],
+            "title": "WorldGroupOwnershipPolicy"
           },
           "lifetime": {
             "description": "The lifetime/persistence policy (see WorldGroupLifetime) \u2014 runtime groups only.",
             "enum": [
               "Ephemeral",
               "Persistent"
-            ]
+            ],
+            "title": "WorldGroupLifetime"
           },
           "evictionPolicy": {
             "description": "What a kick does to the kicked member\u0027s row \u2014 and, under Disband, to the whole group (see WorldGroupEvictionPolicy).",
             "enum": [
               "Remove",
               "Disband"
-            ]
+            ],
+            "title": "WorldGroupEvictionPolicy"
           },
           "capacity": {
             "description": "The maximum concurrent members a group of this kind admits \u2014 one minor authored field within MaxMembersPerGroup, the population ceiling this substrate is bounded against.",
@@ -98,7 +95,8 @@
           "evictionPolicy",
           "capacity"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldGroupKind"
       }
     },
     "groups": {
@@ -113,6 +111,7 @@
         "properties": {
           "id": {
             "description": "The group\u0027s stable id, unique within Groups \u2014 the token Group carries as a grant principal. SafeName-typed (the For precedent: a scoped session\u0027s process-local instance name is composed from this id, literal separators and all, in WorldSessionResolver.MintInstanceName \u2014 typing it here is what makes that composition injective by construction rather than by an escaping step downstream that could collapse two distinct ids onto one name).",
+            "title": "SafeName",
             "type": "string"
           },
           "kindName": {
@@ -123,6 +122,7 @@
             "description": "The current membership \u2014 flat only: every entry is a principal, never a group (a Group entry is refused by name \u2014 a member holding another group\u0027s memberships by proxy is exactly what flat membership forbids), and never World/ Document (neither is a real actor a hold could ever reach). Bounded by the kind\u0027s own Capacity.",
             "type": "array",
             "items": {
+              "title": "WorldPrincipal",
               "type": "string"
             }
           },
@@ -146,7 +146,8 @@
           "kindName",
           "members"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldGroup"
       }
     },
     "ownership": {
@@ -167,14 +168,16 @@
                 "description": "The subject flavor.",
                 "enum": [
                   "Group"
-                ]
+                ],
+                "title": "OwnershipSubjectKind"
               },
               "id": {
                 "description": "The subject\u0027s stable id \u2014 a group id for Group.",
                 "type": "string"
               }
             },
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "OwnershipSubject"
           },
           "owner": {
             "description": "Who owns it.",
@@ -186,10 +189,12 @@
                   "Principal",
                   "Group",
                   "Escrow"
-                ]
+                ],
+                "title": "OwnershipOwnerKind"
               },
               "principal": {
                 "description": "The owning principal for Principal; null otherwise. Never Group \u2014 a group owner is spelled through GroupId, not this field, so the two branches never overlap.",
+                "title": "WorldPrincipal",
                 "type": [
                   "string",
                   "null"
@@ -211,10 +216,12 @@
                 "properties": {
                   "offerer": {
                     "description": "The principal that placed the subject into escrow \u2014 the sole reclaim beneficiary.",
+                    "title": "WorldPrincipal",
                     "type": "string"
                   },
                   "recipient": {
                     "description": "The principal named to accept the subject \u2014 the sole accept beneficiary. Never equal to Offerer (refused by name \u2014 an offer to oneself is not a trade).",
+                    "title": "WorldPrincipal",
                     "type": "string"
                   },
                   "deadlineTick": {
@@ -222,17 +229,20 @@
                     "type": "integer"
                   }
                 },
-                "additionalProperties": false
+                "additionalProperties": false,
+                "title": "OwnershipEscrow"
               }
             },
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "OwnershipOwner"
           }
         },
         "required": [
           "subject",
           "owner"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldOwnership"
       }
     }
   },
@@ -242,5 +252,6 @@
     "ownership"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldGroupsSection"
 }

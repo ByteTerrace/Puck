@@ -53,6 +53,25 @@ test('atPath resolves the root and a plain nested section', () => {
   assert.ok(state.schema.properties.world);
 });
 
+test('atPath resolves a state.world row through the bundle\'s own $defs, to the def titled WorldStateRow', () => {
+  const walker = resolve(bundle);
+  const row = walker.atPath(['state', 'world', 0]);
+  assert.equal(walker.title(row), 'WorldStateRow');
+  assert.equal(bundle['$defs'].WorldStateRow.title, 'WorldStateRow', 'the bundle def itself must carry a matching title');
+});
+
+test('a nullable $ref site (anyOf: [{$ref}, {type: "null"}]) reports nullable and resolves through to the referenced shape\'s own children', () => {
+  const walker = resolve(bundle);
+  // `state` itself is exactly this site — WorldDefinition.State is a nullable reference to the
+  // shared WorldStateSection def (see WorldSchema.Bundle's own BuildReferenceSite).
+  const rawState = bundle.properties.state;
+  assert.ok(Array.isArray(rawState.anyOf) && rawState.anyOf.length === 2, 'fixture assumption: state is bundle-wrapped as anyOf: [{$ref}, {type: "null"}]');
+  const state = walker.atPath(['state']);
+  assert.equal(walker.isNullable(state), true);
+  assert.equal(classify(state), 'object');
+  assert.ok(state.schema.properties.world, 'children resolve through to the referenced WorldStateSection def, not the wrapper');
+});
+
 test('rootSections lists every root property, in schema order, with descriptions where the bundle has one', () => {
   const walker = resolve(bundle);
   const sections = walker.rootSections();
@@ -66,10 +85,12 @@ test('a state.world row resolves, and its kind-conditional value/min/max/cells r
   const walker = resolve(bundle);
   const rowPath = ['state', 'world', 0];
 
-  // No document: the raw, unrefined shape — value stays the general anyOf.
+  // No document: the raw, unrefined shape — value stays the general anyOf. `value` itself is a
+  // bundle $ref (ShapeNonNullable); atPath is what resolves it, not a bare property read.
   const bare = walker.atPath(rowPath);
   assert.equal(classify(bare), 'object');
-  assert.ok(Array.isArray(bare.schema.properties.value.anyOf), 'value should be the unrefined anyOf without a document');
+  const bareValue = walker.atPath([...rowPath, 'value']);
+  assert.ok(Array.isArray(bareValue.schema.anyOf), 'value should be the unrefined anyOf without a document');
 
   // With a document declaring kind: Int, value/min/max narrow to plain integers and a cell's
   // own value narrows the same way.
@@ -102,6 +123,21 @@ test('a discriminated anyOf union resolves the arm a supplied document actually 
   assert.equal(resolved.union.key, '$type');
   assert.equal(resolved.union.selected, 'slot');
   assert.notEqual(classify(resolved), 'union'); // an arm was picked -> classify reports the arm's own kind
+});
+
+test('defaultFor resolves a hoisted union arm\'s own $ref, not an empty stub', () => {
+  const walker = resolve(bundle);
+  const domainNode = walker.atPath(['state', 'world', 0, 'domain']);
+  // Each arm now lives as its own bundle def (StateDomainKeysOf, StateDomainSlot, ...); the raw
+  // schema references them by $ref, resolved by findDiscriminatedArms/deref before an arm ever
+  // reaches `union.arms` — defaultFor has to walk through the SAME resolution. "keysOf" (its own
+  // def, StateDomainKeysOf) carries a REQUIRED "row" field beside "$type" — an unresolved $ref
+  // stub could produce "$type" alone (from the arm's own `const`) but never "row" too.
+  const keysOfArm = domainNode.union.arms.find(arm => arm.value === 'keysOf');
+  assert.ok(keysOfArm, 'fixture assumption: domain has a keysOf arm');
+  const built = walker.defaultFor({ path: domainNode.path, schema: domainNode.schema, union: { ...domainNode.union, selected: 'keysOf' } });
+  assert.equal(built.$type, 'keysOf');
+  assert.equal(typeof built.row, 'string', `defaultFor(domain=keysOf) should resolve StateDomainKeysOf's own "row" field, got ${JSON.stringify(built)}`);
 });
 
 test('defaultFor builds a minimal object the walker can itself walk back over', () => {

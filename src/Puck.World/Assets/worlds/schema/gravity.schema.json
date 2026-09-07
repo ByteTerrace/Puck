@@ -10,7 +10,8 @@
         "Pairwise",
         "FastMonopole",
         "AdaptiveFmm"
-      ]
+      ],
+      "title": "WorldGravitySolver"
     },
     "gravitationalConstant": {
       "description": "The non-negative proportionality constant applied to every source mass.",
@@ -43,7 +44,8 @@
           "placementId",
           "mass"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldGravityAttractor"
       }
     },
     "uniform": {
@@ -82,7 +84,8 @@
           "surfaceGravity",
           "referenceRadius"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldGravityPoint"
       },
       "default": null
     },
@@ -112,7 +115,8 @@
             "enum": [
               "Combine",
               "Replace"
-            ]
+            ],
+            "title": "WorldGravityAreaMode"
           },
           "bounds": {
             "description": "The placement-relative analytic bound. Boundary points are included.",
@@ -135,7 +139,8 @@
                 "required": [
                   "radius"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "title": "WorldGravityAreaBoundsSphereBounds"
               },
               {
                 "description": "A yaw-oriented box centered on the riding placement.",
@@ -151,9 +156,11 @@
                 "required": [
                   "halfExtents"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "title": "WorldGravityAreaBoundsBoxBounds"
               }
-            ]
+            ],
+            "title": "WorldGravityAreaBounds"
           },
           "acceleration": {
             "description": "The placement-relative acceleration form.",
@@ -176,7 +183,8 @@
                 "required": [
                   "value"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "title": "WorldGravityAreaAccelerationDirectional"
               },
               {
                 "description": "A constant-magnitude acceleration directed toward the placement origin.",
@@ -192,9 +200,11 @@
                 "required": [
                   "magnitude"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "title": "WorldGravityAreaAccelerationRadial"
               }
-            ]
+            ],
+            "title": "WorldGravityAreaAcceleration"
           }
         },
         "required": [
@@ -204,7 +214,8 @@
           "bounds",
           "acceleration"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldGravityArea"
       },
       "default": null
     },
@@ -220,5 +231,6 @@
     "attractors"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldGravity"
 }
