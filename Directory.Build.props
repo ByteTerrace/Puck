@@ -95,20 +95,23 @@
 
     <ItemGroup>
         <AdditionalFiles Include="$(MSBuildThisFileDirectory)CodeMetricsConfig.txt" />
+        <!-- win-x64/linux-x64 native binaries: meaningless on browser-wasm (a wasm-hosted allocator, "mimalloc.wasm",
+             already rides the Mono runtime pack itself) and otherwise copied into every RID's output regardless of
+             which native host will ever load them. -->
         <None
-            Condition="Exists('$(MSBuildThisFileDirectory)lib\win-x64\mimalloc-3.3\bin\mimalloc.dll')"
+            Condition="Exists('$(MSBuildThisFileDirectory)lib\win-x64\mimalloc-3.3\bin\mimalloc.dll') AND ('$(RuntimeIdentifier)' != 'browser-wasm')"
             CopyToOutputDirectory="PreserveNewest"
             Include="$(MSBuildThisFileDirectory)lib\win-x64\mimalloc-3.3\bin\mimalloc.dll"
             Link="mimalloc.dll"
         />
         <None
-            Condition="Exists('$(MSBuildThisFileDirectory)lib\win-x64\mimalloc-3.3\bin\mimalloc-redirect.dll')"
+            Condition="Exists('$(MSBuildThisFileDirectory)lib\win-x64\mimalloc-3.3\bin\mimalloc-redirect.dll') AND ('$(RuntimeIdentifier)' != 'browser-wasm')"
             CopyToOutputDirectory="PreserveNewest"
             Include="$(MSBuildThisFileDirectory)lib\win-x64\mimalloc-3.3\bin\mimalloc-redirect.dll"
             Link="mimalloc-redirect.dll"
         />
         <None
-            Condition="Exists('$(MSBuildThisFileDirectory)lib\linux-x64\mimalloc-3.3\lib\libmimalloc.so.3.3')"
+            Condition="Exists('$(MSBuildThisFileDirectory)lib\linux-x64\mimalloc-3.3\lib\libmimalloc.so.3.3') AND ('$(RuntimeIdentifier)' != 'browser-wasm')"
             CopyToOutputDirectory="PreserveNewest"
             Include="$(MSBuildThisFileDirectory)lib\linux-x64\mimalloc-3.3\lib\libmimalloc.so.3.3"
             Link="libmimalloc.so"

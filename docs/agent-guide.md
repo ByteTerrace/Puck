@@ -159,6 +159,48 @@ numbers as current — they were taken on a machine and a suite nothing in the t
 can reproduce. If performance work becomes necessary, the honest first step is
 building an instrument in a real project, not reviving a quarantined one.
 
+### Browser engine changes (`Puck.World.Browser`)
+
+`unset C_INCLUDE_PATH` first if the machine has a Cosmocc toolchain installed
+(see "Hardware and toolchain cautions" below) — otherwise every native asset
+compile in the steps below fails with cryptic libc header collisions that have
+nothing to do with the change under test.
+
+```powershell
+dotnet build src/Puck.World.Browser -c Release
+dotnet test tests/Puck.World.Browser.Tests -c Release
+dotnet publish src/Puck.World.Browser -c Release -r browser-wasm
+```
+
+`tests/Puck.World.Browser.Tests` links `Engine/*.cs` as source and runs under
+the ordinary net10.0 test host — no wasm runtime needed to exercise the pure
+core. The wasm-specific proof is the Node harness, which needs the AppBundle
+the `dotnet publish` line above produces and Node reached through fnm, since
+Node is not on `PATH` on the reference system
+(`FNM_DIR="$APPDATA/fnm" fnm exec --using=26.5.1 -- node ...`):
+
+```powershell
+dotnet publish src/Puck.World.Browser -c Release -r browser-wasm
+cd src/Puck.Dashboard/src/portal
+$env:FNM_DIR = "$env:APPDATA/fnm"; fnm exec --using=26.5.1 -- node --test tests/engine-wasm.test.cjs
+```
+
+That harness skips itself by name (never silently passes) when the AppBundle
+is absent. To re-record the determinism-canary baseline both the native tests
+and the Node harness compare against:
+
+```powershell
+$env:PUCK_BROWSER_PARITY_RECORD = "1"
+dotnet test tests/Puck.World.Browser.Tests -c Release --filter "FullyQualifiedName~BrowserParityRecordingTests"
+Remove-Item Env:\PUCK_BROWSER_PARITY_RECORD
+```
+
+See `src/Puck.World.Browser/README.md` for the AppBundle's real file layout
+and sizes, the exact `[JSExport]` surface, the trim-warning baseline, and the
+one verified scope boundary (no emulator core, so a document authoring a
+`screens[].source.machine` engine — the shipped island's arcade district among
+them — refuses by name rather than crashing).
+
 ## World documents
 
 The validator is the thick semantic gate. A valid document must be buildable;
@@ -247,6 +289,15 @@ framed as unverified when no device run exists.
   because the App Control behaviour is a property of the machine and will bite
   the next thing that loads a fresh Debug binary, not because those scripts are
   reachable: they are quarantined under `experimental/` and never run.
+- A machine with a Cosmocc toolchain installed may carry `C_INCLUDE_PATH`
+  pointing at its `include` directory in the ambient shell environment. That
+  path leaks into every `clang`/emscripten invocation a `Puck.World.Browser`
+  `browser-wasm` build or publish shells out to and collides with
+  emscripten's own libc headers (`COSMOPOLITAN_C_START_` redefined, `bool32`
+  unknown type, dozens of "expected function body after function declarator"
+  errors from `libc/calls/calls.h`). `unset C_INCLUDE_PATH` before building or
+  publishing that project; this is host contamination, not a project or
+  workload defect.
 
 Engineering doctrine — the current request outranking artifacts, gates
 asserting observable contracts only, supergreen, determinism pinning the

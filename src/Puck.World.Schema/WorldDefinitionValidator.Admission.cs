@@ -149,7 +149,7 @@ public static partial class WorldDefinitionValidator {
     // directly rather than re-deriving them. Grant TEMPLATE rows are checked against the same subject-bounds/
     // exclusive-over-all rules ValidateGrants applies; Budget/exclusivity legitimacy is WorldServer.Grant's decision
     // at admission time, not this pass's.
-    private static void ValidateAdmission(IReadOnlyList<WorldAdmissionEntry>? entries, int populationCapacity, List<string> errors) {
+    private static void ValidateAdmission(IReadOnlyList<WorldAdmissionEntry>? entries, int populationCapacity, List<string> errors, ICollection<string>? deferred) {
         if (entries is not { Count: > 0 } rows) {
             return;
         }
@@ -248,7 +248,17 @@ public static partial class WorldDefinitionValidator {
                         MaximumAge: null
                     );
 
-                    entry.Validate();
+                    entry.ValidateShape();
+
+                    // ECDsa.Create() has no browser-wasm backing (no native crypto surface Mono's browser host
+                    // exposes it through); a browser Parse/ParseFragment defers the key-material check rather than
+                    // failing every admission row outright, and reports the deferral by name so a caller can tell
+                    // "this row's shape is sound but its key was never imported" from "this row is wrong".
+                    if (OperatingSystem.IsBrowser()) {
+                        deferred?.Add(item: $"{path}: public-key import/curve verification deferred — ECDsa is unavailable on this platform.");
+                    } else {
+                        entry.ValidateKeyMaterial();
+                    }
                 } catch (ArgumentException exception) {
                     errors.Add(item: $"{path}: {exception.Message}");
                 }

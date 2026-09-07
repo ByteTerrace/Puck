@@ -279,6 +279,13 @@
              stub is unrecoverable in-band by construction rather than by policy, and this empty closure is what
              proves that rather than merely stating it. -->
         <PuckArchitectureProfile Include="Puck.Launcher.Stub" Closure="" />
+        <!-- The browser-wasm engine (docs/project-map.md's Puck.World.Browser row): Schema's own exact closure plus
+             Puck.World.Schema itself, since this project references it directly. Composition-roots layer, same as
+             every other host that composes a whole world document and runs it standalone — this one runs it inside
+             a browser tab instead of a desktop process. Exact equality is what proves this project never grows a
+             Presentation, Backends, or Puck.World.Server edge just because it happens to sit at Composition roots'
+             rank: nothing here renders, hosts a network peer, or runs authoritative mutation. -->
+        <PuckArchitectureProfile Include="Puck.World.Browser" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.Text;Puck.World.Authoring;Puck.World.Schema" />
     </ItemGroup>
 
     <!--

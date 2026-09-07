@@ -51,8 +51,8 @@ been quarantined out of the repository.
 
 ```text
 Optional extensions      Puck.World.AgentBridge  Puck.World.AgentHarness
-Composition roots        Puck.Actors  Puck.Azure.Functions  Puck.Launcher.Stub
-                         Puck.World  Puck.World.Silo
+Composition roots        Puck.Actors  Puck.Launcher.Stub  Puck.World
+                         Puck.World.Browser  Puck.World.Silo
 Validation               Puck.AdvancedGamingBrick.Post  Puck.GamingBricks.Post
                          Puck.HumbleGamingBrick.Post
 Engine services          Puck.AdvancedGamingBrick
@@ -89,8 +89,8 @@ Leaf contracts and data  Puck.Abstractions  Puck.Assets  Puck.Attestation
                          Puck.Shaders.Tests  Puck.SignedDistance.Tests
                          Puck.State.Tests  Puck.Text.Tests
                          Puck.World.Agents.Tests  Puck.World.Azure.Tests
-                         Puck.World.Protocol.Tests  Puck.World.Schema.Tests
-                         Puck.World.Tests
+                         Puck.World.Browser.Tests  Puck.World.Protocol.Tests
+                         Puck.World.Schema.Tests  Puck.World.Tests
 (Tool)                   Puck.Cli
 (Analyzer)               Puck.Analyzers
 ```
@@ -205,6 +205,7 @@ Cross-backend parity has one on-demand check: `puck parity` boots the real windo
 |---|---|
 | `Puck.World` | Document-driven (`puck.world.def.v1`, five checked-in charter/dev worlds plus the Four Corners stress examples, `--world`) network-shaped multiplayer host: fixed-point player state, automatic ownership handoff across invisible authored adjacencies, cross-authority neighbour projection/ghost rendering, a runtime mutation/journal/undo protocol vocabulary, principals + capability grants (addons included), per-player owned identity worlds (ordinary `puck.world.def.v1` documents carrying an `identity` section) with bindings layered onto the `Puck.Commands` stack, owned-world cloud sync through `Puck.Storage` (`storage.*` verbs), session write-back, native self-recording (`puck.recording.v1`, `--recording`, `capture.*` verbs), camera probes (the `probes` document section's live host `WorldProbes` — probe lifecycle, `probe.<name>` command axes, presentation-parameter and camera-control bindings — plus the `probe.status`/`probe.record` verbs), and SDF world rendering. The seat/roster/fly-camera/scene-emitter surface itself lives in `Puck.World.Client`, which this project references; `Puck.World` retains the audio director, the frame source, and every `*CommandModule`/document-hook root that needs the live server or a root-only composition type directly. Verify game behavior by running it. |
 | `Puck.World.Silo` | The second substrate driving the moved `Puck.World.Server` host engine (`WorldInstanceHost`, boot-free): an Orleans silo (`--silo <puck.silo.def.v1 path>`) whose grains (`WorldGrain`, keyed by owner oid + world id) carry activation lifecycle only — game traffic never rides the Orleans wire, only the same `WorldPeerCall` the desktop uses. `WorldSiloHost` owns one boot-free `WorldInstanceHost`, an activation mailbox drained on the one tick thread `Puck.Launcher`'s headless terminal pumps, and per-row federation identity/checkpoint bookkeeping. `SiloCommandModule` carries `silo.status`/`.grains`/`.publish`/`.activate`/`.deactivate`/`.checkpoint`. References `Puck.World.Server`, `Puck.World.Protocol`, `Puck.World.Schema`, `Puck.World.Console`, `Puck.World.Client`, `Puck.Commands`, `Puck.Hosting`, `Puck.Launcher`, `Puck.Storage` (`Puck.Networking` only transitively, through `Puck.World.Server`). |
+| `Puck.World.Browser` | The engine embedded in a browser tab: a `browser-wasm` publish of `Puck.World.Schema` + `Puck.State` behind a JSON-string `[JSExport]` surface (`Version`/`Parse`/`ParseFragment`/`Canonicalize`/`Compile`/`Release`/`Rows`/`Rebind`/`Judge`/`ReadRow`/`WriteRow`/`Evaluate`/`BoardMask`/`StateHash`/`Cells`) — the studio's (`src/Puck.Dashboard`) native validator and rule tick, replacing its TypeScript twin. `Engine/` is pure C# (no JS-interop attribute), linked as source into `tests/Puck.World.Browser.Tests` since a browser-wasm exe cannot be referenced as an ordinary assembly; `Exports/` is the `[JSExport]` marshalling shim alone. Installs its own minimal `WorldExtensionVocabularyHook`/`WorldProbeVocabularyHook` wiring (every predicate answers "not registered" — this build ships no emulator core, shader catalog, or probe kind of its own), so a document naming a `screens[].source.machine` engine (arcade cabinets in the shipped island) refuses by name rather than crashing on an uninstalled hook. Same lane-profile discipline as every other exact-equality row: Schema's own closure plus `Puck.World.Schema` itself, no `Puck.World.Protocol`/`Puck.World.Server`/presentation/backend edge. |
 | `Puck.Launcher.Stub` | The self-update stub: an install's actual entry point once `Puck.Launcher.AddSelfUpdate` is registered. References nothing but the BCL — an empty lane-profile closure enforces this — so it parses no manifest and shares no code with the app it launches. Reads `current`/`last-good`/per-version `state-generation` and the health attempt counter beside itself, decides via the pure `StubDecisionTable`, `Process.Start`s the staged app with pass-through argv and inherited stdio, and forwards its exit code. Deliberately exempt from the mechanism it drives: a bricked stub needs a reinstall. |
 | `Puck.HumbleGamingBrick.Post` | Humble core conformance, determinism, reference-ROM, save, and cross-generation link battery. |
 | `Puck.AdvancedGamingBrick.Post` | Advanced core conformance, determinism, commercial-ROM, link, co-simulation, and diagnostic tooling. |
@@ -231,6 +232,7 @@ filter somewhere else.
 | Path | Purpose |
 |---|---|
 | `docs/examples/` | Reference documents for the live authoring families: `creations/` (`puck.creation.v1`) and `tunes/` (`puck.audio.v1`). Nothing loads them; they are read by hand. |
+| `src/Puck.Dashboard/` | The world-authoring studio: a TypeScript/React portal (`src/portal`) plus a module-federation host (`src/host`), outside `Puck.slnx` and the architecture gate — no `<PuckKind>`/`<PuckLayer>`, built and tested through `npm`, never `dotnet`. Edits `puck.world.def.v1` documents and previews their rules; `Puck.World.Browser`'s `browser-wasm` publish is its native engine. |
 | `src/Puck.Cli/` | The `puck` developer CLI, a first-class solution project: content search (`search`), the `Puck.Maths` benchmark microscope (`bench`), source sweeps (`scan`), the convention rewriters (`format`), the symbol-analysis verbs (`references`, `declarations`), and the layering report (`architecture`). Kind `Tool`: it consumes the tree and nothing consumes it. |
 | `src/Puck.Probes/` | The repository's Roslyn probes — the `[VerifiedCode]` brand enforcement (VER001–VER010) and its code fixes. Kind `Probe`: `Directory.Build.props` hands it to every project as a compiler extension (`OutputItemType="Probe"`, `ReferenceOutputAssembly="false"`), which is why it never appears in any project's resolved reference set. |
 | `build/` | Build policy the whole tree imports: the `[VerifiedCode]` marker source, the architecture ledger (`Architecture.props`), the gate (`Puck.Architecture.targets` + `PuckArchitectureGate.cs`), and the NuGet packaging policy (`Packaging.targets` — shared version and metadata, applied only to projects that opt in with `<IsPackable>true</IsPackable>`; the tree default is `false`). |

@@ -861,7 +861,16 @@ public static partial class WorldDefinitionValidator {
         public HashSet<string> PrototypeIds { get; set; } = [];
     }
 
-    private static WorldRuleCompilation? ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, bool retainCompilation = false) {
+    private static WorldRuleCompilation? ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, bool retainCompilation = false) =>
+        ValidateCore(definition, neighbours, validateAdjacencyClaims, retainCompilation, throwOnErrors: true, errorSink: null, deferredSink: null);
+
+    // The collecting twin ValidateCore's throwing overload wraps: throwOnErrors selects RefuseCollected's
+    // aggregate-and-throw ending (every existing caller) versus copying the same per-message list into errorSink and
+    // returning a compilation only when the candidate is sound — the shape TryValidateLocally's structured-errors
+    // overload needs (BrowserErrorPaths, the ratchet test) without a second walk of the whole document. deferredSink
+    // carries ValidateAdmission's platform-deferred notices (see TrustListEntry.ValidateShape/ValidateKeyMaterial) —
+    // never populated when throwOnErrors is true, since none of those callers read it.
+    private static WorldRuleCompilation? ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, bool retainCompilation, bool throwOnErrors, ICollection<string>? errorSink, ICollection<string>? deferredSink) {
         ArgumentNullException.ThrowIfNull(definition);
 
         var errors = new List<string>();
@@ -1910,11 +1919,23 @@ public static partial class WorldDefinitionValidator {
         ValidateAdmission(
             entries: definition.Admission,
             populationCapacity: definition.Population.Capacity,
-            errors: errors
+            errors: errors,
+            deferred: deferredSink
         );
 
-        RefuseCollected(errors: errors);
-        return retainCompilation ? new WorldRuleCompilation(definition, compiledRules, compiledInteractions, WorldRuleCompilation.CompileTables(definition, ruleContext)) : null;
+        if (throwOnErrors) {
+            RefuseCollected(errors: errors);
+
+            return retainCompilation ? new WorldRuleCompilation(definition, compiledRules, compiledInteractions, WorldRuleCompilation.CompileTables(definition, ruleContext)) : null;
+        }
+
+        if (errorSink is not null) {
+            foreach (var error in errors) {
+                errorSink.Add(item: error);
+            }
+        }
+
+        return ((retainCompilation && (errors.Count == 0)) ? new WorldRuleCompilation(definition, compiledRules, compiledInteractions, WorldRuleCompilation.CompileTables(definition, ruleContext)) : null);
     }
     private static void RefuseCollected(List<string> errors) {
         if (errors.Count > 0) {
@@ -2011,6 +2032,39 @@ public static partial class WorldDefinitionValidator {
     /// <param name="compilation">The validated programs, or null on failure.</param>
     /// <returns>Whether the document-local facts are valid.</returns>
     public static bool TryValidateLocally(WorldDefinition definition, out string reason, out WorldRuleCompilation? compilation) => TryValidateLocallyCore(definition, out reason, out compilation, retainCompilation: true);
+
+    /// <summary>Validates document-local facts into <paramref name="errors"/> as individual, unflattened messages —
+    /// skipping <see cref="RefuseCollected"/>'s aggregate-and-throw ending — and returns the same compiled programs
+    /// as <see cref="TryValidateLocally(WorldDefinition, out string, out WorldRuleCompilation?)"/> on success. The
+    /// minimal honest step toward a full <c>(path, message)</c> sweep: most messages here still carry no leading
+    /// path token (<c>BrowserErrorPaths</c> splits the ones that do), which is exactly what
+    /// <c>ValidatorMessagePathRatchetTests</c> measures so that sweep stays visible as work rather than silently
+    /// forgotten.</summary>
+    /// <param name="definition">The candidate, whose collections must remain unchanged through installation.</param>
+    /// <param name="errors">Every collected message is added here, in validation order; empty when the candidate is sound.</param>
+    /// <param name="compilation">The validated programs, or <see langword="null"/> when any message was added.</param>
+    /// <returns><see langword="true"/> when no message was added.</returns>
+    public static bool TryValidateLocally(WorldDefinition definition, ICollection<string> errors, out WorldRuleCompilation? compilation) => TryValidateLocally(definition, errors, deferred: null, out compilation);
+
+    /// <summary>The same structured-errors validation as
+    /// <see cref="TryValidateLocally(WorldDefinition, ICollection{string}, out WorldRuleCompilation?)"/>, additionally
+    /// collecting the admission section's platform-deferred notices (a browser runtime cannot run
+    /// <see cref="Puck.Attestation.TrustListEntry.ValidateKeyMaterial"/>'s ECDsa import/curve check —
+    /// see its own remarks) into <paramref name="deferred"/> rather than treating them as errors.</summary>
+    /// <param name="definition">The candidate, whose collections must remain unchanged through installation.</param>
+    /// <param name="errors">Every collected message is added here, in validation order; empty when the candidate is sound.</param>
+    /// <param name="deferred">Every platform-deferred admission notice is added here, or <see langword="null"/> to discard them.</param>
+    /// <param name="compilation">The validated programs, or <see langword="null"/> when any message was added.</param>
+    /// <returns><see langword="true"/> when no message was added.</returns>
+    public static bool TryValidateLocally(WorldDefinition definition, ICollection<string> errors, ICollection<string>? deferred, out WorldRuleCompilation? compilation) {
+        ArgumentNullException.ThrowIfNull(argument: errors);
+
+        var before = errors.Count;
+
+        compilation = ValidateCore(definition, neighbours: null, validateAdjacencyClaims: false, retainCompilation: true, throwOnErrors: false, errorSink: errors, deferredSink: deferred);
+
+        return (errors.Count == before);
+    }
 
     private static bool TryValidateLocallyCore(WorldDefinition definition, out string reason, out WorldRuleCompilation? compilation, bool retainCompilation) {
         compilation = null;

@@ -8,6 +8,9 @@ namespace Puck.State;
 public sealed class RuleTraceEvaluation {
     /// <summary>Gets the simulation tick the evaluation ran on.</summary>
     public ulong Tick { get; init; }
+    /// <summary>Gets the name of the rule this evaluation belongs to — always populated, single-rule or
+    /// all-rules capture alike (see <see cref="RuleEvaluator.ArmTraceAll"/>).</summary>
+    public string Rule { get; init; } = "";
     /// <summary>Gets the forEach key bound for this evaluation, or <see langword="null"/> for an unbound rule.</summary>
     public string? EachKey { get; init; }
     /// <summary>Gets each binding as <c>name=value</c>, or <c>name=refused</c> for one that could not evaluate.</summary>
@@ -59,6 +62,7 @@ public sealed partial class RuleEvaluator {
     private readonly List<RuleRuntimeDiagnostic> m_refusals = [];
     private readonly List<RuleTraceEvaluation> m_traceCaptured = [];
     private string? m_traceRule;
+    private bool m_traceAll;
     private int m_traceWanted;
     private RuleTraceEvaluation? m_traceEntry;
     private string? m_traceEffectValue;
@@ -83,7 +87,27 @@ public sealed partial class RuleEvaluator {
         }
 
         m_traceRule = rule;
+        m_traceAll = false;
         m_traceWanted = evaluations;
+        m_traceCaptured.Clear();
+
+        return true;
+    }
+    /// <summary>Arms a capture of every rule's evaluations over the next judged tick, replacing any earlier capture —
+    /// the browser engine's <c>Judge</c> export reads this rather than the single-rule
+    /// <see cref="ArmTrace"/>, since a caller with no prior read-back cannot name which rule fired. Each captured
+    /// entry's own <see cref="RuleTraceEvaluation.Rule"/> says which rule it belongs to.</summary>
+    /// <param name="maxEvaluations">The most evaluations to capture across every rule combined, 1..a caller-chosen
+    /// ceiling — a forEach-heavy document can otherwise produce an unbounded capture in one run.</param>
+    /// <returns><see langword="false"/> when the count is out of range.</returns>
+    public bool ArmTraceAll(int maxEvaluations) {
+        if (maxEvaluations < 1) {
+            return false;
+        }
+
+        m_traceRule = null;
+        m_traceAll = true;
+        m_traceWanted = maxEvaluations;
         m_traceCaptured.Clear();
 
         return true;
@@ -91,9 +115,10 @@ public sealed partial class RuleEvaluator {
     /// <summary>Disarms the capture and discards what it captured.</summary>
     /// <returns><see langword="true"/> when a capture was armed.</returns>
     public bool DisarmTrace() {
-        var armed = (m_traceRule is not null);
+        var armed = ((m_traceRule is not null) || m_traceAll);
 
         m_traceRule = null;
+        m_traceAll = false;
         m_traceWanted = 0;
         m_traceCaptured.Clear();
 
@@ -179,11 +204,13 @@ public sealed partial class RuleEvaluator {
     // Null unless this rule is the armed one and the capture still has room; the entry stays current through the
     // evaluation's bindings, gate, and effects and is released by EndTrace.
     private RuleTraceEvaluation? BeginTrace(CompiledRule rule, ulong tick) {
-        if ((m_traceRule is null) || (m_traceCaptured.Count >= m_traceWanted) || !string.Equals(a: m_traceRule, b: rule.Name, comparisonType: StringComparison.Ordinal)) {
+        var armed = (m_traceAll || ((m_traceRule is not null) && string.Equals(a: m_traceRule, b: rule.Name, comparisonType: StringComparison.Ordinal)));
+
+        if (!armed || (m_traceCaptured.Count >= m_traceWanted)) {
             return null;
         }
 
-        var entry = new RuleTraceEvaluation { Tick = tick, EachKey = BoundEachKey };
+        var entry = new RuleTraceEvaluation { Tick = tick, EachKey = BoundEachKey, Rule = rule.Name };
 
         m_traceCaptured.Add(item: entry);
         m_traceEntry = entry;

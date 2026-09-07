@@ -180,3 +180,34 @@ jobs:
           name: gb-post-frontier
           path: artifacts/gb-post
           if-no-files-found: error
+
+  browser:
+    if: ${{ github.event_name != 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install the wasm-tools workload
+        run: dotnet workload install wasm-tools
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "26.5.1"
+
+      - name: Build Puck.World.Browser
+        run: dotnet build src/Puck.World.Browser --configuration Release
+
+      - name: Test the pure Engine core
+        run: dotnet test tests/Puck.World.Browser.Tests --configuration Release
+
+      - name: Publish the browser-wasm AppBundle
+        run: dotnet publish src/Puck.World.Browser --configuration Release -r browser-wasm
+
+      - name: Run the Node harness against the AppBundle
+        working-directory: src/Puck.Dashboard/src/portal
+        run: node --test tests/engine-wasm.test.cjs

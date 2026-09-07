@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <!-- CreationCanonicalizer.Canonicalize calls Puck.Assets.Documents.DocumentCanonicalizer.Canonicalize<T>,
+             which carries RequiresUnreferencedCode (reflection-based JsonSerializer). -->
         <IsAotCompatible>false</IsAotCompatible>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Engine services</PuckLayer>

@@ -1166,6 +1166,77 @@ public static class WorldDefinitionFileSource {
             reason: out reason,
             validateAdjacencyClaims: false
         );
+    // A fully in-memory IWorldDocumentSource for TryComposeFragmentBytes: the two names the synthetic root below
+    // ever names ("host", "fragment") resolve to caller-supplied bytes, never a file. Any other name is a fragment
+    // or host that itself declares basis/imports of its own — refused by name, since neither this entry point nor
+    // its caller (a browser runtime with no filesystem) can resolve a further file reference.
+    private sealed class InMemoryDocumentSource(byte[] host, byte[] fragment) : IWorldDocumentSource {
+        public bool TryRead(string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
+            resolvedName = name;
+
+            switch (name) {
+                case "host":
+                    content = host;
+                    reason = string.Empty;
+
+                    return true;
+                case "fragment":
+                    content = fragment;
+                    reason = string.Empty;
+
+                    return true;
+                default:
+                    content = null;
+                    reason = $"'{name}' (named by {referrerName}) resolves to nothing — this composition is in-memory only and carries no further basis or imports beyond the fragment itself.";
+
+                    return false;
+            }
+        }
+    }
+    /// <summary>Composes <paramref name="fragmentBytes"/> under <paramref name="hostBytes"/> entirely in memory —
+    /// no file system read — the way a directory load composes an aliased <c>imports</c> entry
+    /// (<see cref="WorldModuleNamespace.TryApply"/> renames the fragment's own rows under
+    /// <c>&lt;alias&gt;_&lt;name&gt;</c>, <see cref="WorldModuleExports.TryTake"/> and
+    /// <see cref="WorldModuleExports.TryCheckLayers"/> enforce its declared <c>exports</c>), so a fragment fetched as
+    /// bytes over the network composes identically to one loaded from a <c>games/*.world.json</c> file. Neither
+    /// input may itself declare a further <c>basis</c> or <c>imports</c> — this is a single composition step, not a
+    /// recursive resolve, since the caller (a browser runtime) has no file system to resolve one against; either
+    /// carrying one refuses by name through the same <see cref="TryComposeLayers"/> path a directory load runs.
+    /// </summary>
+    /// <param name="hostBytes">The host document's raw bytes (the basis the fragment composes under — e.g. an
+    /// official <c>standard.basis.json</c> fetched by the caller).</param>
+    /// <param name="fragmentBytes">The fragment's raw bytes (a district or game document carrying <c>exports</c>).</param>
+    /// <param name="alias">The alias the fragment composes under — every row it declares appears in the result as
+    /// <c>&lt;alias&gt;_&lt;name&gt;</c>.</param>
+    /// <param name="composed">The composed tree (host plus the aliased fragment) on success; <see langword="null"/> on failure.</param>
+    /// <param name="reason">The one-line refusal reason, or empty on success.</param>
+    /// <returns><see langword="true"/> when the fragment composed under the host.</returns>
+    public static bool TryComposeFragmentBytes(byte[] hostBytes, byte[] fragmentBytes, string alias, out JsonObject? composed, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: hostBytes);
+        ArgumentNullException.ThrowIfNull(argument: fragmentBytes);
+        ArgumentException.ThrowIfNullOrEmpty(argument: alias);
+
+        var root = new JsonObject {
+            [WorldDocumentBasis.BasisMemberName] = "host",
+            [WorldDocumentBasis.ImportsMemberName] = new JsonArray {
+                new JsonObject {
+                    [WorldImport.DocumentMemberName] = "fragment",
+                    [WorldImport.AsMemberName] = alias,
+                },
+            },
+        };
+
+        return TryComposeLayers(
+            ancestors: [],
+            bytes: Encoding.UTF8.GetBytes(s: root.ToJsonString()),
+            composed: out composed,
+            reason: out reason,
+            resolvedPath: "(in-memory fragment composition)",
+            source: new InMemoryDocumentSource(host: hostBytes, fragment: fragmentBytes),
+            stack: out _,
+            touched: out _
+        );
+    }
     /// <summary>Reads the document at <paramref name="path"/> just far enough to resolve its <c>basis</c> member —
     /// the save-side peek <c>world.save</c> uses to decide between a derivation-preserving delta write and a flat
     /// write. The file is the one source of truth for its own derivation; nothing caches this between load and

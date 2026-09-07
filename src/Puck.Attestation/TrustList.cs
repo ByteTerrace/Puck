@@ -67,13 +67,13 @@ public sealed record TrustListEntry(
     /// <summary>
     /// Validates that <see cref="PublicKeySubjectPublicKeyInfo"/> actually hashes to <see cref="PinnedId"/>,
     /// that the pinned algorithm is a known signing algorithm (a sealing key can never admit a claim), that
-    /// the bytes contain exactly one SPKI value that imports as a key on the curve that algorithm names, and
-    /// that the id's shape matches <see cref="Mode"/>. <see cref="TrustList"/> calls this for every entry at
-    /// construction, so an unvalidated list cannot reach the verifier — without that, an entry whose key bytes
-    /// disagree with its pinned id would verify against the bytes while the pin sat there decorative.
+    /// the id's shape matches <see cref="Mode"/>, and every optional duration is well-formed — everything
+    /// <see cref="ValidateKeyMaterial"/> does NOT need to actually import <see cref="PublicKeySubjectPublicKeyInfo"/>
+    /// as a key, so it holds on every platform, including one with no <see cref="ECDsa"/> backing
+    /// (<see cref="OperatingSystem.IsBrowser"/>).
     /// </summary>
     /// <exception cref="ArgumentException">The entry is not self-consistent.</exception>
-    public void Validate() {
+    public void ValidateShape() {
         ValidateOptionalDuration(
             value: MaximumAge,
             name: nameof(MaximumAge)
@@ -102,15 +102,38 @@ public sealed record TrustListEntry(
             throw new ArgumentException(message: $"A trust list entry pins algorithm '{PinnedId.Algorithm}', which is not an attestation SIGNING algorithm — a trust entry can only pin a key that signs.");
         }
 
-        // The two checks above only prove the bytes are self-consistent (they hash to the pinned id) and that the
-        // pinned name is a known signing algorithm — neither ever imports the bytes as an actual key. Malformed SPKI
-        // bytes, a valid SPKI with trailing data, or a well-formed key on the wrong curve for the named algorithm
-        // would otherwise pass this
-        // validation and fail only the first time a live connection tried to verify a signature against them — at
-        // every runtime connection attempt, forever, rather than once. Import it now, the same way
-        // AttestationVerifier.VerifySignature does at actual verification time, and require its curve to match — so a
-        // bad key refuses at validation (boot, for a world's admission section — WorldDefinitionValidator's
-        // ValidateAdmission runs this through TrustList's constructor), by name, never silently deferred.
+        if (
+            (Mode == AttestationTrustMode.Vouches) &&
+            !PinnedId.IsRoot
+        ) {
+            throw new ArgumentException(message: "A vouching trust list entry must pin a root id — the chain it walks is always exactly two hops beneath a root.");
+        }
+
+        if (
+            (Mode == AttestationTrustMode.SignsDirectly) &&
+            (PinnedId.Subject is null)
+        ) {
+            throw new ArgumentException(message: "A directly-signing trust list entry must pin a SUBJECT key — only a subject key signs claims, and a root or issuing key that signed one would be indistinguishable from a binding.");
+        }
+
+        if (
+            (Mode == AttestationTrustMode.SignsDirectly) &&
+            ((RootBindingMaximumAge is not null) || (SubjectBindingMaximumAge is not null))
+        ) {
+            throw new ArgumentException(message: "A directly-signing trust list entry cannot author binding-age policy because no binding is walked beneath it.");
+        }
+    }
+    /// <summary>
+    /// Imports <see cref="PublicKeySubjectPublicKeyInfo"/> the same way <c>AttestationVerifier.VerifySignature</c>
+    /// does at actual verification time and requires its curve to match <see cref="PinnedId"/>'s algorithm, so a
+    /// malformed SPKI, one with trailing bytes, or a well-formed key on the wrong curve refuses once, at validation,
+    /// rather than at every runtime connection attempt forever. Requires <see cref="ECDsa"/>, which has no backing
+    /// on every platform (<see cref="OperatingSystem.IsBrowser"/>) — call only where that is available; a caller
+    /// that cannot defers the check and reports it as deferred rather than as an error (see
+    /// <c>WorldDefinitionValidator.ValidateAdmission</c>).
+    /// </summary>
+    /// <exception cref="ArgumentException">The public key does not decode, import, or match the pinned algorithm's curve.</exception>
+    public void ValidateKeyMaterial() {
         var descriptor = AttestationAlgorithms.Resolve(algorithm: PinnedId.Algorithm);
 
         using var ecdsa = ECDsa.Create();
@@ -137,27 +160,14 @@ public sealed record TrustListEntry(
         )) {
             throw new ArgumentException(message: $"A trust list entry's public key is not on the curve algorithm '{PinnedId.Algorithm}' names.");
         }
-
-        if (
-            (Mode == AttestationTrustMode.Vouches) &&
-            !PinnedId.IsRoot
-        ) {
-            throw new ArgumentException(message: "A vouching trust list entry must pin a root id — the chain it walks is always exactly two hops beneath a root.");
-        }
-
-        if (
-            (Mode == AttestationTrustMode.SignsDirectly) &&
-            (PinnedId.Subject is null)
-        ) {
-            throw new ArgumentException(message: "A directly-signing trust list entry must pin a SUBJECT key — only a subject key signs claims, and a root or issuing key that signed one would be indistinguishable from a binding.");
-        }
-
-        if (
-            (Mode == AttestationTrustMode.SignsDirectly) &&
-            ((RootBindingMaximumAge is not null) || (SubjectBindingMaximumAge is not null))
-        ) {
-            throw new ArgumentException(message: "A directly-signing trust list entry cannot author binding-age policy because no binding is walked beneath it.");
-        }
+    }
+    /// <summary>Validates <see cref="ValidateShape"/> and <see cref="ValidateKeyMaterial"/> together — every check
+    /// this entry needs on a platform with an <see cref="ECDsa"/> backing. <see cref="TrustList"/> calls this for
+    /// every entry at construction, so an unvalidated list cannot reach the verifier.</summary>
+    /// <exception cref="ArgumentException">The entry is not self-consistent.</exception>
+    public void Validate() {
+        ValidateShape();
+        ValidateKeyMaterial();
     }
 }
 /// <summary>
