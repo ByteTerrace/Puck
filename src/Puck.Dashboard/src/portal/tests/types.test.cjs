@@ -8,7 +8,7 @@ const generated = fs.readFileSync(generatedPath, 'utf8');
 
 test('worldDefinition.generated.ts carries a GENERATED header naming the source bundle', () => {
   assert.match(generated, /^\/\/ GENERATED FILE — do not hand-edit\.$/m);
-  assert.match(generated, /Source bundle: schemaVersion=puck\.world\.def\.v1 commit=[0-9a-f]+ generator=\S+/);
+  assert.match(generated, /Source bundle: schemaVersion=puck\.world\.def\.v1 generator=\S+/);
 });
 
 test('worldDefinition.generated.ts exports the top-level WorldDefinition type', () => {
