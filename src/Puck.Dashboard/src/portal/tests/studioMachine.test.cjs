@@ -300,13 +300,8 @@ if (!HAS_FIXTURES) {
     editActor.stop();
   });
 
-  test('supersedable validation: two rapid edits leave only the newer result applied', async () => {
-    // The document region's `editing`/`validating` states are RE-ENTRANT on every document-
-    // mutating event (see studioMachine.ts's own remarks): a second EDIT_DOCUMENT fired
-    // synchronously, before the first's editActor/validateActor invoke has resolved, exits and
-    // re-enters the SAME state, which XState stops the exited invoke for — its eventual result
-    // (the first edit's own onDone/onError) is never applied. Two SYNCHRONOUS sends (no await
-    // between them) below exercise exactly that: the first edit never even reaches `context.document`.
+  test('supersedable validation: rapid edits retain both revisions and validate the latest value', async () => {
+    // Edits commit synchronously and remain undoable; expensive validation is debounced.
     const rapidActor = startActor();
     await waitFor(rapidActor, (s) => s.matches('ready'), { timeout: 120_000 });
     rapidActor.send({
@@ -329,7 +324,7 @@ if (!HAS_FIXTURES) {
 
     assert.equal(settled.context.document.value.metadata.custom.marker, 'second', 'only the newer edit\'s value lands');
     assert.equal(settled.context.document.label, 'set marker to second');
-    assert.equal(settled.context.document.revision, revisionBefore + 1, 'the superseded first edit never became its own revision');
+    assert.equal(settled.context.document.revision, revisionBefore + 2, 'both edits remain in document history');
     assert.deepEqual(settled.context.document.diagnostics, []);
     assert.equal(settled.context.document.validation, 'clean');
 
@@ -599,7 +594,7 @@ if (!HAS_FIXTURES) {
       });
       await waitFor(draftActor, (s) => s.matches({ ready: { document: 'idle' } }), { timeout: 120_000 });
       draftActor.send({ type: 'SAVE_DRAFT', id: 'ttt-draft', title: 'TTT Draft' });
-      await waitFor(draftActor, (s) => s.matches({ ready: { document: 'idle' } }) && s.context.document.cleanRevision === s.context.document.revision, { timeout: 120_000 });
+      await waitFor(draftActor, (s) => s.matches({ ready: { document: 'idle' } }) && s.context.document.savedText === s.context.document.text, { timeout: 120_000 });
     }
 
     const store = draftActor.getSnapshot().context.machineInput.draftStore;

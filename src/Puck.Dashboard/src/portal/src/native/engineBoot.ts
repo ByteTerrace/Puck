@@ -23,6 +23,7 @@ import { createInlineWorldEngine, dynamicImport } from "./inlineHost";
 
 export interface EngineBootOptions {
   mode: "inline" | "worker";
+  signal?: AbortSignal;
   /** Overrides the `fetch` every official object is downloaded through. Meaningful only in
    * `'inline'` mode: a function cannot cross a Web Worker's postMessage boundary, so `'worker'`
    * mode always fetches with the worker's own global `fetch` — see engineWorkerLauncher.ts's own
@@ -48,16 +49,21 @@ function refuseVersionMismatch(official: OfficialLoad, version: { schemaVersion:
 export async function bootEngineFromOfficial(official: OfficialLoad, options: EngineBootOptions): Promise<WorldEngine> {
   const engine =
     options.mode === "worker"
-      ? await (await import("./engineWorkerLauncher")).createWorkerEngine({ kind: "boot", engineFiles: official.engineFiles })
+      ? await (await import("./engineWorkerLauncher")).createWorkerEngine({ kind: "boot", engineFiles: official.engineFiles }, options.signal)
       : await bootEngineFromOfficialFiles({ engineFiles: official.engineFiles }, options.fetchImpl ?? fetch);
 
-  const version = await engine.version();
-  if (version.schemaVersion !== official.build.worldSchema || version.commit !== official.build.commit) {
+  try {
+    options.signal?.throwIfAborted();
+    const version = await engine.version();
+    options.signal?.throwIfAborted();
+    if (version.schemaVersion !== official.build.worldSchema || version.commit !== official.build.commit) {
+      refuseVersionMismatch(official, version);
+    }
+    return engine;
+  } catch (error) {
     await engine.dispose();
-    refuseVersionMismatch(official, version);
+    throw error;
   }
-
-  return engine;
 }
 
 /**

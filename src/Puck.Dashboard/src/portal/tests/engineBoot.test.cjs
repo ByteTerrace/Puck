@@ -201,19 +201,24 @@ if (!ready) {
     const official = await loadOfficial(officialFor(baseUrl), fetch, createByteStore());
 
     // engine.worker.ts reads `self`/`postMessage` from the global scope - fake both so its own
-    // `self.onmessage = ...` top-level assignment attaches here, then drive it exactly as
+    // message event listener attaches here, then drive it exactly as
     // engineBoot.ts's real Worker construction would (a MessageEvent-shaped object in, a captured
     // postMessage call out). This is engine.worker.ts's OWN file under test, not a re-implementation.
     const posted = [];
-    const fakeSelf = { onmessage: null, close: () => {} };
+    let onMessage;
+    const fakeSelf = { onmessage: null, addEventListener: (kind, handler) => {
+      assert.equal(kind, 'message');
+      onMessage = handler;
+    }, close: () => {} };
     global.self = fakeSelf;
     global.postMessage = (message) => posted.push(message);
     try {
       delete require.cache[require.resolve('../src/native/engine.worker.ts')];
       require('../src/native/engine.worker.ts');
-      assert.equal(typeof fakeSelf.onmessage, 'function');
+      assert.equal(fakeSelf.onmessage, null, 'the global handler must stay unset for .NET sidecar detection');
+      assert.equal(typeof onMessage, 'function');
 
-      await fakeSelf.onmessage({ data: { kind: 'boot', engineFiles: official.engineFiles } });
+      await onMessage({ data: { kind: 'boot', engineFiles: official.engineFiles } });
       assert.equal(posted.length, 1);
       assert.equal(posted[0].kind, 'ready');
 
@@ -240,7 +245,7 @@ if (!ready) {
       require('../src/native/engine.worker.ts');
 
       posted.length = 0;
-      await fakeSelf.onmessage({ data: { kind: 'boot', engineFiles: tamperedOfficial.engineFiles } });
+      await onMessage({ data: { kind: 'boot', engineFiles: tamperedOfficial.engineFiles } });
       assert.equal(posted.length, 1);
       assert.equal(posted[0].kind, 'init-error');
       assert.match(posted[0].error, /Puck\.Abstractions\.wasm/);

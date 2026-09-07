@@ -6,7 +6,21 @@
  * invokes them as actors and folds the result into `context.preview`.
  */
 import type { RowInfo, WorldEngine } from "../../native/engineTypes";
-import type { PreviewScriptStep, PreviewSnapshot } from "./types";
+import type { PreviewScriptStep, PreviewSnapshot, PreviewState } from "./types";
+
+/** A write or tick after a history move replaces the abandoned future. */
+export function branchPreview(preview: PreviewState): PreviewState {
+  if (preview.cursor >= preview.snapshots.length - 1) return preview;
+  return {
+    ...preview,
+    snapshots: preview.snapshots.slice(0, preview.cursor + 1),
+    script: preview.script.slice(0, preview.snapshots[preview.cursor].scriptLength),
+  };
+}
+
+function checkCancelled(signal?: AbortSignal): void {
+  signal?.throwIfAborted();
+}
 
 export interface PreviewOutcome {
   readonly status: "ready" | "refused";
@@ -24,15 +38,23 @@ function refused(refusal: string): PreviewOutcome {
 export async function compilePreview(
   engine: WorldEngine,
   sourceJson: string,
+  signal?: AbortSignal,
 ): Promise<PreviewOutcome & { snapshot: PreviewSnapshot | null }> {
   const compiled = await engine.compile(sourceJson);
   if (!compiled.ok) {
     return { ...refused(compiled.errors.map((error) => `${error.path}: ${error.message}`).join("; ")), snapshot: null };
   }
-  const rows = await engine.rows(compiled.handle);
-  const hash = await engine.stateHash(compiled.handle);
-  const snapshot: PreviewSnapshot = { tick: 0n, rows, hash, trace: null, scriptLength: 0 };
-  return { status: "ready", handle: compiled.handle, rows, tick: 0n, refusal: null, snapshot };
+  try {
+    checkCancelled(signal);
+    const rows = await engine.rows(compiled.handle);
+    const hash = await engine.stateHash(compiled.handle);
+    checkCancelled(signal);
+    const snapshot: PreviewSnapshot = { tick: 0n, rows, hash, trace: null, scriptLength: 0 };
+    return { status: "ready", handle: compiled.handle, rows, tick: 0n, refusal: null, snapshot };
+  } catch (error) {
+    await releasePreview(engine, compiled.handle);
+    throw error;
+  }
 }
 
 export async function writePreviewRow(
@@ -62,14 +84,14 @@ export async function tickPreview(
   }
   const rows = await engine.rows(handle);
   const hash = await engine.stateHash(handle);
-  return { ok: true, snapshot: { tick: nextTick, rows, hash, trace: judged.trace, scriptLength } };
+  return { ok: true, snapshot: { tick: nextTick, rows, hash, trace: judged.trace, scriptLength: scriptLength + 1 } };
 }
 
 /** Releases `handle` if given — never throws; a handle that is already gone (or was never
  * compiled) is not an error the caller needs to see. */
 export async function releasePreview(engine: WorldEngine, handle: string | null): Promise<void> {
   if (handle) {
-    await engine.release(handle);
+    try { await engine.release(handle); } catch { /* The owning session is already gone. */ }
   }
 }
 
@@ -84,30 +106,43 @@ export async function replayPreview(
   sourceJson: string,
   script: readonly PreviewScriptStep[],
   upTo: number,
+  signal?: AbortSignal,
+  expectedHash?: string,
 ): Promise<PreviewOutcome> {
   const compiled = await engine.compile(sourceJson);
   if (!compiled.ok) {
     return refused(compiled.errors.map((error) => `${error.path}: ${error.message}`).join("; "));
   }
 
-  let tick = 0n;
-  for (const step of script.slice(0, upTo)) {
-    if (step.kind === "write") {
-      const result = await engine.writeRow(compiled.handle, step.row, step.key, step.value, step.write);
-      if (!result.ok) {
-        await engine.release(compiled.handle);
-        return refused(result.error ?? `replay: write to '${step.row}' refused.`);
+  try {
+    checkCancelled(signal);
+    let tick = 0n;
+    for (const step of script.slice(0, upTo)) {
+      checkCancelled(signal);
+      if (step.kind === "write") {
+        const result = await engine.writeRow(compiled.handle, step.row, step.key, step.value, step.write);
+        if (!result.ok) {
+          await engine.release(compiled.handle);
+          return refused(result.error ?? `replay: write to '${step.row}' refused.`);
+        }
+      } else {
+        const judged = await engine.judge(compiled.handle, step.tick);
+        if (!judged.ok) {
+          await engine.release(compiled.handle);
+          return refused(judged.error);
+        }
+        tick = step.tick;
       }
-    } else {
-      const judged = await engine.judge(compiled.handle, step.tick);
-      if (!judged.ok) {
-        await engine.release(compiled.handle);
-        return refused(judged.error);
-      }
-      tick = step.tick;
     }
-  }
 
-  const rows = await engine.rows(compiled.handle);
-  return { status: "ready", handle: compiled.handle, rows, tick, refusal: null };
+    const rows = await engine.rows(compiled.handle);
+    if (expectedHash !== undefined && await engine.stateHash(compiled.handle) !== expectedHash) {
+      throw new Error("Preview replay did not reproduce the recorded state hash.");
+    }
+    checkCancelled(signal);
+    return { status: "ready", handle: compiled.handle, rows, tick, refusal: null };
+  } catch (error) {
+    await releasePreview(engine, compiled.handle);
+    throw error;
+  }
 }

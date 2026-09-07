@@ -52,8 +52,9 @@ for the current hardware matrix.
 ## Production SDF world path
 
 These are the kernels loaded by `SdfWorldKernels` and recorded by
-`SdfWorldEngine` every world frame. **Nothing verifies them today.** The engine
-battery whose world-path stages exercised every one of them left the build in
+`SdfWorldEngine` every world frame. Runtime ISA probes verify the beam and all
+three views variants during initialization and compiled-shader reload; they do
+not verify rendered-image correctness. The engine battery whose world-path stages exercised every one of them left the build in
 the 2026-08-02 quarantine and has no replacement, so a kernel change is judged
 by running `Puck.World` and looking at the pixels on both backends.
 
@@ -69,7 +70,7 @@ by running `Puck.World` and looking at the pixels on both backends.
 
 | Include | Role | Keep in sync with |
 |---|---|---|
-| `Sdf/sdf-isa.hlsli` | The shader-reported SDF ISA version. The production beam and both views variants write it through their existing tile/output bindings during initialization. | `SdfIsa.Version`, verified at runtime rather than trusted by duplication |
+| `Sdf/sdf-isa.hlsli` | The shader-reported SDF ISA version. The production beam and all three views variants write it through their existing tile/output bindings during initialization and compiled-shader reload. | `SdfIsa.Version`, verified at runtime rather than trusted by duplication |
 | `Sdf/sdf-vm.hlsli` | The primary VM include: packed instruction stream decode, shape SDFs, blends, wallpaper folds, bounds skips, segment/instance merge, dynamic transforms, materials, and `map`/`mapMasked`. | `SdfOp`, `SdfShapeType`, `SdfBlendOp`, `SdfWallpaperGroup`, `SdfProgram`, `SdfProgramBuilder` |
 | `Sdf/sdf-world.hlsli` | World-render shared code: viewport push/data contract, screen-source sampling, camera ray generation, cone march, per-tile instance cull, and `renderView`. | `SdfWorldEngine`, `SdfFrame`, `SdfScreenSurface` |
 
@@ -94,3 +95,9 @@ by running `Puck.World` and looking at the pixels on both backends.
 A committed `.spv` or `.dxil` file without a matching `.hlsl` source is stale by
 default. If a future shader is intentionally bytecode-only, add an explicit
 allowlist and explain why; otherwise remove the bytecode or restore the source.
+
+The build publishes each `.hash` sidecar by replacing it with a completed sibling
+file. Readers see a complete checksum, and a Windows reader holding an old memory
+mapping does not prevent publication when its file sharing allows replacement.
+Finish shader compilation before requesting a live reload; sidecar replacement
+does not make an entire multi-kernel build atomic.

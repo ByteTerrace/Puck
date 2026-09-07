@@ -534,6 +534,17 @@ plus the existing instanced==flat stages.
 
 ## Gotchas (verified, expensive to re-learn)
 
+- **Use compiled-shader reload during iteration.** After `CompileShaders` finishes,
+  `world.shaders.reload src/Puck.SdfVm/Assets/Shaders/Sdf` queues the primary
+  node's next-frame reload; `world.shaders.status` distinguishes pending from
+  applied/unchanged/failed. Do not reboot for HLSL-only edits. The engine stages
+  changed pipelines, drains the frame ring, validates beam/full/core/fold ISA,
+  then retires old pipelines; failure restores them. Scene buffers, textures,
+  baked bricks, and world state survive; descriptor caches borrowed by the ISA
+  probe, cadence, and shadow history are invalidated. The last successful set
+  also survives device-loss reconstruction. Host ABI changes still need a build;
+  child engines and overlay/decorator pipelines are outside this command.
+
 - **The soft-shadow march is GRID-CULLED (default ON; `sdf.shadowcull on|off`,
   `SdfFrame.DisableShadowCull`).** `renderView`'s `softShadow` no longer marches
   the CAMERA-tile mask (the wrong occluder set for a ray that leaves the camera
@@ -541,7 +552,8 @@ plus the existing instanced==flat stages.
   `SDF_GROUP_SHADOW_GATHER` — the Stage 1 kernels) walks the SAME view-
   independent `SdfInstanceGrid` the beam cull walks, along the SUN ray, into ONE
   GROUPSHARED mask per 8x8 workgroup (`sdfShadowMaskWords`,
-  `SDF_SHADOW_MASK_WORDS = 32` = ≤1024 addressable instances) that `mapMasked`
+  `SDF_SHADOW_MASK_WORDS = ceil(SDF_MAX_INSTANCES/32)` = 512 words, covering
+  all 16384 instance slots, including reserved pools) that `mapMasked`
   reads via the `sdfShadowMaskActive` static. PER-TILE since 2026-09-03 (it was a
   per-lit-pixel gather into 32 per-thread registers): every lane publishes its
   hit point at the ONE uniform seam in `renderView` between the march and the
@@ -565,8 +577,8 @@ plus the existing instanced==flat stages.
   surface clearance, so a bare ray (chord 0) or the direct 1/k penumbra drops
   penumbra-edge px (measured: 1/k→840, 2/k→125, 3/k→0); a wider cone is always a
   safe superset, only less selective. (2) The fallback is 3-way: gather BUILT (2) →
-  the cull; grid present but >1024 instances (1) → the CAMERA-tile mask (the cheap
-  pre-cull behaviour — NOT flat, which is ~20× on a dense 4096 scene); NO grid (0)
+  the cull; explicit camera-tile quality policy (1) → the CAMERA-tile mask;
+  capacity never downgrades an exact request. NO grid (0)
   → flat all-instances (cheap for few instances, and MATCHES a would-be gather so
   the `sdf.grid` toggle stays render-invariant — the `world-grid-cull` contract).
   (3) PERF is scene-dependent and MEASURED: the per-pixel gather WINS on spread
@@ -574,7 +586,17 @@ plus the existing instanced==flat stages.
   but LOSES on dense clustering (1024 carves stacked in one spot 46→101 ms — the
   amortized per-tile camera-tile mask beats the per-pixel gather when the cone can't
   narrow). A density-adaptive gate (skip to camera-tile when the grid is dense) is
-  the open follow-up; the lever ships ON for the overworld's benefit.
+  an approximation policy, never an exact-cull fallback; the lever ships ON
+  for the overworld's benefit.
+
+- **Exact AO uses a complete live-instance mask.** At the same uniform seam,
+  the lanes build `sdfAmbientMaskWords`, excluding only negative-radius parked
+  slots. No camera-cone or finite-radius rejection: the ladder consumes field
+  clearances, including negative deficits, so a visibility proof cannot preserve
+  its result. `sdfAmbientMaskActive` selects this mask only during exact AO;
+  fast AO retains its camera-tile approximation. The two 512-word masks consume
+  4 KiB shared memory per workgroup. This favors avatar fidelity; dense scenes
+  must measure the cost before selecting exact AO globally.
 
 - **SmoothUnion against WORLD geometry — now cullable (was the headline cull
   gotcha, closed by D1 increment E).** `blendSmoothUnion` is written far-exact

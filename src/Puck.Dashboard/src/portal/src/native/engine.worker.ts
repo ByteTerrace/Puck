@@ -4,7 +4,7 @@
 // no real Worker/DOM — `engineHost.ts`/`engineWorkerLauncher.ts` reach this file only through
 // `new Worker(new URL("./engine.worker.ts", ...))`, a construction that never runs under Node — but
 // tests/engineBoot.test.cjs still requires THIS file directly under Node, faking `self`/`postMessage` on the
-// global scope so its own `self.onmessage = ...` assignment attaches there, then drives it exactly as a real
+// global scope so its message listener attaches there, then drives it exactly as a real
 // Worker's postMessage would (see that test's own remarks).
 //
 // `'boot'` requests (engineBoot.ts's official-tree boot path) are handled by delegating to
@@ -18,7 +18,11 @@ import type { WorkerRequest, WorkerResponse } from "./engineHost";
 
 let engine: WorldEngine | null = null;
 
-self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
+// .NET distinguishes its pthread workers from an independently hosted runtime using
+// globalThis.onmessage. Keep that property unset: an event listener receives our protocol
+// without making the runtime wait forever for a pthread initialization handshake.
+// https://github.com/dotnet/runtime/issues/114918
+self.addEventListener("message", async (event: MessageEvent<WorkerRequest>) => {
   const request = event.data;
 
   switch (request.kind) {
@@ -69,4 +73,4 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       }
     }
   }
-};
+});

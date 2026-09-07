@@ -22,6 +22,9 @@ project is for is [`docs/project-map.md`](../../docs/project-map.md).
 
 ## Run it
 
+For the standalone avatar prototype, see the [Moth flight studio](Assets/worlds/moth.md).
+It has inspection cameras, walking and flight poses, and live document reload.
+
 For service extensions, use the [configuration guide](../Puck.World.Server/ExtensionConfiguration.md)
 and the [Azure example](Assets/hosting/azure.extensions.example.json). The operator
 selects the file with `--extensions-config-file`; `world.extensions.catalog`
@@ -47,6 +50,13 @@ flag surface (backend, size, world, recording, user id, present mode, listen,
 connect, federation key) is declared in `Program.cs`; the graphics API is the boot-time
 choice `--backend directx|vulkan` (Direct3D 12 is the Windows default),
 because changing APIs rebuilds the whole render host.
+
+Compiled SDF shaders can change within that running host: finish `CompileShaders`,
+then issue `world.shaders.reload src/Puck.SdfVm/Assets/Shaders/Sdf` and inspect
+`world.shaders.status`. The request swaps changed compute pipelines at a frame
+boundary while retaining world and GPU scene state. Failed validation keeps the
+previous set. See the [shader reload contract](../Puck.SdfVm/README.md#reload-compiled-shaders)
+for scope and binding-layout limits; `world.reload` remains the world-document verb.
 
 **Networking.** `--listen <ip:port>` (or the document's `host.listen`) binds
 the QUIC peer endpoint (`WorldPeerHost`) so a remote peer can join the same
@@ -1174,8 +1184,9 @@ state (an advancing `state` row — deterministic, replayed, settable with
 - `SdfProgramBuilder.MaxInstances = 16384`: per-tile mask width scales with
   DECLARED instances, which is why this project emits active avatars only and
   probes capacity floors at construction.
-- The per-pixel soft-shadow gather addresses ≤1024 instances; beyond that the
-  engine falls back to coarser camera-tile masking.
+- The exact soft-shadow gather addresses all 16384 instance slots, including
+  reserved pools. Camera-tile masking is a separate approximation selected by
+  the quality policy or `world.shadow-mask camera-tile`.
 - `OffscreenRenderBudget.RegisteredViews = 64`: do not register a rendered view per
   population entry.
 - XInput caps at 4 Xbox-family pads locally; HID pads are uncapped.

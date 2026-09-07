@@ -451,6 +451,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         );
         m_dynamicTransformScratch = new byte[(m_dynamicTransformCapacity * DynamicTransformByteLength)];
         m_gpu = gpu;
+        m_loadedKernels = kernels;
         m_height = height;
         m_instanceCapacity = Math.Max(
             val1: options.Program.Instances.Count,
@@ -927,7 +928,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             ),
         ];
 
-        m_beamPipeline = gpu.ComputePipelineFactory.Create(
+        m_beamPipeline = CreateReloadablePipeline(
             computeShaderModule: m_beamShaderModule,
             description: new GpuComputePipelineDescription(
                 Name: "sdf-beam",
@@ -936,7 +937,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             ),
             deviceContext: device
         );
-        m_instanceCullPipeline = gpu.ComputePipelineFactory.Create(
+        m_instanceCullPipeline = CreateReloadablePipeline(
             computeShaderModule: m_instanceCullShaderModule,
             description: new GpuComputePipelineDescription(
                 Name: "sdf-instance-cull",
@@ -945,7 +946,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             ),
             deviceContext: device
         );
-        m_cullArgsPipeline = gpu.ComputePipelineFactory.Create(
+        m_cullArgsPipeline = CreateReloadablePipeline(
             computeShaderModule: m_cullArgsShaderModule,
             description: new GpuComputePipelineDescription(
                 Name: "sdf-cull-args",
@@ -956,7 +957,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         );
         // Nearest filtering end to end: a bound screen source (an emulator/child's native pixels) magnifies as crisp
         // cells, never bilinear smears — the whole point of sampling instead of the flat material.
-        m_viewsPipeline = gpu.ComputePipelineFactory.Create(
+        m_viewsPipeline = CreateReloadablePipeline(
             computeShaderModule: m_viewsShaderModule,
             description: new GpuComputePipelineDescription(
                 Bindings: viewsBindings,
@@ -969,7 +970,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // The core-ops Stage 1 variant shares the SAME viewsBindings array (and push/sampler shape), so its layout is
         // identically defined and the per-slot views sets bind against either pipeline — UploadProgram just flips
         // which handle the views dispatch records (m_useCoreViews). One extra pipeline object; zero extra sets.
-        m_viewsCorePipeline = gpu.ComputePipelineFactory.Create(
+        m_viewsCorePipeline = CreateReloadablePipeline(
             computeShaderModule: m_viewsCoreShaderModule,
             description: new GpuComputePipelineDescription(
                 Bindings: viewsBindings,
@@ -980,7 +981,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             deviceContext: device
         );
         // The fold-ops Stage 1 variant rides the same shared layout as the other two (see the comment above).
-        m_viewsFoldsPipeline = gpu.ComputePipelineFactory.Create(
+        m_viewsFoldsPipeline = CreateReloadablePipeline(
             computeShaderModule: m_viewsFoldsShaderModule,
             description: new GpuComputePipelineDescription(
                 Bindings: viewsBindings,
@@ -993,7 +994,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         // The sky pre-pass shares the SAME viewsBindings array too (see m_skyPipeline's field comment): it reads only
         // viewports + sdfScreenLights out of that layout and writes the source array, so it needs no bindings, sets,
         // or pool capacity of its own.
-        m_skyPipeline = gpu.ComputePipelineFactory.Create(
+        m_skyPipeline = CreateReloadablePipeline(
             computeShaderModule: m_skyShaderModule,
             description: new GpuComputePipelineDescription(
                 Bindings: viewsBindings,
@@ -1003,7 +1004,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             ),
             deviceContext: device
         );
-        m_compositePipeline = gpu.ComputePipelineFactory.Create(
+        m_compositePipeline = CreateReloadablePipeline(
             computeShaderModule: m_compositeShaderModule,
             description: new GpuComputePipelineDescription(
                 Name: "sdf-world-composite",
@@ -1022,7 +1023,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         );
 
         m_brickBakePipeline = ((m_brickBakeShaderModule is not null)
-            ? gpu.ComputePipelineFactory.Create(
+            ? CreateReloadablePipeline(
                 computeShaderModule: m_brickBakeShaderModule,
                 description: new GpuComputePipelineDescription(
                     Name: "sdf-brick-bake",
@@ -1034,7 +1035,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             : null
         );
         m_brickUploadPipeline = ((m_brickUploadShaderModule is not null)
-            ? gpu.ComputePipelineFactory.Create(
+            ? CreateReloadablePipeline(
                 computeShaderModule: m_brickUploadShaderModule,
                 description: new GpuComputePipelineDescription(
                     Name: "sdf-brick-upload",
@@ -1063,7 +1064,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             ),
         ];
 
-        m_frameUploadPipeline = gpu.ComputePipelineFactory.Create(
+        m_frameUploadPipeline = CreateReloadablePipeline(
             computeShaderModule: m_frameUploadShaderModule,
             description: new GpuComputePipelineDescription(
                 Name: "sdf-frame-upload",

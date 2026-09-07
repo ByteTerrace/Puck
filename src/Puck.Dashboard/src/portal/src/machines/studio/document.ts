@@ -15,6 +15,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function requireAppliedDraft(document: DocumentState): void {
+  if (document.text !== document.appliedText) {
+    throw new Error("Apply or discard the JSON draft before editing other fields or document history.");
+  }
+}
+
 export function createEmptyDocument(): DocumentState {
   return {
     name: "untitled",
@@ -23,7 +29,8 @@ export function createEmptyDocument(): DocumentState {
     value: {},
     label: "New document",
     revision: 0,
-    cleanRevision: 0,
+    appliedText: "{}",
+    savedText: "{}",
     past: [],
     future: [],
     diagnostics: [],
@@ -34,15 +41,18 @@ export function createEmptyDocument(): DocumentState {
 }
 
 function freshRevision(document: DocumentState, revision: DocumentRevision, role: DocumentRole): DocumentState {
-  if (revision.text === document.text) {
-    return document;
+  if (revision.text === document.appliedText) {
+    return document.text === revision.text ? document : {
+      ...document, text: revision.text, diagnostics: [], validation: "pending",
+    };
   }
   return {
     ...document,
     ...revision,
+    appliedText: revision.text,
     role,
     revision: document.revision + 1,
-    past: [...document.past, { text: document.text, value: document.value, label: document.label }],
+    past: [...document.past, { text: document.appliedText, value: document.value, label: document.label }],
     future: [],
     diagnostics: [],
     deferred: [],
@@ -61,7 +71,8 @@ export function openOfficialDocument(name: string, text: string, role: DocumentR
     value: parseDocumentText(text),
     label: `Opened ${name}`,
     revision: 0,
-    cleanRevision: 0,
+    appliedText: text,
+    savedText: text,
     past: [],
     future: [],
     diagnostics: [],
@@ -83,7 +94,8 @@ export function openTextDocument(text: string, name: string | undefined): Docume
     value,
     label: "Opened document",
     revision: 0,
-    cleanRevision: 0,
+    appliedText: text,
+    savedText: text,
     past: [],
     future: [],
     diagnostics: [],
@@ -91,6 +103,22 @@ export function openTextDocument(text: string, name: string | undefined): Docume
     composed: null,
     validation: "pending",
   };
+}
+
+/** Local drafts can contain unfinished JSON; retain that text for repair in the editor. */
+export function openDraftDocument(text: string, name: string): DocumentState {
+  checkDocument(text);
+  try {
+    return openTextDocument(text, name);
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
+    return {
+      ...createEmptyDocument(), name, text, savedText: text,
+      label: "Loaded unfinished JSON draft",
+      validation: "refused",
+      diagnostics: [{ path: "", message: "This saved draft contains unfinished JSON. Repair and apply it in the JSON tab." }],
+    };
+  }
 }
 
 /** `APPLY_TEXT`: the JSON editor's Apply — intake-checks, parses, becomes a revision. */
@@ -103,6 +131,7 @@ export function applyText(document: DocumentState, text: string): DocumentState 
 /** `EDIT_DOCUMENT`: `value === undefined` deletes whatever is at `path` (see `SchemaNode.tsx`'s
  * own `DocumentEdit` contract, which this mirrors exactly). */
 export function editDocument(document: DocumentState, path: JsonPath, value: unknown, label: string): DocumentState {
+  requireAppliedDraft(document);
   const nextValue = value === undefined ? deleteAt(document.value, path) : setAt(document.value, path, value);
   const text = serializeDocumentText(nextValue);
   return freshRevision(document, { text, value: nextValue, label }, readDocumentRole(nextValue));
@@ -122,6 +151,7 @@ export function paintCells(
   ordinals: readonly number[],
   value: bigint,
 ): DocumentState {
+  requireAppliedDraft(document);
   const rows = getAt(document.value, ["state", "world"]);
   if (!Array.isArray(rows)) {
     throw new Error(`paint: document has no state.world rows (looking for '${row}').`);
@@ -148,6 +178,7 @@ export function paintCells(
 }
 
 export function undoDocument(document: DocumentState): DocumentState {
+  requireAppliedDraft(document);
   if (document.past.length === 0) {
     return document;
   }
@@ -155,10 +186,11 @@ export function undoDocument(document: DocumentState): DocumentState {
   return {
     ...document,
     ...previous,
+    appliedText: previous.text,
     role: readDocumentRole(previous.value),
     revision: document.revision + 1,
     past: document.past.slice(0, -1),
-    future: [{ text: document.text, value: document.value, label: document.label }, ...document.future],
+    future: [{ text: document.appliedText, value: document.value, label: document.label }, ...document.future],
     diagnostics: [],
     deferred: [],
     composed: null,
@@ -167,6 +199,7 @@ export function undoDocument(document: DocumentState): DocumentState {
 }
 
 export function redoDocument(document: DocumentState): DocumentState {
+  requireAppliedDraft(document);
   if (document.future.length === 0) {
     return document;
   }
@@ -174,9 +207,10 @@ export function redoDocument(document: DocumentState): DocumentState {
   return {
     ...document,
     ...next,
+    appliedText: next.text,
     role: readDocumentRole(next.value),
     revision: document.revision + 1,
-    past: [...document.past, { text: document.text, value: document.value, label: document.label }],
+    past: [...document.past, { text: document.appliedText, value: document.value, label: document.label }],
     future: rest,
     diagnostics: [],
     deferred: [],
@@ -244,12 +278,9 @@ function composeOutcome(result: Awaited<ReturnType<WorldEngine["composeTree"]>>)
  * import) instead, for speed — but most shipped fragments (billiards, bowling, poker, chess, …)
  * refuse under that bare basis BY DESIGN: they name the island's own body/look rows and host
  * registers, which only the real island supplies. That made the synthetic root wrong, not fast —
- * every such fragment read as permanently broken. Composing over the real island costs real engine
- * time (low-teens seconds on a dev machine for the whole MMO island, not the "minutes" once
- * assumed here — see this package's own COMMANDS report for measured numbers) but is the only host
- * that answers the actual question correctly, so correctness wins outright; `PREVIEW_START`
- * staying an explicit, guarded user action (see `studioMachine.ts`'s own remarks) is what keeps
- * that cost off every keystroke.
+ * every such fragment read as permanently broken. Validation therefore composes against the
+ * island after the machine's edit debounce. The browser worker keeps that work off the UI
+ * thread; preview compilation remains a separate explicit action.
  */
 export async function validateDocument(
   engine: WorldEngine,

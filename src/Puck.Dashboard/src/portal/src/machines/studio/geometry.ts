@@ -12,15 +12,30 @@ export interface GeometryOutcome {
   readonly diagnostics: readonly EngineDiagnostic[];
 }
 
+// Retain only the most recently requested topology set for each engine. Unrelated document
+// edits reuse both engine answers and array identities, keeping the viewport camera stable.
+const cachedGeometry = new WeakMap<WorldEngine, Map<string, Promise<Awaited<ReturnType<WorldEngine["cells"]>>>>>();
+
 export async function computeGeometry(engine: WorldEngine, value: unknown): Promise<GeometryOutcome> {
   const geometry: Record<string, readonly EngineCell[]> = {};
   const diagnostics: EngineDiagnostic[] = [];
+  const previous = cachedGeometry.get(engine);
+  const current = new Map<string, Promise<Awaited<ReturnType<WorldEngine["cells"]>>>>();
+  const topologies = readTopologies(value);
+  for (const topology of topologies) {
+    const pending = previous?.get(topology.json) ?? engine.cells(topology.json).catch(error => ({
+      ok: false as const, error: error instanceof Error ? error.message : String(error),
+    }));
+    current.set(topology.json, pending);
+  }
+  cachedGeometry.set(engine, current);
 
-  for (const topology of readTopologies(value)) {
-    const result = await engine.cells(topology.json);
+  for (const topology of topologies) {
+    const result = await current.get(topology.json)!;
     if (result.ok) {
       geometry[topology.name] = result.cells;
     } else {
+      current.delete(topology.json);
       geometry[topology.name] = [];
       diagnostics.push({ path: `state.lattices[${topology.name}]`, message: result.error });
     }

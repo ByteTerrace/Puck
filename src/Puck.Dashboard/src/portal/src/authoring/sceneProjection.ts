@@ -63,9 +63,8 @@ function bucket(value: number): number {
   return Math.round(value * 10_000) / 10_000;
 }
 
-function rankOf(sorted: readonly number[], value: number): number {
-  const index = sorted.indexOf(bucket(value));
-  return index < 0 ? 0 : index;
+function ranks(sorted: readonly number[]): ReadonlyMap<number, number> {
+  return new Map(sorted.map((value, index) => [value, index]));
 }
 
 /** True when `cells` occupies more than one world-Y layer — the "volumetric" test a viewport uses
@@ -91,20 +90,23 @@ export function projectScene(cells: readonly EngineCell[], unit = 1, separation 
   const layers = [...new Set(cells.map((cell) => bucket(cell.y)))].sort((a, b) => a - b);
   const cols = [...new Set(cells.map((cell) => bucket(cell.x)))].sort((a, b) => a - b);
   const rows = [...new Set(cells.map((cell) => bucket(cell.z)))].sort((a, b) => a - b);
+  const layerRanks = ranks(layers), colRanks = ranks(cols), rowRanks = ranks(rows);
 
   const raw = cells.map((cell) => ({
     ordinal: cell.ordinal,
     key: cell.key,
-    layerIndex: rankOf(layers, cell.y),
-    grid: { col: rankOf(cols, cell.x), row: rankOf(rows, cell.z) },
-    position: [cell.x, rankOf(layers, cell.y) * layerGap, cell.z] as [number, number, number],
+    layerIndex: layerRanks.get(bucket(cell.y))!,
+    grid: { col: colRanks.get(bucket(cell.x))!, row: rowRanks.get(bucket(cell.z))! },
+    position: [cell.x, layerRanks.get(bucket(cell.y))! * layerGap, cell.z] as [number, number, number],
   }));
 
-  const xs = raw.map((cell) => cell.position[0]);
-  const ys = raw.map((cell) => cell.position[1]);
-  const zs = raw.map((cell) => cell.position[2]);
-  const min: [number, number, number] = [Math.min(...xs) - cellUnit / 2, Math.min(...ys) - cellUnit / 2, Math.min(...zs) - cellUnit / 2];
-  const max: [number, number, number] = [Math.max(...xs) + cellUnit / 2, Math.max(...ys) + cellUnit / 2, Math.max(...zs) + cellUnit / 2];
+  const min: [number, number, number] = [Infinity, Infinity, Infinity];
+  const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+  // A reduction avoids argument-count limits on large authored lattices.
+  for (const cell of raw) for (let axis = 0; axis < 3; axis++) {
+    min[axis] = Math.min(min[axis], cell.position[axis] - cellUnit / 2);
+    max[axis] = Math.max(max[axis], cell.position[axis] + cellUnit / 2);
+  }
   const center: Point3 = [min[0] + (max[0] - min[0]) / 2, min[1] + (max[1] - min[1]) / 2, min[2] + (max[2] - min[2]) / 2];
 
   const recentered: SceneCell[] = raw.map((cell) => ({

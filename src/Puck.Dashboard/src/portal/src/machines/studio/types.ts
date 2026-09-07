@@ -18,22 +18,14 @@ import type { ByteStore } from "../../official/byteStore";
 import type { ResolvedOfficial } from "../../official/officialBase";
 import type { LocalDraftStore } from "../../document/localDrafts";
 
-/**
- * The one seam the machine's boot actor calls to turn a verified official load into a live
- * engine session. In production this IS `bootEngineFromOfficial` from
- * `native/engineBoot.ts` (owned by the boot work package, built in parallel) — the machine
- * takes it as `input.bootEngine` rather than importing that module directly, so this file
- * compiles and tests today whether or not that module has landed in this worktree yet. A test
- * (or, once that module exists, whoever constructs the actor for real — see the boot package's own
- * README) supplies the concrete function; its signature is exactly `bootEngineFromOfficial`'s own.
- */
+/** Injectable boot seam; production supplies native/engineBoot.ts, tests can use a local bundle. */
 export type BootEngine = (official: OfficialLoad, options: EngineBootOptionsLike) => Promise<WorldEngine>;
 
-/** Mirrors `native/engineBoot.ts`'s own `EngineBootOptions` shape (mode + optional fetch) without
- * importing a module this package does not own. */
+/** Options shared with the native engine boot implementation. */
 export interface EngineBootOptionsLike {
   readonly mode: "inline" | "worker";
   readonly fetchImpl?: FetchLike;
+  readonly signal?: AbortSignal;
 }
 
 export interface StudioMachineInput {
@@ -77,7 +69,10 @@ export interface DocumentState extends DocumentRevision {
   readonly name: string;
   readonly role: DocumentRole;
   readonly revision: number;
-  readonly cleanRevision: number;
+  /** Text of the applied value; JSON typing only changes `text`. */
+  readonly appliedText: string;
+  /** Last opened or saved text, used for dirty detection including unapplied edits. */
+  readonly savedText: string;
   readonly past: readonly DocumentRevision[];
   readonly future: readonly DocumentRevision[];
   readonly diagnostics: readonly EngineDiagnostic[];

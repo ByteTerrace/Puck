@@ -24,7 +24,7 @@ npm --workspace portal run dev
 ```
 
 `VITE_PUCK_OFFICIAL_CHANNEL` selects which channel's manifest the studio
-opens (`.env` ships `dev`; production ships `stable` against
+opens (`.env.development` ships `dev`; production ships `stable` against
 `https://puck.byteterrace.com/official`).
 
 `npm --workspace portal run test` (`node --test tests/*.test.cjs`) runs the
@@ -47,15 +47,15 @@ SHA-256 hash before caching it (`official/byteStore.ts`, IndexedDB-backed
 with an in-memory fallback under Node). A manifest fetch that fails falls
 back to a previously verified offline copy; a hash mismatch refuses by name
 and caches nothing. `native/engineBoot.ts`'s `bootEngineFromOfficial` boots
-the engine from those same verified files (`'inline'` mode today in the
-browser and in tests — see the Worker note under limits) and then requires `engine.version()` to report
+the engine from those same verified files (a dedicated Worker in the browser,
+inline in Node tests) and then requires `engine.version()` to report
 the exact `schemaVersion`/`commit` the manifest's own build names — a
 mismatch disposes the engine and refuses by name rather than running a
 document against an engine build the manifest did not vouch for.
 
 ## The studio machine
 
-`machines/studioMachine.ts` (its own header states the full state shape) is
+`machines/studioMachine.ts` owns document and preview regions and is
 the one state machine the whole studio is bound to, through
 `context/StudioContext.tsx`'s hooks — `useStudioDocument`,
 `useStudioPreview`, `useStudioBoot`, `useStudioOfficial`, `useStudioEngine`,
@@ -68,6 +68,24 @@ header): it resolves the official root/channel and mounts
 composed UI and carries no `import.meta` of its own, so tests construct a
 `StudioMachineInput` by hand and render it directly (`tests/shell.test.cjs`,
 `tests/workbench.test.cjs`).
+
+Local edits commit immediately and restart a 250 ms validation delay, so rapid
+edits remain undoable without queuing a composition per keystroke. JSON draft
+text, applied text, and last-saved text are tracked separately. Unapplied JSON
+blocks form edits and document undo/redo until applied or discarded; dirty
+tracking includes that draft and clears when undo returns to the saved text.
+Geometry is cached per engine and topology definition. Unrelated edits reuse
+cell arrays and preserve the spatial view; coordinate projection uses rank
+maps instead of repeated linear searches.
+
+The browser hosts the engine in a dedicated Worker so composition and preview
+do not block input or rendering. Worker startup uses an event listener rather
+than the onmessage property, which .NET interprets as its internal pthread boot
+protocol. The studio owns the worker lifetime: an abandoned boot or unmount
+disposes it, and disposal or a worker failure rejects outstanding calls. Inline
+hosting retains one runtime per module instance; it cannot unload or switch the
+engine in that same realm. Preview history scrubbing replays once when released,
+and Stop remains available while a preview operation is pending.
 
 A document's `role` — world / basis / fragment / shard — is read off the
 manifest when opened from there, or off the document's own content
@@ -98,7 +116,7 @@ no props flow down from a page-level state.
   document's raw text. Typing dispatches `SET_TEXT_DRAFT` (a live, not yet
   revisioned, edit of `document.text`); **Apply** dispatches `APPLY_TEXT`
   (intake-checks, parses, becomes a revision); **Discard** resets the draft
-  back to the last applied revision's own serialized text. A diagnostic is
+  back to the last applied revision's exact text. A diagnostic is
   best-effort mapped to a line by searching the text for its path's leading
   quoted key segments (`lineForDiagnosticPath`) and highlighted there; one
   whose path cannot be textually anchored (an array index, mainly) lists
@@ -115,7 +133,9 @@ no props flow down from a page-level state.
   (`PREVIEW_TICK`), steps and jumps through its recorded snapshots
   (`PREVIEW_UNDO`/`PREVIEW_REDO`/`JUMP_TO_TICK` — the engine has no
   snapshot-restore of its own, so a history move recompiles fresh and
-  replays the write/tick script up to that point), and shows the latest
+  replays the write/tick script through that tick, verifies its state hash,
+  and replaces abandoned future history when a new write or tick branches),
+  and shows the latest
   snapshot's `JudgeTrace` (`RuleTraceView.tsx`: rules visited by mode,
   writes as row/key/old/new, refusals). `PREVIEW_START` is refused by name
   — not silently withheld — while the document has unresolved diagnostics.
@@ -128,21 +148,14 @@ Local drafts (`drafts/DraftsPanel.tsx`, `document/localDrafts.ts`) are a
 browser-storage-backed document library independent of the official tree —
 up to ten revisions per draft, one atomic write. They are this studio's only
 offline library; nothing here uploads, publishes, or generates a share link.
+An unfinished JSON draft can be saved and reopened for repair; preview remains
+unavailable until it is repaired and applied. Refused preview writes preserve
+the existing history, including snapshots ahead of the current tick.
+An unreadable local library reports its error without crashing the editor or
+overwriting stored data. Draft saves use the same 2 MB intake cap as imports.
 
 ## Limits that remain
 
-- The engine is hosted inline (on the page's main thread). With the AOT
-  AppBundle, `dotnet.js` booted inside a module Worker loads every assembly,
-  logs `onRuntimeInitialized`, and then never resolves `create()` (verified
-  in Chromium with diagnostic tracing; the same boot on the main thread
-  resolves in about 250 ms warm). Engine calls therefore block
-  the UI for their duration — about two seconds to compose or compile the
-  island. `WorldStudio.tsx` is the one switch; the Worker path
-  (`engine.worker.ts`, `workerBoot.ts`) stays built and Node-tested.
-- One runtime per page: `dotnet.js` refuses a second `create()` in a realm,
-  so `workerBoot.ts` memoizes the realm's boot by engine set (React's
-  StrictMode double-mount and HMR remounts join it) and refuses a different
-  engine set by name until a reload.
 - Wasm engine payload: the AOT `Puck.World.Browser` AppBundle is roughly
   40 MB; a first boot fetches and hash-verifies it in full (subsequent boots
   serve from the byte store).

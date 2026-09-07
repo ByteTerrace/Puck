@@ -1,0 +1,2552 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "moth-flight-studio",
+  "host": {
+    "backend": "auto",
+    "exitAfterSeconds": 0,
+    "fullscreen": false,
+    "genlock": null,
+    "height": 900,
+    "journalDepth": 2000,
+    "listen": null,
+    "presentMode": "Immediate",
+    "presentation": "Windowed",
+    "rayQuery": true,
+    "surfaceFormat": "r8g8b8a8",
+    "targetHertz": 60,
+    "timing": false,
+    "width": 1280
+  },
+  "simulation": {
+    "rateHz": 30
+  },
+  "bodies": {
+    "seatSpawns": [
+      "stage"
+    ],
+    "capacity": 8,
+    "localSeats": 1
+  },
+  "spawnPoints": [
+    {
+      "yawDegrees": 0,
+      "id": "stage",
+      "position": [
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "defaultSeatKit": "walker",
+  "bodyMotionPrograms": [
+    {
+      "kind": "Motion",
+      "name": "walk",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
+        "ComputePlanarTargetVelocity",
+        "ShapeVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyHold",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ],
+      "version": "puck.body-motion.v1"
+    }
+  ],
+  "channels": [
+    {
+      "frame": "Heading",
+      "name": "forward",
+      "role": "MoveAdvance",
+      "shape": "Bipolar"
+    },
+    {
+      "frame": "Heading",
+      "name": "strafe",
+      "role": "MoveStrafe",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "turn",
+      "role": "Turn",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "faceX",
+      "role": "FaceX",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "faceZ",
+      "role": "FaceZ",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "faceY",
+      "role": "FaceY",
+      "shape": "Bipolar"
+    },
+    {
+      "composition": true,
+      "name": "jump",
+      "shape": "Binary"
+    },
+    {
+      "name": "rise",
+      "role": "MoveUp",
+      "shape": "Bipolar"
+    }
+  ],
+  "gravity": {
+    "uniform": [
+      0,
+      -18,
+      0
+    ],
+    "solver": "Pairwise",
+    "gravitationalConstant": 0,
+    "attractors": [],
+    "softeningLength": 0.5
+  },
+  "collision": {
+    "maxSlopeDegrees": 60,
+    "requirements": [],
+    "gradientProbe": 0,
+    "contactSkin": 0.02,
+    "maxIterations": 4
+  },
+  "kits": {
+    "rows": [
+      {
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "walk",
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            1,
+            0
+          ],
+          "radius": 0.35
+        },
+        "motion": {
+          "facingSnap": false,
+          "holds": [
+            {
+              "bond": "Surface",
+              "cone": [
+                0,
+                60
+              ],
+              "envelope": {
+                "sinkSpeed": 40
+              },
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "hold": "Gravity",
+              "name": "ground",
+              "reach": 1.2,
+              "thrust": 1
+            },
+            {
+              "bond": "Free",
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "hold": "Lift",
+              "name": "air",
+              "lift": 1,
+              "thrust": 1
+            }
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 2.4
+          },
+          "turn": {
+            "rate": 2.5
+          }
+        },
+        "name": "walker"
+      }
+    ]
+  },
+  "views": {
+    "seatControl": {
+      "minPitch": -0.35,
+      "maxPitch": 1.2,
+      "yawReference": "World"
+    },
+    "layouts": [
+      {
+        "name": "three-quarter",
+        "slots": [
+          {
+            "height": 1,
+            "camera": "three-quarter",
+            "y": 0,
+            "width": 1,
+            "x": 0
+          }
+        ],
+        "seatCount": 0,
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0.25
+      },
+      {
+        "name": "front",
+        "slots": [
+          {
+            "height": 1,
+            "camera": "front",
+            "y": 0,
+            "width": 1,
+            "x": 0
+          }
+        ],
+        "seatCount": 0,
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0.25
+      },
+      {
+        "name": "rear",
+        "slots": [
+          {
+            "height": 1,
+            "camera": "rear",
+            "y": 0,
+            "width": 1,
+            "x": 0
+          }
+        ],
+        "seatCount": 0,
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0.25
+      },
+      {
+        "name": "flight-stage",
+        "slots": [
+          {
+            "height": 1,
+            "camera": "flight-stage",
+            "y": 0,
+            "width": 1,
+            "x": 0
+          }
+        ],
+        "seatCount": 0,
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0.25
+      },
+      {
+        "name": "play",
+        "slots": [
+          {
+            "height": 1,
+            "y": 0,
+            "width": 1,
+            "x": 0
+          }
+        ],
+        "seatCount": 0,
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0.25
+      }
+    ],
+    "seatRig": {
+      "operations": [
+        {
+          "$type": "orbit",
+          "pitch": 0.2,
+          "yaw": 0,
+          "pivotOffset": [
+            0,
+            1.2,
+            0
+          ],
+          "distance": 6
+        },
+        {
+          "$type": "lookAt",
+          "targetOffset": [
+            0,
+            1.2,
+            0
+          ],
+          "subject": {
+            "$type": "reference"
+          },
+          "worldAxes": true
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.65
+        }
+      ],
+      "version": "puck.camera.v1",
+      "name": "moth-camera"
+    }
+  },
+  "render": {
+    "sky": {
+      "ground": "#C0BBC7",
+      "fogDensity": 0.012,
+      "horizon": "#E6E0D7",
+      "zenith": "#B4B0C9"
+    },
+    "farDistance": 80,
+    "ambientOcclusion": true,
+    "lighting": {
+      "sun": {
+        "weight": 0.6,
+        "color": "#FFEAD7",
+        "direction": [
+          -0.5,
+          0.8,
+          -0.7
+        ]
+      },
+      "ambient": {
+        "base": 0.75,
+        "color": "#E9E6FF",
+        "hemisphere": 0.15
+      }
+    },
+    "shadows": "High"
+  },
+  "prototypes": [
+    {
+      "document": {
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "material": 0,
+            "scale": [
+              18,
+              0.2,
+              18
+            ],
+            "type": "Box",
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "id": 0,
+            "position": [
+              0,
+              -0.2,
+              0
+            ]
+          }
+        ],
+        "name": "floor",
+        "palette": [
+          {
+            "color": "#777686"
+          }
+        ]
+      },
+      "id": "floor"
+    },
+    {
+      "id": "moth",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "moth",
+        "palette": [
+          {
+            "specular": 0.15,
+            "color": "#E9E0CE",
+            "emissive": 0,
+            "shininess": 32
+          },
+          {
+            "specular": 0.18,
+            "color": "#9A7CC4",
+            "emissive": 0,
+            "shininess": 32
+          },
+          {
+            "specular": 0.025,
+            "color": "#303142",
+            "emissive": 0,
+            "shininess": 24
+          },
+          {
+            "specular": 0,
+            "color": "#BF815B",
+            "emissive": 0,
+            "shininess": 24
+          },
+          {
+            "specular": 0,
+            "color": "#30212A",
+            "emissive": 0,
+            "shininess": 24
+          },
+          {
+            "specular": 0.12,
+            "color": "#FFF5DE",
+            "emissive": 0,
+            "shininess": 24
+          },
+          {
+            "specular": 0.12,
+            "color": "#76E4E4",
+            "emissive": 0.2,
+            "shininess": 24
+          },
+          {
+            "specular": 0.12,
+            "color": "#743B47",
+            "emissive": 0,
+            "shininess": 24
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "chest",
+            "type": "Ellipsoid",
+            "position": [
+              0,
+              1.3,
+              -0.005
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.268,
+              0.225,
+              0.172
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0,
+            "slides": [
+              {
+                "amplitude": 0.008,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "driver": "breath",
+                "wave": "sine"
+              }
+            ]
+          },
+          {
+            "id": 1,
+            "name": "waist",
+            "type": "Ellipsoid",
+            "position": [
+              0,
+              1.044,
+              0.005
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.177,
+              0.13,
+              0.118
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "dilate": 0
+          },
+          {
+            "id": 2,
+            "name": "pelvis",
+            "type": "Ellipsoid",
+            "position": [
+              0,
+              0.914,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.243,
+              0.109,
+              0.149
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0
+          },
+          {
+            "id": 3,
+            "name": "collar",
+            "type": "Box",
+            "position": [
+              -0.12,
+              1.397,
+              0.139
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.1908089953765448,
+              0.981627183447664
+            ],
+            "scale": [
+              0.104,
+              0.064,
+              0.05
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "dilate": 0.025
+          },
+          {
+            "id": 4,
+            "name": "hood",
+            "type": "Ellipsoid",
+            "position": [
+              0,
+              1.886,
+              0.0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.362,
+              0.394,
+              0.303
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "dilate": 0,
+            "group": 1
+          },
+          {
+            "id": 5,
+            "name": "hoodInset",
+            "type": "Ellipsoid",
+            "position": [
+              0,
+              1.846,
+              0.185
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.289,
+              0.304,
+              0.27
+            ],
+            "material": 1,
+            "blend": "Subtraction",
+            "smooth": 0,
+            "parent": "chest",
+            "dilate": 0,
+            "group": 1
+          },
+          {
+            "id": 6,
+            "name": "head",
+            "type": "Ellipsoid",
+            "position": [
+              0,
+              1.839,
+              0.159
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.255,
+              0.266,
+              0.175
+            ],
+            "material": 3,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "dilate": 0
+          },
+          {
+            "id": 7,
+            "name": "hair",
+            "type": "Ellipsoid",
+            "position": [
+              -0.042,
+              2.038,
+              0.153
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.12186934340514748,
+              0.992546151641322
+            ],
+            "scale": [
+              0.227,
+              0.088,
+              0.143
+            ],
+            "material": 4,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "dilate": 0
+          },
+          {
+            "id": 8,
+            "name": "fringe",
+            "type": "Ellipsoid",
+            "position": [
+              0.105,
+              2.013,
+              0.263
+            ],
+            "rotation": [
+              0,
+              0,
+              0.35836794954530027,
+              0.9335804264972017
+            ],
+            "scale": [
+              0.12,
+              0.049,
+              0.025
+            ],
+            "material": 4,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "dilate": 0
+          },
+          {
+            "id": 9,
+            "name": "nose",
+            "type": "Ellipsoid",
+            "position": [
+              0,
+              1.827,
+              0.329
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.022,
+              0.026,
+              0.026
+            ],
+            "material": 3,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "dilate": 0
+          },
+          {
+            "id": 10,
+            "name": "mouth",
+            "type": "Capsule",
+            "position": [
+              0.006,
+              1.757,
+              0.335
+            ],
+            "rotation": [
+              0,
+              0,
+              0.6755902076156602,
+              0.7372773368101241
+            ],
+            "scale": [
+              0.007,
+              0.047,
+              0.007
+            ],
+            "material": 7,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "dilate": 0
+          },
+          {
+            "id": 11,
+            "name": "eyeL",
+            "type": "Ellipsoid",
+            "position": [
+              0.103,
+              1.886,
+              0.318
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.0697564737441253,
+              0.9975640502598242
+            ],
+            "scale": [
+              0.065,
+              0.059,
+              0.022
+            ],
+            "material": 5,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "dilate": 0
+          },
+          {
+            "id": 12,
+            "name": "irisL",
+            "type": "Ellipsoid",
+            "position": [
+              0.103,
+              1.883,
+              0.359
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.028,
+              0.04,
+              0.022
+            ],
+            "material": 4,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "dilate": 0
+          },
+          {
+            "id": 13,
+            "name": "glintL",
+            "type": "Sphere",
+            "position": [
+              0.095,
+              1.898,
+              0.382
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.011,
+              0.011,
+              0.011
+            ],
+            "material": 5,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "dilate": 0
+          },
+          {
+            "id": 14,
+            "name": "browL",
+            "type": "Ellipsoid",
+            "position": [
+              0.103,
+              1.962,
+              0.291
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.07845909572784494,
+              0.996917333733128
+            ],
+            "scale": [
+              0.065,
+              0.013,
+              0.022
+            ],
+            "material": 4,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "dilate": 0
+          },
+          {
+            "id": 15,
+            "name": "eyeR",
+            "type": "Ellipsoid",
+            "position": [
+              -0.103,
+              1.886,
+              0.318
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0697564737441253,
+              0.9975640502598242
+            ],
+            "scale": [
+              0.065,
+              0.059,
+              0.022
+            ],
+            "material": 5,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "dilate": 0
+          },
+          {
+            "id": 16,
+            "name": "irisR",
+            "type": "Ellipsoid",
+            "position": [
+              -0.103,
+              1.883,
+              0.359
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.028,
+              0.04,
+              0.022
+            ],
+            "material": 4,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "dilate": 0
+          },
+          {
+            "id": 17,
+            "name": "glintR",
+            "type": "Sphere",
+            "position": [
+              -0.11099999999999999,
+              1.898,
+              0.382
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.011,
+              0.011,
+              0.011
+            ],
+            "material": 5,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "dilate": 0
+          },
+          {
+            "id": 18,
+            "name": "browR",
+            "type": "Ellipsoid",
+            "position": [
+              -0.103,
+              1.962,
+              0.291
+            ],
+            "rotation": [
+              0,
+              0,
+              0.07845909572784494,
+              0.996917333733128
+            ],
+            "scale": [
+              0.065,
+              0.013,
+              0.022
+            ],
+            "material": 4,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "dilate": 0
+          },
+          {
+            "id": 19,
+            "name": "braid0",
+            "type": "Ellipsoid",
+            "position": [
+              -0.24,
+              1.724,
+              0.246
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.14780941112961063,
+              0.9890158633619168
+            ],
+            "scale": [
+              0.056,
+              0.086,
+              0.052
+            ],
+            "material": 4,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "swings": [
+              {
+                "driver": "breath",
+                "wave": "sine",
+                "phase": 0.0,
+                "pivot": [
+                  -0.27,
+                  1.85,
+                  0.22
+                ],
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "amplitude": 0.025
+              }
+            ],
+            "dilate": 0
+          },
+          {
+            "id": 20,
+            "name": "braid1",
+            "type": "Ellipsoid",
+            "position": [
+              -0.253,
+              1.592,
+              0.256
+            ],
+            "rotation": [
+              0,
+              0,
+              0.11320321376790672,
+              0.9935718556765875
+            ],
+            "scale": [
+              0.056,
+              0.086,
+              0.052
+            ],
+            "material": 4,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "swings": [
+              {
+                "driver": "breath",
+                "wave": "sine",
+                "phase": 0.4,
+                "pivot": [
+                  -0.27,
+                  1.85,
+                  0.22
+                ],
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "amplitude": 0.025
+              }
+            ],
+            "dilate": 0
+          },
+          {
+            "id": 21,
+            "name": "braid2",
+            "type": "Ellipsoid",
+            "position": [
+              -0.24,
+              1.46,
+              0.246
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.14780941112961063,
+              0.9890158633619168
+            ],
+            "scale": [
+              0.056,
+              0.086,
+              0.052
+            ],
+            "material": 4,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "swings": [
+              {
+                "driver": "breath",
+                "wave": "sine",
+                "phase": 0.8,
+                "pivot": [
+                  -0.27,
+                  1.85,
+                  0.22
+                ],
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "amplitude": 0.025
+              }
+            ],
+            "dilate": 0
+          },
+          {
+            "id": 22,
+            "name": "armL",
+            "type": "Ellipsoid",
+            "position": [
+              0.38,
+              1.28,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.10452846326765346,
+              0.9945218953682733
+            ],
+            "scale": [
+              0.11,
+              0.2,
+              0.12
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "swings": [
+              {
+                "driver": "stride",
+                "wave": "sine",
+                "phase": 3.14159,
+                "pivot": [
+                  0.34,
+                  1.46,
+                  0
+                ],
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": 0.43
+              },
+              {
+                "driver": "flight",
+                "wave": "constant",
+                "phase": 0.0,
+                "pivot": [
+                  0.34,
+                  1.46,
+                  0
+                ],
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "amplitude": 0.34
+              }
+            ]
+          },
+          {
+            "id": 23,
+            "name": "shoulderL",
+            "type": "Box",
+            "position": [
+              0.398,
+              1.438,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.1908089953765448,
+              0.981627183447664
+            ],
+            "scale": [
+              0.128,
+              0.055,
+              0.139
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "armL",
+            "dilate": 0.065
+          },
+          {
+            "id": 24,
+            "name": "forearmL",
+            "type": "Box",
+            "position": [
+              0.47,
+              1.005,
+              0.071
+            ],
+            "rotation": [
+              0,
+              0,
+              0.08715574274765817,
+              0.9961946980917455
+            ],
+            "scale": [
+              0.07,
+              0.115,
+              0.085
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "armL",
+            "dilate": 0.055,
+            "swings": [
+              {
+                "driver": "stride",
+                "wave": "halfSine",
+                "phase": 3.14159,
+                "pivot": [
+                  0.43,
+                  1.19,
+                  0.03
+                ],
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": -0.24
+              }
+            ]
+          },
+          {
+            "id": 25,
+            "name": "handL",
+            "type": "Ellipsoid",
+            "position": [
+              0.495,
+              0.817,
+              0.083
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.091,
+              0.093,
+              0.089
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "forearmL",
+            "dilate": 0
+          },
+          {
+            "id": 26,
+            "name": "thighL",
+            "type": "Ellipsoid",
+            "position": [
+              0.16,
+              0.7,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.12,
+              0.23,
+              0.12
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0,
+            "swings": [
+              {
+                "driver": "stride",
+                "wave": "sine",
+                "phase": 0.0,
+                "pivot": [
+                  0.16,
+                  0.9,
+                  0
+                ],
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": 0.55
+              },
+              {
+                "driver": "flight",
+                "wave": "constant",
+                "phase": 0.0,
+                "pivot": [
+                  0.16,
+                  0.9,
+                  0
+                ],
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": -0.32
+              }
+            ]
+          },
+          {
+            "id": 27,
+            "name": "shinL",
+            "type": "Ellipsoid",
+            "position": [
+              0.185,
+              0.352,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.03489949670250097,
+              0.9993908270190958
+            ],
+            "scale": [
+              0.155,
+              0.245,
+              0.158
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "thighL",
+            "swings": [
+              {
+                "driver": "stride",
+                "wave": "halfSine",
+                "phase": 1.5708,
+                "pivot": [
+                  0.17,
+                  0.52,
+                  0
+                ],
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": 0.65
+              },
+              {
+                "driver": "flight",
+                "wave": "constant",
+                "phase": 0.0,
+                "pivot": [
+                  0.17,
+                  0.52,
+                  0
+                ],
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": 0.62
+              }
+            ],
+            "dilate": 0
+          },
+          {
+            "id": 28,
+            "name": "kneeL",
+            "type": "Box",
+            "position": [
+              0.18,
+              0.542,
+              0.124
+            ],
+            "rotation": [
+              0,
+              0,
+              0.3826834323650898,
+              0.9238795325112867
+            ],
+            "scale": [
+              0.066,
+              0.061,
+              0.022
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "shinL",
+            "dilate": 0.025
+          },
+          {
+            "id": 29,
+            "name": "bootL",
+            "type": "Box",
+            "position": [
+              0.198,
+              0.123,
+              0.108
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.148,
+              0.078,
+              0.223
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "shinL",
+            "dilate": 0.04
+          },
+          {
+            "id": 31,
+            "name": "armR",
+            "type": "Ellipsoid",
+            "position": [
+              -0.38,
+              1.28,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.10452846326765346,
+              0.9945218953682733
+            ],
+            "scale": [
+              0.11,
+              0.2,
+              0.12
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "swings": [
+              {
+                "driver": "stride",
+                "wave": "sine",
+                "phase": 0.0,
+                "pivot": [
+                  -0.34,
+                  1.46,
+                  0
+                ],
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": 0.43
+              },
+              {
+                "driver": "flight",
+                "wave": "constant",
+                "phase": 0.0,
+                "pivot": [
+                  -0.34,
+                  1.46,
+                  0
+                ],
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "amplitude": -0.34
+              }
+            ]
+          },
+          {
+            "id": 32,
+            "name": "shoulderR",
+            "type": "Box",
+            "position": [
+              -0.398,
+              1.438,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.1908089953765448,
+              0.981627183447664
+            ],
+            "scale": [
+              0.128,
+              0.055,
+              0.139
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "armR",
+            "dilate": 0.065
+          },
+          {
+            "id": 33,
+            "name": "forearmR",
+            "type": "Box",
+            "position": [
+              -0.47,
+              1.005,
+              0.071
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.08715574274765817,
+              0.9961946980917455
+            ],
+            "scale": [
+              0.07,
+              0.115,
+              0.085
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "armR",
+            "dilate": 0.055,
+            "swings": [
+              {
+                "driver": "stride",
+                "wave": "halfSine",
+                "phase": 0.0,
+                "pivot": [
+                  -0.43,
+                  1.19,
+                  0.03
+                ],
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": -0.24
+              }
+            ]
+          },
+          {
+            "id": 34,
+            "name": "handR",
+            "type": "Ellipsoid",
+            "position": [
+              -0.495,
+              0.817,
+              0.083
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.091,
+              0.093,
+              0.089
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "forearmR",
+            "dilate": 0
+          },
+          {
+            "id": 35,
+            "name": "thighR",
+            "type": "Ellipsoid",
+            "position": [
+              -0.16,
+              0.7,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.12,
+              0.23,
+              0.12
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0,
+            "swings": [
+              {
+                "driver": "stride",
+                "wave": "sine",
+                "phase": 3.14159,
+                "pivot": [
+                  -0.16,
+                  0.9,
+                  0
+                ],
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": 0.55
+              },
+              {
+                "driver": "flight",
+                "wave": "constant",
+                "phase": 0.0,
+                "pivot": [
+                  -0.16,
+                  0.9,
+                  0
+                ],
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": -0.32
+              }
+            ]
+          },
+          {
+            "id": 36,
+            "name": "shinR",
+            "type": "Ellipsoid",
+            "position": [
+              -0.185,
+              0.352,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.03489949670250097,
+              0.9993908270190958
+            ],
+            "scale": [
+              0.155,
+              0.245,
+              0.158
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "thighR",
+            "swings": [
+              {
+                "driver": "stride",
+                "wave": "halfSine",
+                "phase": 4.7124,
+                "pivot": [
+                  -0.17,
+                  0.52,
+                  0
+                ],
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": 0.65
+              },
+              {
+                "driver": "flight",
+                "wave": "constant",
+                "phase": 0.0,
+                "pivot": [
+                  -0.17,
+                  0.52,
+                  0
+                ],
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": 0.62
+              }
+            ],
+            "dilate": 0
+          },
+          {
+            "id": 37,
+            "name": "kneeR",
+            "type": "Box",
+            "position": [
+              -0.18,
+              0.542,
+              0.124
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.3826834323650898,
+              0.9238795325112867
+            ],
+            "scale": [
+              0.066,
+              0.061,
+              0.022
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "shinR",
+            "dilate": 0.025
+          },
+          {
+            "id": 38,
+            "name": "bootR",
+            "type": "Box",
+            "position": [
+              -0.198,
+              0.123,
+              0.108
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.148,
+              0.078,
+              0.223
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "shinR",
+            "dilate": 0.04
+          },
+          {
+            "id": 40,
+            "name": "vaneL",
+            "type": "Box",
+            "position": [
+              0.255,
+              1.355,
+              -0.252
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.10452846326765346,
+              0.9945218953682733
+            ],
+            "scale": [
+              0.1,
+              0.368,
+              0.049
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "swings": [
+              {
+                "driver": "flight",
+                "wave": "constant",
+                "phase": 0.0,
+                "pivot": [
+                  0.16,
+                  1.05,
+                  -0.25
+                ],
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "amplitude": -0.85
+              }
+            ],
+            "dilate": 0.035
+          },
+          {
+            "id": 41,
+            "name": "vaneInsetL",
+            "type": "Box",
+            "position": [
+              0.407,
+              1.375,
+              -0.269
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.224951054343865,
+              0.9743700647852352
+            ],
+            "scale": [
+              0.08,
+              0.325,
+              0.05
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "vaneL",
+            "dilate": 0.028
+          },
+          {
+            "id": 42,
+            "name": "thrusterL",
+            "type": "Ellipsoid",
+            "position": [
+              0.27,
+              1.13,
+              -0.346
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.042,
+              0.062,
+              0.03
+            ],
+            "material": 6,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "vaneL",
+            "dilate": 0
+          },
+          {
+            "id": 43,
+            "name": "vaneR",
+            "type": "Box",
+            "position": [
+              -0.255,
+              1.355,
+              -0.252
+            ],
+            "rotation": [
+              0,
+              0,
+              0.10452846326765346,
+              0.9945218953682733
+            ],
+            "scale": [
+              0.1,
+              0.368,
+              0.049
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "swings": [
+              {
+                "driver": "flight",
+                "wave": "constant",
+                "phase": 0.0,
+                "pivot": [
+                  -0.16,
+                  1.05,
+                  -0.25
+                ],
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "amplitude": 0.85
+              }
+            ],
+            "dilate": 0.035
+          },
+          {
+            "id": 44,
+            "name": "vaneInsetR",
+            "type": "Box",
+            "position": [
+              -0.407,
+              1.375,
+              -0.269
+            ],
+            "rotation": [
+              0,
+              0,
+              0.224951054343865,
+              0.9743700647852352
+            ],
+            "scale": [
+              0.08,
+              0.325,
+              0.05
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "vaneR",
+            "dilate": 0.028
+          },
+          {
+            "id": 45,
+            "name": "thrusterR",
+            "type": "Ellipsoid",
+            "position": [
+              -0.27,
+              1.13,
+              -0.346
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.042,
+              0.062,
+              0.03
+            ],
+            "material": 6,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "vaneR",
+            "dilate": 0
+          },
+          {
+            "id": 46,
+            "name": "chestPlate",
+            "type": "Box",
+            "position": [
+              0.12,
+              1.397,
+              0.139
+            ],
+            "rotation": [
+              0,
+              0,
+              0.1908089953765448,
+              0.981627183447664
+            ],
+            "scale": [
+              0.104,
+              0.064,
+              0.05
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "dilate": 0.025
+          },
+          {
+            "id": 47,
+            "name": "badge",
+            "type": "Box",
+            "position": [
+              0,
+              1.3,
+              0.181
+            ],
+            "rotation": [
+              0,
+              0,
+              0.3826834323650898,
+              0.9238795325112867
+            ],
+            "scale": [
+              0.038,
+              0.047,
+              0.02
+            ],
+            "material": 6,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "chest",
+            "dilate": 0.004
+          },
+          {
+            "id": 30,
+            "name": "vaneOuterL",
+            "type": "Box",
+            "position": [
+              0.536,
+              1.432,
+              -0.251
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.35836794954530027,
+              0.9335804264972017
+            ],
+            "scale": [
+              0.066,
+              0.252,
+              0.044
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "vaneL",
+            "dilate": 0.025
+          },
+          {
+            "id": 39,
+            "name": "vaneOuterR",
+            "type": "Box",
+            "position": [
+              -0.536,
+              1.432,
+              -0.251
+            ],
+            "rotation": [
+              0,
+              0,
+              0.35836794954530027,
+              0.9335804264972017
+            ],
+            "scale": [
+              0.066,
+              0.252,
+              0.044
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "parent": "vaneR",
+            "dilate": 0.025
+          }
+        ],
+        "drivers": [
+          {
+            "name": "stride",
+            "signal": "planarTravel",
+            "cadence": 7,
+            "when": [
+              "Grounded",
+              "moving"
+            ]
+          },
+          {
+            "name": "breath",
+            "signal": "time",
+            "cadence": 1.7,
+            "when": [
+              "still"
+            ]
+          },
+          {
+            "name": "flight",
+            "signal": "time",
+            "cadence": 0,
+            "when": [
+              "Airborne"
+            ]
+          }
+        ],
+        "frames": [
+          {
+            "transforms": [
+              {
+                "rotation": [
+                  0,
+                  0,
+                  -0.0697564737441253,
+                  0.9975640502598242
+                ],
+                "scale": [
+                  0.065,
+                  0.003,
+                  0.022
+                ],
+                "position": [
+                  0.103,
+                  1.886,
+                  0.318
+                ],
+                "id": 11
+              },
+              {
+                "rotation": [
+                  0,
+                  0,
+                  0.0,
+                  1.0
+                ],
+                "scale": [
+                  0.028,
+                  0.003,
+                  0.022
+                ],
+                "position": [
+                  0.103,
+                  1.883,
+                  0.359
+                ],
+                "id": 12
+              },
+              {
+                "rotation": [
+                  0,
+                  0,
+                  0.0,
+                  1.0
+                ],
+                "scale": [
+                  0.011,
+                  0.003,
+                  0.011
+                ],
+                "position": [
+                  0.095,
+                  1.898,
+                  0.382
+                ],
+                "id": 13
+              },
+              {
+                "rotation": [
+                  0,
+                  0,
+                  0.0697564737441253,
+                  0.9975640502598242
+                ],
+                "scale": [
+                  0.065,
+                  0.003,
+                  0.022
+                ],
+                "position": [
+                  -0.103,
+                  1.886,
+                  0.318
+                ],
+                "id": 15
+              },
+              {
+                "rotation": [
+                  0,
+                  0,
+                  0.0,
+                  1.0
+                ],
+                "scale": [
+                  0.028,
+                  0.003,
+                  0.022
+                ],
+                "position": [
+                  -0.103,
+                  1.883,
+                  0.359
+                ],
+                "id": 16
+              },
+              {
+                "rotation": [
+                  0,
+                  0,
+                  0.0,
+                  1.0
+                ],
+                "scale": [
+                  0.011,
+                  0.003,
+                  0.011
+                ],
+                "position": [
+                  -0.11099999999999999,
+                  1.898,
+                  0.382
+                ],
+                "id": 17
+              }
+            ],
+            "name": "blink"
+          }
+        ]
+      }
+    }
+  ],
+  "placements": {
+    "rows": [
+      {
+        "scale": 1,
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "solid": {
+          "margin": 0
+        },
+        "id": "floor",
+        "prototypeId": "floor",
+        "yawDegrees": 0,
+        "grip": {
+          "holdable": true
+        }
+      }
+    ]
+  },
+  "bindingOverlays": [
+    {
+      "document": {
+        "chords": [
+          {
+            "chord": [],
+            "group": "play",
+            "page": {
+              "entries": [
+                {
+                  "channel": "forward",
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.w",
+                    "keyboard.arrowUp"
+                  ]
+                },
+                {
+                  "channel": "forward",
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.s",
+                    "keyboard.arrowDown"
+                  ]
+                },
+                {
+                  "channel": "strafe",
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.a"
+                  ]
+                },
+                {
+                  "channel": "strafe",
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.d"
+                  ]
+                },
+                {
+                  "channel": "turn",
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.arrowLeft"
+                  ]
+                },
+                {
+                  "channel": "turn",
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.arrowRight"
+                  ]
+                },
+                {
+                  "command": "player.move.strafe",
+                  "sources": [
+                    "gamepad.leftStick"
+                  ]
+                },
+                {
+                  "command": "player.look.steer",
+                  "sources": [
+                    "gamepad.rightStick"
+                  ]
+                },
+                {
+                  "command": "player.orbit",
+                  "sources": [
+                    "mouse.button1"
+                  ]
+                },
+                {
+                  "command": "player.steer",
+                  "label": "Steer",
+                  "sources": [
+                    "mouse.button2"
+                  ]
+                },
+                {
+                  "sources": [
+                    "keyboard.space",
+                    "gamepad.buttonSouth"
+                  ],
+                  "scale": 1,
+                  "channel": "rise"
+                },
+                {
+                  "sources": [
+                    "keyboard.controlLeft",
+                    "keyboard.controlRight",
+                    "gamepad.buttonEast"
+                  ],
+                  "scale": -1,
+                  "channel": "rise"
+                },
+                {
+                  "command": "view.override",
+                  "value": {
+                    "raw": [
+                      1,
+                      0,
+                      0,
+                      0
+                    ],
+                    "kind": "Axis1D"
+                  },
+                  "sources": [
+                    "keyboard.1"
+                  ],
+                  "id": "camera1"
+                },
+                {
+                  "command": "view.override",
+                  "value": {
+                    "raw": [
+                      2,
+                      0,
+                      0,
+                      0
+                    ],
+                    "kind": "Axis1D"
+                  },
+                  "sources": [
+                    "keyboard.2"
+                  ],
+                  "id": "camera2"
+                },
+                {
+                  "command": "view.override",
+                  "value": {
+                    "raw": [
+                      3,
+                      0,
+                      0,
+                      0
+                    ],
+                    "kind": "Axis1D"
+                  },
+                  "sources": [
+                    "keyboard.3"
+                  ],
+                  "id": "camera3"
+                },
+                {
+                  "command": "view.override",
+                  "value": {
+                    "raw": [
+                      4,
+                      0,
+                      0,
+                      0
+                    ],
+                    "kind": "Axis1D"
+                  },
+                  "sources": [
+                    "keyboard.4"
+                  ],
+                  "id": "camera4"
+                },
+                {
+                  "command": "view.override",
+                  "value": {
+                    "raw": [
+                      5,
+                      0,
+                      0,
+                      0
+                    ],
+                    "kind": "Axis1D"
+                  },
+                  "sources": [
+                    "keyboard.5"
+                  ],
+                  "id": "camera5"
+                }
+              ],
+              "id": "base"
+            }
+          }
+        ],
+        "modifiers": [],
+        "version": "puck.bindings.v1"
+      },
+      "id": "bare"
+    }
+  ],
+  "looks": {
+    "rows": [
+      {
+        "scale": 1,
+        "name": "moth",
+        "motion": {
+          "cues": [
+            {
+              "frame": "blink",
+              "holdSeconds": 0.12,
+              "minSeconds": 2.5,
+              "maxSeconds": 5
+            }
+          ],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "source": {
+          "$type": "creation",
+          "prototypeId": "moth"
+        }
+      }
+    ],
+    "assignment": {
+      "rows": [
+        "moth"
+      ],
+      "sequence": {
+        "step": 0,
+        "name": "r1",
+        "offset": 0
+      }
+    }
+  },
+  "cameras": [
+    {
+      "name": "front",
+      "anchor": null,
+      "renderHeight": 900,
+      "renderWidth": 1280,
+      "rig": {
+        "name": "front",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                1.5,
+                -5.3
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                1.13,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.65
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "name": "three-quarter",
+      "anchor": null,
+      "renderHeight": 900,
+      "renderWidth": 1280,
+      "rig": {
+        "name": "three-quarter",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                2.9,
+                2.0,
+                -4.8
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                1.13,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.65
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "name": "rear",
+      "anchor": null,
+      "renderHeight": 900,
+      "renderWidth": 1280,
+      "rig": {
+        "name": "rear",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                -2.7,
+                2.0,
+                4.6
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                1.15,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.65
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "name": "flight-stage",
+      "anchor": null,
+      "renderHeight": 900,
+      "renderWidth": 1280,
+      "rig": {
+        "name": "flight-stage",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                4,
+                4.3,
+                -6.5
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                2.8,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.65
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    }
+  ]
+}

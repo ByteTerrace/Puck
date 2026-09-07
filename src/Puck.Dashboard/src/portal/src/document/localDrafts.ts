@@ -8,6 +8,7 @@
  * under Node (`node --test`, no `localStorage` global) and in a browser tab; the default falls
  * back to an in-memory `Map`, matching `official/byteStore.ts`'s own caches-vs-Map fallback.
  */
+import { checkDocumentSize } from "./intake";
 
 export interface DraftRevision {
   readonly text: string;
@@ -59,7 +60,14 @@ class MemoryDraftStorage implements DraftStorage {
 }
 
 function defaultStorage(): DraftStorage {
-  return (typeof localStorage !== "undefined" ? localStorage : new MemoryDraftStorage());
+  try { return typeof localStorage !== "undefined" ? localStorage : new MemoryDraftStorage(); }
+  catch { return new MemoryDraftStorage(); }
+}
+
+/** A listing failure stays visible without crashing the editor or overwriting the library. */
+export function readDraftListing(store: Pick<LocalDraftStore, "list">): { drafts: StudioDraft[]; error: string | null } {
+  try { return { drafts: store.list(), error: null }; }
+  catch (error) { return { drafts: [], error: error instanceof Error ? error.message : String(error) }; }
 }
 
 /** Offline draft library. A single atomic storage write carries every draft and every one of its
@@ -86,6 +94,15 @@ export class LocalDraftStore {
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       throw new DraftRefusal("local draft library is unreadable: not a JSON object.");
     }
+    for (const [id, value] of Object.entries(parsed)) {
+      validId(id);
+      const draft = value as Partial<StudioDraft> | null;
+      if (!draft || draft.id !== id || typeof draft.title !== "string" || typeof draft.documentName !== "string" ||
+          !Array.isArray(draft.revisions) || draft.revisions.length === 0 ||
+          draft.revisions.some(revision => !revision || typeof revision.text !== "string" || typeof revision.label !== "string" || typeof revision.savedAt !== "string")) {
+        throw new DraftRefusal(`local draft '${id}' is unreadable: invalid stored draft.`);
+      }
+    }
     return parsed as Record<string, StudioDraft>;
   }
 
@@ -107,6 +124,7 @@ export class LocalDraftStore {
 
   save(id: string, title: string, documentName: string, text: string, label: string): StudioDraft {
     validId(id);
+    checkDocumentSize(text);
     const drafts = this.read();
     const existing = drafts[id];
     const revision: DraftRevision = { text, label, savedAt: new Date().toISOString() };

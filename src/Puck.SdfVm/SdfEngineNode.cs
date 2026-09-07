@@ -43,7 +43,7 @@ public readonly record struct SdfScreenSurfaceTransform(Vector3 Origin, Vector3 
 /// sampling frame tracks the geometry the dynamic transform already moved (see <see cref="SdfWorldEngine.SetScreenSurface"/>).
 /// </para>
 /// </summary>
-public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequestTarget {
+public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequestTarget {
     private const ulong TimingReportInterval = 60;
 
     private readonly int m_brickPoolVoxelCapacity;
@@ -55,7 +55,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     private readonly ISdfFrameSource m_frameSource;
     private readonly uint m_height;
     private readonly int m_instanceCapacity;
-    private readonly SdfWorldKernels m_kernels;
+    private SdfWorldKernels m_kernels;
 
     /// <summary>Gets the last uploaded program's packed word count, or 0 before the first upload — the live half of
     /// the <c>world.budget</c> cost sheet against <see cref="ProgramWordCapacity"/>.</summary>
@@ -598,6 +598,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
             frame: frame,
             gpuDevice: gpuDevice
         );
+        ApplyPendingShaderReload();
         ReconcileGlyphAtlas();
         m_engine!.DebugMode = m_debugMode;
 

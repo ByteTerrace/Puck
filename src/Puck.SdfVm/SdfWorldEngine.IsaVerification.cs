@@ -215,6 +215,14 @@ public sealed partial class SdfWorldEngine {
                 report: report.Span,
                 viewsVariant: "core views"
             );
+            report = DispatchIsaReport(
+                initializeImages: false,
+                readback: readback,
+                reportImage: reportImage,
+                sampledImage: sampledImage,
+                viewsPipeline: m_viewsFoldsPipeline
+            );
+            SdfShaderSetVerification.ValidateReport(report: report.Span, viewsVariant: "fold views");
         } finally {
             Array.Clear(array: m_pushConstant);
         }

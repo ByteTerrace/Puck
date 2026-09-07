@@ -31,6 +31,12 @@ export function PreviewTab() {
   const actor = StudioContext.useActorRef();
   const preview = useStudioPreview();
   const document = useStudioDocument();
+  const busy = StudioContext.useSelector(snapshot =>
+    !snapshot.matches({ ready: { preview: "ready" } }) &&
+    !snapshot.matches({ ready: { preview: "idle" } }) &&
+    !snapshot.matches({ ready: { preview: "refused" } }));
+  const [seek, setSeek] = useState(preview.cursor);
+  useEffect(() => setSeek(preview.cursor), [preview.cursor]);
 
   const current = preview.snapshots[preview.cursor] ?? null;
 
@@ -38,17 +44,19 @@ export function PreviewTab() {
     <Box>
       <Group gap="xs" mb="md" wrap="wrap">
         {(preview.status === "idle" || preview.status === "refused") && (
-          <Button size="xs" onClick={() => actor.send({ type: "PREVIEW_START" })}>Start preview</Button>
+          <Button size="xs" disabled={busy} onClick={() => actor.send({ type: "PREVIEW_START" })}>Start preview</Button>
         )}
-        {preview.status === "compiling" && <Text size="sm" c="dimmed" role="status">Compiling preview…</Text>}
+        {busy && <Text size="sm" c="dimmed" role="status">Updating preview…</Text>}
         {preview.status === "ready" && (
           <>
-            <Button size="xs" variant="default" onClick={() => actor.send({ type: "PREVIEW_TICK" })}>Tick</Button>
-            <Button size="xs" variant="default" disabled={preview.cursor <= 0} onClick={() => actor.send({ type: "PREVIEW_UNDO" })}>Step back</Button>
-            <Button size="xs" variant="default" disabled={preview.cursor >= preview.snapshots.length - 1} onClick={() => actor.send({ type: "PREVIEW_REDO" })}>Step forward</Button>
-            <Button size="xs" variant="default" onClick={() => actor.send({ type: "RESET_WORLD" })}>Reset</Button>
-            <Button size="xs" variant="subtle" color="red" onClick={() => actor.send({ type: "PREVIEW_STOP" })}>Stop</Button>
+            <Button size="xs" variant="default" disabled={busy} onClick={() => actor.send({ type: "PREVIEW_TICK" })}>Tick</Button>
+            <Button size="xs" variant="default" disabled={busy || preview.cursor <= 0} onClick={() => actor.send({ type: "PREVIEW_UNDO" })}>Step back</Button>
+            <Button size="xs" variant="default" disabled={busy || preview.cursor >= preview.snapshots.length - 1} onClick={() => actor.send({ type: "PREVIEW_REDO" })}>Step forward</Button>
+            <Button size="xs" variant="default" disabled={busy} onClick={() => actor.send({ type: "RESET_WORLD" })}>Reset</Button>
           </>
+        )}
+        {(preview.status === "ready" || busy) && (
+          <Button size="xs" variant="subtle" color="red" onClick={() => actor.send({ type: "PREVIEW_STOP" })}>Stop</Button>
         )}
       </Group>
 
@@ -67,10 +75,11 @@ export function PreviewTab() {
               style={{ flex: 1, maxWidth: 360 }}
               min={0}
               max={Math.max(0, preview.snapshots.length - 1)}
-              value={preview.cursor}
-              onChange={(index) => actor.send({ type: "JUMP_TO_TICK", index })}
+              value={seek}
+              onChange={setSeek}
+              onChangeEnd={(index) => { if (index !== preview.cursor) actor.send({ type: "JUMP_TO_TICK", index }); }}
               label={(index) => preview.snapshots[index]?.tick.toString() ?? String(index)}
-              disabled={preview.snapshots.length <= 1}
+              disabled={busy || preview.snapshots.length <= 1}
             />
           </Group>
           {preview.refusals.length > 0 && (

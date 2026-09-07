@@ -6,6 +6,13 @@ The user wants chunky anime armor and chibi proportions, with Firefall and Mega 
 
 This brief specifies a proposed execution direction, not an owner-approved character design. Its concrete defaults let an implementing agent proceed and produce a reviewable result without asking the user to make every art decision. Later user direction supersedes them. Complete the stages below and judge each stage before proceeding; checkpoints are self-review gates, not requests for repeated permission.
 
+The current owner-selected prototype is **Moth**, from the subsequent character
+collage: ivory/lilac armor, warm brown skin, an open hood, a side braid, and folding
+flight vanes. Virtual On and Power Stone join the broad style references. These
+choices supersede the island-ranger palette and helmet defaults below. The
+[Moth studio guide](../src/Puck.World/Assets/worlds/moth.md) owns the current authored
+model, controls, and live iteration recipe; the quality priorities here still apply.
+
 ## 1. What success looks like
 
 At normal gameplay size, the character reads immediately as a compact, capable adventurer in substantial powered armor. The head has personality; the armor has structure; the joints visibly explain how the body moves. From behind, the character is as recognizable as from the front. Walking feels agile, stopping feels controlled, and landing communicates weight.

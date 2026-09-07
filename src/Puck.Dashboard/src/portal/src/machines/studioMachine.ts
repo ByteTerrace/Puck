@@ -1,43 +1,22 @@
 /**
- * The studio statechart: owns the official content load, the live engine session, the authored
- * document (with undo/redo and validation), per-topology geometry, cell selection, and the
- * preview session. Built beside `machines/worldSimulationMachine.ts` (the old, JS-only preview
- * machine) — phase 3 deletes that machine and its components once they move over to this one; this
- * machine never touches React (see `context/StudioContext.tsx` for the React seam) or `native/`,
- * `forms/`, or `official/` directly beyond the read-only calls their own public contracts offer.
- *
- * State shape: `booting` (invoke `loadOfficial` then the boot seam — see `studio/types.ts`'s own
- * `BootEngine` remarks) always resolves to `ready`, refused or not — "editing continues in
- * refused; every engine-backed action answers with a diagnostic naming the refusal" (this
- * package's own contract). `ready` is a parallel state: the `document` region owns text/value/
- * undo/redo/validation/geometry, the `preview` region owns the compiled session and its tick
- * history. A document-mutating event (see `DOCUMENT_MUTATING_EVENTS`) is visible to BOTH regions
- * in the same microstep: the document region applies the edit, and the preview region — wherever
- * it is — releases its handle and falls back to idle, so a preview can never run silently against
- * a document the engine has not (re)validated.
- *
- * `PREVIEW_START`'s guard reads `document.validation === 'clean'` — a status distinct from
- * `diagnostics.length === 0`, which is ALSO true before validation has ever run (a fresh or
- * just-edited document starts with no diagnostics of its own). `validation` starts, and stays,
- * `'pending'` until a validation actually completes against the live engine (see `studio/types.ts`'s
- * own `DocumentValidationStatus` remarks), so a caller that fires `PREVIEW_START` while a validation is
- * in flight — or before one has ever run — is correctly refused rather than starting a preview the
- * engine has not actually checked yet.
+ * The studio owns two parallel regions: applied document revisions and a hostless preview.
+ * Local edits commit synchronously; validation waits for a short idle interval so typing never
+ * queues a full composition per character. Applied text, JSON draft text, and saved text have
+ * separate identities. Preview always compiles the applied revision.
  */
 import { assign, setup } from "xstate";
-import { readDocumentRole } from "../document/documentRole";
-import { parseDocumentText } from "../document/jsonText";
 import {
   applyText,
   createEmptyDocument,
   editDocument,
+  openDraftDocument,
   openOfficialDocument,
   openTextDocument,
   paintCells,
   redoDocument,
   undoDocument,
 } from "./studio/document";
-import { releasePreview } from "./studio/preview";
+import { branchPreview, releasePreview } from "./studio/preview";
 import {
   bootActor,
   compileActor,
@@ -46,6 +25,7 @@ import {
   geometryActor,
   replayActor,
   saveDraftActor,
+  sessionLifetimeActor,
   tickActor,
   validateActor,
   writeActor,
@@ -124,12 +104,37 @@ export const studioMachine = setup({
     replayActor,
     saveDraftActor,
     deleteDraftActor,
+    sessionLifetimeActor,
   },
   guards: {
     engineReady: ({ context }) => (context.engine !== null && context.official !== null),
     documentCompiles: ({ context }) => (context.document.validation === "clean" && context.engine !== null),
   },
   actions: {
+    applyLocalEdit: assign({
+      selection: ({ context, event }) => ["OPEN_TEXT", "LOAD_DRAFT"].includes(event.type) ? { topology: null, ordinals: [], hovered: null } : context.selection,
+      geometry: ({ context, event }) => ["OPEN_TEXT", "LOAD_DRAFT"].includes(event.type) ? {} : context.geometry,
+      document: ({ context, event }) => {
+        try {
+          switch (event.type) {
+            case "OPEN_TEXT": return openTextDocument(event.text, event.name);
+            case "APPLY_TEXT": return applyText(context.document, event.text);
+            case "EDIT_DOCUMENT": return editDocument(context.document, event.path, event.value, event.label);
+            case "PAINT_CELLS": return paintCells(context.document, event.topology, event.row, event.ordinals, event.value);
+            case "UNDO": return undoDocument(context.document);
+            case "REDO": return redoDocument(context.document);
+            case "LOAD_DRAFT": {
+              const draft = context.machineInput.draftStore.load(event.id);
+              if (!draft?.revisions.length) throw new Error(`no local draft named '${event.id}'.`);
+              return openDraftDocument(draft.revisions[0].text, draft.documentName || event.id);
+            }
+            default: return context.document;
+          }
+        } catch (error) {
+          return pushDiagnostic(context.document, errorMessage(error), errorPath(error));
+        }
+      },
+    }),
     diagnoseEngineUnavailable: assign({
       document: ({ context }) =>
         pushDiagnostic(context.document, `engine unavailable: ${context.boot.refusal ?? "not booted yet."}`),
@@ -197,9 +202,10 @@ export const studioMachine = setup({
     },
     ready: {
       type: "parallel",
+      invoke: { src: "sessionLifetimeActor", input: ({ context, self }) => ({ engine: context.engine, handle: () => self.getSnapshot().context.preview.handle }) },
       on: {
         SELECT_TOPOLOGY: {
-          actions: assign({ selection: ({ context, event }) => ({ ...context.selection, topology: event.name }) }),
+          actions: assign({ selection: ({ context, event }) => ({ ...context.selection, topology: event.name, ordinals: [], hovered: null }) }),
         },
         SELECT_CELLS: {
           actions: assign({
@@ -221,82 +227,48 @@ export const studioMachine = setup({
       states: {
         document: {
           initial: "idle",
+          on: {
+            ...Object.fromEntries([...DOCUMENT_MUTATING_EVENTS].filter(type => type !== "OPEN_OFFICIAL").map(type => [type, {
+              target: ".settling", actions: "applyLocalEdit",
+            }])),
+            OPEN_OFFICIAL: { target: ".editing" },
+            SET_TEXT_DRAFT: {
+              actions: assign({ document: ({ context, event }) => ({ ...context.document, text: event.text }) }),
+            },
+          },
           states: {
             idle: {
               on: {
-                OPEN_OFFICIAL: { target: "editing" },
-                OPEN_TEXT: { target: "editing" },
-                APPLY_TEXT: { target: "editing" },
-                EDIT_DOCUMENT: { target: "editing" },
-                PAINT_CELLS: { target: "editing" },
-                UNDO: { target: "editing" },
-                REDO: { target: "editing" },
-                LOAD_DRAFT: { target: "editing" },
-                SET_TEXT_DRAFT: {
-                  actions: assign({ document: ({ context, event }) => ({ ...context.document, text: event.text }) }),
-                },
                 SAVE_DRAFT: { target: "savingDraft" },
                 DELETE_DRAFT: { target: "deletingDraft" },
               },
             },
-            // Re-entrant on the very same event set: a new document-mutating event while an edit
-            // is in flight interrupts it (XState stops an exited state's invoked actor on exit —
-            // but ONLY on a transition that actually exits: a same-target self-transition like this
-            // one is INTERNAL by default and leaves the current invoke running untouched unless
-            // `reenter: true` says otherwise — see xstate's own `getTransitionDomain`). `reenter:
-            // true` is what makes this transition really EXIT "editing" (stopping the in-flight
-            // editActor) before re-entering it fresh for the new event, so only the NEWEST edit's
-            // editActor ever resolves into `context.document`.
+            settling: {
+              on: Object.fromEntries([...DOCUMENT_MUTATING_EVENTS].filter(type => type !== "OPEN_OFFICIAL").map(type => [type, {
+                target: "settling", reenter: true, actions: "applyLocalEdit",
+              }])),
+              after: { 250: "checking" },
+            },
+            checking: {
+              always: [
+                { guard: ({ context }) => context.document.validation !== "pending", target: "idle" },
+                { guard: "engineReady", target: "validating" },
+                { target: "idle", actions: "diagnoseEngineUnavailable" },
+              ],
+            },
             editing: {
-              on: Object.fromEntries([...DOCUMENT_MUTATING_EVENTS].map((type) => [type, { target: "editing", reenter: true }])),
+              on: { OPEN_OFFICIAL: { target: "editing", reenter: true } },
               invoke: {
                 src: "editActor",
                 input: ({ context, event }) => ({
                   perform: (): DocumentState | Promise<DocumentState> => {
-                    switch (event.type) {
-                      case "OPEN_OFFICIAL": {
-                        if (!context.official) {
-                          throw new Error("cannot open an official document before boot completes.");
-                        }
-                        const entry = context.official.manifest.documents.find((candidate) => candidate.name === event.name);
-                        if (!entry) {
-                          throw new Error(`official manifest names no document '${event.name}'.`);
-                        }
-                        return context.official.documents.get(event.name)
-                          .then((text) => openOfficialDocument(event.name, text, entry.role));
-                      }
-                      case "OPEN_TEXT":
-                        return openTextDocument(event.text, event.name);
-                      case "APPLY_TEXT":
-                        return applyText(context.document, event.text);
-                      case "EDIT_DOCUMENT":
-                        return editDocument(context.document, event.path, event.value, event.label);
-                      case "PAINT_CELLS":
-                        return paintCells(context.document, event.topology, event.row, event.ordinals, event.value);
-                      case "UNDO":
-                        return undoDocument(context.document);
-                      case "REDO":
-                        return redoDocument(context.document);
-                      case "LOAD_DRAFT": {
-                        const draft = context.machineInput.draftStore.load(event.id);
-                        if (!draft || draft.revisions.length === 0) {
-                          throw new Error(`no local draft named '${event.id}'.`);
-                        }
-                        // A draft's own text was, at save time, already-verified official content
-                        // or content that already passed `checkDocument` once (OPEN_TEXT/APPLY_TEXT)
-                        // — this is `openOfficialDocument`'s trusted-content path, not
-                        // `openTextDocument`'s pasted-content one, so `checkDocument` never re-runs
-                        // here. `parseDocumentText` (not plain `JSON.parse`) still parses it once to
-                        // pick a role — the same Int64-faithful parse `openOfficialDocument` itself
-                        // performs a moment later, so an out-of-range sentinel reads back as the
-                        // same `bigint` both times rather than a rounded double on this first pass.
-                        const text = draft.revisions[0].text;
-                        const value: unknown = parseDocumentText(text);
-                        return openOfficialDocument(draft.documentName || event.id, text, readDocumentRole(value));
-                      }
-                      default:
-                        throw new Error(`document.editing: unexpected event '${(event as { type: string }).type}'.`);
+                    if (event.type !== "OPEN_OFFICIAL" || !context.official) {
+                      throw new Error("cannot open an official document before boot completes.");
                     }
+                    const entry = context.official.manifest.documents.find(candidate => candidate.name === event.name);
+                    if (!entry) throw new Error(`official manifest names no document '${event.name}'.`);
+                    return context.official.documents.get(event.name)
+                      .then(text => openOfficialDocument(event.name, text, entry.role));
                   },
                 }),
                 onDone: [
@@ -306,7 +278,7 @@ export const studioMachine = setup({
                   },
                   {
                     guard: "engineReady",
-                    actions: assign({ document: ({ event }) => event.output }),
+                    actions: assign({ document: ({ event }) => event.output, selection: () => ({ topology: null, ordinals: [], hovered: null }), geometry: () => ({}) }),
                     target: "validating",
                   },
                   {
@@ -323,13 +295,7 @@ export const studioMachine = setup({
                 },
               },
             },
-            // Unlike "editing"'s own self-transition (see its remarks on `reenter`), this one's
-            // target ("editing") differs from its source ("validating") — a genuine cross-state
-            // transition always exits its source, so the in-flight validateActor (the expensive
-            // `composeTree`/`compile` call) is always stopped here with no `reenter` flag needed;
-            // its own eventual result, even if it later resolves anyway, is never applied.
             validating: {
-              on: Object.fromEntries([...DOCUMENT_MUTATING_EVENTS].map((type) => [type, { target: "editing" }])),
               invoke: {
                 src: "validateActor",
                 input: ({ context }): ValidateInput => ({
@@ -338,7 +304,7 @@ export const studioMachine = setup({
                   document: {
                     name: context.document.name,
                     role: context.document.role,
-                    text: context.document.text,
+                    text: context.document.appliedText,
                     value: context.document.value,
                   },
                 }),
@@ -382,7 +348,6 @@ export const studioMachine = setup({
               },
             },
             geometrizing: {
-              on: Object.fromEntries([...DOCUMENT_MUTATING_EVENTS].map((type) => [type, { target: "editing" }])),
               invoke: {
                 src: "geometryActor",
                 input: ({ context }): GeometryInput => ({ engine: context.engine!, value: context.document.value }),
@@ -390,6 +355,14 @@ export const studioMachine = setup({
                   target: "idle",
                   actions: assign({
                     geometry: ({ event }) => event.output.geometry,
+                    selection: ({ context, event }) => {
+                      const geometry = event.output.geometry;
+                      const topology = context.selection.topology && Object.hasOwn(geometry, context.selection.topology)
+                        ? context.selection.topology : Object.keys(geometry)[0] ?? null;
+                      if (topology && topology === context.selection.topology && geometry[topology] === context.geometry[topology]) return context.selection;
+                      const valid = new Set(topology ? geometry[topology].map(cell => cell.ordinal) : []);
+                      return { topology, ordinals: topology === context.selection.topology ? context.selection.ordinals.filter(ordinal => valid.has(ordinal)) : [], hovered: null };
+                    },
                     document: ({ context, event }) =>
                       (event.output.diagnostics.length === 0
                         ? context.document
@@ -415,7 +388,7 @@ export const studioMachine = setup({
                   const id = event.id ?? slugifyDraftId(context.document.name);
                   const title = event.title ?? id;
                   return {
-                    revision: context.document.revision,
+                    text: context.document.text,
                     perform: (): StudioDraft =>
                       context.machineInput.draftStore.save(id, title, context.document.name, context.document.text, context.document.label),
                   };
@@ -424,9 +397,7 @@ export const studioMachine = setup({
                   target: "idle",
                   actions: assign({
                     document: ({ context, event }) =>
-                      (event.output.revision === context.document.revision
-                        ? { ...context.document, cleanRevision: context.document.revision }
-                        : context.document),
+                      ({ ...context.document, savedText: event.output.text }),
                   }),
                 },
                 onError: { target: "idle", actions: "diagnoseDraftFailure" },
@@ -452,7 +423,7 @@ export const studioMachine = setup({
           // Applies in every child state below that doesn't declare its own handler for these
           // types (XState bubbles an unhandled event up to the nearest ancestor that does) — the
           // one place "a new document revision stops the preview" is implemented.
-          on: Object.fromEntries([...DOCUMENT_MUTATING_EVENTS].map((type) => [
+          on: Object.fromEntries([...DOCUMENT_MUTATING_EVENTS, "PREVIEW_STOP"].map((type) => [
             type,
             { target: ".idle", actions: ["releasePreviewHandle", "invalidatePreview"] },
           ])),
@@ -484,7 +455,7 @@ export const studioMachine = setup({
             compiling: {
               invoke: {
                 src: "compileActor",
-                input: ({ context }): CompileInput => ({ engine: context.engine!, sourceJson: context.document.composed ?? context.document.text }),
+                input: ({ context }): CompileInput => ({ engine: context.engine!, sourceJson: context.document.composed ?? context.document.appliedText }),
                 onDone: [
                   {
                     guard: ({ event }) => event.output.status === "ready",
@@ -543,9 +514,11 @@ export const studioMachine = setup({
                 onDone: {
                   target: "ready",
                   actions: assign({
-                    preview: ({ context, event }) => (event.output.ok
-                      ? { ...context.preview, rows: event.output.rows, script: [...context.preview.script, event.output.step] }
-                      : { ...context.preview, refusals: [...context.preview.refusals, event.output.error] }),
+                    preview: ({ context, event }) => {
+                      if (!event.output.ok) return { ...context.preview, refusals: [...context.preview.refusals, event.output.error] };
+                      const preview = branchPreview(context.preview);
+                      return { ...preview, rows: event.output.rows, script: [...preview.script, event.output.step] };
+                    },
                   }),
                 },
                 onError: {
@@ -566,7 +539,7 @@ export const studioMachine = setup({
                   engine: context.engine!,
                   handle: context.preview.handle!,
                   nextTick: context.preview.tick + 1n,
-                  scriptLength: context.preview.script.length,
+                  scriptLength: branchPreview(context.preview).script.length,
                 }),
                 onDone: {
                   target: "ready",
@@ -576,13 +549,14 @@ export const studioMachine = setup({
                         return { ...context.preview, refusals: [...context.preview.refusals, event.output.error] };
                       }
                       const snapshot = event.output.snapshot;
-                      const script: PreviewScriptStep[] = [...context.preview.script, { kind: "tick", tick: snapshot.tick }];
+                      const preview = branchPreview(context.preview);
+                      const script: PreviewScriptStep[] = [...preview.script, { kind: "tick", tick: snapshot.tick }];
                       return {
-                        ...context.preview,
+                        ...preview,
                         tick: snapshot.tick,
                         rows: snapshot.rows,
-                        snapshots: [...context.preview.snapshots, snapshot],
-                        cursor: context.preview.snapshots.length,
+                        snapshots: [...preview.snapshots, snapshot],
+                        cursor: preview.snapshots.length,
                         script,
                       };
                     },
@@ -609,10 +583,11 @@ export const studioMachine = setup({
                   const index = Math.max(0, Math.min(context.preview.snapshots.length - 1, requested));
                   return {
                     engine: context.engine!,
-                    sourceJson: context.document.composed ?? context.document.text,
+                    sourceJson: context.document.composed ?? context.document.appliedText,
                     script: context.preview.script,
                     upTo: context.preview.snapshots[index]?.scriptLength ?? 0,
                     index,
+                    expectedHash: context.preview.snapshots[index].hash,
                   };
                 },
                 onDone: [
@@ -633,30 +608,28 @@ export const studioMachine = setup({
                     ],
                   },
                   {
-                    target: "refused",
+                    target: "ready",
                     actions: assign({
-                      preview: ({ context, event }) => ({ ...context.preview, status: "refused" as const, handle: null, refusal: event.output.refusal }),
+                      preview: ({ context, event }) => ({ ...context.preview, refusals: [...context.preview.refusals, event.output.refusal ?? "Preview restore refused."] }),
                     }),
                   },
                 ],
                 onError: {
-                  target: "refused",
+                  target: "ready",
                   actions: assign({
                     preview: ({ context, event }) => ({
                       ...context.preview,
-                      status: "refused" as const,
-                      handle: null,
-                      refusal: errorMessage((event as unknown as { error: unknown }).error),
+                      refusals: [...context.preview.refusals, errorMessage((event as unknown as { error: unknown }).error)],
                     }),
                   }),
                 },
               },
             },
             resetting: {
-              entry: "releasePreviewHandle",
+              entry: ["releasePreviewHandle", "invalidatePreview"],
               invoke: {
                 src: "compileActor",
-                input: ({ context }): CompileInput => ({ engine: context.engine!, sourceJson: context.document.composed ?? context.document.text }),
+                input: ({ context }): CompileInput => ({ engine: context.engine!, sourceJson: context.document.composed ?? context.document.appliedText }),
                 onDone: [
                   {
                     guard: ({ event }) => event.output.status === "ready",

@@ -1537,25 +1537,23 @@ bool worldShadowCullEnabled() {
 // chord, the inflation, the lane striding, and the tExit cap differ. World segments need no bit — mapCore always
 // evaluates them.
 //
-// UNIFORM CONTROL FLOW: every lane of the group calls this exactly once per frame with the same `direction`/`reach`
+// UNIFORM CONTROL FLOW: every lane calls this with the same direction/reach
 // (the lit lanes with their hitPoint, the rest with lit = false) — it carries group barriers, so no caller may skip it
 // or call it under a per-lane branch. Returns the fallback DECISION (uniform across the group) so the caller marches
 // correctly whether or not the mask was built:
 //   2 = mask BUILT into sdfShadowMaskWords — march it (the cull); also the answer when no lane in the group is lit
 //       (an empty mask nothing marches);
-//   1 = a grid is packed but the program has MORE instances than the local mask can address — march the CAMERA-TILE
-//       mask (the pre-cull shipped fallback, cheap; NOT the ~20x-slower flat all-instances march);
 //   0 = NO grid packed (a grid-suppressed or few-instance program) — march the FLAT all-instances field, which for a
 //       few-instance program is cheap AND, for a deliberately grid-suppressed program, MATCHES the grid-present gather
 //       so the grid toggle stays render-invariant (the world-grid-cull grid==flat contract).
 groupshared float4 sdfShadowGatherPoints[SDF_GROUP_SHADOW_LANES];
-groupshared float4 sdfShadowGatherCone; // xyz = the lit points' apex, w = the enclosing radius + ShadowBias
+groupshared float4 sdfShadowGatherCone; // xyz = the hit points' apex, w = the enclosing radius + ShadowBias
 groupshared uint sdfShadowGatherLitCount;
 
 uint sdfShadowGatherGroup(bool lit, float3 hitPoint, float3 direction, float reach, uint lane) {
     // Phase 0 — clear the group mask and publish this lane's hitPoint.
-    if (lane < SDF_SHADOW_MASK_WORDS) {
-        sdfShadowMaskWords[lane] = 0u;
+    for (uint word = lane; word < SDF_SHADOW_MASK_WORDS; word += SDF_GROUP_SHADOW_LANES) {
+        sdfShadowMaskWords[word] = 0u;
     }
 
     sdfShadowGatherPoints[lane] = float4(hitPoint, (lit ? 1.0 : 0.0));
@@ -1602,7 +1600,6 @@ uint sdfShadowGatherGroup(bool lit, float3 hitPoint, float3 direction, float rea
     // The decisions below are uniform (program-level facts and the group's own count), so an early return here leaves
     // no lane behind at a later barrier.
     uint packedInstanceCount = sdfInstanceCount();
-    uint instanceCount = min(packedInstanceCount, SDF_MAX_INSTANCES);
     uint instanceOffset = sdfInstanceDirectoryOffset();
     SdfInstanceGridHeader grid = sdfLoadInstanceGridHeader(instanceOffset, packedInstanceCount);
 
@@ -1610,11 +1607,8 @@ uint sdfShadowGatherGroup(bool lit, float3 hitPoint, float3 direction, float rea
         return 0u; // no grid — flat fallback (cheap for few instances; matches a would-be gather so the grid toggle is invariant)
     }
 
-    uint wordCount = sdfInstanceMaskWordCount(instanceCount);
-
-    if (wordCount > SDF_SHADOW_MASK_WORDS) {
-        return 1u; // grid packed but too many instances to address the local mask — the camera-tile fallback (no flat catastrophe)
-    }
+    // Stage 1's shared mask covers SDF_MAX_INSTANCES. A large reserved pool is still an exact gather; the caller
+    // selects the camera-tile approximation only when that quality mode was requested.
 
     if (litCount == 0u) {
         return 2u; // nothing in this group marches a shadow; the cleared mask is complete
@@ -2032,8 +2026,8 @@ float worldAccumulateShadowVisibility(float sampled) {
 // the tape interpreter, so three unrolled rungs were three interpreter copies in the hottest kernel — measured on the
 // RTX 2060 shipped world as a 60 ms AO term for three evaluations per lit pixel, ten times the primary march's cost per
 // evaluation; one rolled call site is the fix, not fewer taps. Paid
-// ONLY on lit hits and tile-masked exactly like areaShadowVisibility (a masked-out instance is as absent from a nearby tap as it
-// is from the hit itself). Purely local — no cones, no hemisphere, no history — but reads convincingly as contact
+// ONLY on lit hits. The exact path includes every live instance: a camera cone cannot prove an instance irrelevant
+// to a tap displaced along the normal. Purely local — no hemisphere or history — but reads as contact
 // shadowing in creases and under overhangs.
 //
 // Applied to the AMBIENT/sky fill ONLY, never the sun: soft shadows govern direct light, and multiplying occlusion into
@@ -2043,13 +2037,14 @@ float worldAccumulateShadowVisibility(float sampled) {
 // tracks each program's stepScale bake, not geometry.
 // `stepScale` is renderView's hoisted Lipschitz clamp (see areaShadowVisibility): the (h - d) rung subtract mixes a world-space
 // rung with a mapMasked distance, so d is divided back to world units by it first.
+static const float AmbientOcclusionReach = 0.13;
 float calcAO(float3 surfacePoint, float3 surfaceNormal, uint instanceMaskBase, float stepScale) {
     float occlusion = 0.0;
     float scale = 1.0;
 
     [loop]
     for (int i = 0; (i < 3); i++) {
-        float h = (0.01 + ((0.12 * float(i)) / 2.0));
+        float h = (0.01 + (((AmbientOcclusionReach - 0.01) * float(i)) / 2.0));
         float d = sdfDeScaleField(mapDistanceMasked(surfacePoint + (surfaceNormal * h), instanceMaskBase), stepScale);
 
         sdfEvalCount += 1.0; // one of the three AO rungs
@@ -2453,10 +2448,32 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
 #ifdef SDF_SCREEN_SOURCES
     bool cullOn = worldShadowCullEnabled();
     uint groupGather = (cullOn ? 1u : 0u); // without the group gather: the camera-tile mask (1) or the flat field (0)
+    uint groupAmbientGather = 0u;
 #ifdef SDF_GROUP_SHADOW_GATHER
     {
         bool finalShadingMode = ((viewMode <= 0) || (viewMode >= DebugViewModeCount) || (viewMode == DebugViewModeEvals));
+        bool ambientGatherWanted = (finalShadingMode && !worldAoDisabled() && !worldUseFastAmbientOcclusion());
         bool groupGatherWanted = (finalShadingMode && cullOn && !worldUseCameraTileShadowMask() && !worldSoftShadowsDisabled());
+
+        if (ambientGatherWanted) {
+            // AO measures the field, including its positive clearances, rather than binary ray visibility.
+            // A camera cone or a finite contact sphere cannot preserve every ladder contribution. Build the
+            // full live-instance mask once per group, excluding only the parked slots that contribute nothing.
+            uint ambientInstanceCount = min(sdfInstanceCount(), SDF_MAX_INSTANCES);
+            uint ambientInstanceOffset = sdfInstanceDirectoryOffset();
+            for (uint word = lane; word < SDF_SHADOW_MASK_WORDS; word += SDF_GROUP_SHADOW_LANES) {
+                uint bits = 0u;
+                uint end = min(((word + 1u) * 32u), ambientInstanceCount);
+                for (uint index = word * 32u; index < end; index++) {
+                    if (sdfInstanceBoundAt(ambientInstanceOffset, index).w >= 0.0) {
+                        bits |= (1u << (index & 31u));
+                    }
+                }
+                sdfAmbientMaskWords[word] = bits;
+            }
+            GroupMemoryBarrierWithGroupSync();
+            groupAmbientGather = 2u;
+        }
 
         if (groupGatherWanted) {
             float groupShadowReach = (ShadowMaxDistance * worldShadowDistanceScale());
@@ -2536,8 +2553,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 // The shadow GRID CULL (default ON). The group phase above built this workgroup's shadow candidate mask
                 // (sdfShadowMaskWords, groupshared) and decided the fallback for every lane: 2 = mask BUILT — march it
                 // (the cull, bit-identical to the flat all-instances march, restricted to the instances the group's
-                // shadow rays can reach); 1 = a grid is packed but the program overflows the local mask, or the
-                // camera-tile lever is set → the camera-tile mask (the cheap pre-cull behaviour, NOT the ~20x-slower
+                // shadow rays can reach); 1 = the camera-tile lever is set → the camera-tile mask (the cheap pre-cull behaviour, NOT the ~20x-slower
                 // all-instances flat); 0 = NO grid → the flat all-instances fallback, which is cheap for a
                 // few-instance program and keeps the grid toggle render-invariant. The cull OFF marches flat
                 // all-instances — the ground-truth reference the A/B lever and the world-shadow-cull gate use.
@@ -2577,11 +2593,21 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 // 3-tap normal-ladder AO, into the AMBIENT fill ONLY (the sun stays governed by areaShadowVisibility above).
                 // Computed in the material branch so the emissive screen-card path never pays its five taps. The
                 // engine-bench sdf.ao lever forces occlusion to 1 (skipping the ladder's map() evals — creases brighten).
+                uint ambientMaskBase = instanceMaskBase;
+#ifdef SDF_SCREEN_SOURCES
+                if (!worldUseFastAmbientOcclusion()) {
+                    sdfAmbientMaskActive = (groupAmbientGather == 2u);
+                    ambientMaskBase = SDF_INSTANCE_MASK_ALL; // exact no-grid fallback; an active shared mask overrides it
+                }
+#endif
                 float ambientOcclusion = (worldAoDisabled()
                     ? 1.0
                     : (worldUseFastAmbientOcclusion()
-                        ? calcFastAO(surfacePoint, normal, instanceMaskBase, stepScale)
-                        : calcAO(surfacePoint, normal, instanceMaskBase, stepScale)));
+                        ? calcFastAO(surfacePoint, normal, ambientMaskBase, stepScale)
+                        : calcAO(surfacePoint, normal, ambientMaskBase, stepScale)));
+#ifdef SDF_SCREEN_SOURCES
+                sdfAmbientMaskActive = false;
+#endif
                 // Ambient and sun each carry their own linear color now (a sunset is a warm sun over a cool ambient,
                 // not a second code path). Both default to white, so the pinned-era expression is the same arithmetic.
                 float3 radiance = ((worldAmbientColor() * ((ambient * ambientScale) * ambientOcclusion)) + (worldSunColor() * ((worldSunWeight() * sunDiffuse) * sunScale)));

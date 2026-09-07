@@ -8,6 +8,14 @@ function isScalarLive(row: RowInfo | undefined): boolean {
   return row !== undefined && !row.keyed;
 }
 
+/** Exact comparison without serializing the engine's bigint cell values. */
+export function sameCells(left: RowInfo["cells"], right: RowInfo["cells"]): boolean {
+  return left === right || (left.length === right.length && left.every((cell, index) => {
+    const other = right[index];
+    return cell.key === other.key && cell.value === other.value && cell.text === other.text;
+  }));
+}
+
 function RegisterInput({ name, value, disabled, onApply }: {
   name: string;
   value: bigint;
@@ -62,6 +70,7 @@ export const StateMatrixView: React.FC = () => {
   const document = useStudioDocument();
   const preview = useStudioPreview();
   const actor = StudioContext.useActorRef();
+  const canWrite = StudioContext.useSelector(snapshot => snapshot.matches({ ready: { preview: "ready" } }));
 
   const authoredRows = useMemo(() => listStateRows(document.value), [document.value]);
   const liveByName = useMemo(() => new Map(preview.rows.map(row => [row.name, row])), [preview.rows]);
@@ -77,7 +86,7 @@ export const StateMatrixView: React.FC = () => {
     const names = new Set<string>();
     for (const row of preview.rows) {
       const before = previousByName.get(row.name);
-      if (!before || JSON.stringify(before.cells) !== JSON.stringify(row.cells)) {
+      if (!before || !sameCells(before.cells, row.cells)) {
         names.add(row.name);
       }
     }
@@ -97,11 +106,11 @@ export const StateMatrixView: React.FC = () => {
           size="md"
           fw={650}>Preview registers</Text><Button
             variant="subtle"
-            disabled={!previewActive}
+            disabled={!canWrite}
             onClick={() => actor.send({ type: "RESET_WORLD" })}>Reset preview</Button></Group>
       <Text
         size="sm"
-        c="var(--ink-soft)">Apply a value to advance one preview tick. These edits do not change the authored document.</Text>
+        c="var(--ink-soft)">Apply a value to the preview session, then use Tick to evaluate rules. These edits do not change the authored document.</Text>
       <ScrollArea
         h={350}
         offsetScrollbars><Table
@@ -123,7 +132,7 @@ export const StateMatrixView: React.FC = () => {
                 ? <RegisterInput
                   name={row.name}
                   value={value}
-                  disabled={false}
+                  disabled={!canWrite}
                   onApply={next => actor.send({ type: "PREVIEW_WRITE", row: row.name, value: next, write: "set" })} />
                 : <Text
                   size="sm"

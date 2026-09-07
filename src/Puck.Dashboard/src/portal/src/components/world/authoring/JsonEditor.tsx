@@ -5,7 +5,6 @@ import { Decoration, type DecorationSet, EditorView, lineNumbers } from "@codemi
 import { StateEffect, StateField } from "@codemirror/state";
 import { EditorView as CmEditorView, minimalSetup } from "codemirror";
 import { StudioContext, useStudioDocument } from "../../../context/StudioContext";
-import { serializeDocumentText } from "../../../document/jsonText";
 import type { EngineDiagnostic } from "../../../native/engineTypes";
 
 /**
@@ -60,9 +59,9 @@ const diagnosticTheme = EditorView.baseTheme({
 /**
  * The studio's JSON tab: a CodeMirror 6 editor over `document.text`. Typing dispatches
  * `SET_TEXT_DRAFT` on every change (the machine keeps this as a live, non-revisioned edit of
- * `context.document.text` — see `studioMachine.ts`'s own `ready.document.idle` handler); Apply
+ * `context.document.text` — accepted throughout the document region); Apply
  * dispatches `APPLY_TEXT` (parses, intake-checks, becomes a real revision); Discard resets the
- * draft back to the last applied revision's own serialized text. Diagnostics are shown as a
+ * draft back to the last applied revision's exact text. Diagnostics are shown as a
  * highlighted-line decoration wherever `lineForDiagnosticPath` can map one, plus a plain list
  * underneath for the diagnostics it cannot place.
  */
@@ -79,6 +78,7 @@ export function JsonEditor() {
       extensions: [
         minimalSetup,
         lineNumbers(),
+        EditorView.contentAttributes.of({ "aria-label": "Document JSON" }),
         json(),
         diagnosticField,
         diagnosticTheme,
@@ -113,7 +113,7 @@ export function JsonEditor() {
     view.dispatch({ effects: setDiagnosticLines.of(lines) });
   }, [document.diagnostics, document.text]);
 
-  const applied = serializeDocumentText(document.value);
+  const applied = document.appliedText;
   const isDraft = document.text !== applied;
   const unplaced = document.diagnostics.filter((d) => lineForDiagnosticPath(document.text, d.path) === null);
 

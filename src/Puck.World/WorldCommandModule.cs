@@ -620,6 +620,40 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.shaders.reload",
+            description: "Reloads compiled SDF kernels on the next produced frame: world.shaders.reload [directory]. Defaults to deployed Assets/Shaders/Sdf; a source checkout can name src/Puck.SdfVm/Assets/Shaders/Sdf after CompileShaders completes. Uses the current backend. Replaces changed pipelines while retaining world state, GPU buffers and textures; failed loads or ISA validation keep the previous set. This queues work: world.shaders.status reports completion. Binding/ABI changes require a host rebuild; child engines and overlay/postprocess shaders are outside this command.",
+            handler: (_, args) => {
+                if (renderProbe.Node is not { } node) {
+                    return CommandResult.Error(output: "[world.shaders.reload: renderer not ready]");
+                }
+                try {
+                    if (!node.RequestShaderReload(directory: args.Count == 0 ? null : args.Tail(start: 0))) {
+                        return CommandResult.Error(output: "[world.shaders.reload: another request is pending — world.shaders.status]");
+                    }
+                    var status = node.ShaderReloadStatus;
+                    return new CommandResult(Output: $"[world.shaders.reload: request={status.RequestId} pending directory={status.Directory}]");
+                } catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException) {
+                    return CommandResult.Error(output: $"[world.shaders.reload: {exception.Message}]");
+                }
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.shaders.status",
+            description: "Reports the most recent compiled SDF shader reload: request number, state (idle/pending/applied/unchanged/failed), generation, changed pipeline count, directory and failure reason. A request is complete only after pending changes to an outcome.",
+            handler: (_, args) => {
+                if (args.Count != 0) {
+                    return CommandResult.Error(output: "[world.shaders.status: no arguments]");
+                }
+                if (renderProbe.Node is not { } node) {
+                    return new CommandResult(Output: "[world.shaders.status: renderer not ready]");
+                }
+                var status = node.ShaderReloadStatus;
+                return new CommandResult(Output: $"[world.shaders.status: request={status.RequestId} state={status.State} generation={status.Generation} pipelines={status.ChangedPipelines} directory={status.Directory ?? "default"}{(status.Error is { } error ? $" error={error}" : "")}]");
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.shadows",
             description: "Sets continuous ENGINE-WIDE soft-shadow reach and CROWD RADIUS, live (no rebuild): world.shadows [off|low|medium|high|0..1|0%..100%] [crowd-radius]. Names alias 0/25/50/100%; numeric input is continuous. The optional 0..100 world-unit crowd radius bounds WHO casts; farther avatars still render but leave the shadow march.",
             handler: (context, args) => {

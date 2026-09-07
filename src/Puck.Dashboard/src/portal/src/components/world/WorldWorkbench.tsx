@@ -17,6 +17,8 @@ import { pathToPointer } from "../../document/jsonPath";
 import UniversalTopologyView from "./UniversalTopologyView";
 
 const SpatialTopology3D = lazy(() => import("./SpatialTopology3D"));
+const EMPTY_GEOMETRY: readonly import("../../native/engineTypes").EngineCell[] = [];
+const ignoreMetrics = () => {};
 
 class ViewportBoundary extends React.Component<{ children: React.ReactNode; onFallback: () => void }, { failed: boolean }> {
   state = { failed: false };
@@ -51,7 +53,7 @@ export const WorldWorkbench: React.FC = () => {
     }
   }, [topologyName, topologies, actor]);
   const topology = topologies.find(t => t.name === topologyName);
-  const geometry = topologyName ? (geometryMap[topologyName] ?? []) : [];
+  const geometry = topologyName ? (geometryMap[topologyName] ?? EMPTY_GEOMETRY) : EMPTY_GEOMETRY;
 
   const domainRows = useMemo(() => (topologyName ? rowsBoundToTopology(document.value, topologyName) : []), [document.value, topologyName]);
   const [rowName, setRowName] = useState<string | null>(null);
@@ -65,7 +67,7 @@ export const WorldWorkbench: React.FC = () => {
     setView(isVolumetric(geometry) ? "3d" : "2d");
     setLayerIndex("all");
     setSource("author");
-  }, [topologyName]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [topologyName, geometry]);
 
   const [separation, setSeparation] = useState(1.6);
   const [orthographic, setOrthographic] = useState(false);
@@ -178,7 +180,7 @@ export const WorldWorkbench: React.FC = () => {
             <Suspense fallback={<div className="studio-viewport-fallback">Loading spatial tools…</div>}>
               <SpatialTopology3D scene={scene} visible={visible} values={values} empty={empty} bindings={bindings} selection={selectedSet}
                 onSelect={onSelect} cameraRequest={cameraRequest} orthographic={orthographic}
-                relationships={effectiveLayerIndex === "all" && showHidden ? relationships : undefined} onMetricsReady={() => {}} />
+                relationships={effectiveLayerIndex === "all" && showHidden ? relationships : undefined} onMetricsReady={ignoreMetrics} />
             </Suspense>
           </ViewportBoundary>
           : <UniversalTopologyView key={(topologyName ?? "") + String(effectiveLayerIndex)} cells={visible} values={values} empty={empty}
@@ -219,7 +221,7 @@ export const WorldWorkbench: React.FC = () => {
         <Text fw={600} size="sm">Paint authored cells</Text>
         <Text size="xs" c="dimmed" mb="sm">One apply is one undo step.</Text>
         <TextInput label="Paint value" value={paintValueText} onChange={e => setPaintValueText(e.currentTarget.value)} size="sm" styles={{ input: { fontFamily: "ui-monospace,monospace" } }} />
-        <Button fullWidth mt="sm" disabled={source !== "author" || !row || !canPaintRow(row) || !selection.ordinals.length || paintValue === undefined} onClick={() => {
+        <Button fullWidth mt="sm" disabled={document.validation !== "clean" || source !== "author" || !row || !canPaintRow(row) || !selection.ordinals.length || paintValue === undefined} onClick={() => {
           if (!row || paintValue === undefined || !topologyName) return;
           actor.send({ type: "PAINT_CELLS", topology: topologyName, row: row.name, ordinals: [...selection.ordinals], value: paintValue });
           setLocalError(null);

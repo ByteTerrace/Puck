@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { parseDocumentText, serializeDocumentText } from "../document/jsonText";
 import { Button, Group, NumberInput, Select, Stack, Switch, Text, TextInput, Textarea } from "@mantine/core";
 import { getAt, pathToEnginePath, type JsonPath } from "../document/jsonPath";
 import { classify, computeArmSwitch, computeArrayMove, type SchemaWalker, type SchemaNode as WalkedNode } from "./schemaWalk";
@@ -238,10 +239,12 @@ function ArrayField({ walker, document, path, onEdit, node, fieldLabel, compact,
             <SchemaNode walker={walker} document={document} path={entry.path} onEdit={onEdit} refDepth={refDepth + 1} />
           </div>
           <Button size="compact-xs" variant="subtle" disabled={index === 0}
+            aria-label={`Move ${fieldLabel} item ${index + 1} up`}
             onClick={() => onEdit({ path, value: computeArrayMove(items, index, -1), label: editLabel(`move [${index}] up in`, path) })}>
             ↑
           </Button>
           <Button size="compact-xs" variant="subtle" disabled={index === items.length - 1}
+            aria-label={`Move ${fieldLabel} item ${index + 1} down`}
             onClick={() => onEdit({ path, value: computeArrayMove(items, index, 1), label: editLabel(`move [${index}] down in`, path) })}>
             ↓
           </Button>
@@ -332,10 +335,13 @@ function BigIntField({ path, value, onEdit, compact, fieldLabel, description }: 
   path: JsonPath; value: bigint; onEdit: (edit: DocumentEdit) => void; compact?: boolean; fieldLabel: string; description?: string;
 }) {
   const [text, setText] = useState(() => value.toString());
+  const fieldPath = pathToEnginePath(path);
+  useEffect(() => setText(value.toString()), [value, fieldPath]);
   const valid = INTEGER_LITERAL.test(text);
   return (
     <TextInput
       label={compact ? undefined : fieldLabel}
+      aria-label={compact ? fieldPath : undefined}
       description={compact ? undefined : (description ?? "A 64-bit integer.")}
       value={text}
       error={!valid ? "Must be a whole number (digits only, an optional leading -)." : undefined}
@@ -355,18 +361,21 @@ function JsonFallback({ document, path, onEdit, fieldLabel, compact, description
   document: unknown; path: JsonPath; onEdit: (edit: DocumentEdit) => void; fieldLabel: string; compact?: boolean; description?: string;
 }) {
   const current = getAt(document, path);
-  const [text, setText] = useState(() => JSON.stringify(current, null, 2) ?? "");
+  const serialized = current === undefined ? "" : serializeDocumentText(current);
+  const [text, setText] = useState(serialized);
   const [error, setError] = useState<string | null>(null);
+  const fieldPath = pathToEnginePath(path);
+  useEffect(() => { setText(serialized); setError(null); }, [serialized, fieldPath]);
   return (
     <Stack gap={4}>
       {!compact && <Text size="sm" fw={500}>{fieldLabel}</Text>}
       {!compact && description && <Text size="xs" c="dimmed">{description}</Text>}
-      <Textarea autosize minRows={2} maxRows={12} value={text}
+      <Textarea aria-label={fieldPath || fieldLabel} autosize minRows={2} maxRows={12} value={text}
         onChange={e => { setText(e.currentTarget.value); setError(null); }}
         onBlur={() => {
           if (!text.trim()) { onEdit({ path, value: undefined, label: editLabel("remove", path) }); return; }
           try {
-            const parsed = JSON.parse(text);
+            const parsed = parseDocumentText(text);
             onEdit({ path, value: parsed, label: editLabel("set", path) });
           } catch {
             setError("Not valid JSON — the previous value is kept until this parses.");

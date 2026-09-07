@@ -36,9 +36,22 @@ public sealed class PuckWriteShaderHashSidecars : Task {
             var sourceHash = PuckShaderHashing.HashConcatenated(firstPath: sourcePath, includes: Includes);
             var bytecodeHash = PuckShaderHashing.HashFile(path: bytecodePath);
 
-            File.WriteAllText(
-                path: bytecodePath + ".hash",
-                contents: $"source:{sourceHash}\nbytecode:{bytecodeHash}\n");
+            // Publish a complete file rather than truncating one a live asset reader may have memory-mapped.
+            // Windows refuses truncation of mapped files; replacement also prevents readers seeing half a hash.
+            var sidecarPath = bytecodePath + ".hash";
+            var temporaryPath = sidecarPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try {
+                File.WriteAllText(path: temporaryPath, contents: $"source:{sourceHash}\nbytecode:{bytecodeHash}\n");
+                if (File.Exists(path: sidecarPath)) {
+                    File.Replace(sourceFileName: temporaryPath, destinationFileName: sidecarPath, destinationBackupFileName: null);
+                } else {
+                    File.Move(sourceFileName: temporaryPath, destFileName: sidecarPath);
+                }
+            } finally {
+                if (File.Exists(path: temporaryPath)) {
+                    File.Delete(path: temporaryPath);
+                }
+            }
         }
 
         return !Log.HasLoggedErrors;

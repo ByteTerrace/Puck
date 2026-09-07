@@ -54,6 +54,14 @@ kernel ships in two compiled variants
 exotic op/shape cases to shrink register pressure and raise warp occupancy
 when a program uses none of them.
 
+Exact secondary lighting has its own instance masks. Each 8×8 workgroup's
+shadow gather covers the full 16384-instance ceiling; reserved slots cannot
+silently select camera-tile shadows. Exact ambient occlusion includes every
+live instance, with parked slots removed once per group. Camera visibility
+does not prove that an object is irrelevant to an AO probe outside that ray.
+The two shared masks cost 4 KiB per workgroup. Explicit fast AO and camera-tile
+shadows remain approximation options; exact AO costs more in dense scenes.
+
 `SdfWorldEngine`'s construction options (`SdfWorldEngineOptions`) freeze the
 program word capacity, instance capacity, and dynamic-transform capacity for
 the lifetime of the engine; `UploadProgram` is the single owner of every
@@ -71,6 +79,33 @@ manifests shipped in this project's `Assets/Shaders/Sdf/` tree
 (`sdf-film-grain.frag.hlsl` + `sdf-film-grain.puck.shader.json` is the one
 today), selected by a world document's `render.extensions[].id`; this project
 carries no per-pass C#.
+
+## Reload compiled shaders
+
+After compiling HLSL, a running `Puck.World` accepts:
+
+```text
+world.shaders.reload src/Puck.SdfVm/Assets/Shaders/Sdf
+world.shaders.status
+```
+
+Omit the directory to read the deployed assets. The request is pending until
+the next produced frame handles it; status reports `applied`, `unchanged`, or
+`failed`, with a generation and changed pipeline count. Compile before issuing
+the command. Source edits alone do not change a running GPU pipeline.
+
+`SdfEngineNode.RequestShaderReload` queues the work; `SdfWorldEngine.ReloadKernels`
+owns the render-thread transaction. It builds changed pipelines using the
+existing binding descriptions, drains outstanding frames, and checks the beam
+and all three views variants' ISA on the GPU before retiring the old pipelines.
+A failed load or validation keeps the previous kernels. Buffers, images, scene
+programs, animation, and baked bricks remain allocated; shadow history and the
+frame reuse decision are invalidated. Unchanged bytecode skips pipeline creation
+and the GPU drain. Device-loss recovery uses the last successfully loaded set.
+
+This is the primary SDF engine's compute-kernel reload. Child engines and
+overlay/postprocess decorators own separate pipelines. Changing host bindings,
+buffer layouts, or the C# ISA requires a host rebuild, not a shader reload.
 
 ## 🧩 Composition, anchors, and views
 

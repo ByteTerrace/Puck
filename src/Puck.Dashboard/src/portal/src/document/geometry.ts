@@ -6,6 +6,7 @@
  * topology to build its `geometry` context slice.
  */
 import type { EngineCell } from "../native/engineTypes";
+import { serializeDocumentText } from "./jsonText";
 
 export interface TopologyEntry {
   readonly name: string;
@@ -13,6 +14,7 @@ export interface TopologyEntry {
 }
 
 export type GeometryMap = Readonly<Record<string, readonly EngineCell[]>>;
+const topologyEntries = new WeakMap<object, TopologyEntry[]>();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -33,11 +35,14 @@ export function readTopologies(value: unknown): TopologyEntry[] {
   if (!Array.isArray(lattices)) {
     return [];
   }
+  const cached = topologyEntries.get(lattices);
+  if (cached) return cached;
   const entries: TopologyEntry[] = [];
   for (const lattice of lattices) {
     if (isRecord(lattice) && typeof lattice.name === "string" && lattice.name.length > 0) {
-      entries.push({ name: lattice.name, json: JSON.stringify(lattice) });
+      entries.push({ name: lattice.name, json: serializeDocumentText(lattice) });
     }
   }
+  topologyEntries.set(lattices, entries);
   return entries;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge, Button, FileButton, Group, Modal, Paper, Stack, Text, Textarea, TextInput } from "@mantine/core";
 import {
   RiArrowLeftLine,
@@ -15,11 +15,13 @@ import {
   useStudioCanUndo,
   useStudioDocument,
   useStudioOfficial,
+  useStudioIsDirty,
 } from "../../context/StudioContext";
 import type { DocumentRole } from "../../document/documentRole";
 import { checkDocument } from "../../document/intake";
-import type { StudioDraft } from "../../document/localDrafts";
+import { readDraftListing } from "../../document/localDrafts";
 import type { ManifestDocumentEntry } from "../../official/manifest";
+import { useStudioConfirmation } from "./StudioConfirmation";
 
 const ROLE_LABEL: Record<DocumentRole, string> = {
   world: "world",
@@ -60,6 +62,12 @@ export function WorldStudioHeader() {
   const official = useStudioOfficial();
   const canUndo = useStudioCanUndo();
   const canRedo = useStudioCanRedo();
+  const isDirty = useStudioIsDirty();
+  const canSave = StudioContext.useSelector(snapshot => snapshot.matches({ ready: { document: "idle" } }));
+  const confirm = useStudioConfirmation();
+  const replaceDocument = async (perform: () => void) => {
+    if (!isDirty || await confirm("Discard unsaved edits and replace this document?")) perform();
+  };
 
   const [openModal, setOpenModal] = useState(false);
   const [importModal, setImportModal] = useState(false);
@@ -85,7 +93,8 @@ export function WorldStudioHeader() {
   }, [actor, canUndo, canRedo]);
 
   const validation = VALIDATION_LABEL[document.validation] ?? VALIDATION_LABEL.pending;
-  const drafts: StudioDraft[] = actor.getSnapshot().context.machineInput.draftStore.list();
+  const draftStore = actor.getSnapshot().context.machineInput.draftStore;
+  const { drafts, error: draftError } = useMemo(() => openModal ? readDraftListing(draftStore) : { drafts: [], error: null }, [openModal, draftStore]);
   const documentsByRole = new Map<DocumentRole, ManifestDocumentEntry[]>();
   if (official) {
     for (const entry of official.manifest.documents) {
@@ -106,8 +115,10 @@ export function WorldStudioHeader() {
       setImportError((error as Error).message);
       return;
     }
-    actor.send({ type: "OPEN_TEXT", text: importText });
-    setImportModal(false);
+    void replaceDocument(() => {
+      actor.send({ type: "OPEN_TEXT", text: importText });
+      setImportModal(false);
+    });
   };
   const importFile = (file: File | null) => {
     if (!file) return;
@@ -162,7 +173,7 @@ export function WorldStudioHeader() {
                       variant="default"
                       size="xs"
                       justify="flex-start"
-                      onClick={() => { actor.send({ type: "OPEN_OFFICIAL", name: entry.name }); setOpenModal(false); }}
+                      onClick={() => void replaceDocument(() => { actor.send({ type: "OPEN_OFFICIAL", name: entry.name }); setOpenModal(false); })}
                     >
                       {entry.name}
                     </Button>
@@ -173,7 +184,8 @@ export function WorldStudioHeader() {
           })}
           <div>
             <Text size="xs" c="dimmed" mb={4} tt="uppercase">Local drafts</Text>
-            {drafts.length === 0 && <Text size="xs" c="dimmed">No local drafts saved yet.</Text>}
+            {draftError && <Text size="sm" c="red" role="alert">{draftError}</Text>}
+            {!draftError && drafts.length === 0 && <Text size="xs" c="dimmed">No local drafts saved yet.</Text>}
             <Stack gap={4}>
               {drafts.map((draft) => (
                 <Button
@@ -181,7 +193,7 @@ export function WorldStudioHeader() {
                   variant="default"
                   size="xs"
                   justify="flex-start"
-                  onClick={() => { actor.send({ type: "LOAD_DRAFT", id: draft.id }); setOpenModal(false); }}
+                  onClick={() => void replaceDocument(() => { actor.send({ type: "LOAD_DRAFT", id: draft.id }); setOpenModal(false); })}
                 >
                   {draft.title}
                 </Button>
@@ -210,7 +222,7 @@ export function WorldStudioHeader() {
           <TextInput label="Title" value={draftTitle} onChange={(e) => setDraftTitle(e.currentTarget.value)} />
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setSaveDraftModal(false)}>Cancel</Button>
-            <Button onClick={() => { actor.send({ type: "SAVE_DRAFT", title: draftTitle || undefined }); setSaveDraftModal(false); }}>Save</Button>
+            <Button disabled={!canSave} onClick={() => { actor.send({ type: "SAVE_DRAFT", title: draftTitle || undefined }); setSaveDraftModal(false); }}>Save</Button>
           </Group>
         </Stack>
       </Modal>

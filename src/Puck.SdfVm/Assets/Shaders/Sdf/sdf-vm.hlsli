@@ -74,27 +74,32 @@
 #endif
 
 // === Shadow-ray instance cull (the world LIT path only) ==============================================================
-// A per-lit-pixel LOCAL instance mask over the shadow ray's grid neighborhood, built by sdf-world.hlsli's
-// sdfShadowGather (the grid slab walk along the sun ray) and consumed by mapMasked EXACTLY like the device per-tile
+// A shadow-ray instance mask over the light ray's grid neighborhood, built by sdf-world.hlsli's
+// sdfShadowGatherGroup (the grid slab walk along the sun ray) and consumed by mapMasked EXACTLY like the device per-tile
 // mask — so a culled soft-shadow march is BIT-IDENTICAL to the flat all-instances march by the same exact-cull contract
 // (an omitted instance's bound excludes every on-axis shadow sample, so its compose returns the accumulator to the
-// bit). Capped at SDF_SHADOW_MASK_WORDS words = the most instances the local mask can address; a larger program gathers
-// nothing and the caller marches the flat field instead. sdfShadowMaskActive gates sdfInstanceMaskWord onto this static
-// array for the duration of ONE areaShadowVisibility call and is false everywhere else, so every OTHER map()/mapMasked consumer
-// (the primary march, normals, AO, coverage) is unchanged. Guarded on SDF_SCREEN_SOURCES: only the world-views kernel
-// shades, so only it pays the static array's per-invocation footprint (the beam/cull/rt kernels never see it).
+// bit). The Stage 1 shared mask addresses the complete instance ceiling, including reserved/parked slots: total
+// capacity must never silently select the camera-tile approximation for an exact shadow request.
+// sdfShadowMaskActive gates sdfInstanceMaskWord onto this
+// array for ONE areaShadowVisibility call. Exact AO independently selects the complete live-instance mask below;
+// the primary march, normals, and coverage keep their camera masks. Guarded on SDF_SCREEN_SOURCES: only the world-views kernel
+// shades (the beam/cull/rt kernels never see it).
 #ifdef SDF_SCREEN_SOURCES
-#define SDF_SHADOW_MASK_WORDS 32u  // <= 1024 addressable instances (room 284, town, carve ladders fit; larger => flat fallback)
 // GROUPSHARED under SDF_GROUP_SHADOW_GATHER (the Stage 1 kernels): the per-tile gather (sdf-world.hlsli's
-// sdfShadowGatherGroup) fills ONE mask per 8x8 workgroup that every lane's march reads, so the 32 words leave the
-// register file. Other kernels keep the per-thread static (nothing in them builds a mask).
+// sdfShadowGatherGroup) fills ONE mask per 8x8 workgroup. The full 512-word mask costs 2 KiB per group, not per lane.
+// Other kernels retain the small inactive per-thread array; nothing in them builds a mask.
 #ifdef SDF_GROUP_SHADOW_GATHER
+#define SDF_SHADOW_MASK_WORDS ((SDF_MAX_INSTANCES + 31u) / 32u)
 #define SDF_GROUP_SHADOW_LANES 64u // the Stage 1 workgroup: [numthreads(8, 8, 1)]
 groupshared uint sdfShadowMaskWords[SDF_SHADOW_MASK_WORDS];
+groupshared uint sdfAmbientMaskWords[SDF_SHADOW_MASK_WORDS];
 #else
+#define SDF_SHADOW_MASK_WORDS 32u
 static uint sdfShadowMaskWords[SDF_SHADOW_MASK_WORDS];
+static uint sdfAmbientMaskWords[SDF_SHADOW_MASK_WORDS];
 #endif
 static bool sdfShadowMaskActive = false;
+static bool sdfAmbientMaskActive = false;
 #endif
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
@@ -124,10 +129,11 @@ uint sdfInstanceMaskWord(uint instanceMaskBase, uint wordIndex, uint instanceCou
     uint word = 0xFFFFFFFFu;
 
 #ifdef SDF_SCREEN_SOURCES
-    // The active shadow-ray mask OVERRIDES the device per-tile mask for one culled areaShadowVisibility march (false everywhere
-    // else). A word past the cap reads 0, but the gather only ran because the program fit the cap, so a real instance
-    // word is never past it. The `else` avoids a wasted device-buffer read while the shadow mask is live.
-    if (sdfShadowMaskActive) {
+    // Secondary-lighting masks override the device camera mask for their own field walks. Stage 1 addresses the
+    // complete instance ceiling; the guard also keeps inactive arrays safe in other kernel configurations.
+    if (sdfAmbientMaskActive) {
+        word = ((wordIndex < SDF_SHADOW_MASK_WORDS) ? sdfAmbientMaskWords[wordIndex] : 0u);
+    } else if (sdfShadowMaskActive) {
         word = ((wordIndex < SDF_SHADOW_MASK_WORDS) ? sdfShadowMaskWords[wordIndex] : 0u);
     } else
 #endif
@@ -145,14 +151,14 @@ uint sdfInstanceMaskWord(uint instanceMaskBase, uint wordIndex, uint instanceCou
 }
 
 // A real camera-tile mask stores one summary bit per primary word after its primary run. The all-visible sentinel and
-// the temporary per-pixel shadow mask have no device summary and retain the short linear walk.
+// the workgroup lighting masks have no device summary and retain the short linear walk.
 bool sdfInstanceMaskHasSummary(uint instanceMaskBase) {
     bool hasSummary = false;
 
 #ifdef SDF_INSTANCE_MASKS
     hasSummary = (instanceMaskBase != SDF_INSTANCE_MASK_ALL);
 #ifdef SDF_SCREEN_SOURCES
-    hasSummary = (hasSummary && !sdfShadowMaskActive);
+    hasSummary = (hasSummary && !sdfShadowMaskActive && !sdfAmbientMaskActive);
 #endif
 #endif
 
