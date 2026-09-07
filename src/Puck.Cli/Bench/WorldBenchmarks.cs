@@ -7,11 +7,9 @@ using Puck.World.Server;
 
 namespace Puck.Cli.Bench;
 
-// puck bench world: the numbers this wave's brief quotes as throwaway probes, made a lane. A server construction
-// against the shipped world costs tens of seconds (Puck.Physics.Navigation.NavigationRuntime.Domain.BuildEdges
-// sphere-casting through the static SDF program), far past what an iteration-based BenchmarkDotNet job could
-// amortize honestly — this lane is a plain stopwatch harness instead: build once, measure the steady state, print
-// one row per number.
+// puck bench world: the numbers this wave's brief quotes as throwaway probes, made a lane. The steady-state tick
+// and Klondike-deal rows are far past what an iteration-based BenchmarkDotNet job could amortize honestly — this
+// lane is a plain stopwatch harness instead: build once, measure the steady state, print one row per number.
 internal static class WorldBenchmarks {
     // Same window HandleTickPathLawTests uses: warm past JIT/first-tick transients, then sample enough ticks that
     // the median is the steady-state claim and the widest tick is a visible outlier, not the headline.

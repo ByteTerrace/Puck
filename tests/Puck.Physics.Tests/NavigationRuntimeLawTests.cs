@@ -67,6 +67,53 @@ public sealed class NavigationRuntimeLawTests {
         public bool LineOfSight(FixedPosition from, FixedPosition to) => true;
     }
 
+    // Counts every call the kernel makes through it, so a test can prove construction alone asks nothing.
+    private sealed class CountingQuery : IWorldQuery {
+        public int Calls;
+        public QueryCapabilities Capabilities => new(HasHeightfield: true, HasBlocked: true, HasOccupancy: false);
+        public bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) { Calls++; hit = default; return false; }
+        public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) { Calls++; hit = default; return false; }
+        public bool Overlap(FixedPosition center, FixedQ4816 radius) { Calls++; return false; }
+        public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) { Calls++; groundY = FixedQ4816.Zero; return true; }
+        public bool LineOfSight(FixedPosition from, FixedPosition to) { Calls++; return true; }
+    }
+
+    [Fact]
+    public void ConstructingADomainAsksTheQueryNothingUntilARouteIsFirstRequested() {
+        var query = new CountingQuery();
+        var runtime = new NavigationRuntime(domains: [SurfaceDomain()], query: query, fields: null, capacity: Capacity());
+
+        Assert.Equal(expected: 0, actual: query.Calls);
+
+        Span<int> path = stackalloc int[16];
+        _ = runtime[0].FindPath(start: 0, goal: 2, path: path, pathLength: out _, expanded: out _);
+
+        Assert.True(condition: query.Calls > 0, userMessage: "the first route request should have baked the domain against the query");
+    }
+
+    [Fact]
+    public void ALazilyBakedDomainRoutesIdenticallyToAnEagerlyBakedOne() {
+        var row = SurfaceDomain();
+        var query = new SurfaceQuery(blockedX: null);
+
+        // Eager: force the bake immediately after construction, before any route is requested.
+        var eager = new NavigationRuntime(domains: [row], query: query, fields: null, capacity: Capacity())[0];
+        _ = eager.WalkableCellCount;
+
+        // Lazy: touch nothing until the route request itself triggers the bake.
+        var lazy = new NavigationRuntime(domains: [row], query: query, fields: null, capacity: Capacity())[0];
+
+        Span<int> eagerPath = stackalloc int[16];
+        Span<int> lazyPath = stackalloc int[16];
+        var eagerStatus = eager.FindPath(start: 0, goal: 2, path: eagerPath, pathLength: out var eagerLength, expanded: out var eagerExpanded);
+        var lazyStatus = lazy.FindPath(start: 0, goal: 2, path: lazyPath, pathLength: out var lazyLength, expanded: out var lazyExpanded);
+
+        Assert.Equal(expected: eagerStatus, actual: lazyStatus);
+        Assert.Equal(expected: eagerExpanded, actual: lazyExpanded);
+        Assert.Equal(expected: eagerPath[..eagerLength].ToArray(), actual: lazyPath[..lazyLength].ToArray());
+        Assert.Equal(expected: eager.WalkableCellCount, actual: lazy.WalkableCellCount);
+    }
+
     // A minimal live-medium field the kernel drives purely through its own narrow seam.
     private sealed class StubMediumField(Func<FixedVector3, bool> isWet, ulong revision = 0) : INavigationMediumField {
         private readonly ulong m_revision = revision;

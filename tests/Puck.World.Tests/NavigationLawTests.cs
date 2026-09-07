@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Numerics;
 using Puck.Assets.Documents;
 using Puck.Physics.Fields;
@@ -637,5 +638,22 @@ public sealed partial class NavigationLawTests {
         fixture.Step();
 
         Assert.Equal(expected: 1L, actual: fixture.Server.Definition.State.Single(row => row.Name == observed).Cells![0].Value);
+    }
+
+    // The island authors a dozen navigation domains; a construction that eagerly sweeps every one of their
+    // occupancy and edge bakes against the shipped solid field costs a full minute (`puck bench world`'s own
+    // construction row). Lazy baking measures under two seconds on an otherwise idle machine; the bound below sits
+    // an order of magnitude under the eager cost so a reintroduced eager bake fails it unmistakably, while staying
+    // loose enough to absorb ordinary machine contention rather than flake on it.
+    [Fact]
+    public void TheIslandsNavigationDomainsConstructWithoutSweepingTheSolidFieldUpFront() {
+        var stopwatch = Stopwatch.StartNew();
+        using var fixture = Fixtures.FreshServer(definition: AuthoredGameFixtures.Nexus);
+        stopwatch.Stop();
+
+        Assert.True(
+            condition: stopwatch.Elapsed < TimeSpan.FromSeconds(value: 20),
+            userMessage: $"server construction against the shipped world took {stopwatch.Elapsed.TotalSeconds:F1} s"
+        );
     }
 }

@@ -229,6 +229,13 @@ document's own kind/connectivity enums onto the kernel's, and
 `INavigationMediumField` seam so a medium-kind domain never needs the
 lattice's own representation.
 
+A domain's own occupancy sweep and edge bake are lazy: `Domain`'s constructor
+only sizes its workspace arrays, and the kernel samples the solid field the
+first time something genuinely needs the answer — a route request, an
+off-grid locomotion check, a direct `WalkableCellCount` read, or a live-edit
+reconcile proving retention. A domain nobody ever routes through never
+sweeps the field; `puck bench world`'s construction row measures this.
+
 A domain's optional `parent` resolves its local origin and X/Z axes through the placement frame compilation;
 surface probes remain vertical. `world.navigation` includes the resolved origin and yaw. Moving a court thus
 rebuilds the domain in its new frame. This is not incremental SDF invalidation: a domain is retained only when the

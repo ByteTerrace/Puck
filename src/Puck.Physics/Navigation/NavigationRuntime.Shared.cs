@@ -148,6 +148,7 @@ public sealed partial class NavigationRuntime {
             m_sharedTrees.Select(tree => SharedStale ? new NavigationTreeCheckpoint(-1, 0, [], []) : tree.Capture()).ToArray());
 
         public void ValidateShared(NavigationSharedCheckpoint checkpoint) {
+            EnsureBaked();
             if (checkpoint is null || checkpoint.Trees is null || checkpoint.Trees.Length != m_sharedTrees.Length ||
                 checkpoint.Cursor < 0 || checkpoint.Cursor >= Math.Max(1, m_sharedTrees.Length)) {
                 throw new InvalidOperationException("shared navigation checkpoint scheduler shape differs.");

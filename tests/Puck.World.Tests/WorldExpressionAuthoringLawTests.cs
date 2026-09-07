@@ -20,7 +20,13 @@ public sealed class WorldExpressionAuthoringLawTests {
         var data = new TheoryData<string>();
         var root = RepoRoot();
         foreach (var directory in new[] { Path.Combine("src", "Puck.World", "Assets", "worlds"), Path.Combine("src", "Puck.World", "Assets", "scenarios") }) {
-            foreach (var path in Directory.EnumerateFiles(Path.Combine(root, directory), "*.world.json", SearchOption.AllDirectories).Order(StringComparer.Ordinal)) {
+            var absolute = Path.Combine(root, directory);
+            if (!Directory.Exists(absolute)) {
+                // The scenario documents retire and re-land as the campaign moves; a directory absent today proves
+                // nothing missing here, only that this pass has nothing under it to enumerate.
+                continue;
+            }
+            foreach (var path in Directory.EnumerateFiles(absolute, "*.world.json", SearchOption.AllDirectories).Order(StringComparer.Ordinal)) {
                 data.Add(Path.GetRelativePath(root, path));
             }
         }

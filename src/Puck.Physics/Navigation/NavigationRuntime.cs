@@ -91,6 +91,13 @@ public sealed partial class NavigationRuntime {
         private readonly int[] m_parent;
         private int m_searchStamp;
         private readonly bool[] m_walkable;
+        // Whether this domain's occupancy and edges have been sampled against m_query yet. Bake is deferred past
+        // construction to whichever caller genuinely needs the answer first — a route request (FindPath/TryCell/
+        // AdmitsLocomotion/IsTraversableEdge/RequestShared, all through IsWalkable), a direct read-back
+        // (WalkableCellCount), or a live-edit reconcile proving retention (TryRebind) — so a domain nobody ever
+        // routes through never pays its own sweep of the solid field.
+        private bool m_baked;
+        private int m_walkableCellCount;
 
         private INavigationMediumField? m_fields;
         private readonly int m_mediumField;
@@ -122,16 +129,25 @@ public sealed partial class NavigationRuntime {
             m_closedStamp = new int[count];
             m_open = new NodeHeap(cells: count);
 
-            for (var node = 0; node < count; node++) {
-                if (TrySampleCell(query, node, out var ground)) {
+            Sharing = row.Shared;
+            InitializeSharing();
+        }
+
+        // The occupancy sweep and edge bake, run exactly once against whichever query is current at the first
+        // genuine need — never at construction, so a domain nobody routes through never sweeps the solid field.
+        private void EnsureBaked() {
+            if (m_baked) {
+                return;
+            }
+            m_baked = true;
+            for (var node = 0; node < CellCount; node++) {
+                if (TrySampleCell(m_query, node, out var ground)) {
                     m_ground[node] = ground;
                     m_walkable[node] = true;
-                    WalkableCellCount++;
+                    m_walkableCellCount++;
                 }
             }
             BuildEdges();
-            Sharing = row.Shared;
-            InitializeSharing();
         }
 
         // A retained workspace is safe only when its fixed occupancy and edge bake means the same thing under the
@@ -142,8 +158,15 @@ public sealed partial class NavigationRuntime {
             if (row != Tuning || capacity != m_capacity || (Tuning.Kind == NavigationKind.Medium && !SameMediumRevision(fields))) {
                 return false;
             }
-            if (!ReferenceEquals(m_query, query) && !HasSameStaticGeometry(query)) {
-                return false;
+            // The proof needs real occupancy/edge data to compare against the candidate provider — bake now,
+            // against the OLD provider, before it is replaced below. A domain nobody has routed through yet has
+            // nothing to invalidate, so it never pays this cost either: the geometry proof only runs when the
+            // query reference actually changed.
+            if (!ReferenceEquals(m_query, query)) {
+                EnsureBaked();
+                if (!HasSameStaticGeometry(query)) {
+                    return false;
+                }
             }
             m_query = query;
             m_fields = fields;
@@ -215,7 +238,12 @@ public sealed partial class NavigationRuntime {
         public int CellCount => m_walkable.Length;
         public string Name { get; }
         public NavigationDomainInput Tuning { get; }
-        public int WalkableCellCount { get; }
+        public int WalkableCellCount {
+            get {
+                EnsureBaked();
+                return m_walkableCellCount;
+            }
+        }
         public long WorkspaceBytes => checked((long)CellCount * ((6L * sizeof(int)) + sizeof(long) + sizeof(uint) + sizeof(byte)) + SharedWorkspaceBytes);
 
         // Actual off-center locomotion needs a continuous proof: a cached grid edge certifies only the line
@@ -232,6 +260,7 @@ public sealed partial class NavigationRuntime {
         }
 
         public FixedVector3 Position(int node) {
+            EnsureBaked();
             Coordinates(node: node, x: out var x, y: out var y, z: out var z);
             var position = GridPosition(x, y, z);
             return Tuning.Kind == NavigationKind.Surface ? new FixedVector3(position.X, m_ground[node], position.Z) : position;
@@ -355,6 +384,7 @@ public sealed partial class NavigationRuntime {
             return true;
         }
         public bool IsTraversableEdge(int current, int next) {
+            EnsureBaked();
             if ((uint)current >= (uint)CellCount || (uint)next >= (uint)CellCount || current == next) {
                 return false;
             }
@@ -506,6 +536,7 @@ public sealed partial class NavigationRuntime {
             return checked(Math.Max(Math.Abs(nx - gx), Math.Max(Math.Abs(ny - gy), Math.Abs(nz - gz))) * StraightCost);
         }
         public bool IsWalkable(int node) {
+            EnsureBaked();
             if ((uint)node >= (uint)m_walkable.Length || !m_walkable[node]) {
                 return false;
             }

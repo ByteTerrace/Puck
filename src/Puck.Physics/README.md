@@ -260,6 +260,12 @@ representation. `Puck.World.Server.WorldPopulation` is today's host: it
 compiles `navigation.domains` rows and bridges the field lattice below
 through that seam (see [its README](../Puck.World.Server/README.md#navigation)).
 
+A domain's constructor only sizes its workspace arrays: the occupancy sweep
+and edge bake against the host's query run once, lazily, the first time a
+route request, an off-grid locomotion check, a `WalkableCellCount` read, or a
+retention proof (`TryRebind`) genuinely needs the answer. A domain a host
+never routes through never sweeps the query.
+
 A `Surface` domain samples ground through the host's `IWorldQuery.TryGroundHeight`,
 proving lower/head clearance, slope, and step limits; every admitted edge is
 proven with swept spheres from `maxStepHeight` above the foot up to the head
