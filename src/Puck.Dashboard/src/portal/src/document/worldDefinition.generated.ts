@@ -4,7 +4,7 @@
 // Regenerate: dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish
 //             ./src/Puck.Cli/publish/puck.exe schema --bundle <bundle.json>
 //             node scripts/generateWorldTypes.mjs --bundle <bundle.json>
-// Source bundle: schemaVersion=puck.world.def.v1 commit=2946a492abec751ddad2d03aec5456da9ce3cbc6 generator=Puck.World.WorldSchema
+// Source bundle: schemaVersion=puck.world.def.v1 generator=Puck.World.WorldSchema
 
 /**
  * The definition of this world — the aggregate describing what the world is, distinct from the live session state that plays in it. It gathers named spawn points (SpawnPoints), motion defaults (Motion), and render-lever defaults and quality presets (Render). Every consumer takes it by construction.

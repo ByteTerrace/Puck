@@ -77,7 +77,9 @@ async function renderFromBundle(bundlePath) {
     "// Regenerate: dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish\n" +
     "//             ./src/Puck.Cli/publish/puck.exe schema --bundle <bundle.json>\n" +
     "//             node scripts/generateWorldTypes.mjs --bundle <bundle.json>\n" +
-    `// Source bundle: schemaVersion=${meta.schemaVersion ?? "unknown"} commit=${meta.commit ?? "unknown"} ` +
+    // The bundle's x-puck.commit is deliberately NOT stamped here: a header that changes on every commit would
+    // make check:types report drift when the schema itself is unchanged.
+    `// Source bundle: schemaVersion=${meta.schemaVersion ?? "unknown"} ` +
     `generator=${meta.generator ?? "unknown"}\n\n`;
 
   return header + body;
