@@ -1300,6 +1300,7 @@ export type CreationDocument = {
         plant?: {
           driver: string;
           window: unknown;
+          swingWeight?: number | null;
         } | null;
       } | null)[]
     | null;

@@ -142,6 +142,13 @@ the combination is refused by name.
 
 ## Effectors: chains, targets, planting
 
+For a limb that must lift clear during its swing, author `plant.swingWeight: 0`.
+Outside the plant window, contact influence eases out while the named driver is
+active; when that driver returns to rest, surface following returns so both feet
+can settle. Omission keeps continuous target following. Intermediate values in
+[0, 1] retain partial contact influence during the swing. Releasing the effector's
+`when` gate clears its latched world point, so a later landing acquires a fresh one.
+
 A creation's `effectors` list (≤ `CreationDocument.MaxEffectors`, 8) corrects the
 driver-posed skeleton so a named tip reaches a target. The drivers still decide the
 pose; the solve bends it.

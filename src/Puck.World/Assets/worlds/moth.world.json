@@ -418,6 +418,73 @@
         ],
         "shapes": [
           {
+            "id": 2,
+            "name": "pelvis",
+            "type": "Box",
+            "position": [
+              0,
+              0.932,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.172,
+              0.057,
+              0.105
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.038,
+            "swings": [
+              {
+                "phase": 0.0,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "wave": "sine",
+                "amplitude": 0.035,
+                "driver": "stride",
+                "pivot": [
+                  0,
+                  0.92,
+                  0
+                ]
+              }
+            ],
+            "slides": [
+              {
+                "wave": "sine",
+                "amplitude": 0.022,
+                "driver": "step",
+                "phase": 1.5708,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ]
+              },
+              {
+                "wave": "halfSine",
+                "amplitude": -0.025,
+                "driver": "sink",
+                "phase": 0.0,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ]
+              }
+            ]
+          },
+          {
             "id": 0,
             "name": "chest",
             "type": "Box",
@@ -443,14 +510,93 @@
             "dilate": 0.066,
             "slides": [
               {
-                "amplitude": 0.008,
+                "wave": "sine",
+                "amplitude": 0.009,
+                "driver": "breath",
+                "phase": 0.0,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ]
+              },
+              {
+                "wave": "sine",
+                "amplitude": 0.006,
+                "driver": "breath",
+                "phase": 0.0,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ]
+              }
+            ],
+            "parent": "pelvis",
+            "swings": [
+              {
+                "phase": 0.0,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ],
+                "wave": "sine",
+                "amplitude": 0.065,
+                "driver": "stride",
+                "pivot": [
+                  0,
+                  1.04,
+                  0
+                ]
+              },
+              {
+                "phase": 0.0,
                 "axis": [
                   0,
                   0,
                   1
                 ],
-                "driver": "breath",
-                "wave": "sine"
+                "wave": "sine",
+                "amplitude": -0.23,
+                "driver": "bank",
+                "pivot": [
+                  0,
+                  0.92,
+                  0
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "sine",
+                "amplitude": 0.35,
+                "driver": "cruise",
+                "pivot": [
+                  0,
+                  0.92,
+                  0
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "halfSine",
+                "amplitude": -0.065,
+                "driver": "rise",
+                "pivot": [
+                  0,
+                  1.04,
+                  0
+                ]
               }
             ]
           },
@@ -479,31 +625,6 @@
             "smooth": 0,
             "parent": "chest",
             "dilate": 0
-          },
-          {
-            "id": 2,
-            "name": "pelvis",
-            "type": "Box",
-            "position": [
-              0,
-              0.932,
-              0
-            ],
-            "rotation": [
-              0,
-              0,
-              0.0,
-              1.0
-            ],
-            "scale": [
-              0.172,
-              0.057,
-              0.105
-            ],
-            "material": 1,
-            "blend": "Union",
-            "smooth": 0,
-            "dilate": 0.038
           },
           {
             "id": 3,
@@ -556,7 +677,57 @@
             "smooth": 0,
             "parent": "chest",
             "dilate": 0,
-            "group": 1
+            "group": 1,
+            "swings": [
+              {
+                "phase": 0.0,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ],
+                "wave": "sine",
+                "amplitude": -0.045,
+                "driver": "stride",
+                "pivot": [
+                  0,
+                  1.55,
+                  0
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "wave": "sine",
+                "amplitude": 0.08,
+                "driver": "bank",
+                "pivot": [
+                  0,
+                  1.55,
+                  0
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "sine",
+                "amplitude": -0.23,
+                "driver": "cruise",
+                "pivot": [
+                  0,
+                  1.55,
+                  0
+                ]
+              }
+            ]
           },
           {
             "id": 5,
@@ -581,7 +752,7 @@
             "material": 1,
             "blend": "Subtraction",
             "smooth": 0,
-            "parent": "chest",
+            "parent": "hood",
             "dilate": 0,
             "group": 1
           },
@@ -608,7 +779,7 @@
             "material": 3,
             "blend": "Union",
             "smooth": 0,
-            "parent": "chest",
+            "parent": "hood",
             "dilate": 0,
             "group": 2
           },
@@ -635,7 +806,7 @@
             "material": 3,
             "blend": "SmoothUnion",
             "smooth": 0.065,
-            "parent": "chest",
+            "parent": "hood",
             "dilate": 0,
             "group": 2
           },
@@ -662,7 +833,7 @@
             "material": 4,
             "blend": "Union",
             "smooth": 0,
-            "parent": "chest",
+            "parent": "hood",
             "dilate": 0
           },
           {
@@ -688,7 +859,7 @@
             "material": 3,
             "blend": "Union",
             "smooth": 0,
-            "parent": "chest",
+            "parent": "hood",
             "dilate": 0
           },
           {
@@ -714,7 +885,7 @@
             "material": 7,
             "blend": "Union",
             "smooth": 0,
-            "parent": "chest",
+            "parent": "hood",
             "dilate": 0
           },
           {
@@ -724,7 +895,7 @@
             "position": [
               0.103,
               1.895,
-              0.322
+              0.327
             ],
             "rotation": [
               0,
@@ -733,14 +904,14 @@
               0.9981347984218669
             ],
             "scale": [
-              0.068,
-              0.049,
-              0.027
+              0.066,
+              0.051,
+              0.018
             ],
             "material": 5,
             "blend": "Union",
             "smooth": 0,
-            "parent": "chest",
+            "parent": "hood",
             "dilate": 0
           },
           {
@@ -750,7 +921,7 @@
             "position": [
               0.109,
               1.892,
-              0.359
+              0.347
             ],
             "rotation": [
               0,
@@ -759,14 +930,14 @@
               1.0
             ],
             "scale": [
-              0.028,
-              0.034,
-              0.023
+              0.029,
+              0.035,
+              0.01
             ],
             "material": 4,
             "blend": "Union",
             "smooth": 0,
-            "parent": "chest",
+            "parent": "hood",
             "dilate": 0
           },
           {
@@ -776,7 +947,7 @@
             "position": [
               0.10099999999999999,
               1.905,
-              0.382
+              0.359
             ],
             "rotation": [
               0,
@@ -785,14 +956,14 @@
               1.0
             ],
             "scale": [
-              0.01,
-              0.01,
-              0.01
+              0.007,
+              0.007,
+              0.004
             ],
             "material": 5,
             "blend": "Union",
             "smooth": 0,
-            "parent": "chest",
+            "parent": "hood",
             "dilate": 0
           },
           {
@@ -818,7 +989,7 @@
             "material": 4,
             "blend": "Union",
             "smooth": 0,
-            "parent": "chest",
+            "parent": "hood",
             "dilate": 0
           },
           {
@@ -828,7 +999,7 @@
             "position": [
               -0.103,
               1.895,
-              0.322
+              0.327
             ],
             "rotation": [
               0,
@@ -837,14 +1008,14 @@
               0.9981347984218669
             ],
             "scale": [
-              0.068,
-              0.049,
-              0.027
+              0.066,
+              0.051,
+              0.018
             ],
             "material": 5,
             "blend": "Union",
             "smooth": 0,
-            "parent": "chest",
+            "parent": "hood",
             "dilate": 0
           },
           {
@@ -854,7 +1025,7 @@
             "position": [
               -0.09699999999999999,
               1.892,
-              0.359
+              0.347
             ],
             "rotation": [
               0,
@@ -863,14 +1034,14 @@
               1.0
             ],
             "scale": [
-              0.028,
-              0.034,
-              0.023
+              0.029,
+              0.035,
+              0.01
             ],
             "material": 4,
             "blend": "Union",
             "smooth": 0,
-            "parent": "chest",
+            "parent": "hood",
             "dilate": 0
           },
           {
@@ -880,7 +1051,7 @@
             "position": [
               -0.105,
               1.905,
-              0.382
+              0.359
             ],
             "rotation": [
               0,
@@ -889,14 +1060,14 @@
               1.0
             ],
             "scale": [
-              0.01,
-              0.01,
-              0.01
+              0.007,
+              0.007,
+              0.004
             ],
             "material": 5,
             "blend": "Union",
             "smooth": 0,
-            "parent": "chest",
+            "parent": "hood",
             "dilate": 0
           },
           {
@@ -922,7 +1093,7 @@
             "material": 4,
             "blend": "Union",
             "smooth": 0,
-            "parent": "chest",
+            "parent": "hood",
             "dilate": 0
           },
           {
@@ -948,7 +1119,7 @@
             "material": 4,
             "blend": "Union",
             "smooth": 0,
-            "parent": "chest",
+            "parent": "hood",
             "swings": [
               {
                 "driver": "breath",
@@ -992,7 +1163,7 @@
             "material": 4,
             "blend": "Union",
             "smooth": 0,
-            "parent": "chest",
+            "parent": "hood",
             "swings": [
               {
                 "driver": "breath",
@@ -1036,7 +1207,7 @@
             "material": 4,
             "blend": "Union",
             "smooth": 0,
-            "parent": "chest",
+            "parent": "hood",
             "swings": [
               {
                 "driver": "breath",
@@ -1083,36 +1254,68 @@
             "parent": "chest",
             "swings": [
               {
-                "driver": "stride",
-                "wave": "sine",
-                "phase": 3.14159,
-                "pivot": [
-                  0.34,
-                  1.46,
-                  0
-                ],
+                "phase": 3.141592653589793,
                 "axis": [
                   1,
                   0,
                   0
                 ],
-                "amplitude": 0.43
-              },
-              {
-                "driver": "flight",
-                "wave": "constant",
-                "phase": 0.0,
+                "wave": "sine",
+                "amplitude": 0.34,
+                "driver": "stride",
                 "pivot": [
                   0.34,
                   1.46,
                   0
-                ],
+                ]
+              },
+              {
+                "phase": 0.0,
                 "axis": [
                   0,
                   0,
                   1
                 ],
-                "amplitude": 0.34
+                "wave": "constant",
+                "amplitude": 0.3,
+                "driver": "flight",
+                "pivot": [
+                  0.34,
+                  1.46,
+                  0
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "sine",
+                "amplitude": 0.18,
+                "driver": "cruise",
+                "pivot": [
+                  0.34,
+                  1.46,
+                  0
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "wave": "halfSine",
+                "amplitude": 0.14,
+                "driver": "sink",
+                "pivot": [
+                  0.34,
+                  1.46,
+                  0
+                ]
               }
             ]
           },
@@ -1132,15 +1335,15 @@
               0.9890158633619168
             ],
             "scale": [
-              0.13,
-              0.048,
-              0.126
+              0.145,
+              0.064,
+              0.123
             ],
             "material": 1,
             "blend": "Union",
             "smooth": 0,
             "parent": "armL",
-            "dilate": 0.058
+            "dilate": 0.042
           },
           {
             "id": 24,
@@ -1166,23 +1369,39 @@
             "blend": "Union",
             "smooth": 0,
             "parent": "armL",
-            "dilate": 0.035,
+            "dilate": 0.028,
             "swings": [
               {
-                "driver": "stride",
-                "wave": "halfSine",
-                "phase": 3.14159,
-                "pivot": [
-                  0.43,
-                  1.19,
-                  0.03
-                ],
+                "phase": 3.141592653589793,
                 "axis": [
                   1,
                   0,
                   0
                 ],
-                "amplitude": -0.24
+                "wave": "halfSine",
+                "amplitude": -0.38,
+                "driver": "stride",
+                "pivot": [
+                  0.43,
+                  1.19,
+                  0.03
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "constant",
+                "amplitude": -0.3,
+                "driver": "flight",
+                "pivot": [
+                  0.43,
+                  1.19,
+                  0.03
+                ]
               }
             ]
           },
@@ -1237,38 +1456,71 @@
             "smooth": 0,
             "swings": [
               {
-                "driver": "stride",
-                "wave": "sine",
                 "phase": 0.0,
-                "pivot": [
-                  0.16,
-                  0.9,
-                  0
-                ],
                 "axis": [
                   1,
                   0,
                   0
                 ],
-                "amplitude": 0.55
+                "wave": "sine",
+                "amplitude": 0.46,
+                "driver": "stride",
+                "pivot": [
+                  0.16,
+                  0.9,
+                  0
+                ]
               },
               {
-                "driver": "flight",
-                "wave": "constant",
                 "phase": 0.0,
-                "pivot": [
-                  0.16,
-                  0.9,
-                  0
-                ],
                 "axis": [
                   1,
                   0,
                   0
                 ],
-                "amplitude": -0.32
+                "wave": "constant",
+                "amplitude": -0.22,
+                "driver": "flight",
+                "pivot": [
+                  0.16,
+                  0.9,
+                  0
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "halfSine",
+                "amplitude": -0.16,
+                "driver": "rise",
+                "pivot": [
+                  0.16,
+                  0.9,
+                  0
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "halfSine",
+                "amplitude": 0.12,
+                "driver": "sink",
+                "pivot": [
+                  0.16,
+                  0.9,
+                  0
+                ]
               }
-            ]
+            ],
+            "parent": "pelvis"
           },
           {
             "id": 27,
@@ -1296,36 +1548,68 @@
             "parent": "thighL",
             "swings": [
               {
-                "driver": "stride",
-                "wave": "halfSine",
-                "phase": 1.5708,
-                "pivot": [
-                  0.17,
-                  0.52,
-                  0
-                ],
+                "phase": 3.141592653589793,
                 "axis": [
                   1,
                   0,
                   0
                 ],
-                "amplitude": 0.65
+                "wave": "halfSine",
+                "amplitude": 0.92,
+                "driver": "stride",
+                "pivot": [
+                  0.17,
+                  0.52,
+                  0
+                ]
               },
               {
-                "driver": "flight",
-                "wave": "constant",
                 "phase": 0.0,
-                "pivot": [
-                  0.17,
-                  0.52,
-                  0
-                ],
                 "axis": [
                   1,
                   0,
                   0
                 ],
-                "amplitude": 0.62
+                "wave": "constant",
+                "amplitude": 0.48,
+                "driver": "flight",
+                "pivot": [
+                  0.17,
+                  0.52,
+                  0
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "halfSine",
+                "amplitude": 0.2,
+                "driver": "rise",
+                "pivot": [
+                  0.17,
+                  0.52,
+                  0
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "halfSine",
+                "amplitude": -0.18,
+                "driver": "sink",
+                "pivot": [
+                  0.17,
+                  0.52,
+                  0
+                ]
               }
             ],
             "dilate": 0.052
@@ -1380,7 +1664,41 @@
             "blend": "Union",
             "smooth": 0,
             "parent": "shinL",
-            "dilate": 0.047
+            "dilate": 0.047,
+            "swings": [
+              {
+                "phase": 3.141592653589793,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "halfSine",
+                "amplitude": -0.2,
+                "driver": "stride",
+                "pivot": [
+                  0.19,
+                  0.2,
+                  0.015
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "constant",
+                "amplitude": 0.16,
+                "driver": "flight",
+                "pivot": [
+                  0.19,
+                  0.2,
+                  0.015
+                ]
+              }
+            ]
           },
           {
             "id": 31,
@@ -1408,36 +1726,68 @@
             "parent": "chest",
             "swings": [
               {
-                "driver": "stride",
-                "wave": "sine",
-                "phase": 0.0,
-                "pivot": [
-                  -0.34,
-                  1.46,
-                  0
-                ],
+                "phase": 6.283185307179586,
                 "axis": [
                   1,
                   0,
                   0
                 ],
-                "amplitude": 0.43
-              },
-              {
-                "driver": "flight",
-                "wave": "constant",
-                "phase": 0.0,
+                "wave": "sine",
+                "amplitude": 0.34,
+                "driver": "stride",
                 "pivot": [
                   -0.34,
                   1.46,
                   0
-                ],
+                ]
+              },
+              {
+                "phase": 0.0,
                 "axis": [
                   0,
                   0,
                   1
                 ],
-                "amplitude": -0.34
+                "wave": "constant",
+                "amplitude": -0.3,
+                "driver": "flight",
+                "pivot": [
+                  -0.34,
+                  1.46,
+                  0
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "sine",
+                "amplitude": 0.18,
+                "driver": "cruise",
+                "pivot": [
+                  -0.34,
+                  1.46,
+                  0
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "wave": "halfSine",
+                "amplitude": -0.14,
+                "driver": "sink",
+                "pivot": [
+                  -0.34,
+                  1.46,
+                  0
+                ]
               }
             ]
           },
@@ -1457,15 +1807,15 @@
               0.9890158633619168
             ],
             "scale": [
-              0.13,
-              0.048,
-              0.126
+              0.145,
+              0.064,
+              0.123
             ],
             "material": 1,
             "blend": "Union",
             "smooth": 0,
             "parent": "armR",
-            "dilate": 0.058
+            "dilate": 0.042
           },
           {
             "id": 33,
@@ -1491,23 +1841,39 @@
             "blend": "Union",
             "smooth": 0,
             "parent": "armR",
-            "dilate": 0.035,
+            "dilate": 0.028,
             "swings": [
               {
-                "driver": "stride",
-                "wave": "halfSine",
-                "phase": 0.0,
-                "pivot": [
-                  -0.43,
-                  1.19,
-                  0.03
-                ],
+                "phase": 6.283185307179586,
                 "axis": [
                   1,
                   0,
                   0
                 ],
-                "amplitude": -0.24
+                "wave": "halfSine",
+                "amplitude": -0.38,
+                "driver": "stride",
+                "pivot": [
+                  -0.43,
+                  1.19,
+                  0.03
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "constant",
+                "amplitude": -0.3,
+                "driver": "flight",
+                "pivot": [
+                  -0.43,
+                  1.19,
+                  0.03
+                ]
               }
             ]
           },
@@ -1562,38 +1928,71 @@
             "smooth": 0,
             "swings": [
               {
-                "driver": "stride",
-                "wave": "sine",
-                "phase": 3.14159,
-                "pivot": [
-                  -0.16,
-                  0.9,
-                  0
-                ],
+                "phase": 3.141592653589793,
                 "axis": [
                   1,
                   0,
                   0
                 ],
-                "amplitude": 0.55
+                "wave": "sine",
+                "amplitude": 0.46,
+                "driver": "stride",
+                "pivot": [
+                  -0.16,
+                  0.9,
+                  0
+                ]
               },
               {
-                "driver": "flight",
-                "wave": "constant",
                 "phase": 0.0,
-                "pivot": [
-                  -0.16,
-                  0.9,
-                  0
-                ],
                 "axis": [
                   1,
                   0,
                   0
                 ],
-                "amplitude": -0.32
+                "wave": "constant",
+                "amplitude": -0.22,
+                "driver": "flight",
+                "pivot": [
+                  -0.16,
+                  0.9,
+                  0
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "halfSine",
+                "amplitude": -0.16,
+                "driver": "rise",
+                "pivot": [
+                  -0.16,
+                  0.9,
+                  0
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "halfSine",
+                "amplitude": 0.12,
+                "driver": "sink",
+                "pivot": [
+                  -0.16,
+                  0.9,
+                  0
+                ]
               }
-            ]
+            ],
+            "parent": "pelvis"
           },
           {
             "id": 36,
@@ -1621,36 +2020,68 @@
             "parent": "thighR",
             "swings": [
               {
-                "driver": "stride",
-                "wave": "halfSine",
-                "phase": 4.7124,
-                "pivot": [
-                  -0.17,
-                  0.52,
-                  0
-                ],
+                "phase": 6.283185307179586,
                 "axis": [
                   1,
                   0,
                   0
                 ],
-                "amplitude": 0.65
+                "wave": "halfSine",
+                "amplitude": 0.92,
+                "driver": "stride",
+                "pivot": [
+                  -0.17,
+                  0.52,
+                  0
+                ]
               },
               {
-                "driver": "flight",
-                "wave": "constant",
                 "phase": 0.0,
-                "pivot": [
-                  -0.17,
-                  0.52,
-                  0
-                ],
                 "axis": [
                   1,
                   0,
                   0
                 ],
-                "amplitude": 0.62
+                "wave": "constant",
+                "amplitude": 0.48,
+                "driver": "flight",
+                "pivot": [
+                  -0.17,
+                  0.52,
+                  0
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "halfSine",
+                "amplitude": 0.2,
+                "driver": "rise",
+                "pivot": [
+                  -0.17,
+                  0.52,
+                  0
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "halfSine",
+                "amplitude": -0.18,
+                "driver": "sink",
+                "pivot": [
+                  -0.17,
+                  0.52,
+                  0
+                ]
               }
             ],
             "dilate": 0.052
@@ -1705,7 +2136,41 @@
             "blend": "Union",
             "smooth": 0,
             "parent": "shinR",
-            "dilate": 0.047
+            "dilate": 0.047,
+            "swings": [
+              {
+                "phase": 6.283185307179586,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "halfSine",
+                "amplitude": -0.2,
+                "driver": "stride",
+                "pivot": [
+                  -0.19,
+                  0.2,
+                  0.015
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "constant",
+                "amplitude": 0.16,
+                "driver": "flight",
+                "pivot": [
+                  -0.19,
+                  0.2,
+                  0.015
+                ]
+              }
+            ]
           },
           {
             "id": 40,
@@ -1733,20 +2198,52 @@
             "parent": "chest",
             "swings": [
               {
-                "driver": "flight",
-                "wave": "constant",
                 "phase": 0.0,
-                "pivot": [
-                  0.16,
-                  1.05,
-                  -0.25
-                ],
                 "axis": [
                   0,
                   0,
                   1
                 ],
-                "amplitude": -0.85
+                "wave": "constant",
+                "amplitude": -0.78,
+                "driver": "flight",
+                "pivot": [
+                  0.16,
+                  1.05,
+                  -0.25
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ],
+                "wave": "sine",
+                "amplitude": 0.2,
+                "driver": "bank",
+                "pivot": [
+                  0.16,
+                  1.05,
+                  -0.25
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "sine",
+                "amplitude": 0.2,
+                "driver": "cruise",
+                "pivot": [
+                  0.16,
+                  1.05,
+                  -0.25
+                ]
               }
             ],
             "dilate": 0.035
@@ -1775,7 +2272,25 @@
             "blend": "Union",
             "smooth": 0,
             "parent": "vaneL",
-            "dilate": 0.028
+            "dilate": 0.028,
+            "swings": [
+              {
+                "phase": 0.0,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "wave": "constant",
+                "amplitude": -0.09,
+                "driver": "flight",
+                "pivot": [
+                  0.16,
+                  1.05,
+                  -0.25
+                ]
+              }
+            ]
           },
           {
             "id": 42,
@@ -1829,20 +2344,52 @@
             "parent": "chest",
             "swings": [
               {
-                "driver": "flight",
-                "wave": "constant",
                 "phase": 0.0,
-                "pivot": [
-                  -0.16,
-                  1.05,
-                  -0.25
-                ],
                 "axis": [
                   0,
                   0,
                   1
                 ],
-                "amplitude": 0.85
+                "wave": "constant",
+                "amplitude": 0.78,
+                "driver": "flight",
+                "pivot": [
+                  -0.16,
+                  1.05,
+                  -0.25
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ],
+                "wave": "sine",
+                "amplitude": -0.2,
+                "driver": "bank",
+                "pivot": [
+                  -0.16,
+                  1.05,
+                  -0.25
+                ]
+              },
+              {
+                "phase": 0.0,
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "wave": "sine",
+                "amplitude": 0.2,
+                "driver": "cruise",
+                "pivot": [
+                  -0.16,
+                  1.05,
+                  -0.25
+                ]
               }
             ],
             "dilate": 0.035
@@ -1871,7 +2418,25 @@
             "blend": "Union",
             "smooth": 0,
             "parent": "vaneR",
-            "dilate": 0.028
+            "dilate": 0.028,
+            "swings": [
+              {
+                "phase": 0.0,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "wave": "constant",
+                "amplitude": 0.09,
+                "driver": "flight",
+                "pivot": [
+                  -0.16,
+                  1.05,
+                  -0.25
+                ]
+              }
+            ]
           },
           {
             "id": 45,
@@ -1975,7 +2540,25 @@
             "blend": "Union",
             "smooth": 0,
             "parent": "vaneL",
-            "dilate": 0.025
+            "dilate": 0.025,
+            "swings": [
+              {
+                "phase": 0.0,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "wave": "constant",
+                "amplitude": -0.18,
+                "driver": "flight",
+                "pivot": [
+                  0.16,
+                  1.05,
+                  -0.25
+                ]
+              }
+            ]
           },
           {
             "id": 39,
@@ -2001,14 +2584,32 @@
             "blend": "Union",
             "smooth": 0,
             "parent": "vaneR",
-            "dilate": 0.025
+            "dilate": 0.025,
+            "swings": [
+              {
+                "phase": 0.0,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "wave": "constant",
+                "amplitude": 0.18,
+                "driver": "flight",
+                "pivot": [
+                  -0.16,
+                  1.05,
+                  -0.25
+                ]
+              }
+            ]
           }
         ],
         "drivers": [
           {
             "name": "stride",
             "signal": "planarTravel",
-            "cadence": 7,
+            "cadence": 5.8,
             "when": [
               "Grounded",
               "moving"
@@ -2029,17 +2630,54 @@
             "when": [
               "Airborne"
             ]
+          },
+          {
+            "name": "step",
+            "signal": "planarTravel",
+            "cadence": 11.6,
+            "when": [
+              "Grounded",
+              "moving"
+            ]
+          },
+          {
+            "name": "bank",
+            "signal": "turnRate",
+            "cadence": 0.26,
+            "when": [
+              "Airborne"
+            ]
+          },
+          {
+            "name": "cruise",
+            "signal": "speed",
+            "cadence": 0.18,
+            "when": [
+              "Airborne",
+              "moving"
+            ]
+          },
+          {
+            "name": "rise",
+            "signal": "verticalSpeed",
+            "cadence": 0.4,
+            "when": [
+              "Airborne"
+            ]
+          },
+          {
+            "name": "sink",
+            "signal": "verticalSpeed",
+            "cadence": -0.4,
+            "when": [
+              "Airborne"
+            ]
           }
         ],
         "frames": [
           {
             "transforms": [
               {
-                "position": [
-                  0.103,
-                  1.895,
-                  0.322
-                ],
                 "id": 11,
                 "rotation": [
                   0,
@@ -2047,18 +2685,18 @@
                   -0.06104853953485687,
                   0.9981347984218669
                 ],
+                "position": [
+                  0.103,
+                  1.895,
+                  0.327
+                ],
                 "scale": [
-                  0.068,
+                  0.066,
                   0.003,
-                  0.027
+                  0.018
                 ]
               },
               {
-                "position": [
-                  0.109,
-                  1.892,
-                  0.359
-                ],
                 "id": 12,
                 "rotation": [
                   0,
@@ -2066,18 +2704,18 @@
                   0.0,
                   1.0
                 ],
+                "position": [
+                  0.109,
+                  1.892,
+                  0.347
+                ],
                 "scale": [
-                  0.028,
+                  0.029,
                   0.003,
-                  0.023
+                  0.01
                 ]
               },
               {
-                "position": [
-                  0.10099999999999999,
-                  1.905,
-                  0.382
-                ],
                 "id": 13,
                 "rotation": [
                   0,
@@ -2085,18 +2723,18 @@
                   0.0,
                   1.0
                 ],
+                "position": [
+                  0.10099999999999999,
+                  1.905,
+                  0.359
+                ],
                 "scale": [
-                  0.01,
+                  0.007,
                   0.003,
-                  0.01
+                  0.004
                 ]
               },
               {
-                "position": [
-                  -0.103,
-                  1.895,
-                  0.322
-                ],
                 "id": 15,
                 "rotation": [
                   0,
@@ -2104,18 +2742,18 @@
                   0.06104853953485687,
                   0.9981347984218669
                 ],
+                "position": [
+                  -0.103,
+                  1.895,
+                  0.327
+                ],
                 "scale": [
-                  0.068,
+                  0.066,
                   0.003,
-                  0.027
+                  0.018
                 ]
               },
               {
-                "position": [
-                  -0.09699999999999999,
-                  1.892,
-                  0.359
-                ],
                 "id": 16,
                 "rotation": [
                   0,
@@ -2123,18 +2761,18 @@
                   0.0,
                   1.0
                 ],
+                "position": [
+                  -0.09699999999999999,
+                  1.892,
+                  0.347
+                ],
                 "scale": [
-                  0.028,
+                  0.029,
                   0.003,
-                  0.023
+                  0.01
                 ]
               },
               {
-                "position": [
-                  -0.105,
-                  1.905,
-                  0.382
-                ],
                 "id": 17,
                 "rotation": [
                   0,
@@ -2142,10 +2780,15 @@
                   0.0,
                   1.0
                 ],
+                "position": [
+                  -0.105,
+                  1.905,
+                  0.359
+                ],
                 "scale": [
-                  0.01,
+                  0.007,
                   0.003,
-                  0.01
+                  0.004
                 ]
               }
             ],
@@ -2172,7 +2815,8 @@
                 0,
                 3.1415926
               ],
-              "driver": "stride"
+              "driver": "stride",
+              "swingWeight": 0
             },
             "chain": [
               "thighL",
@@ -2200,7 +2844,8 @@
                 3.1415926,
                 6.28
               ],
-              "driver": "stride"
+              "driver": "stride",
+              "swingWeight": 0
             },
             "chain": [
               "thighR",
@@ -2208,6 +2853,20 @@
             ],
             "tip": "bootR",
             "name": "footR"
+          }
+        ],
+        "parts": [
+          {
+            "id": "braid-root",
+            "shapeId": 19
+          },
+          {
+            "id": "braid-middle",
+            "shapeId": 20
+          },
+          {
+            "id": "braid-tip",
+            "shapeId": 21
           }
         ]
       }
@@ -2436,7 +3095,12 @@
           ],
           "gaitAmplitude": 0,
           "replayFrames": false,
-          "secondsPerFrame": 0
+          "secondsPerFrame": 0,
+          "partDynamics": {
+            "braid-tip": "braid-tip",
+            "braid-root": "braid-root",
+            "braid-middle": "braid-middle"
+          }
         },
         "source": {
           "$type": "creation",
@@ -2607,6 +3271,26 @@
         ],
         "version": "puck.camera.v1"
       }
+    }
+  ],
+  "dynamics": [
+    {
+      "zeta": 0.85,
+      "name": "braid-root",
+      "f": 6,
+      "r": 1
+    },
+    {
+      "zeta": 0.8,
+      "name": "braid-middle",
+      "f": 5,
+      "r": 1
+    },
+    {
+      "zeta": 0.75,
+      "name": "braid-tip",
+      "f": 4,
+      "r": 1
     }
   ]
 }

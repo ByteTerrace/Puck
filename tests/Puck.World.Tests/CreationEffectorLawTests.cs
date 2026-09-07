@@ -657,6 +657,28 @@ public sealed class CreationEffectorLawTests {
             userMessage: $"the effector never moved the part off its authored position; anchor={authored.Position}"
         );
     }
+    /// <summary>Contact influence releases outside stance instead of dragging the authored swing onto the floor;
+    /// an omitted swing weight retains target following, and the stance window still supports the limb.</summary>
+    [Fact]
+    public void AReleasedSwingReturnsToTheAuthoredPoseWhileStanceKeepsContact() {
+        var released = Pack(effectors: [Leg(new CreationPlantDocument("clock", new Vector2(0f, 0.5f), 0f))], frames: 120, step: Vector3.Zero);
+        var following = Pack(effectors: [Leg(new CreationPlantDocument("clock", new Vector2(0f, 0.5f)))], frames: 120, step: Vector3.Zero);
+        var stance = Pack(effectors: [Leg(new CreationPlantDocument("clock", new Vector2(0f, MathF.PI), 0f))], frames: 120, step: Vector3.Zero);
+        var authored = Pack(effectors: null, frames: 120, step: Vector3.Zero);
+        AssertNear(actual: released, expected: authored, what: "the released swing was still pulled to the floor");
+        Assert.True(MathF.Abs(following.Y - 0.03f) < 1e-3f);
+        Assert.True(MathF.Abs(stance.Y - 0.03f) < 1e-3f);
+    }
+
+    /// <summary>Plant influence cannot introduce non-finite or extrapolating target weights.</summary>
+    [Theory]
+    [InlineData(-0.1f)]
+    [InlineData(1.1f)]
+    [InlineData(float.NaN)]
+    public void InvalidSwingInfluenceIsRefused(float weight) {
+        Assert.Contains("swingWeight", Refusal(Rig([Leg(new CreationPlantDocument("clock", new Vector2(0f, 1f), weight))])), StringComparison.Ordinal);
+    }
+
     // The one two-bone leg every pipeline law drives: a hip-knee-boot chain whose boot probes for whatever is below
     // the body within half a metre and stands 0.03 off it.
     private static CreationEffectorDocument Leg(CreationPlantDocument? plant) => new(

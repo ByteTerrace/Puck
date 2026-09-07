@@ -64,7 +64,14 @@ public sealed record CreationEffectorTargetDocument(
 /// <param name="Window">The phase interval <c>[from, to]</c> in radians, each in <c>[0, 2π)</c>. A window whose
 /// <c>from</c> exceeds its <c>to</c> wraps through 0 — the half-cycle straddling the phase origin is as authorable as
 /// any other.</param>
-public sealed record CreationPlantDocument(string Driver, DocumentVector2 Window) {
+/// <param name="SwingWeight">The target influence outside the plant window while the driver is active, in [0, 1].
+/// Null means 1 (continue following the target); 0 releases the tip to its authored swing. As the driver eases to
+/// rest, target influence returns to 1 so an idle limb can settle onto its surface.</param>
+public sealed record CreationPlantDocument(
+    string Driver,
+    DocumentVector2 Window,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? SwingWeight = null
+) {
     /// <summary>One full turn — the exclusive bound both window ends sit under.</summary>
     public const float TwoPi = (2f * MathF.PI);
 }

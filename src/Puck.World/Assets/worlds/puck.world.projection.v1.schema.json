@@ -10218,7 +10218,14 @@
                         "driver": {
                           "type": "string"
                         },
-                        "window": true
+                        "window": true,
+                        "swingWeight": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        }
                       },
                       "required": [
                         "driver",

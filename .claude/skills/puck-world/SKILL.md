@@ -5,6 +5,14 @@ description: Guides work on Puck.World across its document and Protocol model, a
 
 # Puck.World: the game of many games
 
+Creation contact tuning: `CreationPlantDocument.SwingWeight` (`plant.swingWeight`,
+nullable float in [0, 1]) controls target influence outside the plant window while
+its driver is active. Zero releases to the authored swing; omission keeps target
+following. Driver rest restores contact influence. A false effector `when` gate
+clears the latch, so reacquisition cannot reuse a pre-flight world target. The
+pack-path controls live in `CreationEffectorLawTests`; Moth opts into zero swing
+influence. These are presentation changes, not collision or simulation changes.
+
 Keep this skill factual and procedural: record settled contracts, their exact
 seams, and how to verify them. Let the user's current instruction outrank this
 file. If the skill contradicts a demanded change, update it in the same change.

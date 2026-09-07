@@ -85,22 +85,26 @@ public sealed partial class WorldStampPool {
                 tipWorld: tipWorld
             );
 
-            resolved = ApplyPlant(
-                document: document,
-                effector: effector,
-                index: index,
-                live: live,
-                resolved: resolved,
-                target: ref targetWorld
-            );
+            var gateHolds = WorldGaitDrivers.GateHolds(facts: facts, gate: effector.When, moving: moving);
+            var contactWeight = 1f;
+            if (gateHolds) {
+                resolved = ApplyPlant(
+                    document: document,
+                    effector: effector,
+                    index: index,
+                    live: live,
+                    resolved: resolved,
+                    target: ref targetWorld,
+                    contactWeight: out contactWeight
+                );
+            } else {
+                // A contact released in flight cannot be reused on a later landing at another world point.
+                live.EffectorPlanted[index] = false;
+            }
 
-            var holds = (resolved && WorldGaitDrivers.GateHolds(
-                facts: facts,
-                gate: effector.When,
-                moving: moving
-            ));
+            var holds = (resolved && gateHolds);
             var weight = (live.EffectorWeight[index] + (((holds
-                ? 1f
+                ? contactWeight
                 : 0f) - live.EffectorWeight[index]) * blend));
 
             // Snapped at BOTH ends of the exponential approach, unlike a driver's weight, which only needs the
@@ -230,7 +234,8 @@ public sealed partial class WorldStampPool {
     }
     // Holds the effector's target where it was when the plant window opened, and reports whether a usable target
     // exists: a latched contact survives a probe that misses this frame, which is the whole point of latching.
-    private static bool ApplyPlant(Registration live, CreationDocument document, CreationEffectorDocument effector, int index, bool resolved, ref Vector3 target) {
+    private static bool ApplyPlant(Registration live, CreationDocument document, CreationEffectorDocument effector, int index, bool resolved, ref Vector3 target, out float contactWeight) {
+        contactWeight = 1f;
         if (effector.Plant is not { } plant) {
             live.EffectorPlanted[index] = false;
 
@@ -241,7 +246,7 @@ public sealed partial class WorldStampPool {
             phase: out var phase,
             phases: live.DriverPhase,
             rows: (document.Drivers ?? []),
-            weight: out _,
+            weight: out var driverWeight,
             weights: live.DriverWeight
         )) {
             live.EffectorPlanted[index] = false;
@@ -251,12 +256,18 @@ public sealed partial class WorldStampPool {
 
         var window = plant.Window.Value;
 
+        if (plant.SwingWeight is not null && driverWeight <= WorldGaitDrivers.RestWeight) {
+            live.EffectorPlanted[index] = false;
+            return resolved;
+        }
+
         if (!WorldEffectorSolver.InWindow(
             from: window.X,
             phase: phase,
             to: window.Y
         )) {
             live.EffectorPlanted[index] = false;
+            contactWeight = 1f - (driverWeight * (1f - (plant.SwingWeight ?? 1f)));
 
             return resolved;
         }

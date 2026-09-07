@@ -63,13 +63,27 @@ press **5** when moving away from it. A gamepad uses the left stick to move, the
 right stick to steer, the south face button to rise, and the east face button to
 descend.
 
-The rig breathes and blinks at idle, swings arms and legs with grounded travel,
-and blends into an airborne pose with opened vanes. Touching down folds the vanes
-and restores the grounded rig. Each leg uses the existing two-bone surface IK
-and alternating stride-phase foot latch while grounded. The target is the boot
-origin, held 0.13 units above the surface; the correction releases in flight.
-This improves contact placement, but does not lock sole orientation or supply
-separate landing/recovery clips.
+The pelvis carries the rig's weight shift and step bounce; the torso counter-rotates
+with the stride and the neck compensates to keep the face readable. Knees flex on
+the swing half of the cycle, with smaller ankle and elbow articulation. The two
+surface IK chains latch during alternating support phases and ease their influence
+out during swing (`plant.swingWeight: 0`), returning to surface following at rest.
+The target is the boot origin, held 0.13 units above the surface. Leaving the ground
+clears the contact latch so landing acquires a fresh world point.
+
+Flight opens the three blades of each vane by different amounts. Turn rate drives
+body banking and differential vane rotation; speed supplies a restrained forward
+lean. Positive and negative vertical-speed lobes add ascent and descent poses.
+These read rendered motion: the powered lift hold does not publish `Rising` and
+`Falling` during every vertical movement. Three named second-order position
+followers add progressively softer braid follow-through, while armor stays rigid.
+The rig uses eight drivers, two effectors, and the same 48 shapes.
+
+This is still a motion prototype. It has no contact-normal sole alignment, authored
+directional ground gait, impact/recovery sequence, climbing transition, or hurt
+reaction. The speed signal includes vertical travel, so the flight lean is not a
+directional acceleration model. Braid followers do not enforce strand length or
+collision. These limits remain visible acceptance work, not finished animation.
 
 ## Iterate in the running window
 

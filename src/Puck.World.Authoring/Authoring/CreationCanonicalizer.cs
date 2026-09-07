@@ -728,6 +728,9 @@ public static class CreationCanonicalizer {
         if (plant is null) {
             return;
         }
+        if (plant.SwingWeight is { } swingWeight && (!float.IsFinite(swingWeight) || swingWeight < 0f || swingWeight > 1f)) {
+            errors.Add(item: new(Message: "swingWeight must be finite and in [0, 1].", Path: $"{path}.swingWeight"));
+        }
         if ((document.Drivers ?? []).All(predicate: row => !string.Equals(
             a: row.Name,
             b: plant.Driver,
