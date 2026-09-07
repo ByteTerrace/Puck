@@ -44,6 +44,22 @@ contributions (`FoldChannelContributions`) → settle per-body contention →
 advance every body → resolve the guests' reads
 (`IWorldAddonHost.ResolveReads`) → deliver the tick's `WorldSnapshot`.
 
+A quiet tick's cost splits roughly evenly across two shapes: the animating
+population's own contact solves against the compiled solid field
+(`WorldSolidField`/`FixedFieldContactSolver`, walked once per awake body's
+`Advance`), and every rule operand's row-version/value read through
+`WorldDefinition.StateCatalog`. The catalog's compiled product is keyed to the
+exact `StateRaw` reference it was proven against — an unchanged document never
+replaces that reference mid-tick — so a fresh full-document shape walk on
+every one of those reads, rather than once per reference, is pure per-call
+waste that scales with the district count; `WorldDefinition.GetStateCatalog`
+skips the walk once that one-time proof stands. The contact-solve share has no
+comparable per-call shortcut today: it is real per-body physics work against a
+program sized by every district's solid geometry, and reducing it further is
+an `SdfFieldEvaluator`/navigation-scale concern, not a Server one.
+`puck bench world`'s "shipped world: idle tick (median)" row and
+`tests/Puck.World.Tests/HandleTickPathLawTests.cs` are the read-backs.
+
 Every non-intent submission arrives as one `SubmissionEnvelope` through
 `WorldServer.Submit` — a single ordered domain, drained in submission order.
 Enqueue and drain both run under the same authority gate `Step` and every
