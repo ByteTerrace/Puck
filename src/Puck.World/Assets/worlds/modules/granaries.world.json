@@ -2429,7 +2429,7 @@
       },
       {
         "name": "granaryWaterCoverage",
-        "kind": "int",
+        "kind": "Int",
         "capacity": 16,
         "min": 0,
         "max": 9223372036854775807,
@@ -2438,7 +2438,7 @@
       },
       {
         "name": "granaryPowerCoverage",
-        "kind": "int",
+        "kind": "Int",
         "capacity": 16,
         "min": 0,
         "max": 9223372036854775807,
@@ -2447,7 +2447,7 @@
       },
       {
         "name": "granaryIrrigationChoices",
-        "kind": "text",
+        "kind": "Text",
         "capacity": 3,
         "cells": [
           { "key": "0", "value": "[3.5, 2, 3.5]" },
@@ -2458,13 +2458,13 @@
       },
       {
         "name": "granaryIrrigationSelected",
-        "kind": "text",
+        "kind": "Text",
         "value": "[3.5, 2, 3.5]",
         "visibility": {}
       },
       {
         "name": "granaryPowerChoices",
-        "kind": "text",
+        "kind": "Text",
         "capacity": 3,
         "cells": [
           { "key": "0", "value": "[8.5, 2, 8.5]" },
@@ -2475,13 +2475,13 @@
       },
       {
         "name": "granaryPowerSelected",
-        "kind": "text",
+        "kind": "Text",
         "value": "[8.5, 2, 8.5]",
         "visibility": {}
       },
       {
         "name": "granarySurveyRequest",
-        "kind": "int",
+        "kind": "Int",
         "min": 0,
         "max": 9223372036854775807,
         "value": 0,
@@ -2489,7 +2489,7 @@
       },
       {
         "name": "granarySurveyApplied",
-        "kind": "int",
+        "kind": "Int",
         "min": 0,
         "max": 9223372036854775807,
         "value": 0,
@@ -2497,7 +2497,7 @@
       },
       {
         "name": "granarySurveyPage",
-        "kind": "int",
+        "kind": "Int",
         "min": 0,
         "max": 2,
         "value": 0,
@@ -2505,7 +2505,7 @@
       },
       {
         "name": "granaryIrrigationRequest",
-        "kind": "int",
+        "kind": "Int",
         "min": 0,
         "max": 2,
         "value": 0,
@@ -2513,7 +2513,7 @@
       },
       {
         "name": "granaryIrrigationStage",
-        "kind": "int",
+        "kind": "Int",
         "min": 0,
         "max": 2,
         "value": 0,
@@ -2521,7 +2521,7 @@
       },
       {
         "name": "granaryPowerRequest",
-        "kind": "int",
+        "kind": "Int",
         "min": 0,
         "max": 2,
         "value": 0,
@@ -2529,7 +2529,7 @@
       },
       {
         "name": "granaryPowerStage",
-        "kind": "int",
+        "kind": "Int",
         "min": 0,
         "max": 2,
         "value": 0,
