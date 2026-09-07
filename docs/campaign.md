@@ -207,16 +207,41 @@ fourteen); cross-row rule effects compose on the batch workspace (`StateMutation
 (Chinese Checkers), and billiards fires `applyRigidImpulse` from a chord-charged cell; draw sites take an
 `extended` table or script and a `skip` on the one seed ladder (`GeneratorExtendedLawTests`, zero bytes over a
 thousand draws). `world.state.hash` is identical across three boots at ticks 32 and 152; parity 8/8; Schema,
-State, Physics, Maths, Networking, and World suites green. Not yet: the idle tick stays near 13 ms (the
-catalog re-walk per operand read cannot be skipped until the state section owns its rows and the batch
-workspace stops editing that list in place, `src/Puck.World.Server/README.md`); the handheld's attach-on-engage
-rule pair is proven in `HandheldAttachLawTests` but not shipped, since the composed island spends 1,967,916 of
-the 2,000,000 rule-work ceiling and each `upsertPlacement`/`removePlacement` costs a flat 32,768
-(`modules/README.md`); the `chance` level's hidden-operand half is unbuilt; the three multi-authority
-four-corners canaries load and run but their scripts still carry pre-scale coordinates. The seam crossing itself is not yet proven: in the `seamless-adjacency` canary
-the `world.adjacency … crossed` narration fires only after the wait releases, the arrival on `quilt-ne` reads
-`airborne` at y=-0.24, and the verbs routed to the transferred seat after it go unanswered — the wave's own
-report of a grounded landing came from its branch alone, before integration. The canary gate came back from rot across two waves. The first made the loader load every manifest before running
+State, Physics, Maths, Networking, and World suites green. The state section owns an immutable copy of every
+list it carries, so the catalog keys its compiled product to the section reference and the per-operand shape walk
+is gone: the idle tick fell from 15.4 ms to 11.4 ms, and the batch compose path commits its private row workspace
+once per call rather than freezing a section per member (`WorldStateCatalogLawTests`, `BatchComposeLawTests`,
+`src/Puck.World.Server/README.md`). A placement effect costs what its own row rebuilds — the document write, one
+population entry per body its `inhabit` facet could admit, one shape per solid geometry it folds into the contact
+field (`WorldPlacementEffectCost`) — so the handheld's attach-on-engage pair ships in `modules/arcade.world.json`
+at 1,171 and 1,170 units and the composed island stands at 1,980,733 of the 2,000,000 ceiling;
+`world.budget.rules` prints that total and `--why <rule>` names every term behind one line. A region
+interaction's carrier count is bounded by disc packing of the smallest solid kit footprint over the region's own
+reach (`floor(((R + r)/r)^2)`, membership being by a body's centre), falling back to the population when any kit
+is overlap-contact, since a property tag carries no static link to a kit.
+
+The seam is proven. A body already past a yaw-only seam's ownership threshold crosses within three host ticks and
+the destination answers an ordinary query the instant the transfer settles (`SeamCrossingOrchestrationLawTests`);
+the same crossing runs in the real executable driven (`seamless-adjacency`) and undriven, from a pose alone
+(`quilt-nw-gap-edge-carry`); the colocated four-hop ring closes back onto its boot instance
+(`seamless-four-corners-circuit`); and five real processes each bind their own endpoint and carry a driven body
+across one federation hop (`four-corners-sharded`). All four are green. What made them unreachable was boot cost,
+not the crossing: a shard names one island document as its own basis, as each adjacency neighbour, and again
+through every derived corner, and each reach merged the whole twenty-one-document tree again. A composed document
+is now reused per resolved path while every file its composition read still holds the bytes it read — identity is
+the path, freshness is content, no clock takes part in either, and the tree is re-parsed from the image's own
+bytes so no reader is handed one an earlier reader edited. A `quilt-nw` boot merges 25 documents instead of 283
+and its five-second headless run fell from a 23.98 s median to 16.43 s; `world.status` reads the counts and what
+the held images cost, `world.adjacencies` names `composed=shared` or `composed=fresh` per neighbour, and
+`WorldNeighbourComposeReuseLawTests` pins that the reused image serializes identically to a fresh merge, that an
+edit anywhere in a held chain is never served, and that reuse never stretches the composition-depth rule.
+
+Not yet: the `chance` level's hidden-operand half is unbuilt; a body that arrives over a federation hop is minted
+rigid on the destination, and a rigid body's own transfer is refused by name, so a driven ring cannot be carried
+past its first remote hop — `four-corners-sharded` claims that one hop and its binding states the reason the
+rest is not asserted there.
+
+The canary gate came back from rot across two waves. The first made the loader load every manifest before running
 one and accounted a `[verb.facet …]` run (`world.state <row>`) as one answer; ten manifests it could load still ran
 red — the deleted `prototypes/` worlds re-pointed to the island or a shard were prototype-era scripts against a
 world they were never written for, never a live proof. This wave deletes all ten (the retired-canary ledger below
@@ -232,8 +257,12 @@ followed by a space rather than a colon, which the runner never recognized as an
 own row-header/cell shape was merging separate calls together or splitting one call's own dump apart depending on
 what came right before it — and a loader that refuses one manifest now skips it (named, with its reason) and keeps
 loading the rest, so one rotten manifest can never again block the whole gate; `--list` alone stays strict, so an
-author curating manifests still gets one unambiguous refusal. Every canary this task owns in the automatic set is
-green; the four seam canaries above remain the one open item, on their own branch.
+author curating manifests still gets one unambiguous refusal, and a selection standing for a whole suite runs
+every loadable proof and then fails on the skip, so tolerance never turns into a gate reporting green with one of
+its proofs unread. A federated leg's own staging was the other half of the rot: it copied the booted files into
+one flat directory, which no basis delta can compose from, and raised a `population` member no document answers to
+where the census is `bodies.networkPlayers`, so every arrival was refused at a cap that had never been raised.
+Staging now mirrors the tree it boots from.
 
 **Retired-canary ledger.** Ten manifests under `prototypes/`-era worlds were re-pointed to the island or a shard at
 the One World integration, loaded, and ran red against them — scripts and assertions written for a document that no
