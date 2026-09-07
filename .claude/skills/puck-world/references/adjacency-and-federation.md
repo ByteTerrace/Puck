@@ -396,23 +396,23 @@ dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-resto
 dotnet test tests/Puck.World.Schema.Tests/Puck.World.Schema.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~WorldFrameIsometryLawTests"
 ```
 
-Run `puck canary seamless-adjacency` for the automatic crossing and stationary
-real-path proof, `puck canary quilt-nw-gap-corner-strip` for the four-way
-corner specifically (quilt-nw-gap drops both of NW's direct adjacencies, so a
-body resting past NW's own east and south edges — where the local field is
-identically absent in both legs — is grounded only when at least one direct
-edge still delivers the corner, isolating that continuity from local geometry),
-and `puck canary four-corners-sharded` for the topology stress proof: five real
-`Puck.World` processes (four ground worlds and the floating island), each
-binding its own dynamic loopback endpoint and trusting the others' generated
-federation identity, with one human-driven body ringing all four ground
-authorities (nw's east edge into ne, ne's south edge into se, se's west edge
-into sw, sw's own north edge closing the ring back onto nw) purely through the
-router that follows a body wherever it now lives. Vertical/island crossing,
-retained dual-stick camera/movement control, autonomous producer travellers,
-derived diagonal peers, and cross-authority contact-pair settling are not
-exercised by this canary; widening its scripts to cover them is future work,
-not a runner limitation.
+Run `puck canary seamless-adjacency` for the driven crossing on NW's east face,
+`puck canary quilt-nw-gap-edge-carry` for the undriven one (a body placed past
+NW's own ground on the `south` face's centre line is minted a crossing by the
+per-tick scan alone; quilt-nw-gap drops that adjacency, so the identical body
+falls the full sixteen units instead), `puck canary
+seamless-four-corners-circuit` for the colocated four-hop ring, and `puck
+canary four-corners-sharded` for the federated hop: five real `Puck.World`
+processes (four ground worlds and the floating island), each binding its own
+dynamic loopback endpoint and trusting the others' generated federation
+identity, with one driven body crossing NW's east face onto NE's own process.
+
+A body that arrives over a federation hop is minted rigid on the destination,
+and `WorldInstanceHost.Transfers` refuses a rigid body's own transfer by name,
+so a federated ring cannot be driven past its first hop today. Vertical/island
+crossing, retained dual-stick camera/movement control, autonomous producer
+travellers, derived diagonal peers, and cross-authority contact-pair settling
+are not exercised either.
 
 For federation transport changes, both sides need the same
 `--federation-key-file`; inspect both stdout and stderr. Authentication must

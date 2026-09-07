@@ -1531,7 +1531,7 @@ landed.
 POST battery scaffold folded into `Puck.GamingBricks` / `Puck.GamingBricks.Post`, and two link-session
 defects closed; the two-body spike folded into `tests/Puck.Physics.Tests`; separable tests mirrored into
 `Puck.Networking.Tests`, `Puck.World.Protocol.Tests`, `Puck.World.Schema.Tests`, `Puck.GamingBricks.Tests`;
-`quilt-nw-gap` back as a three-field basis delta with the `quilt-nw-gap-corner-strip` canary; the
+`quilt-nw-gap` back as a three-field basis delta with the `quilt-nw-gap-edge-carry` canary; the
 canary runner's `authorities` array (an N-ary federated listener mesh, generalizing the prior
 singular companion-authority shape) and the `four-corners-sharded` canary it carries.
 **Wave 3, still open:** the `Puck.World.Client` split (seam designed, sequenced after the dissolution it
@@ -1647,7 +1647,7 @@ seams plus their derived corners, so `quilt-island` cannot compose a window at a
 worlds' `up` boundaries sit at y = 2, so anything standing above a corner's own ground transfers off it
 immediately. The four ground corner authorities plus `quilt-island` stay what they were — adjacency and
 federation stress content, exercised headless by `four-corners-sharded`, `seamless-adjacency`,
-`seamless-four-corners-circuit` and `quilt-nw-gap-corner-strip`. Attaching other identities' worlds to
+`seamless-four-corners-circuit` and `quilt-nw-gap-edge-carry`. Attaching other identities' worlds to
 the hub is still open, and now needs a mechanism other than a reciprocal corner adjacency.
 
 The whole hub being silo-hosted — one silo, one grain per authority — and **owned by the platform's

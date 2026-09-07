@@ -1,11 +1,11 @@
 {
-  "id": "quilt-nw-gap-corner-strip",
-  "title": "Ground past the shard's own edge is the neighbour's, delivered across the adjacency",
+  "id": "quilt-nw-gap-edge-carry",
+  "title": "A body placed past the shard's own ground is carried across the adjacency without ever being driven",
   "bootShape": "headless",
   "requirements": [],
   "seconds": 18,
   "timeoutSeconds": 60,
-  "binding": "Both legs boot the same shard and probe one point past its own ground: the quiltGround slab's surface ends at z = -66, the shard's own `south` adjacency frame is the face centred there at x = -99 and 24 wide, and walking outward along that face's normal the local field's last reading is z = -64 and its first empty one z = -63.5, so the point is taken at (-99, -63) \u2014 one unit clear of the last local reading, on the face's own centre line. The collision probe reads the same emptiness there in both legs. The positive leg keeps the two adjacencies that deliver past that edge, so a body posed there is carried by the neighbour's own floor and rests at -0.48, still resting 60 ticks later. The discriminating leg is quilt-nw-gap \u2014 the same world with `east` and `south` dropped \u2014 so nothing reaches past the edge and the identical body falls the full sixteen units to the world's own base plane, isolating the adjacency as the source of the continuity rather than any local geometry.",
+  "binding": "Both legs boot the same shard and place a body one point past its own ground, with no drive command of any kind: the quiltGround slab's surface ends at z = -66, the shard's own `south` adjacency frame is the face centred there at x = -99 and 24 wide, and the local field's last reading walking outward along that face's normal is z = -64 with its first empty one at z = -63.5, so the body is placed at (-99, 0.5, -63) \u2014 one unit clear of the last local reading, on the face's own centre line. The collision probe reads the same emptiness there in both legs. The positive leg keeps `south`, the one adjacency whose frame spans that point (the `island` frame beside it is centred at x = 0 and 132 wide, so it reaches only to x = -66), and the scan that runs every tick mints the crossing from the pose alone: the body arrives on sw, rests at -0.48 on sw's own floor and is still resting 60 ticks later. The discriminating leg is quilt-nw-gap \u2014 the same world with `east` and `south` dropped \u2014 so nothing carries the body and it falls the full sixteen units to the world's own base plane, isolating the adjacency, not any local geometry, as what caught it. seamless-adjacency proves the driven crossing on the east face; this one proves the undriven one, the executable half of SeamCrossingOrchestrationLawTests' three-tick bound.",
   "fixtures": [],
   "positive": {
     "world": "src/Puck.World/Assets/worlds/shards/quilt-nw.world.json",
