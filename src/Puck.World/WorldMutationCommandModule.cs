@@ -490,6 +490,14 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     ? basisPath
                     : "none"
                 );
+                // The process's document accounting sits beside `source` and `basis` because it is a fact about the
+                // documents this process merged, not about the world one of them describes: `shared` counts the
+                // reaches answered from a document already composed here, which is what a shard's four neighbours
+                // and its own basis all naming one island turns into.
+                var documents = string.Create(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"composed {WorldDefinitionFileSource.DocumentsComposed} shared {WorldDefinitionFileSource.DocumentCompositionsShared} held {WorldDefinitionFileSource.ComposedDocumentsHeld} ({WorldDefinitionFileSource.ComposedDocumentBytes} bytes)"
+                );
                 var journalDepth = definition.Host.JournalDepth;
                 var journalDepthText = ((journalDepth > 0)
                     ? journalDepth.ToString(provider: CultureInfo.InvariantCulture)
@@ -498,7 +506,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
 
                 return new CommandResult(Output: string.Create(
                     provider: CultureInfo.InvariantCulture,
-                    handler: $"[world.status: source {source} basis {basis} schema {definition.Schema} rate {definition.SimulationRateHz}Hz kits {definition.Kits.Count} body-programs {definition.BodyMotionPrograms.Count} screens {definition.Screens.Count} cameras {definition.Cameras.Count} creations {definition.Creations.Count} placements {definition.Placements.Count} maxSmoothError {definition.Motion.MaxSmoothError:0.###} medium {medium} audio-curve {definition.Audio.DefaultCurve} half-radius-gain {halfRadiusGain:0.#####} sleeping {server.Population.SleepingCount} session-drift {drift} dirty {dirty} journal-depth {journalDepthText}]"
+                    handler: $"[world.status: source {source} basis {basis} documents {documents} schema {definition.Schema} rate {definition.SimulationRateHz}Hz kits {definition.Kits.Count} body-programs {definition.BodyMotionPrograms.Count} screens {definition.Screens.Count} cameras {definition.Cameras.Count} creations {definition.Creations.Count} placements {definition.Placements.Count} maxSmoothError {definition.Motion.MaxSmoothError:0.###} medium {medium} audio-curve {definition.Audio.DefaultCurve} half-radius-gain {halfRadiusGain:0.#####} sleeping {server.Population.SleepingCount} session-drift {drift} dirty {dirty} journal-depth {journalDepthText}]"
                 ));
             }
         );

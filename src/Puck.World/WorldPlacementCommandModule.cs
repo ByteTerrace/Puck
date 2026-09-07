@@ -59,11 +59,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
     private string DescribeAdjacencies(WorldInstance? instance) {
         var definition = (instance?.Server.Definition ?? server.Definition);
         var source = (instance?.Server.Adjacencies ?? server.Adjacencies);
-        // The process's document accounting rides the adjacency read-back because adjacency is what makes documents
-        // repeat: a shard's neighbours and its own basis name one island, so `shared` is the count of times this
-        // process was spared merging a document it had already composed. The per-neighbour `composed=` term below
-        // says which side of that each individual authority landed on.
-        var builder = new StringBuilder(value: $"[world.adjacencies: documents={WorldDefinitionFileSource.DocumentsComposed}composed/{WorldDefinitionFileSource.DocumentCompositionsShared}shared");
+        var builder = new StringBuilder(value: "[world.adjacencies:");
         var any = false;
 
         foreach (var adjacency in (definition.Adjacencies ?? [])) {

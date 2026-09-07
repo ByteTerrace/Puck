@@ -42,8 +42,31 @@ public static class WorldDefinitionFileSource {
     /// <summary>Gets how many document compositions this process answered from an image it had already composed,
     /// rather than merging the same tree again.</summary>
     public static long DocumentCompositionsShared => Interlocked.Read(location: ref s_documentCompositionsShared);
-    /// <summary>Gets how many distinct document paths this process currently holds a composed image of.</summary>
+    /// <summary>Gets how many distinct document paths this process currently holds a composed image of. The store
+    /// is not capped: it holds one image per distinct document path a directory composition has completed in this
+    /// process, so it grows with the documents the process actually composes and never with how long it runs. What
+    /// that costs is <see cref="ComposedDocumentBytes"/>, which the boot narration and <c>world.status</c> both
+    /// read, and <see cref="ForgetComposedDocuments"/> drops the lot.</summary>
     public static int ComposedDocumentsHeld => s_composedDocuments.Count;
+    /// <summary>Gets the total bytes the held composed images occupy — each image's own composed tree as UTF-8
+    /// JSON, plus the bytes of every file its composition read. A file's bytes are shared with every image whose
+    /// chain also read it, so this counts the shared array once per image that names it, an upper bound on what
+    /// the store actually retains.</summary>
+    public static long ComposedDocumentBytes {
+        get {
+            var total = 0L;
+
+            foreach (var image in s_composedDocuments.Values) {
+                total += image.ComposedJson.LongLength;
+
+                for (var index = 0; (index < image.Chain.Count); index++) {
+                    total += image.Chain[index].Bytes.LongLength;
+                }
+            }
+
+            return total;
+        }
+    }
 
     /// <summary>Whether this process already holds a composed image of <paramref name="resolvedPath"/> whose whole
     /// chain still carries the bytes it composed from — so the next composition of that path is answered from the
@@ -124,17 +147,22 @@ public static class WorldDefinitionFileSource {
     // for this reader (ImageStillStands) and its subtree still fits under the depth rule from where this reader
     // stands. The tree is parsed out of the image's own UTF-8 JSON, never handed out by reference: whoever receives
     // it edits it (a merge one level up, the neighbour resolver's reference re-expression), and the image has to
-    // stay usable for the next reader.
-    private static bool TryServeComposedImage(string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach) {
+    // stay usable for the next reader. Only a directory composition is answered, matching what HoldComposedImage
+    // records: every other source names its documents in a space of its own (an in-memory pair calls them "host"
+    // and "fragment"), and nothing else may resolve one of those names onto a file image.
+    private static bool TryServeComposedImage(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach) {
         composed = null;
         touched = [];
         touchedPaths = [];
         reach = 0;
 
-        if (!s_composedDocuments.TryGetValue(
+        if (
+            (source is not DirectoryDocumentSource) ||
+            !s_composedDocuments.TryGetValue(
             key: resolvedPath,
             value: out var image
-        )) {
+        )
+        ) {
             return false;
         }
 
@@ -857,6 +885,7 @@ public static class WorldDefinitionFileSource {
             composed: out var held,
             reach: out var heldReach,
             resolvedPath: resolvedPath,
+            source: source,
             touched: out var heldTouched,
             touchedPaths: out var heldTouchedPaths
         )) {
