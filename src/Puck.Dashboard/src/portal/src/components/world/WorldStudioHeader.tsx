@@ -1,50 +1,221 @@
-import { Badge, Button, Group, Menu, Paper, Select, Text } from "@mantine/core";
-import { RiArrowDownSLine, RiArrowLeftLine, RiArrowRightLine, RiFolderOpenLine, RiSaveLine, RiToolsLine } from "@remixicon/react";
-import { SimulationContext } from "../../context/SimulationContext";
-import { AVAILABLE_PRESETS } from "../../catalog/worldCatalog";
-import type { WorldMetadata } from "../../clients/worldStorageClient";
-export type StudioModalType = "vault" | "save" | "topology" | "schema" | "rule" | "hud" | null;
-export interface WorldStudioHeaderProps {
-  selectedPresetId: string;
-  draftDirty?: boolean;
-  onSelectPreset: (id: string, metadata: Partial<WorldMetadata>) => void;
-  onOpenModal: (modal: StudioModalType) => void;
+import { useEffect, useState } from "react";
+import { Badge, Button, FileButton, Group, Modal, Paper, Stack, Text, Textarea, TextInput } from "@mantine/core";
+import {
+  RiArrowLeftLine,
+  RiArrowRightLine,
+  RiDownloadLine,
+  RiFolderOpenLine,
+  RiSaveLine,
+  RiUploadLine,
+} from "@remixicon/react";
+import {
+  StudioContext,
+  useStudioBoot,
+  useStudioCanRedo,
+  useStudioCanUndo,
+  useStudioDocument,
+  useStudioOfficial,
+} from "../../context/StudioContext";
+import type { DocumentRole } from "../../document/documentRole";
+import { checkDocument } from "../../document/intake";
+import type { StudioDraft } from "../../document/localDrafts";
+import type { ManifestDocumentEntry } from "../../official/manifest";
+
+const ROLE_LABEL: Record<DocumentRole, string> = {
+  world: "world",
+  basis: "basis",
+  fragment: "fragment",
+  shard: "shard",
+};
+
+const VALIDATION_LABEL: Record<string, { text: string; color: string }> = {
+  pending: { text: "pending", color: "yellow" },
+  clean: { text: "clean", color: "teal" },
+  refused: { text: "refused", color: "red" },
+};
+
+function isTextEditingTarget(target: EventTarget | null): boolean {
+  return (target instanceof HTMLElement) && !!target.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]');
 }
-export function WorldStudioHeader({ selectedPresetId, draftDirty = false, onSelectPreset, onOpenModal }: WorldStudioHeaderProps) {
-  const actor = SimulationContext.useActorRef();
-  const dirty = SimulationContext.useSelector(s => s.context.isDirty) || draftDirty;
-  const canUndo = SimulationContext.useSelector(s => s.context.documentIndex > 0);
-  const canRedo = SimulationContext.useSelector(s => s.context.documentIndex < s.context.documentHistory.length - 1);
-  const revision = SimulationContext.useSelector(s => s.context.documentHistory[s.context.documentIndex].label);
-  return <Paper p="sm" radius="md" withBorder className="studio-document-toolbar">
-    <Group justify="space-between" gap="sm">
-      <div><Text className="kicker">Puck authoring studio</Text><Text component="h1" m={0} fw={600} size="lg">World workspace</Text></div>
-      <Group gap="xs">
-        <Select aria-label="World Preset" size="xs" w={255} value={AVAILABLE_PRESETS.some(p => p.id === selectedPresetId) ? selectedPresetId : null} placeholder="Custom document" allowDeselect={false}
-          data={AVAILABLE_PRESETS.map(p => ({ value: p.id, label: p.name }))} onChange={id => {
-            const item = AVAILABLE_PRESETS.find(p => p.id === id);
-            if (item) onSelectPreset(item.id, { name: item.name, author: "ByteTerrace Catalog", description: item.subtitle, category: item.category, visibility: "public" });
-          }} />
-        <Button size="xs" variant="default" leftSection={<RiFolderOpenLine size={15} />} onClick={() => onOpenModal("vault")}>Local library</Button>
-        <Button size="xs" variant={dirty ? "filled" : "default"} leftSection={<RiSaveLine size={15} />} onClick={() => onOpenModal("save")}>Save locally{dirty ? " *" : ""}</Button>
-        <Menu position="bottom-end" width={240}>
-          <Menu.Target><Button size="xs" variant="default" leftSection={<RiToolsLine size={15} />} rightSection={<RiArrowDownSLine size={14} />}>Design</Button></Menu.Target>
-          <Menu.Dropdown>
-            <Menu.Label>Document structure</Menu.Label>
-            <Menu.Item onClick={() => onOpenModal("topology")}>Topology CAD Designer</Menu.Item>
-            <Menu.Item onClick={() => onOpenModal("schema")}>State Schema & Domains</Menu.Item>
-            <Menu.Item onClick={() => onOpenModal("rule")}>Reactive Rule Composer</Menu.Item>
-            <Menu.Item onClick={() => onOpenModal("hud")}>Player HUD & Theme</Menu.Item>
-          </Menu.Dropdown>
-        </Menu>
+
+function downloadText(filename: string, text: string): void {
+  const blob = new Blob([text], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = window.document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * The studio's document toolbar: the official build (or the boot refusal by name), the open
+ * document's name and role, validation status, undo/redo, and the Open/Import/Export/Save-draft
+ * document actions. Bound entirely to `StudioContext` — no props.
+ */
+export function WorldStudioHeader() {
+  const actor = StudioContext.useActorRef();
+  const boot = useStudioBoot();
+  const document = useStudioDocument();
+  const official = useStudioOfficial();
+  const canUndo = useStudioCanUndo();
+  const canRedo = useStudioCanRedo();
+
+  const [openModal, setOpenModal] = useState(false);
+  const [importModal, setImportModal] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importError, setImportError] = useState<string | null>(null);
+  const [saveDraftModal, setSaveDraftModal] = useState(false);
+  const [draftTitle, setDraftTitle] = useState("");
+
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || isTextEditingTarget(event.target)) return;
+      const key = event.key.toLowerCase();
+      if (key !== "z" && key !== "y") return;
+      event.preventDefault();
+      if (key === "y" || event.shiftKey) {
+        if (canRedo) actor.send({ type: "REDO" });
+      } else if (canUndo) {
+        actor.send({ type: "UNDO" });
+      }
+    };
+    window.addEventListener("keydown", shortcut);
+    return () => window.removeEventListener("keydown", shortcut);
+  }, [actor, canUndo, canRedo]);
+
+  const validation = VALIDATION_LABEL[document.validation] ?? VALIDATION_LABEL.pending;
+  const drafts: StudioDraft[] = actor.getSnapshot().context.machineInput.draftStore.list();
+  const documentsByRole = new Map<DocumentRole, ManifestDocumentEntry[]>();
+  if (official) {
+    for (const entry of official.manifest.documents) {
+      const list = documentsByRole.get(entry.role) ?? [];
+      list.push(entry);
+      documentsByRole.set(entry.role, list);
+    }
+  }
+
+  const openImport = () => { setImportText(document.text); setImportError(null); setImportModal(true); };
+  const applyImport = () => {
+    // `checkDocument` runs the same byte-size intake check the machine's own `OPEN_TEXT` edit
+    // reducer runs (`openTextDocument`, `document/intake.ts`) — checked again here so the modal
+    // can show the refusal by name inline instead of only via `WorldStudioAlerts` a beat later.
+    try {
+      checkDocument(importText);
+    } catch (error) {
+      setImportError((error as Error).message);
+      return;
+    }
+    actor.send({ type: "OPEN_TEXT", text: importText });
+    setImportModal(false);
+  };
+  const importFile = (file: File | null) => {
+    if (!file) return;
+    void file.text().then((text) => { setImportText(text); setImportError(null); });
+  };
+
+  return (
+    <Paper p="sm" radius="md" withBorder className="studio-document-toolbar">
+      <Group justify="space-between" gap="sm" wrap="wrap">
+        <div>
+          <Text className="kicker">Puck authoring studio</Text>
+          <Group gap="xs" align="baseline">
+            <Text component="h1" m={0} fw={600} size="lg">{document.name}</Text>
+            <Badge size="xs" variant="light">{ROLE_LABEL[document.role]}</Badge>
+            <Badge size="xs" variant="light" color={validation.color} role="status">
+              {validation.text}{document.diagnostics.length > 0 ? ` (${document.diagnostics.length})` : ""}
+            </Badge>
+          </Group>
+          <Text size="xs" c="dimmed" mt={2}>
+            {boot.status === "refused"
+              ? `boot refused: ${boot.refusal}`
+              : boot.build
+                ? `commit ${boot.build.commit.slice(0, 12)} · ${boot.build.source} · ${official?.manifest.channel ?? "?"} channel`
+                : "booting…"}
+          </Text>
+        </div>
+        <Group gap="xs">
+          <Button size="xs" variant="default" leftSection={<RiFolderOpenLine size={15} />} disabled={boot.status !== "ready"} onClick={() => setOpenModal(true)}>Open</Button>
+          <Button size="xs" variant="default" leftSection={<RiUploadLine size={15} />} onClick={openImport}>Import JSON</Button>
+          <Button size="xs" variant="default" leftSection={<RiDownloadLine size={15} />} onClick={() => downloadText(`${document.name}.json`, document.text)}>Export JSON</Button>
+          <Button size="xs" variant="default" leftSection={<RiSaveLine size={15} />} onClick={() => { setDraftTitle(document.name); setSaveDraftModal(true); }}>Save draft</Button>
+        </Group>
       </Group>
-    </Group>
-    <Group gap="xs" mt="sm">
-      <Button size="compact-xs" variant="default" leftSection={<RiArrowLeftLine size={14} />} disabled={!canUndo || draftDirty} onClick={() => actor.send({ type: "DOCUMENT_UNDO" })}>Undo edit</Button>
-      <Button size="compact-xs" variant="default" rightSection={<RiArrowRightLine size={14} />} disabled={!canRedo || draftDirty} onClick={() => actor.send({ type: "DOCUMENT_REDO" })}>Redo edit</Button>
-      <Text size="xs" c="dimmed" role="status" style={{ flex: 1 }}>{revision}</Text>
-      <Badge variant="light" color={dirty ? "yellow" : "teal"}>{dirty ? "Unsaved changes" : "No unsaved changes"}</Badge>
-    </Group>
-  </Paper>;
+      <Group gap="xs" mt="sm">
+        <Button size="compact-xs" variant="default" leftSection={<RiArrowLeftLine size={14} />} disabled={!canUndo} onClick={() => actor.send({ type: "UNDO" })}>Undo</Button>
+        <Button size="compact-xs" variant="default" rightSection={<RiArrowRightLine size={14} />} disabled={!canRedo} onClick={() => actor.send({ type: "REDO" })}>Redo</Button>
+        <Text size="xs" c="dimmed" role="status" style={{ flex: 1 }}>{document.label}</Text>
+      </Group>
+
+      <Modal opened={openModal} onClose={() => setOpenModal(false)} title="Open a document" size="lg">
+        <Stack gap="md">
+          {(["world", "basis", "fragment", "shard"] as const).map((role) => {
+            const entries = documentsByRole.get(role) ?? [];
+            if (entries.length === 0) return null;
+            return (
+              <div key={role}>
+                <Text size="xs" c="dimmed" mb={4} tt="uppercase">{role}</Text>
+                <Stack gap={4}>
+                  {entries.map((entry) => (
+                    <Button
+                      key={entry.name}
+                      variant="default"
+                      size="xs"
+                      justify="flex-start"
+                      onClick={() => { actor.send({ type: "OPEN_OFFICIAL", name: entry.name }); setOpenModal(false); }}
+                    >
+                      {entry.name}
+                    </Button>
+                  ))}
+                </Stack>
+              </div>
+            );
+          })}
+          <div>
+            <Text size="xs" c="dimmed" mb={4} tt="uppercase">Local drafts</Text>
+            {drafts.length === 0 && <Text size="xs" c="dimmed">No local drafts saved yet.</Text>}
+            <Stack gap={4}>
+              {drafts.map((draft) => (
+                <Button
+                  key={draft.id}
+                  variant="default"
+                  size="xs"
+                  justify="flex-start"
+                  onClick={() => { actor.send({ type: "LOAD_DRAFT", id: draft.id }); setOpenModal(false); }}
+                >
+                  {draft.title}
+                </Button>
+              ))}
+            </Stack>
+          </div>
+        </Stack>
+      </Modal>
+
+      <Modal opened={importModal} onClose={() => setImportModal(false)} title="Import JSON" size="lg">
+        <Stack gap="sm">
+          <FileButton onChange={importFile} accept="application/json,.json">
+            {(props) => <Button {...props} size="xs" variant="default">Choose a file…</Button>}
+          </FileButton>
+          <Textarea autosize minRows={8} maxRows={20} value={importText} onChange={(e) => setImportText(e.currentTarget.value)} styles={{ input: { fontFamily: "ui-monospace,monospace" } }} />
+          {importError && <Text size="xs" c="red" role="alert">{importError}</Text>}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setImportModal(false)}>Cancel</Button>
+            <Button onClick={applyImport}>Open as new document</Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal opened={saveDraftModal} onClose={() => setSaveDraftModal(false)} title="Save local draft">
+        <Stack gap="sm">
+          <TextInput label="Title" value={draftTitle} onChange={(e) => setDraftTitle(e.currentTarget.value)} />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setSaveDraftModal(false)}>Cancel</Button>
+            <Button onClick={() => { actor.send({ type: "SAVE_DRAFT", title: draftTitle || undefined }); setSaveDraftModal(false); }}>Save</Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </Paper>
+  );
 }
+
 export default WorldStudioHeader;

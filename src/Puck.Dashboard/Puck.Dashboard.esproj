@@ -1,8 +1,6 @@
 ﻿<Project Sdk="Microsoft.VisualStudio.JavaScript.Sdk/1.0.3864779">
     <PropertyGroup>
         <BuildOutputFolder>$(MSBuildProjectDirectory)\dist</BuildOutputFolder>
-        <JavaScriptTestFramework>Vitest</JavaScriptTestFramework>
-        <JavaScriptTestRoot>src\</JavaScriptTestRoot>
         <ShouldRunBuildScript>true</ShouldRunBuildScript>
         <StartupCommand>npm run dev</StartupCommand>
     </PropertyGroup>

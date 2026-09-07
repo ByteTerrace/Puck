@@ -1,164 +1,170 @@
 # Puck authoring studio
 
-The studio edits world documents and previews a limited set of integer rules in
-the browser. It works without signing in. The authenticated storage and audit
-pages are separate from the studio's local document library.
+The studio opens a document from the official build and validates, edits, and
+previews it against the real engine — `Puck.World.Browser` running in-browser
+(WebAssembly), never a JavaScript reimplementation of engine semantics. The
+authenticated storage and audit pages are separate from the studio.
 
 ## Run and check
 
-From `src/Puck.Dashboard/src`, run `npm ci` to install the workspace dependencies,
-then `npm --workspace portal run dev`. Open `http://localhost:61101` for the
-standalone studio. The host runs separately with `npm --workspace host run dev`
-on port 61100.
+From `src/Puck.Dashboard/src`, run `npm ci` to install the workspace
+dependencies. `npm --workspace portal run dev` starts the studio's own dev
+server on `http://localhost:61101`; it proxies `/official/*` to a local
+`puck official serve` instance (`VITE_PUCK_OFFICIAL_PROXY_TARGET`, default
+`http://localhost:61102`) so `VITE_PUCK_OFFICIAL_BASE` can stay the same
+relative `/official` path it uses in production. A dry run:
 
-Run `npm --workspace portal test` for the offline engine, document intake, state
-machine, and local storage regression tests. Run `npm run build` to type-check and
-build both the host and portal. No native engine service is needed for these
-checks. The build also generates the module federation declarations.
+```
+dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish
+dotnet publish src/Puck.World.Browser -c Release -r browser-wasm
+src/Puck.Cli/publish/puck.exe official build --out artifacts/official --channel dev \
+  --engine src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle --allow-dirty
+src/Puck.Cli/publish/puck.exe official serve --tree artifacts/official --port 61102
+npm --workspace portal run dev
+```
 
-## Author a document
+`VITE_PUCK_OFFICIAL_CHANNEL` selects which channel's manifest the studio
+opens (`.env` ships `dev`; production ships `stable` against
+`https://puck.byteterrace.com/official`).
 
-Start with an example or import JSON into the editor. Typing changes a draft;
-**Apply document** checks its structure and starts a fresh preview. A rejected
-document leaves the applied world and preview history intact. Drafts survive
-switching tool tabs. Leaving with unsaved changes asks before discarding them.
+`npm --workspace portal run test` (`node --test tests/*.test.cjs`) runs the
+regression suite — most of it against the REAL engine and official tree
+fixtures, not a stand-in; a handful of tests skip themselves by name when
+those local build artifacts are absent (publish `Puck.World.Browser` and run
+`puck.exe official build` to produce them, as above). `npm run build`
+type-checks (`tsc -b`) and builds both the host and portal, and generates the
+module federation declarations. `npm --workspace portal run check:types`
+regenerates the schema-derived `WorldDefinition` TypeScript and fails if the
+checked-in file has drifted from the schema bundle.
 
-The designers, cell painting, appearance bindings, and applied JSON edits all use
-the same document transaction path. Each edit resets preview history. **Undo
-edit** and **Redo edit** travel through document revisions; Ctrl/Cmd+Z and
-Ctrl/Cmd+Shift+Z do the same outside text fields. A bulk paint is one revision.
-Invalid edits leave both histories intact. Saving establishes the clean revision,
-so undoing away from it marks the document unsaved. Apply or export an outstanding
-JSON draft before opening a designer or painting. JSON is also the
-editing surface for constructs the designers do not support. HUD settings are
-stored as a string in `metadata.custom.puckStudioHud`; they are authoring data,
-not a native HUD binding.
+## The official content model
 
-**Save locally** saves the applied document in this browser's local storage. It
-keeps up to ten document revisions in the same atomic write. Storage failures
-remain visible and do not mark a document saved. Local IDs take precedence over
-example IDs when loading. The library can open a saved revision for review before
-saving again. These saves do not upload, publish, or generate share links.
+`official/officialClient.ts`'s `loadOfficial` fetches and parses the
+channel's manifest (`puck.official.v1` — build info, the world-schema
+bundle, every document/composed-world/asset entry, the engine's own file
+list), then verifies every object it fetches against the manifest's own
+SHA-256 hash before caching it (`official/byteStore.ts`, IndexedDB-backed
+with an in-memory fallback under Node). A manifest fetch that fails falls
+back to a previously verified offline copy; a hash mismatch refuses by name
+and caches nothing. `native/engineBoot.ts`'s `bootEngineFromOfficial` boots
+the engine from those same verified files (`'worker'` mode in the browser,
+`'inline'` mode for tests) and then requires `engine.version()` to report
+the exact `schemaVersion`/`commit` the manifest's own build names — a
+mismatch disposes the engine and refuses by name rather than running a
+document against an engine build the manifest did not vouch for.
 
-**Export JSON** downloads the current editor text, including unapplied edits. Use
-it for a portable copy or before clearing browser data. Preview register changes
-and played moves are temporary: they do not alter the authored document or its
-saved revisions.
+## The studio machine
 
-## Select and paint
+`machines/studioMachine.ts` (its own header states the full state shape) is
+the one state machine the whole studio is bound to, through
+`context/StudioContext.tsx`'s hooks — `useStudioDocument`,
+`useStudioPreview`, `useStudioBoot`, `useStudioOfficial`, `useStudioEngine`,
+`useStudioSelection`, `useStudioGeometry`, `useStudioCanUndo`/
+`useStudioCanRedo`, `useStudioIsDirty`. `WorldStudio.tsx` is the only file
+that reads `import.meta.env` (Vite's own env, unavailable and syntactically
+disallowed under the Node/CommonJS test harness — see `official/officialBase.ts`'s
+header): it resolves the official root/channel and mounts
+`StudioContext.Provider` around `StudioShell.tsx`, which is the entire
+composed UI and carries no `import.meta` of its own, so tests construct a
+`StudioMachineInput` by hand and render it directly (`tests/shell.test.cjs`,
+`tests/workbench.test.cjs`).
 
-The explorer chooses a topology and one of its cell state domains. The viewport
-and inspector share selection by topology name and native cell ordinal. Click a
-cell to select it; Shift-click adds or removes it. The address field accepts
-inclusive ranges such as **0-19, 32, 63**, and **Select visible** selects the
-current layer and visibility filter. Selection outside the view remains selected
-and is counted explicitly. **Apply to cells** paints the entire selection in the
-chosen domain, after checking integer precision and declared bounds.
+A document's `role` — world / basis / fragment / shard — is read off the
+manifest when opened from there, or off the document's own content
+(`document/documentRole.ts`) when pasted or imported. Validation
+(`machines/studio/document.ts`'s `validateDocument`) runs `engine.parse`
+alone for a standalone world document, and `engine.composeTree` against the
+real island for anything that composes (a basis/shard root under its own
+name, a bare fragment composed over `puck.world.json` — the only host that
+answers a fragment's own island-scoped references correctly). Every 64-bit
+engine value — row cell values, tick numbers, hashes-as-strings, write
+old/new — is a `bigint` in TypeScript, decoded by `native/engineTypes.ts`'s
+facade; `document/jsonText.ts` preserves an out-of-range integer literal in
+authored JSON as an exact `bigint` leaf rather than rounding it through
+`JSON.parse`/`JSON.stringify`.
 
-The **Author** view displays authored values. **Preview** displays temporary
-execution state; painting requires switching back to Author. Selecting a cell
-never runs rules. The inspector's **Submit selected cell** is an explicit preview
-action through the supported input adapter. Preview register controls and time
-travel live in the collapsible **Document & diagnostics** panel.
+## Sections, JSON, Spatial, State, Preview, Console
 
-Value appearance maps arbitrary integer values to a label, color, shape (cube,
-sphere, or diamond), and optional visibility. Both views use the same binding;
-3D shows a label for the primary visible selection, and 2D labels every button.
-Bindings are JSON stored in the native custom string extension
-`metadata.custom.puckStudioPresentation`. Qubic's X/O labels and shapes are
-example metadata, not renderer behavior. **Show hidden values** keeps hidden
-values available for editing. **Reveal in JSON** focuses the selected authored
-cell value, or its state row when that cell has no explicit authored value.
+The tool-tab strip (`StudioShell.tsx`) is bound entirely to the machine —
+no props flow down from a page-level state.
 
-## Navigate spatially
+- **Sections** (`authoring/AuthoringWorkspace.tsx`) renders the schema
+  bundle as a form: `forms/SectionExplorer` lists every root section in
+  schema order, `forms/SectionForm` (`forms/SchemaNode` underneath) edits
+  the selected one, and the root's reserved `$`/`_`-prefixed extension keys
+  get their own always-present entry (`forms/ExtensionsEditor`). Every edit
+  becomes an `EDIT_DOCUMENT` event — one document revision, undoable.
+- **JSON** (`authoring/JsonEditor.tsx`) is a CodeMirror 6 editor over the
+  document's raw text. Typing dispatches `SET_TEXT_DRAFT` (a live, not yet
+  revisioned, edit of `document.text`); **Apply** dispatches `APPLY_TEXT`
+  (intake-checks, parses, becomes a revision); **Discard** resets the draft
+  back to the last applied revision's own serialized text. A diagnostic is
+  best-effort mapped to a line by searching the text for its path's leading
+  quoted key segments (`lineForDiagnosticPath`) and highlighted there; one
+  whose path cannot be textually anchored (an array index, mainly) lists
+  below the editor instead.
+- **Spatial** (`WorldWorkbench.tsx`) is the topology explorer, viewport
+  (`UniversalTopologyView` or, for a volumetric topology, the lazy-loaded
+  `SpatialTopology3D`), and cell inspector — geometry always comes from
+  `useStudioGeometry()`, the engine's own `cells()` answer, never a
+  TypeScript ordinal formula.
+- **State** (`StateMatrixView.tsx`) lists every authored `state.world[]`
+  row; while a preview session is running, a non-keyed row's live value is
+  editable in place through `PREVIEW_WRITE`.
+- **Preview** compiles the document (`PREVIEW_START`), ticks it
+  (`PREVIEW_TICK`), steps and jumps through its recorded snapshots
+  (`PREVIEW_UNDO`/`PREVIEW_REDO`/`JUMP_TO_TICK` — the engine has no
+  snapshot-restore of its own, so a history move recompiles fresh and
+  replays the write/tick script up to that point), and shows the latest
+  snapshot's `JudgeTrace` (`RuleTraceView.tsx`: rules visited by mode,
+  writes as row/key/old/new, refusals). `PREVIEW_START` is refused by name
+  — not silently withheld — while the document has unresolved diagnostics.
+- **Console** (`PuckReplConsole.tsx`) evaluates an expression through
+  `engine.evaluate(handle, expression, kind, tick)` against the live
+  preview handle, `Int`/`Fixed` selectable; refused by name when no preview
+  session is running.
 
-Volumetric topology opens in 3D. Drag to orbit, right-drag to pan, and scroll to
-zoom. Fit world, fit selection, axis views, and orthographic projection offer
-explicit framing. Layer isolation and adjustable separation expose dense volumes;
-these controls never change logical coordinates or saved topology. The optional
-authored-direction overlay is shown with all layers and values.
+Local drafts (`drafts/DraftsPanel.tsx`, `document/localDrafts.ts`) are a
+browser-storage-backed document library independent of the official tree —
+up to ten revisions per draft, one atomic write. They are this studio's only
+offline library; nothing here uploads, publishes, or generates a share link.
 
-The 2D view uses native buttons and retains the same selection. Tab enters the
-cell list; arrows, Home, and End move focus; Enter or Space selects. Shift adds
-or removes a cell. Volumes show one layer at a time, with at most 144 buttons per
-page. Non-hex pages use native ordinal order; hex pages show the native coordinate
-layout. The address inspector is also available without pointer interaction.
-3D load or rendering failures offer a 2D fallback.
+## Limits that remain
 
-Spatial projection supports grid, box, hex, ring, and explicit lattice geometry.
-Hex positions use the Eisenstein basis; rings have a circular presentation.
-Box and lattice logical z is vertical in the 3D view. Presentation is centered
-near the origin, while the inspector retains native coordinates and addresses.
-This topology visualization is not the native SDF world renderer.
+- Wasm engine payload: the AOT `Puck.World.Browser` AppBundle is roughly
+  40 MB; a first boot fetches and hash-verifies it in full (subsequent boots
+  serve from the byte store).
+- A real fragment's `PREVIEW_START`/`RESET_WORLD`/`JUMP_TO_TICK` compiles
+  the WHOLE composed island (hundreds of KB of JSON), not just the open
+  fragment, and can take several seconds even warm — `PREVIEW_START` stays
+  an explicit, guarded action rather than something that runs on every
+  keystroke.
+- The JSON tab's diagnostic-to-line mapping is a textual heuristic over the
+  pretty-printed document (leading dotted-key segments only, array indices
+  skipped) — it can point at the wrong occurrence of a repeated key name,
+  and never claims to be a real JSON-path evaluator.
+- `forms/SectionForm` exposes no deeper per-field focus than the root
+  section itself — a diagnostic's "reveal" affordance selects the Sections
+  tab and that section, not the exact field.
+- The old studio's arcade demo input adapters, scenario/Monte Carlo batch
+  rollout, ray prober, rule dependency graph, and predicate truth tree are
+  gone with the JS-only preview machine they were built over; nothing here
+  replaces them yet.
 
-## Explore the preview
+## Layout
 
-Each preview tick evaluates rules once in document order. Edge rules remember
-whether their gate was open on the previous tick. A demo board move runs an input
-tick followed by an idle tick so request acknowledgements can rearm Edge gates.
-Applying a preview register value runs one tick. Previous/next preview controls
-include latch state, and changing preview after stepping back starts a new
-preview branch. These controls never edit document revisions. Trace details use the
-state at each gate evaluation, rather than the final state of the tick.
-
-The expression interpreter parses a small grammar instead of executing
-JavaScript. It supports integer arithmetic, comparisons, bit operations,
-conditionals, inclusive board masks, and named board shifts. Integers remain
-exact through 64 bits; values beyond JavaScript's exact number range stay BigInt
-inside preview. This is not a claim of native arithmetic or compiler parity.
-Native validation remains necessary before using a document in the engine.
-
-JSON integer literals outside JavaScript's exact number range cannot be applied
-or saved locally: parsing and reserializing them would round their values. Such
-a draft remains editable and exportable without changing its original text.
-
-Bound rules, unsupported effects or predicates, non-integer state kinds, and
-unsupported domains disable preview while leaving the document editable. Board
-input adapters currently cover the Qubic and hex demo request registers. Other
-documents can expose geometry and register inspection without playable input.
-Mask expressions currently require one topology and at most 64 cells. Nonzero
-empty-cell values and wrapped grids require native preview.
-
-## Performance limits and ownership
-
-Document intake is limited to 2 MB, 100,000 values, 32 topologies, 512 state rows,
-and 256 rules.
-Geometry is cached by immutable topology identity and limited to 4,096 cells.
-Three.js is lazy-loaded behind the viewport boundary. It renders on demand,
-batches cells by three primitive shapes using instancing, updates changed
-instance buffer ranges, caps pixel ratio at 1.5, and uses no shadows or continuous
-hover animation. React Three Fiber disposes declaratively owned GPU resources
-on unmount. Direction overlays cap at 16,384 unique edges. Camera and hover
-interaction never dispatch document or simulation actions. View options include
-a one-second frame-count measurement and renderer draw/resource counts; these
-are local diagnostics, not a frame-rate guarantee.
-
-Expressions have character, token,
-nesting, and operation budgets. A preview tick has a 25 ms deadline checked
-between rules and effects. A refusal leaves the prior interactive snapshot
-intact; it is not a partial commit.
-
-Document history retains at most 64 revisions and 8,388,608 UTF-16 code units
-(roughly 16 MiB of text), dropping oldest revisions when either budget is exceeded.
-Preview history retains at most 128 snapshots and shares unchanged board rows. Trace
-details expand on demand, and inactive tool panels are unmounted. Scenario and
-Monte Carlo batches run in a dedicated worker with cancellation and a 30-second
-deadline. Rollouts allow at most 200 games and 128 ticks per game. Their random
-results are observations of this preview, not replay proofs or deadlock proofs.
-
-The implementation lives under `src/portal/src`: `engine` owns intake and bounded
-execution and demo input adapters; `authoring` owns typed helpers over the
-generated `WorldDefinition` document shape (topology/row lookup, ordinal cell
-addressing), a pure projection of the engine's own `cells()` geometry into
-render-space, presentation bindings, and JSON addressing — no topology-kind
-ordinal math of its own; that geometry always comes from the engine.
-`machines/worldSimulationMachine.ts` (the old JS-only preview machine) owns
-document transactions and the separate preview history for the still-mounted
-`AuthoringWorkspace`/`WorldWorkbench` JSON-editor components; `machines/studioMachine.ts`
-is the newer statechart (see its own header) that `WorldWorkbench.tsx`,
-`UniversalTopologyView.tsx`, `SpatialTopology3D.tsx`, and `StateMatrixView.tsx`
-are bound to instead, once a `StudioContext.Provider` mounts one. `components/world`
-owns editing and inspection, with Three.js objects confined to
-`SpatialTopology3D.tsx`, and `clients/worldStorageClient.ts` owns local document
-persistence. The TypeScript tests are exercised by Node's test runner in
-`src/portal/tests`.
+Under `src/portal/src`: `machines/studioMachine.ts` (+ `machines/studio/*`)
+is the one state machine; `context/StudioContext.tsx` is its React seam;
+`native/` is the engine facade (inline and Worker hosting); `official/` is
+the official content client; `document/` owns JSON path/text addressing,
+document-role classification, intake, and local drafts; `forms/` is the
+schema-driven form layer; `authoring/` (`documentTools.ts`,
+`presentation.ts`, `jsonReference.ts`, `sceneProjection.ts`) is
+topology/row lookup and render-space projection with no ordinal math of its
+own — geometry always comes from the engine. `components/world` owns the
+composed UI: `WorldStudio.tsx` (the page entry — the one file with
+`import.meta.env`), `StudioShell.tsx` (the composed shell everything else
+mounts under), `WorldStudioHeader.tsx`/`WorldStudioAlerts.tsx` (build/
+document status, diagnostics), the six tab components above, and
+`drafts/DraftsPanel.tsx`. Tests live in `src/portal/tests`, run by Node's
+own test runner.

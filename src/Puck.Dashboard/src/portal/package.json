@@ -3,6 +3,7 @@
     "@azure/app-configuration": "^1",
     "@azure/storage-blob": "^12",
     "@azure/storage-queue": "^12",
+    "@codemirror/lang-json": "^6.0.2",
     "@codemirror/lang-sql": "^6.10.0",
     "@mantine/core": "^9",
     "@mantine/hooks": "^9",
