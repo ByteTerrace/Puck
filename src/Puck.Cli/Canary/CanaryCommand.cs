@@ -64,7 +64,7 @@ internal static partial class CanaryCommand {
 
         return exit;
     }
-    // Tolerance is about letting the OTHER proofs run, never about calling the gate green while a manifest went
+    // Tolerance is about letting the other proofs run, never about calling the gate green while a manifest went
     // unread. A selection that stands for a whole suite therefore still fails when one was skipped — with every
     // surviving proof's verdict already printed, which is the whole difference from refusing the discovery
     // outright. A selection that named its proofs is answered on those proofs alone.
@@ -392,7 +392,7 @@ internal static partial class CanaryCommand {
     // Stages every world a federated leg boots into the run's own tree, mirrored whole from the nearest directory
     // holding all of them, and answers the staged path for each source path. A leg's worlds are patched copies —
     // each carries its own endpoint and admission rows — so every reference they resolve must land on a copy rather
-    // than on the shipped asset, which means the staged tree has to have the shipped tree's SHAPE, not just its
+    // than on the shipped asset, which means the staged tree has to have the shipped tree's shape, not just its
     // booted files: a shard names its basis one directory up, that basis names imports one directory down again,
     // and an adjacency `references` row names a sibling. Anything short of the mirror leaves one of those three
     // resolving to nothing, and the process refuses its own definition before it ever listens.
