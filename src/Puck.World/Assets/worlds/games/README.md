@@ -144,6 +144,23 @@ accounting are exercised by
 For console changes, also run the real `Puck.World` executable and record a
 `replay.record` / `replay.stop` / `replay.verify` trajectory.
 
+## Billiards: the cue gesture
+
+[billiards.world.json](billiards.world.json)'s cue ball takes a strike through the shared `attack`
+channel (declared by the arena district; a physical control means "attack" or "strike" depending
+which table a seat stands at, never a second input surface). Holding it charges the keyed Fixed
+`cue` row's cell `0` monotonically toward its authored ceiling (`cue-charge`, a level rule gated on
+`$channel:1:attack`); releasing fires `cue-release`, an edge rule whose `applyRigidImpulse` effect
+strikes `placement:cueBall`'s live inhabitant along seat body `0`'s own forward facing, scaled by
+the charged cell, then resets the cell to zero. `applyRigidImpulse` is the world-rule effect family's
+one honest path to a rigid impulse — it calls the same `WorldBody.TryApplyRigidImpulse` `body.impulse`
+does, never a second impulse mechanism — addressed by the same `body:<n>`/`argmax:<row>`/
+`placement:<id>` body-reference grammar a spatial rule channel reads, so a struck body and its heading
+body are two independently live-resolved references. A struck body carrying no `rigid` kit facet
+refuses by name (`world.rule.hazards`/`world.rule.trace` read the refusal back); every rack ball
+shares the cue ball's own `billiardBall` kit, so only the placement `applyRigidImpulse` actually
+names — never an arbitrary nearby ball — ever takes the strike.
+
 Historical context: [Microsoft Solitaire](https://en.wikipedia.org/wiki/Microsoft_Solitaire)
 and [Microsoft Spider Solitaire](https://en.wikipedia.org/wiki/Microsoft_Spider_Solitaire)
 identify the bundled games; the

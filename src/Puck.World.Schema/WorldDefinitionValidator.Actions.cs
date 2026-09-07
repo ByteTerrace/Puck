@@ -318,7 +318,7 @@ public static partial class WorldDefinitionValidator {
                     value: add.Value
                 );
                 break;
-            case ActionEffect.TransformState or ActionEffect.CountdownState or ActionEffect.RemoveStateCell or ActionEffect.ScheduleState or ActionEffect.Transaction or WorldEffect.EmitCue or WorldEffect.SetBodyVerticalVelocity or WorldEffect.ScaleBodyVerticalVelocity or WorldEffect.ApplyBodyImpulse or WorldEffect.DesignateBody or WorldEffect.PaintField:
+            case ActionEffect.TransformState or ActionEffect.CountdownState or ActionEffect.RemoveStateCell or ActionEffect.ScheduleState or ActionEffect.Transaction or WorldEffect.EmitCue or WorldEffect.SetBodyVerticalVelocity or WorldEffect.ScaleBodyVerticalVelocity or WorldEffect.ApplyBodyImpulse or WorldEffect.ApplyRigidImpulse or WorldEffect.DesignateBody or WorldEffect.PaintField:
                 errors.Add(item: $"{path} is a world-rule effect, which has no body-action meaning — admissible only inside a world rule's own effects.");
                 break;
             case WorldEffect.StartTimer timer:

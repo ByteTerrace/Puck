@@ -245,6 +245,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldEffect.SetBodyVerticalVelocity))]
 [JsonSerializable(typeof(WorldEffect.ScaleBodyVerticalVelocity))]
 [JsonSerializable(typeof(WorldEffect.ApplyBodyImpulse))]
+[JsonSerializable(typeof(WorldEffect.ApplyRigidImpulse))]
 [JsonSerializable(typeof(WorldEffect.DesignateBody))]
 [JsonSerializable(typeof(WorldEffect.PaintField))]
 [JsonSerializable(typeof(WorldEffect.UpsertHudPanel))]

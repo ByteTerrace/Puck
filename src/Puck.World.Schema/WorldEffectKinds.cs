@@ -167,6 +167,25 @@ public sealed class BodyEffect : EffectFact {
     }
 }
 
+/// <summary>Applies a rigid-body impulse — the same physical operation <c>body.impulse</c> fires — to a live-resolved
+/// struck body, along a second live-resolved heading body's own forward facing, scaled by a live state cell.</summary>
+public sealed class RigidImpulseEffect : EffectFact {
+    public RigidImpulseEffect(CompiledBodyRef target, CompiledBodyRef heading, OperandFact magnitude, string describe) : base(describe: describe) {
+        Target = target;
+        Heading = heading;
+        Magnitude = magnitude;
+    }
+
+    public CompiledBodyRef Target { get; }
+    public CompiledBodyRef Heading { get; }
+    public OperandFact Magnitude { get; }
+
+    public override bool SubmitsMutation => false;
+    public override bool ReadsHost => true;
+    public override long Cost(RuleCompileContext context) => (1L + Magnitude.Cost(context: context));
+    public override void CollectReads(List<RuleAccess> into) => Magnitude.CollectReads(into: into);
+}
+
 /// <summary>Paints a lattice field cell or the cube around it.</summary>
 public sealed class PaintFieldEffect : EffectFact {
     public PaintFieldEffect(CompiledWorldFieldPaint paint, string describe) : base(describe: describe) => Paint = paint;

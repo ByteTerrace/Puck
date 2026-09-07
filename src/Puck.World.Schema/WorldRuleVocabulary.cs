@@ -252,6 +252,11 @@ public static class WorldRuleVocabulary {
                 compile: static (effect, ruleName, context) => WorldRuleCompiler.ResolveBodyImpulse(effect: (WorldEffect.ApplyBodyImpulse)effect, ruleName: ruleName, context: context)
             ),
             new WorldEffectArm(
+                effectType: typeof(WorldEffect.ApplyRigidImpulse), discriminator: "applyRigidImpulse",
+                allowsTransaction: true,
+                compile: static (effect, ruleName, context) => WorldRuleCompiler.ResolveRigidImpulse(effect: (WorldEffect.ApplyRigidImpulse)effect, ruleName: ruleName, context: context)
+            ),
+            new WorldEffectArm(
                 effectType: typeof(WorldEffect.DesignateBody), discriminator: "designateBody",
                 allowsTransaction: true,
                 compile: static (effect, ruleName, context) => WorldRuleCompiler.ResolveBodyDesignation(effect: (WorldEffect.DesignateBody)effect, ruleName: ruleName, context: context)

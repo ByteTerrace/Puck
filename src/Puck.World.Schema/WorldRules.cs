@@ -239,4 +239,10 @@ public enum WorldRuleEffectRefusal : byte {
 
     [Refusal(door: "world.rule.effect", condition: "a 'setIdentityFact' effect finds no 'identity' lane row in the installed document, or the lane or the identity's own facts row refuses the write", kind: RefusalKind.Verdict)]
     IdentityFactUnwritable,
+
+    [Refusal(door: "world.rule.effect", condition: "an 'applyRigidImpulse' effect's struck body carries no 'rigid' kit facet", kind: RefusalKind.Verdict)]
+    RigidBodyRequired,
+
+    [Refusal(door: "world.rule.effect", condition: "an 'applyRigidImpulse' effect's magnitude cell is absent, or the resulting impulse is not representable or exceeds the world's declared rigid speed ceiling", kind: RefusalKind.Verdict)]
+    RigidImpulseOutOfRange,
 }

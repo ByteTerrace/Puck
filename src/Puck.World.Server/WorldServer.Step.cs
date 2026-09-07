@@ -412,6 +412,8 @@ public sealed partial class WorldServer {
                 return EffectOutcome.Skipped;
             case BodyEffect body:
                 return (FireBodyEffect(effect: body, ruleName: ruleName, tick: tick, preflight: preflight) ? EffectOutcome.Refused : EffectOutcome.Skipped);
+            case RigidImpulseEffect impulse:
+                return (FireRigidImpulseEffect(effect: impulse, ruleName: ruleName, tick: tick, preflight: preflight) ? EffectOutcome.Refused : EffectOutcome.Skipped);
             case PaintFieldEffect paint:
                 return (FireFieldPaint(effect: paint, ruleName: ruleName, tick: tick, preflight: preflight) ? EffectOutcome.Refused : EffectOutcome.Skipped);
             case SaveEffect:

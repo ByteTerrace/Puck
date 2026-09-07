@@ -252,6 +252,28 @@ public static partial class WorldRuleCompiler {
         );
     }
 
+    internal static EffectFact ResolveRigidImpulse(WorldEffect.ApplyRigidImpulse effect, string ruleName, WorldRuleCompileContext context) {
+        var target = context.ResolveBodyRef(tokens: effect.Key.Split(separator: ':'), start: 0, ruleName: ruleName, channel: "applyRigidImpulse.key");
+        var heading = context.ResolveBodyRef(tokens: effect.HeadingKey.Split(separator: ':'), start: 0, ruleName: ruleName, channel: "applyRigidImpulse.headingKey");
+        var magnitude = RuleCompiler.ResolveOperand(
+            name: effect.MagnitudeState,
+            key: effect.MagnitudeKey,
+            site: new OperandSite(RuleName: ruleName, Verb: "applyRigidImpulse", FieldLabel: "magnitudeState", KeyFieldLabel: "magnitudeKey"),
+            context: context
+        );
+
+        if (magnitude.ValueKind != CellKind.Fixed) {
+            throw new RuleException(refusal: RuleRefusal.EffectSourceKindMismatch, ruleName: ruleName, detail: $"'applyRigidImpulse' magnitudeState '{effect.MagnitudeState}' is kind={StateSpelling.Kind(kind: magnitude.ValueKind)} — an impulse magnitude requires a kind=Fixed row");
+        }
+
+        return new RigidImpulseEffect(
+            target: target,
+            heading: heading,
+            magnitude: magnitude.Operand,
+            describe: $"applyRigidImpulse {effect.Key} <- heading:{effect.HeadingKey} magnitude:{effect.MagnitudeState}"
+        );
+    }
+
     internal static EffectFact ResolveBodyDesignation(WorldEffect.DesignateBody effect, string ruleName, WorldRuleCompileContext context) {
         if (!Enum.IsDefined(value: effect.Kind)) {
             throw new RuleException(refusal: RuleRefusal.EffectKindInadmissible, ruleName: ruleName, detail: $"'designateBody' kind '{effect.Kind}' is not defined");

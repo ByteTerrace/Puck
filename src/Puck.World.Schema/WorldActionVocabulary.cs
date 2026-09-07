@@ -61,6 +61,27 @@ public static class WorldEffect {
     /// <summary>Rides a unit <paramref name="BodyDirection"/> at <paramref name="Speed"/> on a world-addressed body
     /// for an exact whole-engine-tick duration.</summary>
     public sealed record ApplyBodyImpulse(string Key, DocumentVector3 BodyDirection, decimal Speed, decimal DurationSeconds) : ActionEffect;
+    /// <summary>Applies the SAME instantaneous world-space rigid impulse <c>body.impulse</c> fires (Δv = impulse /
+    /// mass, through the server's rigid-body solver — never a second impulse mechanism) to a
+    /// <paramref name="Key"/>-addressed body, along <paramref name="HeadingKey"/>'s own body's forward facing,
+    /// scaled by a live kind=Fixed state cell's magnitude. The cue gesture's one honest path: billiards charges
+    /// <paramref name="MagnitudeState"/> by hold duration and fires this on release. Refused by name when the
+    /// struck body resolves to no active body or carries no 'rigid' kit facet, the heading body resolves to no
+    /// active body, or the resulting impulse is not representable or exceeds the world's declared rigid speed
+    /// ceiling.</summary>
+    /// <param name="Key">The struck body reference — <c>body:&lt;n&gt;</c>, <c>argmax:&lt;row&gt;</c>/
+    /// <c>argmin:&lt;row&gt;</c>, or <c>placement:&lt;id&gt;</c> (see
+    /// <see cref="WorldRuleCompileContext.BodyRefVocabulary"/>).</param>
+    /// <param name="HeadingKey">The body reference whose forward facing supplies the impulse direction — the same
+    /// reference grammar as <paramref name="Key"/>.</param>
+    /// <param name="MagnitudeState">The declared kind=Fixed row naming the impulse's magnitude.</param>
+    /// <param name="MagnitudeKey">The row's cell key, or <see langword="null"/> for an unkeyed row.</param>
+    public sealed record ApplyRigidImpulse(
+        string Key,
+        string HeadingKey,
+        string MagnitudeState,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? MagnitudeKey = null
+    ) : ActionEffect;
     /// <summary>Designates or clears a world-addressed body's target register.</summary>
     public sealed record DesignateBody(
         string Key,
