@@ -503,12 +503,34 @@ layout.
 screen at index 10 as its face, cradled on `handheldStand` until a body holds
 it. The primitive a held handheld rides is a placement's `attach` facet
 (`{"bodyIndex", "localOffset", "localYawDegrees"}`): the row's pose follows the
-named body's root pose, colliders and regions included. What a handheld in the
-wren's hands still lacks: an attach target on a rig joint (`handRight`) so the
-offset follows the hand rather than the root, a body named through the seat
-that holds it rather than a fixed index, and a `screens` row that rides the
-placement — the slab is world-space today, so the picture would stay on the
-stand while the chassis left with the body.
+named body's root pose, colliders and regions included — no new schema member
+needed, since a body carries no joint transforms `attach` could target in the
+first place (an avatar's rig authors named IK chains and tip joints, e.g.
+`handRight`, for the climbing grip solve alone, resolved client-side in
+presentation float; there is no server-side, deterministic query for a joint's
+current world transform, so `attach`'s local-frame root offset is already the
+most precise anchor the engine can honor today).
+
+An ordinary pair of `rules` toggles `attach` live — the exact idiom
+`studio-look-cycle` already ships (`compareState` over a region and a channel,
+`Edge` mode): a body standing in the stand's region with the engage channel
+pressed gets `handheld` upserted with `attach` pointing at it; walking back out
+of the region upserts it back to the stand's authored pose. This is proven in
+`tests/Puck.World.Tests/HandheldAttachLawTests.cs` against an isolated
+document, not wired into this module's shipped `rules`: each `upsertPlacement`
+firing costs a flat 32,768 rule-work unit
+(`Puck.World.UpsertPlacementEffect.Cost`), and `puck.world.json`'s composed
+rule-work sheet already spends 1,967,916 of the 2,000,000-unit ceiling
+(`Puck.State.RuleCapacity.MaxWorkUnitsPerTick`) before either rule of the pair
+lands, so landing both here overruns the ceiling and refuses the whole world's
+boot. What still keeps this a fixed-index attach even once budget allows it:
+`upsertPlacement`'s embedded placement is a literal, compile-time constant —
+its `attach.bodyIndex` cannot resolve to `$left`/`$right` or any other live
+carrier the way a `setState`/`setBodyVerticalVelocity` effect's `key` can, so
+the body a rule attaches to must be a fixed seat index, never "whichever body
+engaged the screen." A `screens` row still does not ride a placement either —
+the slab is world-space, so the picture stays on the stand while the chassis
+leaves with the body.
 
 ## Verify
 
