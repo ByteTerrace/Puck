@@ -156,9 +156,26 @@ export function wrapRawExports(raw: RawBrowserExports, disposeCore?: () => void)
   };
 }
 
+/**
+ * A real, un-rewritten dynamic `import()` — usable with `file:`/`data:` URL specifiers, not just
+ * bare package names. TypeScript's CommonJS emit rewrites every `import(x)` into a
+ * `require()`-based emulation regardless of whether `x` is a literal, and `require()` has no
+ * notion of a `file:`/`data:` URL the way ECMAScript's own dynamic import operator does — this
+ * indirection (`new Function` hides the call from both TypeScript's and Vite/Rollup's static
+ * import analysis) keeps it a genuine dynamic import at runtime under every module system this
+ * file is ever loaded by: bundled ESM in the studio, or CommonJS-transpiled for this repository's
+ * `require.extensions['.ts']` Node test harness (see tests/engineBoot.test.cjs's own remarks).
+ * Exported so every other file needing the same guarantee (workerBoot.ts, engineBoot.ts,
+ * engine.worker.ts) shares this one indirection rather than re-deriving it.
+ */
+export const dynamicImport: (specifier: string) => Promise<unknown> = new Function(
+  "specifier",
+  "return import(specifier);",
+) as (specifier: string) => Promise<unknown>;
+
 /** Boots `options.engineEntryUrl` (a `main.mjs`) in the calling thread and returns the wrapped `WorldEngine`. */
 export async function createInlineWorldEngine(options: EngineHostOptions): Promise<WorldEngine> {
-  const module = (await import(/* @vite-ignore */ options.engineEntryUrl)) as { createEngine: CreateRawEngine };
+  const module = (await dynamicImport(options.engineEntryUrl)) as { createEngine: CreateRawEngine };
   const raw = await module.createEngine(options.resourceLoader ? { resourceLoader: options.resourceLoader } : undefined);
 
   return wrapRawExports(raw);

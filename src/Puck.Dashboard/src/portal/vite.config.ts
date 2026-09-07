@@ -14,6 +14,13 @@ export default defineConfig(({ mode }) => {
       target: "esnext",
     },
     base: "./",
+    // engine.worker.ts is a module Worker (`new Worker(url, { type: "module" })` in
+    // engineHost.ts/engineBoot.ts) — 'es' keeps its own bundle an ES module too, so its
+    // `import()` of dotnet.js-family modules and workerBoot.ts's own imports work the same built
+    // as they do in dev.
+    worker: {
+      format: "es",
+    },
     plugins: [
       react(),
       federation({
