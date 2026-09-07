@@ -3,8 +3,19 @@ using Xunit;
 
 namespace Puck.World.Schema.Tests;
 
+/// <summary>
+/// The serialized home for every law that reads <see cref="StateCatalog.ShapeWalkCount"/>. The count belongs to
+/// the process, not to a test, so any class composing a document beside one of these laws moves the number it is
+/// asserting on. Runs one class at a time, apart from every parallel collection.
+/// </summary>
+[CollectionDefinition(name: Name, DisableParallelization = true)]
+public sealed class ShapeWalkCollection {
+    /// <summary>The collection name test classes reference via <c>[Collection(ShapeWalkCollection.Name)]</c>.</summary>
+    public const string Name = "state-catalog-shape-walk";
+}
 /// <summary>Proves the typed state catalog's stable ordinal, ownership, storage-shape, value-kind, and handle
 /// resolution contracts.</summary>
+[Collection(name: ShapeWalkCollection.Name)]
 public sealed class WorldStateCatalogLawTests {
     [InlineData(CellKind.Int, StateValueKind.Int)]
     [InlineData(CellKind.Fixed, StateValueKind.Fixed)]
