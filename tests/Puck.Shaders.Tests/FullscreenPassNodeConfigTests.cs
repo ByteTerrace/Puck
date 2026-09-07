@@ -56,12 +56,49 @@ public sealed class FullscreenPassNodeConfigTests {
         Assert.Equal(expected: 0.75f, actual: BitConverter.UInt32BitsToSingle(value: liveValue.ComponentBits(index: 0)));
     }
 
-    private static FullscreenPassNode CreateNode() {
+    [Fact]
+    public async Task CaptureIsNotReplacedAndDisposalCompletesAnUnservedRequest() {
+        var node = CreateNode();
+        var first = new FrameCaptureRequest("first.png");
+        node.RequestCapture(first);
+        Assert.Equal("first.png", node.PendingCapturePath);
+        Assert.Throws<InvalidOperationException>(() => node.RequestCapture(new FrameCaptureRequest("second.png")));
+        Assert.False(first.Completion.IsCompleted);
+        node.Dispose();
+        Assert.IsType<ObjectDisposedException>((await first.Completion).Error);
+        Assert.Throws<ObjectDisposedException>(() => node.RequestCapture(new FrameCaptureRequest("closed.png")));
+    }
+
+    [Fact]
+    public async Task PassThroughForwardsTheSameRequestAndReportsInnerShutdown() {
+        var inner = new CaptureStub();
+        var node = CreateNode(inner);
+        var request = new FrameCaptureRequest("forwarded.png");
+        node.RequestCapture(request);
+        _ = node.ProduceFrame(default);
+        Assert.Same(request, inner.Pending);
+        Assert.Equal(request.Path, node.PendingCapturePath);
+        Assert.False(request.Completion.IsCompleted);
+        Assert.Throws<InvalidOperationException>(() => node.RequestCapture(new FrameCaptureRequest("busy.png")));
+        node.Dispose();
+        Assert.IsType<ObjectDisposedException>((await request.Completion).Error);
+    }
+
+    private sealed class CaptureStub : IRenderNode, ICaptureRequestTarget {
+        public FrameCaptureRequest? Pending { get; private set; }
+        public string? PendingCapturePath => Pending?.Path;
+        public NodeDescriptor Descriptor { get; } = new(Name: "capture-stub", SurfaceId: SurfaceId.New());
+        public Surface ProduceFrame(in FrameContext context) => default;
+        public void RequestCapture(FrameCaptureRequest request) => Pending = request;
+        public void Dispose() => Pending?.TryFail(new ObjectDisposedException(nameof(CaptureStub)));
+    }
+
+    private static FullscreenPassNode CreateNode(IRenderNode? inner = null) {
         var manifest = ShaderSetManifest.Load(manifestPath: FilmGrainManifestPath);
         var config = manifest.BindConfig(config: null);
         var services = new UnusedGpuServices();
 
-        return new FullscreenPassNode(inner: new StubRenderNode(), manifest: manifest, config: config, services: services, hostsOnDirectX: false, width: 64, height: 64);
+        return new FullscreenPassNode(inner: inner ?? new StubRenderNode(), manifest: manifest, config: config, services: services, hostsOnDirectX: false, width: 64, height: 64);
     }
 
     // A render node this test never drives past construction — FullscreenPassNode's constructor reads the

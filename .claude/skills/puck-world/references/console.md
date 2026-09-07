@@ -178,14 +178,17 @@ needs no polling, and another seat's ready text keeps draining meanwhile.
 Further Simulation lines keep draining FIFO into the same pending snapshot.
 Blank lines and `#` comments
 are skipped, so piped scripts can be self-documenting. **The barrier holds
-only `Immediate` lines** — it fences reads behind writes; it does not delay
+`Immediate` lines and queued host operations** — it fences reads behind writes; it does not delay
 Simulation traffic. It releases whether or not the submission's handler
 dispatched or threw, so a throwing verb can no longer strand a session's stdin.
 
 `world.wait <ticks>` (`WorldWaitCommandModule` + `WorldConsoleWaitGate`) is
-the explicit fence: Immediate, 1..144000 ticks (ten minutes at the 240 Hz
-fixed step), clocked by COMPLETED SIMULATION TICKS
-(`WorldServerStepShell` via `WorldConsoleWaitGate.PublishTick`), never wall time. Echo:
+the explicit wait: Immediate, 1..144000 ticks, clocked by completed host-work
+ticks through `WorldConsoleWaitGate.PublishTick`, independent of replay
+rewinds and wall time. It holds only `CommandContext.TextSession`; each
+session has its own deadline even when sessions share the same row clock.
+Do not wire this gate to the source-wide `ITextCommandHoldGate`.
+Direct registry submissions without a text session are refused. Echo:
 `[world.wait: N ticks from T — releasing at tick R]`. Being Immediate, the
 barrier holds `world.wait` itself until a preceding mutation lands, so its
 countdown starts from a tick that already contains it. Use it for
@@ -241,8 +244,8 @@ verification.
 the whole truth, and a script reading only one of them reads a half-answer:
 
 - stdout, at arming: `[world.screenshot: pending <path> — lands on the next
-  composed frame]`. No file exists yet. **Fence a frame (`world.wait`) before
-  reading it.**
+  composed frame]`. No file is promised yet. Let rendering progress with
+  `world.wait`, then confirm the completion before reading it.
 - stderr, when the frame lands: `[capture] unified overlay -> <path>` (the
   overlay decorator served it) or `[debug] captured frame N -> <path>` (the
   engine node beneath it did). THIS is the line that says a file exists.
@@ -252,12 +255,17 @@ the whole truth, and a script reading only one of them reads a half-answer:
 
 Arming a second capture while one is still pending is REFUSED by name
 (`SdfWorldRender.PendingCapturePath`) and counts in `wire.errors`: the render
-chain holds exactly ONE pending path, so arming over it would silently drop a
-file the caller was already promised. Any Simulation-routed line between two
-shots fences a composed frame for free (the drain barrier), which is why
-back-to-back shots separated by an ordinary write never trip it (see
-[hud.md](hud.md)'s "Verifying" section for the live recipe this once
-exercised as a committed battery).
+chain admits one pending request at a time. A mutation barrier orders command
+application, but does not itself prove the capture has completed; use the
+capture outcome before reusing a path or claiming its bytes exist.
+
+Host integrations arm captures through `TextCommandSession.InvokeAsync` when
+they must follow the session's queued edits and waits. Await the returned
+`FrameCaptureRequest.Completion` off the pump. Success means the writer closed
+the PNG; failure carries an exception, including disposal before service.
+`PendingCapturePath == null` is never proof of a successful capture, and a
+tick wait alone does not prove a particular request finished. Cancelling an
+await does not cancel the accepted capture or release its output path for reuse.
 
 ## The document has ONE door — do not add a per-section verb
 

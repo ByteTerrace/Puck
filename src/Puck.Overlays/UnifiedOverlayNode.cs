@@ -140,7 +140,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     private nint m_lastImageViewHandle;
     // The previous drawn frame's overlay-pass GPU milliseconds (the IPassTimingSource readout).
     private double m_lastOverlayMilliseconds;
-    private string? m_pendingCapturePath;
+    private FrameCaptureRequest? m_pendingCapture;
     private IGpuPipeline? m_pipeline;
     private bool m_previousFrameTimed;
     private IGpuSurfaceReadback? m_readback;
@@ -305,23 +305,28 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     /// <inheritdoc/>
     public ReadOnlySpan<string> PassLabels => OverlayPassLabels;
     /// <inheritdoc/>
-    public string? PendingCapturePath => (m_pendingCapturePath ?? (m_inner as ICaptureRequestTarget)?.PendingCapturePath);
+    public string? PendingCapturePath => (m_pendingCapture?.Path ?? (m_inner as ICaptureRequestTarget)?.PendingCapturePath);
 
     // Reads back this node's own render target (the overlay composited over the world — what the player actually
     // sees) and writes it as a PNG: a new, separately-fenced submit sequenced after the draw above on the same queue.
     private void CaptureIfPending() {
-        if (m_pendingCapturePath is not { } path) {
+        if (m_pendingCapture is not { } request) {
             return;
         }
 
-        m_pendingCapturePath = null;
-
+        m_pendingCapture = null;
+        var result = request.Write(WriteCapture);
+        if (result.Error is { } error) {
+            Console.Error.WriteLine(value: $"[capture] failed -> {request.Path} ({error.Message})");
+        }
+    }
+    private void WriteCapture(string path) {
         if (m_captureUnavailable) {
             // The latch spares a doomed assembly load per frame, but a request dropped for it still has to be said
             // out loud: the requester was told a path and no file is coming.
             Console.Error.WriteLine(value: $"[capture] skipped, Puck.Assets is unavailable — no file written to {path}");
 
-            return;
+            throw new NotSupportedException("PNG capture is unavailable.");
         }
 
         m_readback ??= m_surfaceTransferFactory.CreateReadback(deviceContext: m_deviceContext);
@@ -345,6 +350,7 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
             Console.Error.WriteLine(value: $"[capture] unified overlay -> {path}");
         } else {
             m_captureUnavailable = true;
+            throw new NotSupportedException("PNG capture is unavailable.");
         }
     }
     // The resources a channel actually lost this frame, each as {verb} ({written} of {reserved} written) — shared by
@@ -508,16 +514,15 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
     }
     // Not drawing this frame: hand a pending capture down the chain (the shared decorator forwarding contract) so
     // the readback lands on whatever actually produced the shown frame. Keeping it armed when the inner cannot serve
-    // it is what stops a request from vanishing silently — PendingCapturePath keeps reporting it until some node
-    // writes the file, and a later frame this node does draw serves it here instead.
+    // it is what stops a request from vanishing silently — the request remains armed until a node serves it or disposal fails it, and a later frame this node does draw serves it here instead.
     private void ForwardPendingCapture() {
-        if (m_pendingCapturePath is not { } path) {
+        if (m_pendingCapture is not { } request) {
             return;
         }
 
         if (m_inner is ICaptureRequestTarget target) {
-            m_pendingCapturePath = null;
-            target.RequestCapture(path: path);
+            target.RequestCapture(request: request);
+            m_pendingCapture = null;
         }
     }
     // Loud once per EPISODE, PER CHANNEL, PER CAUSE: the two loss causes OverlayFrameBuilder tracks — a channel
@@ -919,11 +924,16 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         }
 
         m_disposed = true;
+        _ = m_pendingCapture?.TryFail(new ObjectDisposedException(GetType().Name));
+        m_pendingCapture = null;
         // A final wait proves no in-flight pass can still be sampling a held lease, so every one of them — bound
         // this frame or still pending retirement from the last — can retire safely.
-        m_frameSlots.RetireAllAfter(fence: m_frameFence);
-        ReleaseGpuResources();
-        m_inner.Dispose();
+        try {
+            m_frameSlots.RetireAllAfter(fence: m_frameFence);
+            ReleaseGpuResources();
+        } finally {
+            m_inner.Dispose();
+        }
     }
     /// <inheritdoc/>
     public void OnDeviceLost() {
@@ -1104,7 +1114,15 @@ public sealed class UnifiedOverlayNode : IRenderNode, ICaptureRequestTarget, IPa
         );
     }
     /// <inheritdoc/>
-    public void RequestCapture(string path) => m_pendingCapturePath = path;
+    public void RequestCapture(FrameCaptureRequest request) {
+        ArgumentNullException.ThrowIfNull(request);
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        if (PendingCapturePath is not null || request.Completion.IsCompleted) {
+            throw new InvalidOperationException("A capture is already pending or the request is terminal.");
+        }
+
+        m_pendingCapture = request;
+    }
     /// <summary>Republishes the live theme every CPU writer reads (<see cref="OverlayThemeStore"/>) and re-fills
     /// the GPU token slab from it — the composition root's live-retheme call, at whatever cadence it resolves the
     /// document's authored <c>theme</c> section against live state (matching the sky's own per-revision cadence).

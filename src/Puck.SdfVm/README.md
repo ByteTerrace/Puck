@@ -184,3 +184,20 @@ not run — say so plainly rather than implying coverage that does not exist.
 The [`sdf-world` skill](../../.claude/skills/sdf-world/SKILL.md) carries the
 settled C#↔HLSL sync-pair contracts and engine semantics this project must
 never re-derive or accidentally fork.
+
+## Capture completion
+
+`SdfWorldRender.RequestCapture(path)` returns a `FrameCaptureRequest`.
+The request follows the outermost capture-capable decorator down to whichever
+node serves the frame. Its `Completion` resolves with a `FrameCaptureResult`
+only after the PNG writer returns, or with a failure if readback, writing,
+capture availability, or disposal prevents success. A busy target refuses
+instead of replacing the earlier request. `PendingCapturePath` is a busy
+diagnostic, never evidence that a file was written.
+
+Arm requests on the host pump. A worker can use
+`TextCommandSession.InvokeAsync` to arm after that session's queued commands
+and waits, then await capture completion off the pump. Cancellation of that
+await leaves the capture accepted; keep its unique path reserved until it
+finishes. GPU readback and PNG writing remain synchronous render work, and
+completion does not promise an exact simulation tick or durable disk storage.

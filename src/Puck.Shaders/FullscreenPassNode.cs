@@ -49,7 +49,7 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
     private nint m_lastImageViewHandle;
     private Dictionary<string, ShaderConfigValue>? m_liveConfig;
     private Dictionary<string, byte[]>? m_liveConfigBytes;
-    private string? m_pendingCapturePath;
+    private FrameCaptureRequest? m_pendingCapture;
     private IGpuPipeline? m_pipeline;
     private IGpuSurfaceReadback? m_readback;
     private IGpuRenderTarget? m_renderTarget;
@@ -114,7 +114,7 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
     /// <inheritdoc/>
     public NodeDescriptor Descriptor => m_descriptor;
     /// <inheritdoc/>
-    public string? PendingCapturePath => (m_pendingCapturePath ?? (m_inner as ICaptureRequestTarget)?.PendingCapturePath);
+    public string? PendingCapturePath => (m_pendingCapture?.Path ?? (m_inner as ICaptureRequestTarget)?.PendingCapturePath);
 
     /// <inheritdoc/>
     public void Dispose() {
@@ -123,8 +123,13 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
         }
 
         m_disposed = true;
-        ReleaseGpuResources();
-        m_inner.Dispose();
+        _ = m_pendingCapture?.TryFail(new ObjectDisposedException(GetType().Name));
+        m_pendingCapture = null;
+        try {
+            ReleaseGpuResources();
+        } finally {
+            m_inner.Dispose();
+        }
     }
     /// <inheritdoc/>
     public void OnDeviceLost() {
@@ -180,8 +185,14 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
         );
     }
     /// <inheritdoc/>
-    public void RequestCapture(string path) {
-        m_pendingCapturePath = path;
+    public void RequestCapture(FrameCaptureRequest request) {
+        ArgumentNullException.ThrowIfNull(request);
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        if (PendingCapturePath is not null || request.Completion.IsCompleted) {
+            throw new InvalidOperationException("A capture is already pending or the request is terminal.");
+        }
+
+        m_pendingCapture = request;
     }
     /// <summary>Overwrites one scalar-float config field's live value, and — when a push-constant slot sources it —
     /// the slot's bytes for the next frame. The write a presentation binding drives per frame; the manifest's
@@ -235,16 +246,21 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
     // Reads back this pass's own render target (the composed result — what the player sees when nothing draws over
     // it) and writes it as a PNG.
     private void CaptureIfPending() {
-        if (m_pendingCapturePath is not { } path) {
+        if (m_pendingCapture is not { } request) {
             return;
         }
 
-        m_pendingCapturePath = null;
-
+        m_pendingCapture = null;
+        var result = request.Write(WriteCapture);
+        if (result.Error is { } error) {
+            Console.Error.WriteLine(value: $"[capture] failed -> {request.Path} ({error.Message})");
+        }
+    }
+    private void WriteCapture(string path) {
         if (m_captureUnavailable) {
             Console.Error.WriteLine(value: $"[capture] skipped, Puck.Assets is unavailable — no file written to {path}");
 
-            return;
+            throw new NotSupportedException("PNG capture is unavailable.");
         }
 
         m_readback ??= m_surfaceTransferFactory.CreateReadback(deviceContext: m_deviceContext);
@@ -268,19 +284,20 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
             Console.Error.WriteLine(value: $"[capture] {m_manifest.Name} -> {path}");
         } else {
             m_captureUnavailable = true;
+            throw new NotSupportedException("PNG capture is unavailable.");
         }
     }
     // Passing the inner frame through untouched: hand a pending capture down so the readback lands on whatever
     // actually produced the shown frame. Keeping it armed when the inner cannot serve it is what stops a request
-    // from vanishing silently — PendingCapturePath keeps reporting it until some node writes the file.
+    // from vanishing silently — the request remains armed until a node serves it or disposal fails it.
     private void ForwardPendingCapture() {
-        if (m_pendingCapturePath is not { } path) {
+        if (m_pendingCapture is not { } request) {
             return;
         }
 
         if (m_inner is ICaptureRequestTarget target) {
-            m_pendingCapturePath = null;
-            target.RequestCapture(path: path);
+            target.RequestCapture(request: request);
+            m_pendingCapture = null;
         }
     }
     private void EnsureResources() {

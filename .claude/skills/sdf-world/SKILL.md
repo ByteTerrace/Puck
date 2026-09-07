@@ -753,3 +753,9 @@ What remains is looking at it: `dotnet run --project src/Puck.World -c Release -
 --exit-after-seconds 2` (0 or less runs until the window is closed), plus the
 `Puck.SdfVm.Debug` inspection engine for field-level questions. Say in the
 commit what was not checked.
+
+Capture integrations must retain the `FrameCaptureRequest` returned by
+`SdfWorldRender.RequestCapture` and await its `Completion`. All capture-capable
+decorators forward that same request; `PendingCapturePath` is only a busy
+diagnostic. Arm on the host pump, and never block that pump awaiting a frame.
+See [capture completion](../../../src/Puck.SdfVm/README.md#capture-completion).

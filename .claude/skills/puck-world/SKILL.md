@@ -271,8 +271,8 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   your scripts.
 - **The drain barrier**: a following `Immediate` verb is held until pending
   `Simulation` traffic applies, so write-then-read pairs need no polling.
-  `world.wait <ticks>` is the explicit fence, clocked by completed
-  simulation ticks (see [references/console.md](references/console.md)).
+  `world.wait <ticks>` holds only its issuing session, clocked by completed
+  host-work ticks (see [references/console.md](references/console.md)).
 - **Encoding, the two traps**: a pwsh spawned from Git Bash reads captured
   output under an OEM codepage and mangles the engine's em-dashes
   (false-FAIL); pin `[Console]::OutputEncoding` and `$OutputEncoding` to

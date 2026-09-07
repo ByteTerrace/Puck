@@ -127,7 +127,7 @@ honest failure rather than refusing as unknown.
 in EVERY shape, `AddWorldPresentation` only when a window is composed.
 
 **Offscreen.** The document's `host.presentation: offscreen` boots a real GPU
-device and the composed-frame render pipeline (the world render alone — no
+device and the composed-frame render pipeline (the world render alone — no post-render extension chain,
 unified overlay/console-mirror/binding-bar, no audio device, no gamepad or
 pointer input) with NO window and NO swap chain ever created, so
 `world.screenshot` writes real PNGs of the composed world with nothing on
@@ -1209,8 +1209,8 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 ```
 
 `world.screenshot <path.png>` is the cheap pixel assertion, but it REQUESTS a
-capture of the next composed frame rather than taking one — fence a frame
-(`world.wait`) before reading the file. Its stdout echo says `pending <path>`
+capture of a following composed frame. A tick wait lets rendering progress;
+confirm the capture completion before reading the file. Its stdout echo says `pending <path>`
 precisely because no file exists yet; the resolved path arrives on **stderr**
 when the frame lands, named by whichever node in the render chain served it:
 `[capture] unified overlay -> <path>`, `[capture] <shader-set id> -> <path>`
@@ -1220,7 +1220,10 @@ frame forwards the request inward, so the readback always lands on the node
 that actually produced the shown frame. Arming a second capture while one is still
 pending is REFUSED by name — the earlier path would never be written — and a
 request still outstanding when the run ends prints a `WARNING` naming it. A
-scripted caller can therefore always tell "written" from "never happened".
+scripted caller can therefore distinguish a reported write from an unserved
+request. In-process callers receive a `FrameCaptureRequest` from
+`SdfWorldRender.RequestCapture` and await its `Completion` for success or
+failure. See [the render contract](../Puck.SdfVm/README.md#capture-completion).
 
 Committed, re-runnable proofs cover most load-bearing seams as `puck canary`
 manifests under `tests/Puck.World.Canaries/` — `sdf-decode-sign-refusal`

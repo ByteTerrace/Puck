@@ -1,43 +1,48 @@
-using Puck.Launcher;
+using Puck.Commands;
 
 namespace Puck.World;
 
 /// <summary>
 /// The console wire's TICK barrier: the state behind <c>world.wait</c>. It is armed by that verb with a release tick and
-/// read every frame through <see cref="ITextCommandHoldGate"/>, so the queued lines AFTER a wait stay
-/// queued until the world's fixed-step simulation has actually advanced the requested number of ticks.
+/// read by the issuing text session, so only that session's queued work AFTER a wait stays
+/// queued until the world host has completed the requested number of ticks.
 /// </summary>
 /// <remarks>
-/// The clock is <see cref="WorldInstance.PublishTick"/>'s completed fixed ticks, published here at the end of each
-/// step — not wall time: the same script advances the same number of ticks on every run and every machine, which is
-/// the whole point of a scripted "drive, then read back". Both members run on the tick thread the row they are
-/// bound to steps on, so no synchronization is needed. One instance per row: a desktop composes exactly one, bound
-/// to the boot row's <see cref="WorldInstance.PublishTick"/>; a host with several rows composes one per row.
+/// The clock is the row's monotonic completed host-work counter, independent of replay rewinds and wall time.
+/// Members run on the host pump. One instance serves a desktop's boot row; a multi-row host supplies one per row.
 /// </remarks>
-public sealed class WorldConsoleWaitGate : ITextCommandHoldGate {
+public sealed class WorldConsoleWaitGate {
     private bool m_armed;
     private ulong m_releaseTick;
+    private uint m_epoch;
 
-    /// <summary>Gets the last completed simulation tick published to this gate.</summary>
+    /// <summary>Gets the last completed host-work tick published to this gate.</summary>
     public ulong Tick { get; private set; }
 
-    /// <summary>Holds the wire until the simulation has completed <paramref name="ticks"/> further ticks.</summary>
+    /// <summary>Holds only <paramref name="session"/> until this clock has completed the requested ticks.</summary>
+    /// <param name="session">The issuing text session. Other sessions keep draining.</param>
     /// <param name="ticks">The number of ticks to wait, counted from the last completed tick.</param>
-    /// <returns>The tick the wire releases on.</returns>
-    public ulong Arm(ulong ticks) {
+    /// <returns>The earliest host-work tick that releases the session.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The tick count is zero.</exception>
+    /// <exception cref="OverflowException">The release tick exceeds the clock range.</exception>
+    public ulong Arm(TextCommandSession session, ulong ticks) {
+        ArgumentNullException.ThrowIfNull(argument: session);
+        ArgumentOutOfRangeException.ThrowIfZero(ticks);
+        var release = checked(Tick + ticks);
+        var epoch = m_epoch;
+        session.HoldWhile(() => m_epoch == epoch && Tick < release);
         m_armed = true;
-        m_releaseTick = (Tick + ticks);
+        m_releaseTick = Math.Max(m_releaseTick, release);
 
-        return m_releaseTick;
+        return release;
     }
-    /// <summary>Whether the queued console stream is currently held — the <c>HoldGate</c> delegate.</summary>
-    /// <returns><see langword="true"/> while the armed release tick is still in the future.</returns>
-    public bool IsHolding() {
-        return m_armed;
-    }
-    /// <summary>Publishes a completed simulation tick, releasing the wire once the armed release tick is reached.</summary>
-    /// <param name="tick">The number of fixed ticks the simulation has completed.</param>
+    /// <summary>Publishes a completed host-work tick. Each waiting session checks its own deadline.</summary>
+    /// <param name="tick">The monotonic count of completed host-work ticks.</param>
     public void PublishTick(ulong tick) {
+        if (tick < Tick) {
+            _ = ReleaseStalled();
+            m_releaseTick = tick;
+        }
         Tick = tick;
 
         if (
@@ -60,6 +65,8 @@ public sealed class WorldConsoleWaitGate : ITextCommandHoldGate {
         }
 
         m_armed = false;
+        m_releaseTick = Tick;
+        m_epoch++;
 
         return true;
     }

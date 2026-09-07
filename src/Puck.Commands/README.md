@@ -545,15 +545,29 @@ guarantee rather than a `Submit` one: `TextCommandSource.Collect` holds that
 session's following non-Simulation line until its pending Simulation submission
 has applied, and each session's hold is independent of every other session's.
 
-That drain does two more things a piped script depends on. It skips a blank line
-and a line whose first non-whitespace character is `#`, so a driving script can
-carry its own commentary (a header saying what the run proves, a note beside
-each step) and only the real verbs run. And `TextCommandSource.HoldGate` is an
-optional predicate the drain consults before each line: while it answers true
-nothing dequeues, so a verb that arms it (a `step <n>` or `settle`) stops the
-rest of the frame's drain and the queued lines behind it wait, in order, for a
-later frame to let them go. Left `null`, the gate never holds and every queued
-line drains each frame.
+The drain skips blank lines and lines whose first non-whitespace character
+is `#`, so scripts can carry comments. An immediate handler receives its
+issuing `CommandContext.TextSession` on both text parsing paths. It can call
+`HoldWhile` to hold only that session's later work; other sessions continue
+draining. Direct registry calls and replayed snapshots have no text session.
+The optional `TextCommandSource.HoldGate` remains a host-wide stop and must
+not be used for one caller's wait.
+
+`TextCommandSession.InvokeAsync` queues a short host operation behind that
+session's preceding commands, mutation barriers, and holds. The operation
+runs inside the session's scope on the command pump; its task continuations
+run asynchronously. This lets a worker request a render capture in command
+order without accessing render state from the worker. Delegates must not
+block on I/O or wait for the pump. Cancellation skips work that has not
+started; once it starts, its result or exception remains the outcome.
+Disposing a session refuses queued operations and closes text ingress.
+Already injected simulation commands retain their execution semantics.
+
+The line result callback still reports synchronous submission results.
+A Simulation-routed line can return `CommandResult.None` before its handler
+runs, and a handler can enqueue a later world mutation. Neither this callback
+nor a queued host operation is an authoritative per-mutation acceptance
+receipt.
 
 The addon pump (`Puck.World.Addons`' `AddonSimulationPump`) is not a third
 `Puck.Commands` path. `Puck.World.Addons` reads its typed submissions and turns

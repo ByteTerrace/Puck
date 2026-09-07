@@ -194,6 +194,117 @@ public sealed class TextCommandSourceTests {
         }
     }
 
+    [Fact]
+    public async Task HostOperationWaitsForMutationAndSessionHoldWhileAnotherSessionRuns() {
+        var registry = new CommandRegistry(modules: [new ProbeModule(), new DeferredModule()]);
+        var router = new InputRouter(registry: registry, bindings: new EmptyBindings(), principalResolver: new ConsolePrincipal());
+        var source = new TextCommandSource(registry);
+        using var session = source.CreateSession(principal: CommandPrincipal.Console, simulationSink: router.ConsoleTextSink);
+        using var other = source.CreateSession(principal: CommandPrincipal.Console);
+        session.Enqueue("sim.defer payload");
+        var ran = false;
+        var operation = session.InvokeAsync(() => ran = true, cancellationToken: TestContext.Current.CancellationToken);
+        var independent = other.InvokeAsync(() => 42, cancellationToken: TestContext.Current.CancellationToken);
+        source.Collect();
+        Assert.False(ran);
+        Assert.Equal(42, await independent);
+
+        var held = true;
+        session.HoldWhile(() => held);
+        var snapshot = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+        registry.ApplySnapshot(snapshot: in snapshot);
+        source.Collect();
+        Assert.False(ran);
+        held = false;
+        source.Collect();
+        Assert.True(await operation);
+    }
+
+    [Fact]
+    public async Task QueuedCancellationSkipsTheDelegateAndDoesNotHoldLaterWork() {
+        var source = Source(submitted: [], session: out var session);
+        using var cancellation = new CancellationTokenSource();
+        var ran = false;
+        var cancelled = session.InvokeAsync(() => ran = true, cancellation.Token);
+        var later = session.InvokeAsync(() => 42, cancellationToken: TestContext.Current.CancellationToken);
+        cancellation.Cancel();
+        source.Collect();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await cancelled);
+        Assert.False(ran);
+        Assert.Equal(42, await later);
+    }
+
+    [Fact]
+    public async Task CancellationAfterExecutionStartsDoesNotMisreportAnAppliedOperation() {
+        var source = Source(submitted: [], session: out var session);
+        using var cancellation = new CancellationTokenSource();
+        var operation = session.InvokeAsync(() => {
+            cancellation.Cancel();
+            return 42;
+        }, cancellation.Token);
+        source.Collect();
+        Assert.Equal(42, await operation);
+    }
+
+    [Fact]
+    public async Task OperationFailureDoesNotStopTheDrainAndDisposalRefusesQueuedWork() {
+        var source = Source(submitted: [], session: out var session);
+        var failed = session.InvokeAsync<int>(() => throw new IOException("operation failed"), cancellationToken: TestContext.Current.CancellationToken);
+        var later = session.InvokeAsync(() => 42, cancellationToken: TestContext.Current.CancellationToken);
+        source.Collect();
+        await Assert.ThrowsAsync<IOException>(async () => await failed);
+        Assert.Equal(42, await later);
+
+        var abandoned = session.InvokeAsync<int>(() => throw new InvalidOperationException("must not execute"), cancellationToken: TestContext.Current.CancellationToken);
+        session.Dispose();
+        source.Collect();
+        await Assert.ThrowsAsync<ObjectDisposedException>(async () => await abandoned);
+        Assert.Throws<ObjectDisposedException>(() => session.Enqueue("probe closed"));
+    }
+
+    [Fact]
+    public async Task AFailedHostScopeCompletesTheOperationAndDoesNotStrandOtherSessions() {
+        var source = new TextCommandSource(new CommandRegistry(modules: []));
+        using var scoped = source.CreateSession(principal: CommandPrincipal.Console,
+            scope: () => throw new IOException("scope unavailable"));
+        using var other = source.CreateSession(principal: CommandPrincipal.Console);
+        var failed = scoped.InvokeAsync(() => 1, cancellationToken: TestContext.Current.CancellationToken);
+        var ready = other.InvokeAsync(() => 42, cancellationToken: TestContext.Current.CancellationToken);
+        source.Collect();
+        await Assert.ThrowsAsync<IOException>(async () => await failed);
+        Assert.Equal(42, await ready);
+        scoped.Dispose();
+        var closed = scoped.InvokeAsync(() => 1, cancellationToken: TestContext.Current.CancellationToken);
+        await Assert.ThrowsAsync<ObjectDisposedException>(async () => await closed);
+    }
+
+    [Theory]
+    [InlineData("identity plain")]
+    [InlineData("identity \"quoted value\"")]
+    public void ImmediateHandlersReceiveTheOriginatingSessionOnBothTextPaths(string line) {
+        TextCommandSession? observed = null;
+        var registry = new CommandRegistry(modules: [new IdentityModule(context => observed = context.TextSession)]);
+        var source = new TextCommandSource(registry);
+        using var session = source.CreateSession(principal: CommandPrincipal.Console);
+        session.Enqueue(line);
+        source.Collect();
+        Assert.Same(session, observed);
+        _ = registry.Submit(line);
+        Assert.Null(observed);
+    }
+
+    private sealed class IdentityModule(Action<CommandContext> observe) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.WithWireArgs(
+                name: "identity", description: "Records the issuing session.",
+                bindability: CommandBindability.Unbindable,
+                handler: (context, _) => {
+                    observe(context);
+                    return CommandResult.None;
+                });
+        }
+    }
+
     private static TextCommandSource Source(List<string> submitted, out TextCommandSession session) {
         var registry = new CommandRegistry(modules: [new ProbeModule()]);
         var source = new TextCommandSource(registry: registry);

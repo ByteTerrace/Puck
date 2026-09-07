@@ -52,12 +52,17 @@ because `build/Architecture.props` denies that project a reference to
 `System.Console`.
 
 Project references: `Puck.World.Server`, `Puck.World.Protocol`,
-`Puck.World.Schema`, `Puck.Commands`, `Puck.Launcher` (the
-`ITextCommandHoldGate` seam `WorldConsoleWaitGate` implements). `Puck.Hosting`
+`Puck.World.Schema`, `Puck.Commands`, and `Puck.Launcher`. `Puck.Hosting`
 (`GpuTimingControl`, the arming authority `WorldTimingCommandModule` reads and
 writes) and `Puck.Networking` are reached only transitively, through
 `Puck.Launcher`/`Puck.World.Server`; no `ProjectReference` here names either
 directly.
+
+`world.wait` holds only its issuing `TextCommandSession`. A row's
+`WorldConsoleWaitGate` supplies the host-work clock; sessions keep independent
+release deadlines. Other text sessions remain responsive. Pausing or stopping
+the row releases its armed waits. Direct registry calls without an originating
+text session are refused.
 
 ## `IWorldConsoleAuthority`
 

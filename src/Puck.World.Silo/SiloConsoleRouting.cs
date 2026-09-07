@@ -61,16 +61,13 @@ public sealed class SiloConsoleRouting {
     /// with <c>[&lt;worldId&gt;] </c> ahead of the shared output writer's own <c>Console.Out</c>/<c>Console.Error</c>
     /// routing.</summary>
     /// <param name="worldId">The row's registry name.</param>
-    /// <param name="hold">The row's own <c>world.wait</c> hold predicate.</param>
     /// <returns>The row's own text session — the caller enqueues nothing through it directly; it exists so the
     /// registry submits lines under this row's stamped identity and slot.</returns>
-    public TextCommandSession Register(string worldId, Func<bool> hold) {
+    public TextCommandSession Register(string worldId) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: worldId);
-        ArgumentNullException.ThrowIfNull(argument: hold);
 
         var slot = Interlocked.Increment(location: ref m_nextSlot);
         var session = m_source().CreateSession(
-            hold: hold,
             onResult: (_, result) => m_tagging.WriteTagged(
                 result: result,
                 tag: worldId

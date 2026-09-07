@@ -694,7 +694,6 @@ public sealed class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateResolver 
 
                 row.PublishTick = gate.PublishTick;
                 _ = m_routing.Register(
-                    hold: gate.IsHolding,
                     worldId: row.Name
                 );
 

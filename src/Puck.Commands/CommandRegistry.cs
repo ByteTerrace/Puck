@@ -754,7 +754,8 @@ public sealed class CommandRegistry {
         CommandPrincipal principal,
         int slot,
         bool observe,
-        out bool faulted
+        out bool faulted,
+        TextCommandSession? textSession = null
     ) {
         var quiet = (m_acksQuiet && definition.AcknowledgementOnly);
         var context = new CommandContext(
@@ -765,6 +766,7 @@ public sealed class CommandRegistry {
             registry: this,
             slot: slot,
             text: line,
+            textSession: textSession,
             value: value
         );
         CommandResult result;
@@ -1115,7 +1117,8 @@ public sealed class CommandRegistry {
                 principal: principal,
                 slot: slot,
                 observe: false,
-                faulted: out _
+                faulted: out _,
+                textSession: session
             );
         }
 
@@ -1197,6 +1200,7 @@ public sealed class CommandRegistry {
                 registry: this,
                 slot: slot,
                 text: line,
+                textSession: session,
                 value: ImpulseValue(kind: definition.ValueKind)
             );
 

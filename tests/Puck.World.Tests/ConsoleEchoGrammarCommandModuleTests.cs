@@ -32,6 +32,62 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
     }
 
     [Fact]
+    public async Task WorldWaitHoldsOnlyItsIssuerAndUsesIndependentDeadlines() {
+        using var row = HostRow.Build(name: "boot", definition: Fixtures.BuildDocument());
+        var gate = new WorldConsoleWaitGate();
+        var registry = new CommandRegistry(modules: [
+            new WorldWaitCommandModule(authority: new FakeConsoleAuthority(row.Instance), gates: new FakeWaitGateResolver(gate)),
+        ]);
+        var source = new TextCommandSource(registry);
+        using var first = source.CreateSession(CommandPrincipal.Console);
+        using var second = source.CreateSession(CommandPrincipal.Console);
+        first.Enqueue("world.wait 3");
+        var afterFirst = first.InvokeAsync(() => gate.Tick, cancellationToken: TestContext.Current.CancellationToken);
+        second.Enqueue("world.wait 1");
+        var afterSecond = second.InvokeAsync(() => gate.Tick, cancellationToken: TestContext.Current.CancellationToken);
+        source.Collect();
+        Assert.False(afterFirst.IsCompleted);
+        Assert.False(afterSecond.IsCompleted);
+        gate.PublishTick(1);
+        source.Collect();
+        Assert.Equal(1UL, await afterSecond);
+        Assert.False(afterFirst.IsCompleted);
+        gate.PublishTick(3);
+        source.Collect();
+        Assert.Equal(3UL, await afterFirst);
+        Assert.False(gate.ReleaseStalled());
+        Assert.True(registry.Submit("world.wait 1").IsError);
+    }
+
+    [Fact]
+    public async Task StalledReleaseAndClockResetReleaseEveryWaitingSession() {
+        var gate = new WorldConsoleWaitGate();
+        var source = new TextCommandSource(new CommandRegistry(modules: []));
+        using var first = source.CreateSession(CommandPrincipal.Console);
+        using var second = source.CreateSession(CommandPrincipal.Console);
+        gate.PublishTick(10);
+        _ = gate.Arm(first, 2);
+        _ = gate.Arm(second, 3);
+        var a = first.InvokeAsync(() => true, cancellationToken: TestContext.Current.CancellationToken);
+        var b = second.InvokeAsync(() => true, cancellationToken: TestContext.Current.CancellationToken);
+        source.Collect();
+        Assert.False(a.IsCompleted);
+        Assert.False(b.IsCompleted);
+        Assert.True(gate.ReleaseStalled());
+        source.Collect();
+        Assert.True(await a);
+        Assert.True(await b);
+        _ = gate.Arm(first, 2);
+        var reset = first.InvokeAsync(() => true, cancellationToken: TestContext.Current.CancellationToken);
+        gate.PublishTick(0);
+        source.Collect();
+        Assert.True(await reset);
+        _ = gate.Arm(first, 1);
+        gate.PublishTick(1);
+        Assert.False(gate.ReleaseStalled());
+    }
+
+    [Fact]
     public void WorldUpdate_NoSectionAuthored_EchoesNone() {
         using var row = HostRow.Build(name: "boot", definition: Fixtures.BuildDocument());
         var registry = new CommandRegistry(modules: [new WorldUpdateCommandModule(authority: new FakeConsoleAuthority(instance: row.Instance))]);
@@ -114,7 +170,11 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
             new WorldWaitCommandModule(authority: new FakeConsoleAuthority(instance: row.Instance), gates: new FakeWaitGateResolver(gate: new WorldConsoleWaitGate())),
         ]);
 
-        var result = registry.Submit(line: $"world.wait {token}");
+        CommandResult result = default;
+        var source = new TextCommandSource(registry);
+        using var session = source.CreateSession(principal: CommandPrincipal.Console, onResult: (_, value) => result = value);
+        session.Enqueue(line: $"world.wait {token}");
+        source.Collect();
 
         if (accepted) {
             Assert.False(condition: result.IsError);

@@ -129,7 +129,9 @@ submitter, shader-module factory, surface-transfer factory, vertex-buffer
 factory). The pass is an `ICaptureRequestTarget`: an armed capture reads
 back the pass's own render target — the composed result — and prints
 `[capture] <set name> -> <path>` on stderr; a frame the pass passes through
-untouched forwards the request to its inner node instead.
+untouched forwards the same request to its inner node instead. The request
+reports write completion or failure and is failed if disposed before service;
+see [capture completion](../Puck.SdfVm/README.md#capture-completion).
 `ShaderSetManifest.ConfigJsonSchema()` emits the config schema as a JSON
 Schema object; `manifest.TryBindConfig(config, out values, out reason)` is
 the non-throwing bind. `IShaderModuleLoader`/`ShaderModuleLoader` load and

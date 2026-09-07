@@ -452,7 +452,6 @@ internal static class WorldBootComposition {
         // shell each fixed step) and the verb that arms it. CORE — world.wait is a server-safe verb by name (DELIVER
         // item 3), and a headless script needs the SAME read-after-write fence a windowed one does.
         services.AddSingleton<WorldConsoleWaitGate>();
-        services.AddSingleton<ITextCommandHoldGate>(implementationFactory: static sp => sp.GetRequiredService<WorldConsoleWaitGate>());
         services.AddSingleton<IWorldWaitGateResolver, WorldSingleWaitGateResolver>();
         services.AddSingleton<ICommandModule, WorldWaitCommandModule>();
 
@@ -464,7 +463,7 @@ internal static class WorldBootComposition {
 
         // The captures section's tick-scheduled arm, wired beside the wait gate at the SAME publishTick call site
         // (HeadlessWorldSimulation/WorldSimulation compose the two delegates together). CORE — a headless boot still
-        // schedules and hashes/manifests every capture; it simply has no renderer to arm, narrated by name rather
+        // visits each scheduled tick; it has no renderer to arm or PNG to manifest, narrated by name rather
         // than a crash.
         services.AddSingleton(implementationFactory: static sp => new WorldCaptureScheduler(
             definitionSource: sp.GetRequiredService<WorldDefinitionSource>(),

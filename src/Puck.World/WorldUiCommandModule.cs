@@ -139,14 +139,14 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldRenderProbe? r
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.screenshot",
-            description: "Arms a one-shot PNG capture of the next composed frame (world + overlay, via the outermost render decorator): world.screenshot <path.png>. This REQUESTS a capture, it does not take one — the echo reads 'pending <path>' because no file exists yet, and the render chain prints the resolved path on stderr the moment the frame lands, named by whichever node served it ('[capture] unified overlay -> <path>', '[capture] <shader-set id> -> <path>' from a composed render.extensions pass, or '[debug] captured frame N -> <path>' from the engine node when the nodes above drew nothing and forwarded the request down). Fence a frame (world.wait) before reading the file. Arming a second capture while one is still pending REFUSES rather than silently replacing it — the earlier path would never be written — and a request still outstanding when the run ends is reported on stderr instead of leaving the caller believing a file exists. The parent directory is created here.",
+            description: "Arms a one-shot PNG capture of the next composed frame (world + overlay, via the outermost render decorator): world.screenshot <path.png>. This REQUESTS a capture, it does not take one — the echo reads 'pending <path>' because no file exists yet, and the render chain prints the resolved path on stderr the moment the frame lands, named by whichever node served it ('[capture] unified overlay -> <path>', '[capture] <shader-set id> -> <path>' from a composed render.extensions pass, or '[debug] captured frame N -> <path>' from the engine node when the nodes above drew nothing and forwarded the request down). Let rendering progress (world.wait), then confirm the capture completion before reading the file. Arming a second capture while one is still pending REFUSES rather than silently replacing it — the earlier path would never be written — and a request still outstanding when the run ends is reported on stderr instead of leaving the caller believing a file exists. The parent directory is created here.",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return CommandResult.Error(output: "[world.screenshot: a target path is required — world.screenshot <path.png>]");
                 }
 
                 if (renderProbe is null) {
-                    return CommandResult.Error(output: "[world.screenshot: requires a windowed boot — headless has no renderer to capture]");
+                    return CommandResult.Error(output: "[world.screenshot: requires offscreen or windowed presentation — headless has no renderer to capture]");
                 }
 
                 if (renderProbe.Render is not { } render) {
@@ -170,7 +170,7 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldRenderProbe? r
                     return CommandResult.Error(output: $"[world.screenshot: could not create the target directory ({exception.Message})]");
                 }
 
-                render.RequestCapture(path: path);
+                _ = render.RequestCapture(path: path);
 
                 // "pending", not the bare path: the words are true at the instant they are printed. The capture line
                 // on stderr is what says the file exists.

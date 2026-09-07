@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Assets;
+using Puck.Abstractions.Presentation;
 using Puck.World.Authoring;
 using Puck.Maths;
 using Puck.World.Server;
@@ -23,16 +24,10 @@ internal sealed record WorldCaptureManifest(string Schema, string Backend, strin
     public const string SchemaId = "puck.parity.manifest.v1";
 }
 /// <summary>
-/// Arms <c>world.screenshot</c>'s own capture path (<see cref="WorldRenderProbe.Render"/>'s
-/// <c>RequestCapture</c>) at the exact simulation ticks a document's <c>captures</c> section schedules — the
-/// tick-complete hook fires once per completed <see cref="WorldServer"/> step, the SAME clock
-/// <c>WorldConsoleWaitGate.PublishTick</c> rides, so two backends stepping the identical document capture the
-/// identical moment by construction. Per-capture work (the SDF inside-check, the per-pixel census, the state hash,
-/// and the <c>manifest.json</c> stamp) happens once the armed frame has actually landed — checked at the START of
-/// the NEXT tick-complete call, since the render chain serves a capture from inside the SAME host-loop iteration's
-/// frame production that follows this one's tick step (offscreen: always that same iteration; windowed: at most one
-/// frame later through the overlay decorator) — polling <see cref="Puck.SdfVm.SdfWorldRender.PendingCapturePath"/>
-/// tells the two cases apart without a timer.
+/// Arms captures at the document's scheduled authority ticks. The inside-check and state hash describe the arming
+/// tick; rendering happens later and may observe subsequent simulation work. On a later tick-complete hook, the
+/// exact request's completion permits PNG decoding, census calculation and manifest writing, or reports failure.
+/// This schedule does not make a composed frame an exact-tick simulation snapshot.
 /// </summary>
 /// <remarks>
 /// The camera-inside check reads <see cref="WorldServer.SolidField"/> — the same field <c>world.collision.probe</c>
@@ -43,7 +38,7 @@ internal sealed record WorldCaptureManifest(string Schema, string Backend, strin
 /// the evaluator's own construction seam.
 /// </remarks>
 internal sealed class WorldCaptureScheduler {
-    private readonly record struct Pending(CellName Station, ulong Tick, string Path, string FrameName, ulong StateHash, IReadOnlyList<WorldCapturePaletteEntry> Palette);
+    private readonly record struct Pending(CellName Station, ulong Tick, string Path, string FrameName, FrameCaptureRequest Request, ulong StateHash, IReadOnlyList<WorldCapturePaletteEntry> Palette);
 
     private readonly string m_backend;
     private readonly string m_directory;
@@ -186,10 +181,16 @@ internal sealed class WorldCaptureScheduler {
             return;
         }
 
-        render.RequestCapture(path: path);
+        if (render.PendingCapturePath is { } busyPath) {
+            Console.Error.WriteLine(value: $"[captures] {row.Station} tick {tick}: capture already pending at {busyPath} — skipping.");
+            return;
+        }
+
+        var request = render.RequestCapture(path: path);
 
         m_pending = new Pending(
             FrameName: frameName,
+            Request: request,
             Palette: row.Palette,
             Path: path,
             StateHash: stateHash,
@@ -202,25 +203,23 @@ internal sealed class WorldCaptureScheduler {
             return;
         }
 
-        // Still outstanding on the render chain — this exact path has not been served by a produced frame yet;
-        // retry on a later tick's call rather than reading a file that may not exist (windowed) or may be
-        // mid-write (offscreen, within the same host-loop iteration this tick's own frame has not reached yet).
-        if (string.Equals(
-            a: m_renderProbe?.Render?.PendingCapturePath,
-            b: pending.Path,
-            comparisonType: StringComparison.Ordinal
-        )) {
+        if (!pending.Request.Completion.IsCompleted) {
             return;
         }
 
         m_pending = null;
+        var result = pending.Request.Completion.GetAwaiter().GetResult();
+        if (result.Error is { } error) {
+            Console.Error.WriteLine(value: $"[captures] {pending.Station} tick {pending.Tick}: capture failed ({error.Message}) — dropping this capture.");
+            return;
+        }
 
         byte[] bytes;
 
         try {
             bytes = File.ReadAllBytes(path: pending.Path);
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"[captures] {pending.Station} tick {pending.Tick}: the render chain cleared its pending path but {pending.Path} could not be read ({exception.Message}) — dropping this capture.");
+            Console.Error.WriteLine(value: $"[captures] {pending.Station} tick {pending.Tick}: the capture completed but {pending.Path} could not be read ({exception.Message}) — dropping this capture.");
 
             return;
         }
