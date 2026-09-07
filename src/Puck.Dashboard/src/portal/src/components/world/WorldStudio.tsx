@@ -18,7 +18,12 @@ import { StudioShellWithConfirmation } from "./StudioShell";
 export function WorldStudio() {
   const input = useMemo(() => ({
     official: resolveOfficial(import.meta.env),
-    engineMode: "worker" as const,
+    // Inline, not worker: with the AOT AppBundle, dotnet.js booted inside a module Worker loads every
+    // assembly, logs onRuntimeInitialized, and then never resolves create() (verified in Chromium,
+    // 2026-09-07, with diagnostic tracing; the same boot on the main thread resolves in ~250 ms warm).
+    // Engine calls therefore block the UI thread for their duration (about 2 s to compose or compile
+    // the island). Flip this back to "worker" once the worker boot is proven in a real browser.
+    engineMode: "inline" as const,
     bootEngine: bootEngineFromOfficial,
   }), []);
 
