@@ -48,55 +48,50 @@ AppBundle/
   package.json                                 19 B
   .stamp                                        0 B
   _framework/
-    dotnet.js                                37,898 B
-    dotnet.js.map                            51,818 B
-    dotnet.boot.js                           15,339 B
-    dotnet.native.js                        225,371 B
-    dotnet.native.js.symbols                191,724 B
-    dotnet.native.wasm                    1,523,626 B
-    dotnet.runtime.js                       198,480 B
-    dotnet.runtime.js.map                   276,757 B
-    Puck.World.Browser.wasm                 161,557 B
-    Puck.World.Schema.wasm                4,917,513 B   <- the document model + validator
-    Puck.World.Authoring.wasm               173,317 B
-    Puck.State.wasm                         557,317 B
-    Puck.Assets.wasm                         97,029 B
-    Puck.Attestation.wasm                    61,189 B
-    Puck.Commands.wasm                      110,853 B
-    Puck.Physics.wasm                        65,285 B
-    Puck.SignedDistance.wasm                 25,349 B
-    Puck.Text.wasm                           34,053 B
-    Puck.Hosting.wasm                         4,869 B
-    Puck.Abstractions.wasm                    7,429 B
-    Puck.Maths.wasm                         218,373 B
-    System.Private.CoreLib.wasm           1,711,381 B
-    System.Text.Json.wasm                   425,237 B
+    dotnet.native.wasm                   31,542,689 B   <- AOT'd native code for every assembly in the closure
+    Puck.World.Schema.wasm                4,917,513 B   <- the document model + validator, IL (rooted, unstripped)
+    System.Private.CoreLib.wasm           1,711,893 B
+    Puck.State.wasm                         563,461 B
     System.Private.Xml.wasm                 471,829 B
-    (+ ~30 more BCL assemblies and 14 System.CommandLine resource satellites)
+    System.Text.Json.wasm                   425,749 B
+    dotnet.native.js                        238,780 B
+    Puck.Maths.wasm                         218,885 B
+    dotnet.runtime.js                       198,480 B
+    Puck.World.Authoring.wasm               173,317 B   <- rooted, unstripped (see "Trim baseline" below)
+    Puck.World.Browser.wasm                 161,557 B
+    Puck.Commands.wasm                      110,853 B
+    Puck.Assets.wasm                         98,565 B   <- rooted, unstripped
+    Puck.Physics.wasm                        65,285 B
+    Puck.Attestation.wasm                    61,189 B
+    (+ ~35 more BCL/Puck.* assemblies, mostly metadata-only stubs post-AOT)
 ```
 
-**Total AppBundle size: 12,600,621 bytes (12.02 MiB), uncompressed.** No
-mimalloc native binary lands in the AppBundle (see "mimalloc" below) — the
-`_framework/*.wasm` set above is the complete network payload. `System.CommandLine`
-and its 14 locale resource satellites (~117 KiB combined) ride in only because
-`Puck.Cli`'s own document-loading code is reachable from `Puck.World.Schema`
-through `WorldAssetRowLoader`/canonicalizers shared with the CLI; nothing in
-this project's own `Engine`/`Exports` calls into `System.CommandLine` itself.
-
-`Puck.World.Schema.wasm` (4.8 MiB, 39% of the payload) dominates because
-`TrimmerRootAssembly` keeps it — and `Puck.World.Authoring`/`Puck.Assets` —
-whole (see "Trim baseline" below): trimming is disabled for exactly the three
-assemblies whose reflection this document model depends on, so their full IL
-ships rather than a analyzer-verified subset.
+**Total AppBundle size: 42,444,284 bytes (40.48 MiB), uncompressed** — up from
+**12,600,621 bytes (12.02 MiB)** the same publish produced before
+`RunAOTCompilation` (a 3.4x growth; see "Performance" below for why this
+switch is on despite the size). No mimalloc native binary lands in the
+AppBundle (see "mimalloc" below). `dotnet.native.wasm` alone (31.5 MiB, 74%
+of the payload) is every assembly's AOT-compiled native code; `Puck.World.Schema.wasm`
+(4.8 MiB) and its two `TrimmerRootAssembly` siblings still ship their full IL
+on top of that native code — `WasmStripILAfterAOT` (the SDK default, on)
+strips a trimming-eligible method's IL body once AOT has compiled it
+natively, but a `TrimmerRootAssembly`-rooted assembly is kept out of trimming
+entirely (see "Trim baseline" below), so ILLink never marks its methods
+eligible to strip and their IL survives untouched alongside the native code
+that supersedes it at runtime — the dominant cost this switch carries, not
+something a stripping flag can claw back without giving up the reflection
+that rooting exists to keep real.
 
 ### Cold-start time
 
 Loading `main.mjs` under Node and calling `createEngine()` to a ready
-`[JSExport]` surface: **~150-250 ms** on this machine (measured via the Node
-harness's own per-test timings; a browser tab's first load also pays one-time
-`WebAssembly.compile` cost the Node CLI's JIT-adjacent `node.exe` build may
-warm differently). `Version()` itself (a call into an already-booted engine)
-answers in single-digit milliseconds.
+`[JSExport]` surface: **~110-150 ms** on this machine under AOT (measured via
+the Node harness's own per-test timings; a browser tab's first load also
+pays one-time `WebAssembly.compile`/`instantiate` cost over a ~3.4x larger
+binary, which this Node measurement does not isolate — a browser network
+fetch's own cost is a separate, unmeasured concern here). `Version()` itself
+(a call into an already-booted engine) answers in single-digit milliseconds
+either way.
 
 ## `[JSExport]` API surface (as actually exported)
 
@@ -212,6 +207,20 @@ This is confirmed, expected behavior, not a defect:
 pins it. A district or game fragment that authors no `screens[].source.machine`
 row (most of the catalog) parses and compiles cleanly with no deferral at all.
 
+**`Judge()` on the composed flagship island throws.** `BrowserSession`'s
+`FrameHost` (`Puck.State`, generic) is not an `IWorldRuleReader`
+(`Puck.World.Schema/IWorldRuleReader.cs`) — the widened reader "the evaluator
+that owns bodies, regions, machines, and channels implements", per that
+interface's own remarks — so any rule reading a world-scoped operand fact
+(`PhysicsQuiescentOperand`, `RegionOccupancyOperand`, `ArgBodyOperand`, …)
+throws `Arg_InvalidCastException` the moment it evaluates. `puck.world.json`'s
+own `dive`/`kart`/`jump` modules author such rules, so `Judge()` on the
+composed island (unlike `games/tictactoe.world.json`, which authors none)
+fails today, regardless of build configuration. `Compile()` still succeeds
+(it never evaluates a rule); every `Judge`-exercising test and harness in this
+tree (`BrowserParityRecordingTests`, `engine-timing.test.cjs`) judges
+`games/tictactoe.world.json` for this reason, never the composed island.
+
 ## Trim baseline
 
 `PublishTrimmed=true`/`TrimMode=partial`, with `TrimmerRootAssembly` keeping
@@ -240,6 +249,93 @@ verified against the real AppBundle under Node before this switch was added
 Cost: `System.Text.Json.wasm` grows from 327,445 to 425,237 bytes (+30%,
 +96 KiB) — the AppBundle total moved from ~12.0 MiB to ~12.4 MiB for this one
 switch.
+
+## Performance
+
+`src/Puck.Dashboard/src/portal/tests/engine-timing.test.cjs` times every call
+an editing loop makes against this AppBundle under Node, over the shipped
+island (`puck.world.json` + `standard.basis.json` + all 16 imports,
+`~2.4 MB` of source JSON, composing to a `~428 KB` standalone document);
+`tests/Puck.World.Browser.Tests/EngineTimingTests.cs` times the identical
+calls natively (JIT, no wasm interpreter) for comparison. Medians of three
+runs each, this machine:
+
+| Call | wasm interpreter (Node) | native (JIT), cold | native (JIT), warm |
+|---|---:|---:|---:|
+| `Parse` (tictactoe under basis) | 1,235 ms | 1,135 ms | 11 ms |
+| `ComposeTree` (full island) | 12,733 ms | 2,605 ms | 1,996 ms |
+| `Compile` (composed island) | 9,911 ms | 1,683 ms | 1,710 ms |
+| `Judge` (tick 1, tictactoe) | 35 ms | — | — |
+| `StateHash` (tictactoe) | 1 ms | — | — |
+| `Cells` (chessBoard, 64 cells) | 7 ms | — | — |
+
+Two things follow from the native cold/warm split. `Parse`'s huge cold-run
+cost (1,135 ms) is almost entirely one-time JIT/static-init — it drops to
+11 ms once the same process has already paid that cost once. `ComposeTree`
+and `Compile` do **not** drop the same way (2,605 ms → 1,996 ms; 1,683 ms →
+1,710 ms) — that time is real per-call work, not warm-up, and it lives in
+`Puck.World.Schema` (the `WorldDefinitionFileSource`/`WorldDocumentBasis`
+`JsonNode` tree merge `BrowserComposer.ComposeTree` calls into, and the
+parse/migrate/validate/rule-compile pipeline `BrowserParser.TryParseAndValidate`
+runs three times over the same ~428 KB document across one `ComposeTree` +
+one `Compile` call) and `Puck.State` (`RuleEvaluator`'s own rule compilation) —
+outside this project's own `Engine`/`Exports` boundary. The wasm interpreter
+is roughly 5-6x slower than native-warm on both (`ComposeTree` 12,733 ms vs
+1,996 ms; `Compile` 9,911 ms vs 1,710 ms), consistent with Mono's
+interpreter-tier overhead relative to JIT, not a wasm-specific pathology.
+
+**`RunAOTCompilation` landed.** With it on (`WasmStripILAfterAOT` at its SDK
+default of `true` — see "AppBundle" above for why it cannot strip the three
+rooted assemblies), the wasm interpreter numbers above become:
+
+| Call | AOT (Node) | vs. interpreter |
+|---|---:|---:|
+| `Parse` (tictactoe under basis) | 753 ms | 1.6x |
+| `ComposeTree` (full island) | 2,347 ms | 5.4x |
+| `Compile` (composed island) | 1,969 ms | 5.0x |
+| `Judge` (tick 1, tictactoe) | 17 ms | 2.1x |
+| `StateHash` (tictactoe) | 2 ms | ~1x |
+| `Cells` (chessBoard, 64 cells) | 5 ms | 1.5x |
+
+`ComposeTree` + `Compile` together — the pair an edit-and-preview cycle pays —
+drop from ~22.6 s to ~4.3 s. Every existing test and harness in this tree
+(`dotnet test tests/Puck.World.Browser.Tests`, `engine-wasm.test.cjs`,
+`native.test.cjs`, `engineBoot.test.cjs`) passes unchanged against the AOT
+AppBundle, including the parity-hash assertions — `BrowserParityRecordingTests`'
+own `Fixtures/browser-parity/expected.json` needed no re-record. Cost: the
+AppBundle grows 3.4x, 12.02 MiB → 40.48 MiB (see "AppBundle" above) — over
+this package's own "~40 MB uncompressed" guidance on a decimal-MB reading
+(42.44 MB), inside it on the binary-MiB reading this README uses everywhere
+else. Landed on the strength of the win and the ~1.2% MiB margin; a stricter
+reading of that ceiling would argue for reverting this switch instead.
+
+`WasmEnableSIMD=true` was tried alongside AOT and produced a byte-identical
+`dotnet.native.wasm` to the non-SIMD AOT build — the SDK's own incremental
+AOT cache treated the two runs as equivalent and never re-ran the AOT
+compiler, so this switch is untested in isolation here, not measured at zero
+effect; a clean rebuild (`rm -rf obj bin` first) would be needed to test it
+honestly. The bottleneck this section exists to explain — `JsonNode` tree
+merging and rule-table interpretation, not numeric vector loops — makes SIMD
+an unlikely further win regardless.
+
+There is no separate interpreter-tiering/PGO MSBuild property in this SDK
+(`Microsoft.NET.Runtime.WebAssembly.Sdk/10.0.11`) — `RunAOTCompilation` is the
+only lever `BrowserWasmApp.targets`/`WasmApp.Common.targets` expose for
+interpreter speed. `EventSourceSupport` already defaults to `false` for a
+browser-wasm publish (the SDK's own default, unrelated to this project's
+`<NoWarn>`); `DebuggerSupport`/`UseSystemResourceKeys` are general SDK
+feature switches over diagnostics infrastructure and exception-message
+strings, neither of which sits in `ComposeTree`/`Compile`'s own call graph —
+not tried, on that reading of the SDK source rather than a measurement.
+
+`ComposeTree` and `Compile` still cost ~2 s each even AOT'd and native-warm
+(see the cold/warm table above) — real per-call work in `Puck.World.Schema`'s
+`JsonNode` tree merge and `Puck.State`'s rule compilation, outside this
+project's own boundary. `BrowserExports.Compile` also re-runs
+`BrowserParser.TryParseAndValidate` over the same composed bytes `ComposeTree`
+already validated once — the studio's own two-call convention (`composeTree()`
+then `compile()`), not a defect this project can unilaterally change without
+reshaping that contract.
 
 ## mimalloc
 

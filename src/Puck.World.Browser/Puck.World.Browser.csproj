@@ -22,6 +22,16 @@
              their SDK defaults; single-threaded per the plan's own API contract (JSON-string marshalling, no
              cross-thread state). -->
         <WasmEnableThreads>false</WasmEnableThreads>
+        <!-- The Mono interpreter (this project's default without this switch) runs every call — Parse, ComposeTree,
+             Compile — 5-6x slower than the identical native JIT call over the same bytes (see the project README's
+             own "Performance" table): ComposeTree over the shipped island measured ~12.7 s interpreted vs ~2.3 s
+             AOT'd, Compile ~9.9 s vs ~2.0 s, an editing loop the interpreter cannot serve. AOT compiles every
+             assembly in the closure to native wasm ahead of time instead of interpreting IL per call.
+             WasmStripILAfterAOT (the SDK default) cannot strip TrimmerRootAssembly's three rooted assemblies'
+             IL — their reflection surface depends on it staying real (see the NoWarn remarks above) — so their
+             AOT'd native code and their original IL both ship, which is most of the size cost this switch carries
+             (see the README's own AppBundle-size table). -->
+        <RunAOTCompilation>true</RunAOTCompilation>
         <!-- Puck.Assets and Puck.World.Schema each carry IsAotCompatible=false for a REAL reason (reflection-based
              JsonSerializer calls in Puck.Assets' DocumentCanonicalizer/DocumentSpatialValues/CreationDocumentJsonConverter;
              WorldSchema/WorldNameRegistry.Walk/WorldStateDocumentValues' own reflection walk in Puck.World.Schema) —
