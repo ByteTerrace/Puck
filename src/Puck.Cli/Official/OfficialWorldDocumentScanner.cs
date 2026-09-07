@@ -31,8 +31,8 @@ internal static class OfficialWorldDocumentScanner {
         // The validator asks which screen-machine engines ship and which compile a cartridge; a composition root
         // installs both (see Puck.Cli.Bench.WorldBenchmarks, the other Puck.Cli lane that composes a real world), and
         // this scan is its own root.
-        WorldExtensionVocabularyHook.ScreenMachineEngineCheck = WorldScreenMachineEngines.IsRegistered;
-        WorldExtensionVocabularyHook.ScreenMachineCartridgeCheck = WorldScreenMachineEngines.CompilesCartridges;
+        WorldExtensionVocabularyHook.ScreenMachineEngineCheck = id => WorldScreenMachineEngines.IsRegistered(id);
+        WorldExtensionVocabularyHook.ScreenMachineCartridgeCheck = id => WorldScreenMachineEngines.CompilesCartridges(id);
 
         var full = Path.GetFullPath(path: worldsDirectory);
         var rootPath = Path.Combine(path1: full, path2: RootDocumentName);
