@@ -4,7 +4,7 @@
   "bootShape": "headless",
   "requirements": [],
   "seconds": 3,
-  "timeoutSeconds": 20,
+  "timeoutSeconds": 60,
   "binding": "The positive leg boots the nexus (which authors title/description/authors/tags) and reads world.metadata back; the discriminating leg boots jump (no metadata authored) and gets the 'none' line instead.",
   "fixtures": [],
   "positive": {

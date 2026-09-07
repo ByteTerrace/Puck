@@ -1,11 +1,11 @@
 {
   "id": "instrument-clock-source",
-  "title": "Engaging a diegetic instrument and submitting its clock lever drives a music segment transition an unengaged run never reaches",
+  "title": "Engaging a diegetic instrument automatically folds its clock in and drives a music segment transition an unengaged run never reaches",
   "bootShape": "windowed",
   "requirements": ["gpu"],
   "seconds": 6,
   "timeoutSeconds": 20,
-  "binding": "A one-seat fixture declaring one engageable screen booted on the tune-instrument engine (fast-instrument.audio.json, tempo=1 -> an 840-tick beat) and one music score whose sole segment arms a BeatEnd transition off seat.join against a WORLD tempo authored at the slowest legal beat (50400 ticks, one second) -- far longer than this canary's own wait. The local seat joins at boot, arming the transition identically in both legs. The positive leg engages the screen (body.engage), engages the instrument-clock lever, waits 15 sim ticks, then reads instrument.state/music.state: WorldServer.InstrumentClockBoundary folds the instrument's fast tempo in only while the seat holds the screen application, so the transition commits well inside the wait. The discriminating leg runs the IDENTICAL fixture and wait with the engage/lever steps omitted entirely, so the seat never holds the application, the fold never contributes, and only the world's own far-slower clock is live -- the transition stays armed, uncommitted, for the whole wait.",
+  "binding": "A one-seat fixture declaring one engageable screen booted on the tune-instrument engine (fast-instrument.audio.json, tempo=1 -> an 840-tick beat) and one music score whose sole segment arms a BeatEnd transition off seat.join against a WORLD tempo authored at the slowest legal beat (50400 ticks, one second) -- far longer than this canary's own wait. The local seat joins at boot, arming the transition identically in both legs. The positive leg engages the screen (body.engage), waits 15 sim ticks, then reads instrument.state/music.state: WorldServer.InstrumentClockBoundary folds the instrument's fast tempo in automatically, for as long as the seat holds the screen application -- holding IS the whole gate, no separate lever -- so the transition commits well inside the wait. The discriminating leg runs the IDENTICAL fixture and wait with the engage step omitted entirely, so the seat never holds the application, the fold never contributes, and only the world's own far-slower clock is live -- the transition stays armed, uncommitted, for the whole wait.",
   "fixtures": ["fast-instrument.audio.json"],
   "positive": {
     "world": "tests/Puck.World.Canaries/instrument-clock-source/fixture.world.json",
@@ -14,7 +14,6 @@
       { "verb": "console", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
       { "verb": "body.engage", "occurrence": 1, "outcome": "accepted" },
-      { "verb": "world.instrument-clock", "occurrence": 1, "outcome": "accepted" },
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
       { "verb": "instrument.state", "occurrence": 1, "outcome": "accepted" },
       { "verb": "music.state", "occurrence": 1, "outcome": "accepted" },

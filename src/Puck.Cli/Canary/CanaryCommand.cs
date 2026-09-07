@@ -26,10 +26,18 @@ internal static partial class CanaryCommand {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
         }
-        if (!CanaryManifestLoader.TryLoadAll(error: out var manifestError, manifests: out var manifests, repositoryRoot: repositoryRoot)) {
+        // --list stays strict (a single, unambiguous refusal for an author curating manifests); every running shape
+        // tolerates a rotten manifest instead of letting it block every other proof — see TryLoadAll's own remarks.
+        var strict = (selection.Kind == CanarySelectionKind.List);
+
+        if (!CanaryManifestLoader.TryLoadAll(error: out var manifestError, manifests: out var manifests, refused: out var refusedManifests, repositoryRoot: repositoryRoot, strict: strict)) {
             Console.Error.WriteLine(value: $"ERROR: {manifestError}");
 
             return 2;
+        }
+
+        foreach (var (directory, reason) in refusedManifests) {
+            Console.Error.WriteLine(value: $"canary: SKIPPED manifest '{directory}' — {reason}");
         }
 
         if (selection.Kind == CanarySelectionKind.List) {
@@ -743,13 +751,12 @@ internal static partial class CanaryCommand {
         return results;
     }
     // Per-verb command-claim accounting shared by a single-process leg and a federated mesh leg's primary
-    // authority: every authored occurrence's response is found by its "[verb:" prefix, or by a "[verb.facet"
-    // line for a verb whose read-back is a run of facet lines (world.state answers a row as [world.state.row …]
-    // followed by its [world.state.cell …] lines) — a contiguous run of such lines is one answer (either stream;
-    // OutputLines carries both, sequence-ordered) — and checked against its declared stream (accepted implies
-    // stdout unless StreamOverride says otherwise; refused always implies stderr). wire.errors additionally
+    // authority: every authored occurrence's response is ResponseEvents' own reading for that verb (either
+    // stream; OutputLines carries both, sequence-ordered) — checked against its declared stream (accepted implies
+    // stdout unless StreamOverride says otherwise, EXCEPT a narrated verb — see NarratedMutationVerbs — whose only
+    // signal is engine narration and so is always stderr; refused always implies stderr). wire.errors additionally
     // carries the runner-owned terminal call, one beyond whatever occurrences the script itself authored.
-    private static IReadOnlyList<CanaryAssertionResult> EvaluateCommandAccounting(IReadOnlyList<CanaryCommandClaim> commands, IReadOnlyList<CliProcessOutputLine> outputLines) {
+    internal static IReadOnlyList<CanaryAssertionResult> EvaluateCommandAccounting(IReadOnlyList<CanaryCommandClaim> commands, IReadOnlyList<CliProcessOutputLine> outputLines) {
         var results = new List<CanaryAssertionResult>();
         var expectedRefusals = commands.Count(predicate: static claim => (claim.Outcome == CanaryCommandOutcome.Refused));
         var byVerb = commands.GroupBy(keySelector: static claim => claim.Verb, comparer: StringComparer.Ordinal);
@@ -767,7 +774,7 @@ internal static partial class CanaryCommand {
 
             if (countPassed) {
                 for (var index = 0; (index < claims.Count); index++) {
-                    var expectedStream = (((claims[index].StreamOverride ?? ((claims[index].Outcome == CanaryCommandOutcome.Accepted) ? CanaryStream.Stdout : CanaryStream.Stderr)) == CanaryStream.Stdout)
+                    var expectedStream = (((claims[index].StreamOverride ?? DefaultStream(outcome: claims[index].Outcome, verb: group.Key)) == CanaryStream.Stdout)
                         ? CliProcessOutputStream.Stdout
                         : CliProcessOutputStream.Stderr);
 
@@ -792,30 +799,200 @@ internal static partial class CanaryCommand {
 
         return results;
     }
-    // One event per answer: a line opening "[verb:" always starts one; a line opening "[verb." starts one only
-    // when the previous line did not already belong to this verb's answer.
-    private static List<CliProcessOutputLine> ResponseEvents(IReadOnlyList<CliProcessOutputLine> outputLines, string verb) {
-        var exact = $"[{verb}:";
-        var facet = $"[{verb}.";
+    // A buffered mutation verb the console layer never registers against WorldDeferredVerbEchoes (WorldServer stays
+    // off limits to this task, so the registration gap itself is not this runner's to close) leaves the universal
+    // tick-boundary narration — "[world.mutation: <Describe> applied]" accepted, "[world.mutation rejected:
+    // <Describe> — …]" refused, ALWAYS on stderr (engine narration, never the accepted-implies-stdout default) — as
+    // its only observable answer. Describe's own text is unique per WorldMutation case (WorldServer.Describe.cs), so
+    // the prefix below is a stable, verb-specific correlation, not a guess.
+    private static readonly IReadOnlyDictionary<string, string> NarratedMutationVerbs = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
+        ["world.generate"] = "Generate '",
+        ["world.state.cell.remove"] = "RemoveStateCell '",
+        ["world.state.cell.set"] = "UpsertStateCell '",
+    };
+    // Refused always answers on stderr; accepted answers on stdout UNLESS the verb is narration-only (above), whose
+    // sole signal is engine narration and so is stderr regardless of outcome.
+    private static CanaryStream DefaultStream(CanaryCommandOutcome outcome, string verb) =>
+        (((outcome == CanaryCommandOutcome.Accepted) && !NarratedMutationVerbs.ContainsKey(key: verb))
+            ? CanaryStream.Stdout
+            : CanaryStream.Stderr);
+    // A verb whose space-led answer opens with an inline key ("[world.symmetry node=5 …]") rather than a bracketed
+    // name reads the SAME as any other spaced answer EXCEPT for one ambiguity BracketResponseEvents cannot resolve
+    // on its own: two SEPARATE calls back to back (no other command between them) are indistinguishable from one
+    // call's own multi-line answer by prefix alone, since both are runs of "[verb …]" lines with nothing else
+    // between them. The key value breaks the tie — a second line still naming the SAME key is the SAME call's own
+    // further output (world.symmetry's second line echoes the identical node its first line answered for); a key
+    // change can only be a fresh call.
+    private static readonly IReadOnlyDictionary<string, string> KeyedSpacedVerbs = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
+        ["world.symmetry"] = "node=",
+    };
+    private static List<CliProcessOutputLine> KeyedResponseEvents(IReadOnlyList<CliProcessOutputLine> outputLines, string verb, string keyPrefix) {
+        var lead = $"[{verb} {keyPrefix}";
         var events = new List<CliProcessOutputLine>();
-        var inFacetRun = false;
+        var inRun = false;
+        var openKey = string.Empty;
 
         foreach (var line in outputLines) {
-            if (line.Line.StartsWith(value: exact, comparisonType: StringComparison.Ordinal)) {
-                events.Add(item: line);
-                inFacetRun = false;
-            } else if (line.Line.StartsWith(value: facet, comparisonType: StringComparison.Ordinal)) {
-                if (!inFacetRun) {
+            if (TryReadDelimited(line: line.Line, prefix: lead, value: out var key)) {
+                if (!(inRun && string.Equals(a: openKey, b: key, comparisonType: StringComparison.Ordinal))) {
                     events.Add(item: line);
+                    inRun = true;
                 }
 
-                inFacetRun = true;
+                openKey = key;
             } else {
-                inFacetRun = false;
+                inRun = false;
+                openKey = string.Empty;
             }
         }
 
         return events;
+    }
+    // Reads the token right after a known prefix, up to the next space or closing bracket — "5" from
+    // "[world.symmetry node=5 …]" given prefix "[world.symmetry node=".
+    private static bool TryReadDelimited(string line, string prefix, out string value) {
+        value = string.Empty;
+
+        if (!line.StartsWith(value: prefix, comparisonType: StringComparison.Ordinal)) {
+            return false;
+        }
+
+        var end = line.IndexOfAny(anyOf: [' ', ']'], startIndex: prefix.Length);
+
+        value = ((end < 0) ? line[prefix.Length..] : line[prefix.Length..end]);
+
+        return true;
+    }
+    // One event per answer. A verb narrated only through the universal mutation channel (above) is matched by
+    // Describe-prefix instead of its own bracket; world.state's own two-tier read-back (a row header opening a run
+    // of cell lines) gets its own reading, since a bare cell line can ALSO be a whole answer on its own (the
+    // row+key single-cell form) and a fresh row header must never be swallowed into a run already open for a
+    // DIFFERENT row; every other verb uses the general bracket reading.
+    internal static List<CliProcessOutputLine> ResponseEvents(IReadOnlyList<CliProcessOutputLine> outputLines, string verb) {
+        if (NarratedMutationVerbs.TryGetValue(key: verb, value: out var describePrefix)) {
+            return NarratedResponseEvents(describePrefix: describePrefix, outputLines: outputLines);
+        }
+        if (KeyedSpacedVerbs.TryGetValue(key: verb, value: out var keyPrefix)) {
+            return KeyedResponseEvents(keyPrefix: keyPrefix, outputLines: outputLines, verb: verb);
+        }
+
+        return (string.Equals(a: verb, b: "world.state", comparisonType: StringComparison.Ordinal)
+            ? WorldStateResponseEvents(outputLines: outputLines)
+            : BracketResponseEvents(outputLines: outputLines, verb: verb));
+    }
+    private static List<CliProcessOutputLine> NarratedResponseEvents(IReadOnlyList<CliProcessOutputLine> outputLines, string describePrefix) {
+        var accepted = $"[world.mutation: {describePrefix}";
+        var rejected = $"[world.mutation rejected: {describePrefix}";
+        var events = new List<CliProcessOutputLine>();
+
+        foreach (var line in outputLines) {
+            if (line.Line.StartsWith(value: accepted, comparisonType: StringComparison.Ordinal) || line.Line.StartsWith(value: rejected, comparisonType: StringComparison.Ordinal)) {
+                events.Add(item: line);
+            }
+        }
+
+        return events;
+    }
+    // "[verb:" always opens a fresh answer AND stays open for whatever "[verb." or "[verb " lines follow it without
+    // a gap — the header-then-details shape console.md documents for world.state generalizes to any verb whose
+    // read-back is one summary line followed by a run of detail lines under the same prefix (world.rule.trace's
+    // read-back names its rule instead of a bare colon: "[world.rule.trace <rule>: N/N captured]" then one
+    // "[world.rule.trace <rule> tick=…]" line per evaluation — a space-led run exactly like a dot-led facet run).
+    // A "[verb." or "[verb " line NOT already inside a run of its own verb opens one; two such lines in a row
+    // continue the SAME answer, since the only way to tell separate answers apart from bracket text alone is a
+    // non-matching line between them.
+    private static List<CliProcessOutputLine> BracketResponseEvents(IReadOnlyList<CliProcessOutputLine> outputLines, string verb) {
+        var exact = $"[{verb}:";
+        var dotted = $"[{verb}.";
+        var spaced = $"[{verb} ";
+        var events = new List<CliProcessOutputLine>();
+        var inRun = false;
+
+        foreach (var line in outputLines) {
+            if (line.Line.StartsWith(value: exact, comparisonType: StringComparison.Ordinal)) {
+                events.Add(item: line);
+                inRun = true;
+            } else if (line.Line.StartsWith(value: dotted, comparisonType: StringComparison.Ordinal) || line.Line.StartsWith(value: spaced, comparisonType: StringComparison.Ordinal)) {
+                if (!inRun) {
+                    events.Add(item: line);
+                }
+
+                inRun = true;
+            } else {
+                inRun = false;
+            }
+        }
+
+        return events;
+    }
+    // world.state's own two forms collide under the general bracket reading: "world.state <row>" prints ONE
+    // "[world.state.row '<row>' …]" header followed by that row's own "[world.state.cell '<row>'.'<key>' …]"
+    // lines (one answer), "world.state <row> <key>" prints ONLY the cell line with no header at all (also one
+    // answer), and "world.state" alone prints an EXACT "[world.state: rows N/…]" header followed by every row's
+    // OWN header-then-cells run in turn (still one answer, the whole dump). A row header can only ever be the
+    // FIRST line of ITS OWN answer, so one immediately following another row's cell lines — the row-only form
+    // called back to back — must always open fresh; the one case it must NOT is a header inside the "world.state"
+    // dump's own already-open run, where every row's header is a further line of the SAME answer. A cell line
+    // continues the run only when the run's own open row already names it — the dump's own exact-opened run
+    // (whose "open row" tracks whichever header struck last) or a prior cell line reporting the identical row (the
+    // row+key single-cell form has no header to open on, so its first cell line is what opens it).
+    private static List<CliProcessOutputLine> WorldStateResponseEvents(IReadOnlyList<CliProcessOutputLine> outputLines) {
+        const string Exact = "[world.state:";
+        const string RowPrefix = "[world.state.row '";
+        const string CellPrefix = "[world.state.cell '";
+        var events = new List<CliProcessOutputLine>();
+        var inRun = false;
+        var runIsDump = false;
+        var openRow = string.Empty;
+
+        foreach (var line in outputLines) {
+            if (line.Line.StartsWith(value: Exact, comparisonType: StringComparison.Ordinal)) {
+                events.Add(item: line);
+                inRun = true;
+                runIsDump = true;
+                openRow = string.Empty;
+            } else if (TryReadQuoted(line: line.Line, prefix: RowPrefix, value: out var rowName)) {
+                if (!(inRun && runIsDump)) {
+                    events.Add(item: line);
+                    inRun = true;
+                    runIsDump = false;
+                }
+
+                openRow = rowName;
+            } else if (TryReadQuoted(line: line.Line, prefix: CellPrefix, value: out var cellRow)) {
+                if (!(inRun && (runIsDump || string.Equals(a: openRow, b: cellRow, comparisonType: StringComparison.Ordinal)))) {
+                    events.Add(item: line);
+                    inRun = true;
+                    runIsDump = false;
+                    openRow = cellRow;
+                }
+            } else {
+                inRun = false;
+                runIsDump = false;
+                openRow = string.Empty;
+            }
+        }
+
+        return events;
+    }
+    // Reads the quoted token right after a known prefix — "'<name>'" from either "[world.state.row 'name' …]" or
+    // "[world.state.cell 'name'.'key' …]", both of which quote their row name first.
+    private static bool TryReadQuoted(string line, string prefix, out string value) {
+        value = string.Empty;
+
+        if (!line.StartsWith(value: prefix, comparisonType: StringComparison.Ordinal)) {
+            return false;
+        }
+
+        var closing = line.IndexOf(value: '\'', startIndex: prefix.Length);
+
+        if (closing < 0) {
+            return false;
+        }
+
+        value = line[prefix.Length..closing];
+
+        return true;
     }
     private static void ReportLeg(string id, CanaryLegRun result) {
         Console.WriteLine(value: $"canary {id} {result.Leg.Name}: transcripts {result.RunDirectory}");

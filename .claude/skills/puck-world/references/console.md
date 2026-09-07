@@ -100,10 +100,26 @@ Three echo models — do not conflate them:
    `WorldServer.EchoTap` (stderr + toast + mirror), and a rejection
    increments `wire.errors` via `NoteDeferredRejection`. A verb that submits
    through the registering `Submit(link, mutation, echoes, verb)` overload
-   (`WorldDeferredVerbEchoes`; the `world.row.set`/`world.row.remove`/`world.assign` family) also
-   gets a per-verb `[<verb>: …]` stderr line when the drain REJECTS its
-   mutation — that is what lets a canary account a `refused` outcome against
-   the submitting verb. An accepted mutation still prints no per-verb line.
+   (`WorldDeferredVerbEchoes`; the `world.row.set`/`world.row.remove`/`world.assign`/
+   `world.state.transform`/`world.state.act` family) also gets a per-verb
+   `[<verb>: …]` line the tick-boundary drain settles — stderr on rejection
+   (beside the verb-agnostic `[world.mutation rejected: …]`), stdout on
+   acceptance — so a canary can account either outcome against the
+   submitting verb rather than only a refusal. A verb that submits through
+   the plain `Submit(link, mutation)` overload (`world.generate`,
+   `world.state.cell.set`, `world.state.cell.remove`) registers nothing, so
+   its only observable answer is the universal `[world.mutation: … applied]`/
+   `[world.mutation rejected: … — …]` narration, always stderr regardless of
+   outcome — `puck canary`'s runner accounts these by correlating that
+   narration to the verb's own `Describe()` prefix (`WorldServer.Describe.cs`
+   — unique per `WorldMutation` case, e.g. `Generate '`), never by a
+   `[<verb>: …]` line the console layer never prints. Adding the echoes
+   registration to a currently-unregistered verb is the more direct fix; the
+   narration-correlation reading is the fallback for when that command
+   module is out of reach. The two readings are not layered — registering a
+   verb that stays listed as narrated in the runner (`CanaryCommand`'s
+   `NarratedMutationVerbs`) still reads the narrated way, so a verb moved to
+   registration must also move out of that table.
 
 `world.gravity` is the gravity decision's Immediate read-back: it echoes the
 authored solver, uniform acceleration, shared constant/softening, explicit-mass

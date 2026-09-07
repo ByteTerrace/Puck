@@ -1,7 +1,0 @@
-wire.errors reset
-body.pose -2 0 -12 0 0 0 0
-body.press strafe 1 1 0
-world.wait 120
-world.view.camera 1
-body.where 0
-wire.errors

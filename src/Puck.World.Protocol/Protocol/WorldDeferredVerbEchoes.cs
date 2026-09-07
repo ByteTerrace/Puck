@@ -2,10 +2,9 @@ namespace Puck.World.Protocol;
 
 /// <summary>The local console's pending-verb table for deferred mutation verdicts: a buffered-mutation verb registers
 /// the correlation id its submission minted, and the composition root's <c>WorldServer.EchoTap</c> subscriber takes
-/// the entry back when the tick-boundary verdict fires, printing a per-verb refusal line
-/// (<c>[world.row.set: …]</c>) the submitting script can account beside the verb-agnostic
-/// <c>[world.mutation rejected: …]</c> narration. An accepted verdict takes its entry silently — echo model 3's
-/// no-applied-result-line contract is unchanged.</summary>
+/// the entry back when the tick-boundary verdict fires, printing a per-verb line the submitting script can account
+/// beside the verb-agnostic <c>[world.mutation …]</c> narration — a refusal on stderr
+/// (<c>[world.row.set: …]</c>), an acceptance on stdout.</summary>
 /// <remarks>Register and take both run on the tick thread (a console handler submits inline over loopback; the echo
 /// tap fires from the drain), so the table carries no lock. Correlation <c>0</c> means "no local correlation" (a
 /// codec refusal, a federated link) and never registers. Past <see cref="Capacity"/> pending entries the oldest is

@@ -73,7 +73,7 @@
         "name": "spin-starts-at-phase-zero",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'spin' kind=Int value=0 cycle=coxeter^1:Step/20@epoch0 order=30]",
+        "text": "[world.state.row 'spin' kind=Int value=0 cycle=coxeter^1:Step/20@epoch0 order=30 domain=slot]",
         "present": true
       },
       {
@@ -81,7 +81,7 @@
         "name": "spin-reaches-step-one-by-tick-30",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'spin' kind=Int value=1 cycle=coxeter^1:Step/20@epoch0 order=30]",
+        "text": "[world.state.row 'spin' kind=Int value=1 cycle=coxeter^1:Step/20@epoch0 order=30 domain=slot]",
         "present": true
       },
       {
@@ -89,7 +89,7 @@
         "name": "spin-reaches-step-three-by-tick-70",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'spin' kind=Int value=3 cycle=coxeter^1:Step/20@epoch0 order=30]",
+        "text": "[world.state.row 'spin' kind=Int value=3 cycle=coxeter^1:Step/20@epoch0 order=30 domain=slot]",
         "present": true
       },
       {
@@ -97,7 +97,7 @@
         "name": "phase-adds-to-the-step",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'spinPhased' kind=Int value=10 cycle=coxeter^1:Step/20@epoch0 order=30]",
+        "text": "[world.state.row 'spinPhased' kind=Int value=10 cycle=coxeter^1:Step/20@epoch0 order=30 domain=slot]",
         "present": true
       },
       {
@@ -105,7 +105,7 @@
         "name": "turns-is-floor-of-step-over-thirty",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'spinTurns' kind=Fixed value=0.0999908447265625 cycle=coxeter^1:Turns/20@epoch0 order=30]",
+        "text": "[world.state.row 'spinTurns' kind=Fixed value=0.0999908447265625 cycle=coxeter^1:Turns/20@epoch0 order=30 domain=slot]",
         "present": true
       },
       {
@@ -113,7 +113,7 @@
         "name": "plane-three-cos-at-step-thirteen",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'spinCos' kind=Fixed value=-0.913543701171875 cycle=coxeter^13:Cos/20@epoch0 order=30]",
+        "text": "[world.state.row 'spinCos' kind=Fixed value=-0.913543701171875 cycle=coxeter^13:Cos/20@epoch0 order=30 domain=slot]",
         "present": true
       },
       {
@@ -121,7 +121,7 @@
         "name": "plane-three-cos-wraps-to-step-nine",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'spinCos' kind=Fixed value=-0.3090057373046875 cycle=coxeter^13:Cos/20@epoch0 order=30]",
+        "text": "[world.state.row 'spinCos' kind=Fixed value=-0.3090057373046875 cycle=coxeter^13:Cos/20@epoch0 order=30 domain=slot]",
         "present": true
       },
       {
@@ -129,7 +129,7 @@
         "name": "orbit-starts-on-its-phase-node",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'orbit' kind=Int value=5 cycle=coxeter^7:Node/20@epoch0 order=30]",
+        "text": "[world.state.row 'orbit' kind=Int value=5 cycle=coxeter^7:Node/20@epoch0 order=30 domain=slot]",
         "present": true
       },
       {
@@ -137,7 +137,7 @@
         "name": "orbit-walks-seven-ring-positions-per-step",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'orbit' kind=Int value=87 cycle=coxeter^7:Node/20@epoch0 order=30]",
+        "text": "[world.state.row 'orbit' kind=Int value=87 cycle=coxeter^7:Node/20@epoch0 order=30 domain=slot]",
         "present": true
       },
       {
@@ -145,7 +145,7 @@
         "name": "orbit-walks-on-by-tick-70",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'orbit' kind=Int value=54 cycle=coxeter^7:Node/20@epoch0 order=30]",
+        "text": "[world.state.row 'orbit' kind=Int value=54 cycle=coxeter^7:Node/20@epoch0 order=30 domain=slot]",
         "present": true
       },
       {
@@ -153,7 +153,7 @@
         "name": "projection-follows-the-node",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'orbitX' kind=Fixed value=-0.0636749267578125 cycle=coxeter^7:ProjectionX/20@epoch0 order=30]",
+        "text": "[world.state.row 'orbitX' kind=Fixed value=-0.0636749267578125 cycle=coxeter^7:ProjectionX/20@epoch0 order=30 domain=slot]",
         "present": true
       },
       {
@@ -161,7 +161,7 @@
         "name": "dial-word-derives-order-twelve",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'dial' kind=Int value=0 cycle=[0,1,2,3,4,5]^1:Step/20@epoch0 order=12]",
+        "text": "[world.state.row 'dial' kind=Int value=0 cycle=[0,1,2,3,4,5]^1:Step/20@epoch0 order=12 domain=slot]",
         "present": true
       },
       {
@@ -169,7 +169,7 @@
         "name": "dial-reaches-step-three-by-tick-70",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'dial' kind=Int value=3 cycle=[0,1,2,3,4,5]^1:Step/20@epoch0 order=12]",
+        "text": "[world.state.row 'dial' kind=Int value=3 cycle=[0,1,2,3,4,5]^1:Step/20@epoch0 order=12 domain=slot]",
         "present": true
       },
       {
@@ -177,7 +177,7 @@
         "name": "dial-node-walks-the-words-orbit",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'dialNode' kind=Int value=58 cycle=[0,1,2,3,4,5]^1:Node/20@epoch0 order=12]",
+        "text": "[world.state.row 'dialNode' kind=Int value=58 cycle=[0,1,2,3,4,5]^1:Node/20@epoch0 order=12 domain=slot]",
         "present": true
       },
       {
@@ -185,7 +185,7 @@
         "name": "dial-node-returns-after-its-orbit",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'dialNode' kind=Int value=5 cycle=[0,1,2,3,4,5]^1:Node/20@epoch0 order=12]",
+        "text": "[world.state.row 'dialNode' kind=Int value=5 cycle=[0,1,2,3,4,5]^1:Node/20@epoch0 order=12 domain=slot]",
         "present": true
       },
       {
@@ -193,7 +193,7 @@
         "name": "dial-ring-moves-when-the-orbit-crosses-rings",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'dialRing' kind=Int value=0 cycle=[0,1,2,3,4,5]^1:Ring/20@epoch0 order=12]",
+        "text": "[world.state.row 'dialRing' kind=Int value=0 cycle=[0,1,2,3,4,5]^1:Ring/20@epoch0 order=12 domain=slot]",
         "present": true
       },
       {
@@ -296,7 +296,7 @@
         "name": "spin-stays-at-its-stored-value",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'spin' kind=Int value=0]",
+        "text": "[world.state.row 'spin' kind=Int value=0 domain=slot]",
         "present": true
       },
       {

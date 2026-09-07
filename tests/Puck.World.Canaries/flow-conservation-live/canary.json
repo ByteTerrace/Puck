@@ -20,7 +20,7 @@
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
     ],
     "expect": [
-      { "type": "line", "name": "spill-starts-at-zero", "stream": "stdout", "match": "contains", "text": "[world.state.row 'spill' kind=Fixed value=0 range=0..1000000]", "present": true },
+      { "type": "line", "name": "spill-starts-at-zero", "stream": "stdout", "match": "contains", "text": "[world.state.row 'spill' kind=Fixed value=0 range=0..1000000 domain=slot]", "present": true },
       { "type": "line", "name": "spill-climbs-by-tick-20", "stream": "stdout", "match": "contains", "text": "value=1900.000091552734375", "present": true },
       { "type": "line", "name": "spill-climbs-further-by-tick-60", "stream": "stdout", "match": "contains", "text": "value=5900.000030517578125", "present": true },
       { "type": "line", "name": "no-rejected-wire", "stream": "stdout", "match": "contains", "text": "[wire.errors: 0 rejected]", "present": true },
@@ -40,7 +40,7 @@
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
     ],
     "expect": [
-      { "type": "line", "name": "spill-stays-at-zero-with-no-source-feeding-it", "stream": "stdout", "match": "contains", "text": "[world.state.row 'spill' kind=Fixed value=0 range=0..1000000]", "present": true },
+      { "type": "line", "name": "spill-stays-at-zero-with-no-source-feeding-it", "stream": "stdout", "match": "contains", "text": "[world.state.row 'spill' kind=Fixed value=0 range=0..1000000 domain=slot]", "present": true },
       { "type": "line", "name": "spill-never-climbs-with-no-source-feeding-it", "stream": "stdout", "match": "contains", "text": "value=1900.000091552734375", "present": false },
       { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]

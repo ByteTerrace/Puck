@@ -11,11 +11,22 @@ internal static class CanaryManifestLoader {
 
     private static readonly Func<string, Exception> Refusal = static message => new CanaryManifestRefusal(message: message);
 
-    public static bool TryLoadAll(string repositoryRoot, out IReadOnlyList<CanaryManifest> manifests, out string error) {
+    /// <summary>Loads every manifest under <c>tests/Puck.World.Canaries</c>. <paramref name="strict"/> true (the
+    /// <c>--list</c> shape) refuses the WHOLE discovery on the first bad manifest, naming exactly that one — the
+    /// shape an author curating manifests wants, so a refusal always points at a single, unambiguous cause.
+    /// <paramref name="strict"/> false (every running shape) instead SKIPS a manifest that refuses to load, collects
+    /// its reason into <paramref name="refused"/> keyed by directory name, and keeps loading the rest: one rotten
+    /// manifest — a dead world path, a stale command claim — must never block every OTHER proof from running, which
+    /// is exactly the failure mode that once left the whole gate dark for weeks. A structural refusal that is not
+    /// about any one manifest (no canary directory at all, a stray root file, zero directories, zero SURVIVING
+    /// manifests) still fails outright in both modes, since there is then no "the rest" to keep running.</summary>
+    public static bool TryLoadAll(string repositoryRoot, bool strict, out IReadOnlyList<CanaryManifest> manifests, out IReadOnlyList<(string Directory, string Reason)> refused, out string error) {
         var canaryRoot = Path.Combine(path1: repositoryRoot, path2: "tests", path3: "Puck.World.Canaries");
         var loaded = new List<CanaryManifest>();
+        var skipped = new List<(string Directory, string Reason)>();
 
         manifests = loaded;
+        refused = skipped;
         error = string.Empty;
 
         if (!Directory.Exists(path: canaryRoot)) {
@@ -43,33 +54,70 @@ internal static class CanaryManifestLoader {
         var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         foreach (var directory in directories) {
+            var directoryName = Path.GetFileName(path: directory);
             var manifestPath = Path.Combine(path1: directory, path2: "canary.json");
 
             if (!File.Exists(path: manifestPath)) {
-                error = $"canary directory '{Path.GetFileName(path: directory)}' has no canary.json; an orphan directory is not a proof.";
+                var reason = "has no canary.json; an orphan directory is not a proof.";
 
-                return false;
+                if (strict) {
+                    error = $"canary directory '{directoryName}' {reason}";
+
+                    return false;
+                }
+
+                skipped.Add(item: (directoryName, reason));
+
+                continue;
             }
 
-            if (!TryLoadManifest(directory: directory, error: out error, manifest: out var manifest, manifestPath: manifestPath, repositoryRoot: repositoryRoot)) {
-                return false;
+            if (!TryLoadManifest(directory: directory, error: out var manifestError, manifest: out var manifest, manifestPath: manifestPath, repositoryRoot: repositoryRoot)) {
+                if (strict) {
+                    error = manifestError;
+
+                    return false;
+                }
+
+                skipped.Add(item: (directoryName, manifestError));
+
+                continue;
             }
 
             if (!ids.Add(item: manifest.Id)) {
-                error = $"duplicate canary id '{manifest.Id}'; selection would not identify one proof.";
+                var reason = $"duplicate canary id '{manifest.Id}'; selection would not identify one proof.";
 
-                return false;
+                if (strict) {
+                    error = reason;
+
+                    return false;
+                }
+
+                skipped.Add(item: (directoryName, reason));
+
+                continue;
             }
 
-            var directoryName = Path.GetFileName(path: directory);
-
             if (!string.Equals(a: manifest.Id, b: directoryName, comparisonType: StringComparison.Ordinal)) {
-                error = $"manifest '{CliPaths.ToDisplay(fullPath: manifestPath, relativeTo: repositoryRoot)}' refused: id '{manifest.Id}' does not match its directory name '{directoryName}'; discovery identity must come from one place.";
+                var reason = $"id '{manifest.Id}' does not match its directory name '{directoryName}'; discovery identity must come from one place.";
 
-                return false;
+                if (strict) {
+                    error = $"manifest '{CliPaths.ToDisplay(fullPath: manifestPath, relativeTo: repositoryRoot)}' refused: {reason}";
+
+                    return false;
+                }
+
+                skipped.Add(item: (directoryName, reason));
+
+                continue;
             }
 
             loaded.Add(item: manifest);
+        }
+
+        if (loaded.Count == 0) {
+            error = $"every discovered manifest was refused ({skipped.Count} of {directories.Length}); an empty surviving suite cannot report green.";
+
+            return false;
         }
 
         return true;

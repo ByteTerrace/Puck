@@ -225,18 +225,23 @@ internal static class WorldPostBuildWiring {
 
         services.GetRequiredService<WorldServer>().EchoTap = echo => {
             // The per-verb half of a deferred verdict: a buffered mutation verb registered its minted correlation at
-            // submit, so a LOCAL submission's rejection prints an accountable "[<verb>: …]" line on stderr beside the
-            // verb-agnostic "[world.mutation rejected: …]" narration. An accepted verdict takes its entry silently —
-            // echo model 3 stays applied-line-free.
+            // submit, so a LOCAL submission's verdict prints an accountable "[<verb>: …]" line beside the
+            // verb-agnostic "[world.mutation …]" narration — stderr on rejection (alongside "[world.mutation
+            // rejected: …]"), stdout on acceptance (the verb's own confirmation, distinct from the narration's
+            // "[world.mutation: …]" stderr line), so a script can account either verdict under the verb it submitted
+            // rather than only the reason it was refused.
             if (
                 (echo.ConnectionId == SubmissionEnvelope.LocalConnectionId) &&
                 deferredVerbEchoes.TryTake(
                 correlationId: echo.CorrelationId,
                 verb: out var submittingVerb
-            ) &&
-                echo.Rejected
+            )
             ) {
-                Console.Error.WriteLine(value: $"[{submittingVerb}: {echo.Message}]");
+                if (echo.Rejected) {
+                    Console.Error.WriteLine(value: $"[{submittingVerb}: {echo.Message}]");
+                } else {
+                    Console.WriteLine(value: $"[{submittingVerb}: {echo.Message}]");
+                }
             }
 
             // world.load/world.reload move what the console considers "the current origin" — but only once the

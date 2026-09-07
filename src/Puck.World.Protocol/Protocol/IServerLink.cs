@@ -193,8 +193,8 @@ public static class ServerLinkSubmissions {
     }
     /// <summary>Submits a live world edit like <see cref="Submit(IServerLink, WorldMutation)"/> and registers the
     /// submitting verb against the minted correlation id, so the composition root's <c>WorldServer.EchoTap</c>
-    /// subscriber can print a per-verb <c>[&lt;verb&gt;: …]</c> refusal line the submitting script can account when
-    /// the tick-boundary drain rejects the mutation. An accepted verdict stays narration-only.</summary>
+    /// subscriber can print a per-verb <c>[&lt;verb&gt;: …]</c> line the submitting script can account when the
+    /// tick-boundary drain settles the mutation — refused on stderr, accepted on stdout.</summary>
     /// <param name="link">The link.</param>
     /// <param name="mutation">The world mutation to apply.</param>
     /// <param name="echoes">The pending-verb table the echo subscriber consumes.</param>

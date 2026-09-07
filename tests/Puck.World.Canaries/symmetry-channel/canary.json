@@ -48,7 +48,7 @@
         "name": "ring-through-the-channel",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'ringOf' kind=Int value=2]",
+        "text": "[world.state.row 'ringOf' kind=Int value=2 domain=slot]",
         "present": true
       },
       {
@@ -56,7 +56,7 @@
         "name": "antipode-through-the-channel",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'antipodeOf' kind=Int value=18]",
+        "text": "[world.state.row 'antipodeOf' kind=Int value=18 domain=slot]",
         "present": true
       },
       {
@@ -64,7 +64,7 @@
         "name": "canonical-ray-through-the-channel",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'canonicalOf' kind=Int value=5]",
+        "text": "[world.state.row 'canonicalOf' kind=Int value=5 domain=slot]",
         "present": true
       },
       {
@@ -72,7 +72,7 @@
         "name": "seven-ring-steps-through-the-channel",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'walked' kind=Int value=87]",
+        "text": "[world.state.row 'walked' kind=Int value=87 domain=slot]",
         "present": true
       },
       {
@@ -80,7 +80,7 @@
         "name": "reflection-through-a-cell-argument",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'reflected' kind=Int value=16]",
+        "text": "[world.state.row 'reflected' kind=Int value=16 domain=slot]",
         "present": true
       },
       {
@@ -88,7 +88,7 @@
         "name": "orthogonality-through-a-literal-argument",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'orthogonalFlag' kind=Int value=0]",
+        "text": "[world.state.row 'orthogonalFlag' kind=Int value=0 domain=slot]",
         "present": true
       },
       {
@@ -96,7 +96,7 @@
         "name": "inner-product-through-a-literal-argument",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'pairing' kind=Int value=1]",
+        "text": "[world.state.row 'pairing' kind=Int value=1 domain=slot]",
         "present": true
       },
       {
@@ -104,7 +104,7 @@
         "name": "projection-through-the-channel",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'projX' kind=Fixed value=0.238006591796875]",
+        "text": "[world.state.row 'projX' kind=Fixed value=0.238006591796875 domain=slot]",
         "present": true
       },
       {
@@ -182,7 +182,7 @@
         "name": "plain-copy-carries-the-node-itself",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'ringOf' kind=Int value=5]",
+        "text": "[world.state.row 'ringOf' kind=Int value=5 domain=slot]",
         "present": true
       },
       {
@@ -190,7 +190,7 @@
         "name": "pairing-stays-the-plain-copy",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'pairing' kind=Int value=5]",
+        "text": "[world.state.row 'pairing' kind=Int value=5 domain=slot]",
         "present": true
       },
       {
@@ -198,7 +198,7 @@
         "name": "no-ring-without-the-channel",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'ringOf' kind=Int value=2]",
+        "text": "[world.state.row 'ringOf' kind=Int value=2 domain=slot]",
         "present": false
       },
       {
@@ -206,7 +206,7 @@
         "name": "no-walk-without-the-channel",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'walked' kind=Int value=87]",
+        "text": "[world.state.row 'walked' kind=Int value=87 domain=slot]",
         "present": false
       },
       {
@@ -214,7 +214,7 @@
         "name": "no-reflection-without-the-channel",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'reflected' kind=Int value=16]",
+        "text": "[world.state.row 'reflected' kind=Int value=16 domain=slot]",
         "present": false
       },
       {
@@ -222,7 +222,7 @@
         "name": "projection-untouched-without-the-channel",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'projX' kind=Fixed value=0]",
+        "text": "[world.state.row 'projX' kind=Fixed value=0 domain=slot]",
         "present": true
       },
       {

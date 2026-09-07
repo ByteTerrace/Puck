@@ -216,15 +216,37 @@ the 2,000,000 rule-work ceiling and each `upsertPlacement`/`removePlacement` cos
 four-corners canaries load and run but their scripts still carry pre-scale coordinates. The seam crossing itself is not yet proven: in the `seamless-adjacency` canary
 the `world.adjacency … crossed` narration fires only after the wait releases, the arrival on `quilt-ne` reads
 `airborne` at y=-0.24, and the verbs routed to the transferred seat after it go unanswered — the wave's own
-report of a grounded landing came from its branch alone, before integration. The canary gate itself
-came back from rot in this wave: the runner loads every manifest before running one, so the ten manifests still
-naming the deleted `prototypes/` worlds had blocked `puck canary` outright since the One World deletions; they
-now name the island or a shard and load, but run red against it (prototype-era scripts), and are deleted with a
-named successor or re-recorded, never left; and a verb answering with `[verb.facet …]` lines (`world.state <row>`)
-is now accounted as one answer. What the gate still cannot account is an accepted buffered-mutation verb
-(`world.generate`, `world.state.cell.set`, `world.row.set`), narration-only by the deferred-echo model, so
-`lattice-draw-fill`, `symmetry-orbit-source`, and `tabletop-state` stay red until an accepted verdict earns a
-`[verb: … applied]` echo or the manifest grammar gains a narration-accounted outcome.
+report of a grounded landing came from its branch alone, before integration. The canary gate came back from rot across two waves. The first made the loader load every manifest before running
+one and accounted a `[verb.facet …]` run (`world.state <row>`) as one answer; ten manifests it could load still ran
+red — the deleted `prototypes/` worlds re-pointed to the island or a shard were prototype-era scripts against a
+world they were never written for, never a live proof. This wave deletes all ten (the retired-canary ledger below
+names each one's successor or its gap) and closes the gap the first wave left open: an accepted buffered-mutation
+verb the console layer registers against `WorldDeferredVerbEchoes` (`world.row.set`/`.remove`/`world.assign`/
+`world.state.transform`/`.act`) now earns a `[<verb>: …]` line on stdout, beside the existing stderr line on
+refusal; `world.generate`/`world.state.cell.set`/`.remove`, which the console layer never registers, are instead
+accounted by correlating the universal `[world.mutation: …]`/`[world.mutation rejected: …]` narration to the
+verb's own `Describe()` prefix (`console.md`'s echo-model section has the reasoning and the boundary between the
+two). The same pass fixed three accounting defects the ten-manifest fix's own re-verification exposed rather than
+caused — `world.rule.trace`'s per-rule answer and `world.symmetry`'s two-line answer both open with the verb
+followed by a space rather than a colon, which the runner never recognized as an answer at all, and `world.state`'s
+own row-header/cell shape was merging separate calls together or splitting one call's own dump apart depending on
+what came right before it — and a loader that refuses one manifest now skips it (named, with its reason) and keeps
+loading the rest, so one rotten manifest can never again block the whole gate; `--list` alone stays strict, so an
+author curating manifests still gets one unambiguous refusal. Every canary this task owns in the automatic set is
+green; the four seam canaries above remain the one open item, on their own branch.
+
+**Retired-canary ledger.** Ten manifests under `prototypes/`-era worlds were re-pointed to the island or a shard at
+the One World integration, loaded, and ran red against them — scripts and assertions written for a document that no
+longer exists. Deleted, each with what it proved and what proves it now:
+
+| Canary | Proved | Successor |
+|---|---|---|
+| `addon-mutation-seam` | A compiled WASM addon guest asking for a handle, submitting an `UpsertHudPanel` then a chained `UpsertHudElement` through a verb-masked grant, `world.hud` reflecting both, and `replay.record` refusing to arm once the guest has pumped. | No successor — the addon-mutation seam has no live canary. |
+| `music-region-transition`, `music-region-transition-remote` | `nexus-ambient.music.json`'s conditional layer and region-entry embellishment firing as a driven body crosses the island's `arcade-cabinet` region, locally and over `--connect`. | No successor — region-conditioned music has no live canary; `music-conditional-layer-and-embellishment` proves the conditional-layer/embellishment mechanism itself on a minimal fixture, not the island's own region wiring. |
+| `travel-frame-boot-local`, `travel-frame-boot-remote` | A changed-pixel-count frame proof that moving a body inside `quilt-nw` visibly changes the composed frame, locally and over `--connect`. | No successor — this task does not own rendering canaries; the seam-crossing family below is the closer live analogue. |
+| `travel-frame-portal-local`, `travel-frame-portal-remote` | The same frame proof crossing Play's mapped archway into a local and a remote Studio instance. | No successor — the mapped-archway portal (Play ↔ Studio) is itself a prototype-era concept the One World wave folded into `front-door`, which proves the studio-arrival/gate mechanic without a frame capture. |
+| `travel-frame-seam-local`, `travel-frame-seam-remote` | The same frame proof crossing `quilt-nw`'s east seam into a local and a remote `quilt-ne`. | `seamless-adjacency` proves the identical crossing at the console level (pose, contacts, wire errors); no frame-capture successor exists. |
+| `travel-parity` | Walking `quilt-nw`'s invisible east adjacency preserves arrival whether the far side is a remote authority or colocated. | `seamless-four-corners-circuit` proves the same colocated-vs-authoritative shape at the console level. |
 
 **Verified 2026-09-06 (the One World wave):** `puck.world.json` composes the island and ten districts under aliases (`world.imports` names granaries, arcade, dive, kart, jump, arena, studio beside the bare game imports); a headless boot exits 0 with no refusal; `body.pose spawn:<alias>-arrival` then `body.where 0` reads `grounded` in every district; `world.state.hash` is identical across two boots at ticks 31 and 151; the World suite is green with the island laws (`IslandLawTests`) in it. The frozen diorama, its basis, `granaries.world.json`, the two scenario documents, and `experimental/Puck.Demo` are deleted. Not yet: the island authors no `adjacencies` (the quilt shards under `Assets/worlds/shards/` and the file neighbour resolver are landed but the seams must be re-sited to the crown's extent and the shards re-validated as basis deltas), the inhabit count read from a cell (only its law exists), and three cuts the derived limits forced, recorded in `modules/README.md`.
 

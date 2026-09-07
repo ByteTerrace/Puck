@@ -240,7 +240,6 @@
           "System.Runtime.CompilerServices.Unsafe": "6.1.2"
         }
       }
-    },
-    ".NETStandard,Version=v2.0/browser-wasm": {}
+    }
   }
 }

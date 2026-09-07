@@ -22,7 +22,7 @@
       { "verb": "world.state", "occurrence": 3, "outcome": "accepted" }
     ],
     "expect": [
-      { "type": "line", "name": "imports-name-kart-alias", "stream": "stdout", "match": "contains", "text": "modules/kart.world.json as kart", "present": true },
+      { "type": "line", "name": "imports-name-kart-alias", "stream": "stdout", "match": "contains", "text": "as kart [bodyMotionPrograms,curves,kits,navigation,placements,prototypes,rules,spawnPoints,state]", "present": true },
       { "type": "line", "name": "gate-stage-reset-after-third-gate", "stream": "stdout", "match": "contains", "text": "[world.state.row 'kart_gateStage' kind=Int nonNegative=true value=0", "present": true },
       { "type": "line", "name": "lap-completed", "stream": "stdout", "match": "contains", "text": "[world.state.row 'kart_lap' kind=Int nonNegative=true value=1", "present": true },
       { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false },
