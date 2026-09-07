@@ -747,7 +747,7 @@ public sealed class DocumentBasisLawTests {
             name: "fragmentA.world.json",
             text: /*lang=json*/ """
             {
-              "state": { "world": [ { "name": "flagA", "kind": "int", "value": 0 } ] },
+              "state": { "world": [ { "name": "flagA", "kind": "Int", "value": 0 } ] },
               "rules": [ { "name": "setFlagA", "effects": [ { "$type": "setState", "state": "flagA", "value": 1 } ] } ]
             }
             """
@@ -756,7 +756,7 @@ public sealed class DocumentBasisLawTests {
             name: "fragmentB.world.json",
             text: /*lang=json*/ """
             {
-              "state": { "world": [ { "name": "flagB", "kind": "int", "value": 0 } ] },
+              "state": { "world": [ { "name": "flagB", "kind": "Int", "value": 0 } ] },
               "rules": [ { "name": "setFlagB", "effects": [ { "$type": "setState", "state": "flagB", "value": 1 } ] } ]
             }
             """
@@ -983,7 +983,7 @@ public sealed class DocumentBasisLawTests {
         var baseNode = ((JsonObject)JsonNode.Parse(json: System.Text.Encoding.UTF8.GetString(bytes: Fixtures.DefaultWorldBytes()))!);
 
         baseNode["state"] = JsonNode.Parse(json: /*lang=json*/ """
-            { "world": [ { "name": "keyed-refine", "kind": "int", "cells": [ { "key": "a", "value": 1 }, { "key": "b", "value": 2 } ] } ] }
+            { "world": [ { "name": "keyed-refine", "kind": "Int", "cells": [ { "key": "a", "value": 1 }, { "key": "b", "value": 2 } ] } ] }
             """);
         var basisPath = files.WriteText(
             name: "basis.world.json",
@@ -995,7 +995,7 @@ public sealed class DocumentBasisLawTests {
         var refinedPath = files.WriteText(
             name: "refined.world.json",
             text: /*lang=json*/ """
-            { "basis": "basis.world.json", "state": { "world": [ { "name": "keyed-refine", "kind": "int", "cells": [ { "key": "a", "value": 9 } ] } ] } }
+            { "basis": "basis.world.json", "state": { "world": [ { "name": "keyed-refine", "kind": "Int", "cells": [ { "key": "a", "value": 9 } ] } ] } }
             """
         );
 
@@ -1024,7 +1024,7 @@ public sealed class DocumentBasisLawTests {
         var replacedPath = files.WriteText(
             name: "replaced.world.json",
             text: /*lang=json*/ """
-            { "basis": "basis.world.json", "state": { "world": [ { "name": "keyed-refine", "kind": "int", "cells": [ { "$replace": true }, { "key": "a", "value": 9 } ] } ] } }
+            { "basis": "basis.world.json", "state": { "world": [ { "name": "keyed-refine", "kind": "Int", "cells": [ { "$replace": true }, { "key": "a", "value": 9 } ] } ] } }
             """
         );
 

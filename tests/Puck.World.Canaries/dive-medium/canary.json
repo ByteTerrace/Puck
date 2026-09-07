@@ -22,8 +22,8 @@
     "expect": [
       { "type": "line", "name": "dry-hash-before-the-pool", "stream": "stdout", "match": "contains", "text": "hash=310f68292ebf0dab", "present": true },
       { "type": "line", "name": "seat-reads-inmedium-once-posed-into-the-basin", "stream": "stdout", "match": "contains", "text": "facts=grounded|inmedium", "present": true },
-      { "type": "line", "name": "depth-row-reads-positive-near-the-basin-floor", "stream": "stdout", "match": "contains", "text": "'dive_depth' kind=fixed value=2.399993896484375", "present": true },
-      { "type": "line", "name": "dived-row-latches-once-the-threshold-crossed", "stream": "stdout", "match": "contains", "text": "'dive_dived' kind=int value=1", "present": true },
+      { "type": "line", "name": "depth-row-reads-positive-near-the-basin-floor", "stream": "stdout", "match": "contains", "text": "'dive_depth' kind=Fixed value=2.399993896484375", "present": true },
+      { "type": "line", "name": "dived-row-latches-once-the-threshold-crossed", "stream": "stdout", "match": "contains", "text": "'dive_dived' kind=Int value=1", "present": true },
       { "type": "line", "name": "no-mutation-rejected", "stream": "stderr", "match": "contains", "text": "world.mutation rejected", "present": false },
       { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]
@@ -42,8 +42,8 @@
     ],
     "expect": [
       { "type": "line", "name": "dry-hash-still-agrees-before-the-pool", "stream": "stdout", "match": "contains", "text": "hash=310f68292ebf0dab", "present": true },
-      { "type": "line", "name": "depth-row-reads-the-perturbed-settled-value", "stream": "stdout", "match": "contains", "text": "'dive_depth' kind=fixed value=2.899993896484375", "present": true },
-      { "type": "line", "name": "not-the-positive-legs-depth-value", "stream": "stdout", "match": "contains", "text": "'dive_depth' kind=fixed value=2.399993896484375", "present": false },
+      { "type": "line", "name": "depth-row-reads-the-perturbed-settled-value", "stream": "stdout", "match": "contains", "text": "'dive_depth' kind=Fixed value=2.899993896484375", "present": true },
+      { "type": "line", "name": "not-the-positive-legs-depth-value", "stream": "stdout", "match": "contains", "text": "'dive_depth' kind=Fixed value=2.399993896484375", "present": false },
       { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]
   }

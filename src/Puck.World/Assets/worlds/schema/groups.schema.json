@@ -121,7 +121,10 @@
           },
           "members": {
             "description": "The current membership \u2014 flat only: every entry is a principal, never a group (a Group entry is refused by name \u2014 a member holding another group\u0027s memberships by proxy is exactly what flat membership forbids), and never World/ Document (neither is a real actor a hold could ever reach). Bounded by the kind\u0027s own Capacity.",
-            "type": "array"
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "tags": {
             "description": "The row\u0027s own tags \u2014 what a Tagged destination selector matches against: a traveler resolving a tagged destination is expected to hold exactly one membership among rows carrying the selector\u0027s tag, never zero or several. Validated non-empty and distinct when present; null/absent means this row carries none, which is not the same as an authored empty list (refused \u2014 omit the member instead).",

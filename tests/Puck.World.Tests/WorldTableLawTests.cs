@@ -46,7 +46,7 @@ public sealed class WorldTableLawTests {
         Assert.Equal(5L, Value(fixture, "literal"));
         Assert.Equal(90L, Value(fixture, "dynamic"));
         Assert.Equal(0L, Value(fixture, "missing"));
-        Assert.Contains("power kind=int entries=3", fixture.Server.DescribeTables(), StringComparison.Ordinal);
+        Assert.Contains("power kind=Int entries=3", fixture.Server.DescribeTables(), StringComparison.Ordinal);
 
         var control = document with { StateRaw = document.StateRaw! with { World = [Slot("move", 2L), Slot("literal", 0L), Slot("dynamic", 0L), Slot("missing", 1L)] } };
         using var held = Fixtures.FreshServer(definition: control);

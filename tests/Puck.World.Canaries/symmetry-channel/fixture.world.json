@@ -8,52 +8,52 @@
     "world": [
       {
         "name": "node",
-        "kind": "int",
+        "kind": "Int",
         "value": 5
       },
       {
         "name": "mirror",
-        "kind": "int",
+        "kind": "Int",
         "value": 17
       },
       {
         "name": "ringOf",
-        "kind": "int",
+        "kind": "Int",
         "value": -2
       },
       {
         "name": "antipodeOf",
-        "kind": "int",
+        "kind": "Int",
         "value": -2
       },
       {
         "name": "canonicalOf",
-        "kind": "int",
+        "kind": "Int",
         "value": -2
       },
       {
         "name": "walked",
-        "kind": "int",
+        "kind": "Int",
         "value": -2
       },
       {
         "name": "reflected",
-        "kind": "int",
+        "kind": "Int",
         "value": -2
       },
       {
         "name": "orthogonalFlag",
-        "kind": "int",
+        "kind": "Int",
         "value": -2
       },
       {
         "name": "pairing",
-        "kind": "int",
+        "kind": "Int",
         "value": -3
       },
       {
         "name": "projX",
-        "kind": "fixed",
+        "kind": "Fixed",
         "value": "0"
       }
     ]

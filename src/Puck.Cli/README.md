@@ -48,9 +48,10 @@ other verbs print working-directory-relative paths.
 dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish
 ```
 
-produces `src/Puck.Cli/publish/puck.exe` — a framework-dependent .NET
-executable. A trivial invocation costs ~0.18 s wall (measured quiet,
-2026-07-24), cheap enough to call per query though not per file.
+produces `src/Puck.Cli/publish/puck.exe` on Windows or `src/Puck.Cli/publish/puck`
+elsewhere — a framework-dependent .NET executable. A trivial invocation costs
+~0.18 s wall (measured quiet, 2026-07-24), cheap enough to call per query
+though not per file.
 Do not attempt AOT: the search engine's F# runtime dependency and the
 BenchmarkDotNet host code both preclude it. `publish/` is git-ignored.
 
@@ -551,6 +552,18 @@ from the shipped `puck.shader.v1` manifests under `src/*/Assets/Shaders`
 (`Puck.Shaders.ShaderSetManifest.ConfigJsonSchema`) — one `if`/`then` arm per
 id — so an entry's config validates by id in an editor, and adding a shader
 set changes the schema (`--check` catches a manifest edit not regenerated).
+
+Every array and dictionary carries `items`/`additionalProperties`, including
+a converter-hidden shape the exporter cannot introspect on its own (a
+`StateRowJsonConverter<TRow>`-owned row, a fixed-arity vector array, a
+document-identifier list); a raw `JsonElement` slot decided by an id named
+elsewhere in the document (`render.extensions[].config`, `probes[].config`,
+`metadata.custom`) stays open but carries a `$comment` saying so. The root
+carries `x-puck: {schemaVersion, generator, commit}` (the silo root carries
+its own) and `properties.schema.const` pins the exact tag a well-formed
+document's own `schema` field must equal; `--check` masks `x-puck.commit`
+before comparing, since the commit a checked-in file was generated at can
+never equal the commit that first introduces the file.
 
 The output is SPLIT, not one file: a small root plus one file per top-level
 document section (`kits.schema.json`, `screens.schema.json`, …), plus

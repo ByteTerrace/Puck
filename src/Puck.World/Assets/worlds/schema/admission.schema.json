@@ -80,7 +80,8 @@
               ]
             },
             "kindMask": {
-              "description": "The verb-scoped narrowing beneath a Mutate/section:\u003Cname\u003E row \u2014 required by the live grant door on an untrusted principal\u0027s such a row (an absent mask there is refused rather than read as full reach)."
+              "description": "The verb-scoped narrowing beneath a Mutate/section:\u003Cname\u003E row \u2014 required by the live grant door on an untrusted principal\u0027s such a row (an absent mask there is refused rather than read as full reach).",
+              "type": "string"
             }
           },
           "additionalProperties": false

@@ -192,7 +192,7 @@ public static partial class WorldDefinitionValidator {
                 tokenRow.IsKeyed ||
                 (tokenRow.Field is not null)
             ) {
-                errors.Add(item: $"host.backendRow names state row '{backendRow}', which must be a scalar kind=text row.");
+                errors.Add(item: $"host.backendRow names state row '{backendRow}', which must be a scalar kind=Text row.");
             }
         }
 
@@ -405,7 +405,7 @@ public static partial class WorldDefinitionValidator {
             )) {
                 errors.Add(item: $"{path} '{name}' names no declared state row — a property's per-carrier tags are stored in a keyed int state row of the SAME name; declare it first with world.row.set state.");
             } else if (row.Kind != CellKind.Int) {
-                errors.Add(item: $"{path} '{name}' names state row '{name}', which is kind={row.Kind.ToString().ToLowerInvariant()} — a property's per-carrier tags are stored as kind=int.");
+                errors.Add(item: $"{path} '{name}' names state row '{name}', which is kind={StateSpelling.Kind(kind: row.Kind)} — a property's per-carrier tags are stored as kind=Int.");
             } else if (!row.IsKeyed) {
                 errors.Add(item: $"{path} '{name}' names state row '{name}', which is not keyed — a property's per-carrier tags are one cell per carrier (a keyed row, exactly like an argmax-eligible tally); author it with a 'capacity' (or several cells) so it is keyed.");
             }
@@ -726,7 +726,7 @@ public static partial class WorldDefinitionValidator {
                 declared.IsKeyed ||
                 (declared.Field is not null)
             ) {
-                errors.Add(item: $"{path} references state row '{row}', which must be a scalar kind=fixed row (a reaction scalar reads one slot cell per step).");
+                errors.Add(item: $"{path} references state row '{row}', which must be a scalar kind=Fixed row (a reaction scalar reads one slot cell per step).");
             }
         }
 
@@ -775,7 +775,7 @@ public static partial class WorldDefinitionValidator {
                 (declared.Kind != CellKind.Int) ||
                 !declared.IsKeyed
             ) {
-                errors.Add(item: $"{path} names state row '{row}', which must be a keyed kind=int row.");
+                errors.Add(item: $"{path} names state row '{row}', which must be a keyed kind=Int row.");
             }
         }
 

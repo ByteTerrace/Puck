@@ -134,7 +134,7 @@ public static partial class RuleCompiler {
             } else if (!string.Equals(a: tokenDomain, b: zone.Row.Value, comparisonType: StringComparison.Ordinal)) {
                 throw Malformed($"'zones' entry {index} '{name}' is a zone over '{zone.Row}', not the token domain '{tokenDomain}' the table's other zones share");
             } else if (kind != row.Kind) {
-                throw Malformed($"'zones' entry {index} '{name}' is kind={DescribeCellKind(kind: row.Kind)}, not the kind={DescribeCellKind(kind: kind)} the table's other zones share");
+                throw Malformed($"'zones' entry {index} '{name}' is kind={StateSpelling.Kind(kind: row.Kind)}, not the kind={StateSpelling.Kind(kind: kind)} the table's other zones share");
             }
             if (!seen.Add(item: name)) {
                 throw Malformed($"'zones' names '{name}' twice");
@@ -274,7 +274,7 @@ public static partial class RuleCompiler {
                 throw new RuleException(refusal: RuleRefusal.NameMissing, ruleName: rule.Name, detail: "a binding declares a name");
             }
             if (binding!.Kind is not (CellKind.Int or CellKind.Fixed)) {
-                throw new RuleException(refusal: RuleRefusal.EffectKindInadmissible, ruleName: rule.Name, detail: $"binding '{name}' is kind={DescribeCellKind(kind: binding.Kind)} — a bound value is int or fixed");
+                throw new RuleException(refusal: RuleRefusal.EffectKindInadmissible, ruleName: rule.Name, detail: $"binding '{name}' is kind={StateSpelling.Kind(kind: binding.Kind)} — a bound value is int or fixed");
             }
             foreach (var earlier in compiled) {
                 if (string.Equals(a: earlier.Name, b: name, comparisonType: StringComparison.Ordinal)) {
@@ -454,7 +454,7 @@ public static partial class RuleCompiler {
             throw new RuleException(
                 refusal: RuleRefusal.ComparandKindMismatch,
                 ruleName: ruleName,
-                detail: $"'{name}' is kind={DescribeCellKind(kind: lhs.ValueKind)} but comparand '{compare.ComparandState}' is kind={DescribeCellKind(kind: rhs.ValueKind)} — mixed-kind comparisons are refused; author both sides the same kind"
+                detail: $"'{name}' is kind={StateSpelling.Kind(kind: lhs.ValueKind)} but comparand '{compare.ComparandState}' is kind={StateSpelling.Kind(kind: rhs.ValueKind)} — mixed-kind comparisons are refused; author both sides the same kind"
             );
         }
 
@@ -506,7 +506,7 @@ public static partial class RuleCompiler {
             throw new RuleException(
                 refusal: RuleRefusal.StateCellUnaddressable,
                 ruleName: ruleName,
-                detail: $"'{verb}' literal {literal.ToString(provider: CultureInfo.InvariantCulture)} is outside the representable {DescribeCellKind(kind: kind)} state range"
+                detail: $"'{verb}' literal {literal.ToString(provider: CultureInfo.InvariantCulture)} is outside the representable {StateSpelling.Kind(kind: kind)} state range"
             );
         }
     }
@@ -527,10 +527,6 @@ public static partial class RuleCompiler {
             detail: $"'{verb}' {field} '{value.ToString(provider: CultureInfo.InvariantCulture)}' is outside the Q48.16 range"
         );
     }
-
-    /// <summary>Formats a cell kind as its lower-case spelling.</summary>
-    /// <param name="kind">The kind.</param>
-    public static string DescribeCellKind(CellKind kind) => kind.ToString().ToLowerInvariant();
 
     /// <summary>Resolves the compiled handle of a declared row — a row the compiler already proved present.</summary>
     /// <param name="context">The compile context.</param>
@@ -598,7 +594,7 @@ public static partial class RuleCompiler {
             throw new RuleException(
                 refusal: RuleRefusal.StateCellUnaddressable,
                 ruleName: ruleName,
-                detail: $"'{channel}' reads row '{row}' as a body index, but it is kind={DescribeCellKind(kind: declared.Kind)} — an index cell is kind=int"
+                detail: $"'{channel}' reads row '{row}' as a body index, but it is kind={StateSpelling.Kind(kind: declared.Kind)} — an index cell is kind=Int"
             );
         }
 
@@ -777,7 +773,7 @@ public static partial class RuleCompiler {
         );
     }
 
-    /// <summary>Resolves a declared numeric row: it must exist and must not be kind=text. <paramref name="requireKeyed"/>
+    /// <summary>Resolves a declared numeric row: it must exist and must not be kind=Text. <paramref name="requireKeyed"/>
     /// additionally demands the row be keyed — a read that yields a cell key (an extremum or filter) has no
     /// key to yield from a slot row.</summary>
     /// <param name="name">The row name.</param>
@@ -797,7 +793,7 @@ public static partial class RuleCompiler {
             ?? throw new RuleException(refusal: malformed, ruleName: ruleName, detail: $"'{channel}' names row '{name}', which the document does not declare"));
 
         if (requireNumeric && row.Kind == CellKind.Text) {
-            throw new RuleException(refusal: malformed, ruleName: ruleName, detail: $"'{channel}' names row '{name}', which is kind=text — a reduction/extremum is numeric, never text");
+            throw new RuleException(refusal: malformed, ruleName: ruleName, detail: $"'{channel}' names row '{name}', which is kind=Text — a reduction/extremum is numeric, never text");
         }
 
         if (requireKeyed && !row.IsKeyed) {

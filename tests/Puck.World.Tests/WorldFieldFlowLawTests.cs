@@ -65,6 +65,6 @@ public sealed class WorldFieldFlowLawTests {
         Assert.Contains(actualString: missingReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "does not declare");
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: wrongShape, neighbours: null, reason: out var shapeReason));
-        Assert.Contains(actualString: shapeReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "scalar kind=fixed row");
+        Assert.Contains(actualString: shapeReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "scalar kind=Fixed row");
     }
 }

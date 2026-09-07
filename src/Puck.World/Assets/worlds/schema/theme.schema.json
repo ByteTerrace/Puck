@@ -8,10 +8,18 @@
       "description": "The semantic color roles.",
       "type": "object",
       "properties": {
-        "surfaceBase": {},
-        "surfacePanel": {},
-        "surfaceRaised": {},
-        "surfaceInset": {},
+        "surfaceBase": {
+          "type": "string"
+        },
+        "surfacePanel": {
+          "type": "string"
+        },
+        "surfaceRaised": {
+          "type": "string"
+        },
+        "surfaceInset": {
+          "type": "string"
+        },
         "scrimPanel": {
           "$ref": "./common.schema.json#/$defs/WorldThemeScrim"
         },
@@ -21,25 +29,63 @@
         "scrimChip": {
           "$ref": "./common.schema.json#/$defs/WorldThemeScrim"
         },
-        "lineHair": {},
-        "lineSoft": {},
-        "lineStrong": {},
-        "lineInset": {},
-        "textPrimary": {},
-        "textDim": {},
-        "textMute": {},
-        "accent": {},
-        "accentQuiet": {},
-        "accentLine": {},
-        "accentInk": {},
-        "positive": {},
-        "warning": {},
-        "danger": {},
-        "phosphor": {},
-        "phosphorDim": {},
-        "phosphorCyan": {},
-        "badgeDark": {},
-        "badgeLight": {}
+        "lineHair": {
+          "type": "string"
+        },
+        "lineSoft": {
+          "type": "string"
+        },
+        "lineStrong": {
+          "type": "string"
+        },
+        "lineInset": {
+          "type": "string"
+        },
+        "textPrimary": {
+          "type": "string"
+        },
+        "textDim": {
+          "type": "string"
+        },
+        "textMute": {
+          "type": "string"
+        },
+        "accent": {
+          "type": "string"
+        },
+        "accentQuiet": {
+          "type": "string"
+        },
+        "accentLine": {
+          "type": "string"
+        },
+        "accentInk": {
+          "type": "string"
+        },
+        "positive": {
+          "type": "string"
+        },
+        "warning": {
+          "type": "string"
+        },
+        "danger": {
+          "type": "string"
+        },
+        "phosphor": {
+          "type": "string"
+        },
+        "phosphorDim": {
+          "type": "string"
+        },
+        "phosphorCyan": {
+          "type": "string"
+        },
+        "badgeDark": {
+          "type": "string"
+        },
+        "badgeLight": {
+          "type": "string"
+        }
       },
       "required": [
         "surfaceBase",
@@ -328,7 +374,9 @@
         "pressHeldGlowSpread": {
           "type": "number"
         },
-        "pressHeldGlowColor": {},
+        "pressHeldGlowColor": {
+          "type": "string"
+        },
         "pressHeldShadowBlur": {
           "type": "number"
         },
@@ -338,7 +386,9 @@
         "pressHeldTranslateY": {
           "type": "number"
         },
-        "pressHeldShadowColor": {},
+        "pressHeldShadowColor": {
+          "type": "string"
+        },
         "shadowSeatBlur": {
           "type": "number"
         },
@@ -351,12 +401,18 @@
         "shadowSeatStripSpread": {
           "type": "number"
         },
-        "shadowSeatColor": {},
-        "shadowSeatStripColor": {},
+        "shadowSeatColor": {
+          "type": "string"
+        },
+        "shadowSeatStripColor": {
+          "type": "string"
+        },
         "catchlightOffsetY": {
           "type": "number"
         },
-        "catchlightColor": {},
+        "catchlightColor": {
+          "type": "string"
+        },
         "chipRestOpacity": {
           "type": "number"
         },
@@ -412,12 +468,24 @@
       "description": "The diegetic material recipe.",
       "type": "object",
       "properties": {
-        "plateTop": {},
-        "plateMid": {},
-        "plateBottom": {},
-        "plateStripeColor": {},
-        "embossFill": {},
-        "engraveFill": {},
+        "plateTop": {
+          "type": "string"
+        },
+        "plateMid": {
+          "type": "string"
+        },
+        "plateBottom": {
+          "type": "string"
+        },
+        "plateStripeColor": {
+          "type": "string"
+        },
+        "embossFill": {
+          "type": "string"
+        },
+        "engraveFill": {
+          "type": "string"
+        },
         "embossShadowDropAlpha": {
           "type": "number"
         },
@@ -448,11 +516,21 @@
         "engraveShadowRecessOffsetY": {
           "type": "number"
         },
-        "screenWellOuter": {},
-        "screenWellInner": {},
-        "bezelOuter": {},
-        "bezelInner": {},
-        "bezelEdge": {},
+        "screenWellOuter": {
+          "type": "string"
+        },
+        "screenWellInner": {
+          "type": "string"
+        },
+        "bezelOuter": {
+          "type": "string"
+        },
+        "bezelInner": {
+          "type": "string"
+        },
+        "bezelEdge": {
+          "type": "string"
+        },
         "phosphorGlowBlur": {
           "type": "number"
         }

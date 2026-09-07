@@ -81,7 +81,7 @@
         "name": "pass-zero-reads-back",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'tiles' kind=fixed cells=0/128 draw source=<inline:weightedNumeric> fill=lattice cursor=0 masks=none]",
+        "text": "[world.state.row 'tiles' kind=Fixed cells=0/128 draw source=<inline:weightedNumeric> fill=lattice cursor=0 masks=none]",
         "present": true
       },
       {

@@ -104,7 +104,7 @@ public static partial class WorldDefinitionValidator {
                 declared.IsKeyed ||
                 (declared.Field is not null)
             ) {
-                errors.Add(item: $"{entryPath}.when.value references state row '{row}', which must be a scalar kind=fixed row.");
+                errors.Add(item: $"{entryPath}.when.value references state row '{row}', which must be a scalar kind=Fixed row.");
             }
         } else if (!float.IsFinite(f: (condition.Value.Literal ?? 0f))) {
             errors.Add(item: $"{entryPath}.when.value must carry a finite value.");
@@ -122,7 +122,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (declared.Kind == CellKind.Text) {
-            errors.Add(item: $"{entryPath} references state row '{row}', which is kind=text — a response compares numbers, never text.");
+            errors.Add(item: $"{entryPath} references state row '{row}', which is kind=Text — a response compares numbers, never text.");
         }
 
         if (declared.IsKeyed && (key is null)) {

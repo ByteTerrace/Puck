@@ -236,13 +236,13 @@
     "world": [
       {
         "name": "reached",
-        "kind": "int",
+        "kind": "Int",
         "nonNegative": true,
         "value": 0
       },
       {
         "name": "falls",
-        "kind": "int",
+        "kind": "Int",
         "nonNegative": true,
         "value": 0
       }

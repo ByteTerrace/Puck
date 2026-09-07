@@ -114,7 +114,7 @@ public enum RuleRefusal : byte {
     DurationNotExactEngineTicks,
 
     /// <summary>A <c>setState</c>/<c>addState</c> effect's non-negative <c>valueSeconds</c> would compile beyond the
-    /// signed 64-bit raw carrier a <c>kind=int</c> state cell stores.</summary>
+    /// signed 64-bit raw carrier a <c>kind=Int</c> state cell stores.</summary>
     [Refusal(door: "world.rule.compile", condition: "a setState/addState's non-negative 'valueSeconds' exceeds the signed 64-bit engine-tick carrier", kind: RefusalKind.Verdict)]
     DurationEngineTicksOutOfRange,
 
@@ -126,7 +126,7 @@ public enum RuleRefusal : byte {
     StateCellUndeclared,
 
     /// <summary>A <c>$reduce:</c> channel does not spell <c>$reduce:&lt;max|min|sum|count&gt;:&lt;row&gt;</c>, or
-    /// names a row that is not declared or is kind=text.</summary>
+    /// names a row that is not declared or is kind=Text.</summary>
     [Refusal(door: "world.rule.compile", condition: "a '$reduce:' channel does not spell '$reduce:<max|min|sum|count>:<row>' against a declared, non-text row", kind: RefusalKind.Verdict)]
     ReduceChannelMalformed,
 
@@ -144,8 +144,8 @@ public enum RuleRefusal : byte {
     SymmetryChannelMalformed,
 
     /// <summary>An <c>$argmax:</c>/<c>$argmin:</c> channel names no row, or a row that is not declared or is
-    /// kind=text.</summary>
-    [Refusal(door: "world.rule.compile", condition: "an '$argmax:'/'$argmin:' channel names no row, or a row that is not declared or is kind=text", kind: RefusalKind.Verdict)]
+    /// kind=Text.</summary>
+    [Refusal(door: "world.rule.compile", condition: "an '$argmax:'/'$argmin:' channel names no row, or a row that is not declared or is kind=Text", kind: RefusalKind.Verdict)]
     ArgChannelMalformed,
 
     /// <summary>A key-yielding read — an <c>$argmax:</c>/<c>$argmin:</c> channel standalone or embedded in a

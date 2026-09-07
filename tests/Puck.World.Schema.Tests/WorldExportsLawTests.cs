@@ -11,7 +11,7 @@ public sealed class WorldExportsLawTests {
     private static JsonObject Module(string exports) => ((JsonObject)JsonNode.Parse(json: $$"""
         {
           "exports": {{exports}},
-          "state": { "world": [ { "name": "request", "kind": "int", "value": 0 }, { "name": "score", "kind": "int", "value": 0 } ],
+          "state": { "world": [ { "name": "request", "kind": "Int", "value": 0 }, { "name": "score", "kind": "Int", "value": 0 } ],
                      "lattices": [ { "$type": "grid", "name": "grid", "width": 2, "depth": 2, "cellSize": 1 } ] },
           "rules": [ { "name": "settle", "effects": [ { "$type": "setState", "state": "score", "fromState": "request" } ] } ]
         }
@@ -112,7 +112,7 @@ public sealed class WorldExportsLawTests {
         Assert.False(condition: TryCheck(tree: writesARead, treeName: "host", reason: out var writeReason));
         Assert.Equal(expected: "host names 'score' at $.rules[0].effects[0].state, which module declares and does not export under exports.actions; a host binds only what its module exports.", actual: writeReason);
 
-        var readsAnAction = Host(body: /*lang=json*/ """{ "rules": [ { "name": "host", "effects": [ { "$type": "setState", "state": "own", "expression": "request + 1" } ] } ], "state": { "world": [ { "name": "own", "kind": "int", "value": 0 } ] } }""");
+        var readsAnAction = Host(body: /*lang=json*/ """{ "rules": [ { "name": "host", "effects": [ { "$type": "setState", "state": "own", "expression": "request + 1" } ] } ], "state": { "world": [ { "name": "own", "kind": "Int", "value": 0 } ] } }""");
 
         Assert.False(condition: TryCheck(tree: readsAnAction, treeName: "host", reason: out var readReason));
         Assert.Contains(expectedSubstring: "'request' at $.rules[0].effects[0].expression", actualString: readReason);
@@ -124,7 +124,7 @@ public sealed class WorldExportsLawTests {
         Assert.Contains(expectedSubstring: "'request' at $.hud.panels[0].elements[0].binding", actualString: bindReason);
         Assert.Contains(expectedSubstring: "exports.bindings", actualString: bindReason);
 
-        var keyIndirection = Host(body: /*lang=json*/ """{ "rules": [ { "name": "host", "effects": [ { "$type": "setState", "state": "own", "key": "$cell:request:$value", "value": 1 } ] } ], "state": { "world": [ { "name": "own", "kind": "int", "capacity": 4 } ] } }""");
+        var keyIndirection = Host(body: /*lang=json*/ """{ "rules": [ { "name": "host", "effects": [ { "$type": "setState", "state": "own", "key": "$cell:request:$value", "value": 1 } ] } ], "state": { "world": [ { "name": "own", "kind": "Int", "capacity": 4 } ] } }""");
 
         Assert.False(condition: TryCheck(tree: keyIndirection, treeName: "host", reason: out var keyReason));
         Assert.Contains(expectedSubstring: "'request' at $.rules[0].effects[0].key", actualString: keyReason);
@@ -136,7 +136,7 @@ public sealed class WorldExportsLawTests {
         Assert.True(condition: WorldModuleExports.TryTake(module: selfReferencing, moduleName: "module", exports: out var selfExports, reason: out var selfReason), userMessage: selfReason);
         Assert.True(condition: WorldModuleExports.TryCheckLayers(hostPath: "host", ownBody: [], basis: [], imports: [("module", selfReferencing, selfExports!)], surfaces: out _, reason: out selfReason), userMessage: selfReason);
 
-        var restates = Host(body: /*lang=json*/ """{ "state": { "world": [ { "name": "score", "kind": "int", "value": 5 } ] }, "rules": [ { "name": "host", "effects": [ { "$type": "setState", "state": "score", "value": 1 } ] } ] }""");
+        var restates = Host(body: /*lang=json*/ """{ "state": { "world": [ { "name": "score", "kind": "Int", "value": 5 } ] }, "rules": [ { "name": "host", "effects": [ { "$type": "setState", "state": "score", "value": 1 } ] } ] }""");
 
         Assert.True(condition: TryCheck(tree: restates, treeName: "host", reason: out _));
     }

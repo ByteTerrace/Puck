@@ -31,10 +31,10 @@
   },
   "state": {
     "world": [
-      { "name": "station", "kind": "int", "value": 0 },
+      { "name": "station", "kind": "Int", "value": 0 },
       {
         "name": "bump",
-        "kind": "fixed",
+        "kind": "Fixed",
         "domain": { "$type": "cellsOf", "topology": "parityLattice" },
         "field": {
           "initial": 0,

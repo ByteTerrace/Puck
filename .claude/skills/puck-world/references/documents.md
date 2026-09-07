@@ -230,7 +230,7 @@ rule-side `body.pose`: `{"$type":"pose","key":"<body>","spawnPoint":"<id>"}` or
 applied through `WorldBody.Pose` as the world's own act — no `WorldMutation`, no
 journal, and deliberately outside the `gatesDrive` check, which is what lets a
 `dead == 1 && respawnIn <= 0` rule move a body its own gate row has frozen.
-`setState` with `text` writes a `kind=text` cell (exactly one of `value`/
+`setState` with `text` writes a `kind=Text` cell (exactly one of `value`/
 `valueSeconds`/`fromState`/`text`); because `lookAssignment.rows` and creation
 palettes bind to text cells, and a state write re-resolves every bound value
 (re-running the look resolve when `lookAssignment` is touched), this is how a
@@ -513,7 +513,7 @@ future-decision state, rather than manifest compatibility, is the assertion.
 
 ```json
 "state": {
-  "world": [{"name":"score","kind":"int","value":0,"min":0,"max":1000}],
+  "world": [{"name":"score","kind":"Int","value":0,"min":0,"max":1000}],
   "body": [{"name":"jumpUses","kind":"Counter","initial":0,"resetFact":"Grounded"}],
   "identity": [{"name":"stance","kind":"Counter","initial":0,"playerWritable":true,
     "envelope":{"$type":"set","values":[0,1,2]}}]
@@ -861,7 +861,7 @@ refuse edge; see that same section for the full contract. A discrete topology's 
 compass/space names are the unauthored default) replaces its whole direction
 vocabulary — see the schema README's discrete-boards section for the
 authoring shape and validation. Field-shaped
-state rows: `{"name": …, "kind": "fixed", "domain": {"$type": "cellsOf",
+state rows: `{"name": …, "kind": "Fixed", "domain": {"$type": "cellsOf",
 "topology": …}, "field": {"initial"/"min"/"max", optional
 "heightScale"/"color", "paint": […]}}` — `domain.topology` names the
 `Field`-kind topology (the same `cellsOf` case a discrete board's own domain
@@ -979,7 +979,7 @@ record.
 declared row's name) or `generator` (inline), plus `timing`. Three sites:
 
 ```json
-{"name":"bark","kind":"text","draw":{"source":"barkTable","timing":"event"}}
+{"name":"bark","kind":"Text","draw":{"source":"barkTable","timing":"event"}}
 "population": { "capacityDraw": {"generator":{"source":"uniformRange","rangeMin":128,"rangeMax":128},"timing":"boot"} }
 "host": { "backendDraw": {"source":"backendTable","timing":"boot"} }
 ```
@@ -1043,8 +1043,8 @@ field's own range check instead of by a carve-out in the cell namespace.)
 
 There is **no `$type`** and no `rows` member — both are retired spellings of
 the pre-collapse shape and refuse as unmapped members like any other stale
-field. `kind` is `int`|`fixed`|`bool`|`text`; never float, the determinism
-contract. A `fixed` value (`value`, `min`, `max`, or a cell's own `value`) is
+field. `kind` is `Int`|`Fixed`|`Bool`|`Text`; never float, the determinism
+contract. A `Fixed` value (`value`, `min`, `max`, or a cell's own `value`) is
 a **DECIMAL STRING** through `FixedQ4816.TryParse`/`ToString`, never the raw
 Q48.16 bit pattern — only the per-cell mutation wire (`UpsertStateCell`) and
 the addon ABI channel stay raw. `min`/`max` are BOTH-OR-NEITHER on a numeric

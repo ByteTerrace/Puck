@@ -123,7 +123,7 @@ public sealed partial class RuleEvaluator {
         }
 
         if (row.Kind == CellKind.Text) {
-            // A schedule/countdown row is refused at compile time unless kind=int, so a text row here can only be a
+            // A schedule/countdown row is refused at compile time unless kind=Int, so a text row here can only be a
             // Write.
             var textWrite = (WriteEffect)write;
             var nextText = textWrite.Text;

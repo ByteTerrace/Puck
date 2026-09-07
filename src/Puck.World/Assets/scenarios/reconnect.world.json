@@ -793,7 +793,7 @@
             "value": 1000
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "hp"
       },
       {
@@ -816,7 +816,7 @@
             "value": 5
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "threat"
       },
       {
@@ -828,7 +828,7 @@
           }
         ],
         "gatesDrive": true,
-        "kind": "int",
+        "kind": "Int",
         "name": "stunRemaining",
         "nonNegative": true
       },
@@ -840,22 +840,22 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "mobAttackCooldown",
         "nonNegative": true
       },
       {
-        "kind": "bool",
+        "kind": "Bool",
         "name": "graceWarning",
         "value": false
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "name": "parkedProbe0",
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "name": "parkedProbe2",
         "value": 0
       },
@@ -866,7 +866,7 @@
             "value": "0"
           }
         ],
-        "kind": "fixed",
+        "kind": "Fixed",
         "name": "look"
       }
     ]

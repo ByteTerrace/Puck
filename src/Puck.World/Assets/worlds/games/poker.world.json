@@ -46,12 +46,12 @@
       "bindings": [
         {
           "expression": "3 - table[button]",
-          "kind": "int",
+          "kind": "Int",
           "name": "button"
         },
         {
           "expression": "table[button]",
-          "kind": "int",
+          "kind": "Int",
           "name": "blind"
         }
       ],
@@ -224,7 +224,7 @@
           {
             "$type": "compareValue",
             "comparison": "GreaterOrEqual",
-            "kind": "int",
+            "kind": "Int",
             "left": "min(stack[1], stack[2])",
             "right": "house[bigBlind]"
           }
@@ -297,82 +297,82 @@
       "bindings": [
         {
           "expression": "private1[hole] | table[boardMask]",
-          "kind": "int",
+          "kind": "Int",
           "name": "s"
         },
         {
           "expression": "bitField($bind:s, 0, 16)",
-          "kind": "int",
+          "kind": "Int",
           "name": "l0"
         },
         {
           "expression": "bitField($bind:s, 16, 16)",
-          "kind": "int",
+          "kind": "Int",
           "name": "l1"
         },
         {
           "expression": "bitField($bind:s, 32, 16)",
-          "kind": "int",
+          "kind": "Int",
           "name": "l2"
         },
         {
           "expression": "bitField($bind:s, 48, 16)",
-          "kind": "int",
+          "kind": "Int",
           "name": "l3"
         },
         {
           "expression": "$bind:l0 | $bind:l1 | $bind:l2 | $bind:l3",
-          "kind": "int",
+          "kind": "Int",
           "name": "ranks"
         },
         {
           "expression": "($bind:l0 & $bind:l1) | ($bind:l0 & $bind:l2) | ($bind:l0 & $bind:l3) | ($bind:l1 & $bind:l2) | ($bind:l1 & $bind:l3) | ($bind:l2 & $bind:l3)",
-          "kind": "int",
+          "kind": "Int",
           "name": "pairs"
         },
         {
           "expression": "($bind:l0 & $bind:l1 & $bind:l2) | ($bind:l0 & $bind:l1 & $bind:l3) | ($bind:l0 & $bind:l2 & $bind:l3) | ($bind:l1 & $bind:l2 & $bind:l3)",
-          "kind": "int",
+          "kind": "Int",
           "name": "trips"
         },
         {
           "expression": "($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 1) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 2) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 3) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 4)",
-          "kind": "int",
+          "kind": "Int",
           "name": "sf"
         },
         {
           "expression": "($bind:ranks | (($bind:ranks >> 13) & 1)) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 1) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 2) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 3) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 4)",
-          "kind": "int",
+          "kind": "Int",
           "name": "st"
         },
         {
           "expression": "popCount($bind:l0) >= 5 ? $bind:l0 : popCount($bind:l1) >= 5 ? $bind:l1 : popCount($bind:l2) >= 5 ? $bind:l2 : popCount($bind:l3) >= 5 ? $bind:l3 : 0",
-          "kind": "int",
+          "kind": "Int",
           "name": "fl"
         },
         {
           "expression": "popCount($bind:pairs) > 2 ? clearLowestSetBit($bind:pairs) : $bind:pairs",
-          "kind": "int",
+          "kind": "Int",
           "name": "top2p"
         },
         {
           "expression": "$bind:sf != 0 ? 8 : ($bind:l0 & $bind:l1 & $bind:l2 & $bind:l3) != 0 ? 7 : ($bind:trips != 0) & (popCount($bind:pairs) >= 2) ? 6 : $bind:fl != 0 ? 5 : $bind:st != 0 ? 4 : $bind:trips != 0 ? 3 : popCount($bind:pairs) >= 2 ? 2 : $bind:pairs != 0 ? 1 : 0",
-          "kind": "int",
+          "kind": "Int",
           "name": "cat"
         },
         {
           "expression": "$bind:cat == 8 ? 63 - leadingZeroCount(($bind:sf | ($bind:sf >> 16) | ($bind:sf >> 32) | ($bind:sf >> 48)) & 16383) : $bind:cat == 7 ? $bind:l0 & $bind:l1 & $bind:l2 & $bind:l3 : $bind:cat == 6 ? 63 - leadingZeroCount($bind:trips) : $bind:fl ^ parallelBitDeposit((1 << max(popCount($bind:fl) - 5, 0)) - 1, $bind:fl)",
-          "kind": "int",
+          "kind": "Int",
           "name": "high"
         },
         {
           "expression": "$bind:cat == 4 ? 63 - leadingZeroCount($bind:st) : $bind:cat == 3 ? $bind:trips : $bind:cat == 2 ? $bind:top2p : $bind:cat == 1 ? $bind:pairs : clearLowestSetBit(clearLowestSetBit($bind:ranks))",
-          "kind": "int",
+          "kind": "Int",
           "name": "low"
         },
         {
           "expression": "$bind:cat == 7 ? 63 - leadingZeroCount($bind:ranks ^ ($bind:l0 & $bind:l1 & $bind:l2 & $bind:l3)) : $bind:cat == 6 ? 63 - leadingZeroCount($bind:pairs ^ (1 << max(63 - leadingZeroCount($bind:trips), 0))) : $bind:cat == 3 ? clearLowestSetBit(clearLowestSetBit($bind:ranks ^ $bind:trips)) : $bind:cat == 2 ? 63 - leadingZeroCount($bind:ranks ^ $bind:top2p) : $bind:cat == 1 ? clearLowestSetBit(clearLowestSetBit($bind:ranks ^ $bind:pairs)) : 0",
-          "kind": "int",
+          "kind": "Int",
           "name": "secondary"
         }
       ],
@@ -398,82 +398,82 @@
       "bindings": [
         {
           "expression": "private2[hole] | table[boardMask]",
-          "kind": "int",
+          "kind": "Int",
           "name": "s"
         },
         {
           "expression": "bitField($bind:s, 0, 16)",
-          "kind": "int",
+          "kind": "Int",
           "name": "l0"
         },
         {
           "expression": "bitField($bind:s, 16, 16)",
-          "kind": "int",
+          "kind": "Int",
           "name": "l1"
         },
         {
           "expression": "bitField($bind:s, 32, 16)",
-          "kind": "int",
+          "kind": "Int",
           "name": "l2"
         },
         {
           "expression": "bitField($bind:s, 48, 16)",
-          "kind": "int",
+          "kind": "Int",
           "name": "l3"
         },
         {
           "expression": "$bind:l0 | $bind:l1 | $bind:l2 | $bind:l3",
-          "kind": "int",
+          "kind": "Int",
           "name": "ranks"
         },
         {
           "expression": "($bind:l0 & $bind:l1) | ($bind:l0 & $bind:l2) | ($bind:l0 & $bind:l3) | ($bind:l1 & $bind:l2) | ($bind:l1 & $bind:l3) | ($bind:l2 & $bind:l3)",
-          "kind": "int",
+          "kind": "Int",
           "name": "pairs"
         },
         {
           "expression": "($bind:l0 & $bind:l1 & $bind:l2) | ($bind:l0 & $bind:l1 & $bind:l3) | ($bind:l0 & $bind:l2 & $bind:l3) | ($bind:l1 & $bind:l2 & $bind:l3)",
-          "kind": "int",
+          "kind": "Int",
           "name": "trips"
         },
         {
           "expression": "($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 1) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 2) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 3) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 4)",
-          "kind": "int",
+          "kind": "Int",
           "name": "sf"
         },
         {
           "expression": "($bind:ranks | (($bind:ranks >> 13) & 1)) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 1) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 2) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 3) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 4)",
-          "kind": "int",
+          "kind": "Int",
           "name": "st"
         },
         {
           "expression": "popCount($bind:l0) >= 5 ? $bind:l0 : popCount($bind:l1) >= 5 ? $bind:l1 : popCount($bind:l2) >= 5 ? $bind:l2 : popCount($bind:l3) >= 5 ? $bind:l3 : 0",
-          "kind": "int",
+          "kind": "Int",
           "name": "fl"
         },
         {
           "expression": "popCount($bind:pairs) > 2 ? clearLowestSetBit($bind:pairs) : $bind:pairs",
-          "kind": "int",
+          "kind": "Int",
           "name": "top2p"
         },
         {
           "expression": "$bind:sf != 0 ? 8 : ($bind:l0 & $bind:l1 & $bind:l2 & $bind:l3) != 0 ? 7 : ($bind:trips != 0) & (popCount($bind:pairs) >= 2) ? 6 : $bind:fl != 0 ? 5 : $bind:st != 0 ? 4 : $bind:trips != 0 ? 3 : popCount($bind:pairs) >= 2 ? 2 : $bind:pairs != 0 ? 1 : 0",
-          "kind": "int",
+          "kind": "Int",
           "name": "cat"
         },
         {
           "expression": "$bind:cat == 8 ? 63 - leadingZeroCount(($bind:sf | ($bind:sf >> 16) | ($bind:sf >> 32) | ($bind:sf >> 48)) & 16383) : $bind:cat == 7 ? $bind:l0 & $bind:l1 & $bind:l2 & $bind:l3 : $bind:cat == 6 ? 63 - leadingZeroCount($bind:trips) : $bind:fl ^ parallelBitDeposit((1 << max(popCount($bind:fl) - 5, 0)) - 1, $bind:fl)",
-          "kind": "int",
+          "kind": "Int",
           "name": "high"
         },
         {
           "expression": "$bind:cat == 4 ? 63 - leadingZeroCount($bind:st) : $bind:cat == 3 ? $bind:trips : $bind:cat == 2 ? $bind:top2p : $bind:cat == 1 ? $bind:pairs : clearLowestSetBit(clearLowestSetBit($bind:ranks))",
-          "kind": "int",
+          "kind": "Int",
           "name": "low"
         },
         {
           "expression": "$bind:cat == 7 ? 63 - leadingZeroCount($bind:ranks ^ ($bind:l0 & $bind:l1 & $bind:l2 & $bind:l3)) : $bind:cat == 6 ? 63 - leadingZeroCount($bind:pairs ^ (1 << max(63 - leadingZeroCount($bind:trips), 0))) : $bind:cat == 3 ? clearLowestSetBit(clearLowestSetBit($bind:ranks ^ $bind:trips)) : $bind:cat == 2 ? 63 - leadingZeroCount($bind:ranks ^ $bind:top2p) : $bind:cat == 1 ? clearLowestSetBit(clearLowestSetBit($bind:ranks ^ $bind:pairs)) : 0",
-          "kind": "int",
+          "kind": "Int",
           "name": "secondary"
         }
       ],
@@ -505,7 +505,7 @@
       "bindings": [
         {
           "expression": "streetBet[(3 - table[bettor])] - streetBet[(table[bettor])]",
-          "kind": "int",
+          "kind": "Int",
           "name": "toCall"
         }
       ],
@@ -583,14 +583,14 @@
           {
             "$type": "compareValue",
             "comparison": "Equal",
-            "kind": "int",
+            "kind": "Int",
             "left": "(table[bettor] == 1 ? betAction1[act] : betAction2[act])",
             "right": "0"
           },
           {
             "$type": "compareValue",
             "comparison": "GreaterOrEqual",
-            "kind": "int",
+            "kind": "Int",
             "left": "stack[(table[bettor])]",
             "right": "streetBet[(3 - table[bettor])] - streetBet[(table[bettor])]"
           }
@@ -603,12 +603,12 @@
       "bindings": [
         {
           "expression": "streetBet[(3 - table[bettor])] - streetBet[(table[bettor])] + house[bigBlind] * (phase[street] >= 3 ? 2 : 1)",
-          "kind": "int",
+          "kind": "Int",
           "name": "pay"
         },
         {
           "expression": "house[bigBlind] * (phase[street] >= 3 ? 2 : 1)",
-          "kind": "int",
+          "kind": "Int",
           "name": "bet"
         }
       ],
@@ -692,7 +692,7 @@
           {
             "$type": "compareValue",
             "comparison": "Equal",
-            "kind": "int",
+            "kind": "Int",
             "left": "(table[bettor] == 1 ? betAction1[act] : betAction2[act])",
             "right": "1"
           },
@@ -707,7 +707,7 @@
           {
             "$type": "compareValue",
             "comparison": "GreaterOrEqual",
-            "kind": "int",
+            "kind": "Int",
             "left": "stack[(table[bettor])]",
             "right": "streetBet[(3 - table[bettor])] - streetBet[(table[bettor])] + house[bigBlind] * (phase[street] >= 3 ? 2 : 1)"
           }
@@ -791,7 +791,7 @@
           {
             "$type": "compareValue",
             "comparison": "Equal",
-            "kind": "int",
+            "kind": "Int",
             "left": "(table[bettor] == 1 ? betAction1[act] : betAction2[act])",
             "right": "2"
           }
@@ -1023,17 +1023,17 @@
       "bindings": [
         {
           "expression": "private1[strength] > private2[strength] ? 1 : private2[strength] > private1[strength] ? 2 : 0",
-          "kind": "int",
+          "kind": "Int",
           "name": "winner"
         },
         {
           "expression": "table[pot] >> 1",
-          "kind": "int",
+          "kind": "Int",
           "name": "half"
         },
         {
           "expression": "table[pot] & 1",
-          "kind": "int",
+          "kind": "Int",
           "name": "odd"
         }
       ],
@@ -1305,7 +1305,7 @@
       "gate": {
         "$type": "compareValue",
         "comparison": "NotEqual",
-        "kind": "int",
+        "kind": "Int",
         "left": "$reduce:count:deck + $reduce:count:hand1 + $reduce:count:hand2 + $reduce:count:community",
         "right": "$reduce:count:cards"
       },
@@ -1336,7 +1336,7 @@
       "gate": {
         "$type": "compareValue",
         "comparison": "NotEqual",
-        "kind": "int",
+        "kind": "Int",
         "left": "max(betAction1[act], betAction2[act])",
         "right": "-1"
       },
@@ -1558,7 +1558,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "cards"
       },
       {
@@ -1777,7 +1777,7 @@
           "$type": "keysOf",
           "row": "cards"
         },
-        "kind": "int",
+        "kind": "Int",
         "name": "rank",
         "visibility": {
           "hidden": "Placeholder"
@@ -1999,7 +1999,7 @@
           "$type": "keysOf",
           "row": "cards"
         },
-        "kind": "int",
+        "kind": "Int",
         "name": "suit",
         "visibility": {
           "hidden": "Placeholder"
@@ -2222,7 +2222,7 @@
           "ordered": true,
           "row": "cards"
         },
-        "kind": "bool",
+        "kind": "Bool",
         "name": "deck",
         "visibility": {
           "readers": []
@@ -2235,7 +2235,7 @@
           "ordered": true,
           "row": "cards"
         },
-        "kind": "bool",
+        "kind": "Bool",
         "name": "hand1",
         "visibility": {
           "readers": [
@@ -2251,7 +2251,7 @@
           "ordered": true,
           "row": "cards"
         },
-        "kind": "bool",
+        "kind": "Bool",
         "name": "hand2",
         "visibility": {
           "readers": [
@@ -2267,30 +2267,30 @@
           "ordered": true,
           "row": "cards"
         },
-        "kind": "bool",
+        "kind": "Bool",
         "name": "community",
         "visibility": {}
       },
       {
         "draw": {
           "generator": {
-            "source": "streamDraw"
+            "source": "StreamDraw"
           },
-          "timing": "event"
+          "timing": "Event"
         },
-        "kind": "int",
+        "kind": "Int",
         "name": "cardStream"
       },
       {
         "capacity": 2,
         "cells": [],
-        "kind": "text",
+        "kind": "Text",
         "name": "audience1"
       },
       {
         "capacity": 2,
         "cells": [],
-        "kind": "text",
+        "kind": "Text",
         "name": "audience2"
       },
       {
@@ -2305,7 +2305,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "phase",
         "visibility": {}
       },
@@ -2361,7 +2361,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "table",
         "visibility": {}
       },
@@ -2385,7 +2385,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "house",
         "visibility": {}
       },
@@ -2401,7 +2401,7 @@
             "value": 1000
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "stack",
         "nonNegative": true,
         "visibility": {}
@@ -2418,7 +2418,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "streetBet",
         "nonNegative": true,
         "visibility": {}
@@ -2431,7 +2431,7 @@
             "value": -1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 2,
         "min": -1,
         "name": "betAction1",
@@ -2445,7 +2445,7 @@
             "value": -1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 2,
         "min": -1,
         "name": "betAction2",
@@ -2457,7 +2457,7 @@
           "capacity": 16,
           "empty": -1
         },
-        "kind": "int",
+        "kind": "Int",
         "name": "bets",
         "visibility": {}
       },
@@ -2473,7 +2473,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "private1",
         "visibility": {
           "readers": [
@@ -2494,7 +2494,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "private2",
         "visibility": {
           "readers": [

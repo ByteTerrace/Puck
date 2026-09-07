@@ -255,11 +255,11 @@ public sealed class WorldExpressionVocabularyLawTests {
         );
 
         Assert.False(WorldDefinitionValidator.TryValidateLocally(definition: bitwiseInFixed, reason: out var bitwiseReason));
-        Assert.Contains(expectedSubstring: "kind=int expressions only", actualString: bitwiseReason);
+        Assert.Contains(expectedSubstring: "kind=Int expressions only", actualString: bitwiseReason);
         Assert.False(WorldDefinitionValidator.TryValidateLocally(definition: fixedCondition, reason: out var conditionReason));
         Assert.Contains(expectedSubstring: "Select", actualString: conditionReason);
         Assert.False(WorldDefinitionValidator.TryValidateLocally(definition: danglingComparison, reason: out var danglingReason));
-        Assert.Contains(expectedSubstring: "leaves a kind=int value", actualString: danglingReason);
+        Assert.Contains(expectedSubstring: "leaves a kind=Int value", actualString: danglingReason);
         Assert.False(WorldDefinitionValidator.TryValidateLocally(definition: underflow, reason: out var underflowReason));
         Assert.Contains(expectedSubstring: "underflows", actualString: underflowReason);
         Assert.True(WorldDefinitionValidator.TryValidateLocally(definition: control, reason: out var controlReason), controlReason);
@@ -340,7 +340,7 @@ public sealed class WorldExpressionVocabularyLawTests {
         Assert.Equal(expected: 5L, actual: Value(fixture: fixture, row: "target"));
         Assert.Equal(expected: 3L, actual: Value(fixture: fixture, row: "failed"));
         Assert.False(WorldDefinitionValidator.TryValidateLocally(definition: censusInFixed, reason: out var reason));
-        Assert.Contains(expectedSubstring: "kind=int expressions only", actualString: reason);
+        Assert.Contains(expectedSubstring: "kind=Int expressions only", actualString: reason);
     }
 
     [Theory]

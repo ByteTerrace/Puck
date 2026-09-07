@@ -10377,7 +10377,7 @@
             "value": 95
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "houndIdentity"
       },
       {
@@ -10387,7 +10387,7 @@
             "value": "0"
           }
         ],
-        "kind": "fixed",
+        "kind": "Fixed",
         "name": "look"
       },
       {
@@ -10445,7 +10445,7 @@
             "value": "#5AD1C6"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "avatar"
       },
       {
@@ -10453,11 +10453,11 @@
           "generator": {
             "rangeMax": 524288,
             "rangeMin": 327680,
-            "source": "uniformRange"
+            "source": "UniformRange"
           },
-          "timing": "boot"
+          "timing": "Boot"
         },
-        "kind": "fixed",
+        "kind": "Fixed",
         "name": "strideCadence"
       },
       {
@@ -10465,11 +10465,11 @@
           "generator": {
             "rangeMax": 393216,
             "rangeMin": 196608,
-            "source": "uniformRange"
+            "source": "UniformRange"
           },
-          "timing": "boot"
+          "timing": "Boot"
         },
-        "kind": "fixed",
+        "kind": "Fixed",
         "name": "swayRate"
       },
       {
@@ -10477,7 +10477,7 @@
           "output": "Turns",
           "ticksPerStep": 1
         },
-        "kind": "fixed",
+        "kind": "Fixed",
         "name": "swayClock",
         "value": "0"
       },
@@ -10496,7 +10496,7 @@
             "value": "#C8F03C"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "spiderColors"
       },
       {
@@ -10514,7 +10514,7 @@
             "value": "#1B3A44"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "dragonflyColors"
       },
       {
@@ -10532,7 +10532,7 @@
             "value": "#1E1410"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "houndColors"
       },
       {
@@ -10563,7 +10563,7 @@
             "value": 1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "hound"
       },
       {
@@ -10586,17 +10586,17 @@
             "value": 1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "spider"
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "name": "eventSeq",
         "nonNegative": true,
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "name": "claimSeq",
         "nonNegative": true,
         "value": 0
@@ -10609,7 +10609,7 @@
             "value": -1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 127,
         "min": -1,
         "name": "boneHolder"
@@ -10622,13 +10622,13 @@
             "value": -1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 127,
         "min": -1,
         "name": "reporter"
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 50400,
         "min": 0,
         "name": "claimTicks",
@@ -10646,7 +10646,7 @@
             "value": "#F2D98A"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "fishColors"
       },
       {
@@ -10656,7 +10656,7 @@
             "value": "#EDE6D6"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "boneColors"
       },
       {
@@ -10670,7 +10670,7 @@
             "value": "#3E8FD0"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "pondColors"
       },
       {
@@ -10692,11 +10692,11 @@
             "value": "#2E2A26"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "billiardsColors"
       },
       {
-        "kind": "bool",
+        "kind": "Bool",
         "name": "physicsSettled",
         "value": false
       },
@@ -10708,7 +10708,7 @@
             "value": "1"
           }
         ],
-        "kind": "fixed",
+        "kind": "Fixed",
         "max": "1",
         "min": "0.05",
         "name": "scale"
@@ -10724,7 +10724,7 @@
             "value": "#C6435B"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "drinkMeColors"
       },
       {
@@ -10735,19 +10735,19 @@
             "value": 1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "wren"
       },
       {
         "capacity": 128,
-        "kind": "fixed",
+        "kind": "Fixed",
         "max": "1",
         "min": "0",
         "name": "boneHolderTrust"
       },
       {
         "capacity": 64,
-        "kind": "int",
+        "kind": "Int",
         "name": "boneHolderClaimMark",
         "nonNegative": true
       },
@@ -10790,7 +10790,7 @@
             "value": "#8E3B2C"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "islandColors"
       },
       {
@@ -10812,11 +10812,11 @@
             "value": "#9B5DE5"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "districtColors"
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 16,
         "min": 0,
         "name": "captureStation",

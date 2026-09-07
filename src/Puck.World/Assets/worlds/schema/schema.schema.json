@@ -1,4 +1,5 @@
 {
   "description": "Gets the document schema tag \u2014 SchemaVersion for a well-formed document.",
-  "type": "string"
+  "type": "string",
+  "const": "puck.world.def.v1"
 }

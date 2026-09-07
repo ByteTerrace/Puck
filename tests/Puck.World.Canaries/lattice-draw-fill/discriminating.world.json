@@ -8,7 +8,7 @@
     "world": [
       {
         "name": "tiles",
-        "kind": "fixed",
+        "kind": "Fixed",
         "field": {
           "initial": 0,
           "min": 0,

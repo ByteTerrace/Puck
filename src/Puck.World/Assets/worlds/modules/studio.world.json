@@ -260,7 +260,7 @@
     "world": [
       {
         "name": "look",
-        "kind": "int",
+        "kind": "Int",
         "min": 0,
         "max": 7,
         "value": 0

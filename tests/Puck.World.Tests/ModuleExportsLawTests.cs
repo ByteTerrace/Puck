@@ -33,7 +33,7 @@ public sealed class ModuleExportsLawTests {
               "effects": [ { "$type": "setState", "state": "hostSawTurn", "value": 1 } ]
             }
           ],
-          "state": { "world": [ { "name": "hostSawTurn", "kind": "int", "value": 0 }, { "name": "player", "kind": "int", "capacity": 4 } ] },
+          "state": { "world": [ { "name": "hostSawTurn", "kind": "Int", "value": 0 }, { "name": "player", "kind": "Int", "capacity": 4 } ] },
           "properties": { "names": [ "player" ] },
           "interactions": { "interactions": [ { "name": "touch", "left": "player", "right": "player", "coOccurrence": "Distance", "range": 1,
             "effects": [ { "$type": "setState", "state": "ACTION_ROW", "value": 0 } ] } ] },
@@ -159,13 +159,13 @@ public sealed class ModuleExportsLawTests {
         files.WriteText(name: "reader.world.json", text: /*lang=json*/ """
             { "rules": [ { "name": "mirror", "gate": { "$type": "compareState", "state": "flag", "comparison": "Equal", "value": 1 },
                            "effects": [ { "$type": "setState", "state": "mirrored", "value": 1 } ] } ],
-              "state": { "world": [ { "name": "mirrored", "kind": "int", "value": 0 } ] } }
+              "state": { "world": [ { "name": "mirrored", "kind": "Int", "value": 0 } ] } }
             """);
         files.WriteText(name: "private.world.json", text: /*lang=json*/ """
-            { "state": { "world": [ { "name": "flag", "kind": "int", "value": 1 } ] } }
+            { "state": { "world": [ { "name": "flag", "kind": "Int", "value": 1 } ] } }
             """);
         files.WriteText(name: "public.world.json", text: /*lang=json*/ """
-            { "exports": { "reads": [ "flag" ] }, "state": { "world": [ { "name": "flag", "kind": "int", "value": 1 } ] } }
+            { "exports": { "reads": [ "flag" ] }, "state": { "world": [ { "name": "flag", "kind": "Int", "value": 1 } ] } }
             """);
 
         var refused = files.WriteText(name: "refused.world.json", text: /*lang=json*/ """

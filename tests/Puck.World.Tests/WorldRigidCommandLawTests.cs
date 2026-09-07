@@ -117,7 +117,7 @@ public sealed class WorldRigidCommandLawTests {
         };
     }
 
-    // FallingRigidBallDocument plus an authored bodies.scaleRow naming a keyed kind=fixed "scale" row for body 0 —
+    // FallingRigidBallDocument plus an authored bodies.scaleRow naming a keyed kind=Fixed "scale" row for body 0 —
     // the same shape BodyScaleLawTests.WithScaleRow builds, added onto the falling-ball fixture rather than the
     // bare-locomotion one so the scaled body actually has a rigid facet to advance.
     private static WorldDefinition ScaledFallingRigidBallDocument(FixedQ4816 cellValue) {

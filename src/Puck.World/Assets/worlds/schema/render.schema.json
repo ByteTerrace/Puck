@@ -71,7 +71,8 @@
           },
           "config": {
             "description": "The set\u0027s config values, or null when the manifest declares none or every field has a default. Not validated at document load \u2014 the manifest\u0027s declared config schema validates it at boot (matching Machine\u0027s Options, the identical shallow-then-deep precedent), refusing boot with the set id and reason on a malformed value.",
-            "default": null
+            "default": null,
+            "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
           }
         },
         "required": [

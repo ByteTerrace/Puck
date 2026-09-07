@@ -18,7 +18,7 @@
   "world": [
     {
       "name": "solitaireKlondikeCards",
-      "kind": "int",
+      "kind": "Int",
       "capacity": 52,
       "cells": [
         {
@@ -233,7 +233,7 @@
     },
     {
       "name": "solitaireKlondikeRank",
-      "kind": "int",
+      "kind": "Int",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireKlondikeCards"
@@ -452,7 +452,7 @@
     },
     {
       "name": "solitaireKlondikeSuit",
-      "kind": "int",
+      "kind": "Int",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireKlondikeCards"
@@ -671,7 +671,7 @@
     },
     {
       "name": "solitaireKlondikeFace",
-      "kind": "int",
+      "kind": "Int",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireKlondikeCards"
@@ -890,7 +890,7 @@
     },
     {
       "name": "solitaireKlondikePile0",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireKlondikeCards",
@@ -1110,7 +1110,7 @@
     },
     {
       "name": "solitaireKlondikePile1",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireKlondikeCards",
@@ -1121,7 +1121,7 @@
     },
     {
       "name": "solitaireKlondikePile2",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireKlondikeCards",
@@ -1132,7 +1132,7 @@
     },
     {
       "name": "solitaireKlondikePile3",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireKlondikeCards",
@@ -1143,7 +1143,7 @@
     },
     {
       "name": "solitaireKlondikePile4",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireKlondikeCards",
@@ -1154,7 +1154,7 @@
     },
     {
       "name": "solitaireKlondikePile5",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireKlondikeCards",
@@ -1165,7 +1165,7 @@
     },
     {
       "name": "solitaireKlondikePile6",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireKlondikeCards",
@@ -1176,7 +1176,7 @@
     },
     {
       "name": "solitaireKlondikePile7",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireKlondikeCards",
@@ -1187,7 +1187,7 @@
     },
     {
       "name": "solitaireKlondikePile8",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireKlondikeCards",
@@ -1198,7 +1198,7 @@
     },
     {
       "name": "solitaireKlondikePile10",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireKlondikeCards",
@@ -1209,7 +1209,7 @@
     },
     {
       "name": "solitaireKlondikePile11",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireKlondikeCards",
@@ -1220,7 +1220,7 @@
     },
     {
       "name": "solitaireKlondikePile12",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireKlondikeCards",
@@ -1231,7 +1231,7 @@
     },
     {
       "name": "solitaireKlondikePile13",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireKlondikeCards",
@@ -1242,7 +1242,7 @@
     },
     {
       "name": "solitaireKlondike",
-      "kind": "int",
+      "kind": "Int",
       "capacity": 27,
       "cells": [
         {
@@ -1357,21 +1357,21 @@
     },
     {
       "name": "solitaireKlondikeStream",
-      "kind": "int",
+      "kind": "Int",
       "draw": {
         "generator": {
-          "source": "streamDraw"
+          "source": "StreamDraw"
         },
-        "timing": "event"
+        "timing": "Event"
       }
     }
   ]
 },
   "patterns": [
-    {"name": "solitaireKlondikeLength","kind": "int","value": "1","symbols": [{"name": "any","min": 1,"max": 1}],"pattern": {"$type": "star","item": {"$type": "any"}}},
-    {"name": "solitaireKlondikeSingle","kind": "int","value": "1","symbols": [{"name": "any","min": 1,"max": 1}],"pattern": {"$type": "any"}},
-    {"name": "solitaireKlondikeRun","kind": "int","value": "solitaireKlondikeFace[$token] * (1 + (solitaireKlondikeRank[$token] == solitaireKlondikeRank[$previous] - 1) * (solitaireKlondikeSuit[$token] % 2 != solitaireKlondikeSuit[$previous] % 2))","symbols": [{"name": "face","min": 1,"max": 2},{"name": "next","min": 2,"max": 2}],"pattern": {"$type": "sequence","items": [{"$type": "symbol","name": "face"},{"$type": "star","item": {"$type": "symbol","name": "next"}}]}},
-    {"name": "solitaireKlondikeLanding","kind": "int","value": "(solitaireKlondikeRank[$token] == solitaireKlondikeRank[solitaireKlondike[card]] + 1) * (solitaireKlondikeSuit[$token] % 2 != solitaireKlondikeSuit[solitaireKlondike[card]] % 2)","symbols": [{"name": "yes","min": 1,"max": 1}],"pattern": {"$type": "sequence","items": [{"$type": "star","item": {"$type": "any"}},{"$type": "symbol","name": "yes"}]}}
+    {"name": "solitaireKlondikeLength","kind": "Int","value": "1","symbols": [{"name": "any","min": 1,"max": 1}],"pattern": {"$type": "star","item": {"$type": "any"}}},
+    {"name": "solitaireKlondikeSingle","kind": "Int","value": "1","symbols": [{"name": "any","min": 1,"max": 1}],"pattern": {"$type": "any"}},
+    {"name": "solitaireKlondikeRun","kind": "Int","value": "solitaireKlondikeFace[$token] * (1 + (solitaireKlondikeRank[$token] == solitaireKlondikeRank[$previous] - 1) * (solitaireKlondikeSuit[$token] % 2 != solitaireKlondikeSuit[$previous] % 2))","symbols": [{"name": "face","min": 1,"max": 2},{"name": "next","min": 2,"max": 2}],"pattern": {"$type": "sequence","items": [{"$type": "symbol","name": "face"},{"$type": "star","item": {"$type": "symbol","name": "next"}}]}},
+    {"name": "solitaireKlondikeLanding","kind": "Int","value": "(solitaireKlondikeRank[$token] == solitaireKlondikeRank[solitaireKlondike[card]] + 1) * (solitaireKlondikeSuit[$token] % 2 != solitaireKlondikeSuit[solitaireKlondike[card]] % 2)","symbols": [{"name": "yes","min": 1,"max": 1}],"pattern": {"$type": "sequence","items": [{"$type": "star","item": {"$type": "any"}},{"$type": "symbol","name": "yes"}]}}
   ],
   "rules": [
     {"name": "solitaireKlondike-new-deal","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireKlondike","key": "request","comparison": "NotEqual","comparandState": "solitaireKlondike","comparandKey": "applied"},{"$type": "compareState","state": "solitaireKlondike","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireKlondike","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireKlondike","key": "action","comparison": "Equal","value": 1},{"$type": "any","predicates": [{"$type": "compareState","state": "solitaireKlondike","key": "option","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireKlondike","key": "option","comparison": "Equal","value": 3}]}]},"effects": [{"$type": "setState","state": "solitaireKlondike","key": "activeOption","expression": "solitaireKlondike[option]"},{"$type": "setState","state": "solitaireKlondike","key": "stage","value": 1},{"$type": "setState","state": "solitaireKlondike","key": "status","value": 0},{"$type": "setState","state": "solitaireKlondike","key": "result","value": 0},{"$type": "setState","state": "solitaireKlondike","key": "busy","value": 1}]},
@@ -1386,7 +1386,7 @@
     {"name": "solitaireKlondike-source-1","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireKlondike","key": "request","comparison": "NotEqual","comparandState": "solitaireKlondike","comparandKey": "applied"},{"$type": "compareState","state": "solitaireKlondike","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireKlondike","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireKlondike","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireKlondike","key": "action","comparison": "Equal","value": 2},{"$type": "compareState","state": "$zones[solitaireKlondike[from]]","key": "$cell:solitaireKlondike:card","comparison": "Equal","value": 1}]},"effects": [{"$type": "setState","state": "solitaireKlondike","key": "sourceOk","expression": "$match:solitaireKlondikeSingle:$zones[solitaireKlondike[from]][solitaireKlondike[card]]"},{"$type": "setState","state": "solitaireKlondike","key": "runLength","expression": "$match:solitaireKlondikeLength:$zones[solitaireKlondike[from]]:prefix[solitaireKlondike[card]]"}],"zones": ["","solitaireKlondikePile1","","","","","","","","","solitaireKlondikePile10","solitaireKlondikePile11","solitaireKlondikePile12","solitaireKlondikePile13"]},
     {"name": "solitaireKlondike-target","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireKlondike","key": "request","comparison": "NotEqual","comparandState": "solitaireKlondike","comparandKey": "applied"},{"$type": "compareState","state": "solitaireKlondike","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireKlondike","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireKlondike","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireKlondike","key": "action","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireKlondike","key": "sourceOk","comparison": "Equal","value": 1}]},"effects": [{"$type": "setState","state": "solitaireKlondike","key": "targetOk","expression": "$reduce:count:$zones[solitaireKlondike[to]] == 0 ? (solitaireKlondikeRank[solitaireKlondike[card]] == 13) : $match:solitaireKlondikeLanding:$zones[solitaireKlondike[to]]"}],"zones": ["","","solitaireKlondikePile2","solitaireKlondikePile3","solitaireKlondikePile4","solitaireKlondikePile5","solitaireKlondikePile6","solitaireKlondikePile7","solitaireKlondikePile8"]},
     {"name": "solitaireKlondike-target-10","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireKlondike","key": "request","comparison": "NotEqual","comparandState": "solitaireKlondike","comparandKey": "applied"},{"$type": "compareState","state": "solitaireKlondike","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireKlondike","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireKlondike","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireKlondike","key": "action","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireKlondike","key": "sourceOk","comparison": "Equal","value": 1}]},"effects": [{"$type": "setState","state": "solitaireKlondike","key": "targetOk","expression": "(solitaireKlondike[runLength] == 1) * (solitaireKlondikeSuit[solitaireKlondike[card]] == solitaireKlondike[to] - 10) * (solitaireKlondikeRank[solitaireKlondike[card]] == $reduce:count:$zones[solitaireKlondike[to]] + 1)"}],"zones": ["","","","","","","","","","","solitaireKlondikePile10","solitaireKlondikePile11","solitaireKlondikePile12","solitaireKlondikePile13"]},
-    {"name": "solitaireKlondike-move","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireKlondike","key": "request","comparison": "NotEqual","comparandState": "solitaireKlondike","comparandKey": "applied"},{"$type": "compareState","state": "solitaireKlondike","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireKlondike","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireKlondike","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireKlondike","key": "action","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireKlondike","key": "sourceOk","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireKlondike","key": "targetOk","comparison": "Equal","value": 1},{"$type": "compareValue","comparison": "NotEqual","kind": "int","left": "solitaireKlondike[from]","right": "solitaireKlondike[to]"}]},"effects": [{"$type": "transaction","effects": [{"$type": "transformState","transform": {"$type": "transfer","from": "$zones[solitaireKlondike[from]]","to": "$zones[solitaireKlondike[to]]","selector": "Slice","key": "$cell:solitaireKlondike:card"}},{"$type": "setState","state": "solitaireKlondike","key": "moves","expression": "solitaireKlondike[moves] + 1"},{"$type": "setState","state": "solitaireKlondike","key": "busy","value": 1},{"$type": "setState","state": "solitaireKlondike","key": "score","expression": "max(0, solitaireKlondike[score] + ((solitaireKlondike[to] >= 10) ? 10 : ((solitaireKlondike[from] >= 10) ? -15 : ((solitaireKlondike[from] == 1) ? 5 : 0))))"},{"$type": "setState","state": "solitaireKlondike","key": "result","value": 1},{"$type": "setState","state": "solitaireKlondike","key": "applied","expression": "solitaireKlondike[request]"}]}],"zones": ["solitaireKlondikePile0","solitaireKlondikePile1","solitaireKlondikePile2","solitaireKlondikePile3","solitaireKlondikePile4","solitaireKlondikePile5","solitaireKlondikePile6","solitaireKlondikePile7","solitaireKlondikePile8","","solitaireKlondikePile10","solitaireKlondikePile11","solitaireKlondikePile12","solitaireKlondikePile13"]},
+    {"name": "solitaireKlondike-move","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireKlondike","key": "request","comparison": "NotEqual","comparandState": "solitaireKlondike","comparandKey": "applied"},{"$type": "compareState","state": "solitaireKlondike","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireKlondike","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireKlondike","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireKlondike","key": "action","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireKlondike","key": "sourceOk","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireKlondike","key": "targetOk","comparison": "Equal","value": 1},{"$type": "compareValue","comparison": "NotEqual","kind": "Int","left": "solitaireKlondike[from]","right": "solitaireKlondike[to]"}]},"effects": [{"$type": "transaction","effects": [{"$type": "transformState","transform": {"$type": "transfer","from": "$zones[solitaireKlondike[from]]","to": "$zones[solitaireKlondike[to]]","selector": "Slice","key": "$cell:solitaireKlondike:card"}},{"$type": "setState","state": "solitaireKlondike","key": "moves","expression": "solitaireKlondike[moves] + 1"},{"$type": "setState","state": "solitaireKlondike","key": "busy","value": 1},{"$type": "setState","state": "solitaireKlondike","key": "score","expression": "max(0, solitaireKlondike[score] + ((solitaireKlondike[to] >= 10) ? 10 : ((solitaireKlondike[from] >= 10) ? -15 : ((solitaireKlondike[from] == 1) ? 5 : 0))))"},{"$type": "setState","state": "solitaireKlondike","key": "result","value": 1},{"$type": "setState","state": "solitaireKlondike","key": "applied","expression": "solitaireKlondike[request]"}]}],"zones": ["solitaireKlondikePile0","solitaireKlondikePile1","solitaireKlondikePile2","solitaireKlondikePile3","solitaireKlondikePile4","solitaireKlondikePile5","solitaireKlondikePile6","solitaireKlondikePile7","solitaireKlondikePile8","","solitaireKlondikePile10","solitaireKlondikePile11","solitaireKlondikePile12","solitaireKlondikePile13"]},
     {"name": "solitaireKlondike-draw-start","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireKlondike","key": "request","comparison": "NotEqual","comparandState": "solitaireKlondike","comparandKey": "applied"},{"$type": "compareState","state": "solitaireKlondike","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireKlondike","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireKlondike","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireKlondike","key": "action","comparison": "Equal","value": 3},{"$type": "compareState","state": "$reduce:count:solitaireKlondikePile0","comparison": "Greater","value": 0}]},"effects": [{"$type": "transaction","effects": [{"$type": "setState","state": "solitaireKlondike","key": "stage","value": 4},{"$type": "setState","state": "solitaireKlondike","key": "drawLeft","expression": "min(solitaireKlondike[activeOption], $reduce:count:solitaireKlondikePile0)"},{"$type": "setState","state": "solitaireKlondike","key": "busy","value": 1}]}]},
     {"name": "solitaireKlondike-draw-card","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireKlondike","key": "stage","comparison": "Equal","value": 4}]},"effects": [{"$type": "transaction","effects": [{"$type": "setState","state": "solitaireKlondikeFace","key": "$zone:solitaireKlondikePile0:first","value": 1},{"$type": "transformState","transform": {"$type": "transfer","from": "solitaireKlondikePile0","to": "solitaireKlondikePile1","selector": "First"}},{"$type": "setState","state": "solitaireKlondike","key": "drawLeft","expression": "solitaireKlondike[drawLeft] - 1"}]}]},
     {"name": "solitaireKlondike-draw-finish","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireKlondike","key": "stage","comparison": "Equal","value": 4},{"$type": "compareState","state": "solitaireKlondike","key": "drawLeft","comparison": "Equal","value": 0}]},"effects": [{"$type": "transaction","effects": [{"$type": "setState","state": "solitaireKlondike","key": "stage","value": 0},{"$type": "setState","state": "solitaireKlondike","key": "moves","expression": "solitaireKlondike[moves] + 1"},{"$type": "setState","state": "solitaireKlondike","key": "result","value": 1},{"$type": "setState","state": "solitaireKlondike","key": "applied","expression": "solitaireKlondike[request]"}]}]},

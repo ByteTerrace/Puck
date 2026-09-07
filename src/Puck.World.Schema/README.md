@@ -982,7 +982,7 @@ ONE authored spelling (`WorldStateRowJsonConverter` in
 `WorldDefinitionSerialization.cs`):
 
 ```json
-{"name":.., "kind":"int"|"fixed"|"bool"|"text",
+{"name":.., "kind":"Int"|"Fixed"|"Bool"|"Text",
  "value":..              // sugar for one cell keyed "$value"
  "cells":[{"key":..,"value":..}],   // ... OR the keyed form; never both
  "min":.., "max":.., "capacity":.., "nonNegative":..}
@@ -1351,7 +1351,7 @@ fold folds) — only the bytes written to disk carry the settled base/epoch.
 — the same `StateAdvance` shape, authored per cell instead of per row:
 
 ```json
-{"name":"threat","kind":"fixed","capacity":8,
+{"name":"threat","kind":"Fixed","capacity":8,
  "cells":[
    {"key":"body:0","value":"40.0","advance":{"rateNumerator":1,"rateDenominator":4,"epochTick":0}},
    {"key":"body:1","value":"10.0","advance":{"rateNumerator":-1,"rateDenominator":2,"epochTick":120}}
@@ -1764,7 +1764,7 @@ vocabulary every other table in `state` uses, paying no schema cost of its own.
 ```json
 {
   "name": "boneHolderTrust",
-  "kind": "fixed",
+  "kind": "Fixed",
   "capacity": 64,
   "min": "0",
   "max": "1"

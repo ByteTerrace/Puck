@@ -8,47 +8,47 @@
     "world": [
       {
         "name": "spin",
-        "kind": "int",
+        "kind": "Int",
         "value": 0
       },
       {
         "name": "spinPhased",
-        "kind": "int",
+        "kind": "Int",
         "value": 7
       },
       {
         "name": "spinTurns",
-        "kind": "fixed",
+        "kind": "Fixed",
         "value": "0"
       },
       {
         "name": "spinCos",
-        "kind": "fixed",
+        "kind": "Fixed",
         "value": "0"
       },
       {
         "name": "orbit",
-        "kind": "int",
+        "kind": "Int",
         "value": 5
       },
       {
         "name": "orbitX",
-        "kind": "fixed",
+        "kind": "Fixed",
         "value": "5"
       },
       {
         "name": "dial",
-        "kind": "int",
+        "kind": "Int",
         "value": 0
       },
       {
         "name": "dialNode",
-        "kind": "int",
+        "kind": "Int",
         "value": 5
       },
       {
         "name": "dialRing",
-        "kind": "int",
+        "kind": "Int",
         "value": 5
       }
     ]

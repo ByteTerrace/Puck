@@ -149,7 +149,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         ? " gatesDrive=true"
         : string.Empty
     );
-    private static string DescribeKind(CellKind kind) => kind.ToString().ToLowerInvariant();
+    private static string DescribeKind(CellKind kind) => StateSpelling.Kind(kind: kind);
     private static string DescribeNonNegative(WorldStateRow row) => (row.NonNegative
         ? " nonNegative=true"
         : string.Empty

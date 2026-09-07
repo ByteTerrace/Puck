@@ -95,7 +95,7 @@ public static partial class RuleCompiler {
             throw new RuleException(
                 refusal: RuleRefusal.StateCellUnaddressable,
                 ruleName: ruleName,
-                detail: $"state row '{name}' is kind=text — a rule compares numbers, never text"
+                detail: $"state row '{name}' is kind=Text — a rule compares numbers, never text"
             );
         }
 

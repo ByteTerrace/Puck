@@ -352,7 +352,7 @@ public sealed partial class WorldServer {
         if (m_tables.Length == 0) {
             return "[world.tables: none]";
         }
-        return $"[world.tables: {string.Join(separator: " | ", values: m_tables.Select(selector: static table => $"{table.Name} kind={table.Kind.ToString().ToLowerInvariant()} entries={table.Count}{((table.ColumnNames.Count > 0) ? $" columns=[{string.Join(separator: ",", values: table.ColumnNames)}]" : string.Empty)}"))}]";
+        return $"[world.tables: {string.Join(separator: " | ", values: m_tables.Select(selector: static table => $"{table.Name} kind={StateSpelling.Kind(kind: table.Kind)} entries={table.Count}{((table.ColumnNames.Count > 0) ? $" columns=[{string.Join(separator: ",", values: table.ColumnNames)}]" : string.Empty)}"))}]";
     }
     // Canonical "a_b" pair keys (underscore, not colon: CellName reserves ':'), cached per distinct DIRECTED
     // pair once minted so a steady-state rule scan allocates nothing: (a, b) and (b, a) name different cells (an

@@ -8,7 +8,7 @@
     "world": [
       {
         "name": "spin",
-        "kind": "int",
+        "kind": "Int",
         "value": 0,
         "cycle": {
           "output": "Step",
@@ -17,7 +17,7 @@
       },
       {
         "name": "spinPhased",
-        "kind": "int",
+        "kind": "Int",
         "value": 7,
         "cycle": {
           "output": "Step",
@@ -26,7 +26,7 @@
       },
       {
         "name": "spinTurns",
-        "kind": "fixed",
+        "kind": "Fixed",
         "value": "0",
         "cycle": {
           "output": "Turns",
@@ -35,7 +35,7 @@
       },
       {
         "name": "spinCos",
-        "kind": "fixed",
+        "kind": "Fixed",
         "value": "0",
         "cycle": {
           "power": 13,
@@ -45,7 +45,7 @@
       },
       {
         "name": "orbit",
-        "kind": "int",
+        "kind": "Int",
         "value": 5,
         "cycle": {
           "power": 7,
@@ -55,7 +55,7 @@
       },
       {
         "name": "orbitX",
-        "kind": "fixed",
+        "kind": "Fixed",
         "value": "5",
         "cycle": {
           "power": 7,
@@ -65,7 +65,7 @@
       },
       {
         "name": "dial",
-        "kind": "int",
+        "kind": "Int",
         "value": 0,
         "cycle": {
           "word": [
@@ -82,7 +82,7 @@
       },
       {
         "name": "dialNode",
-        "kind": "int",
+        "kind": "Int",
         "value": 5,
         "cycle": {
           "word": [
@@ -99,7 +99,7 @@
       },
       {
         "name": "dialRing",
-        "kind": "int",
+        "kind": "Int",
         "value": 5,
         "cycle": {
           "word": [

@@ -18,21 +18,21 @@
     "world": [
       {
         "name": "pick",
-        "kind": "int",
+        "kind": "Int",
         "value": -1,
         "draw": {
           "source": "ringTwo",
-          "timing": "event"
+          "timing": "Event"
         }
       },
       {
         "name": "pickRing",
-        "kind": "int",
+        "kind": "Int",
         "value": -1
       },
       {
         "name": "tiles",
-        "kind": "fixed",
+        "kind": "Fixed",
         "field": {
           "initial": 0,
           "min": 0,

@@ -233,7 +233,7 @@ public enum WorldHostPresentation : byte {
 /// to <see cref="WorldHostPresentation.Windowed"/>, so every world authored before this field existed boots
 /// byte-identically; the <c>--headless</c> CLI flag reflects <see cref="WorldHostPresentation.None"/> for a single run
 /// without editing the document.</param>
-/// <param name="BackendRow">A scalar kind=text state row whose slot names the backend token, read at boot after
+/// <param name="BackendRow">A scalar kind=Text state row whose slot names the backend token, read at boot after
 /// literal <paramref name="Backend"/>. A boot-only site (<see cref="WorldDrawSites.HostBackend"/>): the resolver draws
 /// it once at composition, writes the settled preference into <paramref name="Backend"/>, clears this facet, and
 /// narrates the settlement on stderr — the only surface that can say the backend was drawn at all, since a settled

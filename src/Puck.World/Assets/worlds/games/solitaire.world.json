@@ -34,7 +34,7 @@
     "world": [
       {
         "name": "solitaire",
-        "kind": "int",
+        "kind": "Int",
         "capacity": 1,
         "cells": [
           {

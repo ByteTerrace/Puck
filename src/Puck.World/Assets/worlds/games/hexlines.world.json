@@ -2563,20 +2563,20 @@
           "$type": "cellsOf",
           "topology": "hexLinesBoard"
         },
-        "kind": "int",
+        "kind": "Int",
         "max": 1,
         "min": -1,
         "name": "hexBoard"
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 1,
         "min": 0,
         "name": "hexTurn",
         "value": 1
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 1,
         "min": 0,
         "name": "hexVerdict",
@@ -2606,7 +2606,7 @@
             "value": -1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 60,
         "min": -1,
         "name": "hexMove"
@@ -2735,7 +2735,7 @@
             "value": -1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 60,
         "min": -1,
         "name": "hexStoneCell"
@@ -2864,7 +2864,7 @@
             "value": -1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 1,
         "min": -1,
         "name": "hexStoneCode"
@@ -2884,7 +2884,7 @@
             "value": "#8C5E3C"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "hexTileColors"
       },
       {
@@ -2898,7 +2898,7 @@
             "value": "#2B2B30"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "hexStoneColors"
       },
       {
@@ -2912,7 +2912,7 @@
             "value": "#4A3728"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "hexTableColors"
       }
     ]

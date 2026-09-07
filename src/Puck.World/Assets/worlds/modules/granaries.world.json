@@ -2394,35 +2394,35 @@
     "world": [
       {
         "name": "granaryNames",
-        "kind": "text",
+        "kind": "Text",
         "capacity": 16,
         "cells": [],
         "visibility": {}
       },
       {
         "name": "granaryResources",
-        "kind": "text",
+        "kind": "Text",
         "capacity": 16,
         "cells": [],
         "visibility": {}
       },
       {
         "name": "granaryRegions",
-        "kind": "text",
+        "kind": "Text",
         "capacity": 16,
         "cells": [],
         "visibility": {}
       },
       {
         "name": "granaryKinds",
-        "kind": "text",
+        "kind": "Text",
         "capacity": 16,
         "cells": [],
         "visibility": {}
       },
       {
         "name": "granarySkus",
-        "kind": "text",
+        "kind": "Text",
         "capacity": 16,
         "cells": [],
         "visibility": {}

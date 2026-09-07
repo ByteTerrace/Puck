@@ -133,7 +133,7 @@ public sealed class WorldGeneratorOrbitLawTests {
         Assert.Contains(expectedSubstring: "word holds 9 letters", actualString: Validate(generator: NodeSource(node: 3, word: [0, 1, 2, 3, 4, 5, 6, 7, 0])));
         Assert.Contains(expectedSubstring: "beside start/contexts/rangeMin/rangeMax/weighted", actualString: Validate(generator: new StateGenerator(Source: GeneratorSource.SymmetryOrbit, Ring: 1, RangeMin: 0, RangeMax: 4)));
         Assert.Contains(expectedSubstring: "beside ring/node/word, which belong to source=symmetryOrbit", actualString: Validate(generator: new StateGenerator(Source: GeneratorSource.UniformRange, RangeMin: 0, RangeMax: 4, Ring: 1)));
-        Assert.Contains(expectedSubstring: "writes a numeric value, but the site is kind=text", actualString: Validate(generator: RingSource(ring: 0), kind: CellKind.Text));
+        Assert.Contains(expectedSubstring: "writes a numeric value, but the site is kind=Text", actualString: Validate(generator: RingSource(ring: 0), kind: CellKind.Text));
         Assert.Contains(expectedSubstring: "outside the site's admissible domain", actualString: Validate(generator: RingSource(ring: 0), max: 100L));
         Assert.Equal(expected: string.Empty, actual: Validate(generator: RingSource(ring: 0), max: 239L));
 

@@ -54,7 +54,7 @@ public abstract record ActionEffect {
     /// coerced.</param>
     /// <param name="FromKey">The cell inside <paramref name="FromState"/>, on the same (row, key) terms as
     /// <paramref name="Key"/>. Refused when <paramref name="FromState"/> names a reserved channel or is absent.</param>
-    /// <param name="ValueSeconds">An alternative to <paramref name="Value"/> for a <c>kind=int</c> state row a
+    /// <param name="ValueSeconds">An alternative to <paramref name="Value"/> for a <c>kind=Int</c> state row a
     /// companion <see cref="CountdownState"/> effect decrements once per simulation tick (a countdown/cooldown).
     /// Authored in seconds — a physical unit, not a tick count, so a document's rate can change without silently
     /// retuning every cooldown — and converted once at rule compile time to an exact whole engine-tick count via
@@ -64,7 +64,7 @@ public abstract record ActionEffect {
     /// <see langword="float"/> because JSON deserializes a number token to <see cref="decimal"/> exactly (base-10, no
     /// binary-float intermediate), and most terminating decimals — the only ones an author can spell — have no exact
     /// binary float or fixed-point spelling either.</param>
-    /// <param name="Text">The literal a <c>kind=text</c> state row's cell takes — the fourth spelling beside
+    /// <param name="Text">The literal a <c>kind=Text</c> state row's cell takes — the fourth spelling beside
     /// <paramref name="Value"/>/<paramref name="FromState"/>/<paramref name="ValueSeconds"/>, exactly one authored.
     /// Every state-bound document value re-resolves on the write, so this is how a rule restyles what a state-bound
     /// document row names.</param>
@@ -105,7 +105,7 @@ public abstract record ActionEffect {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValueExpression? Expression = null
     ) : ActionEffect;
     /// <summary>Decrements a state countdown by the current simulation step's engine-tick width, saturating at zero.
-    /// The destination must be a <c>kind=int nonNegative=true</c> row. Unlike an authored <see cref="AddState"/>
+    /// The destination must be a <c>kind=Int nonNegative=true</c> row. Unlike an authored <see cref="AddState"/>
     /// constant, this effect consumes the runtime step width, so changing the document's authored tick rate never
     /// retunes the duration. When the remaining duration is shorter than one step, the computed decrement is exactly
     /// the remaining value; it reaches zero without asking the explicit-write door to admit a negative candidate.</summary>

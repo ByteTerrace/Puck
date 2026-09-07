@@ -4,10 +4,11 @@ namespace Puck.State;
 /// <remarks>A refusal quotes the token the author wrote in the document, not the CLR name — one home so a validator
 /// refusal and a runtime refusal about the same value never disagree on how it is spelled.</remarks>
 public static class StateSpelling {
-    /// <summary>Describes the authored spelling of a cell kind.</summary>
+    /// <summary>Describes the authored spelling of a cell kind — the declared member name, as the strict enum
+    /// converter reads and writes it.</summary>
     /// <param name="kind">The cell kind.</param>
     /// <returns>The kind's authored token.</returns>
-    public static string Kind(CellKind kind) => kind.ToString().ToLowerInvariant();
+    public static string Kind(CellKind kind) => kind.ToString();
     /// <summary>Describes the authored spelling of a generator source shape.</summary>
     /// <param name="source">The source shape.</param>
     /// <returns>The source's authored token.</returns>

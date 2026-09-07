@@ -18,7 +18,7 @@
   "world": [
     {
       "name": "solitaireSpiderCards",
-      "kind": "int",
+      "kind": "Int",
       "capacity": 104,
       "cells": [
         {
@@ -441,7 +441,7 @@
     },
     {
       "name": "solitaireSpiderRank",
-      "kind": "int",
+      "kind": "Int",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireSpiderCards"
@@ -868,7 +868,7 @@
     },
     {
       "name": "solitaireSpiderSuit",
-      "kind": "int",
+      "kind": "Int",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireSpiderCards"
@@ -1295,7 +1295,7 @@
     },
     {
       "name": "solitaireSpiderFace",
-      "kind": "int",
+      "kind": "Int",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireSpiderCards"
@@ -1722,7 +1722,7 @@
     },
     {
       "name": "solitaireSpiderPile0",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireSpiderCards",
@@ -2150,7 +2150,7 @@
     },
     {
       "name": "solitaireSpiderPile2",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireSpiderCards",
@@ -2161,7 +2161,7 @@
     },
     {
       "name": "solitaireSpiderPile3",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireSpiderCards",
@@ -2172,7 +2172,7 @@
     },
     {
       "name": "solitaireSpiderPile4",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireSpiderCards",
@@ -2183,7 +2183,7 @@
     },
     {
       "name": "solitaireSpiderPile5",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireSpiderCards",
@@ -2194,7 +2194,7 @@
     },
     {
       "name": "solitaireSpiderPile6",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireSpiderCards",
@@ -2205,7 +2205,7 @@
     },
     {
       "name": "solitaireSpiderPile7",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireSpiderCards",
@@ -2216,7 +2216,7 @@
     },
     {
       "name": "solitaireSpiderPile8",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireSpiderCards",
@@ -2227,7 +2227,7 @@
     },
     {
       "name": "solitaireSpiderPile9",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireSpiderCards",
@@ -2238,7 +2238,7 @@
     },
     {
       "name": "solitaireSpiderPile10",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireSpiderCards",
@@ -2249,7 +2249,7 @@
     },
     {
       "name": "solitaireSpiderPile11",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireSpiderCards",
@@ -2260,7 +2260,7 @@
     },
     {
       "name": "solitaireSpiderPile12",
-      "kind": "bool",
+      "kind": "Bool",
       "domain": {
         "$type": "keysOf",
         "row": "solitaireSpiderCards",
@@ -2271,7 +2271,7 @@
     },
     {
       "name": "solitaireSpider",
-      "kind": "int",
+      "kind": "Int",
       "capacity": 27,
       "cells": [
         {
@@ -2386,22 +2386,22 @@
     },
     {
       "name": "solitaireSpiderStream",
-      "kind": "int",
+      "kind": "Int",
       "draw": {
         "generator": {
-          "source": "streamDraw"
+          "source": "StreamDraw"
         },
-        "timing": "event"
+        "timing": "Event"
       }
     }
   ]
 },
   "patterns": [
-    {"name": "solitaireSpiderLength","kind": "int","value": "1","symbols": [{"name": "any","min": 1,"max": 1}],"pattern": {"$type": "star","item": {"$type": "any"}}},
-    {"name": "solitaireSpiderSingle","kind": "int","value": "1","symbols": [{"name": "any","min": 1,"max": 1}],"pattern": {"$type": "any"}},
-    {"name": "solitaireSpiderRun","kind": "int","value": "solitaireSpiderFace[$token] * (1 + (solitaireSpiderRank[$token] == solitaireSpiderRank[$previous] - 1) * (solitaireSpiderSuit[$token] == solitaireSpiderSuit[$previous]))","symbols": [{"name": "face","min": 1,"max": 2},{"name": "next","min": 2,"max": 2}],"pattern": {"$type": "sequence","items": [{"$type": "symbol","name": "face"},{"$type": "star","item": {"$type": "symbol","name": "next"}}]}},
-    {"name": "solitaireSpiderLanding","kind": "int","value": "(solitaireSpiderRank[$token] == solitaireSpiderRank[solitaireSpider[card]] + 1)","symbols": [{"name": "yes","min": 1,"max": 1}],"pattern": {"$type": "sequence","items": [{"$type": "star","item": {"$type": "any"}},{"$type": "symbol","name": "yes"}]}},
-    {"name": "solitaireSpiderComplete","kind": "int","value": "solitaireSpiderFace[$token] * ((solitaireSpiderRank[$token] == 13) + 2 * (solitaireSpiderRank[$token] == solitaireSpiderRank[$previous] - 1) * (solitaireSpiderSuit[$token] == solitaireSpiderSuit[$previous]))","symbols": [{"name": "king","min": 1,"max": 1},{"name": "next","min": 2,"max": 2}],"pattern": {"$type": "sequence","items": [{"$type": "star","item": {"$type": "any"}},{"$type": "symbol","name": "king"},{"$type": "repeat","item": {"$type": "symbol","name": "next"},"min": 12,"max": 12}]}}
+    {"name": "solitaireSpiderLength","kind": "Int","value": "1","symbols": [{"name": "any","min": 1,"max": 1}],"pattern": {"$type": "star","item": {"$type": "any"}}},
+    {"name": "solitaireSpiderSingle","kind": "Int","value": "1","symbols": [{"name": "any","min": 1,"max": 1}],"pattern": {"$type": "any"}},
+    {"name": "solitaireSpiderRun","kind": "Int","value": "solitaireSpiderFace[$token] * (1 + (solitaireSpiderRank[$token] == solitaireSpiderRank[$previous] - 1) * (solitaireSpiderSuit[$token] == solitaireSpiderSuit[$previous]))","symbols": [{"name": "face","min": 1,"max": 2},{"name": "next","min": 2,"max": 2}],"pattern": {"$type": "sequence","items": [{"$type": "symbol","name": "face"},{"$type": "star","item": {"$type": "symbol","name": "next"}}]}},
+    {"name": "solitaireSpiderLanding","kind": "Int","value": "(solitaireSpiderRank[$token] == solitaireSpiderRank[solitaireSpider[card]] + 1)","symbols": [{"name": "yes","min": 1,"max": 1}],"pattern": {"$type": "sequence","items": [{"$type": "star","item": {"$type": "any"}},{"$type": "symbol","name": "yes"}]}},
+    {"name": "solitaireSpiderComplete","kind": "Int","value": "solitaireSpiderFace[$token] * ((solitaireSpiderRank[$token] == 13) + 2 * (solitaireSpiderRank[$token] == solitaireSpiderRank[$previous] - 1) * (solitaireSpiderSuit[$token] == solitaireSpiderSuit[$previous]))","symbols": [{"name": "king","min": 1,"max": 1},{"name": "next","min": 2,"max": 2}],"pattern": {"$type": "sequence","items": [{"$type": "star","item": {"$type": "any"}},{"$type": "symbol","name": "king"},{"$type": "repeat","item": {"$type": "symbol","name": "next"},"min": 12,"max": 12}]}}
   ],
   "rules": [
     {"name": "solitaireSpider-new-deal","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "request","comparison": "NotEqual","comparandState": "solitaireSpider","comparandKey": "applied"},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "action","comparison": "Equal","value": 1},{"$type": "any","predicates": [{"$type": "compareState","state": "solitaireSpider","key": "option","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "option","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "option","comparison": "Equal","value": 4}]}]},"effects": [{"$type": "setState","state": "solitaireSpider","key": "activeOption","expression": "solitaireSpider[option]"},{"$type": "setState","state": "solitaireSpider","key": "stage","value": 1},{"$type": "setState","state": "solitaireSpider","key": "status","value": 0},{"$type": "setState","state": "solitaireSpider","key": "result","value": 0},{"$type": "setState","state": "solitaireSpider","key": "busy","value": 1}]},
@@ -2414,7 +2414,7 @@
     {"name": "solitaireSpider-prepare-move","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "request","comparison": "NotEqual","comparandState": "solitaireSpider","comparandKey": "applied"},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "action","comparison": "Equal","value": 2}]},"effects": [{"$type": "setState","state": "solitaireSpider","key": "sourceOk","value": 0},{"$type": "setState","state": "solitaireSpider","key": "targetOk","value": 0},{"$type": "setState","state": "solitaireSpider","key": "runLength","value": 0}]},
     {"name": "solitaireSpider-source","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "request","comparison": "NotEqual","comparandState": "solitaireSpider","comparandKey": "applied"},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "action","comparison": "Equal","value": 2},{"$type": "compareState","state": "$zones[solitaireSpider[from]]","key": "$cell:solitaireSpider:card","comparison": "Equal","value": 1}]},"effects": [{"$type": "setState","state": "solitaireSpider","key": "sourceOk","expression": "$match:solitaireSpiderRun:$zones[solitaireSpider[from]][solitaireSpider[card]]"},{"$type": "setState","state": "solitaireSpider","key": "runLength","expression": "$match:solitaireSpiderLength:$zones[solitaireSpider[from]]:prefix[solitaireSpider[card]]"}],"zones": ["","","solitaireSpiderPile2","solitaireSpiderPile3","solitaireSpiderPile4","solitaireSpiderPile5","solitaireSpiderPile6","solitaireSpiderPile7","solitaireSpiderPile8","solitaireSpiderPile9","solitaireSpiderPile10","solitaireSpiderPile11"]},
     {"name": "solitaireSpider-target","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "request","comparison": "NotEqual","comparandState": "solitaireSpider","comparandKey": "applied"},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "action","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "sourceOk","comparison": "Equal","value": 1}]},"effects": [{"$type": "setState","state": "solitaireSpider","key": "targetOk","expression": "$reduce:count:$zones[solitaireSpider[to]] == 0 ? 1 : $match:solitaireSpiderLanding:$zones[solitaireSpider[to]]"}],"zones": ["","","solitaireSpiderPile2","solitaireSpiderPile3","solitaireSpiderPile4","solitaireSpiderPile5","solitaireSpiderPile6","solitaireSpiderPile7","solitaireSpiderPile8","solitaireSpiderPile9","solitaireSpiderPile10","solitaireSpiderPile11"]},
-    {"name": "solitaireSpider-move","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "request","comparison": "NotEqual","comparandState": "solitaireSpider","comparandKey": "applied"},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "action","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "sourceOk","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "targetOk","comparison": "Equal","value": 1},{"$type": "compareValue","comparison": "NotEqual","kind": "int","left": "solitaireSpider[from]","right": "solitaireSpider[to]"}]},"effects": [{"$type": "transaction","effects": [{"$type": "transformState","transform": {"$type": "transfer","from": "$zones[solitaireSpider[from]]","to": "$zones[solitaireSpider[to]]","selector": "Slice","key": "$cell:solitaireSpider:card"}},{"$type": "setState","state": "solitaireSpider","key": "moves","expression": "solitaireSpider[moves] + 1"},{"$type": "setState","state": "solitaireSpider","key": "busy","value": 1},{"$type": "setState","state": "solitaireSpider","key": "score","expression": "solitaireSpider[score] - 1"},{"$type": "setState","state": "solitaireSpider","key": "result","value": 1},{"$type": "setState","state": "solitaireSpider","key": "applied","expression": "solitaireSpider[request]"}]}],"zones": ["solitaireSpiderPile0","","solitaireSpiderPile2","solitaireSpiderPile3","solitaireSpiderPile4","solitaireSpiderPile5","solitaireSpiderPile6","solitaireSpiderPile7","solitaireSpiderPile8","solitaireSpiderPile9","solitaireSpiderPile10","solitaireSpiderPile11","solitaireSpiderPile12"]},
+    {"name": "solitaireSpider-move","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "request","comparison": "NotEqual","comparandState": "solitaireSpider","comparandKey": "applied"},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "action","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "sourceOk","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "targetOk","comparison": "Equal","value": 1},{"$type": "compareValue","comparison": "NotEqual","kind": "Int","left": "solitaireSpider[from]","right": "solitaireSpider[to]"}]},"effects": [{"$type": "transaction","effects": [{"$type": "transformState","transform": {"$type": "transfer","from": "$zones[solitaireSpider[from]]","to": "$zones[solitaireSpider[to]]","selector": "Slice","key": "$cell:solitaireSpider:card"}},{"$type": "setState","state": "solitaireSpider","key": "moves","expression": "solitaireSpider[moves] + 1"},{"$type": "setState","state": "solitaireSpider","key": "busy","value": 1},{"$type": "setState","state": "solitaireSpider","key": "score","expression": "solitaireSpider[score] - 1"},{"$type": "setState","state": "solitaireSpider","key": "result","value": 1},{"$type": "setState","state": "solitaireSpider","key": "applied","expression": "solitaireSpider[request]"}]}],"zones": ["solitaireSpiderPile0","","solitaireSpiderPile2","solitaireSpiderPile3","solitaireSpiderPile4","solitaireSpiderPile5","solitaireSpiderPile6","solitaireSpiderPile7","solitaireSpiderPile8","solitaireSpiderPile9","solitaireSpiderPile10","solitaireSpiderPile11","solitaireSpiderPile12"]},
     {"name": "solitaireSpider-draw-start","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "request","comparison": "NotEqual","comparandState": "solitaireSpider","comparandKey": "applied"},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "action","comparison": "Equal","value": 3},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile0","comparison": "GreaterOrEqual","value": 10},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile2","comparison": "Greater","value": 0},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile3","comparison": "Greater","value": 0},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile4","comparison": "Greater","value": 0},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile5","comparison": "Greater","value": 0},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile6","comparison": "Greater","value": 0},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile7","comparison": "Greater","value": 0},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile8","comparison": "Greater","value": 0},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile9","comparison": "Greater","value": 0},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile10","comparison": "Greater","value": 0},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile11","comparison": "Greater","value": 0}]},"effects": [{"$type": "transaction","effects": [{"$type": "setState","state": "solitaireSpider","key": "stage","value": 4},{"$type": "setState","state": "solitaireSpider","key": "busy","value": 1}]}]},
     {"name": "solitaireSpider-draw","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 4},{"$type": "compareState","state": "solitaireSpider","key": "dealStep","comparison": "LessOrEqual","value": 9}]},"effects": [{"$type": "transformState","transform": {"$type": "transfer","from": "solitaireSpiderPile0","to": "$zones[2 + solitaireSpider[dealStep]]","selector": "First"}}],"zones": ["solitaireSpiderPile0","","solitaireSpiderPile2","solitaireSpiderPile3","solitaireSpiderPile4","solitaireSpiderPile5","solitaireSpiderPile6","solitaireSpiderPile7","solitaireSpiderPile8","solitaireSpiderPile9","solitaireSpiderPile10","solitaireSpiderPile11","solitaireSpiderPile12"]},
     {"name": "solitaireSpider-draw-finish","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 4},{"$type": "compareState","state": "solitaireSpider","key": "dealStep","comparison": "Equal","value": 9}]},"effects": [{"$type": "transaction","effects": [{"$type": "setState","state": "solitaireSpider","key": "stage","value": 0},{"$type": "setState","state": "solitaireSpider","key": "moves","expression": "solitaireSpider[moves] + 1"},{"$type": "setState","state": "solitaireSpider","key": "score","expression": "solitaireSpider[score] - 1"},{"$type": "setState","state": "solitaireSpider","key": "result","value": 1},{"$type": "setState","state": "solitaireSpider","key": "applied","expression": "solitaireSpider[request]"}]}]},

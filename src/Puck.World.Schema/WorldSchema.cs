@@ -22,15 +22,20 @@ namespace Puck.World;
 /// own: curated hover text pulled from the XML documentation of this assembly and of <c>Puck.State</c>
 /// (<c>Puck.World.Schema.xml</c> and <c>Puck.State.xml</c> beside it), a <c>type</c>/<c>enum</c> constraint for a member whose <see cref="JsonConverter{T}"/> the exporter cannot
 /// introspect and that opts in via <see cref="IJsonSchemaTypeConverter"/> or
-/// <see cref="IJsonSchemaStringConverter"/> (<see cref="ApplyConverterVocabulary"/>),
-/// the document root's one deliberate strictness exception — the <see cref="WorldDefinition.Extensions"/>
+/// <see cref="IJsonSchemaStringConverter"/> (<see cref="ApplyConverterVocabulary"/>), a whole node — required
+/// members, kind-conditional types, exclusivity rules — for a converter that opts into
+/// <see cref="IJsonSchemaNodeConverter"/>, <c>items</c>/<c>additionalProperties</c> for a collection whose own
+/// element/value type the exporter left unconstrained, a <c>$comment</c> marking a raw <see cref="JsonElement"/>
+/// slot whose shape an id named elsewhere in the document decides, the document root's one deliberate strictness
+/// exception — the <see cref="WorldDefinition.Extensions"/>
 /// round-trip bag, which admits any <c>$</c>/<c>_</c>-prefixed key (<see cref="DocumentExtensionsPolicy"/>) and so
-/// cannot be a flat <c>additionalProperties: false</c> — and the multi-file split: a small root plus one file per
+/// cannot be a flat <c>additionalProperties: false</c> — <c>x-puck</c>/<c>properties.schema.const</c>
+/// self-identification, and the multi-file split: a small root plus one file per
 /// top-level document section under <c>schema/</c>, with every subschema that appears more than once hoisted into
 /// <c>schema/common.schema.json</c> under <c>$defs</c> so a person can open <c>kits.schema.json</c> and read the
 /// schema for the <c>kits</c> section without wading through the other 43.
 /// </summary>
-public static class WorldSchema {
+public static partial class WorldSchema {
     // Below this compact-JSON length, a repeated node is left inlined: the $ref text would cost more than the
     // duplicate content saves, and a two/three-word leaf isn't a "shape" a reader benefits from finding by name.
     private const int HoistMinimumLength = 60;
@@ -206,6 +211,11 @@ public static class WorldSchema {
         if (items["properties"]?["id"] is not JsonObject id) {
             return;
         }
+        // An empty catalog narrows nothing: an "enum"/"allOf" built from zero entries would validate NO document
+        // rather than every document, the opposite of "nothing shipped yet".
+        if (extensions.Count == 0) {
+            return;
+        }
 
         var ids = new JsonArray();
         var arms = new JsonArray();
@@ -247,6 +257,17 @@ public static class WorldSchema {
             obj.ContainsKey(propertyName: "enum") ||
             obj.ContainsKey(propertyName: "anyOf")
         ) {
+            return;
+        }
+
+        // A raw JsonElement slot (render.extensions[].config, probes[].config, metadata.custom's dictionary
+        // values) carries no CLR shape this generator could ever describe — its actual contract is decided by an
+        // id this document names elsewhere (a shipped shader manifest, a probe extension) that this generator has
+        // no way to resolve for an as-yet-unauthored id. Left fully permissive, with a $comment naming why, rather
+        // than narrowed to a shape that would refuse a legitimate payload.
+        if ((Nullable.GetUnderlyingType(nullableType: propertyType) ?? propertyType) == typeof(JsonElement)) {
+            obj["$comment"] = "Open payload: this member's shape is decided by an id named elsewhere in the document, never by this generator.";
+
             return;
         }
 
@@ -1565,6 +1586,14 @@ public static class WorldSchema {
 
         typesByNode[propertyObject] = property.PropertyType;
 
+        ApplyCollectionVocabulary(
+            index: index,
+            nested: nested,
+            obj: propertyObject,
+            propertyType: property.PropertyType,
+            typesByNode: typesByNode
+        );
+
         ApplyConverterVocabulary(
             index: index,
             nested: nested,
@@ -1737,6 +1766,14 @@ public static class WorldSchema {
         }
 
         typesByNode[obj] = context.TypeInfo.Type;
+
+        ApplyCollectionVocabulary(
+            index: index,
+            nested: nested,
+            obj: obj,
+            typeInfo: context.TypeInfo,
+            typesByNode: typesByNode
+        );
 
         ApplyConverterVocabulary(
             index: index,
@@ -2021,6 +2058,11 @@ public static class WorldSchema {
 
         var (merged, typesByNode) = ExportMergedWithTypes();
 
+        ApplySelfIdentification(
+            root: merged,
+            schemaVersion: SchemaId
+        );
+
         ApplyPostRenderExtensions(
             extensions: postRenderExtensions,
             root: merged
@@ -2304,6 +2346,10 @@ public static class WorldSchema {
         ResolveNestedRefs(
             nested: nested,
             root: root
+        );
+        ApplySelfIdentification(
+            root: root,
+            schemaVersion: SiloSchemaId
         );
 
         return root;

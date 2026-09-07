@@ -44,8 +44,14 @@
     </ItemGroup>
     <Target Name="PublishPuckLauncher" AfterTargets="Publish">
         <Copy
+            Condition="'$(OS)' == 'Windows_NT'"
             DestinationFiles="$(PublishDir)puck.exe"
             SourceFiles="$(PublishDir)$(AssemblyName).exe"
+        />
+        <Copy
+            Condition="'$(OS)' != 'Windows_NT'"
+            DestinationFiles="$(PublishDir)puck"
+            SourceFiles="$(PublishDir)$(AssemblyName)"
         />
     </Target>
     <ItemGroup>

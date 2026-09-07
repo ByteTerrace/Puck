@@ -120,7 +120,13 @@
             },
             "deadZone": {
               "description": "Independent X/Y/Z dead zones in radians per second.",
-              "default": null
+              "default": null,
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 3
             },
             "invertX": {
               "description": "Whether the physical X angular-velocity axis is inverted before projection.",
@@ -139,11 +145,23 @@
             },
             "yaw": {
               "description": "The X/Y/Z projection weights producing semantic look-right angular velocity.",
-              "default": null
+              "default": null,
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 3
             },
             "pitch": {
               "description": "The X/Y/Z projection weights producing semantic look-up angular velocity.",
-              "default": null
+              "default": null,
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 3
             }
           },
           "additionalProperties": false,

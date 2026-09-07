@@ -249,7 +249,8 @@
               },
               "config": {
                 "description": "The set\u0027s config values, or null when the manifest declares none or every field has a default. Not validated at document load \u2014 the manifest\u0027s declared config schema validates it at boot (matching Machine\u0027s Options, the identical shallow-then-deep precedent), refusing boot with the set id and reason on a malformed value.",
-                "default": null
+                "default": null,
+                "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
               }
             },
             "required": [
@@ -3750,7 +3751,33 @@
         "networkPlayers": {
           "type": "integer"
         },
-        "defaultPeerSource": {},
+        "defaultPeerSource": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "Live",
+                "Idle"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "$type": {
+                  "const": "producer"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "$type",
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
         "seatSpawns": {
           "type": [
             "array",
@@ -4312,7 +4339,13 @@
                 },
                 "deadZone": {
                   "description": "Independent X/Y/Z dead zones in radians per second.",
-                  "default": null
+                  "default": null,
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
                 },
                 "invertX": {
                   "description": "Whether the physical X angular-velocity axis is inverted before projection.",
@@ -4331,11 +4364,23 @@
                 },
                 "yaw": {
                   "description": "The X/Y/Z projection weights producing semantic look-right angular velocity.",
-                  "default": null
+                  "default": null,
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
                 },
                 "pitch": {
                   "description": "The X/Y/Z projection weights producing semantic look-up angular velocity.",
-                  "default": null
+                  "default": null,
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
                 }
               },
               "additionalProperties": false,
@@ -6981,7 +7026,10 @@
         },
         "rows": {
           "description": "Gets the authored row-name view. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
-          "type": "array"
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -8230,7 +8278,1046 @@
             "type": "string"
           },
           "document": {
-            "description": "The canonical (validated \u002B normalized) creation document."
+            "description": "The canonical (validated \u002B normalized) creation document.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "name": true,
+              "palette": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "color": {
+                      "type": "string"
+                    },
+                    "emissive": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "specular": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "shininess": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "color"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "shapes": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "name": true,
+                    "type": {
+                      "enum": [
+                        "Sphere",
+                        "Box",
+                        "Torus",
+                        "Cylinder",
+                        "Capsule",
+                        "Ellipsoid",
+                        "RoundCone",
+                        "Plane",
+                        "Cone"
+                      ]
+                    },
+                    "position": true,
+                    "rotation": true,
+                    "scale": true,
+                    "material": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "blend": {
+                      "enum": [
+                        "Union",
+                        "SmoothUnion",
+                        "Subtraction",
+                        "Intersection",
+                        "Xor",
+                        "SmoothIntersection",
+                        "SmoothSubtraction",
+                        "ChamferUnion",
+                        "ChamferIntersection",
+                        "ChamferSubtraction",
+                        null
+                      ]
+                    },
+                    "smooth": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "group": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "twist": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "onion": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "bend": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "dilate": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "domain": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "required": [
+                          "$type"
+                        ],
+                        "anyOf": [
+                          {
+                            "properties": {
+                              "$type": {
+                                "const": "symmetry"
+                              },
+                              "normal": true,
+                              "offset": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ],
+                                "default": null
+                              }
+                            },
+                            "required": [
+                              "normal"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "properties": {
+                              "$type": {
+                                "const": "repeat"
+                              },
+                              "spacing": true,
+                              "limit": {
+                                "default": null
+                              }
+                            },
+                            "required": [
+                              "spacing"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "properties": {
+                              "$type": {
+                                "const": "polar"
+                              },
+                              "count": {
+                                "type": "integer"
+                              },
+                              "axis": {
+                                "enum": [
+                                  "X",
+                                  "Y",
+                                  "Z",
+                                  null
+                                ],
+                                "default": null
+                              },
+                              "mirror": {
+                                "type": [
+                                  "boolean",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "materialStride": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "default": null
+                              }
+                            },
+                            "required": [
+                              "count"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "properties": {
+                              "$type": {
+                                "const": "wallpaper"
+                              },
+                              "group": {
+                                "enum": [
+                                  "P1",
+                                  "P2",
+                                  "Pm",
+                                  "Pg",
+                                  "Cm",
+                                  "Pmm",
+                                  "Pmg",
+                                  "Pgg",
+                                  "Cmm",
+                                  "P4",
+                                  "P4M",
+                                  "P4G",
+                                  "P3",
+                                  "P3M1",
+                                  "P31M",
+                                  "P6",
+                                  "P6M"
+                                ]
+                              },
+                              "cell": true,
+                              "limit": {
+                                "default": null
+                              },
+                              "plane": {
+                                "enum": [
+                                  "XZ",
+                                  "XY",
+                                  "YZ",
+                                  null
+                                ],
+                                "default": null
+                              },
+                              "materialStride": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "lodDistance": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ],
+                                "default": null
+                              }
+                            },
+                            "required": [
+                              "group",
+                              "cell"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "default": null
+                    },
+                    "swings": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "driver": {
+                            "type": "string"
+                          },
+                          "pivot": true,
+                          "axis": true,
+                          "amplitude": true,
+                          "phase": {
+                            "default": null
+                          },
+                          "wave": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "default": null
+                          }
+                        },
+                        "required": [
+                          "driver",
+                          "pivot",
+                          "axis",
+                          "amplitude"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": null
+                    },
+                    "slides": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "driver": {
+                            "type": "string"
+                          },
+                          "axis": true,
+                          "amplitude": true,
+                          "phase": {
+                            "default": null
+                          },
+                          "wave": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "default": null
+                          }
+                        },
+                        "required": [
+                          "driver",
+                          "axis",
+                          "amplitude"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": null
+                    },
+                    "parent": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "joint": {
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "type",
+                    "position",
+                    "rotation",
+                    "scale"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "frames": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "transforms": {
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "position": true,
+                          "rotation": true,
+                          "scale": true
+                        },
+                        "required": [
+                          "id",
+                          "position",
+                          "rotation",
+                          "scale"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "transforms"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "chains": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "shapes": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    },
+                    "kind": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "goal": true,
+                    "pole": true
+                  },
+                  "required": [
+                    "id",
+                    "shapes"
+                  ],
+                  "additionalProperties": false
+                },
+                "default": null
+              },
+              "cameras": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "shapeId": {
+                      "type": "integer"
+                    },
+                    "position": true,
+                    "yaw": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "pitch": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "fov": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "focus": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "feed": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "shapeId",
+                    "position"
+                  ],
+                  "additionalProperties": false
+                },
+                "default": null
+              },
+              "behavior": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "locomotion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "faces": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "shapeId": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "defaultSource": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "sounds": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "shapeId": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "patch": {
+                          "type": "object",
+                          "properties": {
+                            "schema": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "name": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "oscillator": {
+                              "enum": [
+                                "Pulse",
+                                "Saw",
+                                "Triangle",
+                                "Sine",
+                                "Noise",
+                                null
+                              ]
+                            },
+                            "dutyThousandths": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "polynomial": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "attackFrames": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "decayFrames": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "sustainThousandths": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "releaseFrames": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "pitchMillihertz": {
+                              "type": "integer"
+                            },
+                            "sweepMillihertzPerFrame": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ],
+                              "default": null
+                            },
+                            "vibratoDepthMillihertz": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ],
+                              "default": null
+                            },
+                            "vibratoRateMillihertz": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ],
+                              "default": null
+                            },
+                            "durationFrames": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ],
+                              "default": null
+                            }
+                          },
+                          "required": [
+                            "pitchMillihertz"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "level": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "radius": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "patch"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "default": null
+                  }
+                },
+                "additionalProperties": false,
+                "default": null
+              },
+              "textRuns": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "position": true,
+                    "rotation": true,
+                    "emHeight": {
+                      "type": "number"
+                    },
+                    "depth": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "mode": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "material": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "font": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "maxWidth": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "align": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "tracking": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "lineSpacing": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "shapeId": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "text",
+                    "position",
+                    "rotation",
+                    "emHeight"
+                  ],
+                  "additionalProperties": false
+                },
+                "default": null
+              },
+              "parts": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "shapeId": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "shapeId"
+                  ],
+                  "additionalProperties": false
+                },
+                "default": null
+              },
+              "noise": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "frequency": {
+                    "type": "number"
+                  },
+                  "amplitude": {
+                    "type": "number"
+                  },
+                  "octaves": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "gain": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "lacunarity": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "seed": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "frequency",
+                  "amplitude"
+                ],
+                "additionalProperties": false,
+                "default": null
+              },
+              "drivers": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "signal": {
+                      "type": "string"
+                    },
+                    "cadence": true,
+                    "when": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "signal",
+                    "cadence"
+                  ],
+                  "additionalProperties": false
+                },
+                "default": null
+              },
+              "effectors": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "chain": {
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "tip": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string"
+                        },
+                        "direction": {
+                          "default": null
+                        },
+                        "reach": {
+                          "default": null
+                        },
+                        "standoff": {
+                          "default": null
+                        },
+                        "index": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "offset": {
+                          "default": null
+                        },
+                        "reference": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "when": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "default": null
+                    },
+                    "weight": {
+                      "default": null
+                    },
+                    "plant": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "driver": {
+                          "type": "string"
+                        },
+                        "window": true
+                      },
+                      "required": [
+                        "driver",
+                        "window"
+                      ],
+                      "additionalProperties": false,
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "chain",
+                    "tip",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                },
+                "default": null
+              }
+            },
+            "additionalProperties": false,
+            "$id": "puck.creation.v1"
           },
           "hash": {
             "description": "The SHA-256 hex64 of the document\u0027s canonical bytes (Hash on the canonical result the compose boundary produces). ABSENT resolves to the hash computed from Document at load \u2014 an author never writes a content hash by hand; see Hash.",
@@ -8391,7 +9478,32 @@
                 ]
               },
               "source": {
-                "description": "The live, idle, or named producer source the bodies wake on."
+                "description": "The live, idle, or named producer source the bodies wake on.",
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "Live",
+                      "Idle"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "$type": {
+                        "const": "producer"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "$type",
+                      "name"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
               },
               "count": {
                 "description": "How many bodies, bounded by the world\u0027s authored peer capacity.",
@@ -12609,7 +13721,7 @@
                           "default": null
                         },
                         "valueSeconds": {
-                          "description": "An alternative to Value for a kind=int state row a companion CountdownState effect decrements once per simulation tick (a countdown/cooldown). Authored in seconds \u2014 a physical unit, not a tick count, so a document\u0027s rate can change without silently retuning every cooldown \u2014 and converted once at rule compile time to an exact whole engine-tick count via TryDurationEngineTicksExact, never re-derived at runtime and never rounded: a duration that is not an exact whole engine-tick count is refused rather than silently rounded away (DurationNotExactEngineTicks). Typed Decimal rather than float because JSON deserializes a number token to Decimal exactly (base-10, no binary-float intermediate), and most terminating decimals \u2014 the only ones an author can spell \u2014 have no exact binary float or fixed-point spelling either.",
+                          "description": "An alternative to Value for a kind=Int state row a companion CountdownState effect decrements once per simulation tick (a countdown/cooldown). Authored in seconds \u2014 a physical unit, not a tick count, so a document\u0027s rate can change without silently retuning every cooldown \u2014 and converted once at rule compile time to an exact whole engine-tick count via TryDurationEngineTicksExact, never re-derived at runtime and never rounded: a duration that is not an exact whole engine-tick count is refused rather than silently rounded away (DurationNotExactEngineTicks). Typed Decimal rather than float because JSON deserializes a number token to Decimal exactly (base-10, no binary-float intermediate), and most terminating decimals \u2014 the only ones an author can spell \u2014 have no exact binary float or fixed-point spelling either.",
                           "type": [
                             "number",
                             "null"
@@ -12617,7 +13729,7 @@
                           "default": null
                         },
                         "text": {
-                          "description": "The literal a kind=text state row\u0027s cell takes \u2014 the fourth spelling beside Value/FromState/ValueSeconds, exactly one authored. Every state-bound document value re-resolves on the write, so this is how a rule restyles what a state-bound document row names.",
+                          "description": "The literal a kind=Text state row\u0027s cell takes \u2014 the fourth spelling beside Value/FromState/ValueSeconds, exactly one authored. Every state-bound document value re-resolves on the write, so this is how a rule restyles what a state-bound document row names.",
                           "type": [
                             "string",
                             "null"
@@ -13180,7 +14292,7 @@
                       "additionalProperties": false
                     },
                     {
-                      "description": "Decrements a state countdown by the current simulation step\u0027s engine-tick width, saturating at zero. The destination must be a kind=int nonNegative=true row. Unlike an authored AddState constant, this effect consumes the runtime step width, so changing the document\u0027s authored tick rate never retunes the duration. When the remaining duration is shorter than one step, the computed decrement is exactly the remaining value; it reaches zero without asking the explicit-write door to admit a negative candidate.",
+                      "description": "Decrements a state countdown by the current simulation step\u0027s engine-tick width, saturating at zero. The destination must be a kind=Int nonNegative=true row. Unlike an authored AddState constant, this effect consumes the runtime step width, so changing the document\u0027s authored tick rate never retunes the duration. When the remaining duration is shorter than one step, the computed decrement is exactly the remaining value; it reaches zero without asking the explicit-write door to admit a negative candidate.",
                       "properties": {
                         "$type": {
                           "const": "countdownState"

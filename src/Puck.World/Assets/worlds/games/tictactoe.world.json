@@ -432,84 +432,84 @@
           "$type": "cellsOf",
           "topology": "tttCube"
         },
-        "kind": "int",
+        "kind": "Int",
         "name": "tttBoard"
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 2,
         "min": 1,
         "name": "tttActive",
         "value": 1
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 63,
         "min": -1,
         "name": "tttMoveCell",
         "value": -1
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "name": "tttMoveRequest",
         "nonNegative": true,
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "name": "tttMoveApplied",
         "nonNegative": true,
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "name": "tttBoardVersion",
         "nonNegative": true,
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "name": "tttWinCheckVersion",
         "nonNegative": true,
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 3,
         "min": 0,
         "name": "tttWinner",
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 64,
         "min": 0,
         "name": "tttMoveCount",
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 1,
         "min": 0,
         "name": "tttXWin",
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 1,
         "min": 0,
         "name": "tttOWin",
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 9223372036854775807,
         "min": -9223372036854775808,
         "name": "tttMaskX",
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 9223372036854775807,
         "min": -9223372036854775808,
         "name": "tttMaskO",

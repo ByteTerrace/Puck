@@ -962,7 +962,7 @@
           "$type": "cellsOf",
           "topology": "mancalaBoard"
         },
-        "kind": "int",
+        "kind": "Int",
         "name": "mancalaBoard"
       },
       {
@@ -1028,64 +1028,64 @@
           "$type": "cellsOf",
           "topology": "mancalaBoard"
         },
-        "kind": "int",
+        "kind": "Int",
         "name": "mancalaPitIndex"
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 1,
         "min": 0,
         "name": "mancalaTurn",
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 13,
         "min": -1,
         "name": "mancalaSelectedPit",
         "value": -1
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "name": "mancalaMoveRequest",
         "nonNegative": true,
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "name": "mancalaMoveApplied",
         "nonNegative": true,
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 3,
         "min": 0,
         "name": "mancalaStatus",
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "name": "mancalaPitSeeds",
         "nonNegative": true,
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 13,
         "min": -1,
         "name": "mancalaLastPit",
         "value": -1
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 1,
         "min": 0,
         "name": "mancalaExtraTurn",
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 5,
         "min": 0,
         "name": "mancalaStage",

@@ -164,7 +164,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         }
 
         if (!row.IsSlot) {
-            return new CommandResult(Output: $"[identity.state: {id}.{rowName} kind={row.Kind.ToString().ToLowerInvariant()} cells={(row.Cells?.Count ?? 0)}]");
+            return new CommandResult(Output: $"[identity.state: {id}.{rowName} kind={StateSpelling.Kind(kind: row.Kind)} cells={(row.Cells?.Count ?? 0)}]");
         }
 
         var cell = row.Cells![0];
@@ -173,7 +173,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             : cell.Value.ToString(provider: CultureInfo.InvariantCulture)
         );
 
-        return new CommandResult(Output: $"[identity.state: {id}.{rowName} kind={row.Kind.ToString().ToLowerInvariant()} value={value}]");
+        return new CommandResult(Output: $"[identity.state: {id}.{rowName} kind={StateSpelling.Kind(kind: row.Kind)} value={value}]");
     }
     private string DescribeWriteback() {
         if (m_worlds.LastReceipt is not { } receipt) {

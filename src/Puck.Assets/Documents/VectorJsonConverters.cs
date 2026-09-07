@@ -1,8 +1,21 @@
 using System.Numerics;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
 
 namespace Puck.Assets.Documents;
+
+/// <summary>The fixed-arity number-array schema a vector converter reads/writes.</summary>
+public static class FixedArityNumberArraySchema {
+    /// <summary>Builds <c>{"type":"array","items":{"type":"number"},"minItems":arity,"maxItems":arity}</c>.</summary>
+    public static JsonObject Build(int arity) => new() {
+        ["type"] = "array",
+        ["items"] = new JsonObject { ["type"] = "number" },
+        ["minItems"] = arity,
+        ["maxItems"] = arity,
+    };
+}
 
 /// <summary>The one array-element reader every fixed-arity numeric-array converter in the document graph shares.</summary>
 public static class JsonComponentReader {
@@ -45,7 +58,9 @@ public static class JsonComponentReader {
 /// failures, by name; STJ appends the offending JSON path to the exception when it propagates, so the refusal names
 /// both what shape was expected and where the document went wrong.
 /// </summary>
-public sealed class Vector2JsonConverter : JsonConverter<Vector2> {
+public sealed class Vector2JsonConverter : JsonConverter<Vector2>, IJsonSchemaNodeConverter {
+    /// <inheritdoc/>
+    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) => FixedArityNumberArraySchema.Build(arity: 2);
     /// <inheritdoc/>
     public override Vector2 Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if (reader.TokenType != JsonTokenType.StartArray) {
@@ -81,7 +96,9 @@ public sealed class Vector2JsonConverter : JsonConverter<Vector2> {
 /// creation shapes, chain goals/poles, camera offsets, text-run positions, …). See <see cref="Vector2JsonConverter"/>'s
 /// remarks for the arity/object-form refusal posture, which this converter shares exactly.
 /// </summary>
-public sealed class Vector3JsonConverter : JsonConverter<Vector3> {
+public sealed class Vector3JsonConverter : JsonConverter<Vector3>, IJsonSchemaNodeConverter {
+    /// <inheritdoc/>
+    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) => FixedArityNumberArraySchema.Build(arity: 3);
     /// <inheritdoc/>
     public override Vector3 Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if (reader.TokenType != JsonTokenType.StartArray) {
@@ -122,7 +139,9 @@ public sealed class Vector3JsonConverter : JsonConverter<Vector3> {
 /// <c>IncludeFields</c>) is refused outright, matching <see cref="Vector3JsonConverter"/>'s posture exactly: wrong
 /// arity and the object form are both hard parse failures, by name, with the offending JSON path appended by STJ.
 /// </summary>
-public sealed class QuaternionJsonConverter : JsonConverter<Quaternion> {
+public sealed class QuaternionJsonConverter : JsonConverter<Quaternion>, IJsonSchemaNodeConverter {
+    /// <inheritdoc/>
+    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) => FixedArityNumberArraySchema.Build(arity: 4);
     /// <inheritdoc/>
     public override Quaternion Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if (reader.TokenType != JsonTokenType.StartArray) {

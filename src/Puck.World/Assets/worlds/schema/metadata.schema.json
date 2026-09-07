@@ -73,7 +73,10 @@
         "object",
         "null"
       ],
-      "default": null
+      "default": null,
+      "additionalProperties": {
+        "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
+      }
     }
   },
   "additionalProperties": false,

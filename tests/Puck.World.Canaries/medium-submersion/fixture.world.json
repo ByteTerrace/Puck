@@ -50,7 +50,7 @@
     "world": [
       {
         "name": "water",
-        "kind": "fixed",
+        "kind": "Fixed",
         "field": {
           "initial": 1,
           "min": 0,

@@ -83,7 +83,7 @@
   },
   "patterns": [
     {
-      "kind": "int",
+      "kind": "Int",
       "name": "chessRayEmpty",
       "pattern": {
         "$type": "star",
@@ -2576,7 +2576,7 @@
           "transform": {
             "$type": "boardCombine",
             "left": "board",
-            "operation": "copy",
+            "operation": "Copy",
             "row": "lastLegal"
           }
         }
@@ -2611,37 +2611,37 @@
       "bindings": [
         {
           "expression": "turn == 0 ? $board:mask:lastLegal:1:6 : $board:mask:lastLegal:-6:-1",
-          "kind": "int",
+          "kind": "Int",
           "name": "ownBefore"
         },
         {
           "expression": "turn == 0 ? $board:mask:board:1:6 : $board:mask:board:-6:-1",
-          "kind": "int",
+          "kind": "Int",
           "name": "ownAfter"
         },
         {
           "expression": "$bind:ownBefore & ~($board:mask:board:1:6 | $board:mask:board:-6:-1)",
-          "kind": "int",
+          "kind": "Int",
           "name": "sources"
         },
         {
           "expression": "$bind:ownAfter & ~$bind:ownBefore",
-          "kind": "int",
+          "kind": "Int",
           "name": "destinations"
         },
         {
           "expression": "turn == 0 ? $board:mask:lastLegal:6:6 : $board:mask:lastLegal:-6:-6",
-          "kind": "int",
+          "kind": "Int",
           "name": "kingBefore"
         },
         {
           "expression": "turn == 0 ? $board:mask:board:6:6 : $board:mask:board:-6:-6",
-          "kind": "int",
+          "kind": "Int",
           "name": "kingAfter"
         },
         {
           "expression": "($bind:sources & $bind:kingBefore) != 0 ? $bind:destinations & $bind:kingAfter : $bind:destinations",
-          "kind": "int",
+          "kind": "Int",
           "name": "target"
         }
       ],
@@ -2672,12 +2672,12 @@
       "bindings": [
         {
           "expression": "lastLegal[move[from]]",
-          "kind": "int",
+          "kind": "Int",
           "name": "mover"
         },
         {
           "expression": "(move[from] < 0) | (move[to] < 0) | (move[to] > 63) ? 0 : (abs($bind:mover) == 6) & (abs(move[to] - move[from]) == 2) ? 4 : (abs($bind:mover) == 1) & (((move[from] ^ move[to]) & 7) != 0) & (lastLegal[move[to]] == 0) ? 3 : lastLegal[move[to]] != 0 ? 2 : 1",
-          "kind": "int",
+          "kind": "Int",
           "name": "kind"
         }
       ],
@@ -2714,52 +2714,52 @@
       "bindings": [
         {
           "expression": "(($board:mask:board:-3:-2 | $board:mask:board:1:2 | $board:mask:board:5:6) ^ ($board:mask:lastLegal:-3:-2 | $board:mask:lastLegal:1:2 | $board:mask:lastLegal:5:6)) | (($board:mask:board:-5:-3 | $board:mask:board:2:5) ^ ($board:mask:lastLegal:-5:-3 | $board:mask:lastLegal:2:5)) | (($board:mask:board:-4:3) ^ ($board:mask:lastLegal:-4:3)) | (($board:mask:board:0:7) ^ ($board:mask:lastLegal:0:7))",
-          "kind": "int",
+          "kind": "Int",
           "name": "changed"
         },
         {
           "expression": "move[from]",
-          "kind": "int",
+          "kind": "Int",
           "name": "from"
         },
         {
           "expression": "move[to]",
-          "kind": "int",
+          "kind": "Int",
           "name": "to"
         },
         {
           "expression": "1 - 2 * turn",
-          "kind": "int",
+          "kind": "Int",
           "name": "sign"
         },
         {
           "expression": "move[kind] == 4 ? ($bind:from & 56) + ($bind:to > $bind:from ? 7 : 0) : move[kind] == 3 ? $bind:to - 8 * $bind:sign : -1",
-          "kind": "int",
+          "kind": "Int",
           "name": "clear"
         },
         {
           "expression": "move[kind] == 4 ? (($bind:from + $bind:to) >> 1) : -1",
-          "kind": "int",
+          "kind": "Int",
           "name": "rook"
         },
         {
           "expression": "($bind:clear >= 0) & ($bind:clear < 64) & ($bind:clear != $bind:from) & ($bind:clear != $bind:to)",
-          "kind": "int",
+          "kind": "Int",
           "name": "clearUnique"
         },
         {
           "expression": "($bind:rook >= 0) & ($bind:rook < 64) & ($bind:rook != $bind:from) & ($bind:rook != $bind:to) & ($bind:rook != $bind:clear)",
-          "kind": "int",
+          "kind": "Int",
           "name": "rookUnique"
         },
         {
           "expression": "(($bind:from >= 0) * (1 << max($bind:from, 0))) | (($bind:to >= 0) * (1 << max($bind:to, 0))) | ($bind:clearUnique * (1 << clamp($bind:clear, 0, 63))) | ($bind:rookUnique * (1 << clamp($bind:rook, 0, 63)))",
-          "kind": "int",
+          "kind": "Int",
           "name": "footprint"
         },
         {
           "expression": "(abs(move[mover]) == 1) & ($bind:to / 8 == (turn == 0 ? 7 : 0)) ? board[move[to]] : move[mover]",
-          "kind": "int",
+          "kind": "Int",
           "name": "landed"
         }
       ],
@@ -2836,37 +2836,37 @@
       "bindings": [
         {
           "expression": "1 - 2 * turn",
-          "kind": "int",
+          "kind": "Int",
           "name": "sign"
         },
         {
           "expression": "4 + 56 * turn",
-          "kind": "int",
+          "kind": "Int",
           "name": "home"
         },
         {
           "expression": "move[to] > move[from] ? 1 : -1",
-          "kind": "int",
+          "kind": "Int",
           "name": "direction"
         },
         {
           "expression": "$bind:home + ($bind:direction == 1 ? 3 : -4)",
-          "kind": "int",
+          "kind": "Int",
           "name": "rook"
         },
         {
           "expression": "($bind:direction == 1 ? 2 : 1) << (2 * turn)",
-          "kind": "int",
+          "kind": "Int",
           "name": "right"
         },
         {
           "expression": "$bind:direction == 1 ? $match:chessRayEmpty:lastLegal:E:cell[move[from]] : $match:chessRayEmpty:lastLegal:W:cell[move[from]]",
-          "kind": "int",
+          "kind": "Int",
           "name": "path"
         },
         {
           "expression": "turn == 0 ? ($bind:direction == 1 ? castleTransitAttacked[wk] : castleTransitAttacked[wq]) : ($bind:direction == 1 ? castleTransitAttacked[bk] : castleTransitAttacked[bq])",
-          "kind": "int",
+          "kind": "Int",
           "name": "attacked"
         }
       ],
@@ -2890,37 +2890,37 @@
       "bindings": [
         {
           "expression": "abs(move[mover])",
-          "kind": "int",
+          "kind": "Int",
           "name": "piece"
         },
         {
           "expression": "abs(move[to] % 8 - move[from] % 8)",
-          "kind": "int",
+          "kind": "Int",
           "name": "dx"
         },
         {
           "expression": "(move[to] / 8 - move[from] / 8) * (1 - 2 * turn)",
-          "kind": "int",
+          "kind": "Int",
           "name": "dy"
         },
         {
           "expression": "max(max(max($match:chessRayEmpty:lastLegal:N:cell[move[to]] == move[from], $match:chessRayEmpty:lastLegal:S:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:E:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:W:cell[move[to]] == move[from])",
-          "kind": "int",
+          "kind": "Int",
           "name": "straight"
         },
         {
           "expression": "max(max(max($match:chessRayEmpty:lastLegal:NE:cell[move[to]] == move[from], $match:chessRayEmpty:lastLegal:SE:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:SW:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:NW:cell[move[to]] == move[from])",
-          "kind": "int",
+          "kind": "Int",
           "name": "diagonal"
         },
         {
           "expression": "move[from] + 8 * (1 - 2 * turn)",
-          "kind": "int",
+          "kind": "Int",
           "name": "middle"
         },
         {
           "expression": "($bind:dx == 0) & (lastLegal[move[to]] == 0) & max($bind:dy == 1, ($bind:dy == 2) & (move[from] / 8 == (turn == 0 ? 1 : 6)) & (lastLegal[($bind:middle)] == 0)) | ($bind:dx == 1) & ($bind:dy == 1) & max(move[kind] == 2, (move[kind] == 3) & (move[to] == enPassantTarget) & (move[captured] == 2 * turn - 1))",
-          "kind": "int",
+          "kind": "Int",
           "name": "pawn"
         }
       ],
@@ -2944,42 +2944,42 @@
       "bindings": [
         {
           "expression": "lowestSetBit($board:mask:board:6:6)",
-          "kind": "int",
+          "kind": "Int",
           "name": "kingMask"
         },
         {
           "expression": "$bind:kingMask == 0 ? -1 : trailingZeroCount($bind:kingMask)",
-          "kind": "int",
+          "kind": "Int",
           "name": "kingSquare"
         },
         {
           "expression": "boardShift($bind:kingMask, chessBoard, E) | boardShift($bind:kingMask, chessBoard, W)",
-          "kind": "int",
+          "kind": "Int",
           "name": "nearFiles"
         },
         {
           "expression": "(boardShift($bind:nearFiles, chessBoard, E) | boardShift($bind:nearFiles, chessBoard, W)) & ~$bind:kingMask",
-          "kind": "int",
+          "kind": "Int",
           "name": "farFiles"
         },
         {
           "expression": "$bind:kingMask | $bind:nearFiles",
-          "kind": "int",
+          "kind": "Int",
           "name": "kingBand"
         },
         {
           "expression": "((boardShift($bind:nearFiles, chessBoard, S) & $board:mask:board:-1:-1) | (($bind:kingBand | boardShift($bind:kingBand, chessBoard, S) | boardShift($bind:kingBand, chessBoard, N)) & $board:mask:board:-6:-6)) != 0",
-          "kind": "int",
+          "kind": "Int",
           "name": "closeHit"
         },
         {
           "expression": "((boardShift(boardShift($bind:nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift($bind:nearFiles, chessBoard, N), chessBoard, N) | boardShift($bind:farFiles, chessBoard, S) | boardShift($bind:farFiles, chessBoard, N)) & $board:mask:board:-2:-2) != 0",
-          "kind": "int",
+          "kind": "Int",
           "name": "knightHit"
         },
         {
           "expression": "($bind:kingMask != 0) & (`$board:attacks:board:-5:-4:N,S,E,W`[($bind:kingSquare)] | `$board:attacks:board:-3:-3:NE,SE,SW,NW`[($bind:kingSquare)] | `$board:attacks:board:-5:-5:NE,SE,SW,NW`[($bind:kingSquare)])",
-          "kind": "int",
+          "kind": "Int",
           "name": "slideHit"
         }
       ],
@@ -3004,42 +3004,42 @@
       "bindings": [
         {
           "expression": "lowestSetBit($board:mask:board:-6:-6)",
-          "kind": "int",
+          "kind": "Int",
           "name": "kingMask"
         },
         {
           "expression": "$bind:kingMask == 0 ? -1 : trailingZeroCount($bind:kingMask)",
-          "kind": "int",
+          "kind": "Int",
           "name": "kingSquare"
         },
         {
           "expression": "boardShift($bind:kingMask, chessBoard, E) | boardShift($bind:kingMask, chessBoard, W)",
-          "kind": "int",
+          "kind": "Int",
           "name": "nearFiles"
         },
         {
           "expression": "(boardShift($bind:nearFiles, chessBoard, E) | boardShift($bind:nearFiles, chessBoard, W)) & ~$bind:kingMask",
-          "kind": "int",
+          "kind": "Int",
           "name": "farFiles"
         },
         {
           "expression": "$bind:kingMask | $bind:nearFiles",
-          "kind": "int",
+          "kind": "Int",
           "name": "kingBand"
         },
         {
           "expression": "((boardShift($bind:nearFiles, chessBoard, N) & $board:mask:board:1:1) | (($bind:kingBand | boardShift($bind:kingBand, chessBoard, S) | boardShift($bind:kingBand, chessBoard, N)) & $board:mask:board:6:6)) != 0",
-          "kind": "int",
+          "kind": "Int",
           "name": "closeHit"
         },
         {
           "expression": "((boardShift(boardShift($bind:nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift($bind:nearFiles, chessBoard, N), chessBoard, N) | boardShift($bind:farFiles, chessBoard, S) | boardShift($bind:farFiles, chessBoard, N)) & $board:mask:board:2:2) != 0",
-          "kind": "int",
+          "kind": "Int",
           "name": "knightHit"
         },
         {
           "expression": "($bind:kingMask != 0) & (`$board:attacks:board:4:5:N,S,E,W`[($bind:kingSquare)] | `$board:attacks:board:3:3:NE,SE,SW,NW`[($bind:kingSquare)] | `$board:attacks:board:5:5:NE,SE,SW,NW`[($bind:kingSquare)])",
-          "kind": "int",
+          "kind": "Int",
           "name": "slideHit"
         }
       ],
@@ -3110,22 +3110,22 @@
       "bindings": [
         {
           "expression": "1 - 2 * turn",
-          "kind": "int",
+          "kind": "Int",
           "name": "sign"
         },
         {
           "expression": "(abs(move[mover]) == 1) & (move[to] / 8 == (turn == 0 ? 7 : 0))",
-          "kind": "int",
+          "kind": "Int",
           "name": "promotes"
         },
         {
           "expression": "$bind:promotes ? (board[move[to]] * $bind:sign >= 2) & (board[move[to]] * $bind:sign <= 5) : board[move[to]] == move[mover]",
-          "kind": "int",
+          "kind": "Int",
           "name": "replacement"
         },
         {
           "expression": "(popCount($board:mask:board:6:6) == 1) & (popCount($board:mask:board:-6:-6) == 1)",
-          "kind": "int",
+          "kind": "Int",
           "name": "kings"
         }
       ],
@@ -3184,7 +3184,7 @@
           {
             "$type": "compareValue",
             "comparison": "Equal",
-            "kind": "int",
+            "kind": "Int",
             "left": "(abs(move[mover]) == 1) & (move[to] / 8 == (turn == 0 ? 7 : 0)) & (board[move[to]] == move[mover]) & shapeLegal & (boardMismatch == 0) & (boardCollisions == 0) & (inCheck[turn[$value]] == 0) & (popCount($board:mask:board:6:6) == 1) & (popCount($board:mask:board:-6:-6) == 1)",
             "right": "1"
           }
@@ -3208,7 +3208,7 @@
               "transform": {
                 "$type": "boardCombine",
                 "left": "board",
-                "operation": "copy",
+                "operation": "Copy",
                 "row": "lastLegal"
               }
             },
@@ -3278,12 +3278,12 @@
       "bindings": [
         {
           "expression": "(($board:mask:lastLegal:4:4 & ~$board:mask:board:4:4) & 0x81) | (($board:mask:lastLegal:-4:-4 & ~$board:mask:board:-4:-4) & (0x81 << 56))",
-          "kind": "int",
+          "kind": "Int",
           "name": "lostRooks"
         },
         {
           "expression": "(($board:mask:lastLegal:6:6 & ~$board:mask:board:6:6) & (1 << 4)) | (($board:mask:lastLegal:-6:-6 & ~$board:mask:board:-6:-6) & (1 << 60))",
-          "kind": "int",
+          "kind": "Int",
           "name": "lostKings"
         }
       ]
@@ -3458,7 +3458,7 @@
           "$type": "cellsOf",
           "topology": "chessBoard"
         },
-        "kind": "int",
+        "kind": "Int",
         "max": 6,
         "min": -6,
         "name": "board",
@@ -3731,7 +3731,7 @@
           "$type": "cellsOf",
           "topology": "chessBoard"
         },
-        "kind": "int",
+        "kind": "Int",
         "max": 6,
         "min": -6,
         "name": "lastLegal"
@@ -3742,25 +3742,25 @@
           "$type": "cellsOf",
           "topology": "chessBoard"
         },
-        "kind": "int",
+        "kind": "Int",
         "name": "plan"
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 1,
         "min": 0,
         "name": "turn",
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 1,
         "min": 0,
         "name": "verdict",
         "value": 1
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 50400,
         "min": 0,
         "name": "illegalCount",
@@ -3768,14 +3768,14 @@
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 60,
         "min": 0,
         "name": "settleHold",
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 1,
         "min": 0,
         "name": "gameStarted",
@@ -3792,7 +3792,7 @@
             "value": "#2B2420"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "pieceSetColors"
       },
       {
@@ -3819,7 +3819,7 @@
             "value": -1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 63,
         "min": -6,
         "name": "move"
@@ -3956,7 +3956,7 @@
             "value": -4
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 6,
         "min": -6,
         "name": "pieceCode"
@@ -4093,7 +4093,7 @@
             "value": -1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 63,
         "min": -1,
         "name": "pieceCell"
@@ -4110,7 +4110,7 @@
             "value": -1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 63,
         "min": -1,
         "name": "promotionPending"
@@ -4122,7 +4122,7 @@
             "value": -1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 63,
         "min": -1,
         "name": "enPassantTarget"
@@ -4139,7 +4139,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 1,
         "min": 0,
         "name": "inCheck"
@@ -4150,7 +4150,7 @@
           "capacity": 12,
           "empty": -1
         },
-        "kind": "int",
+        "kind": "Int",
         "name": "boardHistory"
       },
       {
@@ -4160,7 +4160,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 12,
         "min": 0,
         "name": "repetitionCount"
@@ -4172,7 +4172,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 1,
         "min": 0,
         "name": "shapeLegal"
@@ -4184,7 +4184,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 1,
         "min": 0,
         "name": "castleLegal"
@@ -4200,11 +4200,11 @@
             "value": "#8B5A2B"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "boardColors"
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 15,
         "min": 0,
         "name": "castleRights",
@@ -4222,7 +4222,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 1,
         "min": 0,
         "name": "previousInCheck"
@@ -4247,27 +4247,27 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 1,
         "min": 0,
         "name": "castleTransitAttacked"
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 64,
         "min": 0,
         "name": "boardMismatch",
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 64,
         "min": 0,
         "name": "boardChanged",
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 64,
         "min": 0,
         "name": "boardCollisions",

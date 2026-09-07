@@ -43,7 +43,8 @@
       },
       "config": {
         "description": "The kind\u0027s config values, or null when the kind declares none or every field has a default. Not validated at document load \u2014 the kind\u0027s own manifest config schema validates it at boot, matching Config\u0027s shallow-then-deep precedent.",
-        "default": null
+        "default": null,
+        "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
       },
       "bindings": {
         "description": "What this probe\u0027s channels drive, or null for a probe that is only read back.",

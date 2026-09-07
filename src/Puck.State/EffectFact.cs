@@ -87,7 +87,7 @@ public interface IValueSourcedEffect {
 }
 
 /// <summary>A state cell write — <c>setState</c>/<c>addState</c>, a literal, a live copy, an expression, or (for a
-/// kind=text row) a text literal.</summary>
+/// kind=Text row) a text literal.</summary>
 public sealed class WriteEffect : EffectFact, IStateWriteEffect, IValueSourcedEffect {
     /// <param name="row">The destination state row name.</param>
     /// <param name="key">The destination cell key.</param>
@@ -96,7 +96,7 @@ public sealed class WriteEffect : EffectFact, IStateWriteEffect, IValueSourcedEf
     /// <param name="rawValue">The authored literal, pre-converted to the destination row's raw encoding — read only
     /// when neither <paramref name="from"/> nor <paramref name="expression"/> applies.</param>
     /// <param name="from">The live copy-source operand, or <see langword="null"/> for a literal/expression/text write.</param>
-    /// <param name="text">The text literal for a kind=text row, or <see langword="null"/> for a numeric write.</param>
+    /// <param name="text">The text literal for a kind=Text row, or <see langword="null"/> for a numeric write.</param>
     /// <param name="expression">The compiled numeric expression, or <see langword="null"/> for another source spelling.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
     public WriteEffect(string row, string key, CompiledCellRef? keyFrom, StateWriteKind write, long rawValue, OperandFact? from, string? text, CompiledExpressionToken[]? expression, string describe)
@@ -123,7 +123,7 @@ public sealed class WriteEffect : EffectFact, IStateWriteEffect, IValueSourcedEf
     public long RawValue { get; }
     /// <inheritdoc/>
     public OperandFact? From { get; }
-    /// <summary>Gets the text literal for a kind=text row, or <see langword="null"/> for a numeric write.</summary>
+    /// <summary>Gets the text literal for a kind=Text row, or <see langword="null"/> for a numeric write.</summary>
     public string? Text { get; }
     /// <inheritdoc/>
     public CompiledExpressionToken[]? Expression { get; }

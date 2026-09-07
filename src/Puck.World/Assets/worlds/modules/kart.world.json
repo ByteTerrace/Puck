@@ -603,25 +603,25 @@
   "state": {
     "world": [
       {
-        "kind": "int",
+        "kind": "Int",
         "name": "gateStage",
         "nonNegative": true,
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "name": "lap",
         "nonNegative": true,
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "name": "lapTicks",
         "nonNegative": true,
         "value": 0
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "name": "lapStart",
         "nonNegative": true,
         "value": 0

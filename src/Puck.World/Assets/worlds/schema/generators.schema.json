@@ -19,14 +19,8 @@
         "type": "object",
         "properties": {
           "source": {
+            "$ref": "./common.schema.json#/$defs/GeneratorSource",
             "description": "Which draw shape this source fires.",
-            "enum": [
-              "Markov",
-              "UniformRange",
-              "WeightedNumeric",
-              "StreamDraw",
-              "SymmetryOrbit"
-            ],
             "default": "Markov"
           },
           "start": {
@@ -111,12 +105,8 @@
             "default": null
           },
           "mode": {
+            "$ref": "./common.schema.json#/$defs/GeneratorMode",
             "description": "Markov, weighted numeric and symmetry orbit: how the entries are consumed (see GeneratorMode).",
-            "enum": [
-              "WithReplacement",
-              "WithoutReplacement",
-              "RestartOnExhaustion"
-            ],
             "default": "WithReplacement"
           },
           "rangeMin": {

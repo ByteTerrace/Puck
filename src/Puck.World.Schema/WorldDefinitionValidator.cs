@@ -1015,7 +1015,7 @@ public static partial class WorldDefinitionValidator {
                 censusRow.IsKeyed ||
                 (censusRow.Field is not null)
             ) {
-                errors.Add(item: $"bodies.capacityRow names state row '{capacityRow}', which must be a scalar kind=int row.");
+                errors.Add(item: $"bodies.capacityRow names state row '{capacityRow}', which must be a scalar kind=Int row.");
             }
         }
 
@@ -1032,7 +1032,7 @@ public static partial class WorldDefinitionValidator {
                 (scaleStateRow.Min is null) ||
                 (scaleStateRow.Max is null)
             ) {
-                errors.Add(item: $"bodies.scaleRow names state row '{scaleRow}', which must be a keyed kind=fixed row declaring both min and max — the world's own body-scale envelope.");
+                errors.Add(item: $"bodies.scaleRow names state row '{scaleRow}', which must be a keyed kind=Fixed row declaring both min and max — the world's own body-scale envelope.");
             } else {
                 var scaleMin = ((float)((double)FixedQ4816.FromRawBits(value: scaleStateRow.Min.Value)));
                 var scaleMax = ((float)((double)FixedQ4816.FromRawBits(value: scaleStateRow.Max.Value)));

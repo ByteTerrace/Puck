@@ -60,7 +60,7 @@
   },
   "patterns": [
     {
-      "kind": "int",
+      "kind": "Int",
       "name": "capture",
       "pattern": {
         "$type": "sequence",
@@ -213,7 +213,7 @@
             "value": 2
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "units"
       },
       {
@@ -231,7 +231,7 @@
           "$type": "keysOf",
           "row": "units"
         },
-        "kind": "int",
+        "kind": "Int",
         "name": "positions",
         "phaseOf": "turns",
         "valuesFrom": "map",
@@ -252,7 +252,7 @@
           "$type": "keysOf",
           "row": "units"
         },
-        "kind": "int",
+        "kind": "Int",
         "name": "moves",
         "phaseOf": "turns"
       },
@@ -271,7 +271,7 @@
           "$type": "keysOf",
           "row": "units"
         },
-        "kind": "int",
+        "kind": "Int",
         "name": "destination"
       },
       {
@@ -290,7 +290,7 @@
           "empty": 1,
           "topology": "map"
         },
-        "kind": "int",
+        "kind": "Int",
         "name": "terrain"
       },
       {
@@ -309,7 +309,7 @@
           "empty": 0,
           "topology": "map"
         },
-        "kind": "int",
+        "kind": "Int",
         "name": "occupancy"
       },
       {
@@ -335,7 +335,7 @@
           "$type": "cellsOf",
           "topology": "map"
         },
-        "kind": "int",
+        "kind": "Int",
         "name": "discs"
       },
       {
@@ -350,7 +350,7 @@
             "value": 7
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "cards"
       },
       {
@@ -369,7 +369,7 @@
           "ordered": true,
           "row": "cards"
         },
-        "kind": "bool",
+        "kind": "Bool",
         "name": "deck"
       },
       {
@@ -379,12 +379,12 @@
           "ordered": true,
           "row": "cards"
         },
-        "kind": "bool",
+        "kind": "Bool",
         "name": "hand"
       },
       {
         "cells": [],
-        "kind": "int",
+        "kind": "Int",
         "name": "turns",
         "phase": {}
       }

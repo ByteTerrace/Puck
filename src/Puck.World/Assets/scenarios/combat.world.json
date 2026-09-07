@@ -1032,7 +1032,7 @@
             "value": 30
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "hp"
       },
       {
@@ -1047,7 +1047,7 @@
             "value": 5
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "threat"
       },
       {
@@ -1059,7 +1059,7 @@
           }
         ],
         "gatesDrive": true,
-        "kind": "bool",
+        "kind": "Bool",
         "name": "dead"
       },
       {
@@ -1071,7 +1071,7 @@
           }
         ],
         "gatesDrive": true,
-        "kind": "int",
+        "kind": "Int",
         "name": "stunRemaining",
         "nonNegative": true
       },
@@ -1083,7 +1083,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "strikeCooldown",
         "nonNegative": true
       },
@@ -1095,7 +1095,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "ccCooldown",
         "nonNegative": true
       },
@@ -1107,22 +1107,22 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "mobAttackCooldown",
         "nonNegative": true
       },
       {
-        "kind": "bool",
+        "kind": "Bool",
         "name": "castStrike",
         "value": false
       },
       {
-        "kind": "bool",
+        "kind": "Bool",
         "name": "castCC",
         "value": false
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "name": "mobTarget",
         "value": -1
       },
@@ -1133,7 +1133,7 @@
             "value": "0"
           }
         ],
-        "kind": "fixed",
+        "kind": "Fixed",
         "name": "look"
       }
     ]

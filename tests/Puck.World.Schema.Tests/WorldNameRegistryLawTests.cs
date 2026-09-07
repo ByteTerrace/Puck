@@ -120,8 +120,8 @@ public sealed class WorldNameRegistryLawTests {
               "state": {
                 "lattices": [ { "$type": "grid", "name": "cube", "origin": [0, 0, 0], "cellSize": 1, "width": 2, "depth": 2 } ],
                 "world": [
-                  { "name": "board", "kind": "int", "domain": { "$type": "cellsOf", "topology": "cube" } },
-                  { "name": "turn", "kind": "int", "value": 0 }
+                  { "name": "board", "kind": "Int", "domain": { "$type": "cellsOf", "topology": "cube" } },
+                  { "name": "turn", "kind": "Int", "value": 0 }
                 ]
               },
               "rules": [

@@ -212,8 +212,12 @@ public readonly record struct BindableScalar {
         });
     }
 }
-/// <summary>Reads/writes <see cref="BindableColor"/> as its plain-string wire form.</summary>
-public sealed class BindableColorJsonConverter : JsonConverter<BindableColor> {
+/// <summary>Reads/writes <see cref="BindableColor"/> as its plain-string wire form — a free-form string validated
+/// against <see cref="BindableColor.Grammar"/> at read/resolve, never a closed token set.</summary>
+public sealed class BindableColorJsonConverter : JsonConverter<BindableColor>, IJsonSchemaStringConverter {
+    /// <inheritdoc/>
+    public IReadOnlyList<string>? SchemaTokens => null;
+
     /// <inheritdoc/>
     public override BindableColor Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if (reader.TokenType != JsonTokenType.String) {

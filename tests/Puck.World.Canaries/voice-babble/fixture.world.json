@@ -156,12 +156,12 @@
     "world": [
       {
         "name": "identity-move-speed",
-        "kind": "fixed",
+        "kind": "Fixed",
         "value": "4"
       },
       {
         "name": "identity-turn-speed",
-        "kind": "fixed",
+        "kind": "Fixed",
         "value": "2"
       }
     ]

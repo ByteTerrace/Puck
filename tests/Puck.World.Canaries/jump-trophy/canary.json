@@ -15,7 +15,7 @@
       { "verb": "world.state", "occurrence": 1, "outcome": "accepted" }
     ],
     "expect": [
-      { "type": "line", "name": "trophy-touched", "stream": "stdout", "match": "contains", "text": "'jump_reached' kind=int nonNegative=true value=1", "present": true },
+      { "type": "line", "name": "trophy-touched", "stream": "stdout", "match": "contains", "text": "'jump_reached' kind=Int nonNegative=true value=1", "present": true },
       { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]
   },
@@ -27,7 +27,7 @@
       { "verb": "world.state", "occurrence": 1, "outcome": "accepted" }
     ],
     "expect": [
-      { "type": "line", "name": "trophy-not-touched", "stream": "stdout", "match": "contains", "text": "'jump_reached' kind=int nonNegative=true value=0", "present": true },
+      { "type": "line", "name": "trophy-not-touched", "stream": "stdout", "match": "contains", "text": "'jump_reached' kind=Int nonNegative=true value=0", "present": true },
       { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]
   }

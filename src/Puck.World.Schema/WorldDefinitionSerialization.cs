@@ -1,6 +1,8 @@
 using System.Numerics;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Schema;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Puck.Abstractions.Documents;
@@ -192,6 +194,10 @@ namespace Puck.World;
 // one sealed record (the CELL substrate) with ONE authored JSON shape — no $type discriminator at all — hand-written
 // in WorldStateRowJsonConverter so the `value`-vs-`cells` exclusivity and the decimal fixed-point spelling refuse by
 // name rather than defaulting.
+// The row's own name and kind — hand-parsed by StateRowJsonConverter<TRow>, never an ordinarily reachable
+// property, so its own IJsonSchemaNodeConverter.BuildSchema needs an explicit root to export either through.
+[JsonSerializable(typeof(CellName))]
+[JsonSerializable(typeof(CellKind))]
 [JsonSerializable(typeof(WorldStateRow))]
 [JsonSerializable(typeof(WorldStateSection))]
 // The stochastic SOURCE family — reachable both as a document `generators` row and inline inside a site's draw
@@ -462,7 +468,12 @@ public static class WorldJsonVocabulary {
 
 /// <summary>The shared shape behind a plain 64-bit lane's wire form: a bare JSON number, round-tripped through the
 /// closed subclass's own <c>Bits</c> constructor/property.</summary>
-internal abstract class BitMaskJsonConverter<T> : JsonConverter<T> where T : struct {
+internal abstract class BitMaskJsonConverter<T> : JsonConverter<T>, IJsonSchemaTypeConverter where T : struct {
+    private static readonly string[] AcceptedSchemaTypes = ["integer"];
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string> SchemaTypes => AcceptedSchemaTypes;
+
     /// <summary>Builds <typeparamref name="T"/> from its raw bit lane.</summary>
     protected abstract T Create(ulong bits);
     /// <summary>Reads back <paramref name="value"/>'s raw bit lane.</summary>
@@ -497,18 +508,33 @@ internal sealed class ChannelConsentMaskJsonConverter : BitMaskJsonConverter<Cha
 /// <summary>The shared shape behind a comma-separated declared-name lane: <c>Read</c> parses via the closed
 /// subclass's own vocabulary and refuses an unrecognized name by it (never a silently narrower mask); <c>Write</c>
 /// prints the same name list back.</summary>
-internal abstract class NameListMaskJsonConverter<T> : JsonConverter<T> where T : struct {
+internal abstract class NameListMaskJsonConverter<T> : JsonConverter<T>, IJsonSchemaNodeConverter where T : struct {
     /// <summary>Gets the mask's own noun, read into the refusal template as "a &lt;kind&gt; mask is …".</summary>
     protected abstract string MaskKind { get; }
     /// <summary>Gets the declared vocabulary description read into the refusal template.</summary>
     protected abstract string Vocabulary { get; }
     /// <summary>Gets the row noun an unrecognized name refuses against ("… names no declared &lt;noun&gt;.").</summary>
     protected abstract string Noun { get; }
+    /// <summary>Gets a regex constraining the comma-separated wire form to the declared vocabulary, or
+    /// <see langword="null"/> when the vocabulary is not reachable at schema-generation time (installed later by a
+    /// module initializer this generator never runs).</summary>
+    protected virtual string? SchemaPattern => null;
 
     /// <summary>Parses the comma-separated name list, reporting the first unrecognized name.</summary>
     protected abstract bool TryParse(string? text, out T mask, out string? unknown);
     /// <summary>Prints <paramref name="value"/>'s comma-separated name list.</summary>
     protected abstract string Describe(T value);
+
+    /// <inheritdoc/>
+    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) {
+        var obj = new JsonObject { ["type"] = "string" };
+
+        if (SchemaPattern is { } pattern) {
+            obj["pattern"] = pattern;
+        }
+
+        return obj;
+    }
 
     /// <inheritdoc/>
     public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
@@ -562,6 +588,15 @@ internal sealed class DocumentWriteMaskJsonConverter : NameListMaskJsonConverter
     protected override string Vocabulary => DocumentWriteMask.All.Describe();
     /// <inheritdoc/>
     protected override string Noun => "operation";
+    /// <inheritdoc/>
+    protected override string SchemaPattern {
+        get {
+            var names = DocumentWriteMask.All.Describe().Split(separator: ',');
+            var alternation = string.Join(separator: '|', values: names);
+
+            return $"^({alternation})(,({alternation}))*$";
+        }
+    }
 
     /// <inheritdoc/>
     protected override bool TryParse(string? text, out DocumentWriteMask mask, out string? unknown) => DocumentWriteMask.TryParse(
@@ -574,8 +609,8 @@ internal sealed class DocumentWriteMaskJsonConverter : NameListMaskJsonConverter
 }
 /// <summary>
 /// Reads and writes <see cref="WorldStateRow"/> — the cell substrate's one C# type — as one authored JSON shape (see
-/// <see cref="WorldStateRow"/>'s remarks): a <c>name</c>, a <c>kind</c> (<c>int</c>|<c>fixed</c>|<c>bool</c>|
-/// <c>text</c>), the optional envelope fields (<c>min</c>/<c>max</c>/<c>capacity</c>/<c>nonNegative</c>), and
+/// <see cref="WorldStateRow"/>'s remarks): a <c>name</c>, a <c>kind</c> (<see cref="CellKind"/>'s own declared member
+/// name), the optional envelope fields (<c>min</c>/<c>max</c>/<c>capacity</c>/<c>nonNegative</c>), and
 /// either a bare <c>value</c> — sugar for the one cell keyed <see cref="StateRow.SlotKey"/> — or a <c>cells</c>
 /// array of <c>{"key","value"}</c> objects. Two optional fields, never two discriminators: a row carrying both is
 /// refused by name, as is a <c>value</c> beside a <c>capacity</c> (declaring a capacity is declaring a keyed row).
@@ -595,7 +630,7 @@ internal sealed class DocumentWriteMaskJsonConverter : NameListMaskJsonConverter
 /// only a world reads, <c>gatesDrive</c> beside the flags and <c>field</c> beside the traits.</summary>
 internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldStateRow> {
     /// <inheritdoc/>
-    protected override string Shape => "{\"name\":…,\"kind\":\"int\"|\"fixed\"|\"bool\"|\"text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…},\"field\":{\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"markov\"|\"uniformRange\"|\"weightedNumeric\"|\"streamDraw\"|\"symmetryOrbit\",…},\"timing\":\"boot\"|\"tickPeriod\"|\"event\"},\"drawCursor\":…,\"drawnMasks\":[…],\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…}}";
+    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"gatesDrive\":…,\"evicts\":…,\"advance\":{\"rateNumerator\":…,\"rateDenominator\":…,\"epochTick\":…},\"dynamics\":{\"row\":…,\"y0\":…,\"v0\":…,\"epochTick\":…},\"cycle\":{\"word\":[…],\"power\":…,\"output\":\"Step\"|\"Turns\"|\"Cos\"|\"Sin\"|\"Node\"|\"ProjectionX\"|\"ProjectionY\"|\"Ring\",\"ticksPerStep\":…,\"epochTick\":…,\"substepTicks\":…},\"field\":{\"initial\":…,\"min\":…,\"max\":…,\"heightScale\":…,\"color\":…,\"paint\":[…]},\"draw\":{\"source\":… or \"generator\":{\"source\":\"Markov\"|\"UniformRange\"|\"WeightedNumeric\"|\"StreamDraw\"|\"SymmetryOrbit\",…},\"timing\":\"Boot\"|\"TickPeriod\"|\"Event\"},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…}}";
 
     /// <inheritdoc/>
     protected override bool ClaimsMember(string name) => (name is "gatesDrive" or "field");
@@ -607,6 +642,15 @@ internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldSt
             throw new JsonException(message: $"state row '{members.Name}' declares both 'cycle' and 'field' — a physical-field row's cells are the field's.");
         }
     }
+    /// <inheritdoc/>
+    protected override IReadOnlyList<SchemaClaimedMember> SchemaClaimedMembers(Func<Type, JsonNode> exportType) => [
+        new(Name: "gatesDrive", Schema: new JsonObject { ["type"] = "boolean" }),
+        new(Name: "field", Schema: exportType(typeof(WorldStateFieldTrait))),
+    ];
+    /// <inheritdoc/>
+    protected override IReadOnlyList<string> SchemaDrawSiteMembers => ["field"];
+    /// <inheritdoc/>
+    protected override IReadOnlyList<string> SchemaCycleExclusiveMembers => ["field"];
     /// <inheritdoc/>
     protected override WorldStateRow Create(StateRow row, RowMembers members, JsonSerializerOptions options) => new(
         row: row,
@@ -889,7 +933,85 @@ internal sealed class WorldPrincipalJsonConverter : TryParseStringJsonConverter<
 /// <see cref="Puck.World.Authoring.CreationCanonicalizer"/> hashes. Formatting (indent/newlines) rides the outer canonical
 /// writer, which is deterministic — the ouroboros round-trip covers the composition.
 /// </summary>
-internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.World.Authoring.CreationDocument> {
+internal sealed class CreationDocumentJsonConverter : JsonConverter<Puck.World.Authoring.CreationDocument>, IJsonSchemaNodeConverter {
+    /// <inheritdoc/>
+    // A fully self-contained fragment: $id makes any "#/$defs/…" the exporter emits for a repeated CreationDocument
+    // shape resolve against THIS fragment's own root, never the enclosing WorldDefinition schema's, wherever this
+    // node ends up embedded in the larger document tree. The exporter requires an explicit TypeInfoResolver on the
+    // options it walks; DocumentJsonOptions.Shared relies on STJ's implicit reflection default instead (attached
+    // lazily on first (de)serialize, never by the exporter), so this reads a resolver-bearing COPY rather than
+    // risking a mutation of the shared, possibly-already-frozen singleton.
+    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) {
+        var options = new JsonSerializerOptions(Puck.Assets.Documents.DocumentJsonOptions.Shared) {
+            TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
+        };
+        // This walk never reaches WorldSchema's own TransformSchemaNode (a different JsonSerializerOptions, outside
+        // WorldJsonContext's metadata), so the same converter-hidden-shape defect ApplyConverterVocabulary fixes
+        // there needs its own narrow fixup here — the only converters this document family's own graph carries
+        // beyond what the exporter already understands natively (a plain JsonStringEnumConverter) are the shared
+        // Vector2/Vector3/Quaternion array converters.
+        var exporterOptions = new JsonSchemaExporterOptions {
+            TransformSchemaNode = (context, node) => DropNullableMembersFromRequired(
+                context: context,
+                node: ((node is JsonValue value) && value.TryGetValue<bool>(value: out var permissive) && permissive)
+                    ? (context.TypeInfo.Type == typeof(Vector2)
+                        ? Puck.Assets.Documents.FixedArityNumberArraySchema.Build(arity: 2)
+                        : (context.TypeInfo.Type == typeof(Vector3)
+                            ? Puck.Assets.Documents.FixedArityNumberArraySchema.Build(arity: 3)
+                            : ((context.TypeInfo.Type == typeof(Quaternion))
+                                ? Puck.Assets.Documents.FixedArityNumberArraySchema.Build(arity: 4)
+                                : node)))
+                    : node
+            ),
+        };
+        var schema = options.GetJsonSchemaAsNode(type: typeof(Puck.World.Authoring.CreationDocument), exporterOptions: exporterOptions).AsObject();
+
+        schema["$id"] = Puck.World.Authoring.CreationDocument.CurrentSchema;
+
+        return schema;
+    }
+    // Document doctrine for this whole family (see CreationDocument's own remarks) declares every optional member
+    // nullable and every nullable member optional; the exporter's own "required" computation only reads a
+    // constructor parameter's DEFAULT VALUE, blind to that convention, so a nullable positional-record parameter
+    // authored without "= null" (the common case here — the null IS the documented default) still lands in
+    // "required". Corrected once, generically, against the record's own primary constructor rather than by chasing
+    // every such parameter's declaration by hand.
+    private static JsonNode DropNullableMembersFromRequired(JsonSchemaExporterContext context, JsonNode node) {
+        if (
+            (node is JsonObject obj) &&
+            (obj["required"] is JsonArray required) &&
+            (required.Count > 0) &&
+            (context.TypeInfo.Type.GetConstructors() is [{ } constructor, ..])
+        ) {
+            var nullabilityContext = new NullabilityInfoContext();
+            var nullableNames = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+
+            foreach (var parameter in constructor.GetParameters()) {
+                if ((parameter.Name is { } name) && IsNullableParameter(parameter: parameter, context: nullabilityContext)) {
+                    nullableNames.Add(item: name);
+                }
+            }
+
+            var kept = new JsonArray();
+
+            foreach (var entry in required) {
+                if (!((entry is JsonValue entryValue) && entryValue.TryGetValue<string>(value: out var entryName) && nullableNames.Contains(item: entryName))) {
+                    kept.Add(item: entry?.DeepClone());
+                }
+            }
+
+            if (kept.Count > 0) {
+                obj["required"] = kept;
+            } else {
+                obj.Remove(propertyName: "required");
+            }
+        }
+
+        return node;
+    }
+    private static bool IsNullableParameter(ParameterInfo parameter, NullabilityInfoContext context) =>
+        (Nullable.GetUnderlyingType(nullableType: parameter.ParameterType) is not null) ||
+        (!parameter.ParameterType.IsValueType && (context.Create(parameterInfo: parameter).WriteState == NullabilityState.Nullable));
     /// <inheritdoc/>
     public override Puck.World.Authoring.CreationDocument? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
         JsonSerializer.Deserialize<Puck.World.Authoring.CreationDocument>(

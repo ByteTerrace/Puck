@@ -50,7 +50,7 @@ public static partial class RuleCompiler {
             throw Malformed($"leaves {depth} values on the postfix stack instead of exactly one");
         }
         if (kinds[0] != kind) {
-            throw Malformed($"leaves a kind={DescribeCellKind(kind: kinds[0])} value where kind={DescribeCellKind(kind: kind)} is required");
+            throw Malformed($"leaves a kind={StateSpelling.Kind(kind: kinds[0])} value where kind={StateSpelling.Kind(kind: kind)} is required");
         }
 
         return FoldConstants(tokens, kind);
@@ -63,7 +63,7 @@ public static partial class RuleCompiler {
                 throw new RuleException(
                     refusal: RuleRefusal.EffectSourceKindMismatch,
                     ruleName: ruleName,
-                    detail: $"'{verb}' expression reads '{state.Name}' as kind={DescribeCellKind(kind: resolved.ValueKind)} into a kind={DescribeCellKind(kind: kind)} destination"
+                    detail: $"'{verb}' expression reads '{state.Name}' as kind={StateSpelling.Kind(kind: resolved.ValueKind)} into a kind={StateSpelling.Kind(kind: kind)} destination"
                 );
             }
 
@@ -78,7 +78,7 @@ public static partial class RuleCompiler {
         }
         void RequireKind(ExpressionOp operation, int slot, CellKind required) {
             if (kinds[slot] != required) {
-                throw Malformed($"token '{operation}' needs a kind={DescribeCellKind(kind: required)} operand but found kind={DescribeCellKind(kind: kinds[slot])}");
+                throw Malformed($"token '{operation}' needs a kind={StateSpelling.Kind(kind: required)} operand but found kind={StateSpelling.Kind(kind: kinds[slot])}");
             }
         }
         CompiledExpressionToken ResolveOperator(ValueToken token) {
@@ -89,18 +89,18 @@ public static partial class RuleCompiler {
             if (descriptor.Signature == ExpressionSignature.Comparison) { return Comparison(operation); }
             if (descriptor.Signature == ExpressionSignature.Select) { return Select(); }
             if (!descriptor.Admits(kind)) {
-                throw Malformed($"token '{operation}' is admitted in kind={descriptor.Signature.ToString().ToLowerInvariant()} expressions only");
+                throw Malformed($"token '{operation}' is admitted in kind={descriptor.Signature} expressions only");
             }
             Require(operation, descriptor.Arity);
             for (var slot = depth - descriptor.Arity; slot < depth; slot++) { RequireKind(operation, slot, kind); }
             depth -= descriptor.Arity - 1;
             return new CompiledExpressionToken(Operation: operation);
         }
-        // The one door every board token (BoardShift/BoardFill/BoardImage) enters through: kind=int only, a declared
+        // The one door every board token (BoardShift/BoardFill/BoardImage) enters through: kind=Int only, a declared
         // discrete topology whose mask fits, then the token's own direction/element lookup (resolveIndex answers -1
         // for an unknown name) folded into the same neighbour query — three tokens, one refusal vocabulary.
         CompiledExpressionToken ResolveBoard(ExpressionOp operation, string? topologyName, string verbPhrase, string indexKind, string? indexName, Func<CompiledTopology, string, int> resolveIndex) {
-            if (kind != CellKind.Int) { throw Malformed($"token '{operation}' is admitted in kind=int expressions only"); }
+            if (kind != CellKind.Int) { throw Malformed($"token '{operation}' is admitted in kind=Int expressions only"); }
             if (context.FindTopology(name: (topologyName ?? string.Empty)) is not { } topology) {
                 throw Malformed($"token '{operation}' names no discrete topology '{topologyName}'");
             }
@@ -130,7 +130,7 @@ public static partial class RuleCompiler {
         CompiledExpressionToken Comparison(ExpressionOp operation) {
             Require(operation, 2);
             if (kinds[depth - 2] != kinds[depth - 1]) {
-                throw Malformed($"token '{operation}' compares kind={DescribeCellKind(kind: kinds[depth - 2])} against kind={DescribeCellKind(kind: kinds[depth - 1])}");
+                throw Malformed($"token '{operation}' compares kind={StateSpelling.Kind(kind: kinds[depth - 2])} against kind={StateSpelling.Kind(kind: kinds[depth - 1])}");
             }
             depth--;
             kinds[depth - 1] = CellKind.Int;
@@ -140,7 +140,7 @@ public static partial class RuleCompiler {
             Require(ExpressionOp.Select, 3);
             RequireKind(ExpressionOp.Select, depth - 3, CellKind.Int);
             if (kinds[depth - 2] != kinds[depth - 1]) {
-                throw Malformed($"token 'Select' branches disagree: kind={DescribeCellKind(kind: kinds[depth - 2])} against kind={DescribeCellKind(kind: kinds[depth - 1])}");
+                throw Malformed($"token 'Select' branches disagree: kind={StateSpelling.Kind(kind: kinds[depth - 2])} against kind={StateSpelling.Kind(kind: kinds[depth - 1])}");
             }
             var result = kinds[depth - 1];
             depth -= 2;

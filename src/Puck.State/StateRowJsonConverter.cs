@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using Puck.Abstractions.Documents;
 using Puck.Maths;
 
 namespace Puck.State;
@@ -13,7 +14,7 @@ namespace Puck.State;
 /// <typeparam name="TRow">The row type the converter reads and writes.</typeparam>
 /// <remarks>Every nested object (a trait, a domain, a draw) is read and written through the options' own
 /// resolver, so the same converter serves any context that registers the nested types.</remarks>
-public abstract class StateRowJsonConverter<TRow> : JsonConverter<TRow> where TRow : StateRow {
+public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>, IJsonSchemaNodeConverter where TRow : StateRow {
     /// <summary>The wire members the shared shape parses, held as raw elements until the row's kind decides how
     /// each is read, plus whatever members the derived converter claimed.</summary>
     protected sealed class RowMembers {
@@ -31,8 +32,9 @@ public abstract class StateRowJsonConverter<TRow> : JsonConverter<TRow> where TR
         public Dictionary<string, JsonElement> Claimed { get; } = new(comparer: StringComparer.Ordinal);
     }
 
-    /// <summary>Gets the shape a refusal quotes for an unmapped or missing member.</summary>
-    protected abstract string Shape { get; }
+    /// <summary>Gets the shape a refusal quotes for an unmapped or missing member — also the completeness law's own
+    /// oracle for which top-level members the schema must describe.</summary>
+    public abstract string Shape { get; }
 
     /// <summary>Determines whether a wire member outside the shared shape belongs to the derived row; a claimed
     /// member lands in <see cref="RowMembers.Claimed"/> instead of refusing.</summary>
@@ -87,13 +89,6 @@ public abstract class StateRowJsonConverter<TRow> : JsonConverter<TRow> where TR
         _ => throw new JsonException(message: $"{context} must be a boolean."),
     };
 
-    private static string DescribeCellKind(CellKind cellKind) => cellKind switch {
-        CellKind.Int => "int",
-        CellKind.Fixed => "fixed",
-        CellKind.Bool => "bool",
-        CellKind.Text => "text",
-        _ => throw new JsonException(message: $"CellKind '{cellKind}' has no JSON token."),
-    };
     // A dynamics trait's y0/v0 ride the same per-kind spelling as an ordinary cell value (a decimal string via
     // FixedQ4816 for a fixed row, a plain JSON number for int) — never raw bits, matching StateCell.Value's own
     // wire convention.
@@ -316,20 +311,6 @@ public abstract class StateRowJsonConverter<TRow> : JsonConverter<TRow> where TR
         }
 
         return masks;
-    }
-    private static CellKind RequireCellKind(JsonElement element, string context) {
-        var token = ((element.ValueKind == JsonValueKind.String)
-            ? element.GetString()
-            : null
-        );
-
-        return token switch {
-            "int" => CellKind.Int,
-            "fixed" => CellKind.Fixed,
-            "bool" => CellKind.Bool,
-            "text" => CellKind.Text,
-            _ => throw new JsonException(message: $"{context} '{(token ?? "(absent)")}' must be one of 'int', 'fixed', 'bool', 'text'."),
-        };
     }
     // Fixed-kind values are human-authored decimal text, never the raw Q48.16 bit pattern: the document, the console
     // verb JSON, and every echo agree on one spelling.
@@ -586,7 +567,7 @@ public abstract class StateRowJsonConverter<TRow> : JsonConverter<TRow> where TR
             throw new JsonException(message: $"state row 'name' '{name}' {nameReason}.");
         }
         if (kind is not { } kindElement) {
-            throw new JsonException(message: $"state row '{name}' requires member 'kind' (int|fixed|bool|text).");
+            throw new JsonException(message: $"state row '{name}' requires member 'kind' (Int|Fixed|Bool|Text).");
         }
 
         members.Name = name;
@@ -705,10 +686,13 @@ public abstract class StateRowJsonConverter<TRow> : JsonConverter<TRow> where TR
             throw new JsonException(message: $"state row '{name}' declares 'cycle' beside a non-empty 'cells' array — cycle is a scalar (slot) row trait; author it with 'value' or leave the row empty, and give a keyed row's cells their own 'cycle'.");
         }
 
-        var cellKind = RequireCellKind(
-            context: $"state row '{name}'.kind",
-            element: kindElement
-        );
+        CellKind cellKind;
+
+        try {
+            cellKind = kindElement.Deserialize(jsonTypeInfo: (JsonTypeInfo<CellKind>)options.GetTypeInfo(typeof(CellKind)));
+        } catch (JsonException) {
+            throw new JsonException(message: $"state row '{name}'.kind must be one of {string.Join(separator: ", ", values: Enum.GetNames<CellKind>())}.");
+        }
 
         var row = new StateRow(
             Name: rowName,
@@ -815,7 +799,7 @@ public abstract class StateRowJsonConverter<TRow> : JsonConverter<TRow> where TR
         );
         writer.WriteString(
             propertyName: "kind",
-            value: DescribeCellKind(cellKind: value.Kind)
+            value: StateSpelling.Kind(kind: value.Kind)
         );
         WriteOptionalNumeric(
             writer: writer,
@@ -982,7 +966,7 @@ public abstract class StateRowJsonConverter<TRow> : JsonConverter<TRow> where TR
 /// <summary>The row converter of the standalone state document — the shared shape and nothing more.</summary>
 public sealed class StateRowJsonConverter : StateRowJsonConverter<StateRow> {
     /// <inheritdoc/>
-    protected override string Shape => "{\"name\":…,\"kind\":\"int\"|\"fixed\"|\"bool\"|\"text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"evicts\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"draw\":{…},\"drawCursor\":…,\"drawnMasks\":[…],\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…}}";
+    public override string Shape => "{\"name\":…,\"kind\":\"Int\"|\"Fixed\"|\"Bool\"|\"Text\",\"value\":… or \"cells\":[{\"key\":…,\"value\":…,\"provenance\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…}}],\"min\":…,\"max\":…,\"capacity\":…,\"nonNegative\":…,\"evicts\":…,\"advance\":{…},\"dynamics\":{…},\"cycle\":{…},\"draw\":{…},\"drawCursor\":…,\"drawnMasks\":[…],\"historyCursor\":…,\"visibility\":{…},\"knowledge\":{…},\"phase\":{…},\"phaseOf\":…,\"valuesFrom\":…,\"domain\":{\"$type\":\"slot\"|\"keys\"|\"keysOf\"|\"cellsOf\"|\"ring\",…},\"inverse\":{\"tokens\":…,\"codes\":…}}";
 
     /// <inheritdoc/>
     protected override StateRow Create(StateRow row, RowMembers members, JsonSerializerOptions options) => row;

@@ -105,7 +105,7 @@ public static partial class RuleCompiler {
             ?? throw new RuleException(refusal: RuleRefusal.StateRowUnknown, ruleName: ruleName, detail: $"'scheduleState' names no state row '{effect.State}'"));
 
         if (row.Kind != CellKind.Int) {
-            throw new RuleException(refusal: RuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"'scheduleState' requires a kind=int row; '{effect.State}' is {DescribeCellKind(kind: row.Kind)}");
+            throw new RuleException(refusal: RuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"'scheduleState' requires a kind=Int row; '{effect.State}' is {StateSpelling.Kind(kind: row.Kind)}");
         }
 
         var ticks = DurationSimulationTicks(seconds: effect.DelaySeconds, ratePerSecond: context.SimulationRateHz, ruleName: ruleName, verb: "scheduleState");
@@ -186,7 +186,7 @@ public static partial class RuleCompiler {
             throw new RuleException(
                 refusal: RuleRefusal.StateCellUnaddressable,
                 ruleName: ruleName,
-                detail: $"state row '{effect.State}' is kind={DescribeCellKind(kind: row.Kind)} nonNegative={row.NonNegative.ToString().ToLowerInvariant()} — 'countdownState' requires kind=int nonNegative=true so its computed final partial step can saturate at zero"
+                detail: $"state row '{effect.State}' is kind={StateSpelling.Kind(kind: row.Kind)} nonNegative={row.NonNegative.ToString().ToLowerInvariant()} — 'countdownState' requires kind=Int nonNegative=true so its computed final partial step can saturate at zero"
             );
         }
 
@@ -314,8 +314,8 @@ public static partial class RuleCompiler {
                 refusal: RuleRefusal.StateCellUnaddressable,
                 ruleName: ruleName,
                 detail: (hasText
-                    ? $"state row '{rowName}' is kind={DescribeCellKind(kind: row.Kind)} — '{verb}' 'text' writes a kind=text row"
-                    : $"state row '{rowName}' is kind=text — '{verb}' writes it through 'text' or a text 'fromState' copy, never arithmetic"
+                    ? $"state row '{rowName}' is kind={StateSpelling.Kind(kind: row.Kind)} — '{verb}' 'text' writes a kind=Text row"
+                    : $"state row '{rowName}' is kind=Text — '{verb}' writes it through 'text' or a text 'fromState' copy, never arithmetic"
                 )
             );
         }
@@ -362,7 +362,7 @@ public static partial class RuleCompiler {
                 throw new RuleException(
                     refusal: RuleRefusal.StateCellUnaddressable,
                     ruleName: ruleName,
-                    detail: $"state row '{rowName}' is kind={DescribeCellKind(kind: row.Kind)} — '{verb}' 'valueSeconds' authors a whole engine-tick countdown, meaningful only against a kind=int row"
+                    detail: $"state row '{rowName}' is kind={StateSpelling.Kind(kind: row.Kind)} — '{verb}' 'valueSeconds' authors a whole engine-tick countdown, meaningful only against a kind=Int row"
                 );
             }
 
@@ -393,7 +393,7 @@ public static partial class RuleCompiler {
 
         if (hasExpression) {
             if (row.Kind is CellKind.Bool or CellKind.Text) {
-                throw new RuleException(refusal: RuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"state row '{rowName}' is kind={DescribeCellKind(kind: row.Kind)} — numeric expressions require kind=int or kind=fixed");
+                throw new RuleException(refusal: RuleRefusal.StateCellUnaddressable, ruleName: ruleName, detail: $"state row '{rowName}' is kind={StateSpelling.Kind(kind: row.Kind)} — numeric expressions require kind=Int or kind=Fixed");
             }
 
             var program = CompileExpression(context: context, expression: expression, kind: row.Kind, ruleName: ruleName, verb: verb);
@@ -407,7 +407,7 @@ public static partial class RuleCompiler {
             throw new RuleException(
                 refusal: RuleRefusal.EffectSourceKindMismatch,
                 ruleName: ruleName,
-                detail: $"state row '{rowName}' is kind={DescribeCellKind(kind: row.Kind)} but 'fromState' '{fromState}' is kind={DescribeCellKind(kind: source.ValueKind)} — mixed-kind copies are refused; author both sides the same kind"
+                detail: $"state row '{rowName}' is kind={StateSpelling.Kind(kind: row.Kind)} but 'fromState' '{fromState}' is kind={StateSpelling.Kind(kind: source.ValueKind)} — mixed-kind copies are refused; author both sides the same kind"
             );
         }
 

@@ -1636,7 +1636,7 @@
             "value": 1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "enemy"
       },
       {
@@ -1647,7 +1647,7 @@
             "value": -1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 7,
         "min": -1,
         "name": "targeted"
@@ -1660,7 +1660,7 @@
             "value": -1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 7,
         "min": -1,
         "name": "targetOfTarget"
@@ -1673,7 +1673,7 @@
             "value": 1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 1,
         "min": 0,
         "name": "autoTarget"
@@ -1686,7 +1686,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 1,
         "min": 0,
         "name": "autoAttackOn"
@@ -1699,7 +1699,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 1,
         "min": 0,
         "name": "autoAttackPrev"
@@ -1712,7 +1712,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 1,
         "min": 0,
         "name": "autoAttackToggle"
@@ -1725,7 +1725,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 50400,
         "min": 0,
         "name": "attackCooldown",
@@ -1739,7 +1739,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 2,
         "min": 0,
         "name": "elementIndex"
@@ -1759,7 +1759,7 @@
             "value": "frost"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "elementName"
       },
       {
@@ -1769,7 +1769,7 @@
             "value": "plain"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "elementLabel"
       },
       {
@@ -1787,7 +1787,7 @@
             "value": "dummy-b"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "bodyName"
       },
       {
@@ -1797,7 +1797,7 @@
             "value": "none"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "targetName"
       },
       {
@@ -1807,7 +1807,7 @@
             "value": "none"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "targetOfTargetName"
       },
       {
@@ -1822,7 +1822,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "hot"
       },
       {
@@ -1837,7 +1837,7 @@
             "value": 1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "flammable"
       },
       {
@@ -1852,7 +1852,7 @@
             "value": 1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "freezable"
       },
       {
@@ -1867,7 +1867,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 201600,
         "min": 0,
         "name": "burning",
@@ -1886,7 +1886,7 @@
           }
         ],
         "gatesDrive": true,
-        "kind": "int",
+        "kind": "Int",
         "max": 201600,
         "min": 0,
         "name": "frozen",
@@ -1904,7 +1904,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "cold"
       },
       {
@@ -1919,7 +1919,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 201600,
         "min": 0,
         "name": "hitRecently",
@@ -1942,7 +1942,7 @@
           }
         ],
         "gatesDrive": true,
-        "kind": "int",
+        "kind": "Int",
         "name": "dead"
       },
       {
@@ -1957,7 +1957,7 @@
             "value": 0
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 151200,
         "min": 0,
         "name": "respawnIn",
@@ -1975,7 +1975,7 @@
             "value": 1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "mortal"
       },
       {
@@ -1990,7 +1990,7 @@
             "value": 1
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "name": "regenerates"
       },
       {
@@ -2005,7 +2005,7 @@
             "value": 1000
           }
         ],
-        "kind": "int",
+        "kind": "Int",
         "max": 1000,
         "min": 0,
         "name": "hp"
@@ -2021,7 +2021,7 @@
             "value": "dummy"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "lookOf"
       },
       {
@@ -2035,7 +2035,7 @@
             "value": "dummy"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "normalLook"
       },
       {
@@ -2049,7 +2049,7 @@
             "value": "dummy-fire"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "fireLook"
       },
       {
@@ -2063,7 +2063,7 @@
             "value": "dummy-ice"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "iceLook"
       },
       {
@@ -2077,7 +2077,7 @@
             "value": "dummy-down"
           }
         ],
-        "kind": "text",
+        "kind": "Text",
         "name": "deadLook"
       }
     ]

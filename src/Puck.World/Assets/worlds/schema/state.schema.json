@@ -10,7 +10,949 @@
         "array",
         "null"
       ],
-      "default": null
+      "default": null,
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "description": "A validated state-section row name or cell key \u2014 the base SafeName rule plus no dot anywhere, which is what makes the state.\u003Crow\u003E.\u003Ckey\u003E HUD binding grammar unambiguous by construction: splitting a bound token on \u0027.\u0027 can never mistake part of a row or cell name for a grammar separator, because neither can hold one. A row\u0027s reserved slot key (\u0022$value\u0022) is unaffected \u2014 \u0027$\u0027 is neither a reserved character nor a dot, so it is already a legal CellName like any other author-chosen key, exactly the one reserved exception the substrate mints rather than authors.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "The closed set of cell value kinds a state row declares, shared by every cell the row carries. Carries no float kind: simulation state is float-free by the determinism contract (see Fixed for how a fractional value still rides here). A counter is represented as Fixed; a timer is Int with NonNegative set.",
+            "enum": [
+              "Int",
+              "Fixed",
+              "Bool",
+              "Text"
+            ]
+          },
+          "value": {
+            "$ref": "./common.schema.json#/$defs/ShapeNonNullable"
+          },
+          "cells": {
+            "description": "The row\u0027s current cells (default empty). Refused past its effective capacity, and on a duplicate key, by name \u2014 unless Evicts is set, in which case a write that would grow past capacity evicts the oldest cell instead of refusing (see Evicts). A slot-shaped row (see IsSlot) holds exactly one cell keyed SlotKey; a keyed row may hold any author-chosen keys except SlotKey itself, which is reserved for the value sugar and refused as an authored cell key.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "value": {
+                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable"
+                },
+                "advance": {
+                  "$ref": "./common.schema.json#/$defs/StateAdvance"
+                },
+                "dynamics": {
+                  "type": "object",
+                  "properties": {
+                    "row": {
+                      "type": "string"
+                    },
+                    "y0": {
+                      "type": "string"
+                    },
+                    "v0": {
+                      "type": "string"
+                    },
+                    "epochTick": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "row",
+                    "y0",
+                    "v0"
+                  ],
+                  "additionalProperties": false
+                },
+                "cycle": {
+                  "$ref": "./common.schema.json#/$defs/StateCycle"
+                },
+                "visibility": {
+                  "$ref": "./common.schema.json#/$defs/StateVisibility"
+                },
+                "observation": {
+                  "description": "When a stored knowledge value was last seen and whether the latest observation still sees it.",
+                  "type": "object",
+                  "properties": {
+                    "tick": {
+                      "description": "The last observation tick.",
+                      "type": "integer"
+                    },
+                    "visible": {
+                      "description": "Whether the latest explicit refresh sees this cell.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "tick",
+                    "visible"
+                  ],
+                  "additionalProperties": false
+                },
+                "provenance": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "min": {
+            "description": "The row-wide declared lower bound every cell\u0027s Value must satisfy, raw-encoded per Kind (raw FixedQ4816 bits for Fixed), or null for none. Present only together with Max \u2014 a range is authored as a pair or not at all. Legitimate only for Int/Fixed. Omitted from the wire when null.",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "max": {
+            "description": "The row-wide declared upper bound, raw-encoded per Kind, or null for none. Present only together with Min. Omitted from the wire when null.",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "capacity": {
+            "description": "The row\u0027s own cell-count ceiling (1..MaxCellsPerRow), or null to fall back to the implicit ceiling. A row declaring Capacity can never be a slot (IsSlot), even if it happens to carry exactly one cell \u2014 declaring a capacity is declaring table intent. Omitted from the wire when null.",
+            "type": "integer"
+          },
+          "nonNegative": {
+            "description": "Whether every cell\u0027s value must be non-negative, enforced regardless of any authored Min. Legitimate only for Int/Fixed. A timer is represented as Int with this set.",
+            "type": "boolean"
+          },
+          "evicts": {
+            "description": "Whether this row is a bounded, FIFO-evicting table. Ordinarily a Capacity is a hard ceiling and a write that would exceed it is refused by name; with this set, such a write instead succeeds and, if it added a new key past capacity, evicts the row\u0027s oldest surviving cell. Eviction runs as a pure function of the candidate cells inside the compose step, so replay reproduces the identical victim, and the dropped key is named on the mutation\u0027s apply echo. Eviction is by insertion position, not recency of touch: a new key is appended to the end of Cells and eviction always drops index 0. Re-writing an existing key updates it in place without moving it \u2014 true FIFO, never LRU. Legitimate only together with a declared Capacity. Default false.",
+            "type": "boolean"
+          },
+          "advance": {
+            "$ref": "./common.schema.json#/$defs/StateAdvance"
+          },
+          "draw": {
+            "description": "The AUTHORED-RANDOMNESS facet: the declaration that a SITE\u0027s value is DRAWN rather than literal. One facet, one source family, one engine \u2014 an NPC-bark text site, a loot cell, a random census, and a drawn host backend are the SAME mechanism pointed at different sites.",
+            "type": "object",
+            "properties": {
+              "source": {
+                "description": "The declared source to draw from, by name \u2014 or null when StateGenerator inlines one.",
+                "default": null,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "generator": {
+                "$ref": "./common.schema.json#/$defs/StateGenerator",
+                "description": "An inline anonymous source \u2014 or null when Source names a declared one.",
+                "default": null
+              },
+              "timing": {
+                "description": "When this site draws and whether it may be redrawn (see DrawTiming).",
+                "enum": [
+                  "Boot",
+                  "TickPeriod",
+                  "Event"
+                ],
+                "default": "Boot"
+              },
+              "secret": {
+                "description": "An authority-provisioned 256-bit secret for an independently keyed streamDraw sample at each cursor. Never sent in observations.",
+                "default": null
+              }
+            },
+            "additionalProperties": false
+          },
+          "drawCursor": {
+            "description": "How many samples this site\u0027s Draw has ever consumed \u2014 engine-minted bookkeeping and the position the engine re-seeks to (GeneratorEngine.AdvancesPerSample scales it into Pcg32XshRr advances, so resuming is an exact O(1) advance rather than a replay of the earlier draws). Stored in the document, so world.undo, world.save, and replay rewind a site\u0027s draw position with the same whole-document restore that rewinds an ordinary counter. Zero when Draw is null; refused negative.",
+            "type": "integer"
+          },
+          "drawnMasks": {
+            "description": "This site\u0027s drawn masks \u2014 engine-minted bookkeeping a source under an exhausting GeneratorMode carries: one mask per context, by declaration ordinal, for a Markov source; exactly one for a weighted numeric source. Bit i is set when entry i has been drawn. Lives at the site rather than on the source row, which lets two sites reference one declared source and draw independently. Null or empty for a site whose source never exhausts.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{64}$"
+            }
+          },
+          "historyCursor": {
+            "description": "How many values have ever been pushed into a Ring row \u2014 engine bookkeeping that names the next slot (cursor mod capacity) and how much of the ring is filled. Zero without the trait; refused negative.",
+            "type": "integer"
+          },
+          "visibility": {
+            "$ref": "./common.schema.json#/$defs/StateVisibility"
+          },
+          "knowledge": {
+            "description": "A persisted knowledge layer refreshed explicitly by the authority.",
+            "type": "object",
+            "properties": {
+              "source": {
+                "description": "The integer/boolean board observed.",
+                "type": "string"
+              },
+              "mask": {
+                "description": "A boolean board over the same topology; true cells are currently observed.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "source",
+              "mask"
+            ],
+            "additionalProperties": false
+          },
+          "phase": {
+            "description": "Marks a plain integer row as a guarded submission stamp: the row\u0027s own generation Sequence, the sole state a PhaseGuard checks and the mutation pipeline advances. Nothing about who may act, in what order, or under what deadline is engine knowledge any more \u2014 a turn order, a round counter, a ready or skipped bitset, and a deadline are all ordinary rows a world\u0027s own rules author and advance, and eligibility is the ordinary grant/admission system over whichever rows a rule ties to this one via PhaseOf. Submitting any mutation whose PhaseGuard matches this generation both admits the submission and, on success, advances the generation by one: the guard\u0027s presence on a mutation IS the turn\u0027s completion, so a world that wants several ungated moves before a turn ends simply leaves those rows untagged and reserves PhaseOf for the one row that ends it.",
+            "type": "object",
+            "properties": {
+              "sequence": {
+                "description": "The generation. Advanced by the mutation pipeline after a guarded mutation naming this row succeeds; never written directly.",
+                "type": "integer",
+                "default": 0
+              }
+            },
+            "additionalProperties": false
+          },
+          "phaseOf": {
+            "description": "The phase row required on external gameplay transforms that write this row.",
+            "type": "string"
+          },
+          "valuesFrom": {
+            "description": "The discrete topology whose cell ordinals this row\u0027s integer values name \u2014 a value-typing trait, independent of Domain (legitimate only alongside a KeysOf domain over Int cells).",
+            "type": "string"
+          },
+          "domain": {
+            "description": "A StateRow\u0027s declared cell domain \u2014 the closed answer to \u0022which keys does this row\u0027s storage admit\u0022 that IsKeyed/IsSlot/CellCeiling switch over, replacing the five hand-kept discriminators (a null Board, Tokens, Zone, KeysFrom, or History facet) inference used to read the same shape off of. Orthogonal traits \u2014 a row\u0027s Advance/Dynamics/Cycle/ Draw/Visibility/Knowledge/ Phase/PhaseOf/ Evicts/Min/Max/ NonNegative \u2014 are unaffected by which case a row declares; every combination the validator already refused (a lattice row carrying advance, a phase row carrying capacity) is refused the identical way with the case substituted for the old field.",
+            "type": "object",
+            "required": [
+              "$type"
+            ],
+            "anyOf": [
+              {
+                "description": "One cell, keyed SlotKey \u2014 a scalar row. An omitted key addresses it. Carries no data, so InferDomain answers with the single Instance rather than allocating one per unauthored row.",
+                "properties": {
+                  "$type": {
+                    "const": "slot"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "description": "Explicit author-keyed cells (StateRow.Capacity and Cells carry the shape); no omitted-key address exists. The token-domain declaration row (the old dedicated tokens facet) is simply a row of this case whose Capacity is the domain\u0027s token-count ceiling \u2014 other rows address its keys through KeysOf rather than through a second facet of their own. Carries no data, so InferDomain answers with the single Instance rather than allocating one per unauthored keyed row.",
+                "properties": {
+                  "$type": {
+                    "const": "keys"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "description": "The row\u0027s key domain is another row\u0027s keys (see Keys). Ordered true gives the old zone semantics \u2014 cell order is pile order, first/last selection has gameplay meaning \u2014 while false gives the old plain keysFrom attribute-row semantics (a numeric fact per token, no pile order). The one shape two different authored roles used to spell as two different facets.",
+                "properties": {
+                  "$type": {
+                    "const": "keysOf"
+                  },
+                  "row": {
+                    "description": "The row whose keys this row\u0027s own keys are drawn from.",
+                    "type": "string"
+                  },
+                  "ordered": {
+                    "description": "Whether cell order carries gameplay meaning (a pile) rather than being incidental.",
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "required": [
+                  "row"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "One value per cell of a named state.lattices topology \u2014 the old board and lattice facets\u0027 shared shape. Which of the two storage strategies a row actually gets (sparse cells overlaying Empty, or the dense physical-field composite) is an implementation choice keyed on the row\u0027s own Kind \u2014 a Fixed row over a Field-kind topology compiles into the host\u0027s dense field storage, every other combination is the sparse board \u2014 never two authored traits.",
+                "properties": {
+                  "$type": {
+                    "const": "cellsOf"
+                  },
+                  "topology": {
+                    "description": "The state.lattices topology this row lies over.",
+                    "type": "string"
+                  },
+                  "empty": {
+                    "description": "The value a sparse (board) cell reads before it is ever written; meaningless for the dense physical-field case, whose unwritten value is the field trait\u0027s own initial instead.",
+                    "type": "integer",
+                    "default": 0
+                  }
+                },
+                "required": [
+                  "topology"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "The history ring: the row keeps the last Capacity pushed values in slots keyed 0..Capacity-1, oldest overwritten first \u2014 the old history facet.",
+                "properties": {
+                  "$type": {
+                    "const": "ring"
+                  },
+                  "capacity": {
+                    "description": "How many pushes the ring keeps, 1..128.",
+                    "type": "integer"
+                  },
+                  "empty": {
+                    "description": "The value read for an age older than the ring holds.",
+                    "type": "integer",
+                    "default": 0
+                  }
+                },
+                "required": [
+                  "capacity"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "inverse": {
+            "description": "A CellsOf row\u0027s declared inverse: the board\u0027s cells are not authored directly but derived from a keyed Tokens row naming cells of the same topology and a Codes row keyed the same way, giving each token\u0027s code. Legitimate only on a Int row whose EffectiveDomain is CellsOf and that carries no field trait \u2014 a document project\u0027s validator enforces both.",
+            "type": "object",
+            "properties": {
+              "tokens": {
+                "description": "The keyed Int row whose cell values name cells of the board\u0027s topology \u2014 a value naming no cell means that token is off the board.",
+                "type": "string"
+              },
+              "codes": {
+                "description": "The row giving each token\u0027s code, keyed the same as Tokens \u2014 the same cell keys, in the same order, so index i of one names the same token as index i of the other.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "tokens",
+              "codes"
+            ],
+            "additionalProperties": false
+          },
+          "dynamics": {
+            "description": "The row\u0027s own (slot-cell) second-order easing trait, or null for an ordinary row whose slot value only changes through an explicit write. See StateDynamics. Legitimate only for Int/Fixed, only on a scalar (slot-eligible) row, and never together with Advance or Draw. A keyed row\u0027s own cells ease independently through Dynamics instead.",
+            "type": "object",
+            "properties": {
+              "row": {
+                "description": "The referenced dynamics row name; must resolve.",
+                "type": "string"
+              },
+              "y0": {
+                "description": "The follower\u0027s position at EpochTick as raw FixedQ4816 bits, independent of the carrying row\u0027s stored-value kind. Keeping the continuous state fixed-native preserves sub-unit phase when an integer target is rebased.",
+                "type": "string"
+              },
+              "v0": {
+                "description": "The follower\u0027s velocity at EpochTick, per second, as raw FixedQ4816 bits. A sub-unit response kick therefore survives an integer-row rebase.",
+                "type": "string"
+              },
+              "epochTick": {
+                "description": "The server tick Y0/V0 were captured at.",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "row",
+              "y0",
+              "v0"
+            ],
+            "additionalProperties": false
+          },
+          "cycle": {
+            "$ref": "./common.schema.json#/$defs/StateCycle"
+          },
+          "gatesDrive": {
+            "description": "Whether this row is a drive-admission gate. When set, this must be a keyed row (IsKeyed) whose per-body cell \u2014 keyed by the body\u0027s 0-based entity index \u2014 is consulted before admitting a drive or action intent for that body: a nonzero cell refuses the body\u0027s intents until the cell reads zero again, checked fresh every tick. The engine does not interpret the row\u0027s name; several independently named gate rows may exist at once, any one of which can refuse. Legitimate only on a row declaring Capacity, and only for Int/Fixed/ Bool. Default false.",
+            "type": "boolean"
+          },
+          "field": {
+            "description": "A state row\u0027s field trait \u2014 carried only by a row whose Domain is CellsOf over a Field-kind topology: the row holds one Fixed scalar per cell of that topology instead of sparse board cells. Values are authored DECIMAL (like every lattice quantity), not raw Q48.16 bits; a field row refuses slot/keyed members (cells, capacity, advance, dynamics, draw -- per-cell draws are the spatial-draw seam, refused until it lands).",
+            "type": "object",
+            "properties": {
+              "initial": {
+                "description": "The value every cell starts at before paint.",
+                "type": "number",
+                "default": 0
+              },
+              "min": {
+                "description": "The least value a cell holds.",
+                "type": "number",
+                "default": 0
+              },
+              "max": {
+                "description": "The greatest value a cell holds.",
+                "type": "number",
+                "default": 1
+              },
+              "heightScale": {
+                "description": "World units of solid surface per unit of value above the lattice origin -- 0 for a row that is not geometry.",
+                "type": "number",
+                "default": 0
+              },
+              "color": {
+                "description": "The color the row\u0027s surface shades with \u2014 a #RRGGBB literal or a state.\u003Crow\u003E[.\u003Ckey\u003E] Text-cell binding (WorldColor\u0027s shared grammar, resolved live at emit); required when HeightScale is nonzero.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "paint": {
+                "description": "The initial fills, applied in order over Initial.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "description": "One initial fill of a lattice row, applied in order over the row\u0027s initial. Every kind decides per CELL with integer hashes and Q48.16 arithmetic only, so a fill is bit-identical on every machine and backend -- lattice values are simulation state. The Field member is compile-stamped from the carrying row (see Compile) and omitted in the document.",
+                  "type": "object",
+                  "required": [
+                    "$type"
+                  ],
+                  "anyOf": [
+                    {
+                      "description": "Every cell whose XZ centre lies in the rectangle takes Value.",
+                      "properties": {
+                        "$type": {
+                          "const": "rect"
+                        },
+                        "value": {
+                          "description": "The value written.",
+                          "type": "number"
+                        },
+                        "minX": {
+                          "description": "The rectangle\u0027s least X, world units.",
+                          "type": "number"
+                        },
+                        "minZ": {
+                          "description": "The rectangle\u0027s least Z, world units.",
+                          "type": "number"
+                        },
+                        "maxX": {
+                          "description": "The rectangle\u0027s greatest X, world units.",
+                          "type": "number"
+                        },
+                        "maxZ": {
+                          "description": "The rectangle\u0027s greatest Z, world units.",
+                          "type": "number"
+                        },
+                        "field": {
+                          "description": "Gets the filled row\u0027s name -- compile-stamped, never authored inside a trait.",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "minX",
+                        "minZ",
+                        "maxX",
+                        "maxZ"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Patchy fill: fixed-point hash-lattice fBm over the CELL INDEX decides each cell. Where the octave sum n (in [0, 1]) reaches Threshold, the cell takes Value \u00B7 (n \u2212 Threshold) / (1 \u2212 Threshold) -- a smooth patch interior rising to the full value. The hash folds the fill\u0027s Seed with the world seed (the generation section\u0027s reroll lever), and every blend runs in Q48.16, so two boots of one document at one seed are bit-identical.",
+                      "properties": {
+                        "$type": {
+                          "const": "noise"
+                        },
+                        "value": {
+                          "description": "The peak value written inside a patch.",
+                          "type": "number"
+                        },
+                        "frequency": {
+                          "description": "Lattice cells per noise cell reciprocal -- noise-cell edge in CELLS (e.g. 8 = one noise cell spans 8 lattice cells). At least 1.",
+                          "type": "integer"
+                        },
+                        "threshold": {
+                          "description": "The patch admission level in [0, 1); higher = sparser patches.",
+                          "type": "number",
+                          "default": 0.5
+                        },
+                        "octaves": {
+                          "description": "Octave count, 1..4.",
+                          "type": "integer",
+                          "default": 3
+                        },
+                        "seed": {
+                          "description": "The hash seed, folded with the world seed.",
+                          "type": "integer",
+                          "default": 0
+                        },
+                        "field": {
+                          "description": "Gets the filled row\u0027s name -- compile-stamped, never authored inside a trait.",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "frequency"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Scattered discs: one jittered point per Spacing-cell block (integer-hash offset), and every cell within Radius cells of a point takes Value -- the CPU boot-fill sibling of the renderer\u0027s CellJitter scatter.",
+                      "properties": {
+                        "$type": {
+                          "const": "scatter"
+                        },
+                        "value": {
+                          "description": "The value written inside each disc.",
+                          "type": "number"
+                        },
+                        "spacing": {
+                          "description": "The scatter block edge in CELLS (at least 2).",
+                          "type": "integer"
+                        },
+                        "radius": {
+                          "description": "The disc radius in CELLS (at least 1; must leave the disc inside its block\u0027s jitter envelope, refused otherwise).",
+                          "type": "integer",
+                          "default": 1
+                        },
+                        "seed": {
+                          "description": "The hash seed, folded with the world seed.",
+                          "type": "integer",
+                          "default": 0
+                        },
+                        "field": {
+                          "description": "Gets the filled row\u0027s name -- compile-stamped, never authored inside a trait.",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "spacing"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Every cell drawn from a numeric authored-randomness source \u2014 the per-cell lattice draw. The fill is one pass of the row\u0027s own draw stream (seeded through the same ladder as a state-row site, under the row\u0027s state.\u003Crow\u003E descriptor): cell k, in cell-index order, takes the sample a site at drawCursor \u002B k would draw, so a weighted source under an exhausting mode draws its units across the field and restarts as it goes. The row\u0027s DrawCursor/DrawnMasks name the pass currently painted; generate \u003Crow\u003E advances them one whole pass and repaints. Draw occupies its authored paint position (overwriting earlier fills and preceding later fills); boot, rebuild, load/reset, and a draw-rewinding undo repaint the pass the document names.",
+                      "properties": {
+                        "$type": {
+                          "const": "draw"
+                        },
+                        "source": {
+                          "description": "A declared generators row, or null when Generator is inlined.",
+                          "default": null,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "generator": {
+                          "$ref": "./common.schema.json#/$defs/StateGenerator",
+                          "description": "An inline numeric source, or null when Source is named.",
+                          "default": null
+                        },
+                        "field": {
+                          "description": "Gets the filled row\u0027s name -- compile-stamped, never authored inside a trait.",
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "default": null
+              },
+              "medium": {
+                "description": "Marks this field a fluid MEDIUM, or null for an ordinary field. A medium field\u0027s value times HeightScale over the lattice origin is a free surface every active body samples each tick at its coupled cell \u2014 the same body-coupling ceiling Emit/ Expose resolve against \u2014 refused unless HeightScale is greater than zero (a surface-less medium is meaningless).",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "default": null
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "name",
+          "kind"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "Int"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "value": {
+                  "type": "integer"
+                },
+                "min": {
+                  "type": "integer"
+                },
+                "max": {
+                  "type": "integer"
+                },
+                "cells": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "Fixed"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "value": {
+                  "type": "string",
+                  "description": "The decimal FixedQ4816 spelling (e.g. \u002212.5\u0022), never raw bits."
+                },
+                "min": {
+                  "type": "string",
+                  "description": "The decimal FixedQ4816 spelling (e.g. \u002212.5\u0022), never raw bits."
+                },
+                "max": {
+                  "type": "string",
+                  "description": "The decimal FixedQ4816 spelling (e.g. \u002212.5\u0022), never raw bits."
+                },
+                "cells": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "description": "The decimal FixedQ4816 spelling (e.g. \u002212.5\u0022), never raw bits."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "Bool"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "value": {
+                  "type": "boolean"
+                },
+                "min": {
+                  "type": "integer"
+                },
+                "max": {
+                  "type": "integer"
+                },
+                "cells": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "Text"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "value": {
+                  "type": "string"
+                },
+                "min": {
+                  "type": "integer"
+                },
+                "max": {
+                  "type": "integer"
+                },
+                "cells": {
+                  "items": {
+                    "properties": {
+                      "value": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "not": {
+              "allOf": [
+                {
+                  "required": [
+                    "value"
+                  ]
+                },
+                {
+                  "required": [
+                    "cells"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "not": {
+              "allOf": [
+                {
+                  "required": [
+                    "value"
+                  ]
+                },
+                {
+                  "required": [
+                    "capacity"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "not": {
+              "allOf": [
+                {
+                  "required": [
+                    "advance"
+                  ]
+                },
+                {
+                  "required": [
+                    "draw"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "not": {
+              "allOf": [
+                {
+                  "required": [
+                    "advance"
+                  ]
+                },
+                {
+                  "required": [
+                    "capacity"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "not": {
+              "allOf": [
+                {
+                  "required": [
+                    "dynamics"
+                  ]
+                },
+                {
+                  "required": [
+                    "draw"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "not": {
+              "allOf": [
+                {
+                  "required": [
+                    "dynamics"
+                  ]
+                },
+                {
+                  "required": [
+                    "advance"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "not": {
+              "allOf": [
+                {
+                  "required": [
+                    "dynamics"
+                  ]
+                },
+                {
+                  "required": [
+                    "capacity"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "not": {
+              "allOf": [
+                {
+                  "required": [
+                    "cycle"
+                  ]
+                },
+                {
+                  "required": [
+                    "draw"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "not": {
+              "allOf": [
+                {
+                  "required": [
+                    "cycle"
+                  ]
+                },
+                {
+                  "required": [
+                    "advance"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "not": {
+              "allOf": [
+                {
+                  "required": [
+                    "cycle"
+                  ]
+                },
+                {
+                  "required": [
+                    "dynamics"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "not": {
+              "allOf": [
+                {
+                  "required": [
+                    "cycle"
+                  ]
+                },
+                {
+                  "required": [
+                    "capacity"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "not": {
+              "allOf": [
+                {
+                  "required": [
+                    "cycle"
+                  ]
+                },
+                {
+                  "required": [
+                    "field"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "draw"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "field"
+                    ]
+                  }
+                ]
+              }
+            },
+            "then": {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "drawCursor"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "drawnMasks"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
     },
     "body": {
       "description": "Per-body ephemeral counters and timers, compiled into each body\u0027s bounded ordinal arrays.",

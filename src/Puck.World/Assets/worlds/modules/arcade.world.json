@@ -992,21 +992,21 @@
   "state": {
     "world": [
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 63,
         "min": 0,
         "name": "cgbScreen",
         "value": 8
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 63,
         "min": 0,
         "name": "agbScreen",
         "value": 9
       },
       {
-        "kind": "int",
+        "kind": "Int",
         "max": 63,
         "min": 0,
         "name": "handheldScreen",

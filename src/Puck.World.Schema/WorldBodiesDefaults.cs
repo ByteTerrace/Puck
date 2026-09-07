@@ -64,14 +64,14 @@ public readonly record struct WorldBodiesDefaults(
     [property: JsonPropertyName("peerColors"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSequence? PeerColorsRaw = null,
     [property: JsonPropertyName("capacity"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? CapacityRaw = null,
     float ReconnectGraceSeconds = 3.0f,
-    // OPTIONAL — reads the census from a scalar kind=int state row's slot at boot, AFTER row first-fills, so a
+    // OPTIONAL — reads the census from a scalar kind=Int state row's slot at boot, AFTER row first-fills, so a
     // Boot-drawn row IS the drawn census: the draw facet lives on the ROW, this site only reads it. Re-resolved on
     // every fresh load; the row itself is the persisted evidence of what was drawn.
     [property: JsonPropertyName("capacityRow"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CapacityRow = null,
     // OPTIONAL per-observer snapshot disclosure. Null resolves to WorldObserverDisclosure.Default (disclose-all),
     // which is what every world authoring none delivers.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldObserverDisclosure? Disclosure = null,
-    // OPTIONAL — names a scalar kind=fixed, KEYED state.world row (capacity declared, cells keyed by 0-based body
+    // OPTIONAL — names a scalar kind=Fixed, KEYED state.world row (capacity declared, cells keyed by 0-based body
     // index, Min AND Max both authored — the declared scale envelope) that carries each body's own live scale
     // multiplier. Absent (the default) is today's behavior: every body's Scale reads FixedQ4816.One forever, at no
     // per-Install cost. Resynced wholesale at the same choke points state.GatesDrive is (WorldServer.Install's own

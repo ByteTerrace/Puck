@@ -67,9 +67,9 @@ status table**. Add these ordinary rows to the world's `state.world` array for
 the example configuration:
 
 ```json
-{ "name": "cloud-requests", "kind": "text", "capacity": 64,
+{ "name": "cloud-requests", "kind": "Text", "capacity": 64,
   "cells": [], "visibility": {} },
-{ "name": "cloud-status", "kind": "int", "capacity": 64,
+{ "name": "cloud-status", "kind": "Int", "capacity": 64,
   "cells": [], "visibility": {} }
 ```
 

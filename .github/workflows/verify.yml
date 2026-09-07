@@ -6,7 +6,9 @@ name: Verify
 # corpora; its BIOS-dependent stages skip here. `frontier` runs nightly and on request: the rows recorded as failing
 # or inconclusive, re-measured to find ratchets and pixel-count changes, with the candidate ledger uploaded so a
 # ratchet is accepted by `--accept-candidate` on the downloaded file rather than by a second run. Both batteries are
-# pure-CPU console applications; neither needs a GPU or a display.
+# pure-CPU console applications; neither needs a GPU or a display. `ledgers` runs `puck schema --check` and
+# `puck registry --check` from a freshly published CLI on every change, so a document field added without
+# regenerating the checked-in schema or the name registry fails the build here rather than only in a manual verb run.
 
 on:
   push:
@@ -211,3 +213,23 @@ jobs:
       - name: Run the Node harness against the AppBundle
         working-directory: src/Puck.Dashboard/src/portal
         run: node --test tests/engine-wasm.test.cjs
+
+  ledgers:
+    if: ${{ github.event_name != 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Publish the CLI
+        run: dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish
+
+      - name: puck schema --check
+        run: src/Puck.Cli/publish/puck schema --check
+
+      - name: puck registry --check
+        run: src/Puck.Cli/publish/puck registry --check

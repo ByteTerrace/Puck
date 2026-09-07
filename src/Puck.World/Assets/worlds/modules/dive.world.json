@@ -464,7 +464,7 @@
     "world": [
       {
         "name": "water",
-        "kind": "fixed",
+        "kind": "Fixed",
         "domain": {
           "$type": "cellsOf",
           "topology": "pool"
@@ -490,14 +490,14 @@
       },
       {
         "name": "depth",
-        "kind": "fixed",
+        "kind": "Fixed",
         "value": "0",
         "min": "0",
         "max": "3"
       },
       {
         "name": "dived",
-        "kind": "int",
+        "kind": "Int",
         "value": 0,
         "min": 0,
         "max": 1
