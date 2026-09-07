@@ -63,6 +63,16 @@ export interface DocumentRevision {
   readonly label: string;
 }
 
+/**
+ * Where this document's OWN validation stands — distinct from `diagnostics.length === 0`, which
+ * is ALSO true before validation has ever run (a fresh or just-edited document starts with no
+ * diagnostics of its own). `'pending'` covers both "never validated yet" and "a newer edit has
+ * since superseded whatever the last validation found" — a caller with no engine available (see
+ * `diagnoseEngineUnavailable`) stays `'pending'` forever, which is the correct, honest answer:
+ * "unknown", not "clean".
+ */
+export type DocumentValidationStatus = "pending" | "clean" | "refused";
+
 export interface DocumentState extends DocumentRevision {
   readonly name: string;
   readonly role: DocumentRole;
@@ -75,6 +85,7 @@ export interface DocumentState extends DocumentRevision {
   /** The engine's composed standalone JSON for a fragment or the island root; null for a
    * standalone world document (validated by `engine.parse` alone) or before validation runs. */
   readonly composed: string | null;
+  readonly validation: DocumentValidationStatus;
 }
 
 export type PreviewScriptStep =

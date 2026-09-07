@@ -16,15 +16,17 @@
  * it is — releases its handle and falls back to idle, so a preview can never run silently against
  * a document the engine has not (re)validated.
  *
- * A known, deliberate simplification: `PREVIEW_START`'s guard reads `document.diagnostics.length
- * === 0`, which is also true before validation has ever run (a fresh document starts with no
- * diagnostics). A caller that fires `PREVIEW_START` before the in-flight validation settles can
- * start a preview the engine has not actually checked yet; a real UI avoids this by disabling the
- * preview control until the document region returns to `idle` (readable via `useStudioDocument`'s
- * own diagnostics/deferred going stable, or a `snapshot.matches` check in `StudioContext.tsx`).
+ * `PREVIEW_START`'s guard reads `document.validation === 'clean'` — a status distinct from
+ * `diagnostics.length === 0`, which is ALSO true before validation has ever run (a fresh or
+ * just-edited document starts with no diagnostics of its own). `validation` starts, and stays,
+ * `'pending'` until a validation actually completes against the live engine (see `studio/types.ts`'s
+ * own `DocumentValidationStatus` remarks), so a caller that fires `PREVIEW_START` while a validation is
+ * in flight — or before one has ever run — is correctly refused rather than starting a preview the
+ * engine has not actually checked yet.
  */
 import { assign, setup } from "xstate";
 import { readDocumentRole } from "../document/documentRole";
+import { parseDocumentText } from "../document/jsonText";
 import {
   applyText,
   createEmptyDocument,
@@ -125,7 +127,7 @@ export const studioMachine = setup({
   },
   guards: {
     engineReady: ({ context }) => (context.engine !== null && context.official !== null),
-    documentCompiles: ({ context }) => (context.document.diagnostics.length === 0 && context.engine !== null),
+    documentCompiles: ({ context }) => (context.document.validation === "clean" && context.engine !== null),
   },
   actions: {
     diagnoseEngineUnavailable: assign({
@@ -238,10 +240,15 @@ export const studioMachine = setup({
               },
             },
             // Re-entrant on the very same event set: a new document-mutating event while an edit
-            // or its validation is in flight interrupts it (XState stops the exited state's
-            // invoked actor on exit), so only the NEWEST edit's validation ever lands.
+            // is in flight interrupts it (XState stops an exited state's invoked actor on exit —
+            // but ONLY on a transition that actually exits: a same-target self-transition like this
+            // one is INTERNAL by default and leaves the current invoke running untouched unless
+            // `reenter: true` says otherwise — see xstate's own `getTransitionDomain`). `reenter:
+            // true` is what makes this transition really EXIT "editing" (stopping the in-flight
+            // editActor) before re-entering it fresh for the new event, so only the NEWEST edit's
+            // editActor ever resolves into `context.document`.
             editing: {
-              on: Object.fromEntries([...DOCUMENT_MUTATING_EVENTS].map((type) => [type, { target: "editing" }])),
+              on: Object.fromEntries([...DOCUMENT_MUTATING_EVENTS].map((type) => [type, { target: "editing", reenter: true }])),
               invoke: {
                 src: "editActor",
                 input: ({ context, event }) => ({
@@ -275,14 +282,16 @@ export const studioMachine = setup({
                         if (!draft || draft.revisions.length === 0) {
                           throw new Error(`no local draft named '${event.id}'.`);
                         }
-                        // A draft's own text was, at save time, either already-verified official
-                        // content or content that already passed `checkDocument` once (OPEN_TEXT/
-                        // APPLY_TEXT) — re-running it here would wrongly refuse an official
-                        // document's own huge Int64 sentinel literals (see
-                        // `tests/engine-wasm.test.cjs`'s remarks); this is `openOfficialDocument`'s
-                        // trusted-content path, not `openTextDocument`'s pasted-content one.
+                        // A draft's own text was, at save time, already-verified official content
+                        // or content that already passed `checkDocument` once (OPEN_TEXT/APPLY_TEXT)
+                        // — this is `openOfficialDocument`'s trusted-content path, not
+                        // `openTextDocument`'s pasted-content one, so `checkDocument` never re-runs
+                        // here. `parseDocumentText` (not plain `JSON.parse`) still parses it once to
+                        // pick a role — the same Int64-faithful parse `openOfficialDocument` itself
+                        // performs a moment later, so an out-of-range sentinel reads back as the
+                        // same `bigint` both times rather than a rounded double on this first pass.
                         const text = draft.revisions[0].text;
-                        const value: unknown = JSON.parse(text);
+                        const value: unknown = parseDocumentText(text);
                         return openOfficialDocument(draft.documentName || event.id, text, readDocumentRole(value));
                       }
                       default:
@@ -314,6 +323,11 @@ export const studioMachine = setup({
                 },
               },
             },
+            // Unlike "editing"'s own self-transition (see its remarks on `reenter`), this one's
+            // target ("editing") differs from its source ("validating") — a genuine cross-state
+            // transition always exits its source, so the in-flight validateActor (the expensive
+            // `composeTree`/`compile` call) is always stopped here with no `reenter` flag needed;
+            // its own eventual result, even if it later resolves anyway, is never applied.
             validating: {
               on: Object.fromEntries([...DOCUMENT_MUTATING_EVENTS].map((type) => [type, { target: "editing" }])),
               invoke: {
@@ -337,6 +351,7 @@ export const studioMachine = setup({
                         diagnostics: event.output.diagnostics,
                         deferred: event.output.deferred,
                         composed: event.output.composed,
+                        validation: "clean" as const,
                       }),
                     }),
                     target: "geometrizing",
@@ -348,6 +363,7 @@ export const studioMachine = setup({
                         diagnostics: event.output.diagnostics,
                         deferred: event.output.deferred,
                         composed: event.output.composed,
+                        validation: "refused" as const,
                       }),
                       geometry: () => ({}),
                     }),
@@ -356,8 +372,10 @@ export const studioMachine = setup({
                 ],
                 onError: {
                   actions: assign({
-                    document: ({ context, event }) =>
-                      pushDiagnostic(context.document, errorMessage((event as unknown as { error: unknown }).error)),
+                    document: ({ context, event }) => ({
+                      ...pushDiagnostic(context.document, errorMessage((event as unknown as { error: unknown }).error)),
+                      validation: "refused" as const,
+                    }),
                   }),
                   target: "idle",
                 },

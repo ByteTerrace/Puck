@@ -129,6 +129,14 @@ function SchemaNodeBody({ walker, document, path, onEdit, compact, refDepth = 0,
     }
     case "integer":
     case "number": {
+      // An Int64-native value — a document/jsonText.ts-parsed extreme, or one this studio itself
+      // wrote (PAINT_CELLS's own value is always a bigint; see this project's own "every 64-bit
+      // value is a bigint" rule) — stays exactly what it is: an editable integer text field,
+      // validated as a whole-number literal, emitted back out as a bigint. A plain NumberInput
+      // cannot carry this: Mantine's own numeric parsing round-trips through a JS `number`.
+      if (typeof value === "bigint") {
+        return <BigIntField path={path} value={value} onEdit={onEdit} compact={compact} fieldLabel={fieldLabel} description={description} />;
+      }
       // A JS number past Number.isSafeInteger (or a value some upstream step already kept as a
       // string token) cannot round-trip through Mantine's numeric parsing without silently
       // rounding it — the same reason engine/documentValidation.ts refuses a document carrying
@@ -310,6 +318,35 @@ function CollapsedObject({ walker, document, path, onEdit, fieldLabel }: {
       <Text size="xs" c="dimmed">{fieldLabel} (nested)</Text>
       <Button size="compact-xs" variant="default" onClick={() => setExpanded(true)}>Expand</Button>
     </Group>
+  );
+}
+
+const INTEGER_LITERAL = /^-?\d+$/;
+
+/** Editable text field for an Int64-native `bigint` leaf — a plain `NumberInput` cannot carry one
+ * (see this switch arm's own remarks). Every keystroke that parses as a whole-number literal
+ * commits immediately, matching every other field's own commit-per-keystroke behavior in this
+ * file; a partial token ("-", "", a non-digit) is kept on screen but never committed, so a typing
+ * document is never mid-edit corrupted into losing precision. */
+function BigIntField({ path, value, onEdit, compact, fieldLabel, description }: {
+  path: JsonPath; value: bigint; onEdit: (edit: DocumentEdit) => void; compact?: boolean; fieldLabel: string; description?: string;
+}) {
+  const [text, setText] = useState(() => value.toString());
+  const valid = INTEGER_LITERAL.test(text);
+  return (
+    <TextInput
+      label={compact ? undefined : fieldLabel}
+      description={compact ? undefined : (description ?? "A 64-bit integer.")}
+      value={text}
+      error={!valid ? "Must be a whole number (digits only, an optional leading -)." : undefined}
+      onChange={e => {
+        const next = e.currentTarget.value;
+        setText(next);
+        if (INTEGER_LITERAL.test(next)) {
+          onEdit({ path, value: BigInt(next), label: editLabel("set", path) });
+        }
+      }}
+    />
   );
 }
 

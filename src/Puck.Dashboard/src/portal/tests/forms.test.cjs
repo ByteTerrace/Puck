@@ -21,6 +21,7 @@ const { SchemaNode } = require('../src/forms/SchemaNode.tsx');
 const { SectionForm } = require('../src/forms/SectionForm.tsx');
 const { SectionExplorer } = require('../src/forms/SectionExplorer.tsx');
 const { getAt, setAt, deleteAt } = require('../src/document/jsonPath.ts');
+const { parseDocumentText } = require('../src/document/jsonText.ts');
 
 // See schemaWalk.test.cjs for why this is generated fresh rather than committed.
 function findRepoRoot(start) {
@@ -86,6 +87,30 @@ test('SchemaNode renders the state.world section with field labels, an Int value
   assert.match(html, /speed/);
   assert.match(html, /1\.5/); // the Fixed row's decimal-string value, rendered as text, never coerced through a lossy number
   assert.equal(edits.length, 0);
+});
+
+test('SchemaNode renders an Int64-extreme cell value as an EDITABLE integer text field, not the old read-only fallback', () => {
+  // The Int64.MaxValue literal MUST come from parsed TEXT, never a JS numeric literal written in
+  // this test's own source — V8 would round a bare `9223372036854775807` the moment this file
+  // itself parses, before parseDocumentText ever saw it (the exact corruption this feature fixes).
+  const text = '{"schema":"puck.world.def.v1","state":{"world":[' +
+    '{"name":"score","kind":"Int","value":0,"cells":[{"key":"0","value":9223372036854775807}]}' +
+    ']}}';
+  const document = parseDocumentText(text);
+  assert.equal(typeof getAt(document, ['state', 'world', 0, 'cells', 0, 'value']), 'bigint');
+  assert.equal(getAt(document, ['state', 'world', 0, 'cells', 0, 'value']), 9223372036854775807n);
+
+  const html = renderToStaticMarkup(withMantine(
+    React.createElement(SchemaNode, {
+      walker: resolve(bundle),
+      document,
+      path: ['state', 'world'],
+      onEdit: () => {},
+    }),
+  ));
+  assert.match(html, /9223372036854775807/);
+  // The retired read-only fallback's own copy must be gone from this render.
+  assert.doesNotMatch(html, /Beyond exact precision/);
 });
 
 test('SectionForm renders a header for the "state" section and its own SchemaNode fields', () => {

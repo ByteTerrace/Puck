@@ -5,27 +5,11 @@
  */
 import { deleteAt, getAt, setAt, type JsonPath } from "../../document/jsonPath";
 import { checkDocument } from "../../document/intake";
-import { hasComposition, readDocumentRole, type DocumentRole } from "../../document/documentRole";
-import { REQUIRED_WORLD_SCHEMA } from "../../official/manifest";
+import { parseDocumentText, serializeDocumentText } from "../../document/jsonText";
+import { hasComposition, ISLAND_ROOT_DOCUMENT_NAME, readDocumentRole, type DocumentRole } from "../../document/documentRole";
 import type { EngineDiagnostic, WorldEngine } from "../../native/engineTypes";
 import type { OfficialLoad } from "../../official/officialClient";
 import type { DocumentRevision, DocumentState } from "./types";
-
-/** `OfficialWorldDocumentScanner`'s own `BasisDocumentName` — the one document every bare fragment
- * composes over when it is validated on its own (see `validateDocument`'s own remarks). */
-const STANDARD_BASIS_NAME = "standard.basis.json";
-
-const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
-const MIN_SAFE_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
-
-/** Encodes a 64-bit authoring value into the JSON shapes a state row's cell value accepts
- * (`number | string | boolean` — see `worldDefinition.generated.ts`'s `state.world[].cells[].value`):
- * a plain JSON number when it round-trips exactly, otherwise its exact decimal string — the same
- * escape hatch the schema itself carries for a value `JSON.parse` cannot represent (see
- * `tests/engine-wasm.test.cjs`'s own remarks on tictactoe.world.json's Int64.Min/MaxValue sentinels). */
-export function encodeCellValue(value: bigint): number | string {
-  return (value <= MAX_SAFE_BIGINT && value >= MIN_SAFE_BIGINT) ? Number(value) : value.toString();
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -45,6 +29,7 @@ export function createEmptyDocument(): DocumentState {
     diagnostics: [],
     deferred: [],
     composed: null,
+    validation: "pending",
   };
 }
 
@@ -62,6 +47,7 @@ function freshRevision(document: DocumentState, revision: DocumentRevision, role
     diagnostics: [],
     deferred: [],
     composed: null,
+    validation: "pending",
   };
 }
 
@@ -72,7 +58,7 @@ export function openOfficialDocument(name: string, text: string, role: DocumentR
     name,
     role,
     text,
-    value: JSON.parse(text),
+    value: parseDocumentText(text),
     label: `Opened ${name}`,
     revision: 0,
     cleanRevision: 0,
@@ -81,6 +67,7 @@ export function openOfficialDocument(name: string, text: string, role: DocumentR
     diagnostics: [],
     deferred: [],
     composed: null,
+    validation: "pending",
   };
 }
 
@@ -88,7 +75,7 @@ export function openOfficialDocument(name: string, text: string, role: DocumentR
  * by name; the caller decides how a refusal surfaces). */
 export function openTextDocument(text: string, name: string | undefined): DocumentState {
   checkDocument(text);
-  const value: unknown = JSON.parse(text);
+  const value: unknown = parseDocumentText(text);
   return {
     name: name ?? "untitled",
     role: readDocumentRole(value),
@@ -102,13 +89,14 @@ export function openTextDocument(text: string, name: string | undefined): Docume
     diagnostics: [],
     deferred: [],
     composed: null,
+    validation: "pending",
   };
 }
 
 /** `APPLY_TEXT`: the JSON editor's Apply — intake-checks, parses, becomes a revision. */
 export function applyText(document: DocumentState, text: string): DocumentState {
   checkDocument(text);
-  const value: unknown = JSON.parse(text);
+  const value: unknown = parseDocumentText(text);
   return freshRevision(document, { text, value, label: "Apply JSON" }, readDocumentRole(value));
 }
 
@@ -116,12 +104,17 @@ export function applyText(document: DocumentState, text: string): DocumentState 
  * own `DocumentEdit` contract, which this mirrors exactly). */
 export function editDocument(document: DocumentState, path: JsonPath, value: unknown, label: string): DocumentState {
   const nextValue = value === undefined ? deleteAt(document.value, path) : setAt(document.value, path, value);
-  const text = JSON.stringify(nextValue, null, 2);
+  const text = serializeDocumentText(nextValue);
   return freshRevision(document, { text, value: nextValue, label }, readDocumentRole(nextValue));
 }
 
 /** `PAINT_CELLS`: writes `cells[]` entries (string keys) on the named `state.world` row, as one
- * revision, through the same `setAt` edit path as `EDIT_DOCUMENT`. */
+ * revision, through the same `setAt` edit path as `EDIT_DOCUMENT`. The authored `value` is kept as
+ * the `bigint` it already is — `serializeDocumentText` writes it back out as a bare integer
+ * literal regardless of magnitude, so there is no separate number/string encoding step to get
+ * wrong (see `document/jsonText.ts`'s own remarks; a JSON.parse/JSON.stringify round trip through
+ * an UNTOUCHED sentinel elsewhere in the same document — see `tests/studioMachine.test.cjs`'s own
+ * Int64 fidelity coverage — is what this guards, not this cell's own write). */
 export function paintCells(
   document: DocumentState,
   topology: string,
@@ -143,14 +136,13 @@ export function paintCells(
       ? existingCells.filter(isRecord).map((cell) => [String(cell.key), cell])
       : [],
   );
-  const encoded = encodeCellValue(value);
   for (const ordinal of ordinals) {
     const key = String(ordinal);
-    byKey.set(key, { ...(byKey.get(key) ?? {}), key, value: encoded });
+    byKey.set(key, { ...(byKey.get(key) ?? {}), key, value });
   }
   const cells = [...byKey.values()];
   const nextValue = setAt(document.value, ["state", "world", rowIndex, "cells"], cells);
-  const text = JSON.stringify(nextValue, null, 2);
+  const text = serializeDocumentText(nextValue);
   const label = `paint ${ordinals.length} cells of ${topology}.${row}`;
   return freshRevision(document, { text, value: nextValue, label }, readDocumentRole(nextValue));
 }
@@ -170,6 +162,7 @@ export function undoDocument(document: DocumentState): DocumentState {
     diagnostics: [],
     deferred: [],
     composed: null,
+    validation: "pending",
   };
 }
 
@@ -188,6 +181,7 @@ export function redoDocument(document: DocumentState): DocumentState {
     diagnostics: [],
     deferred: [],
     composed: null,
+    validation: "pending",
   };
 }
 
@@ -198,16 +192,32 @@ export interface ValidationOutcome {
   readonly composed: string | null;
 }
 
-/** Builds the `documents` map every `composeTree` call needs: every official document of role
- * world/basis/fragment/shard, keyed by its manifest name — see the machine's own remarks on why
- * `composed` entries (already-composed roots) are never part of this map. `LazyOfficialSet.get`
- * memoizes per name, so repeated validations after the first pay only for what changed. */
-async function loadComposeTreeDocuments(official: OfficialLoad): Promise<Record<string, string>> {
-  const documents: Record<string, string> = {};
-  for (const entry of official.manifest.documents) {
-    documents[entry.name] = await official.documents.get(entry.name);
+/** One `official` load's own `documents` map (every `composeTree` call needs it in full, since a
+ * fragment now composes over the WHOLE island — see `validateDocument`'s own remarks), built at
+ * most once per `OfficialLoad` and reused by every later validation. `LazyOfficialSet.get` already
+ * memoizes per name, but re-awaiting ~30 of them and rebuilding the record on every keystroke is
+ * still real (if small) per-call overhead this keys away entirely; the `WeakMap` key is the load
+ * object itself, so a fresh boot (a fresh `OfficialLoad`) starts a fresh cache with no invalidation
+ * to get wrong. */
+const composeTreeDocumentsCache = new WeakMap<OfficialLoad, Promise<Record<string, string>>>();
+
+/** Every official document of role world/basis/fragment/shard, keyed by its manifest name — see
+ * the machine's own remarks on why `composed` entries (already-composed roots) are never part of
+ * this map. */
+function loadComposeTreeDocuments(official: OfficialLoad): Promise<Record<string, string>> {
+  const cached = composeTreeDocumentsCache.get(official);
+  if (cached) {
+    return cached;
   }
-  return documents;
+  const loaded = (async () => {
+    const documents: Record<string, string> = {};
+    for (const entry of official.manifest.documents) {
+      documents[entry.name] = await official.documents.get(entry.name);
+    }
+    return documents;
+  })();
+  composeTreeDocumentsCache.set(official, loaded);
+  return loaded;
 }
 
 function composeOutcome(result: Awaited<ReturnType<WorldEngine["composeTree"]>>): ValidationOutcome {
@@ -227,13 +237,19 @@ function composeOutcome(result: Awaited<ReturnType<WorldEngine["composeTree"]>>)
  *    ITS OWN root: `composeTree(document.name, documents, edited)`, exactly as opening it for
  *    real would;
  *  - a bare fragment (no `basis`/`imports` of its own — it exists to be imported BY something
- *    else, never composed alone) is wrapped in a minimal synthetic root over
- *    `standard.basis.json`, the same shape `tests/engine-wasm.test.cjs`'s own
- *    "ComposeTree() with an edited document" scenario builds by hand. Composing a bare fragment
- *    against the REAL island root would still validate it correctly, but at the cost of
- *    compiling the whole MMO island (every district, every module) just to check one fragment —
- *    empirically minutes of engine time for what should be a fast per-edit check — so a fragment
- *    is always validated against the smallest host that can import it.
+ *    else, never composed alone) composes over the ISLAND ITSELF: `composeTree(
+ *    ISLAND_ROOT_DOCUMENT_NAME, documents, edited)`, exactly as opening the real game would.
+ *
+ * A bare fragment used to compose over a minimal synthetic root (`standard.basis.json` plus one
+ * import) instead, for speed — but most shipped fragments (billiards, bowling, poker, chess, …)
+ * refuse under that bare basis BY DESIGN: they name the island's own body/look rows and host
+ * registers, which only the real island supplies. That made the synthetic root wrong, not fast —
+ * every such fragment read as permanently broken. Composing over the real island costs real engine
+ * time (low-teens seconds on a dev machine for the whole MMO island, not the "minutes" once
+ * assumed here — see this package's own COMMANDS report for measured numbers) but is the only host
+ * that answers the actual question correctly, so correctness wins outright; `PREVIEW_START`
+ * staying an explicit, guarded user action (see `studioMachine.ts`'s own remarks) is what keeps
+ * that cost off every keystroke.
  */
 export async function validateDocument(
   engine: WorldEngine,
@@ -251,19 +267,8 @@ export async function validateDocument(
   const documents = await loadComposeTreeDocuments(official);
   const edited = { name: document.name, json: document.text };
 
-  if (hasComposition(document.value) || document.role === "basis") {
-    return composeOutcome(await engine.composeTree(document.name, documents, edited));
-  }
-
-  const syntheticRootName = "$fragment-preview-root.json";
-  const syntheticRootJson = JSON.stringify({
-    schema: REQUIRED_WORLD_SCHEMA,
-    basis: STANDARD_BASIS_NAME,
-    imports: [{ document: document.name, as: null }],
-  });
-  return composeOutcome(await engine.composeTree(
-    syntheticRootName,
-    { ...documents, [syntheticRootName]: syntheticRootJson },
-    edited,
-  ));
+  const rootName = (hasComposition(document.value) || document.role === "basis")
+    ? document.name
+    : ISLAND_ROOT_DOCUMENT_NAME;
+  return composeOutcome(await engine.composeTree(rootName, documents, edited));
 }
