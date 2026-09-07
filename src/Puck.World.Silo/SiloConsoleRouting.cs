@@ -100,8 +100,8 @@ public sealed class SiloConsoleRouting {
         key: slot,
         value: out worldId!
     );
-    /// <summary>Resolves a currently registered row's own session by world id — <see cref="SiloStdinRouter"/>'s
-    /// tagged-input lookup.</summary>
+    /// <summary>Resolves a currently registered row's own session by world id. Background text readers use
+    /// <see cref="TryEnqueue"/> to handle retirement between lookup and enqueue.</summary>
     /// <param name="worldId">The row's registry name.</param>
     /// <param name="session">The row's own session, on success.</param>
     /// <returns><see langword="true"/> when the world id is currently registered (its row is admitted).</returns>
@@ -119,14 +119,33 @@ public sealed class SiloConsoleRouting {
 
         return false;
     }
+    /// <summary>Queues a line on an admitted row. Retirement racing the reader is a refusal, not a reader-thread
+    /// exception; already injected simulation work retains its existing completion semantics.</summary>
+    /// <param name="worldId">The addressed row's registry name.</param>
+    /// <param name="line">The command line.</param>
+    /// <returns>Whether the line was queued before the session closed. This is not a dispatch receipt.</returns>
+    /// <exception cref="ArgumentNullException">The world id or line is null.</exception>
+    public bool TryEnqueue(string worldId, string line) {
+        ArgumentNullException.ThrowIfNull(line);
+        if (!TryGetSession(worldId, out var session)) {
+            return false;
+        }
+        try {
+            session.Enqueue(line);
+            return true;
+        } catch (ObjectDisposedException) {
+            return false;
+        }
+    }
     /// <summary>Retires a row's console session — called from the same tick-thread mailbox action that removes the
-    /// row itself, so a session's lifetime never outlives its row.</summary>
+    /// row itself. Closes ingress and refuses work still queued, including operations held behind a wait.</summary>
     /// <param name="worldId">The row's registry name.</param>
     public void Unregister(string worldId) {
         if (m_byWorldId.TryRemove(
             key: worldId,
             value: out var route
         )) {
+            route.Session.Dispose();
             m_bySlot.TryRemove(
                 key: route.Slot,
                 value: out _

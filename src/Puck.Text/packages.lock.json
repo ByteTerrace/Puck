@@ -27,7 +27,6 @@
       "ByteTerrace.Puck.Maths": {
         "type": "Project"
       }
-    },
-    "net10.0/browser-wasm": {}
+    }
   }
 }

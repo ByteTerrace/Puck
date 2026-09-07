@@ -153,9 +153,8 @@ committed copy and pins its content hash in the row's own `hash` field. After th
 `sha256-64/{16 hex}` hash to paste into every such row.
 
 **None of the four shipped worlds declares an `addons` row today** — the `default` world that once
-mounted this module was retired under the four-world charter, so the rows that pin this hash live
-only in hand-authored documents: the fixtures under `docs/verification/`, and
-`puck-addon-hudbuilder/worlds/`. There is no built-in `WorldAddonRow` to update.
+mounted this module was retired under the four-world charter. There is no built-in
+`WorldAddonRow` to update. Update each custom document's `addons` row that pins the changed module.
 
 **The committed bytes' provenance is not gate-enforced.** No build step proves the `.wasm` sitting
 in `src/Puck.World/Assets/addons/` was actually built from the Rust sitting beside it here — they

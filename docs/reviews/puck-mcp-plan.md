@@ -1,7 +1,8 @@
 # Puck MCP: adversarial review and implementation plan
 
-Reviewed and revised after technical rebuttal on 2026-09-07 against checkout base
-`621127f0b67a`. This is a future
+Initially reviewed after technical rebuttal on 2026-09-07 against checkout base
+`621127f0b67a`; the engine prerequisites were reviewed again at `5f63f7a533c4`.
+This is a future
 implementation handoff, not a claim that an MCP server is implemented. Source
 links are repository-relative so the plan survives another machine or checkout.
 
@@ -14,7 +15,7 @@ that fact must not become a reason to restrict an explicitly trusted operator.
 
 ## Engine prerequisites implemented on 2026-09-07
 
-The changes in `.worktrees/mcp-engine-prerequisites` supply the engine seams
+Commit `5f63f7a533c464021644abdfa87db684f4024750` supplies the engine seams
 for local pairing:
 
 - `world.wait` now holds only its issuing text session, with independent
@@ -28,16 +29,21 @@ for local pairing:
   `FrameCaptureResult` after writing or on failure. Busy targets cannot replace
   accepted requests. The scheduled-capture consumer uses this completion too.
 
-These engine changes are uncommitted in the isolated
-`.worktrees/mcp-engine-prerequisites` worktree at base `621127f0b67a`; they
-have not been integrated into the primary checkout. The plan is synchronized
-in both checkouts. Build and test evidence below applies to the isolated engine
-changes, not to a merge with subsequent primary-checkout work. No MCP server
-or attachment endpoint has been implemented.
+The engine prerequisites are integrated. The original verification below
+describes the earlier implementation worktree; it is not a new gate run against
+the landed commit. No MCP server or attachment endpoint has been implemented.
 
-The next session must first integrate these engine changes with the current
-primary checkout, preserving concurrent edits and rerunning the affected gates.
-Then proceed to milestone 0: bounded authenticated local IPC and actual
+Adversarial review of the landed commit found three lifecycle defects:
+`FrameCaptureRequest.Write` swallowed the host's `DeviceLostException`
+recovery signal, Silo row retirement did not dispose its command session, and
+a clock reset could revive an expired wait before the pump observed its expiry.
+Corrections complete the failed capture before rethrowing device loss, close
+retired sessions and refuse their queued work, and treat stdin racing retirement
+as a row refusal. Clock reset invalidates all previous deadlines.
+Regression tests exercise the real request, routing, and wait APIs.
+These review corrections must accompany the prerequisites into the MCP work.
+
+Proceed to milestone 0: bounded authenticated local IPC and actual
 SDK/client interop. Reuse these engine APIs instead of inventing a
 `WorldRenderProbe` success event. Authoritative per-mutation receipts remain
 separate work: a submission callback or a completed capture does not prove an
@@ -63,7 +69,7 @@ cleanup; cancelling the wait leaves an accepted render request alive.
 Two additional findings from the second technical review affect the first release:
 
 - The base checkout installed the desktop's shared wait gate as a source-wide
-  hold. The isolated engine changes remove that registration and puts the deadline on the
+  hold. The landed engine changes remove that registration and put the deadline on the
   issuing `TextCommandSession`. Independent session tests now cover that engine
   boundary; simultaneous human/IPC use still belongs to the attachment release
   gate.
@@ -507,7 +513,7 @@ only after all requested slices land; a local release does not claim Azure suppo
 
 | Milestone | Deliverable | Exit evidence |
 |---|---|---|
-| Engine integration: before milestone 0 | Integrate the implemented session waits, ordered host operations, and correlated capture completion from the isolated worktree. | Preserve current primary-checkout edits; pass the affected builds and tests after integration. Prior verification is not evidence for a new merged tree. |
+| Engine prerequisites: before milestone 0 | Landed in `5f63f7a533c4`: session waits, ordered host operations, and correlated capture completion. Include the review corrections for device-loss propagation, row retirement, and clock reset. | Pass the affected builds and tests on the tree used for MCP work. Prior verification is not evidence for a new merged tree. |
 | 0: local transport and protocol spike | Select SDK or owned implementation from measured evidence; pin actual client/protocol matrix; build a user-scoped IPC endpoint feeding a dedicated Console session. | Resolved architecture build and client interop; reviewed lock delta; correct host/profile identity; escaped multiline replies, fragmented/coalesced reads, blank/comment handling, bounded input/queueing, and no stdout contamination. No MCP package in base World. |
 | 1: live operator pairing | `--profile operator --attach <pipe>`, full `puck_exec`, session-scoped waits, and one-call frame capture ordered behind prior edits. | Human enables attachment in a running world; agent changes a parameter and receives a fresh PNG. Human console responds during an MCP wait. Deferred rejection is not reported as success; overlay, shader-pass, and bare-producer captures all complete or fail explicitly. Adapter restart preserves world. Busy/timeout/device-loss, wrong-user/elevation, and remote pipe access checks pass. |
 | 2: participant tools | Explicit participant composition, three bridge tools, binding lifecycle, bounded admission, honest receipts and retry semantics. | Participant cannot reach exec/files/frame/tape even by guessing tool names or changing profile arguments. Grant/revoke, channel reorder, body reuse, observe denial, cancellation, and saturation tests run against the real host. |
@@ -599,7 +605,7 @@ preflight evidence only; actual restore, resolved build, footprint measurement,
 and target-client interoperability remain milestone 0 work. A release plan
 should state that uncertainty instead of declaring either implementation chosen.
 
-Engine prerequisite verification in the isolated worktree: World and Silo Release builds
+Original engine prerequisite verification in the implementation worktree: World and Silo Release builds
 passed with zero warnings, and 516 tests passed across Commands (454),
 Abstractions (10), Shaders (42), and the focused World command suite (10).
 The Puck CLI compiler-backed implementer query resolved all three capture targets
@@ -619,3 +625,19 @@ The independent-session wait assertion was also checked with an intentionally
 inverted production hold predicate: it failed, and passed again after restoring
 the implementation. Host-scope entry failure completes the queued operation
 with an error rather than stranding its caller.
+
+Review verification for the correction patch against `5f63f7a533c4`:
+the device-loss, retired-session, and expired-wait-reset regressions each failed
+before correction. After correction, the full World suite passed 1,974 tests
+with two skips (Azure configuration and Windows symlink support); Commands
+passed 454, Abstractions 11, and Shaders 42. World and Silo Release builds
+passed. The initial sandboxed World run failed during Windows cryptographic
+key setup and skipped replay writes; the normal-user rerun resolved those
+environment failures. Documentation links and the length ledger passed.
+Device loss was injected at the capture request boundary; a live GPU reset
+and Vulkan parity were not exercised in this review.
+
+The pre-commit check also regenerated stale browser-WASM and trimming entries
+in shared-library dependency locks. Locked restores now pass for both the
+native World test graph and the browser project; retained native dependencies
+are unchanged.

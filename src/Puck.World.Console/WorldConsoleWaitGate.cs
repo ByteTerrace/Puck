@@ -36,11 +36,15 @@ public sealed class WorldConsoleWaitGate {
 
         return release;
     }
-    /// <summary>Publishes a completed host-work tick. Each waiting session checks its own deadline.</summary>
+    /// <summary>Publishes a completed host-work tick. Each waiting session checks its own deadline.
+    /// A clock regression invalidates every previous deadline, including expiry not yet observed by the pump.</summary>
     /// <param name="tick">The monotonic count of completed host-work ticks.</param>
     public void PublishTick(ulong tick) {
         if (tick < Tick) {
-            _ = ReleaseStalled();
+            // Expiry clears m_armed before the command pump necessarily observes the old predicate.
+            // A reset must invalidate that predicate too, or the lower clock can revive an expired wait.
+            m_armed = false;
+            m_epoch++;
             m_releaseTick = tick;
         }
         Tick = tick;

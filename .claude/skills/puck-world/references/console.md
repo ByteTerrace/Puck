@@ -168,6 +168,13 @@ reports `[wire.errors: N rejected]`.
 
 ## The stdin drain barrier and `world.wait`
 
+Silo row retirement disposes its `TextCommandSession`, refusing work still
+queued behind commands or waits. The stdin router uses `SiloConsoleRouting.TryEnqueue`
+so a concurrent retirement is a row refusal, not an exception that kills the
+reader thread. Already injected simulation work keeps its completion semantics.
+Clock regression invalidates every old wait deadline, even one that expired
+before the next command-pump drain observed it.
+
 The barrier lives in `TextCommandSource.Collect` (`Puck.Commands`) and is
 PER-SESSION, not registry-wide: while a session's own Simulation submission is
 pending (`TextCommandSession.HasPendingSimulationSubmission`, over the

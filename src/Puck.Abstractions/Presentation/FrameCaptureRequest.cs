@@ -1,3 +1,5 @@
+using Puck.Abstractions.Gpu;
+
 namespace Puck.Abstractions.Presentation;
 
 /// <summary>The terminal outcome of one render capture. Success means the writer returned after closing the PNG;
@@ -30,10 +32,13 @@ public sealed class FrameCaptureRequest {
     public Task<FrameCaptureResult> Completion => m_completion.Task;
 
     /// <summary>Serves this request once, completing only after the synchronous readback and PNG writer returns.
-    /// A writer exception becomes a failed result; it does not escape into the render loop.</summary>
+    /// A writer exception becomes a failed result. Device loss also propagates to the host's recovery loop;
+    /// ordinary capture failures do not interrupt rendering.</summary>
     /// <param name="writer">The readback and PNG writer. It must close the file before returning.</param>
     /// <returns>The terminal result, including any writer exception.</returns>
     /// <exception cref="InvalidOperationException">Another owner already claimed or refused this request.</exception>
+    /// <exception cref="DeviceLostException">Readback lost the graphics device. Completion contains the same
+    /// failure before this signal is rethrown for host recovery.</exception>
     public FrameCaptureResult Write(Action<string> writer) {
         ArgumentNullException.ThrowIfNull(writer);
         if (Interlocked.CompareExchange(ref m_claimed, 1, 0) != 0) {
@@ -43,6 +48,9 @@ public sealed class FrameCaptureRequest {
         Exception? error = null;
         try {
             writer(Path);
+        } catch (DeviceLostException exception) {
+            m_completion.SetResult(new FrameCaptureResult(Path, exception));
+            throw;
         } catch (Exception exception) {
             error = exception;
         }

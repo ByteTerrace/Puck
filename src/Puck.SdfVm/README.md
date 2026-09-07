@@ -195,6 +195,10 @@ capture availability, or disposal prevents success. A busy target refuses
 instead of replacing the earlier request. `PendingCapturePath` is a busy
 diagnostic, never evidence that a file was written.
 
+A readback `DeviceLostException` completes the request with that failure and
+is then rethrown so the host can rebuild the graphics device. Ordinary PNG or
+filesystem failures remain result data and do not interrupt rendering.
+
 Arm requests on the host pump. A worker can use
 `TextCommandSession.InvokeAsync` to arm after that session's queued commands
 and waits, then await capture completion off the pump. Cancellation of that

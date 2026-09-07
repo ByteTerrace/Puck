@@ -55,6 +55,9 @@ directory, and clustering. The generated schema is
   `SiloConsoleAuthority : IWorldConsoleAuthority` resolves a dispatched
   command's row from `CommandContext.Slot` and `WorldSiloHost.GateFor`
   answers `world.wait`'s own gate per row (`IWorldWaitGateResolver`).
+  Retirement disposes the session and refuses its queued host operations,
+  even when a wait holds them. Stdin racing retirement gets a row refusal;
+  work already injected into simulation retains its existing semantics.
   `silo.use <key>` sets which row an untagged line routes to; it never
   refuses admitted-row traffic addressed with an explicit `@<key>` tag.
 - `SiloStdinRouter` — the silo's stdin reader (`AddLauncherHeadlessTerminal

@@ -35,7 +35,6 @@
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       }
-    },
-    "net10.0/browser-wasm": {}
+    }
   }
 }

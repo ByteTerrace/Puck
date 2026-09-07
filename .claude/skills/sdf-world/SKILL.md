@@ -758,4 +758,7 @@ Capture integrations must retain the `FrameCaptureRequest` returned by
 `SdfWorldRender.RequestCapture` and await its `Completion`. All capture-capable
 decorators forward that same request; `PendingCapturePath` is only a busy
 diagnostic. Arm on the host pump, and never block that pump awaiting a frame.
+Capture readback must preserve `DeviceLostException` as a host recovery signal:
+complete the request with failure, then rethrow it. Do not swallow device loss
+as an ordinary PNG error.
 See [capture completion](../../../src/Puck.SdfVm/README.md#capture-completion).

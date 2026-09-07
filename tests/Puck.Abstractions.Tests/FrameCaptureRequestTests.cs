@@ -1,8 +1,19 @@
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 
 namespace Puck.Abstractions.Tests;
 
 public sealed class FrameCaptureRequestTests {
+    [Fact]
+    public async Task DeviceLossCompletesTheRequestAndStillReachesHostRecovery() {
+        var request = new FrameCaptureRequest("lost-device.png");
+        var failure = new DeviceLostException("readback lost the device", reasonCode: -4);
+        Assert.Same(failure, Assert.Throws<DeviceLostException>(() => request.Write(_ => throw failure)));
+        Assert.True(request.Completion.IsCompleted);
+        Assert.Same(failure, (await request.Completion).Error);
+        Assert.False(request.TryFail(new ObjectDisposedException("renderer")));
+    }
+
     [Fact]
     public async Task CompletionFollowsTheWriteAndRemainsBoundToThatRequest() {
         var first = new FrameCaptureRequest("first.png");

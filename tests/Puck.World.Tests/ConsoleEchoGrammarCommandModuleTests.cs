@@ -88,6 +88,28 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
     }
 
     [Fact]
+    public async Task ClockResetCannotReviveAnExpiredWaitThatThePumpHasNotObserved() {
+        var gate = new WorldConsoleWaitGate();
+        var source = new TextCommandSource(new CommandRegistry(modules: []));
+        using var session = source.CreateSession(CommandPrincipal.Console);
+        _ = gate.Arm(session, 2);
+        var pending = session.InvokeAsync(() => true, TestContext.Current.CancellationToken);
+        gate.PublishTick(2);
+        // No Collect between expiry and reset: the session still holds the old predicate.
+        gate.PublishTick(0);
+        source.Collect();
+        Assert.True(pending.IsCompleted);
+        Assert.True(await pending);
+        _ = gate.Arm(session, 1);
+        var next = session.InvokeAsync(() => true, TestContext.Current.CancellationToken);
+        source.Collect();
+        Assert.False(next.IsCompleted);
+        gate.PublishTick(1);
+        source.Collect();
+        Assert.True(await next);
+    }
+
+    [Fact]
     public void WorldUpdate_NoSectionAuthored_EchoesNone() {
         using var row = HostRow.Build(name: "boot", definition: Fixtures.BuildDocument());
         var registry = new CommandRegistry(modules: [new WorldUpdateCommandModule(authority: new FakeConsoleAuthority(instance: row.Instance))]);

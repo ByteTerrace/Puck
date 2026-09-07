@@ -30,7 +30,8 @@ would always arm whichever row it was constructed against), `world.timing`
 registered here so a headless boot lights the world-simulation timing digest
 too; `world.gpu`, the GPU per-pass read-back the same arming lights when a
 window is present, stays in `Puck.World`), and `replay.*`
-(`WorldReplayCommandModule`, `.Drive.cs`, `.Inspect.cs` — record/stop/cancel/
+(`WorldReplayCommandModule.cs`, `WorldReplayCommandModule.Drive.cs`,
+`WorldReplayCommandModule.Inspect.cs` — record/stop/cancel/
 drive/fork/verify/inspect/list/status; a client-local control surface over the
 tape, none of it touching a live player-facing session). The tape mechanism
 itself (`WorldReplayTape`, `WorldReplaySnapshot`, `WorldReplayInspector`,
@@ -62,7 +63,8 @@ directly.
 `WorldConsoleWaitGate` supplies the host-work clock; sessions keep independent
 release deadlines. Other text sessions remain responsive. Pausing or stopping
 the row releases its armed waits. Direct registry calls without an originating
-text session are refused.
+text session are refused. A clock reset invalidates all earlier deadlines,
+including an expired wait the command pump has not yet observed.
 
 ## `IWorldConsoleAuthority`
 
