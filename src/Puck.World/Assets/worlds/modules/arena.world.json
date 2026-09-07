@@ -1998,11 +1998,11 @@
         "cells": [
           {
             "key": "1",
-            "value": 300
+            "value": 1000
           },
           {
             "key": "2",
-            "value": 300
+            "value": 1000
           }
         ],
         "kind": "int",

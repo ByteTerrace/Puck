@@ -223,8 +223,9 @@ a time: `kart-gate-0`, `kart-gate-1`, `kart-gate-2` each gate an `Edge`-mode rul
 cross the gates IN ORDER — sitting inside gate 1 first advances nothing, because the
 stage guard is still 0. The third gate additionally increments `lap` and resets
 `gateStage` to 0, so a completed circuit never needs to return exactly to the start
-line. `lapTicks` mirrors `$tick` every tick (an unconditional Level rule) — a lap timer
-in engine ticks, read alongside `lap`. `exports` surfaces `lap`/`lapTicks` as reads and
+line. `lapStart` records `$tick` when the first gate fires and `lapTicks` is written once per lap as
+`$tick - lapStart` — a lap timer in engine ticks, read alongside `lap`, that costs the quiet tick nothing
+(a rule that writes every tick installs the document every tick). `exports` surfaces `lap`/`lapTicks` as reads and
 `lap` as a binding; nothing is exported as an action (nothing outside the module writes
 into a kart row).
 

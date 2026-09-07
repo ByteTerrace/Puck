@@ -18,7 +18,11 @@ public sealed partial class WorldServer {
         var lattice = m_population.Fields;
         var lines = new List<string>();
 
-        foreach (var placement in m_definition.Placements) {
+        var placements = m_definition.Placements;
+
+        for (var placementIndex = 0; (placementIndex < placements.Count); placementIndex++) {
+            var placement = placements[placementIndex];
+
             if (placement.Respond is not { Count: > 0 } responses) {
                 continue;
             }
@@ -197,8 +201,8 @@ public sealed partial class WorldServer {
     private static bool TryReadResponseSnapshot(WorldDefinition definition, IReadOnlyList<WorldPlacementResponse> responses, ulong tick, Span<long> values, Span<bool> present, out int count) {
         count = 0;
 
-        foreach (var response in responses) {
-            if (response.When is not WorldPlacementResponseCondition.StateCondition state) {
+        for (var responseIndex = 0; (responseIndex < responses.Count); responseIndex++) {
+            if (responses[responseIndex].When is not WorldPlacementResponseCondition.StateCondition state) {
                 return false;
             }
 

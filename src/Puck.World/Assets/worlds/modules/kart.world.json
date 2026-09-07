@@ -31,14 +31,78 @@
       "closed": true,
       "name": "kartTrack",
       "knots": [
-        { "position": [7.0, 0.0, 0.0], "tangentYaw": 1.570796, "curvature": 0.1428571 },
-        { "position": [4.949747, 0.0, 4.949747], "tangentYaw": 2.356194, "curvature": 0.1428571 },
-        { "position": [0.0, 0.0, 7.0], "tangentYaw": 3.141593, "curvature": 0.1428571 },
-        { "position": [-4.949747, 0.0, 4.949747], "tangentYaw": -2.356194, "curvature": 0.1428571 },
-        { "position": [-7.0, 0.0, 0.0], "tangentYaw": -1.570796, "curvature": 0.1428571 },
-        { "position": [-4.949747, 0.0, -4.949747], "tangentYaw": -0.785398, "curvature": 0.1428571 },
-        { "position": [0.0, 0.0, -7.0], "tangentYaw": 0.0, "curvature": 0.1428571 },
-        { "position": [4.949747, 0.0, -4.949747], "tangentYaw": 0.785398, "curvature": 0.1428571 }
+        {
+          "position": [
+            7.0,
+            0.0,
+            0.0
+          ],
+          "tangentYaw": 1.570796,
+          "curvature": 0.1428571
+        },
+        {
+          "position": [
+            4.949747,
+            0.0,
+            4.949747
+          ],
+          "tangentYaw": 2.356194,
+          "curvature": 0.1428571
+        },
+        {
+          "position": [
+            0.0,
+            0.0,
+            7.0
+          ],
+          "tangentYaw": 3.141593,
+          "curvature": 0.1428571
+        },
+        {
+          "position": [
+            -4.949747,
+            0.0,
+            4.949747
+          ],
+          "tangentYaw": -2.356194,
+          "curvature": 0.1428571
+        },
+        {
+          "position": [
+            -7.0,
+            0.0,
+            0.0
+          ],
+          "tangentYaw": -1.570796,
+          "curvature": 0.1428571
+        },
+        {
+          "position": [
+            -4.949747,
+            0.0,
+            -4.949747
+          ],
+          "tangentYaw": -0.785398,
+          "curvature": 0.1428571
+        },
+        {
+          "position": [
+            0.0,
+            0.0,
+            -7.0
+          ],
+          "tangentYaw": 0.0,
+          "curvature": 0.1428571
+        },
+        {
+          "position": [
+            4.949747,
+            0.0,
+            -4.949747
+          ],
+          "tangentYaw": 0.785398,
+          "curvature": 0.1428571
+        }
       ]
     }
   ],
@@ -49,24 +113,41 @@
         "bodyMotionProgram": "kartDrive",
         "collider": {
           "$type": "capsule",
-          "endpoint": [0, 0.5, 0],
+          "endpoint": [
+            0,
+            0.5,
+            0
+          ],
           "radius": 0.5
         },
         "motion": {
           "holds": [
             {
               "bond": "Surface",
-              "cone": [0, 60],
-              "envelope": { "sinkSpeed": 40 },
-              "gravity": { "fall": 46, "rise": 28 },
+              "cone": [
+                0,
+                60
+              ],
+              "envelope": {
+                "sinkSpeed": 40
+              },
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
               "hold": "Gravity",
               "name": "ground",
               "reach": 1.2
             },
             {
               "bond": "Free",
-              "envelope": { "sinkSpeed": 40 },
-              "gravity": { "fall": 46, "rise": 28 },
+              "envelope": {
+                "sinkSpeed": 40
+              },
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
               "hold": "Gravity",
               "name": "air"
             }
@@ -84,8 +165,12 @@
               }
             }
           ],
-          "speed": { "value": 8 },
-          "turn": { "rate": 1.2 }
+          "speed": {
+            "value": 8
+          },
+          "turn": {
+            "rate": 1.2
+          }
         },
         "name": "kart"
       }
@@ -106,7 +191,11 @@
         "maxSlopeDegrees": 60,
         "maxStepHeight": 0.5,
         "name": "kartSurface",
-        "origin": [-20, -1, -20],
+        "origin": [
+          -20,
+          -1,
+          -20
+        ],
         "probeDown": 3,
         "probeUp": 2.5,
         "width": 40
@@ -118,64 +207,106 @@
       {
         "id": "kartCourt",
         "prototypeId": "trackFloor",
-        "position": [0, 0, 0],
+        "position": [
+          0,
+          0,
+          0
+        ],
         "yawDegrees": 0,
         "scale": 1,
-        "solid": { "margin": 0 }
+        "solid": {
+          "margin": 0
+        }
       },
       {
         "id": "gate0",
         "parent": "kartCourt",
         "prototypeId": "gateMarker",
-        "position": [0.0, 0.0, 7.0],
+        "position": [
+          0.0,
+          0.0,
+          7.0
+        ],
         "yawDegrees": 90,
         "scale": 1,
-        "region": { "radius": 3.5 }
+        "region": {
+          "radius": 3.5
+        }
       },
       {
         "id": "gate1",
         "parent": "kartCourt",
         "prototypeId": "gateMarker",
-        "position": [-7.0, 0.0, 0.0],
+        "position": [
+          -7.0,
+          0.0,
+          0.0
+        ],
         "yawDegrees": 0,
         "scale": 1,
-        "region": { "radius": 3.5 }
+        "region": {
+          "radius": 3.5
+        }
       },
       {
         "id": "gate2",
         "parent": "kartCourt",
         "prototypeId": "gateMarker",
-        "position": [0.0, 0.0, -7.0],
+        "position": [
+          0.0,
+          0.0,
+          -7.0
+        ],
         "yawDegrees": 90,
         "scale": 1,
-        "region": { "radius": 3.5 }
+        "region": {
+          "radius": 3.5
+        }
       },
       {
         "id": "kartBank0",
         "parent": "kartCourt",
         "prototypeId": "bankWall",
-        "position": [7.07, 0.0, -7.07],
+        "position": [
+          7.07,
+          0.0,
+          -7.07
+        ],
         "yawDegrees": 45,
         "scale": 1,
-        "solid": { "margin": 0 }
+        "solid": {
+          "margin": 0
+        }
       },
       {
         "id": "kartBank1",
         "parent": "kartCourt",
         "prototypeId": "bankWall",
-        "position": [-7.07, 0.0, 7.07],
+        "position": [
+          -7.07,
+          0.0,
+          7.07
+        ],
         "yawDegrees": -135,
         "scale": 1,
-        "solid": { "margin": 0 }
+        "solid": {
+          "margin": 0
+        }
       },
       {
         "id": "kartRamp0",
         "parent": "kartCourt",
         "prototypeId": "ramp",
-        "position": [10.0, 0.0, 0.0],
+        "position": [
+          10.0,
+          0.0,
+          0.0
+        ],
         "yawDegrees": 0,
         "scale": 1,
-        "solid": { "margin": 0 }
+        "solid": {
+          "margin": 0
+        }
       }
     ]
   },
@@ -186,16 +317,31 @@
         "schema": "puck.creation.v1",
         "name": "trackFloor",
         "palette": [
-          { "color": "#5A6B57" }
+          {
+            "color": "#5A6B57"
+          }
         ],
         "shapes": [
           {
             "id": 0,
             "name": "floor",
             "type": "Box",
-            "position": [0, -0.2, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [20, 0.2, 20],
+            "position": [
+              0,
+              -0.2,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              20,
+              0.2,
+              20
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0
@@ -209,16 +355,31 @@
         "schema": "puck.creation.v1",
         "name": "bankWall",
         "palette": [
-          { "color": "#8A6F4C" }
+          {
+            "color": "#8A6F4C"
+          }
         ],
         "shapes": [
           {
             "id": 0,
             "name": "wall",
             "type": "Box",
-            "position": [0, 1.0, 0],
-            "rotation": [0, 0, 0.2164396, 0.9762961],
-            "scale": [0.15, 1.0, 3.0],
+            "position": [
+              0,
+              1.0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.2164396,
+              0.9762961
+            ],
+            "scale": [
+              0.15,
+              1.0,
+              3.0
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0
@@ -232,16 +393,31 @@
         "schema": "puck.creation.v1",
         "name": "ramp",
         "palette": [
-          { "color": "#79807F" }
+          {
+            "color": "#79807F"
+          }
         ],
         "shapes": [
           {
             "id": 0,
             "name": "incline",
             "type": "Box",
-            "position": [0, 0.3, 0],
-            "rotation": [0.1736482, 0, 0, 0.9848078],
-            "scale": [2.0, 0.15, 3.0],
+            "position": [
+              0,
+              0.3,
+              0
+            ],
+            "rotation": [
+              0.1736482,
+              0,
+              0,
+              0.9848078
+            ],
+            "scale": [
+              2.0,
+              0.15,
+              3.0
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0
@@ -255,16 +431,31 @@
         "schema": "puck.creation.v1",
         "name": "gateMarker",
         "palette": [
-          { "color": "#D8A23E" }
+          {
+            "color": "#D8A23E"
+          }
         ],
         "shapes": [
           {
             "id": 0,
             "name": "post-left",
             "type": "Box",
-            "position": [-2.0, 1.0, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.1, 1.0, 0.1],
+            "position": [
+              -2.0,
+              1.0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.1,
+              1.0,
+              0.1
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0
@@ -273,9 +464,22 @@
             "id": 1,
             "name": "post-right",
             "type": "Box",
-            "position": [2.0, 1.0, 0],
-            "rotation": [0, 0, 0, 1],
-            "scale": [0.1, 1.0, 0.1],
+            "position": [
+              2.0,
+              1.0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.1,
+              1.0,
+              0.1
+            ],
             "material": 0,
             "blend": "Union",
             "smooth": 0
@@ -291,12 +495,31 @@
       "gate": {
         "$type": "all",
         "predicates": [
-          { "$type": "compareState", "state": "gateStage", "comparison": "Equal", "value": 0 },
-          { "$type": "compareState", "state": "$region:gate0", "comparison": "Greater", "value": 0 }
+          {
+            "$type": "compareState",
+            "state": "gateStage",
+            "comparison": "Equal",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "state": "$region:gate0",
+            "comparison": "Greater",
+            "value": 0
+          }
         ]
       },
       "effects": [
-        { "$type": "addState", "state": "gateStage", "value": 1 }
+        {
+          "$type": "addState",
+          "state": "gateStage",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "lapStart",
+          "expression": "$tick"
+        }
       ]
     },
     {
@@ -305,12 +528,26 @@
       "gate": {
         "$type": "all",
         "predicates": [
-          { "$type": "compareState", "state": "gateStage", "comparison": "Equal", "value": 1 },
-          { "$type": "compareState", "state": "$region:gate1", "comparison": "Greater", "value": 0 }
+          {
+            "$type": "compareState",
+            "state": "gateStage",
+            "comparison": "Equal",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "state": "$region:gate1",
+            "comparison": "Greater",
+            "value": 0
+          }
         ]
       },
       "effects": [
-        { "$type": "addState", "state": "gateStage", "value": 1 }
+        {
+          "$type": "addState",
+          "state": "gateStage",
+          "value": 1
+        }
       ]
     },
     {
@@ -319,31 +556,76 @@
       "gate": {
         "$type": "all",
         "predicates": [
-          { "$type": "compareState", "state": "gateStage", "comparison": "Equal", "value": 2 },
-          { "$type": "compareState", "state": "$region:gate2", "comparison": "Greater", "value": 0 }
+          {
+            "$type": "compareState",
+            "state": "gateStage",
+            "comparison": "Equal",
+            "value": 2
+          },
+          {
+            "$type": "compareState",
+            "state": "$region:gate2",
+            "comparison": "Greater",
+            "value": 0
+          }
         ]
       },
       "effects": [
-        { "$type": "addState", "state": "lap", "value": 1 },
-        { "$type": "setState", "state": "gateStage", "value": 0 }
-      ]
-    },
-    {
-      "name": "kart-lap-clock",
-      "mode": "Level",
-      "effects": [
-        { "$type": "setState", "state": "lapTicks", "expression": "$tick" }
+        {
+          "$type": "setState",
+          "state": "lapTicks",
+          "expression": "$tick - lapStart"
+        },
+        {
+          "$type": "addState",
+          "state": "lap",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "gateStage",
+          "value": 0
+        }
       ]
     }
   ],
   "spawnPoints": [
-    { "id": "kart-arrival", "position": [7.0, 0.6, 0.0], "yawDegrees": 180 }
+    {
+      "id": "kart-arrival",
+      "position": [
+        7.0,
+        0.6,
+        0.0
+      ],
+      "yawDegrees": 180
+    }
   ],
   "state": {
     "world": [
-      { "kind": "int", "name": "gateStage", "nonNegative": true, "value": 0 },
-      { "kind": "int", "name": "lap", "nonNegative": true, "value": 0 },
-      { "kind": "int", "name": "lapTicks", "nonNegative": true, "value": 0 }
+      {
+        "kind": "int",
+        "name": "gateStage",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "name": "lap",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "name": "lapTicks",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "kind": "int",
+        "name": "lapStart",
+        "nonNegative": true,
+        "value": 0
+      }
     ]
   }
 }

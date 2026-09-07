@@ -44,6 +44,11 @@ internal static class WorldBenchmarks {
     private static void MeasureShippedWorld(string root, List<(string Name, string Value)> rows) {
         var path = Path.Combine(path1: root, path2: ShippedWorldRelativePath);
 
+        // The validator asks which screen-machine engines ship and which compile a cartridge; a composition root
+        // installs both, and this lane is its own root.
+        WorldExtensionVocabularyHook.ScreenMachineEngineCheck = WorldScreenMachineEngines.IsRegistered;
+        WorldExtensionVocabularyHook.ScreenMachineCartridgeCheck = WorldScreenMachineEngines.CompilesCartridges;
+
         if (!WorldDefinitionLoader.TryLoadFile(path: path, definition: out var definition, reason: out var reason)) {
             throw new InvalidOperationException(message: $"could not load the shipped world at {path}: {reason}");
         }
