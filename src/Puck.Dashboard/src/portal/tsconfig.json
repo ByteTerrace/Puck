@@ -29,6 +29,7 @@
     "../shared/clientApi.ts",
     "../shared/interfaces.tsx",
     "../shared/store.tsx",
-    "src"
+    "src",
+    "vite-env.d.ts"
   ]
 }

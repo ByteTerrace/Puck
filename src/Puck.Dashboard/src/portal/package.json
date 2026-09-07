@@ -27,6 +27,7 @@
     "@types/three": "^0.183",
     "@uidotdev/usehooks": "^2",
     "@vitejs/plugin-react": "^6",
+    "json-schema-to-typescript": "16.0.0",
     "react": "^19",
     "react-dom": "^19",
     "react-redux": "^9",
@@ -41,8 +42,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "check:types": "node scripts/generateWorldTypes.mjs --check",
     "preview": "vite preview",
-    "test": "node --test tests/*.test.cjs"
+    "test": "node --test tests/*.test.cjs",
+    "types:generate": "node scripts/generateWorldTypes.mjs"
   },
   "type": "module",
   "version": "0.0.0"

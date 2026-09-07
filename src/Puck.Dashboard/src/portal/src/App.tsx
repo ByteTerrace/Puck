@@ -98,7 +98,13 @@ const colorSchemeManager = localStorageColorSchemeManager({
 type Section = "audit" | "data" | "studio" | "home";
 
 // Sections are real routes so refreshes, deep links, and back/forward behave
-// the way a site is expected to.
+// the way a site is expected to. The Puck section lives at /puck on every host, except a
+// "puck.*" host, where the bare root already IS the Puck section — puckPath() picks the one
+// in-app navigation should write, and sectionFromLocation's unmatched-path fallback already
+// resolves both to "studio" without needing a path check of its own.
+const isPuckHost = (): boolean => location.hostname.startsWith("puck.");
+const puckPath = (): string => (isPuckHost() ? "/" : "/puck");
+
 const sectionFromLocation = (): Section => {
   if (location.pathname.startsWith("/audit")) {
     return "audit";
@@ -164,7 +170,7 @@ function App({ context }: { context?: HostContextValue }) {
       const destination = location.pathname + location.search + location.hash;
       const continueNavigation = () => { history.replaceState(null,"",destination); setActiveSection(next); close(); };
       if (!window.dispatchEvent(new CustomEvent("puck-before-navigate",{cancelable:true,detail:{continueNavigation}}))) {
-        history.pushState(null,"",activeSection === "audit" ? "/audit" : activeSection === "data" ? "/data" : "/");
+        history.pushState(null,"",activeSection === "audit" ? "/audit" : activeSection === "data" ? "/data" : puckPath());
         return;
       }
       continueNavigation();
@@ -182,7 +188,7 @@ function App({ context }: { context?: HostContextValue }) {
   const navigateTo = (section: Section) => {
     const continueNavigation = () => {
       close();
-      history.pushState(null,"",section === "audit" ? "/audit" : section === "data" ? "/data" : "/");
+      history.pushState(null,"",section === "audit" ? "/audit" : section === "data" ? "/data" : puckPath());
       setActiveSection(section);
     };
     if (section !== activeSection && !window.dispatchEvent(new CustomEvent("puck-before-navigate", {cancelable:true,detail:{continueNavigation}}))) return;
@@ -252,7 +258,7 @@ function App({ context }: { context?: HostContextValue }) {
             <Box ml={12} mt={12}>
               <NavLink
                 active={"studio" === activeSection || "home" === activeSection}
-                href="/"
+                href={puckPath()}
                 label="World Studio"
                 leftSection={<RiHome9Fill />}
                 onClick={(event) => {
