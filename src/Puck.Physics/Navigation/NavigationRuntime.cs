@@ -139,6 +139,7 @@ public sealed partial class NavigationRuntime {
             if (m_baked) {
                 return;
             }
+            // Set before the sweep: the edge build below reads the walkable census, which itself ensures the bake.
             m_baked = true;
             for (var node = 0; node < CellCount; node++) {
                 if (TrySampleCell(m_query, node, out var ground)) {
@@ -159,7 +160,7 @@ public sealed partial class NavigationRuntime {
                 return false;
             }
             // The proof needs real occupancy/edge data to compare against the candidate provider — bake now,
-            // against the OLD provider, before it is replaced below. A domain nobody has routed through yet has
+            // against the old provider, before it is replaced below. A domain nobody has routed through yet has
             // nothing to invalidate, so it never pays this cost either: the geometry proof only runs when the
             // query reference actually changed.
             if (!ReferenceEquals(m_query, query)) {

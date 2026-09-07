@@ -23,7 +23,7 @@ public sealed class ChineseCheckersLawTests {
         using var fixture = Fixtures.FreshServer(definition: Definition());
 
         // Seat 0 opens with both its pieces off the target cluster (30, 14). Landing the first (s0p1) there still
-        // leaves the seat short a piece; landing the second (s0p0) is the LAST piece to land — the fact this law
+        // leaves the seat short a piece; landing the second (s0p0) is the last piece to land — the fact this law
         // proves, not merely that a piece can reach home at all.
         Assert.Equal(expected: 22L, actual: Cell(fixture: fixture, row: "pieceCellPrev", key: "s0p1"));
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.Console, Row: "pieceCell", Key: "s0p1", Value: 14L, Kind: WorldDocumentWriteKind.Set));

@@ -4,7 +4,7 @@
     "null"
   ],
   "items": {
-    "description": "One per-world binding overlay \u2014 a whole BindingProfileDocument layered over the engine default beneath every seat\u0027s profile bindings, so a world can contextualize the controls (a kart world remapping a lane, an RTS world adding a chorded command page) as data, never a client fork. Merged in order; the composed result (default \u2295 every overlay) is what the validator compiles.",
+    "description": "One per-world binding overlay \u2014 a whole BindingProfileDocument layered over the engine default beneath every seat\u0027s profile bindings, so a world can contextualize the controls (a kart world remapping a lane, an RTS world adding a chorded command page) as data, never a client fork. Merged in order; the composed result (default \u2295 every overlay whose When currently holds) is what the validator compiles.",
     "type": [
       "object",
       "null"
@@ -787,6 +787,61 @@
         "required": [
           "slotSet",
           "banks"
+        ],
+        "additionalProperties": false,
+        "default": null
+      },
+      "when": {
+        "description": "The condition this layer composes under; null always composes it (today\u0027s behavior). Reuses StateCondition\u0027s field convention rather than a second reading of \u0022compare a state cell\u0022 \u2014 the same state/key/comparison/value shape a placement\u0027s own response facet speaks. Re-evaluated whenever the routed definition changes, never per frame.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "state": {
+            "description": "The state row compared \u2014 any declared state.world row of a numeric kind (never Text).",
+            "type": "string"
+          },
+          "comparison": {
+            "$ref": "./common.schema.json#/$defs/ActionStateComparison",
+            "description": "The comparison."
+          },
+          "value": {
+            "description": "The literal comparand, or null when ComparandState spells the comparand instead.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null
+          },
+          "key": {
+            "description": "The cell inside State, or null for its slot cell. Refused when State is keyed and this is absent, or unkeyed and this is present.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "comparandState": {
+            "description": "Another declared state.world row, read live and compared instead of Value. Must share State\u0027s cell kind (refused by name otherwise).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "comparandKey": {
+            "description": "The cell inside ComparandState, on the same terms as Key. Refused when ComparandState is absent.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "state",
+          "comparison"
         ],
         "additionalProperties": false,
         "default": null

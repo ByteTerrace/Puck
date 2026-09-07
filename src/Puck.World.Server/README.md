@@ -48,15 +48,15 @@ A quiet tick's cost splits roughly evenly across two shapes: the animating
 population's own contact solves against the compiled solid field
 (`WorldSolidField`/`FixedFieldContactSolver`, walked once per awake body's
 `Advance`), and every rule operand's row-version/value read through
-`WorldDefinition.StateCatalog`. The catalog's compiled product is keyed to the
-exact `StateRaw` reference it was proven against — an unchanged document never
-replaces that reference mid-tick — so a fresh full-document shape walk on
-every one of those reads, rather than once per reference, is pure per-call
-waste that scales with the district count; `WorldDefinition.GetStateCatalog`
-skips the walk once that one-time proof stands. The contact-solve share has no
-comparable per-call shortcut today: it is real per-body physics work against a
-program sized by every district's solid geometry, and reducing it further is
-an `SdfFieldEvaluator`/navigation-scale concern, not a Server one.
+`WorldDefinition.StateCatalog`, which re-walks the state section's shape on
+each read. That walk cannot be skipped by keying on the section reference: the
+batch compose workspace (`WorldServer.MutationCompose.Batch.cs`) hands
+`WithWorldState` a row list it then edits in place per member, so one section
+reference can change shape mid-compose, and `WorldStateCatalogLawTests` pins
+that an in-place edit is seen. Removing the per-read walk means giving the
+section ownership of its rows and the workspace its own section, together.
+The contact-solve share has no per-call shortcut either: it is real per-body
+physics work against a program sized by every district's solid geometry.
 `puck bench world`'s "shipped world: idle tick (median)" row and
 `tests/Puck.World.Tests/HandleTickPathLawTests.cs` are the read-backs.
 

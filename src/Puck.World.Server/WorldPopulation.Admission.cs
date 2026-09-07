@@ -776,7 +776,7 @@ public sealed partial class WorldPopulation {
         // Re-clamp the census against every entity-table slot now owned by an inhabitant or transferred authority.
         _ = SetSimulatedCount(count: m_simulatedCount);
         RebuildPlacementOrdinalTable(definition: definition);
-        // A structural install can reorder or replace placements at a fixed ordinal without changing their COUNT
+        // A structural install can reorder or replace placements at a fixed ordinal without changing their count
         // (WorldPopulation.Step.cs.ReconcileInhabitCounts' own cache resize gate misses that), so every structural
         // pass invalidates the whole cache — the next per-tick reconcile re-resolves each cell-driven facet fresh
         // rather than trusting a raw value that may now belong to a different row entirely.
@@ -785,7 +785,7 @@ public sealed partial class WorldPopulation {
     }
     // Grows or shrinks one inhabited placement's live census to `desired`: growth claims the highest free slots in
     // document order (HighestFreeSlot's own remarks — the first body admitted always lands at the highest index), and
-    // shrink retires the lowest surviving index that is NOT currently a seat's own claimed body (Entry.IsRemoteHuman)
+    // shrink retires the lowest surviving index that is not currently a seat's own claimed body (Entry.IsRemoteHuman)
     // — since admission always fills the highest slot first, the lowest index is always the first one admitted, and
     // skipping a human-occupied one here is what keeps a possessed inhabitant standing through a shrink instead of
     // being torn out from under its player. Shared by the structural (literal-count) pass above and the cell-driven
@@ -828,7 +828,7 @@ public sealed partial class WorldPopulation {
             RetireInhabitant(index: slot);
         }
     }
-    // The shrink half of ReconcileOneInhabitedCount's own retire loop — LOWEST-index match that is not a seat's own
+    // The shrink half of ReconcileOneInhabitedCount's own retire loop — lowest-index match that is not a seat's own
     // claimed body, never LowestInhabitant's plain scan (which would retire a possessed inhabitant out from under
     // its player).
     private int LowestRetirableInhabitant(string placementId) {

@@ -20,8 +20,8 @@ public sealed class WorldSchemaCompletenessLawTests {
     private static readonly HashSet<string> UntypedAllowlist = new(comparer: StringComparer.Ordinal) {
         "#/properties/screens/items/properties/source/anyOf/8/properties/resolution",
         "#/properties/screens/items/properties/magazine/properties/entries/items/anyOf/8/properties/resolution",
-        "#/properties/kits/properties/rows/items/properties/actions/additionalProperties/properties/onPress/properties/effects/items/anyOf/22/properties/placement/properties/faceSources/items/properties/source/anyOf/8/properties/resolution",
-        "#/properties/kits/properties/rows/items/properties/actions/additionalProperties/properties/onPress/properties/effects/items/anyOf/22/properties/placement/properties/respond/items/properties/when/anyOf/0/properties/value",
+        "#/properties/kits/properties/rows/items/properties/actions/additionalProperties/properties/onPress/properties/effects/items/anyOf/23/properties/placement/properties/faceSources/items/properties/source/anyOf/8/properties/resolution",
+        "#/properties/kits/properties/rows/items/properties/actions/additionalProperties/properties/onPress/properties/effects/items/anyOf/23/properties/placement/properties/respond/items/properties/when/anyOf/0/properties/value",
         "#/properties/bindingOverlays/items/properties/document/properties/chords/items/properties/page/properties/entries/items/properties/channel",
         "#/properties/bindingOverlays/items/properties/document/properties/chords/items/properties/page/properties/entries/items/properties/value",
         "#/properties/bindingOverlays/items/properties/document/properties/chords/items/properties/command/properties/channel",

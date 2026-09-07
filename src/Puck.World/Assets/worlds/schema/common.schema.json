@@ -74,12 +74,12 @@
           "default": null
         },
         "color": {
-          "description": "The sun\u0027s linear #RRGGBB color.",
+          "description": "The sun\u0027s linear color \u2014 a #RRGGBB/#RRGGBBAA literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding naming a Text cell that holds one (alpha is ignored; the render path is opaque).",
+          "default": null,
           "type": [
             "string",
             "null"
-          ],
-          "default": null
+          ]
         }
       },
       "additionalProperties": false
@@ -108,12 +108,12 @@
           "default": null
         },
         "color": {
-          "description": "The ambient linear #RRGGBB color.",
+          "description": "The ambient linear color \u2014 BindableColor\u0027s grammar, on the same terms as Color.",
+          "default": null,
           "type": [
             "string",
             "null"
-          ],
-          "default": null
+          ]
         }
       },
       "additionalProperties": false
@@ -260,12 +260,12 @@
           "type": "integer"
         },
         "color": {
-          "description": "The cloud colour, as #RRGGBB or a state.\u003Crow\u003E.\u003Ckey\u003E binding. Optional; absent is white.",
+          "description": "BindableColor\u0027s grammar: the cloud colour. Optional; absent is white.",
+          "default": null,
           "type": [
             "string",
             "null"
-          ],
-          "default": null
+          ]
         },
         "drift": {
           "$ref": "#/$defs/DocumentVector2",
@@ -310,28 +310,28 @@
       ],
       "properties": {
         "zenith": {
-          "description": "The straight-up sky color, as #RRGGBB. Optional; absent takes the pinned zenith.",
+          "description": "BindableColor\u0027s grammar: the straight-up sky color. Optional; absent takes the pinned zenith.",
+          "default": null,
           "type": [
             "string",
             "null"
-          ],
-          "default": null
+          ]
         },
         "horizon": {
-          "description": "The horizon-band color (the gradient\u0027s middle stop), as #RRGGBB. Optional; absent takes the midpoint between the pinned ground and zenith.",
+          "description": "BindableColor\u0027s grammar: the horizon-band color (the gradient\u0027s middle stop). Optional; absent takes the midpoint between the pinned ground and zenith.",
+          "default": null,
           "type": [
             "string",
             "null"
-          ],
-          "default": null
+          ]
         },
         "ground": {
-          "description": "The straight-down (nadir) color, as #RRGGBB. Optional; absent takes the pinned ground.",
+          "description": "BindableColor\u0027s grammar: the straight-down (nadir) color. Optional; absent takes the pinned ground.",
+          "default": null,
           "type": [
             "string",
             "null"
-          ],
-          "default": null
+          ]
         },
         "fogDensity": {
           "description": "The exponential distance-fog density fading toward the sky color. Optional; absent takes the pinned 0.015 \u2014 the exact value the fog term used before this field existed.",
@@ -5531,6 +5531,40 @@
       ],
       "additionalProperties": false
     },
+    "WorldEffectApplyRigidImpulse": {
+      "description": "Applies the SAME instantaneous world-space rigid impulse body.impulse fires (\u0394v = impulse / mass, through the server\u0027s rigid-body solver \u2014 never a second impulse mechanism) to a Key-addressed body, along HeadingKey\u0027s own body\u0027s forward facing, scaled by a live kind=Fixed state cell\u0027s magnitude. The cue gesture\u0027s one honest path: billiards charges MagnitudeState by hold duration and fires this on release. Refused by name when the struck body resolves to no active body or carries no \u0027rigid\u0027 kit facet, the heading body resolves to no active body, or the resulting impulse is not representable or exceeds the world\u0027s declared rigid speed ceiling.",
+      "properties": {
+        "$type": {
+          "const": "applyRigidImpulse"
+        },
+        "key": {
+          "description": "The struck body reference \u2014 body:\u003Cn\u003E, argmax:\u003Crow\u003E/ argmin:\u003Crow\u003E, or placement:\u003Cid\u003E (see BodyRefVocabulary).",
+          "type": "string"
+        },
+        "headingKey": {
+          "description": "The body reference whose forward facing supplies the impulse direction \u2014 the same reference grammar as Key.",
+          "type": "string"
+        },
+        "magnitudeState": {
+          "description": "The declared kind=Fixed row naming the impulse\u0027s magnitude.",
+          "type": "string"
+        },
+        "magnitudeKey": {
+          "description": "The row\u0027s cell key, or null for an unkeyed row.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "key",
+        "headingKey",
+        "magnitudeState"
+      ],
+      "additionalProperties": false
+    },
     "WorldEffectDesignateBody": {
       "description": "Designates or clears a world-addressed body\u0027s target register.",
       "properties": {
@@ -5974,9 +6008,12 @@
           "description": "The live, idle, or named producer source the bodies wake on."
         },
         "count": {
-          "description": "How many bodies, bounded by the world\u0027s authored peer capacity.",
-          "type": "integer",
-          "default": 1
+          "description": "How many bodies: an authored literal, or a live cell reference naming an Int state.world row whose value the population admits and retires bodies to track (WorldPopulation.ReconcileInhabitCounts) \u2014 the spawner primitive a crawl\u0027s mob generator rides. Either way, bounded by the world\u0027s authored peer capacity; a cell reference is additionally bounded by Distribution\u0027s own sample count, the tighter of the two winning. Absent is an authored literal of 1 \u2014 see ResolvedCount.",
+          "default": null,
+          "type": [
+            "integer",
+            "object"
+          ]
         },
         "distribution": {
           "$ref": "#/$defs/WorldDistribution",
@@ -6895,6 +6932,9 @@
           "$ref": "#/$defs/WorldEffectApplyBodyImpulse"
         },
         {
+          "$ref": "#/$defs/WorldEffectApplyRigidImpulse"
+        },
+        {
           "$ref": "#/$defs/WorldEffectDesignateBody"
         },
         {
@@ -7529,6 +7569,45 @@
       ],
       "additionalProperties": false
     },
+    "GeneratorExtended": {
+      "description": "A source\u0027s extended-generator facet: an authored Pcg32Extended table replacing that generator\u0027s own self-seeding, so a site drawing from it is k-dimensionally equidistributed rather than merely 1-dimensionally so. The table is document data, exactly one rebuild cost (GeneratorEngine caches the built generator beside the cursor it corresponds to) \u2014 nothing about the site\u0027s persisted shape changes.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "k": {
+          "description": "The extension table size: a power of two in [2, 1024].",
+          "type": "integer"
+        },
+        "table": {
+          "description": "The whole extension table, exactly K words \u2014 or null when Script authors it instead.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer"
+          },
+          "default": null
+        },
+        "script": {
+          "description": "Up to K values in the source\u0027s own output space, authoring the site\u0027s first draws directly \u2014 or null when Table is authored instead.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer"
+          },
+          "default": null
+        }
+      },
+      "required": [
+        "k"
+      ],
+      "additionalProperties": false
+    },
     "StateGenerator": {
       "description": "An authored stochastic source \u2014 the vocabulary for every randomness declaration in the document: a name generator, a dialogue line, a loot roll, a flat weighted draw, a multiset sample, a random census, and a drawn host backend all reduce to a source of this family, sampled at an authored moment into an authored site (see Draw).",
       "type": [
@@ -7622,6 +7701,11 @@
           "items": {
             "type": "integer"
           },
+          "default": null
+        },
+        "extended": {
+          "$ref": "#/$defs/GeneratorExtended",
+          "description": "The extended-generator facet (see GeneratorExtended), or null for the ordinary Pcg32XshRr generator every other source draws through.",
           "default": null
         }
       },

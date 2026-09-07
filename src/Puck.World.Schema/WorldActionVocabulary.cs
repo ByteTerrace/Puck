@@ -61,7 +61,7 @@ public static class WorldEffect {
     /// <summary>Rides a unit <paramref name="BodyDirection"/> at <paramref name="Speed"/> on a world-addressed body
     /// for an exact whole-engine-tick duration.</summary>
     public sealed record ApplyBodyImpulse(string Key, DocumentVector3 BodyDirection, decimal Speed, decimal DurationSeconds) : ActionEffect;
-    /// <summary>Applies the SAME instantaneous world-space rigid impulse <c>body.impulse</c> fires (Δv = impulse /
+    /// <summary>Applies the same instantaneous world-space rigid impulse <c>body.impulse</c> fires (Δv = impulse /
     /// mass, through the server's rigid-body solver — never a second impulse mechanism) to a
     /// <paramref name="Key"/>-addressed body, along <paramref name="HeadingKey"/>'s own body's forward facing,
     /// scaled by a live kind=Fixed state cell's magnitude. The cue gesture's one honest path: billiards charges

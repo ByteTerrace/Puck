@@ -176,6 +176,57 @@
         ],
         "additionalProperties": false,
         "default": null
+      },
+      "memory": {
+        "description": "The screen\u0027s live byte-window bindings between its booted machine\u0027s bus and ordinary state.world Int cells (see WorldScreenMemory), or null for a screen with none. Omitted from the wire when null.",
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "description": "One live byte-window binding between a declared screens row\u0027s booted machine and an ordinary state.world Int cell \u2014 the campfire seam: a 3D log on the fire is a cell, the cartridge reads it (or, the other direction, a lever the cartridge throws is a cell the 3D world reads). A Direction of Read mirrors the machine\u0027s bytes into the cell every tick through the ordinary state-mutation door (WorldMutation.UpsertStateCell, the same door a rule\u0027s own single-cell write folds into \u2014 see Server.WorldServer.MachineMemory.cs), a write landing only when the peeked value changed, so a quiet machine costs nothing; Write pokes the cell\u0027s current value into the machine\u0027s bus (PokeByte through Server.IWorldMachineHost.TryPokeMessage) every tick the cell\u0027s value has moved since the last poke \u2014 a mutation of the machine\u0027s guest state through the host seam, deterministic under replay because the value it carries is itself simulation state a replay reproduces bit-for-bit, unlike a bare debug poke\u0027s own unrecorded-input caveat. Distinct from an addon row\u0027s own WorldAddonMemoryWatch (an edge-triggered event feed for a mounted guest): this binding is a standing per-tick mirror into ordinary state, read by every other state consumer (rules, HUD bindings, a placement\u0027s respond) with no addon in the loop.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "address": {
+              "description": "The machine bus address the window starts at. Validated within 0..(MaxAddress - Width \u002B 1) \u2014 outside the engine\u0027s addressable memory refuses by name at validation, never at runtime (a machine\u0027s own IMachineMemoryPeek silently reads/no-ops out of its own smaller readable/writable range instead, exactly as it does for any other peek/poke).",
+              "type": "integer"
+            },
+            "width": {
+              "description": "How many bytes the window spans, little-endian (the low byte at Address): 1 or 2.",
+              "type": "integer"
+            },
+            "row": {
+              "description": "The declared state.world row this binding mirrors to/from \u2014 must resolve to a kind=Int row.",
+              "type": "string"
+            },
+            "key": {
+              "description": "The cell inside Row, or null for its slot cell. Refused when Row is keyed and this is absent, or unkeyed and this is present \u2014 the same (row, key) pair rule every other named-cell reference in this document follows. Omitted from the wire when null.",
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "direction": {
+              "description": "Which way the binding moves a value.",
+              "enum": [
+                "Read",
+                "Write"
+              ],
+              "default": "Read"
+            }
+          },
+          "required": [
+            "address",
+            "width",
+            "row"
+          ],
+          "additionalProperties": false
+        },
+        "default": null
       }
     },
     "required": [

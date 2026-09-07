@@ -189,6 +189,11 @@
               "type": "integer"
             },
             "default": null
+          },
+          "extended": {
+            "$ref": "./common.schema.json#/$defs/GeneratorExtended",
+            "description": "The extended-generator facet (see GeneratorExtended), or null for the ordinary Pcg32XshRr generator every other source draws through.",
+            "default": null
           }
         },
         "additionalProperties": false

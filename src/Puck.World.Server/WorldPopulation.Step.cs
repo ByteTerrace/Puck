@@ -995,19 +995,20 @@ Replan:
     // Per-placement-ordinal cache of the last raw cell value ReconcileInhabitCounts resolved for a cell-driven
     // inhabit facet — a placement with no such facet, or a literal count, is never written here. Resized (and its
     // fresh slots re-seeded to NoInhabitCountObserved) only when the placement count itself changes, which already
-    // allocates elsewhere in the SAME structural install; a quiet tick that touches no relevant cell reads this
+    // allocates elsewhere in the same structural install; a quiet tick that touches no relevant cell reads this
     // array and writes nothing.
     private long[] m_inhabitCountCache = [];
 
     // Forces the next ReconcileInhabitCounts call to re-resolve every cell-driven placement from scratch — a
     // structural install's own defensive reset (ReconcileInhabitants), since a placement's ordinal can carry a
-    // different row reference after a reorder or replacement without its overall COUNT changing.
+    // different row reference after a reorder or replacement without its overall count changing.
     private void InvalidateInhabitCountCache() => Array.Fill(array: m_inhabitCountCache, value: NoInhabitCountObserved);
 
     /// <summary>Reconciles every cell-driven inhabit facet's live count against its bound cell's current value —
-    /// the per-tick half of the count-cell primitive (<see cref="ReconcileInhabitants"/> is the structural half,
-    /// and never grows a cell-referencing placement: such a placement starts at zero live bodies through every
-    /// install, including boot, and is admitted here on the first call that finds its cell non-empty). Skips a
+    /// the value half of the count-cell primitive (<see cref="ReconcileInhabitants"/> is the structural half, and
+    /// never grows a cell-referencing placement: such a placement starts at zero live bodies through every install,
+    /// and is admitted here, which the server calls right after every structural reconcile, boot included, and on
+    /// every state write). Skips a
     /// placement whose bound cell has not moved since the last call — the frame's own per-row version lives only
     /// inside the rule evaluator's short-lived state frame, unreachable from here, so this compares the resolved
     /// raw value directly, which answers the identical question ("did anything change") at the cost of one cached

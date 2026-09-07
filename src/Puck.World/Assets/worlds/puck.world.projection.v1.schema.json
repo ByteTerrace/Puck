@@ -480,12 +480,12 @@
                   "default": null
                 },
                 "color": {
-                  "description": "The sun\u0027s linear #RRGGBB color.",
+                  "description": "The sun\u0027s linear color \u2014 a #RRGGBB/#RRGGBBAA literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding naming a Text cell that holds one (alpha is ignored; the render path is opaque).",
+                  "default": null,
                   "type": [
                     "string",
                     "null"
-                  ],
-                  "default": null
+                  ]
                 }
               },
               "additionalProperties": false,
@@ -515,12 +515,12 @@
                   "default": null
                 },
                 "color": {
-                  "description": "The ambient linear #RRGGBB color.",
+                  "description": "The ambient linear color \u2014 BindableColor\u0027s grammar, on the same terms as Color.",
+                  "default": null,
                   "type": [
                     "string",
                     "null"
-                  ],
-                  "default": null
+                  ]
                 }
               },
               "additionalProperties": false,
@@ -538,28 +538,28 @@
           ],
           "properties": {
             "zenith": {
-              "description": "The straight-up sky color, as #RRGGBB. Optional; absent takes the pinned zenith.",
+              "description": "BindableColor\u0027s grammar: the straight-up sky color. Optional; absent takes the pinned zenith.",
+              "default": null,
               "type": [
                 "string",
                 "null"
-              ],
-              "default": null
+              ]
             },
             "horizon": {
-              "description": "The horizon-band color (the gradient\u0027s middle stop), as #RRGGBB. Optional; absent takes the midpoint between the pinned ground and zenith.",
+              "description": "BindableColor\u0027s grammar: the horizon-band color (the gradient\u0027s middle stop). Optional; absent takes the midpoint between the pinned ground and zenith.",
+              "default": null,
               "type": [
                 "string",
                 "null"
-              ],
-              "default": null
+              ]
             },
             "ground": {
-              "description": "The straight-down (nadir) color, as #RRGGBB. Optional; absent takes the pinned ground.",
+              "description": "BindableColor\u0027s grammar: the straight-down (nadir) color. Optional; absent takes the pinned ground.",
+              "default": null,
               "type": [
                 "string",
                 "null"
-              ],
-              "default": null
+              ]
             },
             "fogDensity": {
               "description": "The exponential distance-fog density fading toward the sky color. Optional; absent takes the pinned 0.015 \u2014 the exact value the fog term used before this field existed.",
@@ -672,12 +672,12 @@
                   "type": "integer"
                 },
                 "color": {
-                  "description": "The cloud colour, as #RRGGBB or a state.\u003Crow\u003E.\u003Ckey\u003E binding. Optional; absent is white.",
+                  "description": "BindableColor\u0027s grammar: the cloud colour. Optional; absent is white.",
+                  "default": null,
                   "type": [
                     "string",
                     "null"
-                  ],
-                  "default": null
+                  ]
                 },
                 "drift": {
                   "description": "The layer\u0027s wind, in layer units per second along world X and Z, integrated on the tick clock. Optional; absent holds still.",
@@ -799,28 +799,28 @@
                     ],
                     "properties": {
                       "zenith": {
-                        "description": "The straight-up sky color, as #RRGGBB. Optional; absent takes the pinned zenith.",
+                        "description": "BindableColor\u0027s grammar: the straight-up sky color. Optional; absent takes the pinned zenith.",
+                        "default": null,
                         "type": [
                           "string",
                           "null"
-                        ],
-                        "default": null
+                        ]
                       },
                       "horizon": {
-                        "description": "The horizon-band color (the gradient\u0027s middle stop), as #RRGGBB. Optional; absent takes the midpoint between the pinned ground and zenith.",
+                        "description": "BindableColor\u0027s grammar: the horizon-band color (the gradient\u0027s middle stop). Optional; absent takes the midpoint between the pinned ground and zenith.",
+                        "default": null,
                         "type": [
                           "string",
                           "null"
-                        ],
-                        "default": null
+                        ]
                       },
                       "ground": {
-                        "description": "The straight-down (nadir) color, as #RRGGBB. Optional; absent takes the pinned ground.",
+                        "description": "BindableColor\u0027s grammar: the straight-down (nadir) color. Optional; absent takes the pinned ground.",
+                        "default": null,
                         "type": [
                           "string",
                           "null"
-                        ],
-                        "default": null
+                        ]
                       },
                       "fogDensity": {
                         "description": "The exponential distance-fog density fading toward the sky color. Optional; absent takes the pinned 0.015 \u2014 the exact value the fog term used before this field existed.",
@@ -1870,6 +1870,57 @@
               "entries"
             ],
             "additionalProperties": false,
+            "default": null
+          },
+          "memory": {
+            "description": "The screen\u0027s live byte-window bindings between its booted machine\u0027s bus and ordinary state.world Int cells (see WorldScreenMemory), or null for a screen with none. Omitted from the wire when null.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "One live byte-window binding between a declared screens row\u0027s booted machine and an ordinary state.world Int cell \u2014 the campfire seam: a 3D log on the fire is a cell, the cartridge reads it (or, the other direction, a lever the cartridge throws is a cell the 3D world reads). A Direction of Read mirrors the machine\u0027s bytes into the cell every tick through the ordinary state-mutation door (WorldMutation.UpsertStateCell, the same door a rule\u0027s own single-cell write folds into \u2014 see Server.WorldServer.MachineMemory.cs), a write landing only when the peeked value changed, so a quiet machine costs nothing; Write pokes the cell\u0027s current value into the machine\u0027s bus (PokeByte through Server.IWorldMachineHost.TryPokeMessage) every tick the cell\u0027s value has moved since the last poke \u2014 a mutation of the machine\u0027s guest state through the host seam, deterministic under replay because the value it carries is itself simulation state a replay reproduces bit-for-bit, unlike a bare debug poke\u0027s own unrecorded-input caveat. Distinct from an addon row\u0027s own WorldAddonMemoryWatch (an edge-triggered event feed for a mounted guest): this binding is a standing per-tick mirror into ordinary state, read by every other state consumer (rules, HUD bindings, a placement\u0027s respond) with no addon in the loop.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "address": {
+                  "description": "The machine bus address the window starts at. Validated within 0..(MaxAddress - Width \u002B 1) \u2014 outside the engine\u0027s addressable memory refuses by name at validation, never at runtime (a machine\u0027s own IMachineMemoryPeek silently reads/no-ops out of its own smaller readable/writable range instead, exactly as it does for any other peek/poke).",
+                  "type": "integer"
+                },
+                "width": {
+                  "description": "How many bytes the window spans, little-endian (the low byte at Address): 1 or 2.",
+                  "type": "integer"
+                },
+                "row": {
+                  "description": "The declared state.world row this binding mirrors to/from \u2014 must resolve to a kind=Int row.",
+                  "type": "string"
+                },
+                "key": {
+                  "description": "The cell inside Row, or null for its slot cell. Refused when Row is keyed and this is absent, or unkeyed and this is present \u2014 the same (row, key) pair rule every other named-cell reference in this document follows. Omitted from the wire when null.",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "direction": {
+                  "description": "Which way the binding moves a value.",
+                  "enum": [
+                    "Read",
+                    "Write"
+                  ],
+                  "default": "Read"
+                }
+              },
+              "required": [
+                "address",
+                "width",
+                "row"
+              ],
+              "additionalProperties": false
+            },
             "default": null
           }
         },
@@ -7357,7 +7408,7 @@
       "description": "The world\u0027s binding layers \u2014 a visitor\u0027s seat composes over them.",
       "type": "array",
       "items": {
-        "description": "One per-world binding overlay \u2014 a whole BindingProfileDocument layered over the engine default beneath every seat\u0027s profile bindings, so a world can contextualize the controls (a kart world remapping a lane, an RTS world adding a chorded command page) as data, never a client fork. Merged in order; the composed result (default \u2295 every overlay) is what the validator compiles.",
+        "description": "One per-world binding overlay \u2014 a whole BindingProfileDocument layered over the engine default beneath every seat\u0027s profile bindings, so a world can contextualize the controls (a kart world remapping a lane, an RTS world adding a chorded command page) as data, never a client fork. Merged in order; the composed result (default \u2295 every overlay whose When currently holds) is what the validator compiles.",
         "type": [
           "object",
           "null"
@@ -8566,6 +8617,68 @@
             "required": [
               "slotSet",
               "banks"
+            ],
+            "additionalProperties": false,
+            "default": null
+          },
+          "when": {
+            "description": "The condition this layer composes under; null always composes it (today\u0027s behavior). Reuses StateCondition\u0027s field convention rather than a second reading of \u0022compare a state cell\u0022 \u2014 the same state/key/comparison/value shape a placement\u0027s own response facet speaks. Re-evaluated whenever the routed definition changes, never per frame.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "state": {
+                "description": "The state row compared \u2014 any declared state.world row of a numeric kind (never Text).",
+                "type": "string"
+              },
+              "comparison": {
+                "description": "The comparison.",
+                "enum": [
+                  "Equal",
+                  "NotEqual",
+                  "Less",
+                  "LessOrEqual",
+                  "Greater",
+                  "GreaterOrEqual"
+                ]
+              },
+              "value": {
+                "description": "The literal comparand, or null when ComparandState spells the comparand instead.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "key": {
+                "description": "The cell inside State, or null for its slot cell. Refused when State is keyed and this is absent, or unkeyed and this is present.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "comparandState": {
+                "description": "Another declared state.world row, read live and compared instead of Value. Must share State\u0027s cell kind (refused by name otherwise).",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "comparandKey": {
+                "description": "The cell inside ComparandState, on the same terms as Key. Refused when ComparandState is absent.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "state",
+              "comparison"
             ],
             "additionalProperties": false,
             "default": null
@@ -9851,9 +9964,12 @@
                 ]
               },
               "count": {
-                "description": "How many bodies, bounded by the world\u0027s authored peer capacity.",
-                "type": "integer",
-                "default": 1
+                "description": "How many bodies: an authored literal, or a live cell reference naming an Int state.world row whose value the population admits and retires bodies to track (WorldPopulation.ReconcileInhabitCounts) \u2014 the spawner primitive a crawl\u0027s mob generator rides. Either way, bounded by the world\u0027s authored peer capacity; a cell reference is additionally bounded by Distribution\u0027s own sample count, the tighter of the two winning. Absent is an authored literal of 1 \u2014 see ResolvedCount.",
+                "default": null,
+                "type": [
+                  "integer",
+                  "object"
+                ]
               },
               "distribution": {
                 "description": "The region and deterministic fill sequence that place the bodies relative to the placement root.",
@@ -14024,6 +14140,46 @@
                           "type": "integer"
                         },
                         "default": null
+                      },
+                      "extended": {
+                        "description": "The extended-generator facet (see GeneratorExtended), or null for the ordinary Pcg32XshRr generator every other source draws through.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "k": {
+                            "description": "The extension table size: a power of two in [2, 1024].",
+                            "type": "integer"
+                          },
+                          "table": {
+                            "description": "The whole extension table, exactly K words \u2014 or null when Script authors it instead.",
+                            "type": [
+                              "array",
+                              "null"
+                            ],
+                            "items": {
+                              "type": "integer"
+                            },
+                            "default": null
+                          },
+                          "script": {
+                            "description": "Up to K values in the source\u0027s own output space, authoring the site\u0027s first draws directly \u2014 or null when Table is authored instead.",
+                            "type": [
+                              "array",
+                              "null"
+                            ],
+                            "items": {
+                              "type": "integer"
+                            },
+                            "default": null
+                          }
+                        },
+                        "required": [
+                          "k"
+                        ],
+                        "additionalProperties": false,
+                        "default": null
                       }
                     },
                     "additionalProperties": false,
@@ -15115,6 +15271,40 @@
                         "bodyDirection",
                         "speed",
                         "durationSeconds"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "description": "Applies the SAME instantaneous world-space rigid impulse body.impulse fires (\u0394v = impulse / mass, through the server\u0027s rigid-body solver \u2014 never a second impulse mechanism) to a Key-addressed body, along HeadingKey\u0027s own body\u0027s forward facing, scaled by a live kind=Fixed state cell\u0027s magnitude. The cue gesture\u0027s one honest path: billiards charges MagnitudeState by hold duration and fires this on release. Refused by name when the struck body resolves to no active body or carries no \u0027rigid\u0027 kit facet, the heading body resolves to no active body, or the resulting impulse is not representable or exceeds the world\u0027s declared rigid speed ceiling.",
+                      "properties": {
+                        "$type": {
+                          "const": "applyRigidImpulse"
+                        },
+                        "key": {
+                          "description": "The struck body reference \u2014 body:\u003Cn\u003E, argmax:\u003Crow\u003E/ argmin:\u003Crow\u003E, or placement:\u003Cid\u003E (see BodyRefVocabulary).",
+                          "type": "string"
+                        },
+                        "headingKey": {
+                          "description": "The body reference whose forward facing supplies the impulse direction \u2014 the same reference grammar as Key.",
+                          "type": "string"
+                        },
+                        "magnitudeState": {
+                          "description": "The declared kind=Fixed row naming the impulse\u0027s magnitude.",
+                          "type": "string"
+                        },
+                        "magnitudeKey": {
+                          "description": "The row\u0027s cell key, or null for an unkeyed row.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "headingKey",
+                        "magnitudeState"
                       ],
                       "additionalProperties": false
                     },

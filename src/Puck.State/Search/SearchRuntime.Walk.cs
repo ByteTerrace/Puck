@@ -582,7 +582,7 @@ public sealed partial class SearchRuntime {
         }
     }
 
-    // Max-n's own fold: ply p's mover maximizes its OWN seat's entry of the vector source carries, never a negated
+    // Max-n's own fold: ply p's mover maximizes its own seat's entry of the vector source carries, never a negated
     // reply -- one seat's gain need not be another's loss. An improving candidate's whole vector is remembered in
     // p's own level frame (repurposing its scores cells as the ply's memo of its current best line, since nothing
     // else reads them once the ply's own candidates are all that touches that frame) so a later fold-up to p's

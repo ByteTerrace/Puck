@@ -750,6 +750,13 @@ public sealed partial class WorldServer : IWorldServerHost {
             definition: definition,
             disconnected: disconnectedAtBoot
         );
+        // A cell-driven inhabit count starts from its cell's authored value, not from zero waiting for a write.
+        m_population.ReconcileInhabitCounts(
+            admitted: admittedAtBoot,
+            definition: definition,
+            disconnected: disconnectedAtBoot,
+            tick: NextInputTick
+        );
         ApplyLifecycleEvents(
             admitted: admittedAtBoot,
             disconnected: disconnectedAtBoot,

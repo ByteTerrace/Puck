@@ -324,7 +324,7 @@ internal static partial class Subjects {
 
         return null;
     }
-    /// <summary><see cref="Pcg32Extended.CreateWithTable(ulong, ulong, ReadOnlySpan{uint})"/>'s base matches a FRESH
+    /// <summary><see cref="Pcg32Extended.CreateWithTable(ulong, ulong, ReadOnlySpan{uint})"/>'s base matches a fresh
     /// <see cref="Pcg32XshRr.Create(ulong, ulong)"/> exactly (no draws consumed self-seeding), its extension is the
     /// authored table verbatim, and the chosen-output recipe against that fresh base — rather than
     /// <see cref="Pcg32Extended.Create(ulong, ulong, int)"/>'s already-self-seeded one — lands the next k draws on the
@@ -365,7 +365,7 @@ internal static partial class Subjects {
             if (extension[index] != table[index]) { return $"Extension[{index}] is 0x{extension[index]:X8}, not the authored 0x{table[index]:X8}"; }
         }
 
-        // The chosen-output recipe against a FRESH (zero-offset) probe: precompute the table index and base draw a
+        // The chosen-output recipe against a fresh (zero-offset) probe: precompute the table index and base draw a
         // clean Pcg32XshRr.Create(state, stream) produces at each of the first k steps, install wanted XOR base at
         // each, and confirm the constructed generator's own next k draws equal the wanted values in order.
         var indexProbe = Pcg32XshRr.Create(

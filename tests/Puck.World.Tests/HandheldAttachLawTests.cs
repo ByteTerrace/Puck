@@ -11,7 +11,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// THE LAW: a placement's <c>attach</c> facet can be driven live by an ordinary document rule — a body standing in a
+/// the law: a placement's <c>attach</c> facet can be driven live by an ordinary document rule — a body standing in a
 /// region while holding a channel gets a named placement upserted onto it (<see cref="WorldPlacementAttach"/>,
 /// <c>bodyIndex</c> literal, offset in the body's local frame); walking back out of the region upserts it back to its
 /// authored stand pose. Both edges reuse the exact idiom <c>modules/studio.world.json</c>'s own

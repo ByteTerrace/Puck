@@ -493,7 +493,7 @@ public static partial class WorldDefinitionValidator {
     // every layer's own structure and vocabulary must be sound regardless) passes the existing binding compiler — a
     // partial overlay page that only makes sense post-merge still gates against the real runtime artifact, and the
     // binding validator is never reimplemented. No overlays compose to the empty document: a world with no bindings
-    // is valid. The vocabulary half resolves channel names against THIS document's own table (the `channels`
+    // is valid. The vocabulary half resolves channel names against this document's own table (the `channels`
     // parameter), never a process-global.
     private static void ValidateBindingOverlays(WorldDefinition definition, IReadOnlyList<WorldBindingOverlay> overlays, WorldChannelTable? channels, IReadOnlyDictionary<string, WorldStateRow> stateRows, IReadOnlyList<WorldSeatModeFamily> seatModes, IReadOnlySet<string> iconNames, bool iconsAuthored, List<string> errors) {
         if (overlays is null) {

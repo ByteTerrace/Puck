@@ -96,8 +96,8 @@ public sealed class CueLawTests {
         return StateRows.FindCell(cells: row.Cells, key: CellName.Parse(candidate: "0"))!.Value;
     }
 
-    // The release effect always addresses the SAME two live-resolved bodies: the struck target (a literal body
-    // index) and the heading source (a DIFFERENT literal body index) — proving the effect strikes a body other
+    // The release effect always addresses the same two live-resolved bodies: the struck target (a literal body
+    // index) and the heading source (a different literal body index) — proving the effect strikes a body other
     // than the one supplying the direction, the shape a cue strike needs.
     private static WorldRule ReleaseRule(int targetIndex) => new(
         Name: CellName.Parse(candidate: "cue-release"),
@@ -139,7 +139,7 @@ public sealed class CueLawTests {
 
     [Fact]
     public void AStrikeOnABodyTheSeatDoesNotTargetRefusesAndLeavesEveryRigidBodyAtRest() {
-        // The seat's OWN body (index 0) carries the base locomotion kit, never the rigid "ball" kit — the "does not
+        // The seat's own body (index 0) carries the base locomotion kit, never the rigid "ball" kit — the "does not
         // target" case: an attempted strike on a body that is not the targetable ball.
         var definition = BuildCueDocument(seedMagnitude: FixedQ4816.FromDouble(value: 2.0)) with {
             Rules = [ReleaseRule(targetIndex: 0)],

@@ -402,10 +402,10 @@ no bodies of its own — a visiting seat brings its own avatar and kit.
 ## The look counter
 
 `look` is a slot `int` row, range `0..7`, that a rule (`studio-look-cycle`) advances
-by one (wrapping) on the tick a body's seat presses the world's `jump` channel while
+by one (wrapping) on the tick local seat 1 presses the world's `jump` channel while
 the region reads at least one occupant; the same edge also sets the fact `awakened`
-on local seat 1's own driving identity, through the reserved `identity` lane an
-importing world declares (see below):
+on that seat's own driving identity (body key `0`), through the reserved `identity`
+lane an importing world declares (see below):
 
 ```text
 gate: $region:studioTurntable >= 1  AND  $channel:1:jump >= 1
@@ -420,9 +420,12 @@ studio's own gate faces, and to re-pose a returning identity elsewhere at boot
 without waiting for it to walk back through the studio at all.
 
 A world-rule channel read is a fixed 1-based seat number, not "whichever body is in
-the region" — the closest primitive the engine offers today reads local seat 1's own
-`jump` channel, so a second local seat standing on the turntable does not itself
-advance the counter. `look` is the reveal ladder's future selector into whatever the
+the region" — so each local seat needs its own rule, and a seat's channel compiles
+only in a host that declares that seat. The module carries seat 1's rule; the island,
+which seats two, adds seat 2's (`seat2-studio-look-cycle` in `puck.world.json`,
+writing `studio_look` and key `1`). The region predicate reads any occupant, so a
+seat pressing `jump` while the other stands on the turntable advances the counter
+and wakes the pressing seat's identity. `look` is the reveal ladder's future selector into whatever the
 importing world's own `looks.rows` declares (the wren's look among them) — this
 district only counts; nothing here swaps a body's rendered look yet, since no
 document primitive binds a placement or body look to a live state row (that swap is

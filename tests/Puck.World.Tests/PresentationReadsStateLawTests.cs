@@ -8,7 +8,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// THE LAW: presentation reads state through the same two doors every other bindable field uses — no third reading
+/// the law: presentation reads state through the same two doors every other bindable field uses — no third reading
 /// of "compare a state cell" and no second color grammar. The sky's authored colors speak <see cref="BindableColor"/>
 /// (alpha accepted, ignored by the opaque render path) instead of <c>WorldColor</c>'s own narrower dialect, and a
 /// binding overlay's optional <see cref="WorldBindingOverlay.When"/> reuses
@@ -65,7 +65,7 @@ public sealed class PresentationReadsStateLawTests {
         var moved = new WorldStateRow(Name: CellName.Parse(candidate: "colors"), Kind: CellKind.Text, Cells: [new StateCell(Key: CellName.Parse(candidate: "zenith"), Text: "#AABBCC")]);
         var second = track.Resolve(definition: (Fixtures.BuildDocument().WithWorldState(rows: [moved]) with { RenderRaw = WorldRenderDefaults.Absent with { Sky = sky } }), revision: 2, tick: 0UL);
 
-        // No re-bake: the SAME track instance, told only that the revision moved, reads the new cell straight through.
+        // No re-bake: the same track instance, told only that the revision moved, reads the new cell straight through.
         Assert.Equal(expected: new Vector3(x: (0xAA / 255f), y: (0xBB / 255f), z: (0xCC / 255f)), actual: second.SkyZenithColor);
     }
     // BindableColor's grammar carries an accepted alpha suffix WorldColor's own #RRGGBB-only dialect refused —

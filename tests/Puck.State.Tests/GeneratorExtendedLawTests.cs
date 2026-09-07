@@ -4,7 +4,7 @@ namespace Puck.State.Tests;
 
 /// <summary>
 /// Laws for the extended-generator draw facet: a <see cref="GeneratorExtended"/> table (authored directly, or
-/// compiled from a script) replaces <c>Pcg32Extended</c>'s own self-seeding, so the site draws through the SAME
+/// compiled from a script) replaces <c>Pcg32Extended</c>'s own self-seeding, so the site draws through the same
 /// seed-ladder/cursor contract every other draw site does — nothing new persists, a save/reload resumes exactly, and
 /// an authored seek (<see cref="Draw.Skip"/>) shifts the sequence by a constant offset.
 /// </summary>
@@ -49,7 +49,7 @@ public sealed class GeneratorExtendedLawTests {
             Assert.Equal(expected: script[index], actual: drawn[index]);
         }
 
-        // A second boot is a BRAND-NEW StateGenerator instance carrying the identical authored shape — the table is
+        // A second boot is a brand-new StateGenerator instance carrying the identical authored shape — the table is
         // a pure function of the seed ladder and the authored data, so the whole sequence, script included, repeats.
         var secondBoot = Fresh();
 
@@ -67,7 +67,7 @@ public sealed class GeneratorExtendedLawTests {
         }
 
         // Past the script, the stream continues under the ordinary uniformRange mapping (no crash, no repeat of the
-        // script) — the compiled table is a WHOLE table, self-seeded past the script's own length.
+        // script) — the compiled table is a whole table, self-seeded past the script's own length.
         _ = Fire(generator: generator, cursor: script.Length);
 
         var outOfRange = new StateGenerator(Source: GeneratorSource.UniformRange, RangeMin: 10, RangeMax: 19, Extended: new GeneratorExtended(K: 8, Script: [20L]));
@@ -132,7 +132,7 @@ public sealed class GeneratorExtendedLawTests {
         var cursor = 0L;
 
         // The first draw at a fresh cursor is a cache miss: it builds and caches the extended generator, which
-        // allocates its table once. Warming this (and the generic-over-Pcg32Extended dispatch path's JIT) BEFORE
+        // allocates its table once. Warming this (and the generic-over-Pcg32Extended dispatch path's JIT) before
         // measuring is what isolates the steady-tick cost the law states.
         Assert.True(condition: GeneratorEngine.TryFire(generator: generator, targetKind: CellKind.Int, seedState: seed, stream: stream, cursor: cursor, masks: null, result: out var fired, reason: out var reason), userMessage: reason);
         cursor = checked(cursor + fired.Samples);

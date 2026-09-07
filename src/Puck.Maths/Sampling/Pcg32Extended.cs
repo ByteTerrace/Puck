@@ -319,7 +319,7 @@ public struct Pcg32Extended : IDrawGenerator {
     /// <param name="stream">The stream id, forwarded to <see cref="Pcg32XshRr.Create(ulong, ulong)"/>.</param>
     /// <param name="table">The extension table's own words, copied into a private array; its length is <c>k</c>, a
     /// power of two in <c>[2, 1024]</c>.</param>
-    /// <returns>A ready-to-draw generator whose base starts at the SAME state <see cref="Create(ulong, ulong, int)"/>'s
+    /// <returns>A ready-to-draw generator whose base starts at the same state <see cref="Create(ulong, ulong, int)"/>'s
     /// base would (no draws are consumed forming the table), and whose extension table is <paramref name="table"/>
     /// verbatim rather than self-seeded from the base's own draws.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stream"/> exceeds

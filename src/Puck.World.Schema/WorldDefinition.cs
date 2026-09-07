@@ -508,19 +508,7 @@ public sealed record WorldDefinition(
     private StateCatalog GetStateCatalog() {
         var cache = GetCompilationCache(state: StateRaw);
 
-        // GetCompilationCache keys this instance by the exact StateRaw reference (the ConditionalWeakTable above),
-        // so once a product has been shape-checked against THIS call's StateRaw it can never stop matching it —
-        // the section is an immutable record and a different shape can only arrive under a different reference,
-        // which resolves to a different cache. Skip the O(row count) MatchesShape walk on every later read (every
-        // rule-operand resolve on the tick path) once that one-time proof stands; only an unverified or
-        // freshly-populated cache pays it.
-        if (Volatile.Read(location: ref cache.StateCatalogVerified) && (Volatile.Read(location: ref cache.StateCatalog) is { } fastWarm)) {
-            return fastWarm;
-        }
-
         if ((Volatile.Read(location: ref cache.StateCatalog) is { } warm) && warm.MatchesShape(section: StateRaw)) {
-            Volatile.Write(location: ref cache.StateCatalogVerified, value: true);
-
             return warm;
         }
 
@@ -531,8 +519,6 @@ public sealed record WorldDefinition(
             ) {
                 cache.StateCatalog = StateCatalog.Compile(section: StateRaw);
             }
-
-            Volatile.Write(location: ref cache.StateCatalogVerified, value: true);
 
             return cache.StateCatalog;
         }
@@ -590,7 +576,6 @@ public sealed record WorldDefinition(
                         ? sourceCache.StateCatalog
                         : StateCatalog.Compile(section: target.StateRaw)
                     );
-                    Volatile.Write(location: ref targetCache.StateCatalogVerified, value: true);
                 }
 
                 if (sourceCache.FieldProgramCompiled) {
@@ -640,9 +625,6 @@ public sealed record WorldDefinition(
         public bool FieldsCompiled;
         public WorldFieldsSection? Fields;
         public StateCatalog? StateCatalog;
-        // Set once StateCatalog has been shape-checked against this cache's own key (its exact StateRaw
-        // reference). Never true while StateCatalog itself is being replaced without an accompanying check.
-        public bool StateCatalogVerified;
         public bool FieldProgramCompiled { get; set; }
         public WorldFieldProgram? FieldProgram { get; set; }
         public WorldFieldsSection? FieldProgramFields { get; set; }

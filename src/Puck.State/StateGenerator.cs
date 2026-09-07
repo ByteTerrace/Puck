@@ -108,7 +108,7 @@ public sealed record GeneratorWeightedNumeric(long Value, ulong Weight, [propert
 /// </summary>
 /// <remarks>Exactly one of <see cref="Table"/> and <see cref="Script"/> is declared. <see cref="Table"/> is the whole
 /// extension table verbatim, for any source. <see cref="Script"/> authors the site's own first draws directly in the
-/// SOURCE'S OUTPUT space — the value <c>streamDraw</c> writes, or the value <c>uniformRange</c> maps to — and compiles
+/// source's output space — the value <c>streamDraw</c> writes, or the value <c>uniformRange</c> maps to — and compiles
 /// to a table at boot resolution: word <c>i</c> is <c>wanted_i XOR base_i</c>, where <c>base_i</c> is the base
 /// generator's own <c>i</c>-th raw draw (independent of any table content) and <c>wanted_i</c> is the raw draw the
 /// source's own sampling maps onto the scripted value. Only <c>streamDraw</c> and <c>uniformRange</c> admit a script:

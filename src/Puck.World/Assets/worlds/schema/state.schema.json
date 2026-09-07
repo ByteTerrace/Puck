@@ -170,6 +170,11 @@
               "secret": {
                 "description": "An authority-provisioned 256-bit secret for an independently keyed streamDraw sample at each cursor. Never sent in observations.",
                 "default": null
+              },
+              "skip": {
+                "description": "An authored seek, non-negative, default 0: a rebuild advances the generator by (skip \u002B cursor) * cost rather than cursor * cost. Authored data, the same class as the seed ladder\u0027s own rungs \u2014 it never writes the persisted DrawCursor, which keeps counting samples from zero exactly as an unskipped site\u0027s does.",
+                "type": "integer",
+                "default": 0
               }
             },
             "additionalProperties": false

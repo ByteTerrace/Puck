@@ -47,7 +47,10 @@ internal static class WorldBenchmarks {
         WorldExtensionVocabularyHook.ScreenMachineEngineCheck = id => WorldScreenMachineEngines.IsRegistered(id);
         WorldExtensionVocabularyHook.ScreenMachineCartridgeCheck = id => WorldScreenMachineEngines.CompilesCartridges(id);
 
-        if (!WorldDefinitionLoader.TryLoadFile(path: path, definition: out var definition, reason: out var reason)) {
+        // The island proves its seams against the shard documents beside it, read the way the host reads them.
+        var neighbours = new WorldFileNeighbourResolver(baseDirectory: () => (Path.GetDirectoryName(path: path) ?? string.Empty));
+
+        if (!WorldDefinitionLoader.TryLoadFile(path: path, definition: out var definition, reason: out var reason, neighbours: neighbours)) {
             throw new InvalidOperationException(message: $"could not load the shipped world at {path}: {reason}");
         }
 

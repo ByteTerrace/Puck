@@ -743,8 +743,10 @@ internal static partial class CanaryCommand {
         return results;
     }
     // Per-verb command-claim accounting shared by a single-process leg and a federated mesh leg's primary
-    // authority: every authored occurrence's response is found by its exact "[verb:" prefix (either stream —
-    // OutputLines carries both, sequence-ordered) and checked against its declared stream (accepted implies
+    // authority: every authored occurrence's response is found by its "[verb:" prefix, or by a "[verb.facet"
+    // line for a verb whose read-back is a run of facet lines (world.state answers a row as [world.state.row …]
+    // followed by its [world.state.cell …] lines) — a contiguous run of such lines is one answer (either stream;
+    // OutputLines carries both, sequence-ordered) — and checked against its declared stream (accepted implies
     // stdout unless StreamOverride says otherwise; refused always implies stderr). wire.errors additionally
     // carries the runner-owned terminal call, one beyond whatever occurrences the script itself authored.
     private static IReadOnlyList<CanaryAssertionResult> EvaluateCommandAccounting(IReadOnlyList<CanaryCommandClaim> commands, IReadOnlyList<CliProcessOutputLine> outputLines) {
@@ -753,9 +755,7 @@ internal static partial class CanaryCommand {
         var byVerb = commands.GroupBy(keySelector: static claim => claim.Verb, comparer: StringComparer.Ordinal);
 
         foreach (var group in byVerb) {
-            var responseEvents = outputLines
-                .Where(predicate: line => line.Line.StartsWith(value: $"[{group.Key}:", comparisonType: StringComparison.Ordinal))
-                .ToList();
+            var responseEvents = ResponseEvents(outputLines: outputLines, verb: group.Key);
             var claims = group.OrderBy(keySelector: static claim => claim.Occurrence).ToList();
             var terminalAdjustment = ((group.Key == "wire.errors") ? 1 : 0);
             var countPassed = (responseEvents.Count == (claims.Count + terminalAdjustment));
@@ -791,6 +791,31 @@ internal static partial class CanaryCommand {
         ));
 
         return results;
+    }
+    // One event per answer: a line opening "[verb:" always starts one; a line opening "[verb." starts one only
+    // when the previous line did not already belong to this verb's answer.
+    private static List<CliProcessOutputLine> ResponseEvents(IReadOnlyList<CliProcessOutputLine> outputLines, string verb) {
+        var exact = $"[{verb}:";
+        var facet = $"[{verb}.";
+        var events = new List<CliProcessOutputLine>();
+        var inFacetRun = false;
+
+        foreach (var line in outputLines) {
+            if (line.Line.StartsWith(value: exact, comparisonType: StringComparison.Ordinal)) {
+                events.Add(item: line);
+                inFacetRun = false;
+            } else if (line.Line.StartsWith(value: facet, comparisonType: StringComparison.Ordinal)) {
+                if (!inFacetRun) {
+                    events.Add(item: line);
+                }
+
+                inFacetRun = true;
+            } else {
+                inFacetRun = false;
+            }
+        }
+
+        return events;
     }
     private static void ReportLeg(string id, CanaryLegRun result) {
         Console.WriteLine(value: $"canary {id} {result.Leg.Name}: transcripts {result.RunDirectory}");

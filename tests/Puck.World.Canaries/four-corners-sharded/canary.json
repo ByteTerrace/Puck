@@ -4,7 +4,7 @@
   "bootShape": "headless",
   "requirements": [],
   "seconds": 25,
-  "timeoutSeconds": 600,
+  "timeoutSeconds": 120,
   "binding": "Five real Puck.World processes (nw, ne, se, sw, island) each bind a distinct dynamic loopback endpoint and trust each other's generated federation identity. Only nw's script drives a body: it crosses nw's east edge into ne, then (via the router that follows a body to wherever it now lives) ne's south edge into se, then se's west edge into sw, and sw's own north edge lands it back on nw \u00e2\u20ac\u201d a full four-authority human-driven ring. The other four authorities never receive a drive command; the crossing narration each of their own transcripts carries is server-side, fired by the same simulation the forwarded commands reached, under a seat number ne assigns on arrival and every downstream hop keeps. The discriminating leg keeps the same five worlds and the same topology but nw's script never flies the body, so no crossing and no remote-authority naming can be asserted against it.",
   "fixtures": [],
   "positive": {

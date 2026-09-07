@@ -920,6 +920,13 @@ public sealed partial class WorldServer {
                 definition: definition,
                 disconnected: disconnected
             );
+            // The rebuild re-seeds every cell-driven count to zero; resolve them from their cells before anything reads.
+            m_population.ReconcileInhabitCounts(
+                admitted: admitted,
+                definition: definition,
+                disconnected: disconnected,
+                tick: NextInputTick
+            );
             ApplyLifecycleEvents(
                 admitted: admitted,
                 disconnected: disconnected,

@@ -81,7 +81,7 @@
         "name": "pass-zero-reads-back",
         "stream": "stdout",
         "match": "contains",
-        "text": "[world.state.row 'tiles' kind=Fixed cells=0/128 draw source=<inline:weightedNumeric> fill=lattice cursor=0 masks=none]",
+        "text": "[world.state.row 'tiles' kind=Fixed cells=0/4096 draw source=<inline:weightedNumeric> fill=lattice cursor=0 masks=none",
         "present": true
       },
       {
@@ -89,7 +89,7 @@
         "name": "generate-advances-one-whole-pass",
         "stream": "stdout",
         "match": "contains",
-        "text": "fill=lattice cursor=4 masks=0=0xF]",
+        "text": "fill=lattice cursor=4 masks=0=0x000000000000000000000000000000000000000000000000000000000000000F",
         "present": true
       },
       {
@@ -97,7 +97,7 @@
         "name": "second-generate-advances-again",
         "stream": "stdout",
         "match": "contains",
-        "text": "fill=lattice cursor=8 masks=0=0xF]",
+        "text": "fill=lattice cursor=8 masks=0=0x000000000000000000000000000000000000000000000000000000000000000F",
         "present": true
       },
       {
@@ -148,7 +148,7 @@
       {
         "verb": "world.generate",
         "occurrence": 1,
-        "outcome": "rejected"
+        "outcome": "refused"
       },
       {
         "verb": "world.wait",
@@ -168,7 +168,7 @@
       {
         "verb": "world.generate",
         "occurrence": 2,
-        "outcome": "rejected"
+        "outcome": "refused"
       },
       {
         "verb": "world.wait",

@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>An extended draw site rides the SAME state-hash and journal contract an ordinary draw site does: nothing
+/// <summary>An extended draw site rides the same state-hash and journal contract an ordinary draw site does: nothing
 /// about it is persisted runtime state outside the document, so two independent boots of the identical document hash
 /// identically, and <c>world.undo</c> rewinds it exactly as it rewinds any other draw.</summary>
 public sealed class GeneratorExtendedWorldLawTests {
@@ -12,7 +12,7 @@ public sealed class GeneratorExtendedWorldLawTests {
 
     // WorldServer never resolves a first-fill draw itself (WorldDefinitionLoader — the real file-loading path —
     // does, once, at process boot); Fixtures.FreshServer round-trips the document as-authored. A law over a draw
-    // site therefore resolves it explicitly first, at the SAME instance identity ("boot") the fixture's own
+    // site therefore resolves it explicitly first, at the same instance identity ("boot") the fixture's own
     // WorldServer constructor defaults to, so a live redraw's seed ladder agrees with the settled boot value.
     private static WorldDefinition BuildDocument() {
         var row = new WorldStateRow(

@@ -3,7 +3,7 @@ namespace Puck.Maths;
 /// <summary>
 /// The seekable, allocation-free draw shape every 32-bit generator in this wing exposes — the surface a consumer's
 /// own sampling code (<c>Puck.State.GeneratorEngine</c>'s <c>DrawEntry</c>/<c>TryDrawNumeric</c> family, and
-/// <see cref="AliasTable{TElement}"/>'s own sampling) runs against GENERICALLY, so substituting
+/// <see cref="AliasTable{TElement}"/>'s own sampling) runs against generically, so substituting
 /// <see cref="Pcg32Extended"/> for <see cref="Pcg32XshRr"/> reaches the identical sampling code rather than a second
 /// copy of it. Implemented by both generators; never boxed — a caller constrains its own generic parameter
 /// <c>where TGenerator : struct, IDrawGenerator</c> and threads it by <c>ref</c>, so the JIT specializes one

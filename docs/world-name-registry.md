@@ -14,7 +14,21 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 
 | Path | Kind | Role | Facet | Member |
 |---|---|---|---|---|
+| `render.lighting.sun.color` | State | Binding | Binding | `WorldRenderSun.Color` |
+| `render.lighting.ambient.color` | State | Binding | Binding | `WorldRenderAmbient.Color` |
+| `render.sky.zenith` | State | Binding | Binding | `WorldRenderSky.Zenith` |
+| `render.sky.horizon` | State | Binding | Binding | `WorldRenderSky.Horizon` |
+| `render.sky.ground` | State | Binding | Binding | `WorldRenderSky.Ground` |
+| `render.sky.clouds.color` | State | Binding | Binding | `WorldRenderSkyClouds.Color` |
 | `render.cycle.state` | State | Names | Read | `WorldRenderCycle.State` |
+| `render.cycle.keys[].lighting.sun.color` | State | Binding | Binding | `WorldRenderSun.Color` |
+| `render.cycle.keys[].lighting.ambient.color` | State | Binding | Binding | `WorldRenderAmbient.Color` |
+| `render.cycle.keys[].sky.zenith` | State | Binding | Binding | `WorldRenderSky.Zenith` |
+| `render.cycle.keys[].sky.horizon` | State | Binding | Binding | `WorldRenderSky.Horizon` |
+| `render.cycle.keys[].sky.ground` | State | Binding | Binding | `WorldRenderSky.Ground` |
+| `render.cycle.keys[].sky.clouds.color` | State | Binding | Binding | `WorldRenderSkyClouds.Color` |
+| `screens[].memory[].row` | State | Names | Read | `WorldScreenMemory.Row` |
+| `screens[].memory[].key` | State | Key | Read | `WorldScreenMemory.Key` |
 | `cameras[].rig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
 | `cameras[].rig.operations[][orbit].pitch` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Pitch` |
 | `cameras[].rig.operations[][path].fraction` | State | Binding | Binding | `WorldCameraProgramOp.Path.Fraction` |
@@ -129,6 +143,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][scaleBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleBodyVerticalVelocity.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][applyBodyImpulse].key` | State | Key | Read | `WorldEffect.ApplyBodyImpulse.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][applyRigidImpulse].key` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][applyRigidImpulse].headingKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.HeadingKey` |
+| `kits.rows[].actions{*}.onPress.effects[][applyRigidImpulse].magnitudeState` | State | Names | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeState` |
+| `kits.rows[].actions{*}.onPress.effects[][applyRigidImpulse].magnitudeKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeKey` |
 | `kits.rows[].actions{*}.onPress.effects[][designateBody].key` | State | Key | Read | `WorldEffect.DesignateBody.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][designateBody].targetKey` | State | Key | Read | `WorldEffect.DesignateBody.TargetKey` |
 | `kits.rows[].actions{*}.onPress.effects[][paintField].field` | Field | Names | Action | `WorldEffect.PaintField.Field` |
@@ -252,6 +270,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][scaleBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleBodyVerticalVelocity.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][applyBodyImpulse].key` | State | Key | Read | `WorldEffect.ApplyBodyImpulse.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][applyRigidImpulse].key` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][applyRigidImpulse].headingKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.HeadingKey` |
+| `kits.rows[].actions{*}.onRelease.effects[][applyRigidImpulse].magnitudeState` | State | Names | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeState` |
+| `kits.rows[].actions{*}.onRelease.effects[][applyRigidImpulse].magnitudeKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeKey` |
 | `kits.rows[].actions{*}.onRelease.effects[][designateBody].key` | State | Key | Read | `WorldEffect.DesignateBody.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][designateBody].targetKey` | State | Key | Read | `WorldEffect.DesignateBody.TargetKey` |
 | `kits.rows[].actions{*}.onRelease.effects[][paintField].field` | Field | Names | Action | `WorldEffect.PaintField.Field` |
@@ -375,6 +397,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][scaleBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleBodyVerticalVelocity.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][applyBodyImpulse].key` | State | Key | Read | `WorldEffect.ApplyBodyImpulse.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][applyRigidImpulse].key` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][applyRigidImpulse].headingKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.HeadingKey` |
+| `kits.rows[].actions{*}.onFact[].effects[][applyRigidImpulse].magnitudeState` | State | Names | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeState` |
+| `kits.rows[].actions{*}.onFact[].effects[][applyRigidImpulse].magnitudeKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeKey` |
 | `kits.rows[].actions{*}.onFact[].effects[][designateBody].key` | State | Key | Read | `WorldEffect.DesignateBody.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][designateBody].targetKey` | State | Key | Read | `WorldEffect.DesignateBody.TargetKey` |
 | `kits.rows[].actions{*}.onFact[].effects[][paintField].field` | Field | Names | Action | `WorldEffect.PaintField.Field` |
@@ -437,6 +463,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `bindingOverlays[].bindingBar.visible[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `bindingOverlays[].bindingBar.visible[not].predicate…` | | | | re-enters `OverlayPredicate` |
 | `bindingOverlays[].bindingBar.visible[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
+| `bindingOverlays[].when.state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
+| `bindingOverlays[].when.key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
+| `bindingOverlays[].when.comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
+| `bindingOverlays[].when.comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `placements.rows[].respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `placements.rows[].respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `placements.rows[].respond[].when[state].state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
@@ -659,6 +689,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
 | `rules[].effects[][scaleBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleBodyVerticalVelocity.Key` |
 | `rules[].effects[][applyBodyImpulse].key` | State | Key | Read | `WorldEffect.ApplyBodyImpulse.Key` |
+| `rules[].effects[][applyRigidImpulse].key` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.Key` |
+| `rules[].effects[][applyRigidImpulse].headingKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.HeadingKey` |
+| `rules[].effects[][applyRigidImpulse].magnitudeState` | State | Names | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeState` |
+| `rules[].effects[][applyRigidImpulse].magnitudeKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeKey` |
 | `rules[].effects[][designateBody].key` | State | Key | Read | `WorldEffect.DesignateBody.Key` |
 | `rules[].effects[][designateBody].targetKey` | State | Key | Read | `WorldEffect.DesignateBody.TargetKey` |
 | `rules[].effects[][paintField].field` | Field | Names | Action | `WorldEffect.PaintField.Field` |
@@ -789,6 +823,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
 | `rules[].decision.options[].effects[][scaleBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleBodyVerticalVelocity.Key` |
 | `rules[].decision.options[].effects[][applyBodyImpulse].key` | State | Key | Read | `WorldEffect.ApplyBodyImpulse.Key` |
+| `rules[].decision.options[].effects[][applyRigidImpulse].key` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.Key` |
+| `rules[].decision.options[].effects[][applyRigidImpulse].headingKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.HeadingKey` |
+| `rules[].decision.options[].effects[][applyRigidImpulse].magnitudeState` | State | Names | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeState` |
+| `rules[].decision.options[].effects[][applyRigidImpulse].magnitudeKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeKey` |
 | `rules[].decision.options[].effects[][designateBody].key` | State | Key | Read | `WorldEffect.DesignateBody.Key` |
 | `rules[].decision.options[].effects[][designateBody].targetKey` | State | Key | Read | `WorldEffect.DesignateBody.TargetKey` |
 | `rules[].decision.options[].effects[][paintField].field` | Field | Names | Action | `WorldEffect.PaintField.Field` |
@@ -931,6 +969,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
 | `rules[].decision.onNoChoice[][scaleBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleBodyVerticalVelocity.Key` |
 | `rules[].decision.onNoChoice[][applyBodyImpulse].key` | State | Key | Read | `WorldEffect.ApplyBodyImpulse.Key` |
+| `rules[].decision.onNoChoice[][applyRigidImpulse].key` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.Key` |
+| `rules[].decision.onNoChoice[][applyRigidImpulse].headingKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.HeadingKey` |
+| `rules[].decision.onNoChoice[][applyRigidImpulse].magnitudeState` | State | Names | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeState` |
+| `rules[].decision.onNoChoice[][applyRigidImpulse].magnitudeKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeKey` |
 | `rules[].decision.onNoChoice[][designateBody].key` | State | Key | Read | `WorldEffect.DesignateBody.Key` |
 | `rules[].decision.onNoChoice[][designateBody].targetKey` | State | Key | Read | `WorldEffect.DesignateBody.TargetKey` |
 | `rules[].decision.onNoChoice[][paintField].field` | Field | Names | Action | `WorldEffect.PaintField.Field` |
@@ -1044,6 +1086,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][setBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.SetBodyVerticalVelocity.Key` |
 | `interactions.interactions[].effects[][scaleBodyVerticalVelocity].key` | State | Key | Read | `WorldEffect.ScaleBodyVerticalVelocity.Key` |
 | `interactions.interactions[].effects[][applyBodyImpulse].key` | State | Key | Read | `WorldEffect.ApplyBodyImpulse.Key` |
+| `interactions.interactions[].effects[][applyRigidImpulse].key` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.Key` |
+| `interactions.interactions[].effects[][applyRigidImpulse].headingKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.HeadingKey` |
+| `interactions.interactions[].effects[][applyRigidImpulse].magnitudeState` | State | Names | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeState` |
+| `interactions.interactions[].effects[][applyRigidImpulse].magnitudeKey` | State | Key | Read | `WorldEffect.ApplyRigidImpulse.MagnitudeKey` |
 | `interactions.interactions[].effects[][designateBody].key` | State | Key | Read | `WorldEffect.DesignateBody.Key` |
 | `interactions.interactions[].effects[][designateBody].targetKey` | State | Key | Read | `WorldEffect.DesignateBody.TargetKey` |
 | `interactions.interactions[].effects[][paintField].field` | Field | Names | Action | `WorldEffect.PaintField.Field` |
@@ -1111,6 +1157,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `search.jobs[].counts` | State | Names | Read | `WorldSearchRow.Counts` |
 | `search.jobs[].score` | State | Expression | Read | `WorldSearchRow.Score` |
 | `search.jobs[].best` | State | Names | Action | `WorldSearchRow.Best` |
+| `search.jobs[].chance.row` | State | Names | Read | `WorldSearchChance.Row` |
+| `search.jobs[].scores` | State | Names | Read | `WorldSearchRow.Scores` |
 | `exports.reads` | Any | Names | Read | `WorldExports.Reads` |
 | `exports.actions` | Any | Names | Action | `WorldExports.Actions` |
 | `exports.bindings` | Any | Names | Binding | `WorldExports.Bindings` |

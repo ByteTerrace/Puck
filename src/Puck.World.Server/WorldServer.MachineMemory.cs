@@ -6,8 +6,8 @@ namespace Puck.World.Server;
 /// declared machine's live bus bytes into an ordinary kind=Int <c>state.world</c> cell; a
 /// <see cref="WorldScreenMemoryDirection.Write"/> binding pokes the cell's own value into the machine's bus. Both
 /// directions run once per tick, right before <see cref="IWorldMachineHost.Advance"/> steps every booted machine
-/// (<see cref="WorldServer.Step"/>), so a Write binding's poke reaches the machine before THIS tick's step (visible
-/// to the cartridge on its next frame) and a Read binding mirrors the byte the PREVIOUS step left behind — the same
+/// (<see cref="WorldServer.Step"/>), so a Write binding's poke reaches the machine before this tick's step (visible
+/// to the cartridge on its next frame) and a Read binding mirrors the byte the previous step left behind — the same
 /// evaluation point <c>WorldRuleFacts.MachinePrefix</c>'s live <c>$machine:</c> rule read already answers from. A
 /// mirrored write applies through the ordinary <see cref="WorldMutation.UpsertStateCell"/> door
 /// (<see cref="WorldServer.TryApplyMutation"/>), exactly as <c>WorldServer.Fields.cs</c>'s own engine-driven per-tick
@@ -96,9 +96,7 @@ public sealed partial class WorldServer {
             return;
         }
 
-        m_machineMemoryReadObserved[key] = value;
-
-        _ = TryApplyMutation(
+        var applied = TryApplyMutation(
             mutation: new WorldMutation.UpsertStateCell(
                 Principal: WorldPrincipal.World,
                 Row: binding.Row,
@@ -111,6 +109,12 @@ public sealed partial class WorldServer {
             correlationId: 0,
             preMetered: false
         );
+
+        if (!applied) {
+            return;
+        }
+
+        m_machineMemoryReadObserved[key] = value;
         m_output.DeliverState(definition: m_definition);
     }
     /// <summary>Returns the last value a <c>screens[].memory</c> binding at <paramref name="address"/> observed in

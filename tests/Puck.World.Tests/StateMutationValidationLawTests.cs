@@ -186,7 +186,7 @@ public sealed class StateMutationValidationLawTests(ITestOutputHelper output) {
     }
     // The shape KlondikeDealAllocatesFarLessThanWholeDocumentValidation's own comment describes but does not itself
     // reach: many cross-row writes (text, so each mints through TryApplyCrossRowStateMutation rather than the
-    // frame's numeric array) queued in the SAME tick. Before routing that replay through the batch workspace, the
+    // frame's numeric array) queued in the same tick. Before routing that replay through the batch workspace, the
     // Nth cross-row write recomposed the whole document once per already-queued member — quadratic in the tick's own
     // cross-row count; the workspace makes it one shared row-list copy per replay instead.
     [Fact]

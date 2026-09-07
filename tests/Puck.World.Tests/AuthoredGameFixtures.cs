@@ -18,7 +18,11 @@ internal static class AuthoredGameFixtures {
     }
 
     public static WorldDefinition Load(string relativePath) {
-        Assert.True(WorldDefinitionLoader.TryLoadFile(Path.Combine(Root, relativePath), out var definition, out var reason), reason);
+        var path = Path.Combine(Root, relativePath);
+        // The island proves its seams against the shard documents beside it, read the way the host reads them.
+        var neighbours = new WorldFileNeighbourResolver(baseDirectory: () => (Path.GetDirectoryName(path: path) ?? Root));
+
+        Assert.True(WorldDefinitionLoader.TryLoadFile(path, out var definition, out var reason, neighbours: neighbours), reason);
         return definition!;
     }
 

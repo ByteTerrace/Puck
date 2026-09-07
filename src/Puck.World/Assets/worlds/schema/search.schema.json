@@ -103,7 +103,7 @@
                   "additionalProperties": false
                 },
                 {
-                  "description": "The walked token steps two cells along one topology direction, over a token standing on the intermediate cell \u2014 which leaves the board \u2014 onto an empty destination; a direction with no such occupied intermediate, or whose destination is not empty, is not a candidate.",
+                  "description": "The walked token steps two cells along one topology direction, over a token standing on the intermediate cell onto an empty destination; a direction with no such occupied intermediate, or whose destination is not empty, is not a candidate. Past MaxHops 1 (the default, this shape\u0027s original single hop, which evicts the token it steps over), one candidate chains 1..MaxHops such hops as a single move, never revisiting a cell of the chain (the token\u0027s own starting cell included) and evicting nothing along the way.",
                   "properties": {
                     "$type": {
                       "const": "jump"
@@ -117,6 +117,11 @@
                           "null"
                         ]
                       }
+                    },
+                    "maxHops": {
+                      "description": "How many hops one candidate may chain.",
+                      "type": "integer",
+                      "default": 1
                     }
                   },
                   "required": [
@@ -239,7 +244,7 @@
             "default": 1
           },
           "score": {
-            "description": "An infix expression, in the rule expression grammar, evaluated over the frame after a ply from the perspective of the side that made it; iterative-deepening negamax with alpha-beta compares it across plies. Required when Depth exceeds one, or Best is authored.",
+            "description": "An infix expression, in the rule expression grammar, evaluated over the frame after a ply from the perspective of the side that made it; iterative-deepening negamax with alpha-beta compares it across plies \u2014 the two-sided, zero-sum reading of what a ply is worth. Exactly one of this and Scores is authored when a score is needed; required when Depth exceeds one, or Best is authored, and refused with Tree unauthored alongside it.",
             "type": [
               "string",
               "null"
@@ -247,7 +252,7 @@
             "default": null
           },
           "best": {
-            "description": "A keyed integer row receiving the deepest completed depth\u0027s answer: token (the mover\u0027s ordinal in Tokens), to (its destination cell), and score (the negamax value).",
+            "description": "A keyed integer row receiving the deepest completed depth\u0027s answer: token (the mover\u0027s ordinal in Tokens), to (its destination cell), and score (the negamax value, or, with Scores authored, the root mover\u0027s own seat\u0027s value).",
             "type": [
               "string",
               "null"
@@ -266,6 +271,37 @@
             "description": "How many tree iterations a Tree job runs before it lands.",
             "type": "integer",
             "default": 256
+          },
+          "chance": {
+            "description": "The job\u0027s chance node, or null for a job with none.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "row": {
+                "description": "The keyed integer row a chosen outcome writes.",
+                "type": "string"
+              },
+              "atDepth": {
+                "description": "Negamax: the absolute ply (0 = root) whose move choice is replaced, 0..depth-1. Tree: the 1-based playout ply the chance draw replaces.",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "row",
+              "atDepth"
+            ],
+            "additionalProperties": false,
+            "default": null
+          },
+          "scores": {
+            "description": "A keyed integer row, one cell per seat in Turn\u0027s own ordinal order, holding each seat\u0027s own current score \u2014 the n-seat reading of what a ply is worth: a level maximizes the mover seat\u0027s own entry rather than negating the reply, so no seat\u0027s gain is assumed to be another\u0027s loss (max-n). Exactly one of this and Score is authored when a score is needed; refused with Tree, whose outcome backprop alternates sign along the path.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
           }
         },
         "required": [

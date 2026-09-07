@@ -8,7 +8,7 @@ using Puck.World.Protocol;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// CONTRACT UNDER TEST: a <c>screens[].memory</c> Read binding mirrors the shipped <c>pip.cgb.cartridge.json</c>
+/// The contract under test: a <c>screens[].memory</c> Read binding mirrors the shipped <c>pip.cgb.cartridge.json</c>
 /// machine's own bus byte into an ordinary Int cell every tick, writing only when the peeked value changed; a Write
 /// binding pokes a cell's value into the machine's bus when the cell's value has moved, landing before the machine's
 /// own next step; an address outside the engine's addressable bus refuses at validation by name; and a Write
@@ -33,7 +33,7 @@ public sealed class MachineMemoryLawTests {
     }
     private static string CartridgePath() => Path.Combine(RepoRoot(), "src", "Puck.World", "Assets", "cartridges", "pip.cgb.cartridge.json");
     // The compiled image's own bus address for a named variable — read the same way the machine host reads the
-    // booted image, so the law addresses the byte the RUNNING cartridge actually owns rather than a guessed offset.
+    // booted image, so the law addresses the byte the running cartridge actually owns rather than a guessed offset.
     private static int VariableAddress(string name) {
         var compilation = WorldScreenMachineEngines.CartridgeCompilers[CgbEngine].Compile(document: CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: CartridgePath())));
 
@@ -84,7 +84,7 @@ public sealed class MachineMemoryLawTests {
     }
     [Fact]
     public void AReadBindingMirrorsTheByteTheCartridgeWrites() {
-        // "x" is initialized by the cartridge's OWN reset code from its authored "initial": 76 — the byte this law
+        // "x" is initialized by the cartridge's own reset code from its authored "initial": 76 — the byte this law
         // asserts came from the running cartridge, not from a value the test injected.
         var xAddress = VariableAddress(name: "x");
         var document = WithMachineScreen(memory: [
@@ -100,7 +100,7 @@ public sealed class MachineMemoryLawTests {
 
         Assert.Equal(expected: 76L, actual: Slot(definition: fixture.Server.Definition, name: "pipX"));
 
-        // The control: peeking the SAME address directly agrees with the mirror — the binding did not invent a value.
+        // The control: peeking the same address directly agrees with the mirror — the binding did not invent a value.
         var (ok, _) = fixture.Server.Machines.TryPeekMessage(index: MachineScreen, address: xAddress, value: out var direct);
 
         Assert.True(condition: ok);

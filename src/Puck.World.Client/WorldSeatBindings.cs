@@ -97,7 +97,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
         return signature;
     }
-    // An overlay's own When (WorldPlacementResponseCondition.StateCondition) gates whether it composes THIS call —
+    // An overlay's own When (WorldPlacementResponseCondition.StateCondition) gates whether it composes this call —
     // the reveal's carrier: a gated overlay's chords/pages appear only once the fact it names is set. Absence always
     // composes (today's behavior). Unfilled trailing slots stay null, which WorldBindingComposer.Compose already
     // skips (profile/session are routinely null too), so no second pass to re-size the array is needed.

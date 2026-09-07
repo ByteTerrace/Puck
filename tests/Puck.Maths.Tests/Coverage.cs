@@ -297,8 +297,8 @@ internal static class Coverage {
         // ---- the generic-draw dispatch contract ----
         // IDrawGenerator carries no body of its own: it exists so a generic caller (Puck.State.GeneratorEngine,
         // AliasTable<TElement>.Sample/SampleIndex) can run one sampling body over either Pcg32XshRr or
-        // Pcg32Extended without a virtual call or a second copy. Each implementer's OWN concrete method is a
-        // SEPARATE reflected member under its own declaring type and already carries its own coverage
+        // Pcg32Extended without a virtual call or a second copy. Each implementer's own concrete method is a
+        // separate reflected member under its own declaring type and already carries its own coverage
         // (Pcg32XshRr.NextUInt32/NextUInt32(uint,uint)/Advance and Pcg32Extended's own via the sampling.* laws);
         // the interface declaration itself computes nothing to state a law against.
         (new CoverRef(Name: "NextUInt32", Type: typeof(IDrawGenerator)), DrawGeneratorShapeReason),

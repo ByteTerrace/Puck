@@ -48,7 +48,7 @@ public sealed class InhabitCountLawTests {
         return new WorldPrototype(Id: CourtCreation, Document: canonical.Document, HashRaw: canonical.Hash);
     }
     // A court whose inhabit count reads the "courtSize" Int slot cell (initial value initial), fanned over a
-    // radius-2 Disc distribution sampled at DistributionSampleCount — a bound TIGHTER than the authored peer
+    // radius-2 Disc distribution sampled at DistributionSampleCount — a bound tighter than the authored peer
     // capacity (ExtraPeerSlots), so a law can drive the cell past either bound independently.
     private static WorldDefinition Document(int initial) {
         var document = Fixtures.BuildDocument();
@@ -136,12 +136,12 @@ public sealed class InhabitCountLawTests {
     }
 
     [Fact]
-    public void ANewWorldNeverAdmitsACellDrivenPlacementAtBoot() {
+    public void ANewWorldAdmitsACellDrivenPlacementFromItsCellAtBoot() {
         using var fixture = Fixtures.FreshServer(definition: Document(initial: 3));
 
-        // The cell already reads 3 at boot, but a cell-driven inhabit facet is skipped entirely by the structural
-        // install (ReconcileInhabitants) — only ReconcileInhabitCounts, called here for the first time, admits it.
-        Assert.Empty(collection: Inhabitants(fixture: fixture));
+        // The structural install (ReconcileInhabitants) skips a cell-driven facet; the boot's own ReconcileInhabitCounts
+        // then resolves it from the cell's authored value, so the world never waits for a first write to fill it.
+        Assert.Equal(expected: 3, actual: Inhabitants(fixture: fixture).Length);
     }
     [Fact]
     public void RaisingTheCellAdmitsBodiesAtTheDistributionsNextOffsets() {
@@ -180,7 +180,7 @@ public sealed class InhabitCountLawTests {
 
         var after = Inhabitants(fixture: fixture);
 
-        // The LAST-admitted inhabitant is the LOWEST index (HighestFreeSlot claims downward, so the first admission
+        // The last-admitted inhabitant is the lowest index (HighestFreeSlot claims downward, so the first admission
         // sits at the highest index and each later one at a lower one) — before[2] (lowest of the three) retires;
         // the two earlier (higher-index) inhabitants stand untouched.
         Assert.Equal(expected: 2, actual: after.Length);
@@ -229,7 +229,7 @@ public sealed class InhabitCountLawTests {
 
         using var lease = fixture.Server.AttachNarrationSink(sink: sink);
 
-        // Above BOTH the peer-capacity ceiling (ExtraPeerSlots = 6) and the distribution's own SampleCount (4) —
+        // Above both the peer-capacity ceiling (ExtraPeerSlots = 6) and the distribution's own SampleCount (4) —
         // the tighter of the two (4) governs, and the narration names it.
         Reconcile(fixture: fixture, cellValue: 10);
 
@@ -243,7 +243,7 @@ public sealed class InhabitCountLawTests {
     [Fact]
     public void AnUnchangedCellAllocatesNothingOnTheQuietSweep() {
         using var fixture = Fixtures.FreshServer(definition: Document(initial: 2));
-        // Built ONCE and reused across every call below: Reconcile's own WithCellValue constructs a fresh document
+        // Built once and reused across every call below: Reconcile's own WithCellValue constructs a fresh document
         // per call (the test harness's own cost, not the reconcile primitive's), so isolating the measured
         // allocation to ReconcileInhabitCounts itself means calling it directly against one unchanging reference.
         var definition = WithCellValue(fixture: fixture, value: 2);

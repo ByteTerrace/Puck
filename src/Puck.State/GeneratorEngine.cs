@@ -39,7 +39,7 @@ namespace Puck.State;
 /// <c>Pcg32XshRr.Advance(n * cost)</c>, an O(1) jump, and never a replay of the earlier draws. There is no per-tick
 /// cadence ceiling: a rule redrawing a site on every tick costs the same at cursor 1,000,000 as at cursor 0.</para>
 /// <para><b>An extended source</b> (<see cref="StateGenerator.Extended"/>) draws through a <c>Pcg32Extended</c>
-/// instead of the bare base generator — the SAME sampling code, generic over <see cref="IDrawGenerator"/>, never a
+/// instead of the bare base generator — the same sampling code, generic over <see cref="IDrawGenerator"/>, never a
 /// second copy of it. The table is document data (authored directly, or compiled from a script at rebuild time; see
 /// <see cref="TryBuildExtendedTable"/>), so nothing about the seek/cursor contract above changes. <c>Compiled</c>'s
 /// cache holds the built extended generator beside the cursor it was built for, so a site drawn every tick draws IN
@@ -125,7 +125,7 @@ public static class GeneratorEngine {
         public EntrySet? Weighted { get; }
 
         // The extended-generator per-tick cache: the last built Pcg32Extended, beside the (seed ladder, skip, cursor)
-        // it was built for. A use whose seed/stream/skip/cursor all match draws from the SAME instance in place — no
+        // it was built for. A use whose seed/stream/skip/cursor all match draws from the same instance in place — no
         // rebuild, no allocation; anything else (a reload, an undo, a checkpoint restore, or a different site sharing
         // this declared source) rebuilds once. m_extendedValid alone gates matching, since a default Pcg32Extended
         // (an unallocated table) is never itself a valid cache entry.
@@ -134,25 +134,24 @@ public static class GeneratorEngine {
         private ulong m_extendedSeedState;
         private ulong m_extendedStream;
         private long m_extendedSkip;
-        private long m_extendedCursor;
 
-        public bool MatchesExtended(ulong seedState, ulong stream, long skip, long cursor) =>
+        // The cache proves its own position: the generator's base state must equal the state a fresh generator
+        // seeks to for the site's recorded cursor. A pass that consumed fewer or more draws than the cursor moved (a
+        // refused walk, a pass that drew nothing) simply stops matching and rebuilds, so no separate cursor
+        // bookkeeping can drift from the generator it describes.
+        public bool MatchesExtended(ulong seedState, ulong stream, long skip, ulong expectedBaseState) =>
             (m_extendedValid &&
             (m_extendedSeedState == seedState) &&
             (m_extendedStream == stream) &&
             (m_extendedSkip == skip) &&
-            (m_extendedCursor == cursor));
-        public void SetExtended(ulong seedState, ulong stream, long skip, long cursor, Pcg32Extended generator) {
+            (m_extendedGenerator.State == expectedBaseState));
+        public void SetExtended(ulong seedState, ulong stream, long skip, Pcg32Extended generator) {
             m_extendedGenerator = generator;
             m_extendedValid = true;
             m_extendedSeedState = seedState;
             m_extendedStream = stream;
             m_extendedSkip = skip;
-            m_extendedCursor = cursor;
         }
-        // Advances the cached cursor by the samples an in-place draw just consumed, keeping the cache valid for the
-        // NEXT sequential use — the steady-tick path that never rebuilds.
-        public void AdvanceExtendedCursor(long samples) => m_extendedCursor = checked(m_extendedCursor + samples);
         public ref Pcg32Extended ExtendedGenerator => ref m_extendedGenerator;
     }
     private sealed class EntrySet {
@@ -459,7 +458,7 @@ public static class GeneratorEngine {
         switch (generator.Source) {
             case GeneratorSource.UniformRange: {
                     var span = unchecked((uint)(generator.RangeMax!.Value - generator.RangeMin!.Value));
-                    // The raw fraction IS the draw NextUnitFraction32 wraps (Value: NextUInt32()) — read directly so
+                    // The raw fraction is the draw NextUnitFraction32 wraps (Value: NextUInt32()) — read directly so
                     // this stays generic over IDrawGenerator, which exposes the raw draw and not the fraction types.
                     var fraction = rng.NextUInt32();
                     // Multiply-high map of a uniform fraction onto [0, span] — one fixed-cost advance, no rejection, so
@@ -522,9 +521,9 @@ public static class GeneratorEngine {
     /// <returns>The raw cell value.</returns>
     public static long EncodeNode(int node, CellKind targetKind) =>
         ((targetKind == CellKind.Fixed) ? (((long)node) << FixedQ4816.FractionBitCount) : node);
-    // Shared by an ordinary and an extended run alike: given a POSITIONED generator (already advanced to cursor), draw
+    // Shared by an ordinary and an extended run alike: given a positioned generator (already advanced to cursor), draw
     // sampleCount consecutive numeric samples, threading a weighted/orbit source's mask cell to cell. The one loop
-    // both TryFireBatch and TryAdvanceBatch reduce to — generic over the generator, so the extended path is this SAME
+    // both TryFireBatch and TryAdvanceBatch reduce to — generic over the generator, so the extended path is this same
     // code, never a second copy.
     private static bool TryRunBatchCore<TGenerator>(StateGenerator generator, CellKind targetKind, ref TGenerator rng, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, int sampleCount, bool writeValues, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason) where TGenerator : struct, IDrawGenerator {
         var exhausts = (Exhausts(source: generator.Source) && (generator.Mode != GeneratorMode.WithReplacement));
@@ -608,52 +607,29 @@ public static class GeneratorEngine {
         if (generator.Extended is not null) {
             var compiled = Compiled(generator: generator);
 
-            if (!compiled.MatchesExtended(seedState: seedState, stream: stream, skip: skip, cursor: cursor)) {
-                if (!TryBuildExtendedTable(
-                    generator: generator,
-                    seedState: seedState,
-                    skip: skip,
-                    stream: stream,
-                    table: out var table,
-                    reason: out reason
-                )) {
-                    return false;
-                }
-
-                var fresh = Pcg32Extended.CreateWithTable(
-                    state: seedState,
-                    stream: stream,
-                    table: table
-                );
-
-                fresh.Advance(count: unchecked((((ulong)(skip + cursor)) * AdvancesPerSample(source: generator.Source))));
-                compiled.SetExtended(
-                    cursor: cursor,
-                    generator: fresh,
-                    seedState: seedState,
-                    skip: skip,
-                    stream: stream
-                );
+            if (!TryPositionExtended(
+                compiled: compiled,
+                cursor: cursor,
+                generator: generator,
+                reason: out reason,
+                seedState: seedState,
+                skip: skip,
+                stream: stream
+            )) {
+                return false;
             }
 
-            ref var extended = ref compiled.ExtendedGenerator;
-            var extendedOk = TryRunBatchCore(
+            return TryRunBatchCore(
                 generator: generator,
                 masksAfter: out masksAfter,
                 reason: out reason,
-                rng: ref extended,
+                rng: ref compiled.ExtendedGenerator,
                 sampleCount: sampleCount,
                 targetKind: targetKind,
                 values: values,
                 writeValues: writeValues,
                 masks: masks
             );
-
-            if (extendedOk) {
-                compiled.AdvanceExtendedCursor(samples: sampleCount);
-            }
-
-            return extendedOk;
         }
 
         var rng = Pcg32XshRr.Create(
@@ -1076,7 +1052,7 @@ public static class GeneratorEngine {
 
         return true;
     }
-    /// <summary>Maps one scripted value, authored in <paramref name="generator"/>'s own OUTPUT space, to the raw
+    /// <summary>Maps one scripted value, authored in <paramref name="generator"/>'s own output space, to the raw
     /// 32-bit draw that produces it — the inverse of <see cref="TryDrawNumeric{TGenerator}"/>'s own mapping for the
     /// two sources a script admits.</summary>
     /// <param name="generator">The source; must be <see cref="GeneratorSource.StreamDraw"/> or
@@ -1179,7 +1155,7 @@ public static class GeneratorEngine {
 
         table = selfSeeded.Extension.ToArray();
 
-        // A fresh (zero-offset) probe — the SAME base position CreateWithTable's own generator will start from — so
+        // A fresh (zero-offset) probe — the same base position CreateWithTable's own generator will start from — so
         // the index each of the first script.Count draws selects, and the base's own raw contribution to that draw,
         // are exactly what the real generator will see.
         var probe = Pcg32XshRr.Create(
@@ -1264,50 +1240,26 @@ public static class GeneratorEngine {
         if (generator.Extended is not null) {
             var compiled = Compiled(generator: generator);
 
-            if (!compiled.MatchesExtended(seedState: seedState, stream: stream, skip: skip, cursor: cursor)) {
-                if (!TryBuildExtendedTable(
-                    generator: generator,
-                    seedState: seedState,
-                    skip: skip,
-                    stream: stream,
-                    table: out var table,
-                    reason: out reason
-                )) {
-                    return false;
-                }
-
-                var fresh = Pcg32Extended.CreateWithTable(
-                    state: seedState,
-                    stream: stream,
-                    table: table
-                );
-
-                fresh.Advance(count: unchecked((((ulong)(skip + cursor)) * AdvancesPerSample(source: generator.Source))));
-                compiled.SetExtended(
-                    cursor: cursor,
-                    generator: fresh,
-                    seedState: seedState,
-                    skip: skip,
-                    stream: stream
-                );
-            }
-
-            ref var extended = ref compiled.ExtendedGenerator;
-
-            if (!TryFireDispatch(
+            if (!TryPositionExtended(
+                compiled: compiled,
+                cursor: cursor,
                 generator: generator,
-                masks: masks,
                 reason: out reason,
-                result: out result,
-                rng: ref extended,
-                targetKind: targetKind
+                seedState: seedState,
+                skip: skip,
+                stream: stream
             )) {
                 return false;
             }
 
-            compiled.AdvanceExtendedCursor(samples: result.Samples);
-
-            return true;
+            return TryFireDispatch(
+                generator: generator,
+                masks: masks,
+                reason: out reason,
+                result: out result,
+                rng: ref compiled.ExtendedGenerator,
+                targetKind: targetKind
+            );
         }
 
         var rng = Pcg32XshRr.Create(
@@ -1327,8 +1279,53 @@ public static class GeneratorEngine {
             targetKind: targetKind
         );
     }
+    // Leaves the site's cached extended generator positioned at (skip + cursor): reused in place when its base state
+    // already equals the state a fresh seek lands on, rebuilt (one table allocation) otherwise — a reload, an undo, a
+    // checkpoint restore, a refused draw that left the generator mid-sequence, or another site sharing the source.
+    private static bool TryPositionExtended(CompiledSource compiled, StateGenerator generator, ulong seedState, ulong stream, long skip, long cursor, out string reason) {
+        var advances = unchecked((((ulong)(skip + cursor)) * AdvancesPerSample(source: generator.Source)));
+        var expected = Pcg32XshRr.Create(
+            state: seedState,
+            stream: stream
+        );
+
+        expected.Advance(count: advances);
+
+        if (compiled.MatchesExtended(seedState: seedState, stream: stream, skip: skip, expectedBaseState: expected.State)) {
+            reason = string.Empty;
+
+            return true;
+        }
+
+        if (!TryBuildExtendedTable(
+            generator: generator,
+            seedState: seedState,
+            skip: skip,
+            stream: stream,
+            table: out var table,
+            reason: out reason
+        )) {
+            return false;
+        }
+
+        var fresh = Pcg32Extended.CreateWithTable(
+            state: seedState,
+            stream: stream,
+            table: table
+        );
+
+        fresh.Advance(count: advances);
+        compiled.SetExtended(
+            generator: fresh,
+            seedState: seedState,
+            skip: skip,
+            stream: stream
+        );
+
+        return true;
+    }
     // The one dispatch every generator shares once it is positioned: a Markov walk, or a single numeric draw. Generic
-    // over the generator, so an extended site runs this SAME body rather than a second copy of it.
+    // over the generator, so an extended site runs this same body rather than a second copy of it.
     private static bool TryFireDispatch<TGenerator>(StateGenerator generator, CellKind targetKind, ref TGenerator rng, IReadOnlyList<ClosedBitset256>? masks, out FireResult result, out string reason) where TGenerator : struct, IDrawGenerator {
         switch (generator.Source) {
             case GeneratorSource.Markov:

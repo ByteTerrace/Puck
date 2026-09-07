@@ -1008,7 +1008,7 @@ public sealed partial class WorldServer {
 
         // screens[].memory bindings poke a moved cell into its machine and mirror a machine's moved byte into its
         // cell — see WorldServer.MachineMemory.cs. Runs right before the machine steps so a Write binding's poke
-        // reaches it before THIS tick's advance.
+        // reaches it before this tick's advance.
         SyncMachineMemory(tick: tick);
 
         // Step every booted machine off THIS tick's freshly-folded pads: reads WorldEngagement.BuildPadSnapshot()

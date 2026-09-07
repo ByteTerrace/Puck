@@ -186,6 +186,41 @@ the island's own claims are in the 2026-09-06 entry above):
 | Every world authors per-body action logic | the same documents' `actions` lanes carry `predicates`/`effects`; a quilt variant inherits its base's lanes through `basis` instead of repeating them |
 | A camera reading reaches per-tick input and a presentation parameter — the `ir-blob` probe's `x` lands as seat 1's `turn` channel and its `luminance` drives `sdf-film-grain.intensity` | windowed on the BRIO: `(sleep 8; echo probe.status; echo 'body.channels 0'; echo wire.errors; sleep 3) \| dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/brio-probe.world.json --exit-after-seconds 16` — `probe.status` echoes `state=running tier=gpu`, its `axis head-x … captured=<v>` equals `body.channels`' `turn … h=<v>`, `parameter … writes=` is positive, `wire.errors: 0`; hardware-free: the same verbs against `brio-probe-track.world.json --headless` (the recorded `Assets/probes/tracks/brio-head.probe-track.json` drives the axis; parameter writes stay 0 headless by design); `tests/Puck.Platform.Windows.Tests/ProbeKernelTests.cs` proves the kernel's numbers on a synthetic frame |
 
+**Verified 2026-09-07 (the playthrough's substrate wave):** the island authors its four seams
+(`world.adjacencies` reads `north`/`east`/`south`/`west` at the measured ground edge, ±66, each `open` onto
+its quilt shard, and the island boots with all four proven against the shards beside it); the shards under
+`Assets/worlds/shards/` validate as basis deltas at a 2.75× ring; a fresh seat
+wakes at `studio-arrival` behind the solid `studioGate`, and cycling the look sets the `awakened` identity fact
+that opens it and re-poses a returning identity at the plaza (`front-door` canary); an inhabit facet's `count`
+reads a cell (`InhabitCountLawTests`, resolved at boot and on every write, clamped and echoed on
+`world.placement`); `screens[].memory` bindings mirror a cartridge byte into a cell and a cell into the machine
+(`MachineMemoryLawTests`, `screen.state`); the sky and lighting colors are bindable and a binding overlay's
+`when` reads a state condition (`PresentationReadsStateLawTests`); construction is lazy per navigation domain
+(`puck bench world`: server construction 0.2 s, was 62 s; the World suite runs in under six minutes, was
+fourteen); cross-row rule effects compose on the batch workspace (`StateMutationValidationLawTests`); the
+`search` section has a `chance` level (Backgammon), `jump.maxHops` chains and an n-seat `scores` row
+(Chinese Checkers), and billiards fires `applyRigidImpulse` from a chord-charged cell; draw sites take an
+`extended` table or script and a `skip` on the one seed ladder (`GeneratorExtendedLawTests`, zero bytes over a
+thousand draws). `world.state.hash` is identical across three boots at ticks 32 and 152; parity 8/8; Schema,
+State, Physics, Maths, Networking, and World suites green. Not yet: the idle tick stays near 13 ms (the
+catalog re-walk per operand read cannot be skipped until the state section owns its rows and the batch
+workspace stops editing that list in place, `src/Puck.World.Server/README.md`); the handheld's attach-on-engage
+rule pair is proven in `HandheldAttachLawTests` but not shipped, since the composed island spends 1,967,916 of
+the 2,000,000 rule-work ceiling and each `upsertPlacement`/`removePlacement` costs a flat 32,768
+(`modules/README.md`); the `chance` level's hidden-operand half is unbuilt; the three multi-authority
+four-corners canaries load and run but their scripts still carry pre-scale coordinates. The seam crossing itself is not yet proven: in the `seamless-adjacency` canary
+the `world.adjacency … crossed` narration fires only after the wait releases, the arrival on `quilt-ne` reads
+`airborne` at y=-0.24, and the verbs routed to the transferred seat after it go unanswered — the wave's own
+report of a grounded landing came from its branch alone, before integration. The canary gate itself
+came back from rot in this wave: the runner loads every manifest before running one, so the ten manifests still
+naming the deleted `prototypes/` worlds had blocked `puck canary` outright since the One World deletions; they
+now name the island or a shard and load, but run red against it (prototype-era scripts), and are deleted with a
+named successor or re-recorded, never left; and a verb answering with `[verb.facet …]` lines (`world.state <row>`)
+is now accounted as one answer. What the gate still cannot account is an accepted buffered-mutation verb
+(`world.generate`, `world.state.cell.set`, `world.row.set`), narration-only by the deferred-echo model, so
+`lattice-draw-fill`, `symmetry-orbit-source`, and `tabletop-state` stay red until an accepted verdict earns a
+`[verb: … applied]` echo or the manifest grammar gains a narration-accounted outcome.
+
 **Verified 2026-09-06 (the One World wave):** `puck.world.json` composes the island and ten districts under aliases (`world.imports` names granaries, arcade, dive, kart, jump, arena, studio beside the bare game imports); a headless boot exits 0 with no refusal; `body.pose spawn:<alias>-arrival` then `body.where 0` reads `grounded` in every district; `world.state.hash` is identical across two boots at ticks 31 and 151; the World suite is green with the island laws (`IslandLawTests`) in it. The frozen diorama, its basis, `granaries.world.json`, the two scenario documents, and `experimental/Puck.Demo` are deleted. Not yet: the island authors no `adjacencies` (the quilt shards under `Assets/worlds/shards/` and the file neighbour resolver are landed but the seams must be re-sited to the crown's extent and the shards re-validated as basis deltas), the inhabit count read from a cell (only its law exists), and three cuts the derived limits forced, recorded in `modules/README.md`.
 
 **Verified 2026-08-25 (the medium/flow/ecosystem wave), re-homed 2026-09-06:** the dive district's pool is a
@@ -1556,15 +1591,11 @@ answers what has landed:
   `Assets/scenarios/*`, the canaries that booted them (re-recorded against the one world in the same
   change or deleted with a named successor), and `experimental/Puck.Demo` with a ledger naming each
   folder's live successor.
-- **The playthrough's substrate** (one wave, file-disjoint): the island's seams re-sited with the four shards
-  validating and their canaries re-recorded; an inhabit count read from a cell (the spawner); a `screens` row's
-  `memory` bindings so machine bytes and state cells move each other (the campfire seam); the sky's colors and a
-  binding overlay's activation reading a state cell (the reveal's carrier); the handheld attached to the engaging
-  seat's body; the front door (a fresh seat wakes in the studio behind a gate the `awakened` identity fact opens);
-  construction back under five seconds and the idle tick under four milliseconds; cross-row effects composing on
-  the batch workspace; and three market probes that bring their primitives: Backgammon (a `chance` search level
-  and hidden operands), Chinese Checkers (hop chains and max-n over many seats), billiards (a chord-charged
-  impulse). Extended draw sites (authored tables and scripts on the one seed ladder) land beside it.
+- **The playthrough's substrate remainder** (what the 2026-09-07 entry above leaves): the state section
+  owning its rows so the catalog walk per operand read goes and the idle tick lands under four milliseconds;
+  the handheld's attach pair shipped once the rule-work sheet has room for it (a region-scoped pair interaction,
+  or a placement-effect cost derived from the population it rebuilds rather than a flat 32,768); the `chance`
+  level's hidden operands; the multi-authority four-corners canaries re-recorded at the shards' 2.75× ring.
 - **The content wave**: the studio prologue's acts, the arena crawl's spawners and bosses, the arcade hearth's
   seam content, the retail basis deltas that pin a boot seat and district behind a fact.
 - **The federation wave**: provenance signing for carried state, the bilateral attestation rows a duel or wager

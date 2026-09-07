@@ -2,7 +2,7 @@
   "schema": "puck.world.def.v1",
   "documentId": "backgammon-probe",
   "host": {
-    "presentation": "none",
+    "presentation": "None",
     "backend": "auto",
     "width": 64,
     "height": 64,

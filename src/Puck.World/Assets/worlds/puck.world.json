@@ -10115,6 +10115,40 @@
       },
       "mode": "Edge",
       "name": "seat2-returning-identity-wakes-at-plaza"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "studio_look",
+          "expression": "(studio_look + 1) % 8"
+        },
+        {
+          "$type": "setIdentityFact",
+          "key": "1",
+          "fact": "awakened",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "$region:studioTurntable",
+            "comparison": "GreaterOrEqual",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "state": "$channel:2:jump",
+            "comparison": "GreaterOrEqual",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "seat2-studio-look-cycle"
     }
   ],
   "schema": "puck.world.def.v1",
