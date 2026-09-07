@@ -272,9 +272,17 @@ public sealed class StateCatalog {
 
         return true;
     }
+    /// <summary>Gets the running count of calls to <see cref="MatchesShape"/> across every catalog. A
+    /// recompilation site calls it once per candidate section; nothing on a warm read of an already-keyed catalog
+    /// may call it, so a law reads this to prove that contract without a wall-clock measurement.</summary>
+    public static long ShapeWalkCount => Interlocked.Read(location: ref s_shapeWalkCount);
+    private static long s_shapeWalkCount;
+
     /// <summary>Determines without allocation whether an authored section still carries this catalog's shape.</summary>
     /// <param name="section">The section to compare with.</param>
     public bool MatchesShape(IStateSection? section) {
+        Interlocked.Increment(location: ref s_shapeWalkCount);
+
         var descriptorIndex = 0;
 
         bool Match(string name, StateLane ownership, StateStorageShape storage, StateValueKind valueKind, int laneOrdinal) {

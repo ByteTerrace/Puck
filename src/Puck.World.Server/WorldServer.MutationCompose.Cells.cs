@@ -4,11 +4,12 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
-    // Composes one cell write onto the row it names, reading every row-existence and row-kind fact against
-    // `current` — the candidate the caller has built so far, so a same-batch row declaration ahead of this write
-    // is what the write sees. Hands back the written row; the caller places it, whether into a fresh row list or
-    // a batch's workspace.
-    private static bool TryComposeCellUpsert(WorldDefinition current, WorldMutation.UpsertStateCell mutation, ulong tick, [NotNullWhen(true)] out WorldStateRow? composed, out string reason, out CellName? evictedKey) {
+    // Composes one cell write onto the row it names, reading every row-existence and row-kind fact against `rows` —
+    // the candidate document's rows the caller has built so far, so a same-batch row declaration ahead of this
+    // write is what the write sees. `rows` is read directly rather than through a WorldDefinition so a batch's
+    // shared workspace list can be handed in live, mid-placement, without wrapping it into a section first. Hands
+    // back the written row; the caller places it, whether into a fresh row list or a batch's workspace.
+    private static bool TryComposeCellUpsert(IReadOnlyList<WorldStateRow> rows, WorldMutation.UpsertStateCell mutation, ulong tick, [NotNullWhen(true)] out WorldStateRow? composed, out string reason, out CellName? evictedKey) {
         composed = null;
         reason = string.Empty;
         evictedKey = null;
@@ -17,7 +18,7 @@ public sealed partial class WorldServer {
         // same-batch UpsertStateRow ahead of this one has already declared (or redeclared the kind of) the row
         // it names.
         if (WorldDefinitionRows.FindStateRow(
-            rows: current.State,
+            rows: rows,
             name: mutation.Row
         ) is not { } row) {
             reason = $"no state row named '{mutation.Row}' — declare it first with world.row.set state <json>";
@@ -70,8 +71,8 @@ public sealed partial class WorldServer {
             var textToWrite = mutation.Text!;
 
             if (isTextCycle) {
-                _ = WorldStateReader.TryRead(
-                    definition: current,
+                _ = StateReader.TryRead(
+                    rows: rows,
                     rowName: mutation.Row,
                     key: mutation.Key,
                     tick: tick,
@@ -157,8 +158,8 @@ public sealed partial class WorldServer {
                 }
             }
 
-            _ = WorldStateReader.TryRead(
-                definition: current,
+            _ = StateReader.TryRead(
+                rows: rows,
                 rowName: mutation.Row,
                 key: mutation.Key,
                 tick: tick,
@@ -189,16 +190,16 @@ public sealed partial class WorldServer {
             operand = mutation.Value;
         }
 
-        // The Add operand comes from WorldStateReader — the same read every gate, binding and read-back runs —
-        // rather than from the stored cell. On an ordinary row the two are the same value, so this arm keeps
+        // The Add operand comes from the same live read every gate, binding, and read-back runs — rather than from
+        // the stored cell. On an ordinary row the two are the same value, so this arm keeps
         // the read-modify-write-onto-the-base behaviour it always had. On an advancing row they differ, and
         // the live value is the right operand: the stored cell there is a base the row has been accumulating
         // away from, so adding to it would silently discard every unit gained since the epoch (a regen row
         // sitting at a live 41 taking a -10 would land on -10, not 31). Add means "add to what a reader
         // sees"; RebaseCellTraits then makes that sum the new base and starts the accumulation again from
         // this tick, so the row keeps advancing from the value the author just composed.
-        _ = WorldStateReader.TryRead(
-            definition: current,
+        _ = StateReader.TryRead(
+            rows: rows,
             rowName: mutation.Row,
             key: mutation.Key,
             tick: tick,
@@ -288,11 +289,11 @@ public sealed partial class WorldServer {
         return true;
     }
     // Composes one cell removal onto the row it names, on the same terms as TryComposeCellUpsert.
-    private static bool TryComposeCellRemove(WorldDefinition current, WorldMutation.RemoveStateCell mutation, [NotNullWhen(true)] out WorldStateRow? composed, out string reason) {
+    private static bool TryComposeCellRemove(IReadOnlyList<WorldStateRow> rows, WorldMutation.RemoveStateCell mutation, [NotNullWhen(true)] out WorldStateRow? composed, out string reason) {
         composed = null;
         reason = string.Empty;
         if (WorldDefinitionRows.FindStateRow(
-            rows: current.State,
+            rows: rows,
             name: mutation.Row
         ) is not { } row) {
             reason = $"no state row named '{mutation.Row}'";

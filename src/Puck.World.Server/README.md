@@ -44,20 +44,24 @@ contributions (`FoldChannelContributions`) → settle per-body contention →
 advance every body → resolve the guests' reads
 (`IWorldAddonHost.ResolveReads`) → deliver the tick's `WorldSnapshot`.
 
-A quiet tick's cost splits roughly evenly across two shapes: the animating
-population's own contact solves against the compiled solid field
+A quiet tick's cost splits across two shapes: the animating population's own
+contact solves against the compiled solid field
 (`WorldSolidField`/`FixedFieldContactSolver`, walked once per awake body's
 `Advance`), and every rule operand's row-version/value read through
-`WorldDefinition.StateCatalog`, which re-walks the state section's shape on
-each read. That walk cannot be skipped by keying on the section reference: the
-batch compose workspace (`WorldServer.MutationCompose.Batch.cs`) hands
-`WithWorldState` a row list it then edits in place per member, so one section
-reference can change shape mid-compose, and `WorldStateCatalogLawTests` pins
-that an in-place edit is seen. Removing the per-read walk means giving the
-section ownership of its rows and the workspace its own section, together.
-The contact-solve share has no per-call shortcut either: it is real per-body
-physics work against a program sized by every district's solid geometry.
-`puck bench world`'s "shipped world: idle tick (median)" row and
+`WorldDefinition.StateCatalog`. `WorldStateSection` owns an immutable copy of
+every list it carries (`World`/`Body`/`Identity`/`Lattices`), taken at
+construction and again on every `with`, so a candidate that changes shape is
+always a new `StateRaw` reference — the batch compose path
+(`WorldServer.MutationCompose.Batch.cs`) commits each cell write through
+`WithWorldState` rather than editing a shared row list in place, and
+`WorldStateCatalogLawTests` pins that an in-place edit of a caller's own array
+can never reach an already-built section. `WorldDefinition.StateCatalog`
+therefore keys its compiled product to the `StateRaw` reference
+(`ConditionalWeakTable`) and trusts a warm hit without re-walking the section's
+shape — the walk runs once, at the reference's first read, never again for
+that reference. The contact-solve share has no per-call shortcut: it is real
+per-body physics work against a program sized by every district's solid
+geometry. `puck bench world`'s "shipped world: idle tick (median)" row and
 `tests/Puck.World.Tests/HandleTickPathLawTests.cs` are the read-backs.
 
 Every non-intent submission arrives as one `SubmissionEnvelope` through
@@ -141,10 +145,17 @@ document-value refreshes, because rule effects cannot change row declarations.
 
 `WorldMutation.Batch` composes as one edit
 (`WorldServer.MutationCompose.Batch.cs`). A cell write or removal lands in a
-workspace — one copy of the row list under one definition, which every such
-member writes in place — while a member of any other kind composes through
-its own arm and the next cell write opens a fresh workspace over its result.
-The document-value refresh runs against one referenced-row set per batch
+workspace — one private copy of the row list, written in place by every such
+member — while a member of any other kind composes through its own arm and
+the next cell write opens a fresh workspace over its result. The running
+candidate is re-seated over the workspace (`SyncWorkspace`) only where
+something other than a cell write needs it — before a non-cell member
+composes, before a document-value rehydration actually reads it back, and
+once more when the batch finishes — never once per placement:
+`WorldStateSection` owns an immutable copy of its own row list, so handing the
+workspace to it is the one point that copy is paid for, and a run of
+independent cell writes pays it once for the whole call. The document-value
+refresh runs against one referenced-row set per batch
 (`WorldStateDocumentValues.CollectReferencedRows`), collected on the first
 state member and reused until a member that can add or drop a reference (a
 whole-row write, an edit to another section) drops it; a member whose row is

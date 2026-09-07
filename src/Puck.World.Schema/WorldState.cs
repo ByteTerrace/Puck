@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text.Json.Serialization;
 
 namespace Puck.World;
@@ -5,21 +6,43 @@ namespace Puck.World;
 /// <summary>The root <c>state</c> declaration. It is the document's abstract state inventory; compilation through
 /// <see cref="StateCatalog"/> describes each lane's typed ownership and storage contract before runtime lowers
 /// values into the storage appropriate to their access pattern. The engine reads it as an <see cref="IStateSection"/>:
-/// <see cref="World"/> is the document lane, <see cref="Body"/>/<see cref="Identity"/> the per-participant slot lanes.</summary>
+/// <see cref="World"/> is the document lane, <see cref="Body"/>/<see cref="Identity"/> the per-participant slot lanes.
+/// The section owns an immutable snapshot of every list it carries, taken at construction and again on every
+/// <c>with</c>: a caller's array or list is copied once and never aliased, so an edit the caller makes to its own
+/// collection afterward — in place, by index — can never reach an already-built section. A writer that means to
+/// change a row composes a new list and hands it to <c>with</c> (or <see cref="WorldDefinition.WithWorldState"/>);
+/// it may never keep the old list and mutate it through the section's own reference.</summary>
 /// <param name="World">Document-owned cell rows. These remain mutation-addressable through <c>state:&lt;name&gt;</c>.</param>
 /// <param name="Body">Per-body ephemeral counters and timers, compiled into each body's bounded ordinal arrays.</param>
 /// <param name="Identity">Per-body counters and timers synchronized through the durable identity-document seam.</param>
 /// <param name="Lattices">The lattice topologies the section's lattice-shaped rows lie over (see
 /// <see cref="LatticeTopology"/>; the document adds the physical <see cref="WorldFieldTopology"/> case).</param>
 public sealed record WorldStateSection(
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldStateRow>? World = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ActionStateSlot>? Body = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ActionStateSlot>? Identity = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<LatticeTopology>? Lattices = null
+    IReadOnlyList<WorldStateRow>? World = null,
+    IReadOnlyList<ActionStateSlot>? Body = null,
+    IReadOnlyList<ActionStateSlot>? Identity = null,
+    IReadOnlyList<LatticeTopology>? Lattices = null
 ) : IStateSection {
+    /// <inheritdoc cref="World"/>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldStateRow>? World { get => field; init => field = Freeze(value); } = Freeze(World);
+    /// <inheritdoc cref="Body"/>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<ActionStateSlot>? Body { get => field; init => field = Freeze(value); } = Freeze(Body);
+    /// <inheritdoc cref="Identity"/>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<ActionStateSlot>? Identity { get => field; init => field = Freeze(value); } = Freeze(Identity);
+    /// <inheritdoc cref="Lattices"/>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<LatticeTopology>? Lattices { get => field; init => field = Freeze(value); } = Freeze(Lattices);
+
     IReadOnlyList<StateRow>? IStateSection.Rows => World;
     IReadOnlyList<IStateSlot>? IStateSection.ParticipantSlots => Body;
     IReadOnlyList<IStateSlot>? IStateSection.IdentitySlots => Identity;
+
+    // The one freeze site every construction and every `with` routes through — a section can never expose a list
+    // the caller still holds a live, writable reference to.
+    private static IReadOnlyList<T>? Freeze<T>(IReadOnlyList<T>? items) => ((items is null) ? null : items.ToImmutableArray());
 }
 /// <summary>
 /// One row of the document's <c>state</c> section: a <see cref="StateRow"/> plus the two traits only a world reads —

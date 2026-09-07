@@ -474,11 +474,9 @@ public sealed record WorldDefinition(
     private static readonly RuntimeCompilationCache s_absentStateCompilation = new();
     private static readonly ConditionalWeakTable<WorldStateSection, RuntimeCompilationCache> s_runtimeCompilationCaches = new();
 
-    // The compiled views are read on the tick path (every rule operand resolves through the catalog), so a warm read
-    // answers from the cache without taking its lock: a shape check against the live section is enough, because a
-    // stale product never matches and a matching product is the same answer the locked path would give. The lock
-    // covers only compilation and its publication; a product is published after it is complete, so a reader that
-    // observes it observes a finished one.
+    // Fields/FieldProgram compile from every reaction a lattice-shaped row's topology carries, and a topology's own
+    // Reactions list is not a WorldStateSection list — this cache still re-proves its product against the live
+    // section on every read to catch an in-place edit reaching in through that inner list.
     private WorldFieldsSection? GetCompiledFields() {
         var cache = GetCompilationCache(state: StateRaw);
 
@@ -505,20 +503,23 @@ public sealed record WorldDefinition(
             return cache.Fields;
         }
     }
+    // The catalog's shape depends only on WorldStateSection's own lists (World/Body/Identity/Lattices' names and
+    // kinds), every one of which the section owns an immutable copy of — construction and `with` alike. A candidate
+    // section that changed shape is therefore always a NEW StateRaw reference (a `with` publishes a new instance),
+    // so a product keyed under this reference (the ConditionalWeakTable key) is the answer for it for as long as the
+    // reference lives; a warm read trusts that without re-walking the shape, which is what makes this cache cheap on
+    // the tick path (every rule operand resolves a name through the catalog). The lock covers only compilation and
+    // its publication; a product is published after it is complete, so a reader that observes it observes a
+    // finished one.
     private StateCatalog GetStateCatalog() {
         var cache = GetCompilationCache(state: StateRaw);
 
-        if ((Volatile.Read(location: ref cache.StateCatalog) is { } warm) && warm.MatchesShape(section: StateRaw)) {
+        if (Volatile.Read(location: ref cache.StateCatalog) is { } warm) {
             return warm;
         }
 
         lock (cache.SyncRoot) {
-            if (
-                (cache.StateCatalog is null) ||
-                !cache.StateCatalog.MatchesShape(section: StateRaw)
-            ) {
-                cache.StateCatalog = StateCatalog.Compile(section: StateRaw);
-            }
+            cache.StateCatalog ??= StateCatalog.Compile(section: StateRaw);
 
             return cache.StateCatalog;
         }

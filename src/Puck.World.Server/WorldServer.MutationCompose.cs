@@ -1512,7 +1512,7 @@ public sealed partial class WorldServer {
             case WorldMutation.UpsertStateCell m:
                 if (!TryComposeCellUpsert(
                     composed: out var upsertedRow,
-                    current: current,
+                    rows: current.State,
                     evictedKey: out evictedKey,
                     mutation: m,
                     reason: out reason,
@@ -1533,7 +1533,7 @@ public sealed partial class WorldServer {
             case WorldMutation.RemoveStateCell m:
                 if (!TryComposeCellRemove(
                     composed: out var trimmedRow,
-                    current: current,
+                    rows: current.State,
                     mutation: m,
                     reason: out reason
                 )) {

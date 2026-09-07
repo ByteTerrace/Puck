@@ -130,12 +130,13 @@ public sealed class WorldStateCatalogLawTests {
         Assert.Equal(expected: "score", actual: updated.StateCatalog[score].Name);
     }
     [Fact]
-    public void WorldDefinition_InPlaceCallerArrayMutationCannotLeaveAStaleCatalog() {
+    public void WorldDefinition_InPlaceCallerArrayMutationCannotReachTheSectionOrItsCatalog() {
         WorldStateRow[] rows = [new WorldStateRow(
             Name: CellName.Parse(candidate: "score"),
             Kind: CellKind.Int
         )];
-        var definition = new WorldDefinition(StateRaw: new WorldStateSection(World: rows));
+        var section = new WorldStateSection(World: rows);
+        var definition = new WorldDefinition(StateRaw: section);
         var original = definition.StateCatalog;
 
         Assert.True(condition: original.TryResolve(handle: out var score, lane: StateLane.Document, name: "score"));
@@ -144,11 +145,27 @@ public sealed class WorldStateCatalogLawTests {
             Name: CellName.Parse(candidate: "round"),
             Kind: CellKind.Int
         );
+
+        Assert.Equal(expected: "score", actual: section.World![0].Name.Value);
+
         var refreshed = definition.StateCatalog;
 
-        Assert.NotSame(actual: refreshed, expected: original);
-        Assert.False(condition: refreshed.TryGetDescriptor(descriptor: out _, handle: score));
-        Assert.True(condition: refreshed.TryResolve(handle: out _, lane: StateLane.Document, name: "round"));
+        Assert.Same(expected: original, actual: refreshed);
+        Assert.True(condition: refreshed.TryGetDescriptor(descriptor: out var descriptor, handle: score));
+        Assert.Equal(expected: "score", actual: descriptor.Name);
+        Assert.False(condition: refreshed.TryResolve(handle: out _, lane: StateLane.Document, name: "round"));
+    }
+    [Fact]
+    public void GetStateCatalog_NeverReWalksAnAlreadyKeyedSectionsShape() {
+        var definition = new WorldDefinition(StateRaw: BuildSection());
+        var warm = definition.StateCatalog;
+        var before = StateCatalog.ShapeWalkCount;
+
+        for (var read = 0; read < 64; read++) {
+            Assert.Same(expected: warm, actual: definition.StateCatalog);
+        }
+
+        Assert.Equal(expected: before, actual: StateCatalog.ShapeWalkCount);
     }
     [Fact]
     public void Compile_NullSection_ProducesAnEmptyCatalog() {

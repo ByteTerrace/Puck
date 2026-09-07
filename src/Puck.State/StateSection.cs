@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text.Json.Serialization;
 
 namespace Puck.State;
@@ -34,18 +35,35 @@ public interface IStateSection {
 public sealed record StateSlot(string Name, StateValueKind ValueKind) : IStateSlot;
 /// <summary>The standalone state document's <c>state</c> section: rows, lattices, and the two slot lanes. A document
 /// project that embeds the state engine declares its own section record over <see cref="IStateSection"/> instead;
-/// this record is the shape a host with no document of its own reads and writes.</summary>
+/// this record is the shape a host with no document of its own reads and writes. The section owns an immutable
+/// snapshot of every list it carries, taken at construction and again on every <c>with</c>, so a caller's array or
+/// list can never be mutated in place through the section afterward.</summary>
 /// <param name="Rows">The document-owned cell rows.</param>
 /// <param name="Lattices">The lattice topologies the lattice-shaped rows lie over.</param>
 /// <param name="ParticipantSlots">The per-participant ephemeral slots.</param>
 /// <param name="IdentitySlots">The per-identity durable slots.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StateSection(
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<StateRow>? Rows = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<LatticeTopology>? Lattices = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<StateSlot>? ParticipantSlots = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<StateSlot>? IdentitySlots = null
+    IReadOnlyList<StateRow>? Rows = null,
+    IReadOnlyList<LatticeTopology>? Lattices = null,
+    IReadOnlyList<StateSlot>? ParticipantSlots = null,
+    IReadOnlyList<StateSlot>? IdentitySlots = null
 ) : IStateSection {
+    /// <inheritdoc cref="Rows"/>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<StateRow>? Rows { get => field; init => field = Freeze(value); } = Freeze(Rows);
+    /// <inheritdoc cref="Lattices"/>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<LatticeTopology>? Lattices { get => field; init => field = Freeze(value); } = Freeze(Lattices);
+    /// <inheritdoc cref="ParticipantSlots"/>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<StateSlot>? ParticipantSlots { get => field; init => field = Freeze(value); } = Freeze(ParticipantSlots);
+    /// <inheritdoc cref="IdentitySlots"/>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<StateSlot>? IdentitySlots { get => field; init => field = Freeze(value); } = Freeze(IdentitySlots);
+
     IReadOnlyList<IStateSlot>? IStateSection.ParticipantSlots => ParticipantSlots;
     IReadOnlyList<IStateSlot>? IStateSection.IdentitySlots => IdentitySlots;
+
+    private static IReadOnlyList<T>? Freeze<T>(IReadOnlyList<T>? items) => ((items is null) ? null : items.ToImmutableArray());
 }

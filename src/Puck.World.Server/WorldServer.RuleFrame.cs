@@ -141,14 +141,11 @@ public sealed partial class WorldServer {
     // rather than allocated fresh, so a tick with many cross-row writes (a Klondike deal) pays for the list once
     // per call, never once per member replayed.
     private readonly List<WorldMutation> m_ruleFrameReplayScratch = [];
-    // Replays the one authored rule queue from the clean tick baseline through the batch workspace — the same
-    // vehicle an externally submitted WorldMutation.Batch composes through, which guarantees the document it hands
-    // back is byte-identical to composing the same members one by one (TryComposeBatch's own contract). A cell
-    // write or removal among the replayed members then shares one workspace row-list copy instead of paying for a
-    // fresh whole-document compose per member, so a tick with many cross-row writes (a Klondike deal) composes its
-    // prefix once per call rather than once per member replayed. `next` is appended to the replay rather than
-    // queued first, so a caller sees whether the whole candidate — prefix plus the pending member — composes before
-    // deciding to keep it.
+    // Replays the one authored rule queue from the clean tick baseline through TryComposeBatch — the same vehicle
+    // an externally submitted WorldMutation.Batch composes through, which guarantees the document it hands back is
+    // byte-identical to composing the same members one by one (TryComposeBatch's own contract). `next` is appended
+    // to the replay rather than queued first, so a caller sees whether the whole candidate — prefix plus the
+    // pending member — composes before deciding to keep it.
     private bool TryComposeRuleFrameCandidate(WorldMutation? next, ulong tick, out WorldDefinition candidate, out string reason) {
         var baseline = m_ruleFrameTickBaseline!;
 

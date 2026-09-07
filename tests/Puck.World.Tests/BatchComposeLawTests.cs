@@ -82,6 +82,43 @@ public sealed class BatchComposeLawTests {
         Assert.Equal(expected: ["c5", "c6", "c7"], actual: Keys(definition: batched.Server.Definition, row: "slicePile"));
         Assert.Equal(expected: sequential.DefinitionBytes(), actual: batched.DefinitionBytes());
     }
+    // A batch of many independent cell writes over the SAME workspace copy composes byte-identically to applying
+    // each write on its own — the shared-workspace fast path (TryComposeBatch's OpenWorkspace/PlaceRow) can never
+    // diverge from the one-by-one door it exists only to avoid repeating.
+    [Fact]
+    public void ABatchOfManyCrossRowWritesComposesTheIdenticalDocumentToOneByOne() {
+        const int rowCount = 24;
+        var rows = new WorldStateRow[rowCount];
+        var members = new WorldMutation[rowCount];
+
+        for (var index = 0; index < rowCount; index++) {
+            rows[index] = new WorldStateRow(Name($"crossRow{index}"), CellKind.Int, Min: 0, Max: 1_000, Cells: [new StateCell(WorldStateRow.SlotKey, index)]);
+            members[index] = new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.Console, Row: $"crossRow{index}", Key: WorldStateRow.SlotKey.Value, Value: (index * 7), Kind: WorldDocumentWriteKind.Set);
+        }
+
+        var definition = (Fixtures.BuildDocument() with { StateRaw = new WorldStateSection(World: rows) });
+
+        using var batched = Fixtures.FreshServer(definition: definition);
+        using var sequential = Fixtures.FreshServer(definition: definition);
+        var journal = 0;
+        batched.Server.MutationJournalTap = (_, _) => journal++;
+
+        batched.Server.EnqueueMutation(mutation: new WorldMutation.Batch(Principal: WorldPrincipal.Console, Mutations: members));
+        batched.Step();
+
+        foreach (var member in members) {
+            sequential.Server.EnqueueMutation(mutation: member);
+            sequential.Step();
+        }
+
+        Assert.Equal(expected: 1, actual: journal);
+
+        for (var index = 0; index < rowCount; index++) {
+            Assert.Equal(expected: (index * 7), actual: Slot(definition: batched.Server.Definition, row: $"crossRow{index}"));
+        }
+
+        Assert.Equal(expected: sequential.DefinitionBytes(), actual: batched.DefinitionBytes());
+    }
     [Fact]
     public void OneRefusedMemberRefusesTheWholeBatch() {
         using var fixture = Fixtures.FreshServer(definition: Document());
