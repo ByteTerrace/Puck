@@ -2,7 +2,7 @@ wire.errors reset
 world.collision.probe 65 0 -99
 body.pose 65.5 0 -99 0 0 0 0
 body.fly 0 1 0 0 0 0 3 0
-world.wait 420
+world.wait 150
 body.where 0
 world.contacts 1
 world.adjacencies
