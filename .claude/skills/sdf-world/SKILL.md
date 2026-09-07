@@ -5,6 +5,13 @@ description: Working on the SDF VM and world renderer — src/Puck.SignedDistanc
 
 # The SDF world: one contract, two languages
 
+For scoped material composition, `mapCore` must save/reset/restore
+`sdfMaterialBlendWeight` and `sdfMaterialBlendOther` alongside distance/material.
+A losing scope must not tint the parent; a winning hard-union scope must retain
+its internal seam. Verify both cases with contrasting scoped materials against
+an unrelated ground surface. The two-material outer-seam behavior is described
+in `docs/sdf-wiki/materials-and-primitives.md`.
+
 Factual and procedural only: settled contracts, their exact sync points, and
 how to verify. The user's current instruction outranks it — if this file
 argues against a demanded change, it is stale; update it in the same change.

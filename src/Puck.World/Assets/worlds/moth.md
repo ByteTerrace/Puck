@@ -7,16 +7,18 @@ an initial procedural interpretation; facial construction, armor paneling, and
 flight effects still need art refinement before it represents the concept's final quality.
 
 The current refinement follows the selected Moth collage: warm brown skin and a
-side braid, an ivory hood framing the face, lilac shoulder plates, a split ivory
+side braid, a tapered ivory cowl framing the face, lilac shoulder plates, a split ivory
 chest collar, and a small cyan clasp. Broad boots and dark joints keep the stance
 readable. Three overlapping blades on each flight vane fan out from a lower back
 hinge during flight and fold upright on landing. The creation stays within the
 existing 48-shape budget; the former separate toe caps now supply the outer blades.
 
 The author frame is +Y up and +Z forward, with the soles at Y=0 and the hood crown
-near Y=2.28. Parent pivots and dimensions are authored in that same frame. The
-hood's outer ellipsoid and subtractive opening share composition group 1, so the
-opening cuts only the hood. Its face, eyes, and braid remain separate moving parts.
+near Y=2.31. Parent pivots and dimensions are authored in that same frame. The
+hood's rounded cone and subtractive opening share composition group 1, so the
+opening cuts only the hood. The cheek and chin ellipsoids blend within group 2;
+eyes, brows, hair, and braid remain separate moving parts. Lower armor highlights
+and slightly turned-out boots keep the stance from looking rigidly mirrored.
 Armor and vane edits change appearance only; movement speeds and collision stay
 in the existing walker kit. AO and high shadows are enabled in the studio document.
 
@@ -63,8 +65,11 @@ descend.
 
 The rig breathes and blinks at idle, swings arms and legs with grounded travel,
 and blends into an airborne pose with opened vanes. Touching down folds the vanes
-and restores the grounded rig. Foot planting and separate landing/recovery clips
-are not authored in this first pass.
+and restores the grounded rig. Each leg uses the existing two-bone surface IK
+and alternating stride-phase foot latch while grounded. The target is the boot
+origin, held 0.13 units above the surface; the correction releases in flight.
+This improves contact placement, but does not lock sole orientation or supply
+separate landing/recovery clips.
 
 ## Iterate in the running window
 

@@ -2024,6 +2024,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // its codegen and render stay byte-identical.
     float savedFieldDistance = SDF_FAR_DISTANCE;
     int savedFieldMaterial = 0;
+    float savedFieldBlendWeight = 0.0;
+    int savedFieldBlendOther = 0;
 
     // The OUTER loop walks chain segments (the stream split at ResetPoints), the inner loop interprets a segment's
     // instructions exactly as before — the zero-instance linear walk visits every segment in directory order, and
@@ -2670,6 +2672,10 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     savedFieldDistance = result.distance;
                     if (trackMaterial) {
                         savedFieldMaterial = result.material;
+                        savedFieldBlendWeight = sdfMaterialBlendWeight;
+                        savedFieldBlendOther = sdfMaterialBlendOther;
+                        sdfMaterialBlendWeight = 0.0;
+                        sdfMaterialBlendOther = 0;
                     }
                     result.distance = SDF_FAR_DISTANCE;
                     if (trackMaterial) {
@@ -2697,11 +2703,23 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     }
                     composeBlend = instructionHeader.z;
                     composeSmooth = data1.x;
+                    float scopeBlendWeight = sdfMaterialBlendWeight;
+                    int scopeBlendOther = sdfMaterialBlendOther;
                     result.distance = savedFieldDistance;
                     if (trackMaterial) {
                         result.material = savedFieldMaterial;
+                        sdfMaterialBlendWeight = savedFieldBlendWeight;
+                        sdfMaterialBlendOther = savedFieldBlendOther;
                     }
-                    composePending = true;
+                    // A losing scope cannot tint its parent. A winning hard union carries its own internal seam;
+                    // a smooth outer composition instead creates a new two-material seam in the shared helper.
+                    bool scopeWinsUnion = (composeBlend == SDF_BLEND_UNION) && (composeCandidate < result.distance);
+                    sdfComposeCandidate(result, composeCandidate, composeBlend, composeMaterial, composeSmooth, trackMaterial);
+                    if (trackMaterial && scopeWinsUnion) {
+                        sdfMaterialBlendWeight = scopeBlendWeight;
+                        sdfMaterialBlendOther = scopeBlendOther;
+                    }
+                    composePending = false;
                     break;
                 }
 #endif

@@ -15,6 +15,13 @@ Scoped fields isolate operations such as intersection, onion, dilation, and
 displacement from the parent accumulator, then compose the scoped result back
 through `PopField`. Their outward reach must be included in instance bounds.
 
+Material interpolation state belongs to that accumulator too. `PushField` saves
+the parent's secondary material and blend weight, then starts the scope without
+a seam. A losing scope restores the parent's state; a winning hard-union scope
+keeps its internal material seam. A smooth outer composition creates a new
+two-material seam. Without this isolation, a smooth join inside a character can
+tint unrelated ground pixels even when the ground wins the distance comparison.
+
 ## Primitive contract
 
 Every shape has a packed lane layout shared by `SdfInstruction`,

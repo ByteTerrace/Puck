@@ -12,12 +12,44 @@ cloud deployment has additional boundaries and is a later, independent release.
 Body grants do not authorize host files, composed images, or Azure resources;
 that fact must not become a reason to restrict an explicitly trusted operator.
 
+## Engine prerequisites implemented on 2026-09-07
+
+The changes in `.worktrees/mcp-engine-prerequisites` supply the engine seams
+for local pairing:
+
+- `world.wait` now holds only its issuing text session, with independent
+  deadlines on the host-work clock. Both desktop and Silo use this behavior.
+- `TextCommandSession.InvokeAsync` queues short host operations behind that
+  session's commands, simulation barriers and waits, inside its host scope.
+  Queued cancellation skips the operation; cancellation after execution starts
+  cannot undo it. Disposal closes the ingress and refuses its queued work.
+- `SdfWorldRender.RequestCapture` returns a `FrameCaptureRequest`. All three
+  render writers carry that same request and resolve its `Completion` with a
+  `FrameCaptureResult` after writing or on failure. Busy targets cannot replace
+  accepted requests. The scheduled-capture consumer uses this completion too.
+
+These engine changes are uncommitted in the isolated
+`.worktrees/mcp-engine-prerequisites` worktree at base `621127f0b67a`; they
+have not been integrated into the primary checkout. The plan is synchronized
+in both checkouts. Build and test evidence below applies to the isolated engine
+changes, not to a merge with subsequent primary-checkout work. No MCP server
+or attachment endpoint has been implemented.
+
+The next session must first integrate these engine changes with the current
+primary checkout, preserving concurrent edits and rerunning the affected gates.
+Then proceed to milestone 0: bounded authenticated local IPC and actual
+SDK/client interop. Reuse these engine APIs instead of inventing a
+`WorldRenderProbe` success event. Authoritative per-mutation receipts remain
+separate work: a submission callback or a completed capture does not prove an
+edit was accepted. Capture waiting needs an adapter deadline and unique-path
+cleanup; cancelling the wait leaves an accepted render request alive.
+
 ## 1. Findings that change the design
 
 | Priority | Finding and evidence | Required correction |
 |---|---|---|
 | P0 | Giving a participant arbitrary `puck_exec` would expose host operations beyond body grants. [Recording commands](../../src/Puck.World/WorldRecordingCommandModule.cs) open paths and devices without consulting an acting principal; [replay commands](../../src/Puck.World.Console/WorldReplayCommandModule.cs) manage the session tape directly. | Participant has no exec. Explicit local Operator uses Console identity and the full existing command registry, without an MCP allowlist or per-verb approval layer. |
-| P0 | `puck_doc.write` equates a `Mutate` check with permission to replace a disk file. Puck's [mutation authority](../../.agents/skills/puck-world/references/authority.md) instead checks section/row scope, mutation-kind masks, additional state `Edit`, and dispatch budgets. | Separate live authoritative mutations from offline document persistence. Neither may bypass the other's admission or storage boundary. |
+| P0 | `puck_doc.write` equates a `Mutate` check with permission to replace a disk file. Puck's [mutation authority](../../.claude/skills/puck-world/references/authority.md) instead checks section/row scope, mutation-kind masks, additional state `Edit`, and dispatch budgets. | Separate live authoritative mutations from offline document persistence. Neither may bypass the other's admission or storage boundary. |
 | P0 | Azure delegation is asserted but not composed. [World.Azure](../../src/Puck.World.Azure/README.md) explicitly separates host binding grants from world grants and Azure RBAC. Its normal configured credentials are managed identity or Azure CLI, not automatic per-user OBO. | Build a separately authenticated remote host and scoped extension-client path. Never fall back from delegated credentials to a broader host identity. |
 | P1 | There is no world connection/lifecycle design. [AgentBridge](../../src/Puck.World.AgentBridge/README.md) uses an in-process principal-aware link and a mailbox drained by the host; the base World executable does not install it. Adding a CLI switch does not supply those objects. | First prove the local console attachment and independent adapter lifecycle; compose the participant bridge in its own milestone. Text queueing is reusable, while IPC still needs implementation. |
 | P1 | The plan calls four ingress kinds the entire principal model and proposes `WorldPrincipal.Peer(oid)`. [WorldPrincipal](../../src/Puck.World.Schema/WorldPrincipal.cs) also models Document, World, and Group; `Peer` takes an index and positive admission generation. | Authenticate the external caller separately, then resolve an admitted world principal and body incarnation. Never cast a cloud subject into a body or seat. |
@@ -30,12 +62,11 @@ that fact must not become a reason to restrict an explicitly trusted operator.
 
 Two additional findings from the second technical review affect the first release:
 
-- Desktop [WorldSingleWaitGateResolver](../../src/Puck.World/WorldSingleWaitGateResolver.cs)
-  returns a shared wait gate. [Launcher registration](../../src/Puck.Launcher/LauncherServiceRegistration.cs)
-  installs it as `TextCommandSource.HoldGate`, which stops the whole source.
-  Separate sessions alone do **not** establish independent human input during
-  `world.wait`. Make waits session-scoped as part of local pairing and verify
-  human commands during an MCP wait; retain the existing tick semantics.
+- The base checkout installed the desktop's shared wait gate as a source-wide
+  hold. The isolated engine changes remove that registration and puts the deadline on the
+  issuing `TextCommandSession`. Independent session tests now cover that engine
+  boundary; simultaneous human/IPC use still belongs to the attachment release
+  gate.
 - [WorldRenderProbe](../../src/Puck.World/WorldRenderProbe.cs) only holds render
   references. Actual PNG writers are `UnifiedOverlayNode`, `FullscreenPassNode`,
   and `SdfEngineNode`. A success-only `Action<string>` event added to the holder
@@ -133,7 +164,7 @@ These are local transport controls, not an Entra/OBO project.
 it does not already supply IPC. An existing terminal's stdin cannot generally be
 retrofitted into a shared writable pipe. Add a thin host-owned endpoint feeding a
 dedicated Console session with request-correlated replies. Preserve per-session
-drain barriers and callback ordering; implement session-scoped waits to retain
+drain barriers and callback ordering; use the session-scoped waits to retain
 independent human input. Bound the
 endpoint's queue before it reaches the existing unbounded text queue. Do not
 scrape a shared console log to guess which reply belongs to which request.
@@ -280,8 +311,8 @@ dispatch if returning an authoritative command verdict; do not infer it from an
 empty output or scrape the shared error counter. Preserve existing `IsError`,
 `Output`, and `ClearTranscript` fields where they are available.
 
-Frame capture after exec must enter the same session ordering/barrier before it
-arms the render request. An out-of-band mailbox capture can otherwise overtake
+Frame capture after exec must use `TextCommandSession.InvokeAsync` to enter
+the same session ordering/barrier before arming the render request. An out-of-band mailbox capture can otherwise overtake
 the preceding mutation or `world.wait`. Do not solve this with a fixed sleep:
 reuse the barrier. Capture completion proves a frame exists; it does not prove
 the prior edit was accepted or prevent subsequent human edits entering that frame.
@@ -363,22 +394,22 @@ convert heuristic weights into cycles or claim a wall-clock performance estimate
 **Single stills have a direct success path:** call `puck_capture_frame`, receive
 the PNG. The handler arms the existing next-frame capture and awaits an internal
 completion signal with cancellation and a deadline. Use a request-correlated
-completion seam at the render owner; a `pending` console echo or mere file
+completion seam at the render owner (`FrameCaptureRequest.Completion`); a `pending` console echo or mere file
 existence is not completion. Read only completed bytes using a unique temporary
 destination if the existing path requires a file, then clean it up. Return an
 image block with actual media type/size and available frame metadata. No persistent
 artifact registry, poll handle, separate download, or assumed 50 ms deadline is
 required for a successful small still. Bound image dimensions and payload bytes.
 
-Extend the neutral [ICaptureRequestTarget](../../src/Puck.Abstractions/Presentation/ICaptureRequestTarget.cs)
-contract with a request-correlated terminal result, forwarded unchanged through
-decorators. Update all current implementers:
+Use the neutral [ICaptureRequestTarget](../../src/Puck.Abstractions/Presentation/ICaptureRequestTarget.cs)
+contract and its `FrameCaptureRequest`, now forwarded unchanged through all
+current implementers:
 [UnifiedOverlayNode](../../src/Puck.Overlays/UnifiedOverlayNode.cs),
 [FullscreenPassNode](../../src/Puck.Shaders/FullscreenPassNode.cs), and
 [SdfEngineNode](../../src/Puck.SdfVm/SdfEngineNode.cs). Signal success only after
 the serving node's PNG write is complete; signal failure on unavailable capture,
-readback/write failure, and shutdown. The current code clears a pending path
-before attempting the write, so clearing that path is not a success signal.
+readback/write failure, and shutdown. The pending path may clear before the write finishes; only the request
+completion reports success or failure.
 Preserve the one-pending-request behavior and arbitrate check-and-arm on the
 owning thread across screenshots, parity captures, and MCP.
 
@@ -390,8 +421,7 @@ work inline in the render pass. Define cancellation/late completion cleanup and
 prevent a cancelled request from deleting or completing a newer capture. This
 orders a result after actual work; it does not make GPU/file completion timing
 deterministic or eliminate the existing synchronous readback cost. Reuse the
-same signal for the parity scheduler where practical rather than retaining
-contradictory completion definitions.
+same signal already consumed by `WorldCaptureScheduler`.
 
 Recording/replay outputs may use local paths accessible to the operator. Long
 verification/parity work can use operation handles and status. Remote artifacts
@@ -477,6 +507,7 @@ only after all requested slices land; a local release does not claim Azure suppo
 
 | Milestone | Deliverable | Exit evidence |
 |---|---|---|
+| Engine integration: before milestone 0 | Integrate the implemented session waits, ordered host operations, and correlated capture completion from the isolated worktree. | Preserve current primary-checkout edits; pass the affected builds and tests after integration. Prior verification is not evidence for a new merged tree. |
 | 0: local transport and protocol spike | Select SDK or owned implementation from measured evidence; pin actual client/protocol matrix; build a user-scoped IPC endpoint feeding a dedicated Console session. | Resolved architecture build and client interop; reviewed lock delta; correct host/profile identity; escaped multiline replies, fragmented/coalesced reads, blank/comment handling, bounded input/queueing, and no stdout contamination. No MCP package in base World. |
 | 1: live operator pairing | `--profile operator --attach <pipe>`, full `puck_exec`, session-scoped waits, and one-call frame capture ordered behind prior edits. | Human enables attachment in a running world; agent changes a parameter and receives a fresh PNG. Human console responds during an MCP wait. Deferred rejection is not reported as success; overlay, shader-pass, and bare-producer captures all complete or fail explicitly. Adapter restart preserves world. Busy/timeout/device-loss, wrong-user/elevation, and remote pipe access checks pass. |
 | 2: participant tools | Explicit participant composition, three bridge tools, binding lifecycle, bounded admission, honest receipts and retry semantics. | Participant cannot reach exec/files/frame/tape even by guessing tool names or changing profile arguments. Grant/revoke, channel reorder, body reuse, observe denial, cancellation, and saturation tests run against the real host. |
@@ -496,7 +527,7 @@ dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --filter F
 Add adapter tests in an explicitly owned MCP test project, and real-process MCP
 canaries to the CLI's supported verification workflow. Run the ordinary World
 executable for composition/presentation changes following the current
-[world verification guidance](../../.agents/skills/puck-world/SKILL.md). Route
+[world verification guidance](../../.claude/skills/puck-world/SKILL.md). Route
 rendering changes through its owning skill and `puck parity`; do not resurrect
 quarantined Post or treat builds as behavioral proof. Recheck the current
 `puck landing` routes before wiring a new canary into them.
@@ -545,17 +576,18 @@ Puck graph and refuses Puck assemblies smuggled around project references; this
 is not a blanket ban on third-party dependencies. No MCP package restore/build
 spike was performed here, so package cost and compatibility remain unmeasured.
 
-The rebuttal revision was documentation-only: local links and internal wording
-were checked; the 15-test result above belongs to the initial review, not a new
-protocol implementation. No MCP server, rendered capture, parity job, or live
-Azure operation was run. Existing shader and world-asset changes belong to other
-work and were left alone. This handoff is the only intended tracked change.
+The earlier rebuttal revisions were documentation-only. Their 15-test result
+belongs to the initial review. The later engine-prerequisite implementation and
+real rendering checks are recorded below; no MCP server, cross-backend parity
+job, or live Azure operation has been run. Concurrent shader and world-asset
+changes in the primary checkout were left alone.
 
 The second volley was checked against current source, including compiler-backed
 `references ICaptureRequestTarget --implementers` in the World Release project
 closure. It resolved the three render-node implementations above without a
 reported workspace-load failure. Queue/barrier and PNG-write findings come from
-source inspection, not a newly run graphical reproduction.
+source inspection; the later graphical checks below validate the implemented
+capture behavior.
 
 The inspected [Core 2.2.0 metadata](https://www.nuget.org/packages/ModelContextProtocol.Core)
 lists a native net10.0 dependency group with AI.Abstractions >=10.8.3 and
@@ -566,3 +598,24 @@ but the CLI does not thereby already contain the whole SDK graph. This is
 preflight evidence only; actual restore, resolved build, footprint measurement,
 and target-client interoperability remain milestone 0 work. A release plan
 should state that uncertainty instead of declaring either implementation chosen.
+
+Engine prerequisite verification in the isolated worktree: World and Silo Release builds
+passed with zero warnings, and 516 tests passed across Commands (454),
+Abstractions (10), Shaders (42), and the focused World command suite (10).
+The Puck CLI compiler-backed implementer query resolved all three capture targets
+in the World Release closure; the architecture report passed all 87 projects.
+A real headless host released a session wait. A real Direct3D offscreen host
+wrote and decoded captures, refused a second busy request, reported an intentional
+write failure, recovered on the following request, and wrote both scheduled
+capture manifests through the completion result. This is not a cross-backend
+parity result. Offscreen mode currently omits post-render extensions, so it
+cannot validate that composed windowed path.
+
+The windowed Direct3D smoke also wrote a PNG through the unified overlay.
+Fullscreen-pass forwarding, busy refusal and disposal are covered by the shader
+suite; a live fullscreen-pass write and Vulkan parity are not claimed by this run.
+
+The independent-session wait assertion was also checked with an intentionally
+inverted production hold predicate: it failed, and passed again after restoring
+the implementation. Host-scope entry failure completes the queued operation
+with an error rather than stranding its caller.
