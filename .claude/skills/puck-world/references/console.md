@@ -119,7 +119,14 @@ Three echo models — do not conflate them:
    module is out of reach. The two readings are not layered — registering a
    verb that stays listed as narrated in the runner (`CanaryCommand`'s
    `NarratedMutationVerbs`) still reads the narrated way, so a verb moved to
-   registration must also move out of that table.
+   registration must also move out of that table. The narrated reading counts
+   a mutation KIND, not a caller: anything else in the world that composes the
+   same `WorldMutation` case — a rule frame's own install, an addon guest —
+   narrates under the same `Describe()` prefix and is counted with the
+   script's calls. That direction is a count mismatch (a red the runner
+   reports as `accounted <verb>: N response(s) for M authored occurrence(s)`),
+   never a silent green, so a script for a world whose rules write the same
+   kind must either author the extra occurrences or use a registered verb.
 
 `world.gravity` is the gravity decision's Immediate read-back: it echoes the
 authored solver, uniform acceleration, shared constant/softening, explicit-mass

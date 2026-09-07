@@ -32,6 +32,19 @@ carries, echoed with the unavailable treatment by `world.adjacencies`. Portals
 remain intentional authored travel and are not used to represent seamless
 topology.
 
+A shard names one document several times over — its own `basis`, each adjacency
+neighbour, each derived corner destination — and a composed document is reused
+per resolved path when every file its composition read still holds the bytes it
+read (`WorldDefinitionFileSource`; identity is the path, freshness is content,
+no clock takes part in either). `world.adjacencies` names `composed=shared` or
+`composed=fresh` per started neighbour authority, and `unknown` when that
+authority is not running here. The process totals sit on `world.status`
+(`documents composed N shared M held K (B bytes)`) and on the boot's own
+`[world.documents]` line, since they belong to the process rather than to one
+instance's rows. `held` is one image per distinct document path this process
+composed; the store is not capped, so `B` is what to read when a host composes
+unusually many documents.
+
 A row may also author `livenessGraceSeconds`: how long that edge may go without
 a delivered neighbour refresh before the world calls the link dropped. `0` (the
 default) disables sensing for the row entirely — no event, and `$link:` reads 0

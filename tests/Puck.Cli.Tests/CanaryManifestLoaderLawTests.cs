@@ -57,6 +57,18 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
         Assert.Contains(expectedSubstring: "orphan-one", actualString: error, comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "no canary.json", actualString: error, comparisonType: StringComparison.Ordinal);
     }
+    [Fact]
+    public void ASkippedManifestFailsAWholeSuiteRunAndLeavesANamedSelectionAlone() {
+        // Skipping keeps the other proofs running; it must not also make the suite report green with one of its
+        // proofs unread. A selection that named its proofs is answered on those alone.
+        Assert.Equal(expected: 1, actual: CanaryCommand.SuiteExit(runExit: 0, refusedCount: 1, kind: CanaryCommand.CanarySelectionKind.Automatic));
+        Assert.Equal(expected: 1, actual: CanaryCommand.SuiteExit(runExit: 0, refusedCount: 1, kind: CanaryCommand.CanarySelectionKind.All));
+        Assert.Equal(expected: 1, actual: CanaryCommand.SuiteExit(runExit: 0, refusedCount: 1, kind: CanaryCommand.CanarySelectionKind.Capability));
+        Assert.Equal(expected: 0, actual: CanaryCommand.SuiteExit(runExit: 0, refusedCount: 1, kind: CanaryCommand.CanarySelectionKind.Ids));
+        Assert.Equal(expected: 0, actual: CanaryCommand.SuiteExit(runExit: 0, refusedCount: 0, kind: CanaryCommand.CanarySelectionKind.All));
+        // A real failure never softens into a skip report.
+        Assert.Equal(expected: 2, actual: CanaryCommand.SuiteExit(runExit: 2, refusedCount: 1, kind: CanaryCommand.CanarySelectionKind.All));
+    }
     private static string LegManifest(string id, string worldPrefix) =>
         $$"""
         {

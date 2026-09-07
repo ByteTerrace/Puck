@@ -52,8 +52,27 @@ internal static partial class CanaryCommand {
             return 2;
         }
 
-        return RunSelected(manifests: selected, repositoryRoot: repositoryRoot, explicitAll: (selection.Kind == CanarySelectionKind.All));
+        var exit = SuiteExit(
+            kind: selection.Kind,
+            refusedCount: refusedManifests.Count,
+            runExit: RunSelected(manifests: selected, repositoryRoot: repositoryRoot, explicitAll: (selection.Kind == CanarySelectionKind.All))
+        );
+
+        if ((exit != 0) && (refusedManifests.Count > 0)) {
+            Console.Error.WriteLine(value: $"FAIL: {refusedManifests.Count} manifest(s) were skipped and never ran — a suite with an unread proof in it is not green.");
+        }
+
+        return exit;
     }
+    // Tolerance is about letting the OTHER proofs run, never about calling the gate green while a manifest went
+    // unread. A selection that stands for a whole suite therefore still fails when one was skipped — with every
+    // surviving proof's verdict already printed, which is the whole difference from refusing the discovery
+    // outright. A selection that named its proofs is answered on those proofs alone.
+    internal static int SuiteExit(int runExit, int refusedCount, CanarySelectionKind kind) => (
+        ((refusedCount > 0) && (kind is CanarySelectionKind.Automatic or CanarySelectionKind.All or CanarySelectionKind.Capability))
+            ? Math.Max(val1: runExit, val2: 1)
+            : runExit
+    );
 
     private static int RunSelected(IReadOnlyList<CanaryManifest> manifests, string repositoryRoot, bool explicitAll) {
         var buildClock = Stopwatch.StartNew();
@@ -1206,7 +1225,7 @@ internal static partial class CanaryCommand {
         return 2;
     }
 
-    private enum CanarySelectionKind {
+    internal enum CanarySelectionKind {
         Automatic,
         All,
         Capability,
