@@ -21,6 +21,7 @@ import {
 } from './accessManagement.bicep'
 import {
   frontDoorPublicContentReadCondition
+  officialContentPublisherCondition
 } from './abacConditions.bicep'
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -363,6 +364,7 @@ type resourceType = {
   userAssignedIdentityCustomerManagedEncryption: userAssignedIdentityConfigType
   userAssignedIdentityKubernetesControlPlane: userAssignedIdentityConfigType
   userAssignedIdentityKubernetesKubelet: userAssignedIdentityConfigType
+  userAssignedIdentityPublishing: userAssignedIdentityConfigType
   virtualNetwork: virtualNetworkConfigType
   vsMarketplace: vsMarketplaceConfigType
 }
@@ -1040,6 +1042,21 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.19.2' = {
                   typeName: 'DeliveryRuleUrlPathMatchConditionParameters'
                 }
               }
+              {
+                // official/* never begins with public/, so this never actually fires today — it
+                // says so explicitly rather than relying on the two prefixes staying disjoint by
+                // accident. The mitigation above is for user-owned /public/*, where the uploader
+                // is untrusted; only CI writes /official/* (officialContentPublisherCondition in
+                // abacConditions.bicep), so there is no stored-content author to defend against.
+                name: 'UrlPath'
+                parameters: {
+                  matchValues: ['official/']
+                  negateCondition: true
+                  operator: 'BeginsWith'
+                  transforms: ['Lowercase']
+                  typeName: 'DeliveryRuleUrlPathMatchConditionParameters'
+                }
+              }
             ]
             matchProcessingBehavior: 'Continue'
             name: 'SetPublicContentDisposition'
@@ -1108,6 +1125,39 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.19.2' = {
               {
                 name: 'UrlRewrite'
                 parameters: {
+                  // Official content has one writer (CI) and no per-tenant story, so unlike
+                  // BlobPublicUrlRewrite's per-tenant reorder this bakes the platform's own
+                  // identity in place of a tenant segment — the same move FaviconUrlRewrite makes
+                  // below. {url_path:seg1:...} is everything after the literal "official/" the
+                  // condition matched, carried through unchanged.
+                  destination: '/${frontDoor_userAssignedIdentity.outputs.principalId}/public/puck/official/{url_path:seg1:2147483647}'
+                  preserveUnmatchedPath: false
+                  sourcePattern: '/'
+                  typeName: 'DeliveryRuleUrlRewriteActionParameters'
+                }
+              }
+            ]
+            conditions: [
+              {
+                name: 'UrlPath'
+                parameters: {
+                  matchValues: ['official/']
+                  negateCondition: false
+                  operator: 'BeginsWith'
+                  transforms: ['Lowercase']
+                  typeName: 'DeliveryRuleUrlPathMatchConditionParameters'
+                }
+              }
+            ]
+            matchProcessingBehavior: 'Stop'
+            name: 'OfficialContentRewrite'
+            order: 4
+          }
+          {
+            actions: [
+              {
+                name: 'UrlRewrite'
+                parameters: {
                   destination: '/${frontDoor_userAssignedIdentity.outputs.principalId}/private/favicon.ico'
                   preserveUnmatchedPath: false
                   sourcePattern: '/'
@@ -1129,7 +1179,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.19.2' = {
             ]
             matchProcessingBehavior: 'Stop'
             name: 'FaviconUrlRewrite'
-            order: 4
+            order: 5
           }
         ]
       }
@@ -2499,6 +2549,67 @@ module publicFlexApi_publicFilesRoleAssignmentFrontDoor './avm-temp/resource-rol
     }
   }
 ]
+// Official content: the CI publishing identity gets write access to exactly its own prefix, in
+// the platform's own container (named by the Front Door identity's principal id — the same
+// container avm-temp/ptn/platform/public-flex-api/main.bicep provisions for platform-owned public
+// content such as favicon.ico). Scoped to that one container, never the account, so a broadened
+// publisher grant can never reach a tenant's data.
+module publicFlexApi_officialContentRoleAssignmentPublisher './avm-temp/resource-role-assignment/main.bicep' = {
+  dependsOn: [publicFlexApi]
+  params: {
+    condition: officialContentPublisherCondition()
+    description: 'Publishing pipeline: CI writes puck.official.v1 content under public/puck/official.'
+    enableTelemetry: false
+    name: guid(
+      resourceId(
+        'Microsoft.Storage/storageAccounts/blobServices/containers',
+        publicStorageAccounts[0].name,
+        'default',
+        frontDoor_userAssignedIdentity.outputs.principalId
+      ),
+      userAssignedIdentityPublishing.outputs.principalId,
+      'Storage Blob Data Contributor'
+    )
+    principalId: userAssignedIdentityPublishing.outputs.principalId
+    principalType: 'ServicePrincipal'
+    resourceId: resourceId(
+      'Microsoft.Storage/storageAccounts/blobServices/containers',
+      publicStorageAccounts[0].name,
+      'default',
+      frontDoor_userAssignedIdentity.outputs.principalId
+    )
+    roleDefinitionId: az.roleDefinitions('Storage Blob Data Contributor').id
+  }
+}
+// docs.yml (the Docs workflow) uploads docs/api and docs/site output straight to $web via
+// az storage blob sync/upload, authenticated as this identity over OIDC — it needs the same
+// container-scoped write access the portal deploy identity gets above, just for a different writer.
+module publicFlexApi_staticSiteRoleAssignmentPublishing './avm-temp/resource-role-assignment/main.bicep' = {
+  dependsOn: [publicFlexApi]
+  params: {
+    description: 'Docs workflow: static-site container only.'
+    enableTelemetry: false
+    name: guid(
+      resourceId(
+        'Microsoft.Storage/storageAccounts/blobServices/containers',
+        publicStorageAccounts[0].name,
+        'default',
+        storage.staticSiteContainerName
+      ),
+      userAssignedIdentityPublishing.outputs.principalId,
+      'Storage Blob Data Contributor'
+    )
+    principalId: userAssignedIdentityPublishing.outputs.principalId
+    principalType: 'ServicePrincipal'
+    resourceId: resourceId(
+      'Microsoft.Storage/storageAccounts/blobServices/containers',
+      publicStorageAccounts[0].name,
+      'default',
+      storage.staticSiteContainerName
+    )
+    roleDefinitionId: az.roleDefinitions('Storage Blob Data Contributor').id
+  }
+}
 module redisCache 'br/public:avm/res/cache/redis-enterprise:0.5.1' = {
   params: {
     availabilityZones: (enableZoneRedundancy ? [1, 2, 3] : [])
@@ -2627,6 +2738,31 @@ module userAssignedIdentityKubernetesKubelet 'br/public:avm/res/managed-identity
       }
     ]
     tags: resources.userAssignedIdentityKubernetesKubelet.?tags
+  }
+}
+// The GitHub OIDC-federated identity docs.yml (the Docs workflow) logs in as via azure/login,
+// publishing DocFX output and the marketing site to $web — see the federatedIdentityCredentials
+// subject below and the docs.yml workflow header for the environment name and OIDC contract this
+// mirrors. Modelled as a real resource (not a hand-provisioned principal id) because these
+// bytrc* resources are Puck's own and this template is their single source of truth.
+module userAssignedIdentityPublishing 'br/public:avm/res/managed-identity/user-assigned-identity:0.5.0' = {
+  params: {
+    enableTelemetry: enableTelemetry
+    federatedIdentityCredentials: [
+      {
+        audiences: ['api://AzureADTokenExchange']
+        issuer: 'https://token.actions.githubusercontent.com'
+        name: 'GitHubActionsDocsPublishing'
+        subject: 'repo:ByteTerrace/Puck:environment:Blobs'
+      }
+    ]
+    location: location
+    lock: {
+      kind: lockKind
+    }
+    name: resources.userAssignedIdentityPublishing.name
+    roleAssignments: []
+    tags: resources.userAssignedIdentityPublishing.?tags
   }
 }
 
@@ -3004,7 +3140,17 @@ output actorsEndpoint string = 'https://${actors_containerApplication.outputs.fq
 output configurationStoreEndpoint string = configurationStore.outputs.endpoint
 output containerRegistryEndpoint string = (containerRegistry.?outputs.loginServer ?? '')
 output functionApplicationEndpoint string = 'https://${publicFlexApi.outputs.function.defaultHostname}/api'
+// The literal puck.byteterrace.com host, not derived from resources.frontDoor.routes[].customDomains:
+// main.bicep has no structured "the" primary domain parameter (the .bicepparam file only ever
+// builds per-route customDomains strings), and OfficialContentRewrite is a fixed alias regardless
+// of which custom domain a request arrived on.
+output officialContentBaseUrl string = 'https://puck.byteterrace.com/official'
+output officialContentContainerName string = frontDoor_userAssignedIdentity.outputs.principalId
 output postgreSqlEndpoint string = (postgreSql.?outputs.fqdn ?? '')
+// docs.yml's azure/login step consumes these two: AZURE_CLIENT_ID from clientId, plus the repo's
+// own AZURE_TENANT_ID/AZURE_SUBSCRIPTION_ID variables — see CHECKLIST.md.
+output publishingIdentityClientId string = userAssignedIdentityPublishing.outputs.clientId
+output publishingIdentityPrincipalId string = userAssignedIdentityPublishing.outputs.principalId
 output redisCacheEndpoint string = redisCache.outputs.endpoint
 output staticSiteEndpoint string = '${publicFlexApi.outputs.publicStorage[0].primaryBlobEndpoint}${storage.staticSiteContainerName}/index.html'
 

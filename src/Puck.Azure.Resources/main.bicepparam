@@ -249,6 +249,7 @@ param resources = {
           apexDomainName
           'api.${apexDomainName}'
           'portal.${apexDomainName}'
+          'puck.${apexDomainName}'
           'www.${apexDomainName}'
           'bytrc.com'
         ]
@@ -264,6 +265,7 @@ param resources = {
           apexDomainName
           'blob.${apexDomainName}'
           'portal.${apexDomainName}'
+          'puck.${apexDomainName}'
           'www.${apexDomainName}'
           'bytrc.com'
         ]
@@ -286,6 +288,7 @@ param resources = {
           apexDomainName
           'blob.${apexDomainName}'
           'portal.${apexDomainName}'
+          'puck.${apexDomainName}'
           'www.${apexDomainName}'
           'bytrc.com'
         ]
@@ -294,6 +297,7 @@ param resources = {
         originPath: '/'
         patternsToMatch: [
           '/favicon.ico'
+          '/official/*'
           '/public/*'
         ]
         ruleSets: ['blob']
@@ -324,6 +328,7 @@ param resources = {
         customDomains: [
           apexDomainName
           'portal.${apexDomainName}'
+          'puck.${apexDomainName}'
           'www.${apexDomainName}'
           'bytrc.com'
         ]
@@ -418,6 +423,10 @@ param resources = {
   }
   userAssignedIdentityKubernetesKubelet: {
     name: '${prefix}idp005'
+  }
+  // bytrcidpzzz: the GitHub OIDC-federated identity the Docs workflow (docs.yml) publishes with.
+  userAssignedIdentityPublishing: {
+    name: '${prefix}idpzzz'
   }
   virtualNetwork: {
     addressPrefixes: ['10.64.0.0/20']

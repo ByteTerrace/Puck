@@ -106,4 +106,26 @@ func frontDoorPublicContentReadCondition() string => join(
   ],
   ' AND '
 )
+// The CI publishing identity (puck official upload) writes only to the platform's own container
+// (named by the Front Door identity's principal id), under one fixed prefix. Unlike
+// byteTerraceApiHostStorageUserCondition (any non-private path) this grants no delete-only
+// carve-out and no cross-prefix read: official content has one writer, so there is no
+// migration-drain or Frozen-metadata story to accommodate.
+@export()
+func officialContentPublisherCondition() string => join(
+  [
+    clause(
+      [
+        blobAction('add/action')
+        blobAction('delete')
+        blobAction('move/action')
+        blobReadAction()
+        blobAction('write')
+      ],
+      [allOf([isNotSystemContainer(), blobPathIsUnder('public/puck/official')])]
+    )
+    clause([blobListAction()], [listPrefixIsUnderAnyOf(['public/puck/official'])])
+  ],
+  ' AND '
+)
 
