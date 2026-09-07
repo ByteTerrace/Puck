@@ -345,6 +345,11 @@ internal static partial class CanaryCommand {
     /// of its own (it never listens for federation in this fixture), so Puck.World's own boot-instance fallback
     /// names it — see Program.cs's own remarks on why that fallback exists.</summary>
     private const string CanaryClientAuthoritySubject = Puck.World.WorldDefinitionLoader.BootInstanceName;
+    // The census section a federated fixture raises so an arrival from a peer has a slot to land in. KEEP IN SYNC
+    // with WorldBodiesDefaults' own JSON name: bodies.networkPlayers defaults to 0, so a fixture that raises the
+    // wrong member reads as a world that admits nobody, and every crossing is refused on arrival rather than
+    // failing to compose.
+    private const string WorldBodiesSectionName = "bodies";
 
     private static FederationIdentity GenerateFederationIdentity() {
         using var ecdsa = System.Security.Cryptography.ECDsa.Create(curve: System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
@@ -365,22 +370,67 @@ internal static partial class CanaryCommand {
         ["publicKey"] = peer.PublicKeyBase64,
         ["grants"] = new JsonArray(),
     };
+    // Stages every world a federated leg boots into the run's own tree, mirrored whole from the nearest directory
+    // holding all of them, and answers the staged path for each source path. A leg's worlds are patched copies —
+    // each carries its own endpoint and admission rows — so every reference they resolve must land on a copy rather
+    // than on the shipped asset, which means the staged tree has to have the shipped tree's SHAPE, not just its
+    // booted files: a shard names its basis one directory up, that basis names imports one directory down again,
+    // and an adjacency `references` row names a sibling. Anything short of the mirror leaves one of those three
+    // resolving to nothing, and the process refuses its own definition before it ever listens.
+    private static Dictionary<string, string> StageFederatedWorlds(IReadOnlyCollection<string> worldPaths, string federatedDirectory) {
+        var full = new List<(string Given, string Resolved)>(capacity: worldPaths.Count);
+
+        foreach (var path in worldPaths) {
+            full.Add(item: (path, Path.GetFullPath(path: path)));
+        }
+
+        var root = Path.GetDirectoryName(path: full[0].Resolved)!;
+
+        for (var index = 1; (index < full.Count); index++) {
+            var candidate = Path.GetDirectoryName(path: full[index].Resolved)!;
+
+            while (Path.GetRelativePath(path: candidate, relativeTo: root).StartsWith(value: "..", comparisonType: StringComparison.Ordinal)) {
+                var parent = Path.GetDirectoryName(path: root);
+
+                if (string.IsNullOrEmpty(value: parent)) {
+                    throw new InvalidOperationException(message: $"federated worlds '{full[0].Resolved}' and '{full[index].Resolved}' share no directory to stage from.");
+                }
+
+                root = parent;
+            }
+        }
+
+        CopyDirectory(source: root, target: federatedDirectory);
+
+        var staged = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (given, resolved) in full) {
+            staged[given] = Path.Combine(
+                path1: federatedDirectory,
+                path2: Path.GetRelativePath(path: resolved, relativeTo: root)
+            );
+        }
+
+        return staged;
+    }
+    private static void CopyDirectory(string source, string target) {
+        Directory.CreateDirectory(path: target);
+
+        foreach (var file in Directory.GetFiles(path: source)) {
+            File.Copy(destFileName: Path.Combine(path1: target, path2: Path.GetFileName(path: file)), overwrite: true, sourceFileName: file);
+        }
+
+        foreach (var directory in Directory.GetDirectories(path: source)) {
+            CopyDirectory(source: directory, target: Path.Combine(path1: target, path2: Path.GetFileName(path: directory)));
+        }
+    }
     private static (string ClientWorld, string AuthorityWorld) PrepareFederatedWorlds(CanaryLeg leg, string runDirectory, string endpoint, FederationIdentity clientIdentity, FederationIdentity authorityIdentity) {
-        var sourceDirectory = Path.GetDirectoryName(path: leg.WorldPath)!;
         var federatedDirectory = Path.Combine(path1: runDirectory, path2: "federated-worlds");
-
-        Directory.CreateDirectory(path: federatedDirectory);
-
-        foreach (var source in Directory.GetFiles(path: sourceDirectory, searchOption: SearchOption.TopDirectoryOnly, searchPattern: "*.world.json")) {
-            File.Copy(sourceFileName: source, destFileName: Path.Combine(path1: federatedDirectory, path2: Path.GetFileName(path: source)), overwrite: true);
-        }
-
-        var authoritySource = leg.AuthorityWorldPath!;
-        var authorityTarget = Path.Combine(path1: federatedDirectory, path2: Path.GetFileName(path: authoritySource));
-
-        if (!File.Exists(path: authorityTarget)) {
-            File.Copy(destFileName: authorityTarget, overwrite: true, sourceFileName: authoritySource);
-        }
+        var staged = StageFederatedWorlds(
+            federatedDirectory: federatedDirectory,
+            worldPaths: [leg.WorldPath, leg.AuthorityWorldPath!]
+        );
+        var authorityTarget = staged[leg.AuthorityWorldPath!];
 
         var root = (JsonNode.Parse(json: File.ReadAllText(path: authorityTarget))?.AsObject()
             ?? throw new InvalidOperationException(message: "authority world is not a JSON object"));
@@ -396,7 +446,7 @@ internal static partial class CanaryCommand {
         var composedAdmission = new JsonArray();
 
         if (Puck.World.WorldDefinitionFileSource.TryComposeDocumentTree(path: authorityTarget, reason: out _, tree: out var composed)) {
-            if (composed!["population"] is JsonObject composedPopulation) {
+            if (composed![WorldBodiesSectionName] is JsonObject composedPopulation) {
                 composedCapacity = Math.Max(val1: composedCapacity, val2: (composedPopulation["capacity"]?.GetValue<int>() ?? composedCapacity));
                 composedNetworkPlayers = Math.Max(val1: composedNetworkPlayers, val2: (composedPopulation["networkPlayers"]?.GetValue<int>() ?? composedNetworkPlayers));
             }
@@ -415,9 +465,9 @@ internal static partial class CanaryCommand {
         host["listen"] = endpoint;
         host["authority"] = endpoint;
 
-        if (root["population"] is not JsonObject population) {
+        if (root[WorldBodiesSectionName] is not JsonObject population) {
             population = new JsonObject();
-            root["population"] = population;
+            root[WorldBodiesSectionName] = population;
         }
 
         population["capacity"] = composedCapacity;
@@ -434,7 +484,7 @@ internal static partial class CanaryCommand {
         // fallback, see CanaryClientAuthoritySubject's own remarks) and it never listens for federation in this
         // fixture, so it never verifies an inbound claim and needs no admission rows of its own. A --connect leg
         // therefore still boots from the pristine, unmodified checked-in asset.
-        return ((leg.Connect ? leg.WorldPath : Path.Combine(path1: federatedDirectory, path2: Path.GetFileName(path: leg.WorldPath))), authorityTarget);
+        return ((leg.Connect ? leg.WorldPath : staged[leg.WorldPath]), authorityTarget);
     }
     // A federated mesh leg (leg.Authorities.Count != 0, CANARY-SHAPE.md's N-ary shape): every authority is a
     // listener bound to its own dynamic loopback port, none dials out, and neighbours resolve each other by reading
@@ -444,17 +494,10 @@ internal static partial class CanaryCommand {
     private static CanaryLegRun RunFederatedMeshLeg(CanaryManifest manifest, CanaryLeg leg, string artifact, CanaryBudget budget) {
         var runDirectory = CreateRunDirectory(id: manifest.Id, leg: leg.Name);
         var federatedDirectory = Path.Combine(path1: runDirectory, path2: "federated-worlds");
-
-        Directory.CreateDirectory(path: federatedDirectory);
-
-        // Every authority's world.json lives beside the leg's own (the quilt documents are siblings), so one sweep
-        // of the leg's own directory seeds every authority's copy before any of them is individually patched.
-        var sourceDirectory = Path.GetDirectoryName(path: leg.WorldPath)!;
-
-        foreach (var source in Directory.GetFiles(path: sourceDirectory, searchOption: SearchOption.TopDirectoryOnly, searchPattern: "*.world.json")) {
-            File.Copy(sourceFileName: source, destFileName: Path.Combine(path1: federatedDirectory, path2: Path.GetFileName(path: source)), overwrite: true);
-        }
-
+        var stagedWorlds = StageFederatedWorlds(
+            federatedDirectory: federatedDirectory,
+            worldPaths: [leg.WorldPath, .. leg.Authorities.Select(selector: static role => role.WorldPath)]
+        );
         var identities = new Dictionary<string, FederationIdentity>(comparer: StringComparer.Ordinal);
         var endpoints = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
         var patchedWorldPaths = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
@@ -466,11 +509,7 @@ internal static partial class CanaryCommand {
         }
 
         foreach (var role in leg.Authorities) {
-            var target = Path.Combine(path1: federatedDirectory, path2: Path.GetFileName(path: role.WorldPath));
-
-            if (!File.Exists(path: target)) {
-                File.Copy(sourceFileName: role.WorldPath, destFileName: target, overwrite: true);
-            }
+            var target = stagedWorlds[role.WorldPath];
 
             PatchMeshAuthorityDocument(endpoints: endpoints, identities: identities, selfId: role.Id, targetPath: target);
             patchedWorldPaths[role.Id] = target;
@@ -618,7 +657,7 @@ internal static partial class CanaryCommand {
         var composedAdmission = new JsonArray();
 
         if (Puck.World.WorldDefinitionFileSource.TryComposeDocumentTree(path: targetPath, reason: out _, tree: out var composed)) {
-            if (composed!["population"] is JsonObject composedPopulation) {
+            if (composed![WorldBodiesSectionName] is JsonObject composedPopulation) {
                 composedCapacity = Math.Max(val1: composedCapacity, val2: (composedPopulation["capacity"]?.GetValue<int>() ?? composedCapacity));
                 composedNetworkPlayers = Math.Max(val1: composedNetworkPlayers, val2: (composedPopulation["networkPlayers"]?.GetValue<int>() ?? composedNetworkPlayers));
             }
@@ -637,9 +676,9 @@ internal static partial class CanaryCommand {
         host["listen"] = endpoints[selfId];
         host["authority"] = endpoints[selfId];
 
-        if (root["population"] is not JsonObject population) {
+        if (root[WorldBodiesSectionName] is not JsonObject population) {
             population = new JsonObject();
-            root["population"] = population;
+            root[WorldBodiesSectionName] = population;
         }
 
         population["capacity"] = composedCapacity;
