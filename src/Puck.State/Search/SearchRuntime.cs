@@ -84,6 +84,15 @@ public sealed partial class SearchRuntime {
                 TtValue = new long[SearchCapacity.TranspositionEntries];
                 TtMeta = new long[SearchCapacity.TranspositionEntries];
             }
+            if (plan.Chance is not null) {
+                var frames = new StateFrame[plan.Depth + 1];
+
+                for (var index = 0; index < frames.Length; index++) {
+                    frames[index] = new StateFrame(layout: layout, rows: rows);
+                }
+
+                ChanceFrames = frames;
+            }
             if (plan.Method == SearchMethod.Tree) {
                 var nodes = SearchCapacity.TreeNodes;
 
@@ -166,6 +175,10 @@ public sealed partial class SearchRuntime {
         public long Alpha { get; set; } = -SearchCapacity.MateScore;
         public long Beta { get; set; } = SearchCapacity.MateScore;
         public Level[] Levels { get; set; }
+
+        // Pooled scratch frames a chance node's own bounded recursive negamax reuses by recursion depth, allocated
+        // once for a chance-bearing job so its tick never allocates; null for a job with no chance node.
+        public StateFrame[]? ChanceFrames { get; set; }
 
         public static StateRow[]? ResolveZones(SearchPlan plan, IReadOnlyList<StateRow> rows) {
             if (plan.Zones.Length == 0) {
@@ -289,6 +302,22 @@ public sealed partial class SearchRuntime {
                     } else {
                         kept.UctFrame!.Rebind(rows: rows);
                         kept.PlayFrame!.Rebind(rows: rows);
+                    }
+                }
+                if (kept.ChanceFrames is not null) {
+                    if (layoutRebuilt || (kept.ChanceFrames.Length != (plan.Depth + 1))) {
+                        var frames = new StateFrame[plan.Depth + 1];
+
+                        for (var frameIndex = 0; frameIndex < frames.Length; frameIndex++) {
+                            frames[frameIndex] = new StateFrame(layout: m_layout, rows: rows);
+                        }
+
+                        kept.ChanceFrames = frames;
+                        kept.Stamp = 0UL;
+                    } else {
+                        foreach (var frame in kept.ChanceFrames) {
+                            frame.Rebind(rows: rows);
+                        }
                     }
                 }
 
@@ -659,6 +688,12 @@ public sealed partial class SearchRuntime {
 
             job.UctFrame?.Rebind(rows: rows);
             job.PlayFrame?.Rebind(rows: rows);
+
+            if (job.ChanceFrames is { } chanceFrames) {
+                foreach (var frame in chanceFrames) {
+                    frame.Rebind(rows: rows);
+                }
+            }
         }
     }
     // A job is sized by its token row's live cell count: a token row filled or emptied by a mutation since the last

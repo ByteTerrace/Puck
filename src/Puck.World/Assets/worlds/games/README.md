@@ -149,3 +149,45 @@ and [Microsoft Spider Solitaire](https://en.wikipedia.org/wiki/Microsoft_Spider_
 identify the bundled games; the
 [FreeCell FAQ](https://www.solitairelaboratory.com/fcfaq.html) distinguishes legal
 single-card play from limitations in older automatic multi-card shortcuts.
+
+## Backgammon — the chance-node probe
+
+[backgammon.world.json](backgammon.world.json) is a standalone, self-contained
+document (its own `documentId`, headless `host.presentation: "none"`) rather
+than an importable module: the market's probe for the `search` section's
+`chance` node, run on its own rather than composed into the island. A `points`
+ring topology of 24 cells carries four checkers (`checkerPoint`, keyed `w0`/`w1`
+for white, `b0`/`b1` for black; off the ring at `-1` means on the bar), a
+two-cell `dice` row draws `uniformRange 1..6` on each cell (`world.generate
+dice` rerolls it), and `cube` is a plain, inert row standing in for the
+doubling cube. One `ai` search job supplies both seats: `relocate`
+(`displace: false` — checkers share a point, no hitting) and `drop` (bar entry)
+are its shapes, `depth: 2` with a `chance` node at ply 1 averages the position
+over the 36 dice pairs the search's own next roll might be, and `score` reads
+each side's own pip progress. Four per-checker judge rules (`backgammon-legal-*`) compute legality against a
+shadow `origPoint` row: an ordinary rule, `backgammon-sync-orig`, keeps it
+mirrored to `checkerPoint` on every real tick (a hypothetical candidate's own
+scratch copy never persists past its own judge pass, so `origPoint` still
+reads the real pre-move position inside one). The classic backgammon check —
+no other move while a checker of the same side sits on the bar — reads as
+`origPoint[<other checker>] != -1` in each of the four expressions.
+
+Two deliberate reductions, stated plainly rather than left to be discovered:
+hitting is not modelled (`displace: false`, no blot/point-ownership check), and
+bearing checkers off the board is not a distinct removal step — a side's
+checkers reaching their own endpoint (23 for white, 0 for black) stands in for
+it. Both are honest simplifications of a probe proving the chance-node
+primitive, not the licensed rules of backgammon. Setting a starting position
+must author it into the document rather than poke a live `checkerPoint`/`dice`
+cell post-boot: those cells are exactly what the four judge rules above watch,
+so an external write crosses the same rules the search's own hypothetical walk
+does and flips `turn` for real before anything else runs.
+
+[SearchChanceLawTests](../../../../../tests/Puck.State.Tests/SearchChanceLawTests.cs)
+proves the chance mechanism itself — an expectiminimax value over a two-outcome
+chance equalling the hand-computed average, and a `Method: Tree` job's playout
+drawing from the job's own stream so two independently built runtimes with the
+same seed make the same choice.
+[BackgammonLawTests](../../../../../tests/Puck.World.Tests/BackgammonLawTests.cs)
+proves the document: the bar-occupied refusal (with its control — a checker's
+own bar entry stays legal) and the same position with a clear bar.

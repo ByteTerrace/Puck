@@ -27,6 +27,9 @@ public static class SearchCapacity {
     /// negamax search window's width — shifted down from <see cref="long.MaxValue"/> so a value repeatedly negated
     /// and compared across the deepest authored search never overflows.</summary>
     public const long MateScore = (long.MaxValue >> 2);
+    /// <summary>The most outcomes one <see cref="SearchChancePlan"/> may bake — the cross product of its row's own
+    /// generator's domain across every one of the row's cells (two six-sided dice bakes 36).</summary>
+    public const int MaxChanceOutcomes = 64;
 }
 
 /// <summary>How a job with a score compares plies.</summary>
@@ -80,6 +83,20 @@ public sealed record SearchShapePlan(SearchShapeKind Kind, bool Displace, int[] 
     };
 }
 
+/// <summary>One search job's baked chance node: the ply whose move choice the job's search averages over instead of
+/// choosing, and the outcome table a document project bakes once from the row's own declared generator (its cells'
+/// cross product — two dice of <c>uniformRange 1..6</c> bake 36 outcomes) so <see cref="SearchRuntime"/> reads pure
+/// data. Negamax computes the exact weighted average over every outcome at <see cref="AtDepth"/>; a
+/// <see cref="SearchMethod.Tree"/> job instead samples one outcome per playout at the ply its own playout numbering
+/// reaches <see cref="AtDepth"/>, from the job's own stream.</summary>
+/// <param name="Row">The row a chosen outcome writes.</param>
+/// <param name="AtDepth">Negamax: the absolute ply (0 = root) whose move choice is replaced. Tree: the 1-based
+/// playout ply at which the playout draws instead of choosing a candidate.</param>
+/// <param name="CellCount">How many cells <paramref name="Row"/> has, in its own cell order.</param>
+/// <param name="Outcomes">Every outcome's per-cell values, flattened outcome-major (<c>outcome * CellCount + cell</c>).</param>
+/// <param name="Weights">Every outcome's relative weight, one per stride of <paramref name="Outcomes"/>.</param>
+public sealed record SearchChancePlan(string Row, int AtDepth, int CellCount, long[] Outcomes, ulong[] Weights);
+
 /// <summary>One search job's fully resolved plan — every row it reads or writes, by name, plus the compiled shapes
 /// and the per-tick node quota. A document project derives this from its own authored row (validating it against
 /// the document, resolving row and topology references) and hands the plan to <see cref="SearchRuntime"/>, which
@@ -109,6 +126,7 @@ public sealed record SearchShapePlan(SearchShapeKind Kind, bool Displace, int[] 
 /// <param name="Accept">The verdict value that accepts a candidate.</param>
 /// <param name="Method">How the job compares plies by its score.</param>
 /// <param name="Iterations">The tree iterations a <see cref="SearchMethod.Tree"/> job runs.</param>
+/// <param name="Chance">The job's baked chance node, or <see langword="null"/> for a job with none.</param>
 public sealed record SearchPlan(
     string Name,
     string Tokens,
@@ -130,7 +148,8 @@ public sealed record SearchPlan(
     string? Counts = null,
     long Accept = 1L,
     SearchMethod Method = SearchMethod.Negamax,
-    int Iterations = 0
+    int Iterations = 0,
+    SearchChancePlan? Chance = null
 );
 
 /// <summary>One state write a finished search job wants applied, through whatever mutation door the document

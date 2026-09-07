@@ -69,6 +69,18 @@ public abstract record WorldSearchShape {
     public sealed record Transferred(ZoneSelector Selector = ZoneSelector.Last, bool InsertFirst = false) : WorldSearchShape;
 }
 
+/// <summary>A job's chance node: the ply whose move choice the search averages over instead of choosing, weighted
+/// by <see cref="Row"/>'s own draw — every one of its cells must carry a <c>draw</c> facet naming a
+/// <c>uniformRange</c> or <c>weightedNumeric</c> generator, enumerated as their cross product rather than sampled
+/// (two dice of <c>uniformRange 1..6</c> bakes 36 outcomes). Negamax computes the exact weighted average at
+/// <see cref="AtDepth"/>; a <see cref="SearchMethod.Tree"/> job instead draws one outcome per playout, from its own
+/// stream, at the playout ply its own 1-based numbering reaches <see cref="AtDepth"/>.</summary>
+/// <param name="Row">The keyed integer row a chosen outcome writes.</param>
+/// <param name="AtDepth">Negamax: the absolute ply (0 = root) whose move choice is replaced, <c>0..depth-1</c>.
+/// Tree: the 1-based playout ply the chance draw replaces.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldSearchChance(string Row, int AtDepth);
+
 /// <summary>One search job.</summary>
 /// <param name="Name">The stable job name.</param>
 /// <param name="Tokens">The keyed integer row whose cells are the tokens and whose values are the board cells they
@@ -107,6 +119,7 @@ public abstract record WorldSearchShape {
 /// <param name="Method">How plies are compared by the score: <see cref="SearchMethod.Negamax"/> to the depth cap,
 /// or <see cref="SearchMethod.Tree"/>, which reads the score where no candidate is accepted or at the cap.</param>
 /// <param name="Iterations">How many tree iterations a <see cref="SearchMethod.Tree"/> job runs before it lands.</param>
+/// <param name="Chance">The job's chance node, or <see langword="null"/> for a job with none.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldSearchRow(
     string Name,
@@ -125,7 +138,8 @@ public sealed record WorldSearchRow(
     string? Score = null,
     string? Best = null,
     SearchMethod Method = SearchMethod.Negamax,
-    int Iterations = 256
+    int Iterations = 256,
+    WorldSearchChance? Chance = null
 ) {
     /// <summary>The one candidate shape a job with none authored enumerates: a plain relocation that evicts
     /// whatever stood on the target — this section's original, unconditional behavior.</summary>
@@ -551,12 +565,133 @@ public static class WorldSearchCompilation {
             return false;
         }
 
+        SearchChancePlan? chance = null;
+
+        if (row.Chance is { } chanceRow) {
+            if ((chanceRow.AtDepth < 0) || (chanceRow.AtDepth >= row.Depth)) {
+                reason = $"search '{row.Name}' chance atDepth {chanceRow.AtDepth} must lie in 0..{row.Depth - 1}";
+
+                return false;
+            }
+            if (row.Score is null) {
+                reason = $"search '{row.Name}' chance needs a score to average over — declare one, as a depth past one already requires";
+
+                return false;
+            }
+            if (!TryBuildChance(definition: definition, jobName: row.Name, chanceRow: chanceRow, chance: out chance, reason: out reason)) {
+                return false;
+            }
+        }
+
         plan = new SearchPlan(
             Name: row.Name, Tokens: row.Tokens, Topology: topology, Zones: zones, CellCount: cellCount, Turn: turnName, Verdict: verdictName, Off: off,
             Nodes: (row.Nodes ?? derived), JudgeCost: judgeCost, Depth: row.Depth, Score: score, Best: row.Best, Shapes: shapes,
             Legal: row.Legal, Reach: row.Reach, Held: row.Held, Counts: row.Counts,
-            Accept: (binding?.Accept ?? 1L), Method: row.Method, Iterations: row.Iterations
+            Accept: (binding?.Accept ?? 1L), Method: row.Method, Iterations: row.Iterations, Chance: chance
         );
+        reason = string.Empty;
+
+        return true;
+    }
+
+    // Bakes a chance row's own generator into every one of its outcomes, in the row's own cell order, as their
+    // cross product: two cells of uniformRange 1..6 bake the 36 ordered dice pairs. The one place the runtime's
+    // pure-data SearchChancePlan is built from a document's generator vocabulary.
+    private static bool TryBuildChance(WorldDefinition definition, string jobName, WorldSearchChance chanceRow, out SearchChancePlan? chance, out string reason) {
+        chance = null;
+
+        if (WorldDefinitionRows.FindStateRow(rows: definition.State, name: chanceRow.Row) is not { IsKeyed: true, Kind: CellKind.Int } row || (row.Cells is not { Count: > 0 } cells)) {
+            reason = $"search '{jobName}' chance row '{chanceRow.Row}' must be a keyed integer row with at least one cell";
+
+            return false;
+        }
+        if (row.Draw is not { } draw) {
+            reason = $"search '{jobName}' chance row '{chanceRow.Row}' declares no draw facet — a chance node bakes the row's own generator";
+
+            return false;
+        }
+        if (!GeneratorEngine.TryResolveSource(generators: definition.Generators, draw: draw, generator: out var generator, reason: out var sourceReason)) {
+            reason = $"search '{jobName}' chance row '{chanceRow.Row}': {sourceReason}";
+
+            return false;
+        }
+
+        (long Value, ulong Weight)[] perCell;
+
+        switch (generator.Source) {
+            case GeneratorSource.UniformRange: {
+                var span = (generator.RangeMax!.Value - generator.RangeMin!.Value + 1);
+
+                if ((span <= 0) || (span > SearchCapacity.MaxChanceOutcomes)) {
+                    reason = $"search '{jobName}' chance row '{chanceRow.Row}' generator spans {span} values; one cell's own span must lie in 1..{SearchCapacity.MaxChanceOutcomes}";
+
+                    return false;
+                }
+
+                perCell = new (long, ulong)[span];
+
+                for (var index = 0; index < span; index++) {
+                    perCell[index] = ((generator.RangeMin.Value + index), 1UL);
+                }
+
+                break;
+            }
+            case GeneratorSource.WeightedNumeric: {
+                var outcomes = (generator.Weighted ?? []);
+
+                if (outcomes.Count == 0) {
+                    reason = $"search '{jobName}' chance row '{chanceRow.Row}' generator declares no weighted outcome";
+
+                    return false;
+                }
+
+                perCell = new (long, ulong)[outcomes.Count];
+
+                for (var index = 0; index < outcomes.Count; index++) {
+                    perCell[index] = (outcomes[index].Value, (outcomes[index].Weight * (ulong)Math.Max(val1: 1, val2: (outcomes[index].Multiplicity ?? 1))));
+                }
+
+                break;
+            }
+            default:
+                reason = $"search '{jobName}' chance row '{chanceRow.Row}' generator must be uniformRange or weightedNumeric, not {generator.Source}";
+
+                return false;
+        }
+
+        var cellCount = cells.Count;
+        var outcomeCount = 1L;
+
+        for (var index = 0; index < cellCount; index++) {
+            outcomeCount *= perCell.Length;
+
+            if (outcomeCount > SearchCapacity.MaxChanceOutcomes) {
+                reason = $"search '{jobName}' chance row '{chanceRow.Row}' bakes {outcomeCount} outcomes across its {cellCount} cells; the maximum is {SearchCapacity.MaxChanceOutcomes}";
+
+                return false;
+            }
+        }
+
+        var total = (int)outcomeCount;
+        var values = new long[total * cellCount];
+        var weights = new ulong[total];
+
+        for (var outcome = 0; outcome < total; outcome++) {
+            var residue = outcome;
+            var weight = 1UL;
+
+            for (var cell = 0; cell < cellCount; cell++) {
+                var index = (residue % perCell.Length);
+
+                residue /= perCell.Length;
+                values[(outcome * cellCount) + cell] = perCell[index].Value;
+                weight *= perCell[index].Weight;
+            }
+
+            weights[outcome] = weight;
+        }
+
+        chance = new SearchChancePlan(Row: chanceRow.Row, AtDepth: chanceRow.AtDepth, CellCount: cellCount, Outcomes: values, Weights: weights);
         reason = string.Empty;
 
         return true;

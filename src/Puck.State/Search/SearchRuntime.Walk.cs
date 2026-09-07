@@ -27,6 +27,21 @@ public sealed partial class SearchRuntime {
         var scratch = host.Frame;
         var plan = job.Plan;
         var rows = m_base!.Rows;
+
+        // A chance node at the root replaces the whole root's move choice — there is nothing to choose before the
+        // draw, so this job never enumerates a shape and lands its one averaged value in a single step.
+        if (plan.Chance is { AtDepth: 0 } rootChance) {
+            var chanceRow = StateRows.FindStateRow(rows: rows, name: rootChance.Row);
+
+            job.Best = ((chanceRow is not null) ? ChanceExpectation(job: job, position: m_base!, chanceRow: chanceRow, remainingDepth: (job.PassDepth - 1), tick: tick) : 0L);
+            job.BestToken = -1;
+            job.BestTarget = -1;
+            job.Nodes += Math.Max(val1: 1, val2: rootChance.Weights.Length);
+            job.Running = false;
+
+            return;
+        }
+
         var tokens = StateRows.FindStateRow(rows: rows, name: plan.Tokens);
         var turn = StateRows.FindStateRow(rows: rows, name: plan.Turn);
         var verdict = StateRows.FindStateRow(rows: rows, name: plan.Verdict);
@@ -140,7 +155,15 @@ public sealed partial class SearchRuntime {
                     SetWideBit(wide: wide, token: token, cell: target, words: wideWords);
                 }
             }
-            if (hasScore && accepted && (p < (job.PassDepth - 1)) && TryProbeTransposition(job: job, p: p, position: scratch, remaining: (job.PassDepth - p - 1), value: out var known)) {
+            if (hasScore && accepted && (plan.Chance is { } chance) && (chance.AtDepth == (p + 1))) {
+                // The next ply is the job's own chance node: it never enumerates a move of its own, so this candidate
+                // folds directly to the chance-averaged value of the position it reached, exactly as a leaf does.
+                var chanceRow = StateRows.FindStateRow(rows: rows, name: chance.Row);
+                var value = ((chanceRow is not null) ? ChanceExpectation(job: job, position: scratch, chanceRow: chanceRow, remainingDepth: (job.PassDepth - p - 2), tick: tick) : 0L);
+
+                Fold(job: job, p: p, value: value, token: token, target: target);
+                AdvanceCandidate(job: job, p: p, shapes: shapes, cellCount: cells, tokenCount: tokenCells.Count);
+            } else if (hasScore && accepted && (p < (job.PassDepth - 1)) && TryProbeTransposition(job: job, p: p, position: scratch, remaining: (job.PassDepth - p - 1), value: out var known)) {
                 // The child position was searched to at least this depth already: fold its value without descending.
                 Fold(job: job, p: p, value: -known, token: token, target: target);
                 AdvanceCandidate(job: job, p: p, shapes: shapes, cellCount: cells, tokenCount: tokenCells.Count);

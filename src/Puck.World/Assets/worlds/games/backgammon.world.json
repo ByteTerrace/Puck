@@ -1,0 +1,191 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "backgammon-probe",
+  "host": {
+    "presentation": "none",
+    "backend": "auto",
+    "width": 64,
+    "height": 64,
+    "surfaceFormat": "r8g8b8a8",
+    "fullscreen": false,
+    "presentMode": "Immediate",
+    "targetHertz": 0,
+    "exitAfterSeconds": 0,
+    "rayQuery": false,
+    "timing": false,
+    "genlock": null,
+    "listen": null
+  },
+  "simulation": {
+    "rateHz": 30
+  },
+  "generation": {
+    "worldSeed": 424242
+  },
+  "state": {
+    "lattices": [
+      {
+        "$type": "ring",
+        "name": "points",
+        "origin": [0, 0, 0],
+        "cellSize": 1,
+        "width": 24
+      }
+    ],
+    "world": [
+      {
+        "name": "board",
+        "kind": "Int",
+        "domain": { "$type": "cellsOf", "topology": "points" }
+      },
+      {
+        "name": "checkerPoint",
+        "kind": "Int",
+        "min": -1,
+        "max": 23,
+        "cells": [
+          { "key": "w0", "value": 0 },
+          { "key": "w1", "value": 1 },
+          { "key": "b0", "value": 23 },
+          { "key": "b1", "value": 22 }
+        ]
+      },
+      {
+        "name": "origPoint",
+        "kind": "Int",
+        "min": -1,
+        "max": 23,
+        "cells": [
+          { "key": "w0", "value": 0 },
+          { "key": "w1", "value": 1 },
+          { "key": "b0", "value": 23 },
+          { "key": "b1", "value": 22 }
+        ]
+      },
+      {
+        "name": "dice",
+        "kind": "Int",
+        "min": 1,
+        "max": 6,
+        "draw": {
+          "generator": { "source": "UniformRange", "rangeMin": 1, "rangeMax": 6 },
+          "timing": "Event"
+        },
+        "cells": [
+          { "key": "d1", "value": 3 },
+          { "key": "d2", "value": 4 }
+        ]
+      },
+      { "name": "cube", "kind": "Int", "min": 1, "max": 64, "value": 1 },
+      { "name": "turn", "kind": "Int", "min": 0, "max": 1, "value": 0 },
+      { "name": "verdict", "kind": "Int", "min": 0, "max": 1, "value": 0 },
+      {
+        "name": "best",
+        "kind": "Int",
+        "cells": [
+          { "key": "token", "value": 0 },
+          { "key": "to", "value": 0 },
+          { "key": "score", "value": 0 }
+        ]
+      },
+      {
+        "name": "moveCounts",
+        "kind": "Int",
+        "domain": { "$type": "keysOf", "row": "checkerPoint" }
+      }
+    ]
+  },
+  "rules": [
+    {
+      "name": "backgammon-legal-w0",
+      "mode": "Edge",
+      "gate": { "$type": "compareState", "state": "checkerPoint", "key": "w0", "comparison": "NotEqual", "comparandState": "origPoint", "comparandKey": "w0" },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "verdict",
+          "expression": "(turn == 0) & (((origPoint[w0] == -1) & ((checkerPoint[w0] == (dice[d1] - 1)) | (checkerPoint[w0] == (dice[d2] - 1)))) | ((origPoint[w0] != -1) & (origPoint[w1] != -1) & (((checkerPoint[w0] - origPoint[w0]) == dice[d1]) | ((checkerPoint[w0] - origPoint[w0]) == dice[d2]))))"
+        },
+        { "$type": "setState", "state": "turn", "expression": "1 - turn" }
+      ]
+    },
+    {
+      "name": "backgammon-legal-w1",
+      "mode": "Edge",
+      "gate": { "$type": "compareState", "state": "checkerPoint", "key": "w1", "comparison": "NotEqual", "comparandState": "origPoint", "comparandKey": "w1" },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "verdict",
+          "expression": "(turn == 0) & (((origPoint[w1] == -1) & ((checkerPoint[w1] == (dice[d1] - 1)) | (checkerPoint[w1] == (dice[d2] - 1)))) | ((origPoint[w1] != -1) & (origPoint[w0] != -1) & (((checkerPoint[w1] - origPoint[w1]) == dice[d1]) | ((checkerPoint[w1] - origPoint[w1]) == dice[d2]))))"
+        },
+        { "$type": "setState", "state": "turn", "expression": "1 - turn" }
+      ]
+    },
+    {
+      "name": "backgammon-legal-b0",
+      "mode": "Edge",
+      "gate": { "$type": "compareState", "state": "checkerPoint", "key": "b0", "comparison": "NotEqual", "comparandState": "origPoint", "comparandKey": "b0" },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "verdict",
+          "expression": "(turn == 1) & (((origPoint[b0] == -1) & ((checkerPoint[b0] == (24 - dice[d1])) | (checkerPoint[b0] == (24 - dice[d2])))) | ((origPoint[b0] != -1) & (origPoint[b1] != -1) & (((origPoint[b0] - checkerPoint[b0]) == dice[d1]) | ((origPoint[b0] - checkerPoint[b0]) == dice[d2]))))"
+        },
+        { "$type": "setState", "state": "turn", "expression": "1 - turn" }
+      ]
+    },
+    {
+      "name": "backgammon-legal-b1",
+      "mode": "Edge",
+      "gate": { "$type": "compareState", "state": "checkerPoint", "key": "b1", "comparison": "NotEqual", "comparandState": "origPoint", "comparandKey": "b1" },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "verdict",
+          "expression": "(turn == 1) & (((origPoint[b1] == -1) & ((checkerPoint[b1] == (24 - dice[d1])) | (checkerPoint[b1] == (24 - dice[d2])))) | ((origPoint[b1] != -1) & (origPoint[b0] != -1) & (((origPoint[b1] - checkerPoint[b1]) == dice[d1]) | ((origPoint[b1] - checkerPoint[b1]) == dice[d2]))))"
+        },
+        { "$type": "setState", "state": "turn", "expression": "1 - turn" }
+      ]
+    },
+    {
+      "name": "backgammon-sync-orig",
+      "mode": "Edge",
+      "gate": {
+        "$type": "any",
+        "predicates": [
+          { "$type": "compareState", "state": "checkerPoint", "key": "w0", "comparison": "NotEqual", "comparandState": "origPoint", "comparandKey": "w0" },
+          { "$type": "compareState", "state": "checkerPoint", "key": "w1", "comparison": "NotEqual", "comparandState": "origPoint", "comparandKey": "w1" },
+          { "$type": "compareState", "state": "checkerPoint", "key": "b0", "comparison": "NotEqual", "comparandState": "origPoint", "comparandKey": "b0" },
+          { "$type": "compareState", "state": "checkerPoint", "key": "b1", "comparison": "NotEqual", "comparandState": "origPoint", "comparandKey": "b1" }
+        ]
+      },
+      "effects": [
+        { "$type": "setState", "state": "origPoint", "key": "w0", "fromState": "checkerPoint", "fromKey": "w0" },
+        { "$type": "setState", "state": "origPoint", "key": "w1", "fromState": "checkerPoint", "fromKey": "w1" },
+        { "$type": "setState", "state": "origPoint", "key": "b0", "fromState": "checkerPoint", "fromKey": "b0" },
+        { "$type": "setState", "state": "origPoint", "key": "b1", "fromState": "checkerPoint", "fromKey": "b1" }
+      ]
+    }
+  ],
+  "search": {
+    "jobs": [
+      {
+        "name": "ai",
+        "tokens": "checkerPoint",
+        "board": "board",
+        "turn": "turn",
+        "verdict": "verdict",
+        "shapes": [
+          { "$type": "relocate", "displace": false },
+          { "$type": "drop" }
+        ],
+        "best": "best",
+        "counts": "moveCounts",
+        "depth": 2,
+        "score": "(turn == 1) ? (checkerPoint[w0] + checkerPoint[w1] - dice[d1] - dice[d2]) : ((23 - checkerPoint[b0]) + (23 - checkerPoint[b1]) - dice[d1] - dice[d2])",
+        "chance": { "row": "dice", "atDepth": 1 }
+      }
+    ]
+  }
+}

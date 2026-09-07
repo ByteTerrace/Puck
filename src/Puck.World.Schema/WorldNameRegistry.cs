@@ -196,6 +196,7 @@ public static partial class WorldNameRegistry {
         new(typeof(WorldSearchRow), nameof(WorldSearchRow.Score), WorldNameKind.State, WorldNameRole.Expression),
         new(typeof(WorldSearchRow), nameof(WorldSearchRow.Best), WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action),
         new(typeof(WorldSearchShape.Promote), nameof(WorldSearchShape.Promote.Codes), WorldNameKind.State, WorldNameRole.Names),
+        new(typeof(WorldSearchChance), nameof(WorldSearchChance.Row), WorldNameKind.State, WorldNameRole.Names),
         // Placements, bodies, targeting.
         new(typeof(WorldPlacementBoard), nameof(WorldPlacementBoard.Topology), WorldNameKind.Topology, WorldNameRole.Names),
         new(typeof(WorldPlacementBoard), nameof(WorldPlacementBoard.Occupancy), WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action),

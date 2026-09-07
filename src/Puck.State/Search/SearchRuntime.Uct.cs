@@ -231,6 +231,19 @@ public sealed partial class SearchRuntime {
 
                     return;
                 }
+                // A chance ply draws rather than chooses: one weighted pick over this job's own stream, the same
+                // stream every other playout draw uses, so two jobs sharing a seed make the same choice.
+                if ((plan.Chance is { } chance) && (job.PlayoutPlies == chance.AtDepth)) {
+                    if (StateRows.FindStateRow(rows: rows, name: chance.Row) is { } chanceRow) {
+                        var outcome = SampleChanceOutcome(chance: chance, seed: ref job.Seed);
+
+                        ApplyChanceOutcome(frame: job.PlayFrame!, row: chanceRow, chance: chance, outcome: outcome);
+                    }
+
+                    job.PlayoutPlies++;
+
+                    return;
+                }
 
                 var total = TotalCandidates(shapes: shapes, cellCount: cells, tokenCount: tokenCells.Count);
 
