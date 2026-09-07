@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Puck.Maths;
 
 namespace Puck.World;
 
@@ -47,6 +48,13 @@ public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When
 [JsonDerivedType(typeof(StateCondition), typeDiscriminator: "state")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldPlacementResponseCondition {
+    // A Fixed row's literal keeps its exact fixed-point scale; an Int/Bool row's literal rounds to the nearest whole
+    // number — the raw encoding StateCellWriter.TryParseNumericToken already gives every other author-typed literal
+    // of that kind, so a condition's comparand reads the same way a console cell edit would.
+    private static long LiteralToRaw(CellKind kind, float literal) => (kind switch {
+        CellKind.Fixed => FixedQ4816.FromDouble(value: literal).Value,
+        _ => ((long)MathF.Round(x: literal, mode: MidpointRounding.ToEven)),
+    });
     /// <summary>The original lattice-field condition, unchanged from before this union existed: the named field
     /// read at the placement's own coupled cell, compared against a literal or another row's slot cell.</summary>
     /// <param name="Field">The field read at the cell.</param>
@@ -82,7 +90,37 @@ public abstract record WorldPlacementResponseCondition {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Key = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ComparandState = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ComparandKey = null
-    ) : WorldPlacementResponseCondition;
+    ) : WorldPlacementResponseCondition {
+        /// <summary>Evaluates this condition against the live document — the one reading every consumer (the
+        /// response sweep, a binding overlay's own gate) shares, so they can never disagree about whether a state
+        /// condition currently holds.</summary>
+        /// <param name="definition">The document to read.</param>
+        /// <param name="tick">The tick to read the referenced cell(s) as of.</param>
+        public bool Holds(WorldDefinition definition, ulong tick) {
+            ArgumentNullException.ThrowIfNull(argument: definition);
+
+            if (!WorldStateReader.TryRead(definition: definition, rowName: State, key: Key, tick: tick, row: out var row, rawValue: out var raw, text: out _) || (raw is not { } rawValue)) {
+                return false;
+            }
+
+            long expected;
+
+            if (ComparandState is { } comparandRow) {
+                if (!WorldStateReader.TryRead(definition: definition, rowName: comparandRow, key: ComparandKey, tick: tick, row: out _, rawValue: out var comparand, text: out _) || (comparand is not { } comparandValue)) {
+                    return false;
+                }
+
+                expected = comparandValue;
+            } else {
+                expected = LiteralToRaw(kind: row.Kind, literal: (Value ?? 0f));
+            }
+
+            return Comparison.Holds(
+                value: FixedQ4816.FromRawBits(value: rawValue),
+                expected: FixedQ4816.FromRawBits(value: expected)
+            );
+        }
+    }
 }
 /// <summary>Capacity constants for <see cref="WorldPlacement.Respond"/>.</summary>
 public static class WorldResponseCapacity {

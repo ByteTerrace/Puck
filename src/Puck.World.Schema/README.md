@@ -832,7 +832,14 @@ from published engine state — on the `(family, state)` pair, a later layer
 overriding in place and new keys appending). The engine names no group: it
 publishes facts (`roster`, `engagement`, `layout`) and the document's `contexts` rows say which
 group each selects; a seat with no matching row resolves in the first row's
-group, and `player.bind` lands on the seat's active group's resting page.
+group, and `player.bind` lands on the seat's active group's resting page. A
+`bindingOverlays` entry's own `when` (`WorldPlacementResponseCondition.StateCondition`
+— the placement response facet's state-cell shape, reused rather than a second
+reading of "compare a state cell") composes it only while the condition holds;
+absent, the layer always composes (today's behavior). The reveal's carrier: a
+retail basis delta adds an overlay gated on an identity fact, so the seat's
+controls swap the tick the fact is set, re-evaluated whenever the routed
+definition changes, never per frame.
 The merged document compiles once per change through the binding stack in
 `Puck.Commands` (`BindingProfile.Compile` — deliberately public and shared,
 never copied here), and there is exactly one consumer of the compiled result,
@@ -1467,16 +1474,20 @@ mutation kind for the same per-cell write.
 
 **A color field is a `#RRGGBB` literal or a `state.<row>[.<key>]` binding to a
 text cell holding one** — the same grammar, resolved by `WorldColor.Resolve`
-against the hosting world: creation palette entries, `render.lighting`/`render.sky`
-colors and every `render.cycle` key's, a screen text source's
+against the hosting world: creation palette entries, a screen text source's
 `foreground`/`background`. `WorldDefinitionValidator` refuses a binding that
 names no declared text cell, or one whose text is not a hex color; the
 `CreationCanonicalizer` admits only the binding's syntax (a creation on its own
 has no world to resolve against — the world validator resolves it at the
-placement). Identity, profile, and `seatDefaults` neutral colors stay literal:
-they persist per identity and travel between worlds. A bound color is live —
-`world.state.cell.set colors sage #C0392B` re-registers palettes and lighting on
-the delivery it composes.
+placement). `render.lighting`/`render.sky` colors and every `render.cycle`
+key's speak `BindableColor` instead — the theme vocabulary's generalized form
+of the identical binding grammar (an accepted `#RRGGBBAA` alpha is ignored;
+the render path is opaque), resolved at emit by `WorldRenderCycleTrack`
+against the routed definition with no re-bake, so a cell write recolors the
+sky on the next frame. Identity, profile, and `seatDefaults` neutral colors
+stay literal: they persist per identity and travel between worlds. A bound
+color is live — `world.state.cell.set colors sage #C0392B` re-registers
+palettes and lighting on the delivery it composes.
 
 **Spatial values may use the same state grammar.** World and embedded-creation
 vector/quaternion fields accept their ordinary array or a `state.<row>[.<key>]`

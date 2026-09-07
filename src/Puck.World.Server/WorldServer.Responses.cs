@@ -140,7 +140,7 @@ public sealed partial class WorldServer {
         for (var index = 0; (index < responses.Count); index++) {
             var holds = (responses[index].When switch {
                 WorldPlacementResponseCondition.FieldCondition field => (hasCell && FieldConditionHolds(condition: field, lattice: lattice!, cell: cell, tick: tick)),
-                WorldPlacementResponseCondition.StateCondition state => StateConditionHolds(condition: state, definition: m_definition, tick: tick),
+                WorldPlacementResponseCondition.StateCondition state => state.Holds(definition: m_definition, tick: tick),
                 _ => false,
             });
 
@@ -166,35 +166,6 @@ public sealed partial class WorldServer {
             expected: expected
         );
     }
-    private static bool StateConditionHolds(WorldPlacementResponseCondition.StateCondition condition, WorldDefinition definition, ulong tick) {
-        if (!WorldStateReader.TryRead(definition: definition, rowName: condition.State, key: condition.Key, tick: tick, row: out var row, rawValue: out var raw, text: out _) || (raw is not { } rawValue)) {
-            return false;
-        }
-
-        long expected;
-
-        if (condition.ComparandState is { } comparandRow) {
-            if (!WorldStateReader.TryRead(definition: definition, rowName: comparandRow, key: condition.ComparandKey, tick: tick, row: out _, rawValue: out var comparand, text: out _) || (comparand is not { } comparandValue)) {
-                return false;
-            }
-
-            expected = comparandValue;
-        } else {
-            expected = LiteralToRaw(kind: row.Kind, literal: (condition.Value ?? 0f));
-        }
-
-        return condition.Comparison.Holds(
-            value: FixedQ4816.FromRawBits(value: rawValue),
-            expected: FixedQ4816.FromRawBits(value: expected)
-        );
-    }
-    // A Fixed row's literal keeps its exact fixed-point scale; an Int/Bool row's literal rounds to the nearest whole
-    // number — the raw encoding StateCellWriter.TryParseNumericToken already gives every other author-typed literal
-    // of that kind, so a state condition's comparand reads the same way a console cell edit would.
-    private static long LiteralToRaw(CellKind kind, float literal) => (kind switch {
-        CellKind.Fixed => FixedQ4816.FromDouble(value: literal).Value,
-        _ => ((long)MathF.Round(x: literal, mode: MidpointRounding.ToEven)),
-    });
     // Reads every State entry's primary (and, when authored, comparand) cell straight off the installed document —
     // the snapshot the skip below compares tick to tick. Returns false (never skippable) the moment any entry is a
     // Field condition, so a mixed respond list is always swept in full.

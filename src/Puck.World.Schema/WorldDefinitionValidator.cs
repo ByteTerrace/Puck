@@ -1287,6 +1287,7 @@ public static partial class WorldDefinitionValidator {
         );
 
         ValidateBindingOverlays(
+            definition: definition,
             overlays: definition.BindingOverlays,
             channels: CompilableChannelTable(channels: definition.Channels),
             stateRows: stateRows,

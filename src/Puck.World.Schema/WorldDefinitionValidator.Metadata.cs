@@ -1012,12 +1012,9 @@ public static partial class WorldDefinitionValidator {
 
             if (
                 (sun.Color is { } color) &&
-                !IsColor(
-                definition: definition,
-                value: color
-            )
+                !color.IsAuthorable(definition: definition)
             ) {
-                errors.Add(item: $"{path}.sun.color '{color}' {WorldColor.Grammar}.");
+                errors.Add(item: $"{path}.sun.color '{color.Raw}' {BindableColor.Grammar}.");
             }
         }
 
@@ -1040,12 +1037,9 @@ public static partial class WorldDefinitionValidator {
 
             if (
                 (ambient.Color is { } color) &&
-                !IsColor(
-                definition: definition,
-                value: color
-            )
+                !color.IsAuthorable(definition: definition)
             ) {
-                errors.Add(item: $"{path}.ambient.color '{color}' {WorldColor.Grammar}.");
+                errors.Add(item: $"{path}.ambient.color '{color.Raw}' {BindableColor.Grammar}.");
             }
         }
     }
@@ -1056,32 +1050,23 @@ public static partial class WorldDefinitionValidator {
 
         if (
             (sky.Zenith is { } zenith) &&
-            !IsColor(
-            definition: definition,
-            value: zenith
-        )
+            !zenith.IsAuthorable(definition: definition)
         ) {
-            errors.Add(item: $"{path}.zenith '{zenith}' {WorldColor.Grammar}.");
+            errors.Add(item: $"{path}.zenith '{zenith.Raw}' {BindableColor.Grammar}.");
         }
 
         if (
             (sky.Horizon is { } horizon) &&
-            !IsColor(
-            definition: definition,
-            value: horizon
-        )
+            !horizon.IsAuthorable(definition: definition)
         ) {
-            errors.Add(item: $"{path}.horizon '{horizon}' {WorldColor.Grammar}.");
+            errors.Add(item: $"{path}.horizon '{horizon.Raw}' {BindableColor.Grammar}.");
         }
 
         if (
             (sky.Ground is { } ground) &&
-            !IsColor(
-            definition: definition,
-            value: ground
-        )
+            !ground.IsAuthorable(definition: definition)
         ) {
-            errors.Add(item: $"{path}.ground '{ground}' {WorldColor.Grammar}.");
+            errors.Add(item: $"{path}.ground '{ground.Raw}' {BindableColor.Grammar}.");
         }
 
         if (sky.FogDensity is { } fogDensity) {
@@ -1167,12 +1152,9 @@ public static partial class WorldDefinitionValidator {
 
             if (
                 (clouds.Color is { } cloudColor) &&
-                !IsColor(
-                definition: definition,
-                value: cloudColor
-            )
+                !cloudColor.IsAuthorable(definition: definition)
             ) {
-                errors.Add(item: $"{path}.clouds.color '{cloudColor}' {WorldColor.Grammar}.");
+                errors.Add(item: $"{path}.clouds.color '{cloudColor.Raw}' {BindableColor.Grammar}.");
             }
 
             if (

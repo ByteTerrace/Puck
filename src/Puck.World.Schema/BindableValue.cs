@@ -9,10 +9,10 @@ namespace Puck.World;
 
 /// <summary>
 /// The shared "authored literal, or a state.&lt;row&gt;[.&lt;key&gt;] binding" grammar every bindable document token
-/// speaks — promoted from the pattern <see cref="WorldColor"/> established for the sky's cloud color.
-/// <see cref="BindableColor"/> and <see cref="BindableScalar"/> are its two closed instances; both parse their
-/// binding half through <see cref="TryParseBinding"/> and resolve it through <see cref="WorldStateReader"/>, so no
-/// second binding-token parser or state reader exists anywhere in the document model.
+/// speaks — generalized from the narrower dialect <see cref="WorldColor"/> still carries for a plain-string color
+/// field. <see cref="BindableColor"/> and <see cref="BindableScalar"/> are its two closed instances; both parse
+/// their binding half through <see cref="TryParseBinding"/> and resolve it through <see cref="WorldStateReader"/>,
+/// so no second binding-token parser or state reader exists anywhere in the document model.
 /// </summary>
 public static class BindableState {
     /// <summary>Parses the state-binding arm of the grammar: <c>state.&lt;row&gt;</c> (the row's slot cell) or
@@ -41,12 +41,12 @@ public static class BindableState {
 }
 /// <summary>
 /// A color authored as a <c>#RRGGBB</c>/<c>#RRGGBBAA</c> hex literal, or a <c>state.&lt;row&gt;[.&lt;key&gt;]</c>
-/// binding naming a Text cell that holds one — the theme/marker vocabulary's promoted form of the grammar
-/// <see cref="WorldColor"/> has spoken for the sky's cloud color. Parses and serializes as a plain JSON string;
-/// resolution reuses <see cref="HexColor"/>'s literal parse and <see cref="WorldStateReader"/>'s state read exactly
-/// as <see cref="WorldColor"/> does, so a theme color and the sky's color never disagree about what counts as a
-/// valid token. Unlike <see cref="WorldColor"/> (RGB-only, matching the render path's opaque sky/lighting fields),
-/// this carries alpha — a theme surface bakes its translucency into the token.
+/// binding naming a Text cell that holds one — the theme/marker/render vocabulary's shared color grammar. Parses and
+/// serializes as a plain JSON string; resolution reuses <see cref="HexColor"/>'s literal parse and
+/// <see cref="WorldStateReader"/>'s state read exactly as <see cref="WorldColor"/> does, so this and
+/// <see cref="WorldColor"/>'s own narrower <c>#RRGGBB</c>-only dialect never disagree about what a binding names.
+/// This carries alpha — a translucent theme surface bakes it into the token — while an opaque consumer (the sky and
+/// lighting fields resolved by <c>Puck.World.Client.WorldRenderCycleTrack</c>) drops it at resolve.
 /// </summary>
 /// <param name="Raw">The authored token, verbatim.</param>
 [JsonConverter(typeof(BindableColorJsonConverter))]

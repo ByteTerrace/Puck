@@ -198,7 +198,10 @@ separate constraint on dense populations; reusable appearances do not remove it.
   `seatModes` families (`WorldSeatModeFamily`, flipped by `player.mode`), a
   `state:<row>` family reads the routed world's scalar value or the
   controlled body's keyed value, allowing gameplay-rule state writes to swap
-  whole control groups.
+  whole control groups. A world overlay carrying its own `when` composes only
+  while that state condition holds; `SyncSeat` recomposes the seat the tick a
+  gated overlay's own condition flips (a per-overlay signature compared
+  against the routed definition, never a per-tick poll).
 - `WorldAffordances.cs` — the process command vocabulary check every binding
   document validates against.
 - `CommandVocabulary.cs` — the command-name string constants (and the two

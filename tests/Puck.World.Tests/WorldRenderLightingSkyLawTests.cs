@@ -26,7 +26,7 @@ public sealed class WorldRenderLightingSkyLawTests {
     [Fact]
     public void SunColor_BoundToStateTextCell_ResolvesToTheCell_AndFollowsARevisionMove() {
         var track = new WorldRenderCycleTrack();
-        var lighting = new WorldRenderLighting(Sun: new WorldRenderSun(Color: "state.colors.sun"));
+        var lighting = new WorldRenderLighting(Sun: new WorldRenderSun(Color: new BindableColor(Raw: "state.colors.sun")));
 
         var first = Resolve(defaults: BaseDefaults() with { Lighting = lighting }, state: [ColorsRow(hex: "#FFD9A6")], revision: 1, track: track);
         var second = Resolve(defaults: BaseDefaults() with { Lighting = lighting }, state: [ColorsRow(hex: "#4C5C8C")], revision: 2, track: track);
@@ -42,11 +42,11 @@ public sealed class WorldRenderLightingSkyLawTests {
         Laws.RefusalWithControl(
             lawId: "render.lighting.sun-color-binding",
             deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Sun: new WorldRenderSun(Color: "state.colors.moon")) },
+                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Sun: new WorldRenderSun(Color: new BindableColor(Raw: "state.colors.moon"))) },
                 StateRaw = new WorldStateSection(World: [ColorsRow(hex: "#FFD9A6")]),
             })),
             controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Sun: new WorldRenderSun(Color: "state.colors.sun")) },
+                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Sun: new WorldRenderSun(Color: new BindableColor(Raw: "state.colors.sun"))) },
                 StateRaw = new WorldStateSection(World: [ColorsRow(hex: "#FFD9A6")]),
             }))
         );
@@ -56,11 +56,11 @@ public sealed class WorldRenderLightingSkyLawTests {
         Laws.RefusalWithControl(
             lawId: "render.lighting.sun-color-binding-kind",
             deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Sun: new WorldRenderSun(Color: "state.colors.sun")) },
+                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Sun: new WorldRenderSun(Color: new BindableColor(Raw: "state.colors.sun"))) },
                 StateRaw = new WorldStateSection(World: [new WorldStateRow(Name: CellName.Parse(candidate: "colors"), Kind: CellKind.Int, Cells: [new StateCell(Key: CellName.Parse(candidate: "sun"), Value: 7L)])]),
             })),
             controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Sun: new WorldRenderSun(Color: "state.colors.sun")) },
+                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Sun: new WorldRenderSun(Color: new BindableColor(Raw: "state.colors.sun"))) },
                 StateRaw = new WorldStateSection(World: [ColorsRow(hex: "#FFD9A6")]),
             }))
         );
@@ -77,10 +77,10 @@ public sealed class WorldRenderLightingSkyLawTests {
         Laws.RefusalWithControl(
             lawId: "render.lighting.sun-color",
             deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Sun: new WorldRenderSun(Color: "orange")) },
+                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Sun: new WorldRenderSun(Color: new BindableColor(Raw: "orange"))) },
             })),
             controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Sun: new WorldRenderSun(Color: "#FFD9A6")) },
+                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Sun: new WorldRenderSun(Color: new BindableColor(Raw: "#FFD9A6"))) },
             }))
         );
     }
@@ -89,10 +89,10 @@ public sealed class WorldRenderLightingSkyLawTests {
         Laws.RefusalWithControl(
             lawId: "render.sky.zenith-color",
             deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Zenith: "not-a-color") },
+                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Zenith: new BindableColor(Raw: "not-a-color")) },
             })),
             controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Zenith: "#1B2350") },
+                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Zenith: new BindableColor(Raw: "#1B2350")) },
             }))
         );
     }
@@ -160,11 +160,11 @@ public sealed class WorldRenderLightingSkyLawTests {
             Sun: new WorldRenderSun(
                 Direction: new Vector3(x: 0.3f, y: 0.6f, z: -0.5f),
                 Weight: 0.42f,
-                Color: "#FFD9A6"
+                Color: new BindableColor(Raw: "#FFD9A6")
             ),
             Ambient: new WorldRenderAmbient(
                 Base: 0.11f,
-                Color: "#4C5C8C",
+                Color: new BindableColor(Raw: "#4C5C8C"),
                 Hemisphere: 0.13f
             )
         );
@@ -191,9 +191,9 @@ public sealed class WorldRenderLightingSkyLawTests {
     [Fact]
     public void AuthoredSky_EveryFieldThreadsThroughAndEnablesTheProceduralSky() {
         var sky = new WorldRenderSky(
-            Zenith: "#1B2350",
-            Horizon: "#E08F6B",
-            Ground: "#0B0D14",
+            Zenith: new BindableColor(Raw: "#1B2350"),
+            Horizon: new BindableColor(Raw: "#E08F6B"),
+            Ground: new BindableColor(Raw: "#0B0D14"),
             FogDensity: 0.02f,
             Sun: new WorldRenderSkySun(DiscRadians: 0.045f, Intensity: 6f),
             Stars: new WorldRenderSkyStars(Density: 64f, Brightness: 0.85f, Seed: 1337u)

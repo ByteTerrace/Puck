@@ -385,15 +385,20 @@ public sealed record WorldBindingBarAuthoring(
 /// <summary>One per-world binding overlay — a whole <see cref="BindingProfileDocument"/> layered over the engine
 /// default beneath every seat's profile bindings, so a world can contextualize the controls (a kart world remapping a
 /// lane, an RTS world adding a chorded command page) as data, never a client fork. Merged in order; the composed result
-/// (default ⊕ every overlay) is what the validator compiles.</summary>
+/// (default ⊕ every overlay whose <see cref="When"/> currently holds) is what the validator compiles.</summary>
 /// <param name="Id">The overlay's stable id — its mutation address (unique within the definition; carries no meaning
 /// beyond identity).</param>
 /// <param name="Document">The overlay binding document merged into the composed mapping.</param>
 /// <param name="BindingBar">The on-screen bar policy carried with this binding layer; <see langword="null"/> carries no
 /// policy on this layer, so bar resolution falls through to the world-authored policy, and to
 /// <see cref="WorldBindingBarAuthoring.Absent"/> (no bar drawn) when neither an identity nor the world authors one.</param>
+/// <param name="When">The condition this layer composes under; <see langword="null"/> always composes it (today's
+/// behavior). Reuses <see cref="WorldPlacementResponseCondition.StateCondition"/>'s field convention rather than a
+/// second reading of "compare a state cell" — the same <c>state</c>/<c>key</c>/<c>comparison</c>/<c>value</c> shape a
+/// placement's own response facet speaks. Re-evaluated whenever the routed definition changes, never per frame.</param>
 public sealed record WorldBindingOverlay(
     string Id,
     BindingProfileDocument Document,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBindingBarAuthoring? BindingBar = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBindingBarAuthoring? BindingBar = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementResponseCondition.StateCondition? When = null
 );

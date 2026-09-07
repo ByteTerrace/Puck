@@ -48,39 +48,53 @@ public sealed class WorldRenderCycleTrack {
     private string? m_stateRow;
     private WorldRenderLightingState m_statics;
 
+    // The render path is opaque — alpha plays no part in sky/lighting colour, so every bound colour drops it here,
+    // the one seam between BindableColor's Vector4 grammar and this state's Vector3 fields.
+    private static Vector3 Rgb(BindableColor? color, WorldDefinition definition, Vector3 fallback) {
+        if (color is not { } bound) {
+            return fallback;
+        }
+
+        var resolved = bound.Resolve(
+            definition: definition,
+            fallback: new Vector4(fallback, 1f)
+        );
+
+        return new Vector3(resolved.X, resolved.Y, resolved.Z);
+    }
     private static WorldRenderLightingState Statics(WorldDefinition definition) {
         var defaults = definition.Render;
 
         return new WorldRenderLightingState(
             SunDirection: (defaults.Lighting?.Sun?.Direction ?? SdfFrame.DefaultSunDirection),
             SunWeight: (defaults.Lighting?.Sun?.Weight ?? SdfFrame.DefaultSunWeight),
-            SunColor: WorldColor.Resolve(
+            SunColor: Rgb(
+                color: defaults.Lighting?.Sun?.Color,
                 definition: definition,
-                fallback: Vector3.One,
-                value: defaults.Lighting?.Sun?.Color
+                fallback: Vector3.One
             ),
             AmbientBase: (defaults.Lighting?.Ambient?.Base ?? SdfFrame.DefaultAmbientBase),
             AmbientHemisphere: (defaults.Lighting?.Ambient?.Hemisphere ?? SdfFrame.DefaultAmbientHemisphere),
-            AmbientColor: WorldColor.Resolve(
+            AmbientColor: Rgb(
+                color: defaults.Lighting?.Ambient?.Color,
                 definition: definition,
-                fallback: Vector3.One,
-                value: defaults.Lighting?.Ambient?.Color
+                fallback: Vector3.One
             ),
             SkyEnabled: (defaults.Sky is not null),
-            SkyZenithColor: WorldColor.Resolve(
+            SkyZenithColor: Rgb(
+                color: defaults.Sky?.Zenith,
                 definition: definition,
-                fallback: SdfFrame.DefaultSkyZenithColor,
-                value: defaults.Sky?.Zenith
+                fallback: SdfFrame.DefaultSkyZenithColor
             ),
-            SkyHorizonColor: WorldColor.Resolve(
+            SkyHorizonColor: Rgb(
+                color: defaults.Sky?.Horizon,
                 definition: definition,
-                fallback: SdfFrame.DefaultSkyHorizonColor,
-                value: defaults.Sky?.Horizon
+                fallback: SdfFrame.DefaultSkyHorizonColor
             ),
-            SkyGroundColor: WorldColor.Resolve(
+            SkyGroundColor: Rgb(
+                color: defaults.Sky?.Ground,
                 definition: definition,
-                fallback: SdfFrame.DefaultSkyGroundColor,
-                value: defaults.Sky?.Ground
+                fallback: SdfFrame.DefaultSkyGroundColor
             ),
             SkyFogDensity: (defaults.Sky?.FogDensity ?? SdfFrame.DefaultSkyFogDensity),
             SkySunDiscRadians: (defaults.Sky?.Sun?.DiscRadians ?? SdfFrame.DefaultSkySunDiscRadians),
@@ -91,10 +105,10 @@ public sealed class WorldRenderCycleTrack {
             SkyStarTwinkleShare: (defaults.Sky?.Stars?.Twinkle?.Share ?? 0f),
             SkyStarTwinkleDepth: (defaults.Sky?.Stars?.Twinkle?.Depth ?? 0f),
             SkyStarTwinkleRate: (defaults.Sky?.Stars?.Twinkle?.Rate ?? SdfFrame.DefaultSkyStarTwinkleRate),
-            SkyCloudColor: WorldColor.Resolve(
+            SkyCloudColor: Rgb(
+                color: defaults.Sky?.Clouds?.Color,
                 definition: definition,
-                fallback: Vector3.One,
-                value: defaults.Sky?.Clouds?.Color
+                fallback: Vector3.One
             ),
             SkyCloudCoverage: (defaults.Sky?.Clouds?.Coverage ?? 0f),
             SkyCloudSoftness: (defaults.Sky?.Clouds?.Softness ?? SdfFrame.DefaultSkyCloudSoftness),
@@ -126,33 +140,33 @@ public sealed class WorldRenderCycleTrack {
         return carried with {
             SunDirection = (sun?.Direction ?? carried.SunDirection),
             SunWeight = (sun?.Weight ?? carried.SunWeight),
-            SunColor = WorldColor.Resolve(
+            SunColor = Rgb(
+                color: sun?.Color,
                 definition: definition,
-                fallback: carried.SunColor,
-                value: sun?.Color
+                fallback: carried.SunColor
             ),
             AmbientBase = (ambient?.Base ?? carried.AmbientBase),
             AmbientHemisphere = (ambient?.Hemisphere ?? carried.AmbientHemisphere),
-            AmbientColor = WorldColor.Resolve(
+            AmbientColor = Rgb(
+                color: ambient?.Color,
                 definition: definition,
-                fallback: carried.AmbientColor,
-                value: ambient?.Color
+                fallback: carried.AmbientColor
             ),
             SkyEnabled = (carried.SkyEnabled || (sky is not null)),
-            SkyZenithColor = WorldColor.Resolve(
+            SkyZenithColor = Rgb(
+                color: sky?.Zenith,
                 definition: definition,
-                fallback: carried.SkyZenithColor,
-                value: sky?.Zenith
+                fallback: carried.SkyZenithColor
             ),
-            SkyHorizonColor = WorldColor.Resolve(
+            SkyHorizonColor = Rgb(
+                color: sky?.Horizon,
                 definition: definition,
-                fallback: carried.SkyHorizonColor,
-                value: sky?.Horizon
+                fallback: carried.SkyHorizonColor
             ),
-            SkyGroundColor = WorldColor.Resolve(
+            SkyGroundColor = Rgb(
+                color: sky?.Ground,
                 definition: definition,
-                fallback: carried.SkyGroundColor,
-                value: sky?.Ground
+                fallback: carried.SkyGroundColor
             ),
             SkyFogDensity = (sky?.FogDensity ?? carried.SkyFogDensity),
             SkySunDiscRadians = (sky?.Sun?.DiscRadians ?? carried.SkySunDiscRadians),
@@ -163,10 +177,10 @@ public sealed class WorldRenderCycleTrack {
             SkyStarTwinkleShare = (sky?.Stars?.Twinkle?.Share ?? carried.SkyStarTwinkleShare),
             SkyStarTwinkleDepth = (sky?.Stars?.Twinkle?.Depth ?? carried.SkyStarTwinkleDepth),
             SkyStarTwinkleRate = (sky?.Stars?.Twinkle?.Rate ?? carried.SkyStarTwinkleRate),
-            SkyCloudColor = WorldColor.Resolve(
+            SkyCloudColor = Rgb(
+                color: sky?.Clouds?.Color,
                 definition: definition,
-                fallback: carried.SkyCloudColor,
-                value: sky?.Clouds?.Color
+                fallback: carried.SkyCloudColor
             ),
             SkyCloudCoverage = (sky?.Clouds?.Coverage ?? carried.SkyCloudCoverage),
             SkyCloudSoftness = (sky?.Clouds?.Softness ?? carried.SkyCloudSoftness),

@@ -488,12 +488,14 @@ public static partial class WorldDefinitionValidator {
             }
         }
     }
-    // The per-world binding overlays: non-empty unique ids, and the COMPOSED result (every overlay, in order) passes
-    // the existing binding compiler — a partial overlay page that only makes sense post-merge still gates against the
-    // real runtime artifact, and the binding validator is never reimplemented. No overlays compose to the empty
-    // document: a world with no bindings is valid. The vocabulary half resolves channel names against THIS document's
-    // own table (the `channels` parameter), never a process-global.
-    private static void ValidateBindingOverlays(IReadOnlyList<WorldBindingOverlay> overlays, WorldChannelTable? channels, IReadOnlyDictionary<string, WorldStateRow> stateRows, IReadOnlyList<WorldSeatModeFamily> seatModes, IReadOnlySet<string> iconNames, bool iconsAuthored, List<string> errors) {
+    // The per-world binding overlays: non-empty unique ids, and the COMPOSED result (every overlay, in order,
+    // irrespective of an authored `when` — a live seat composes only the layers whose condition currently holds, but
+    // every layer's own structure and vocabulary must be sound regardless) passes the existing binding compiler — a
+    // partial overlay page that only makes sense post-merge still gates against the real runtime artifact, and the
+    // binding validator is never reimplemented. No overlays compose to the empty document: a world with no bindings
+    // is valid. The vocabulary half resolves channel names against THIS document's own table (the `channels`
+    // parameter), never a process-global.
+    private static void ValidateBindingOverlays(WorldDefinition definition, IReadOnlyList<WorldBindingOverlay> overlays, WorldChannelTable? channels, IReadOnlyDictionary<string, WorldStateRow> stateRows, IReadOnlyList<WorldSeatModeFamily> seatModes, IReadOnlySet<string> iconNames, bool iconsAuthored, List<string> errors) {
         if (overlays is null) {
             errors.Add(item: "bindingOverlays is required.");
 
@@ -567,6 +569,10 @@ public static partial class WorldDefinitionValidator {
                 stateRows: stateRows,
                 errors: errors
             );
+
+            if (overlay.When is { } when) {
+                ValidateStateCondition(condition: when, definition: definition, entryPath: path, errors: errors);
+            }
         }
 
         var composed = WorldBindingComposer.Compose(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: layers));

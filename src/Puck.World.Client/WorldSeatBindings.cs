@@ -60,6 +60,9 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     // starts seeded from the boot definition; SyncSeat re-points one seat's own entries the instant its resolved
     // definition changes reference.
     private readonly IReadOnlyList<WorldBindingOverlay>[] m_overlays;
+    // The last-observed OverlayGateSignature per seat, so a routed state row's own version move (never a per-tick
+    // poll) is what notices a gated overlay's activation flip.
+    private readonly ulong[] m_overlayGateSignature;
     private readonly BindingProfileDocument?[] m_profileBindings;
     private readonly IReadOnlyList<BindingContextDefinition>[] m_seatContexts;
     private readonly PagedInputBindings[] m_seats;
@@ -79,11 +82,34 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     /// through the same exit <c>player.mode</c> takes when it leaves such a state.</summary>
     public event Action<int>? CameraApplicationDropped;
 
-    private BindingProfileDocument?[] BaseLayers(IReadOnlyList<WorldBindingOverlay> overlays, BindingProfileDocument? profile, BindingProfileDocument? session) {
+    // The bit-per-overlay signature SyncSeat compares tick to tick: bit i is overlay i's own When (absent counts as
+    // never set). Two documents whose gates disagree past bit 63 alias to the same signature, so a false-negative
+    // recompose skip is possible only past a 64-overlay document — a scale WorldResponseCapacity-shaped documents
+    // never reach.
+    private static ulong OverlayGateSignature(IReadOnlyList<WorldBindingOverlay> overlays, WorldDefinition definition, ulong tick) {
+        var signature = 0UL;
+
+        for (var index = 0; (index < overlays.Count); index++) {
+            if ((overlays[index].When is { } when) && when.Holds(definition: definition, tick: tick)) {
+                signature |= (1UL << (index & 63));
+            }
+        }
+
+        return signature;
+    }
+    // An overlay's own When (WorldPlacementResponseCondition.StateCondition) gates whether it composes THIS call —
+    // the reveal's carrier: a gated overlay's chords/pages appear only once the fact it names is set. Absence always
+    // composes (today's behavior). Unfilled trailing slots stay null, which WorldBindingComposer.Compose already
+    // skips (profile/session are routinely null too), so no second pass to re-size the array is needed.
+    private BindingProfileDocument?[] BaseLayers(IReadOnlyList<WorldBindingOverlay> overlays, WorldDefinition definition, ulong tick, BindingProfileDocument? profile, BindingProfileDocument? session) {
         var layers = new BindingProfileDocument?[(overlays.Count + 2)];
         var index = 0;
 
         foreach (var overlay in overlays) {
+            if ((overlay.When is { } when) && !when.Holds(definition: definition, tick: tick)) {
+                continue;
+            }
+
             layers[index++] = overlay.Document;
         }
 
@@ -106,16 +132,20 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     // in since there is no "the" world overlay list any more (each seat carries its own, per SyncSeat).
     private BindingProfileDocument ComposeBase() {
         return WorldBindingComposer.Compose(BaseLayers(
+            definition: m_definitions[0],
             overlays: m_overlays[0],
             profile: null,
-            session: null
+            session: null,
+            tick: m_stateTicks[0]
         ));
     }
     private BindingProfileDocument ComposeSeat(int slot) {
         return WorldBindingComposer.Compose(BaseLayers(
+            definition: m_definitions[slot],
             overlays: m_overlays[slot],
             profile: m_profileBindings[slot],
-            session: m_sessionRebinds[slot]
+            session: m_sessionRebinds[slot],
+            tick: m_stateTicks[slot]
         ));
     }
     // The derivation, applied: first matching context row's group (document order) ?? null (the profile default). The
@@ -1284,6 +1314,22 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         m_definitions[slot] = definition;
         m_stateTicks[slot] = CompletedTick(endpointNextInputTick: nextInputTick);
 
+        // A gated overlay's own When is state, not a document swap — its holds() value can flip on any tick that
+        // moves the routed state section, never only on an overlay-list mutation. This is the cheap check (a bit
+        // per When-bearing overlay) that turns that flip into exactly one recompose on the tick it crosses.
+        var gateChanged = false;
+
+        if (stateChanged || bindingsChanged) {
+            var signature = OverlayGateSignature(
+                definition: m_definitions[slot],
+                overlays: (bindingsChanged ? (overlays ?? []) : m_overlays[slot]),
+                tick: m_stateTicks[slot]
+            );
+
+            gateChanged = (signature != m_overlayGateSignature[slot]);
+            m_overlayGateSignature[slot] = signature;
+        }
+
         if (modesChanged && !stateChanged && !bindingsChanged) {
             DeriveActiveGroup(slot: slot);
         }
@@ -1295,19 +1341,23 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
                 slot: slot,
                 tick: m_stateTicks[slot]
             );
-            if (!bindingsChanged) {
+            if (!bindingsChanged && !gateChanged) {
                 DeriveActiveGroup(slot: slot);
             }
         }
 
-        if (!bindingsChanged) {
+        if (bindingsChanged) {
+            m_overlays[slot] = (overlays ?? []);
+            m_channelSource[slot] = channels;
+            m_channels[slot] = WorldChannelTable.Compile(channels: channels);
+            RecomposeSeat(slot: slot);
+
             return;
         }
 
-        m_overlays[slot] = (overlays ?? []);
-        m_channelSource[slot] = channels;
-        m_channels[slot] = WorldChannelTable.Compile(channels: channels);
-        RecomposeSeat(slot: slot);
+        if (gateChanged) {
+            RecomposeSeat(slot: slot);
+        }
     }
     /// <summary>Checks a prospective live session layer against the seat's actual current composition and routed
     /// channel table without installing it. Stale route-local rows in older layers receive the same surgical filtering
@@ -1330,9 +1380,11 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         try {
             var channels = m_channels[slot];
             var document = WorldBindingComposer.Compose(BaseLayers(
+                definition: m_definitions[slot],
                 overlays: m_overlays[slot],
                 profile: m_profileBindings[slot],
-                session: rebinds
+                session: rebinds,
+                tick: m_stateTicks[slot]
             ));
 
             document = SkipUnregisteredPages(
@@ -1445,6 +1497,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         m_contextStates = new Dictionary<string, string>[SeatCount];
         m_seatContexts = new IReadOnlyList<BindingContextDefinition>[SeatCount];
         m_overlays = new IReadOnlyList<WorldBindingOverlay>[SeatCount];
+        m_overlayGateSignature = new ulong[SeatCount];
         m_channelSource = new IReadOnlyList<WorldChannel>[SeatCount];
         m_channels = new WorldChannelTable[SeatCount];
         m_effectiveDocuments = new byte[SeatCount][];
@@ -1461,8 +1514,11 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         var bootChannels = definition.Channels;
         var bootTable = WorldChannelTable.Compile(channels: bootChannels);
 
+        var bootGateSignature = OverlayGateSignature(overlays: bootOverlays, definition: definition, tick: 0UL);
+
         for (var slot = 0; (slot < SeatCount); slot++) {
             m_overlays[slot] = bootOverlays;
+            m_overlayGateSignature[slot] = bootGateSignature;
             m_channelSource[slot] = bootChannels;
             m_channels[slot] = bootTable;
             m_definitions[slot] = definition;

@@ -168,22 +168,26 @@ public sealed record WorldRenderLighting(WorldRenderSun? Sun = null, WorldRender
 /// <param name="Direction">The direction from a lit surface toward the light, any nonzero length (normalized
 /// host-side before upload).</param>
 /// <param name="Weight">The sun's diffuse weight.</param>
-/// <param name="Color">The sun's linear <c>#RRGGBB</c> color.</param>
-public sealed record WorldRenderSun(DocumentVector3? Direction = null, float? Weight = null, string? Color = null);
+/// <param name="Color">The sun's linear color — a <c>#RRGGBB</c>/<c>#RRGGBBAA</c> literal, or a
+/// <c>state.&lt;row&gt;[.&lt;key&gt;]</c> binding naming a Text cell that holds one (alpha is ignored; the render
+/// path is opaque).</param>
+public sealed record WorldRenderSun(DocumentVector3? Direction = null, float? Weight = null, BindableColor? Color = null);
 /// <summary>The ambient (hemisphere) term. Every field is optional individually — absent resolves to
 /// <c>SdfFrame</c>'s pinned default for that field.</summary>
 /// <param name="Base">The ambient floor.</param>
 /// <param name="Hemisphere">The hemisphere gradient, scaling surface normal Y.</param>
-/// <param name="Color">The ambient linear <c>#RRGGBB</c> color.</param>
-public sealed record WorldRenderAmbient(float? Base = null, float? Hemisphere = null, string? Color = null);
+/// <param name="Color">The ambient linear color — <see cref="BindableColor"/>'s grammar, on the same terms as
+/// <see cref="WorldRenderSun.Color"/>.</param>
+public sealed record WorldRenderAmbient(float? Base = null, float? Hemisphere = null, BindableColor? Color = null);
 /// <summary>The procedural sky — a three-stop gradient, sun disc, star field, and distance fog, authored as world
 /// data. Absent is a hard gate: every existing world renders the pinned two-stop gradient and 0.015 fog density
 /// bit-exactly, as before this section existed, until it authors one.</summary>
-/// <param name="Zenith">The straight-up sky color, as <c>#RRGGBB</c>. Optional; absent takes the pinned zenith.</param>
-/// <param name="Horizon">The horizon-band color (the gradient's middle stop), as <c>#RRGGBB</c>. Optional; absent
-/// takes the midpoint between the pinned ground and zenith.</param>
-/// <param name="Ground">The straight-down (nadir) color, as <c>#RRGGBB</c>. Optional; absent takes the pinned
-/// ground.</param>
+/// <param name="Zenith"><see cref="BindableColor"/>'s grammar: the straight-up sky color. Optional; absent takes
+/// the pinned zenith.</param>
+/// <param name="Horizon"><see cref="BindableColor"/>'s grammar: the horizon-band color (the gradient's middle
+/// stop). Optional; absent takes the midpoint between the pinned ground and zenith.</param>
+/// <param name="Ground"><see cref="BindableColor"/>'s grammar: the straight-down (nadir) color. Optional; absent
+/// takes the pinned ground.</param>
 /// <param name="FogDensity">The exponential distance-fog density fading toward the sky color. Optional; absent
 /// takes the pinned 0.015 — the exact value the fog term used before this field existed.</param>
 /// <param name="Sun">The visible sun disc, drawn about the lighting sun's direction. Optional; absent draws no
@@ -191,9 +195,9 @@ public sealed record WorldRenderAmbient(float? Base = null, float? Hemisphere = 
 /// <param name="Stars">The procedural star field. Optional; absent draws no stars.</param>
 /// <param name="Clouds">The procedural cloud layer. Optional; absent draws no clouds.</param>
 public sealed record WorldRenderSky(
-    string? Zenith = null,
-    string? Horizon = null,
-    string? Ground = null,
+    BindableColor? Zenith = null,
+    BindableColor? Horizon = null,
+    BindableColor? Ground = null,
     float? FogDensity = null,
     WorldRenderSkySun? Sun = null,
     WorldRenderSkyStars? Stars = null,
@@ -243,8 +247,7 @@ public sealed record WorldRenderSkyTwinkle(float Share, float Depth, float Rate)
 /// <param name="Scale">The size of one cloud cell in layer units (the layer sits at unit height, so a scale of 1
 /// spans about 45° overhead). Larger is broader clouds.</param>
 /// <param name="Seed">The hash seed folded into the lattice — a different seed reshapes the layer.</param>
-/// <param name="Color">The cloud colour, as <c>#RRGGBB</c> or a <c>state.&lt;row&gt;.&lt;key&gt;</c> binding.
-/// Optional; absent is white.</param>
+/// <param name="Color"><see cref="BindableColor"/>'s grammar: the cloud colour. Optional; absent is white.</param>
 /// <param name="Drift">The layer's wind, in layer units per second along world X and Z, integrated on the tick clock.
 /// Optional; absent holds still.</param>
 /// <param name="Spin">The layer's rotation about the zenith in radians per second — the planetary-scale turning a
@@ -255,4 +258,4 @@ public sealed record WorldRenderSkyTwinkle(float Share, float Depth, float Rate)
 /// <param name="Shear">The wind of the SHAPING field relative to the cloud field, in layer units per second: the
 /// two slide past each other, so clouds boil and re-form as they drift rather than glide as a fixed picture.
 /// Optional; absent holds their shapes.</param>
-public sealed record WorldRenderSkyClouds(float Coverage, float Softness, float Scale, uint Seed, string? Color = null, DocumentVector2? Drift = null, float? Spin = null, float? Curl = null, DocumentVector2? Shear = null);
+public sealed record WorldRenderSkyClouds(float Coverage, float Softness, float Scale, uint Seed, BindableColor? Color = null, DocumentVector2? Drift = null, float? Spin = null, float? Curl = null, DocumentVector2? Shear = null);
