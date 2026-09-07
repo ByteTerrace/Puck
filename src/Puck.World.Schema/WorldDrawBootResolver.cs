@@ -95,7 +95,8 @@ public static class WorldDrawBootResolver {
             masks: row.DrawnMasks,
             values: values,
             masksAfter: out var masksAfter,
-            reason: out var fireReason
+            reason: out var fireReason,
+            skip: draw.Skip
         )) {
             reason = $"{site} {fireReason}";
 
@@ -138,7 +139,8 @@ public static class WorldDrawBootResolver {
             masks: masks,
             result: out fired,
             secret: draw.Secret,
-            reason: out var fireReason
+            reason: out var fireReason,
+            skip: draw.Skip
         )) {
             reason = $"{site} {fireReason}";
 

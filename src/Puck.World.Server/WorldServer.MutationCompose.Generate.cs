@@ -142,7 +142,8 @@ public sealed partial class WorldServer {
             masks: siteRow.DrawnMasks,
             result: out var fired,
             secret: draw.Secret,
-            reason: out var fireReason
+            reason: out var fireReason,
+            skip: draw.Skip
         )) {
             reason = $"state row '{mutation.Row}' {fireReason}";
 

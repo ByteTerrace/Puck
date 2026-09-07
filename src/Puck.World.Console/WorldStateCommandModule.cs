@@ -115,10 +115,20 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             )
         );
     }
+    // An extended-generator facet reads back as its own shape (table size, how many of its first draws are
+    // authored, the site's own seek) — the decision a save/reload proof and an author both need to see, since none of
+    // it is otherwise observable once compiled into the runtime table.
+    private static string DescribeExtended(StateGenerator? generator, long skip) {
+        if (generator?.Extended is not { } extended) {
+            return string.Empty;
+        }
+
+        return $" extended k={extended.K} scripted={extended.Script?.Count ?? 0} skip={skip}";
+    }
     // A DRAW SITE reads back as WHAT IT IS and WHERE IT IS — which source it draws from (named or inline), when it
     // may draw, and its own live position. That position is the whole of a site's draw state (nothing lives outside
     // the document), so this line is what a save/reload proof reads.
-    private static string DescribeDraw(WorldStateRow row) {
+    private static string DescribeDraw(WorldStateRow row, IReadOnlyList<GeneratorRow>? generators) {
         if (row.Draw is not { } draw) {
             // A lattice row's draw fill reads back the same way a site does — its source and its pass position —
             // minus a timing, since a whole-field pass is redrawn only by an explicit generate.
@@ -127,8 +137,12 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                     ? $"source={namedFill}"
                     : $"source=<inline:{DescribeSourceShape(generator: fill.Generator)}>"
                 );
+                var fillResolved = (GeneratorEngine.TryResolveSource(generators: generators, draw: new Draw(Source: fill.Source, Generator: fill.Generator), generator: out var fillGenerator, reason: out _)
+                    ? fillGenerator
+                    : null
+                );
 
-                return $" draw {fillSource} fill=lattice cursor={row.DrawCursor} masks={DescribeMasks(row: row)}";
+                return $" draw {fillSource} fill=lattice cursor={row.DrawCursor} masks={DescribeMasks(row: row)}{DescribeExtended(generator: fillResolved, skip: 0L)}";
             }
 
             return string.Empty;
@@ -138,8 +152,12 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             ? $"source={named}"
             : $"source=<inline:{DescribeSourceShape(generator: draw.Generator)}>"
         );
+        var resolved = (GeneratorEngine.TryResolveSource(generators: generators, draw: draw, generator: out var resolvedGenerator, reason: out _)
+            ? resolvedGenerator
+            : null
+        );
 
-        return $" draw {source} timing={draw.Timing.ToString().ToLowerInvariant()} cursor={row.DrawCursor} masks={DescribeMasks(row: row)}";
+        return $" draw {source} timing={draw.Timing.ToString().ToLowerInvariant()} cursor={row.DrawCursor} masks={DescribeMasks(row: row)}{DescribeExtended(generator: resolved, skip: draw.Skip)}";
     }
     private static string DescribeEvicts(WorldStateRow row) => (row.Evicts
         ? " evicts=true"
@@ -266,7 +284,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             key: WorldStateRow.SlotKey.Value,
             row: row,
             server: server
-        )}{DescribeCycle(cycle: row.Cycle)}{DescribeDraw(row: row)}{DescribeDiscrete(server, row)}]";
+        )}{DescribeCycle(cycle: row.Cycle)}{DescribeDraw(row: row, generators: server.Definition.Generators)}{DescribeDiscrete(server, row)}]";
 
         if (!row.IsSlot) {
             var capacity = Math.Clamp(

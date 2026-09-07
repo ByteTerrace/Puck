@@ -31,7 +31,7 @@ namespace Puck.Maths;
 /// logarithmic time, but it is not a cheap inverse of a small forward advance the way it is for the bare LCG.
 /// </para>
 /// </remarks>
-public struct Pcg32Extended {
+public struct Pcg32Extended : IDrawGenerator {
     private const string KError = "k must be a power of two in [2, 1024]";
     private const string ExtensionIndexError = "index must be within the extension array";
 
@@ -311,6 +311,37 @@ public struct Pcg32Extended {
         return new(
             baseGenerator: baseGenerator,
             extension: extension
+        );
+    }
+    /// <summary>Creates a generator from a seed, a stream id, and an AUTHORED extension table — the document-data
+    /// counterpart of <see cref="Create(ulong, ulong, int)"/>'s self-seeding.</summary>
+    /// <param name="state">The seed, forwarded to <see cref="Pcg32XshRr.Create(ulong, ulong)"/>.</param>
+    /// <param name="stream">The stream id, forwarded to <see cref="Pcg32XshRr.Create(ulong, ulong)"/>.</param>
+    /// <param name="table">The extension table's own words, copied into a private array; its length is <c>k</c>, a
+    /// power of two in <c>[2, 1024]</c>.</param>
+    /// <returns>A ready-to-draw generator whose base starts at the SAME state <see cref="Create(ulong, ulong, int)"/>'s
+    /// base would (no draws are consumed forming the table), and whose extension table is <paramref name="table"/>
+    /// verbatim rather than self-seeded from the base's own draws.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="stream"/> exceeds
+    /// <see cref="Pcg32XshRr.MaxStream"/>, or <paramref name="table"/>'s length is not a power of two in
+    /// <c>[2, 1024]</c>.</exception>
+    public static Pcg32Extended CreateWithTable(ulong state, ulong stream, ReadOnlySpan<uint> table) {
+        var k = table.Length;
+
+        if ((k < 2) || (k > 1024) || ((k & (k - 1)) != 0)) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: k,
+                message: KError,
+                paramName: nameof(table)
+            );
+        }
+
+        return new(
+            baseGenerator: Pcg32XshRr.Create(
+                state: state,
+                stream: stream
+            ),
+            extension: table.ToArray()
         );
     }
     /// <summary>Reads one extension word directly.</summary>

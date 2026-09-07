@@ -1269,6 +1269,30 @@ every tick costs the same at cursor 1,000,000 as at cursor 0. The trade is
 honest and stated: the uniform map is uniform to within `n/2^32`, exactly zero
 when `n` divides `2^32`, rather than exactly uniform.
 
+**A source may declare `extended`** (`GeneratorExtended`): an authored
+`Pcg32Extended` table replacing that generator's own self-seeding, so the site
+is k-dimensionally equidistributed rather than merely 1-dimensionally so.
+`k` is a power of two in `[2, 1024]`; exactly one of `table` (the whole
+extension table verbatim) or `script` (up to `k` values in the source's own
+OUTPUT space, compiled to a table at boot resolution) is authored. A script
+compiles as: word `i` is `wanted_i XOR base_i`, where `base_i` is the base
+generator's own `i`-th raw draw (independent of table content) and `wanted_i`
+is the raw draw the source's own sampling maps onto the scripted value; words
+past the script are the self-seeded table's own. Only `streamDraw` and
+`uniformRange` admit a script — the two sources that sample in one fixed-cost
+draw with no drawn-mask state, so a wanted output maps back to a single raw
+draw; `markov`, `weightedNumeric` and `symmetryOrbit` draw through an alias
+table whose selection depends on the site's own drawn masks, so no script maps
+back. The table is a pure function of (seed ladder, authored table/script,
+cursor) — nothing new persists, and save/reload/undo resume exactly as an
+ordinary site's do. `GeneratorEngine`'s compiled cache holds the built extended
+generator beside the cursor it corresponds to, so a per-tick site draws in
+place with no rebuild and no allocation; a cursor mismatch (a reload, an undo,
+a checkpoint restore) rebuilds once. `Draw.skip` (non-negative, default `0`) is
+an authored seek belonging to the same class as the seed: a rebuild advances by
+`(skip + cursor) * cost` rather than `cursor * cost`, and never writes the
+persisted cursor.
+
 **One site type, never cleared.** Every draw site is a `WorldStateRow.Draw`
 facet — the draw facet's single home. `WorldDrawBootResolver` fills a slot
 row only while it carries no cell yet (first fill: process boot, or a fresh

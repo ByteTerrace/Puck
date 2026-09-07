@@ -247,14 +247,16 @@ public sealed class AliasTable<TElement> {
     }
 
     /// <summary>Samples one element in proportion to the construction weights.</summary>
+    /// <typeparam name="TGenerator">The draw generator's own type.</typeparam>
     /// <param name="generator">The generator to draw from; consumes exactly two advances.</param>
     /// <returns>The sampled element.</returns>
-    public TElement Sample(ref Pcg32XshRr generator) =>
+    public TElement Sample<TGenerator>(ref TGenerator generator) where TGenerator : struct, IDrawGenerator =>
         m_elements[SampleIndex(generator: ref generator)];
     /// <summary>Samples one entry index in proportion to the construction weights.</summary>
+    /// <typeparam name="TGenerator">The draw generator's own type.</typeparam>
     /// <param name="generator">The generator to draw from; consumes exactly two advances.</param>
     /// <returns>The sampled entry's index in the construction span, always below <see cref="Count"/>.</returns>
-    public int SampleIndex(ref Pcg32XshRr generator) {
+    public int SampleIndex<TGenerator>(ref TGenerator generator) where TGenerator : struct, IDrawGenerator {
         var columns = m_columns;
         var column = ((int)(generator.NextUInt32() & ((uint)(columns.Length - 1))));
         var selection = columns[column];

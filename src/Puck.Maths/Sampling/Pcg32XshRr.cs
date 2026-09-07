@@ -19,7 +19,7 @@ namespace Puck.Maths;
 /// generator across systems couples them through draw order. A default-constructed instance is degenerate; create
 /// instances with <see cref="Create(ulong, ulong)"/> or <see cref="FromRawBits"/>.
 /// </remarks>
-public struct Pcg32XshRr {
+public struct Pcg32XshRr : IDrawGenerator {
     private const string MultiplierError = "multiplier must be congruent to 1 (mod 4) for the state to have full period";
     private const string StreamError = "stream id must not exceed 2^63 - 1";
     private const ulong TwoLn2Q30 = 1488522236UL; // round(2·ln 2 · 2^30)

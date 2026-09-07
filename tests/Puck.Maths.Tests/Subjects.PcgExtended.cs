@@ -324,6 +324,106 @@ internal static partial class Subjects {
 
         return null;
     }
+    /// <summary><see cref="Pcg32Extended.CreateWithTable(ulong, ulong, ReadOnlySpan{uint})"/>'s base matches a FRESH
+    /// <see cref="Pcg32XshRr.Create(ulong, ulong)"/> exactly (no draws consumed self-seeding), its extension is the
+    /// authored table verbatim, and the chosen-output recipe against that fresh base — rather than
+    /// <see cref="Pcg32Extended.Create(ulong, ulong, int)"/>'s already-self-seeded one — lands the next k draws on the
+    /// wanted values in order; plus the table-length refusal ladder.</summary>
+    public static string? PcgExtendedCreateWithTable() {
+        const int k = 8;
+        const ulong state = 4001UL;
+        const ulong stream = 17UL;
+        var seeder = Pcg32XshRr.Create(
+            state: state,
+            stream: stream
+        );
+        var table = new uint[k];
+
+        for (var index = 0; (index < k); ++index) {
+            table[index] = seeder.NextUInt32();
+        }
+
+        var withTable = Pcg32Extended.CreateWithTable(
+            state: state,
+            stream: stream,
+            table: table
+        );
+        var freshBase = Pcg32XshRr.Create(
+            state: state,
+            stream: stream
+        );
+
+        if (withTable.State != freshBase.State) { return "CreateWithTable's base State does not match a fresh Pcg32XshRr.Create at the same seed and stream"; }
+        if (withTable.Increment != freshBase.Increment) { return "CreateWithTable's base Increment does not match a fresh Pcg32XshRr.Create"; }
+        if (withTable.Multiplier != freshBase.Multiplier) { return "CreateWithTable's base Multiplier does not match a fresh Pcg32XshRr.Create"; }
+
+        var extension = withTable.Extension;
+
+        if (extension.Length != k) { return $"Extension has length {extension.Length}, not k={k}"; }
+
+        for (var index = 0; (index < k); ++index) {
+            if (extension[index] != table[index]) { return $"Extension[{index}] is 0x{extension[index]:X8}, not the authored 0x{table[index]:X8}"; }
+        }
+
+        // The chosen-output recipe against a FRESH (zero-offset) probe: precompute the table index and base draw a
+        // clean Pcg32XshRr.Create(state, stream) produces at each of the first k steps, install wanted XOR base at
+        // each, and confirm the constructed generator's own next k draws equal the wanted values in order.
+        var indexProbe = Pcg32XshRr.Create(
+            state: state,
+            stream: stream
+        );
+        var baseProbe = Pcg32XshRr.Create(
+            state: state,
+            stream: stream
+        );
+        var indices = new int[k];
+        var baseDraws = new uint[k];
+
+        for (var index = 0; (index < k); ++index) {
+            indices[index] = ((int)(indexProbe.State & ((ulong)(k - 1))));
+            _ = indexProbe.NextUInt32();
+            baseDraws[index] = baseProbe.NextUInt32();
+        }
+
+        var chooser = Pcg32XshRr.Create(
+            state: 990UL,
+            stream: 21UL
+        );
+        var wanted = new uint[k];
+        var chosenTable = new uint[k];
+
+        for (var index = 0; (index < k); ++index) {
+            wanted[index] = chooser.NextUInt32();
+            chosenTable[indices[index]] = unchecked(wanted[index] ^ baseDraws[index]);
+        }
+
+        var chosen = Pcg32Extended.CreateWithTable(
+            state: state,
+            stream: stream,
+            table: chosenTable
+        );
+
+        for (var index = 0; (index < k); ++index) {
+            var drawn = chosen.NextUInt32();
+
+            if (drawn != wanted[index]) { return $"draw {index} is 0x{drawn:X8}, not the chosen 0x{wanted[index]:X8}"; }
+        }
+
+        if (!ThrowsExactly<ArgumentOutOfRangeException>(
+            action: () => Pcg32Extended.CreateWithTable(state: 0UL, stream: 0UL, table: new uint[3]),
+            paramName: "table"
+        )) { return "a non-power-of-two table length was accepted"; }
+        if (!ThrowsExactly<ArgumentOutOfRangeException>(
+            action: () => Pcg32Extended.CreateWithTable(state: 0UL, stream: 0UL, table: new uint[2048]),
+            paramName: "table"
+        )) { return "a table length above 1024 was accepted"; }
+        if (!ThrowsExactly<ArgumentOutOfRangeException>(
+            action: () => Pcg32Extended.CreateWithTable(state: 0UL, stream: (Pcg32XshRr.MaxStream + 1UL), table: new uint[4]),
+            paramName: "stream"
+        )) { return "a stream above MaxStream was accepted"; }
+
+        return null;
+    }
     /// <summary><see cref="Pcg32XshRr.Distance(in Pcg32XshRr)"/> against its own <see cref="Pcg32XshRr.Advance(ulong)"/>: the
     /// reinterpreted distance equals the advance count exactly, at magnitudes sampled logarithmically across the full
     /// 64-bit range, and re-advancing by that distance lands exactly; and the cross-stream/cross-multiplier

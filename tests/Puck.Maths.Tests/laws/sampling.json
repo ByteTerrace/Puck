@@ -1588,6 +1588,42 @@
     ]
   },
   {
+    "Id": "sampling.pcg-extended-create-with-table",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.Pcg32Extended", "Name": "CreateWithTable" }
+    ],
+    "Legs": [
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "CreateWithTable(state, stream, table)'s own State/Increment/Multiplier and its Extension, right after construction",
+        "Against": "a fresh Pcg32XshRr.Create(state, stream) built independently at the same seed and stream, and the authored table array itself",
+        "Shared": "Pcg32XshRr.Create itself: CreateWithTable's base is built by calling that same member, so agreement on State/Increment/Multiplier is carriage evidence that no draw is consumed self-seeding, not independent evidence about Create's own seeding, which sampling.pcg-reference-vector-and-state already pins",
+        "Citation": "the base seeding's own evidence is sampling.pcg-reference-vector-and-state",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the chosen-output recipe restated against a table built by CreateWithTable rather than by Create+SetExtension: the index and base draw at each of the first k steps are read from a FRESH Pcg32XshRr.Create(state, stream) probe (never Create's own already-self-seeded base), wanted XOR base is written to the authored table before construction, and CreateWithTable's own next k draws equal the wanted values in order — this is what makes the table a pure function of (seed, authored table) with no hidden self-seed offset baked in ahead of the caller's own installs, the property sampling.pcg-extended-chosen-outputs states for the OTHER construction path",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the refusal ladder: a table length of 3 (not a power of two) and 2048 (above 1024) are refused naming `table`, and a stream above MaxStream is refused naming `stream`",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
     "Id": "sampling.pcg-distance-round-trip",
     "Tier": "Default",
     "Members": [

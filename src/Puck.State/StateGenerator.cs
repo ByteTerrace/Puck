@@ -101,6 +101,33 @@ public enum GeneratorSource : byte {
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record GeneratorWeightedNumeric(long Value, ulong Weight, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Multiplicity = null);
 /// <summary>
+/// A source's extended-generator facet: an authored <c>Pcg32Extended</c> table replacing that generator's own
+/// self-seeding, so a site drawing from it is k-dimensionally equidistributed rather than merely 1-dimensionally so.
+/// The table is document data, exactly one rebuild cost (<c>GeneratorEngine</c> caches the built generator beside
+/// the cursor it corresponds to) — nothing about the site's persisted shape changes.
+/// </summary>
+/// <remarks>Exactly one of <see cref="Table"/> and <see cref="Script"/> is declared. <see cref="Table"/> is the whole
+/// extension table verbatim, for any source. <see cref="Script"/> authors the site's own first draws directly in the
+/// SOURCE'S OUTPUT space — the value <c>streamDraw</c> writes, or the value <c>uniformRange</c> maps to — and compiles
+/// to a table at boot resolution: word <c>i</c> is <c>wanted_i XOR base_i</c>, where <c>base_i</c> is the base
+/// generator's own <c>i</c>-th raw draw (independent of any table content) and <c>wanted_i</c> is the raw draw the
+/// source's own sampling maps onto the scripted value. Only <c>streamDraw</c> and <c>uniformRange</c> admit a script:
+/// both sample in one fixed-cost draw with no drawn-mask state, so a wanted output maps back to a single raw draw;
+/// <c>markov</c>, <c>weightedNumeric</c> and <c>symmetryOrbit</c> draw through an alias table whose selection depends
+/// on the site's own drawn masks, so no single raw draw maps a scripted value back. Words past the script's length are
+/// the self-seeded table's own.</remarks>
+/// <param name="K">The extension table size: a power of two in <c>[2, 1024]</c>.</param>
+/// <param name="Table">The whole extension table, exactly <see cref="K"/> words — or <see langword="null"/> when
+/// <see cref="Script"/> authors it instead.</param>
+/// <param name="Script">Up to <see cref="K"/> values in the source's own output space, authoring the site's first
+/// draws directly — or <see langword="null"/> when <see cref="Table"/> is authored instead.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record GeneratorExtended(
+    int K,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<uint>? Table = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<long>? Script = null
+);
+/// <summary>
 /// An authored stochastic source — the vocabulary for every randomness declaration in the document: a name
 /// generator, a dialogue line, a loot roll, a flat weighted draw, a multiset sample, a random census, and a drawn
 /// host backend all reduce to a source of this family, sampled at an authored moment into an authored site (see
@@ -150,6 +177,8 @@ public sealed record GeneratorWeightedNumeric(long Value, ulong Weight, [propert
 /// <param name="Word"><see cref="GeneratorSource.SymmetryOrbit"/> beside <see cref="Node"/> only: the word of
 /// reflections (one to eight mirror nodes, applied first to last) the orbit is taken under, or <see langword="null"/>
 /// for the lattice's own cycle — the same generator vocabulary a <see cref="StateCycle"/> authors.</param>
+/// <param name="Extended">The extended-generator facet (see <see cref="GeneratorExtended"/>), or
+/// <see langword="null"/> for the ordinary <c>Pcg32XshRr</c> generator every other source draws through.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StateGenerator(
     GeneratorSource Source = GeneratorSource.Markov,
@@ -164,7 +193,8 @@ public sealed record StateGenerator(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<GeneratorWeightedNumeric>? Weighted = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Ring = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Node = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<int>? Word = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<int>? Word = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] GeneratorExtended? Extended = null
 ) {
     /// <summary>The <see cref="Bound"/> an undeclared source carries — one emitted token. <see cref="Bound"/> is
     /// Markov-only and not nullable, so "left at its default" is the only reading of "not declared" available to it; a
@@ -210,4 +240,10 @@ public static class GeneratorCapacity {
     /// <summary>The least value a <see cref="GeneratorSource.UniformRange"/> bound may hold — see
     /// <see cref="MaxRangeBound"/>.</summary>
     public const long MinRangeBound = int.MinValue;
+    /// <summary>The greatest <see cref="GeneratorExtended.K"/> a source may declare — <c>Pcg32Extended</c>'s own
+    /// ceiling.</summary>
+    public const int MaxExtendedTableSize = 1024;
+    /// <summary>The least <see cref="GeneratorExtended.K"/> a source may declare — <c>Pcg32Extended</c>'s own
+    /// floor.</summary>
+    public const int MinExtendedTableSize = 2;
 }

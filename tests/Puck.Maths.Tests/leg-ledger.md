@@ -18,20 +18,20 @@ adversarial review's job, not this file's.
 | in-tree-independent | — | 31 | 25 |
 | shared-substrate | fused-substrate | 36 | 34 |
 | shared-substrate | shared-exact-kernel | 19 | 18 |
-| shared-substrate | delegation-twin | 45 | 41 |
+| shared-substrate | delegation-twin | 46 | 42 |
 | shared-substrate | transcription | 28 | 25 |
 | shared-substrate | intra-presented | 82 | 47 |
 | shared-substrate | shared-upstream | 22 | 15 |
 | relative-canary | — | 18 | 17 |
-| structural | — | 1178 | 587 |
-| **total** | | **2270** | **743** |
+| structural | — | 1180 | 588 |
+| **total** | | **2273** | **744** |
 
 ## Counts by surface
 
 | surface | statements | agreement legs | structural legs | statements with no independent leg |
 | --- | --- | --- | --- | --- |
 | law: Deep | 112 | 148 | 123 | 21 |
-| law: Default | 602 | 873 | 1054 | 183 |
+| law: Default | 603 | 874 | 1056 | 184 |
 | law: Exhaustive | 7 | 23 | 11 | 1 |
 | law: Smoke | 22 | 30 | 8 | 2 |
 
@@ -1783,6 +1783,9 @@ adversarial review's job, not this file's.
 | sampling.pcg-extended-base-equivalence | law: Default | structural | — | ENVELOPE: the run length at each k stays well under 65536 draws, so no tick fires and the zeroed table is never touched by AdvanceTableByOne; a run that crossed a tick would turn the zero words nonzero and this equivalence would not hold past that point | — | — | — |
 | sampling.pcg-extended-chosen-outputs | law: Default | structural | — | a cloned probe walks the next k draws (k=8) recording, at each step, the table index the pre-draw State selects; a second clone of the plain base generator (Pcg32XshRr.FromRawBits from the same Increment/Multiplier/State) draws the k base values that will land at those same steps; SetExtension(index, wanted XOR base) is called once per recorded index so every slot visited is set exactly once | the next k draws of the original generator equal the k independently-chosen wanted values, in order | — | — |
 | sampling.pcg-extended-chosen-outputs | law: Default | structural | — | ENVELOPE: this states that SetExtension is a raw table write with no on-the-fly XOR of its own (the caller supplies the already-XOR'd word) and that Clone's copy is independent enough to serve as the lookahead probe without disturbing the original's own state or table — it does not claim anything about draws past the kth, since a table of size k revisits every slot once per k draws and no leg here reads that far | — | — | — |
+| sampling.pcg-extended-create-with-table | law: Default | shared-substrate | delegation-twin | CreateWithTable(state, stream, table)'s own State/Increment/Multiplier and its Extension, right after construction | a fresh Pcg32XshRr.Create(state, stream) built independently at the same seed and stream, and the authored table array itself | Pcg32XshRr.Create itself: CreateWithTable's base is built by calling that same member, so agreement on State/Increment/Multiplier is carriage evidence that no draw is consumed self-seeding, not independent evidence about Create's own seeding, which sampling.pcg-reference-vector-and-state already pins | the base seeding's own evidence is sampling.pcg-reference-vector-and-state |
+| sampling.pcg-extended-create-with-table | law: Default | structural | — | the chosen-output recipe restated against a table built by CreateWithTable rather than by Create+SetExtension: the index and base draw at each of the first k steps are read from a FRESH Pcg32XshRr.Create(state, stream) probe (never Create's own already-self-seeded base), wanted XOR base is written to the authored table before construction, and CreateWithTable's own next k draws equal the wanted values in order — this is what makes the table a pure function of (seed, authored table) with no hidden self-seed offset baked in ahead of the caller's own installs, the property sampling.pcg-extended-chosen-outputs states for the OTHER construction path | — | — | — |
+| sampling.pcg-extended-create-with-table | law: Default | structural | — | the refusal ladder: a table length of 3 (not a power of two) and 2048 (above 1024) are refused naming `table`, and a stream above MaxStream is refused naming `stream` | — | — | — |
 | sampling.pcg-extended-delegation-and-refusals | law: Default | shared-substrate | transcription | the bounded draw and both fraction adapters, restated against this type's own NextUInt32 over 256 draws | the bounded draw's declared shapes (a singleton range, a full range, swapped bounds) and the fraction adapters' shift and width, each checked against calls to this type's own NextUInt32 advanced in lockstep | the subject's own rule — the raw draw and its top bits — restated against a generator advanced in lockstep, exactly the shape sampling.pcg-reference-vector-and-state uses for the base type | none stands for the adapters themselves (Pcg32Extended.cs); the draw beneath them is what sampling.pcg-extended-reference-vectors pins |
 | sampling.pcg-extended-delegation-and-refusals | law: Default | structural | — | the refusal ladder: Create refuses k=0, k=3 (not a power of two), k=2048 (above 1024) and a stream above MaxStream, each naming the argument at fault (`k` or `stream`); GetExtension and the single-word SetExtension refuse an index at -1 and at k, naming `index`; the span SetExtension refuses a span one shorter and one longer than k, naming `words`. k=2 and k=1024 (both ends of the window) and stream=MaxStream are accepted | — | — | — |
 | sampling.pcg-extended-delegation-and-refusals | law: Default | structural | — | Increment, Multiplier and State read the identical values the base Pcg32XshRr the type wraps would report from the same raw bits, and Extension's contents equal GetExtension at every index, both immediately after Create and again after a handful of draws and one SetExtension call | — | — | — |
@@ -2391,6 +2394,7 @@ the two fix queues apart.
 | sampling.alias-refusal-and-fixed-twins | law: Default | delegation-twin | (A)/(C) | AliasTable<TElement>.CreateCore — the identical member, not a sibling copy: the fixed-point overloads convert the carrier and delegate the whole Vose partition to it |
 | sampling.bit-mix-constants-invert | law: Default | shared-exact-kernel | (A)/(C) | the round trip calls BOTH members and nothing else, so it pins them only as a PAIR: a compensating error in Mix and Unmix together would survive it. What breaks that symmetry is the constants leg above, which reads the multipliers without calling either |
 | sampling.pcg-extended-base-equivalence | law: Default | delegation-twin | (A)/(C) | Pcg32XshRr.NextUInt32 itself: the extended generator's base field IS a Pcg32XshRr, and XOR against an all-zero word is the identity, so agreement is carriage evidence that the extension wiring adds nothing when the table is zero, not independent evidence about NextUInt32's own permutation, which sampling.pcg-reference-vector-and-state already pins |
+| sampling.pcg-extended-create-with-table | law: Default | delegation-twin | (A)/(C) | Pcg32XshRr.Create itself: CreateWithTable's base is built by calling that same member, so agreement on State/Increment/Multiplier is carriage evidence that no draw is consumed self-seeding, not independent evidence about Create's own seeding, which sampling.pcg-reference-vector-and-state already pins |
 | sampling.pcg-extended-delegation-and-refusals | law: Default | transcription | (A)/(C) | the subject's own rule — the raw draw and its top bits — restated against a generator advanced in lockstep, exactly the shape sampling.pcg-reference-vector-and-state uses for the base type |
 | sampling.pcg-transcribed-reference-and-decorrelation | law: Deep | transcription | (A)/(C) | the REFERENCE implementation's algorithm, not the subject's own rule — agreement proves Pcg32XshRr carries that third-party specification faithfully across a wide operand sweep, and NOT that either side matches the true published generator: a transcription error shared by both would be invisible here |
 | scalar.move-toward-boundaries-and-segment | law: Default | shared-upstream | (A)/(C) | FixedQ4816.Abs — the identical member MoveToward's own early-return branch reaches through (it compares Abs(delta) against maxDelta before ever computing the moved point). Both identities are EXACT rather than tolerance-bounded, unlike the vector law's counterpart: the scalar path has no divide or normalize between the compare and the add, so nothing is rounded. What this claim catches is everything ABOVE Abs — an overshoot, an undershoot, or a step applied against the wrong operand. |

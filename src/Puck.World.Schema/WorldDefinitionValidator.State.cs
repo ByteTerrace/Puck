@@ -429,6 +429,10 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.timing={draw.Timing.ToString().ToLowerInvariant()} — this is a BOOT-ONLY document field, read once at composition; nothing could observe a later redraw, so only timing=boot is admissible here.");
         }
 
+        if (draw.Skip < 0L) {
+            errors.Add(item: $"{path}.skip {draw.Skip} is negative — an authored seek is a non-negative offset.");
+        }
+
         if (!GeneratorEngine.TryResolveSource(
             draw: draw,
             generator: out var generator,
@@ -646,6 +650,10 @@ public static partial class WorldDefinitionValidator {
 
         if (!Enum.IsDefined(value: generator.Mode)) {
             errors.Add(item: $"{path}.mode '{generator.Mode}' is not a defined GeneratorMode.");
+        }
+
+        if (!GeneratorEngine.TryCheckExtendedShape(generator: generator, reason: out var extendedReason)) {
+            errors.Add(item: $"{path} {extendedReason}.");
         }
 
         // Each source's fields are BOTH-OR-NEITHER against the fields the others own — a foreign field present is

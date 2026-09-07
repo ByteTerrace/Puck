@@ -1008,6 +1008,22 @@ live site while its cursor kept counting.
 rejection-sampled bounded draw), so resuming at cursor `n` is one `Advance` —
 O(1). There is NO per-tick cadence ceiling.
 
+**A source may declare `extended`** (`GeneratorExtended`): an authored
+`Pcg32Extended` table replacing that generator's own self-seeding — `{"k": 2..1024
+(power of two), "table": [k uint32 words]}` verbatim, or `{"k": …, "script": [up
+to k values in the source's own OUTPUT space]}`, compiled at boot resolution
+(word `i` is `wanted_i XOR base_i`; words past the script are the self-seeded
+table's own). Only `streamDraw` and `uniformRange` admit a script — the two
+sources that sample in one fixed-cost draw with no drawn-mask state, so a wanted
+value maps back to a single raw draw; `markov`/`weightedNumeric`/`symmetryOrbit`
+draw through an alias table whose selection depends on the site's own drawn
+masks, so a script cannot map back. Nothing new persists — the table is a pure
+function of (seed ladder, authored table/script, cursor), so save/reload/undo
+resume exactly as an ordinary site's do. `Draw.skip` (non-negative, default `0`)
+is an authored seek: a rebuild advances `(skip + cursor) * cost` rather than
+`cursor * cost`, and never writes the cursor. `world.state <row>` echoes
+`extended k=<k> scripted=<n> skip=<s>` on a site carrying the facet.
+
 **Boot-only sites SETTLE AND CLEAR** into their ordinary literal field and
 NARRATE on stderr (`[world.draw: settled <site> instance=<name> -> <value>]`) —
 settling erases the only evidence the value was random. State sites keep facet +

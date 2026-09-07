@@ -9,14 +9,14 @@
       ]
     },
     {
-      "Id": "Puck.Maths.AliasTable<TElement>.Sample(Puck.Maths.Pcg32XshRr&)",
+      "Id": "Puck.Maths.AliasTable<TElement>.Sample(TGenerator&)",
       "State": "covered",
       "CoveredBy": [
         "sampling.alias-refusal-and-fixed-twins"
       ]
     },
     {
-      "Id": "Puck.Maths.AliasTable<TElement>.SampleIndex(Puck.Maths.Pcg32XshRr&)",
+      "Id": "Puck.Maths.AliasTable<TElement>.SampleIndex(TGenerator&)",
       "State": "covered",
       "CoveredBy": [
         "sampling.alias-refusal-and-fixed-twins",
@@ -10609,6 +10609,21 @@
       "State": "uncovered"
     },
     {
+      "Id": "Puck.Maths.IDrawGenerator.Advance(System.UInt64)",
+      "State": "waived",
+      "Reason": "A generic-dispatch shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. Each implementer's own concrete member is a separate reflected member under its own declaring type, gated by that type's sampling.* laws."
+    },
+    {
+      "Id": "Puck.Maths.IDrawGenerator.NextUInt32()",
+      "State": "waived",
+      "Reason": "A generic-dispatch shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. Each implementer's own concrete member is a separate reflected member under its own declaring type, gated by that type's sampling.* laws."
+    },
+    {
+      "Id": "Puck.Maths.IDrawGenerator.NextUInt32(System.UInt32,System.UInt32)",
+      "State": "waived",
+      "Reason": "A generic-dispatch shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. Each implementer's own concrete member is a separate reflected member under its own declaring type, gated by that type's sampling.* laws."
+    },
+    {
       "Id": "Puck.Maths.IFieldEvaluator.Capabilities",
       "State": "waived",
       "Reason": "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own."
@@ -13102,6 +13117,13 @@
       "CoveredBy": [
         "sampling.pcg-extended-delegation-and-refusals",
         "sampling.pcg-extended-reference-vectors"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.Pcg32Extended.CreateWithTable(System.UInt64,System.UInt64,System.ReadOnlySpan<System.UInt32>)",
+      "State": "covered",
+      "CoveredBy": [
+        "sampling.pcg-extended-create-with-table"
       ]
     },
     {

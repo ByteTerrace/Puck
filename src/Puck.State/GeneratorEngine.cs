@@ -38,6 +38,12 @@ namespace Puck.State;
 /// bounded draw precisely so this stays true. Resuming a site at cursor <c>n</c> is therefore one
 /// <c>Pcg32XshRr.Advance(n * cost)</c>, an O(1) jump, and never a replay of the earlier draws. There is no per-tick
 /// cadence ceiling: a rule redrawing a site on every tick costs the same at cursor 1,000,000 as at cursor 0.</para>
+/// <para><b>An extended source</b> (<see cref="StateGenerator.Extended"/>) draws through a <c>Pcg32Extended</c>
+/// instead of the bare base generator — the SAME sampling code, generic over <see cref="IDrawGenerator"/>, never a
+/// second copy of it. The table is document data (authored directly, or compiled from a script at rebuild time; see
+/// <see cref="TryBuildExtendedTable"/>), so nothing about the seek/cursor contract above changes. <c>Compiled</c>'s
+/// cache holds the built extended generator beside the cursor it was built for, so a site drawn every tick draws IN
+/// PLACE with no rebuild and no allocation; a cursor mismatch rebuilds once.</para>
 /// </remarks>
 public static class GeneratorEngine {
     /// <summary>The engine-wide constant folded into every site's seed — the ladder's first rung.</summary>
@@ -117,6 +123,37 @@ public static class GeneratorEngine {
         public EntrySet? Orbit { get; }
         public int[] OrbitNodes { get; }
         public EntrySet? Weighted { get; }
+
+        // The extended-generator per-tick cache: the last built Pcg32Extended, beside the (seed ladder, skip, cursor)
+        // it was built for. A use whose seed/stream/skip/cursor all match draws from the SAME instance in place — no
+        // rebuild, no allocation; anything else (a reload, an undo, a checkpoint restore, or a different site sharing
+        // this declared source) rebuilds once. m_extendedValid alone gates matching, since a default Pcg32Extended
+        // (an unallocated table) is never itself a valid cache entry.
+        private Pcg32Extended m_extendedGenerator;
+        private bool m_extendedValid;
+        private ulong m_extendedSeedState;
+        private ulong m_extendedStream;
+        private long m_extendedSkip;
+        private long m_extendedCursor;
+
+        public bool MatchesExtended(ulong seedState, ulong stream, long skip, long cursor) =>
+            (m_extendedValid &&
+            (m_extendedSeedState == seedState) &&
+            (m_extendedStream == stream) &&
+            (m_extendedSkip == skip) &&
+            (m_extendedCursor == cursor));
+        public void SetExtended(ulong seedState, ulong stream, long skip, long cursor, Pcg32Extended generator) {
+            m_extendedGenerator = generator;
+            m_extendedValid = true;
+            m_extendedSeedState = seedState;
+            m_extendedStream = stream;
+            m_extendedSkip = skip;
+            m_extendedCursor = cursor;
+        }
+        // Advances the cached cursor by the samples an in-place draw just consumed, keeping the cache valid for the
+        // NEXT sequential use — the steady-tick path that never rebuilds.
+        public void AdvanceExtendedCursor(long samples) => m_extendedCursor = checked(m_extendedCursor + samples);
+        public ref Pcg32Extended ExtendedGenerator => ref m_extendedGenerator;
     }
     private sealed class EntrySet {
         private EntrySet(int[] unitEntries, ulong[] unitWeights, AliasTable<int>? full, long unitCount) {
@@ -194,7 +231,7 @@ public static class GeneratorEngine {
     // RestartOnExhaustion, in the same emission. Exactly two generator advances either way, so cursor seeking
     // stays exact. On success the picked unit's bit is set in `mask` (exhausting modes only) and the unit's ENTRY
     // ordinal is returned; -1 with `reason` set otherwise.
-    private static int DrawEntry(GeneratorMode mode, EntrySet? set, ref ClosedBitset256 mask, ref Pcg32XshRr rng, string what, out string reason) {
+    private static int DrawEntry<TGenerator>(GeneratorMode mode, EntrySet? set, ref ClosedBitset256 mask, ref TGenerator rng, string what, out string reason) where TGenerator : struct, IDrawGenerator {
         reason = string.Empty;
 
         if (set?.UnitCount > GeneratorCapacity.MaxEntriesPerSet) {
@@ -258,7 +295,7 @@ public static class GeneratorEngine {
     // The exact Walker/Vose construction AliasTable<T> uses, specialized to a short-lived unit-index table backed
     // entirely by stack storage. Entry order, LIFO partition order, UQ0.32 rounding, power-of-two padding, and the
     // two random advances are deliberately identical, so every stream is a pure function of the entries and the seed.
-    private static int SampleAlias(ReadOnlySpan<(int Element, ulong Weight)> entries, ref Pcg32XshRr generator) {
+    private static int SampleAlias<TGenerator>(ReadOnlySpan<(int Element, ulong Weight)> entries, ref TGenerator generator) where TGenerator : struct, IDrawGenerator {
         var count = entries.Length;
         var columnCount = ((int)System.Numerics.BitOperations.RoundUpToPowerOf2(value: ((uint)count)));
         Span<UInt128> scaled = stackalloc UInt128[columnCount];
@@ -335,7 +372,7 @@ public static class GeneratorEngine {
 
         return entries[selected].Element;
     }
-    private static bool TryFireMarkov(StateGenerator generator, ref Pcg32XshRr rng, IReadOnlyList<ClosedBitset256>? masks, out FireResult result, out string reason) {
+    private static bool TryFireMarkov<TGenerator>(StateGenerator generator, ref TGenerator rng, IReadOnlyList<ClosedBitset256>? masks, out FireResult result, out string reason) where TGenerator : struct, IDrawGenerator {
         var contexts = generator.Contexts!;
         var compiled = Compiled(generator: generator);
         var tokens = new List<string>(capacity: generator.Bound);
@@ -418,15 +455,17 @@ public static class GeneratorEngine {
     // One numeric sample of a non-Markov source at the generator's current position, threading the one mask a
     // weighted source draws through. The single draw TryFire answers and every cell of a TryFireBatch fill share
     // this body, so a fill's cell k is exactly the sample a site at cursor + k would have drawn.
-    private static bool TryDrawNumeric(StateGenerator generator, CellKind targetKind, ref Pcg32XshRr rng, ref ClosedBitset256 mask, out long value, out string reason) {
+    private static bool TryDrawNumeric<TGenerator>(StateGenerator generator, CellKind targetKind, ref TGenerator rng, ref ClosedBitset256 mask, out long value, out string reason) where TGenerator : struct, IDrawGenerator {
         switch (generator.Source) {
             case GeneratorSource.UniformRange: {
                     var span = unchecked((uint)(generator.RangeMax!.Value - generator.RangeMin!.Value));
-                    var fraction = rng.NextUnitFraction32();
+                    // The raw fraction IS the draw NextUnitFraction32 wraps (Value: NextUInt32()) — read directly so
+                    // this stays generic over IDrawGenerator, which exposes the raw draw and not the fraction types.
+                    var fraction = rng.NextUInt32();
                     // Multiply-high map of a uniform fraction onto [0, span] — one fixed-cost advance, no rejection, so
                     // cursor seeking stays exact. The at-most-n/2^32 deviation this trades for an unbiased-via-rejection
                     // draw is the deliberate price of being seekable (see GeneratorSource.UniformRange).
-                    var offset = ((uint)(((((ulong)span) + 1UL) * fraction.Value) >> 32));
+                    var offset = ((uint)(((((ulong)span) + 1UL) * fraction) >> 32));
 
                     value = (generator.RangeMin.Value + offset);
                     reason = string.Empty;
@@ -483,52 +522,15 @@ public static class GeneratorEngine {
     /// <returns>The raw cell value.</returns>
     public static long EncodeNode(int node, CellKind targetKind) =>
         ((targetKind == CellKind.Fixed) ? (((long)node) << FixedQ4816.FractionBitCount) : node);
-    private static bool TryRunBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, int sampleCount, bool writeValues, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason) {
-        ArgumentNullException.ThrowIfNull(argument: generator);
-
-        masksAfter = null;
-
-        if (cursor < 0) {
-            reason = $"cursor {cursor} is negative — a draw cursor is a non-negative sample count";
-
-            return false;
-        }
-
-        if (sampleCount < 0) {
-            reason = $"sample count {sampleCount} is negative";
-
-            return false;
-        }
-
-        if (!Enum.IsDefined(value: generator.Mode)) {
-            reason = $"mode '{generator.Mode}' is not a defined GeneratorMode";
-
-            return false;
-        }
-
-        if (WritesText(source: generator.Source)) {
-            reason = $"source={StateSpelling.GeneratorSource(source: generator.Source)} writes text and cannot fill cells";
-
-            return false;
-        }
-
-        if (!TryCheckTargetKind(
-            source: generator.Source,
-            targetKind: targetKind,
-            reason: out reason
-        )) {
-            return false;
-        }
-
-        var rng = Pcg32XshRr.Create(
-            state: seedState,
-            stream: stream
-        );
-
-        rng.Advance(count: unchecked((((ulong)cursor) * AdvancesPerSample(source: generator.Source))));
-
+    // Shared by an ordinary and an extended run alike: given a POSITIONED generator (already advanced to cursor), draw
+    // sampleCount consecutive numeric samples, threading a weighted/orbit source's mask cell to cell. The one loop
+    // both TryFireBatch and TryAdvanceBatch reduce to — generic over the generator, so the extended path is this SAME
+    // code, never a second copy.
+    private static bool TryRunBatchCore<TGenerator>(StateGenerator generator, CellKind targetKind, ref TGenerator rng, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, int sampleCount, bool writeValues, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason) where TGenerator : struct, IDrawGenerator {
         var exhausts = (Exhausts(source: generator.Source) && (generator.Mode != GeneratorMode.WithReplacement));
         var mask = ((exhausts && (masks is { Count: > 0 })) ? masks[0] : default(ClosedBitset256));
+
+        masksAfter = null;
 
         // A pass that neither writes values nor exhausts has no output at all: its only purpose would be the tail masks,
         // and a non-drawing source has none.
@@ -560,6 +562,119 @@ public static class GeneratorEngine {
 
         return true;
     }
+    private static bool TryRunBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, int sampleCount, bool writeValues, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason, long skip = 0L) {
+        ArgumentNullException.ThrowIfNull(argument: generator);
+
+        masksAfter = null;
+
+        if (cursor < 0) {
+            reason = $"cursor {cursor} is negative — a draw cursor is a non-negative sample count";
+
+            return false;
+        }
+
+        if (skip < 0) {
+            reason = $"skip {skip} is negative — an authored seek is a non-negative offset";
+
+            return false;
+        }
+
+        if (sampleCount < 0) {
+            reason = $"sample count {sampleCount} is negative";
+
+            return false;
+        }
+
+        if (!Enum.IsDefined(value: generator.Mode)) {
+            reason = $"mode '{generator.Mode}' is not a defined GeneratorMode";
+
+            return false;
+        }
+
+        if (WritesText(source: generator.Source)) {
+            reason = $"source={StateSpelling.GeneratorSource(source: generator.Source)} writes text and cannot fill cells";
+
+            return false;
+        }
+
+        if (!TryCheckTargetKind(
+            source: generator.Source,
+            targetKind: targetKind,
+            reason: out reason
+        )) {
+            return false;
+        }
+
+        if (generator.Extended is not null) {
+            var compiled = Compiled(generator: generator);
+
+            if (!compiled.MatchesExtended(seedState: seedState, stream: stream, skip: skip, cursor: cursor)) {
+                if (!TryBuildExtendedTable(
+                    generator: generator,
+                    seedState: seedState,
+                    skip: skip,
+                    stream: stream,
+                    table: out var table,
+                    reason: out reason
+                )) {
+                    return false;
+                }
+
+                var fresh = Pcg32Extended.CreateWithTable(
+                    state: seedState,
+                    stream: stream,
+                    table: table
+                );
+
+                fresh.Advance(count: unchecked((((ulong)(skip + cursor)) * AdvancesPerSample(source: generator.Source))));
+                compiled.SetExtended(
+                    cursor: cursor,
+                    generator: fresh,
+                    seedState: seedState,
+                    skip: skip,
+                    stream: stream
+                );
+            }
+
+            ref var extended = ref compiled.ExtendedGenerator;
+            var extendedOk = TryRunBatchCore(
+                generator: generator,
+                masksAfter: out masksAfter,
+                reason: out reason,
+                rng: ref extended,
+                sampleCount: sampleCount,
+                targetKind: targetKind,
+                values: values,
+                writeValues: writeValues,
+                masks: masks
+            );
+
+            if (extendedOk) {
+                compiled.AdvanceExtendedCursor(samples: sampleCount);
+            }
+
+            return extendedOk;
+        }
+
+        var rng = Pcg32XshRr.Create(
+            state: seedState,
+            stream: stream
+        );
+
+        rng.Advance(count: unchecked((((ulong)(skip + cursor)) * AdvancesPerSample(source: generator.Source))));
+
+        return TryRunBatchCore(
+            generator: generator,
+            masks: masks,
+            masksAfter: out masksAfter,
+            reason: out reason,
+            rng: ref rng,
+            sampleCount: sampleCount,
+            targetKind: targetKind,
+            values: values,
+            writeValues: writeValues
+        );
+    }
     /// <summary>Fills <paramref name="values"/> with consecutive samples of a numeric <paramref name="generator"/> at
     /// a site already seeked to <paramref name="cursor"/> — the per-cell fill a lattice row's <c>draw</c> paint takes.
     /// Cell <c>k</c> receives exactly the sample a single <see cref="TryFire"/> at <c>cursor + k</c> would draw, with a
@@ -573,8 +688,10 @@ public static class GeneratorEngine {
     /// <param name="values">Receives one raw sample per cell; its length is the sample count the cursor advances by.</param>
     /// <param name="masksAfter">The site's drawn masks after the fill, or <see langword="null"/> when the source never exhausts.</param>
     /// <param name="reason">Why the fill was refused, on failure.</param>
+    /// <param name="skip">The site's authored seek (see <see cref="Draw.Skip"/>); a rebuild advances by
+    /// <c>(skip + cursor)</c> samples rather than <c>cursor</c> alone.</param>
     /// <returns><see langword="true"/> when every cell was filled.</returns>
-    public static bool TryFireBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason) => TryRunBatch(
+    public static bool TryFireBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason, long skip = 0L) => TryRunBatch(
         generator: generator,
         targetKind: targetKind,
         seedState: seedState,
@@ -585,7 +702,8 @@ public static class GeneratorEngine {
         sampleCount: values.Length,
         writeValues: true,
         masksAfter: out masksAfter,
-        reason: out reason
+        reason: out reason,
+        skip: skip
     );
     /// <summary>Advances a numeric generator through <paramref name="sampleCount"/> consecutive samples without
     /// materializing their values. This is the compose-side half of a whole-field redraw: it computes the pass's
@@ -882,6 +1000,215 @@ public static class GeneratorEngine {
 
         return false;
     }
+    /// <summary>Checks a source's authored <see cref="StateGenerator.Extended"/> facet shape — the one door both the
+    /// document validator and the runtime table build share, so the two can never disagree about which sources admit
+    /// a script or how long a table must be.</summary>
+    /// <param name="generator">The source.</param>
+    /// <param name="reason">Why the facet was refused, in the author's own vocabulary, or empty when it holds or the
+    /// source declares no extended facet.</param>
+    /// <returns><see langword="true"/> when the facet's shape holds (or the source carries none).</returns>
+    public static bool TryCheckExtendedShape(StateGenerator generator, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: generator);
+
+        if (generator.Extended is not { } extended) {
+            reason = string.Empty;
+
+            return true;
+        }
+
+        var k = extended.K;
+
+        if ((k < GeneratorCapacity.MinExtendedTableSize) || (k > GeneratorCapacity.MaxExtendedTableSize) || ((k & (k - 1)) != 0)) {
+            reason = $"extended.k {k} must be a power of two in {GeneratorCapacity.MinExtendedTableSize}..{GeneratorCapacity.MaxExtendedTableSize}";
+
+            return false;
+        }
+
+        if ((extended.Table is null) == (extended.Script is null)) {
+            reason = ((extended.Table is null)
+                ? "extended declares neither 'table' nor 'script' — an extended site authors one or the other"
+                : "extended declares both 'table' and 'script' — an extended site authors one or the other, never both"
+            );
+
+            return false;
+        }
+
+        if (extended.Table is { } table) {
+            if (table.Count != k) {
+                reason = $"extended.table holds {table.Count} words, not k={k}";
+
+                return false;
+            }
+
+            reason = string.Empty;
+
+            return true;
+        }
+
+        var script = extended.Script!;
+
+        if (script.Count > k) {
+            reason = $"extended.script holds {script.Count} values, more than k={k}";
+
+            return false;
+        }
+
+        if (generator.Source is not (GeneratorSource.StreamDraw or GeneratorSource.UniformRange)) {
+            reason = $"extended.script names source={StateSpelling.GeneratorSource(source: generator.Source)} — only streamDraw and uniformRange sample in one fixed-cost draw with no drawn-mask state, so a wanted output maps back to a single raw draw; markov, weightedNumeric and symmetryOrbit draw through an alias table whose selection depends on the site's own drawn masks, so no script maps back to one";
+
+            return false;
+        }
+
+        for (var index = 0; (index < script.Count); index++) {
+            if (!TryComputeScriptedRaw(
+                generator: generator,
+                scripted: script[index],
+                wantedRaw: out _,
+                reason: out var scriptedReason
+            )) {
+                reason = $"extended.script[{index}] {scriptedReason}";
+
+                return false;
+            }
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
+    /// <summary>Maps one scripted value, authored in <paramref name="generator"/>'s own OUTPUT space, to the raw
+    /// 32-bit draw that produces it — the inverse of <see cref="TryDrawNumeric{TGenerator}"/>'s own mapping for the
+    /// two sources a script admits.</summary>
+    /// <param name="generator">The source; must be <see cref="GeneratorSource.StreamDraw"/> or
+    /// <see cref="GeneratorSource.UniformRange"/>.</param>
+    /// <param name="scripted">The wanted value, in the source's own output space.</param>
+    /// <param name="wantedRaw">The least raw draw the source's sampling maps onto <paramref name="scripted"/>, on
+    /// success.</param>
+    /// <param name="reason">Why the value could not be mapped, on failure.</param>
+    /// <returns><see langword="true"/> when the value maps to a raw draw.</returns>
+    public static bool TryComputeScriptedRaw(StateGenerator generator, long scripted, out uint wantedRaw, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: generator);
+
+        switch (generator.Source) {
+            case GeneratorSource.StreamDraw:
+                if ((scripted < 0L) || (scripted > uint.MaxValue)) {
+                    wantedRaw = 0U;
+                    reason = $"value {scripted} is outside source=streamDraw's raw band 0..{uint.MaxValue}";
+
+                    return false;
+                }
+
+                wantedRaw = unchecked((uint)scripted);
+                reason = string.Empty;
+
+                return true;
+            case GeneratorSource.UniformRange: {
+                    var min = generator.RangeMin!.Value;
+                    var max = generator.RangeMax!.Value;
+
+                    if ((scripted < min) || (scripted > max)) {
+                        wantedRaw = 0U;
+                        reason = $"value {scripted} is outside source=uniformRange's declared range {min}..{max}";
+
+                        return false;
+                    }
+
+                    var span = unchecked((uint)(max - min));
+                    var n = (((ulong)span) + 1UL);
+                    var offset = unchecked((ulong)(scripted - min));
+                    // The least raw x with (n * x) >> 32 == offset: x*n must land in [offset * 2^32, (offset + 1) *
+                    // 2^32), so the least such x is the ceiling of offset * 2^32 / n — computed once in closed form,
+                    // never searched.
+                    var numerator = (offset << 32);
+
+                    wantedRaw = unchecked((uint)((numerator + n - 1UL) / n));
+                    reason = string.Empty;
+
+                    return true;
+                }
+            default:
+                wantedRaw = 0U;
+                reason = $"source={StateSpelling.GeneratorSource(source: generator.Source)} cannot carry a script";
+
+                return false;
+        }
+    }
+    /// <summary>Compiles an authored <see cref="GeneratorExtended"/> facet to a full <c>k</c>-word extension table —
+    /// the fully-authored <see cref="GeneratorExtended.Table"/> verbatim, or a self-seeded table with its first
+    /// <see cref="GeneratorExtended.Script"/>'s words overwritten so the site's first samples come out to the script,
+    /// in order (see <see cref="GeneratorExtended"/>'s remarks). O(k), run only when a rebuild is needed — the
+    /// per-tick cache (<see cref="CompiledSource"/>) never calls this on a cursor that matches its last build.</summary>
+    /// <param name="generator">The source; its <see cref="StateGenerator.Extended"/> facet must be set.</param>
+    /// <param name="seedState">The seed-ladder fold (see <see cref="ComputeSeedState"/>).</param>
+    /// <param name="stream">The site's stream id (see <see cref="ComputeStreamId"/>).</param>
+    /// <param name="skip">The site's authored seek — the script governs the draws at <c>skip, skip + 1, …</c>, not
+    /// unconditionally at <c>0, 1, …</c>.</param>
+    /// <param name="table">The compiled table, on success.</param>
+    /// <param name="reason">Why the facet was refused, on failure.</param>
+    /// <returns><see langword="true"/> when the facet compiled to a table.</returns>
+    public static bool TryBuildExtendedTable(StateGenerator generator, ulong seedState, ulong stream, long skip, out uint[] table, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: generator);
+
+        table = [];
+
+        if (generator.Extended is not { } extended) {
+            reason = "generator declares no extended facet";
+
+            return false;
+        }
+
+        if (!TryCheckExtendedShape(generator: generator, reason: out reason)) {
+            return false;
+        }
+
+        if (extended.Table is { } authored) {
+            table = [.. authored];
+            reason = string.Empty;
+
+            return true;
+        }
+
+        var script = extended.Script!;
+        var k = extended.K;
+        // Words past the script are the self-seeded table's own.
+        var selfSeeded = Pcg32Extended.Create(
+            state: seedState,
+            stream: stream,
+            k: k
+        );
+
+        table = selfSeeded.Extension.ToArray();
+
+        // A fresh (zero-offset) probe — the SAME base position CreateWithTable's own generator will start from — so
+        // the index each of the first script.Count draws selects, and the base's own raw contribution to that draw,
+        // are exactly what the real generator will see.
+        var probe = Pcg32XshRr.Create(
+            state: seedState,
+            stream: stream
+        );
+
+        probe.Advance(count: unchecked((ulong)skip));
+
+        var indexMask = ((ulong)(k - 1));
+
+        for (var index = 0; (index < script.Count); index++) {
+            var tableIndex = ((int)(probe.State & indexMask));
+            var baseDraw = probe.NextUInt32();
+
+            _ = TryComputeScriptedRaw(
+                generator: generator,
+                scripted: script[index],
+                wantedRaw: out var wantedRaw,
+                reason: out _
+            );
+
+            table[tableIndex] = unchecked(wantedRaw ^ baseDraw);
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
     /// <summary>Fires one emission of <paramref name="generator"/> at a site already seeked to
     /// <paramref name="cursor"/>.</summary>
     /// <param name="generator">The resolved source.</param>
@@ -894,13 +1221,21 @@ public static class GeneratorEngine {
     /// <param name="reason">Why the emission was refused, on failure.</param>
     /// <returns><see langword="true"/> on a successful emission.</returns>
     /// <param name="secret">Optional authority secret; admitted only for integer streamDraw sources.</param>
-    public static bool TryFire(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, out FireResult result, out string reason, ClosedBitset256? secret = null) {
+    /// <param name="skip">The site's authored seek (see <see cref="Draw.Skip"/>); a rebuild advances by
+    /// <c>(skip + cursor)</c> samples rather than <c>cursor</c> alone. Never applied to a secret draw.</param>
+    public static bool TryFire(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, out FireResult result, out string reason, ClosedBitset256? secret = null, long skip = 0L) {
         ArgumentNullException.ThrowIfNull(argument: generator);
 
         result = default;
 
         if (cursor < 0) {
             reason = $"cursor {cursor} is negative — a draw cursor is a non-negative sample count";
+
+            return false;
+        }
+
+        if (skip < 0) {
+            reason = $"skip {skip} is negative — an authored seek is a non-negative offset";
 
             return false;
         }
@@ -925,14 +1260,76 @@ public static class GeneratorEngine {
             }
             result = new(null, PrivateDraw.Sample(key, seedState, stream, cursor), 1, null); reason = string.Empty; return true;
         }
+
+        if (generator.Extended is not null) {
+            var compiled = Compiled(generator: generator);
+
+            if (!compiled.MatchesExtended(seedState: seedState, stream: stream, skip: skip, cursor: cursor)) {
+                if (!TryBuildExtendedTable(
+                    generator: generator,
+                    seedState: seedState,
+                    skip: skip,
+                    stream: stream,
+                    table: out var table,
+                    reason: out reason
+                )) {
+                    return false;
+                }
+
+                var fresh = Pcg32Extended.CreateWithTable(
+                    state: seedState,
+                    stream: stream,
+                    table: table
+                );
+
+                fresh.Advance(count: unchecked((((ulong)(skip + cursor)) * AdvancesPerSample(source: generator.Source))));
+                compiled.SetExtended(
+                    cursor: cursor,
+                    generator: fresh,
+                    seedState: seedState,
+                    skip: skip,
+                    stream: stream
+                );
+            }
+
+            ref var extended = ref compiled.ExtendedGenerator;
+
+            if (!TryFireDispatch(
+                generator: generator,
+                masks: masks,
+                reason: out reason,
+                result: out result,
+                rng: ref extended,
+                targetKind: targetKind
+            )) {
+                return false;
+            }
+
+            compiled.AdvanceExtendedCursor(samples: result.Samples);
+
+            return true;
+        }
+
         var rng = Pcg32XshRr.Create(
             state: seedState,
             stream: stream
         );
 
         // The seek: one jump to the site's recorded position. Fixed per-sample cost is what makes this exact.
-        rng.Advance(count: unchecked((((ulong)cursor) * AdvancesPerSample(source: generator.Source))));
+        rng.Advance(count: unchecked((((ulong)(skip + cursor)) * AdvancesPerSample(source: generator.Source))));
 
+        return TryFireDispatch(
+            generator: generator,
+            masks: masks,
+            reason: out reason,
+            result: out result,
+            rng: ref rng,
+            targetKind: targetKind
+        );
+    }
+    // The one dispatch every generator shares once it is positioned: a Markov walk, or a single numeric draw. Generic
+    // over the generator, so an extended site runs this SAME body rather than a second copy of it.
+    private static bool TryFireDispatch<TGenerator>(StateGenerator generator, CellKind targetKind, ref TGenerator rng, IReadOnlyList<ClosedBitset256>? masks, out FireResult result, out string reason) where TGenerator : struct, IDrawGenerator {
         switch (generator.Source) {
             case GeneratorSource.Markov:
                 return TryFireMarkov(
@@ -954,6 +1351,8 @@ public static class GeneratorEngine {
                         targetKind: targetKind,
                         value: out var value
                     )) {
+                        result = default;
+
                         return false;
                     }
 

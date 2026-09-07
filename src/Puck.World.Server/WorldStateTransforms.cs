@@ -191,7 +191,7 @@ public static partial class WorldStateTransforms {
                 _ => 0,
             };
             if (transfer.Selector == ZoneSelector.Random) {
-                if (!GeneratorEngine.TryFire(generator, site!.Kind, seed, stream, cursor, site.DrawnMasks, out var fired, out reason, draw.Secret)) {
+                if (!GeneratorEngine.TryFire(generator, site!.Kind, seed, stream, cursor, site.DrawnMasks, out var fired, out reason, draw.Secret, draw.Skip)) {
                     return false;
                 }
                 cursor = checked(cursor + fired.Samples);
@@ -425,7 +425,7 @@ public static partial class WorldStateTransforms {
         // Fisher-Yates from the top: position i takes a uniform pick from [0, i], the same multiply-high map a random
         // transfer selects with, one sample per position. The site records the final cursor and the last sample once.
         for (var position = cells.Length - 1; position > 0; position--) {
-            if (!GeneratorEngine.TryFire(generator, site.Kind, seed, stream, cursor, site.DrawnMasks, out var fired, out reason, draw.Secret)) {
+            if (!GeneratorEngine.TryFire(generator, site.Kind, seed, stream, cursor, site.DrawnMasks, out var fired, out reason, draw.Secret, draw.Skip)) {
                 return false;
             }
             cursor = checked(cursor + fired.Samples);

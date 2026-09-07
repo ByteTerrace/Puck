@@ -39,6 +39,13 @@ internal static partial class LawRegistry {
             )
         ),
         Case(
+            id: "sampling.pcg-extended-create-with-table",
+            run: () => Laws.Claim(
+                claim: Subjects.PcgExtendedCreateWithTable,
+                lawId: "sampling.pcg-extended-create-with-table"
+            )
+        ),
+        Case(
             id: "sampling.pcg-distance-round-trip",
             run: () => Laws.Claim(
                 claim: Subjects.PcgDistanceRoundTrip,

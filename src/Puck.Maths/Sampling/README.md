@@ -228,6 +228,7 @@ once.
 | Operation | Semantics |
 |---|---|
 | `Create(state, stream, k)` | Builds the base generator exactly as `Pcg32XshRr.Create` does, then self-seeds the table from its own next `k + 2` draws (an XOR difference of two opening draws masks every entry), so a caller who never calls `SetExtension` still gets a well-mixed table. |
+| `CreateWithTable(state, stream, table)` | Builds the base generator exactly as `Create` does, but the base starts at the SAME state a fresh `Pcg32XshRr.Create` would (no draws consumed self-seeding) and the table is `table` verbatim — the document-data counterpart of `Create`'s own self-seeding. |
 | `NextUInt32()` | The base draw XOR'd with the table word the pre-draw base state's low `log₂ k` bits select; once every 65536 draws (independent of `k`) the whole table takes one step of its own first. |
 | `NextUInt32(minimum, maximum)` / `NextUnitFraction16()` / `NextUnitFraction32()` | Built on this type's own `NextUInt32`, exactly as the base type's are built on its. |
 | `Advance(count)` | Skips `count` draws in logarithmic time: the base by the affine skip, the table by however many of its own ticks that skip crosses — never by looping the individual draws. |
@@ -241,6 +242,11 @@ wanted value with the base draw that will occur when that word's index is next
 selected — computable ahead of time from a copy of the base generator's raw
 bits, since the base draw never depends on the table — and write the result to
 that word's index.
+
+`Puck.State.GeneratorEngine`'s extended draw site is the worked consumer of both
+`CreateWithTable` and the chosen-outputs recipe above: it authors a
+`GeneratorExtended` table directly, or a script compiled to one by that exact
+XOR construction, and caches the built generator across ticks.
 
 **What `Advance` does not give back.** Unlike the base type, a huge `count`
 near `2⁶⁴` is not a cheap way to step this generator backward: the base alone
