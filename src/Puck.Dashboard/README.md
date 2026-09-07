@@ -134,8 +134,8 @@ offline library; nothing here uploads, publishes, or generates a share link.
 - The engine is hosted inline (on the page's main thread). With the AOT
   AppBundle, `dotnet.js` booted inside a module Worker loads every assembly,
   logs `onRuntimeInitialized`, and then never resolves `create()` (verified
-  in Chromium on 2026-09-07 with diagnostic tracing; the same boot on the
-  main thread resolves in about 250 ms warm). Engine calls therefore block
+  in Chromium with diagnostic tracing; the same boot on the main thread
+  resolves in about 250 ms warm). Engine calls therefore block
   the UI for their duration — about two seconds to compose or compile the
   island. `WorldStudio.tsx` is the one switch; the Worker path
   (`engine.worker.ts`, `workerBoot.ts`) stays built and Node-tested.
