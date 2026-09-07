@@ -48,7 +48,8 @@ test('worldDefinition.generated.ts exports the top-level WorldDefinition type', 
 
 test('every $defs entry in the bundle names its own top-level export — WorldDefinition, WorldStateRow, LatticeTopology among them', () => {
   // The bundle's own $defs pool (WorldSchema.Bundle) is the authority on what MUST get a named
-  // export: every key there is a titled C# shape, so every one of them has to appear as its own
+  // export: every key there is a titled shape (including VariantN for differing nested constraints),
+  // so every one of them has to appear as its own
   // top-level `export type`/`export interface` by that exact name, not folded into an anonymous
   // literal at each of its call sites.
   assert.ok(bundleDefNames.size > 100, `expected the bundle to carry a substantial $defs pool, got ${bundleDefNames.size}`);

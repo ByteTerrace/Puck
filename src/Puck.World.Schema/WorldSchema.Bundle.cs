@@ -27,11 +27,13 @@ public static partial class WorldSchema {
                 name: out var commonName,
                 obj: obj
             )) {
-                return ((obj.Count == 1)
+                return ((obj.Count == 1) && !nullableDefs.GetValueOrDefault(key: commonName)
                     ? new JsonObject { ["$ref"] = $"#/$defs/{commonName}" }
                     : RewrapReferenceSiteSiblings(
                         obj: obj,
                         title: commonName,
+                        defs: defs,
+                        defContentByTitle: defContentByTitle,
                         nullableDefs: nullableDefs
                     ));
             }
@@ -45,26 +47,30 @@ public static partial class WorldSchema {
                 name: out var bareTarget,
                 obj: obj
             )) {
-                return ((obj.Count == 1)
+                return ((obj.Count == 1) && !nullableDefs.GetValueOrDefault(key: bareTarget)
                     ? obj.DeepClone()!
                     : RewrapReferenceSiteSiblings(
                         obj: obj,
                         title: bareTarget,
+                        defs: defs,
+                        defContentByTitle: defContentByTitle,
                         nullableDefs: nullableDefs
                     ));
             }
 
+            var nullable = AcceptsBundleNull(node: obj, referenceNullability: name => nullableDefs.GetValueOrDefault(key: name));
             var newObj = new JsonObject();
 
             foreach (var (key, value) in obj) {
-                newObj[key] = ((value is not null)
-                    ? HoistBundleTitles(
-                        node: value,
+                newObj[key] = RewriteSchemaKeyword(
+                    key: key,
+                    value: value,
+                    rewrite: child => HoistBundleTitles(
+                        node: child,
                         defs: defs,
                         defContentByTitle: defContentByTitle,
                         nullableDefs: nullableDefs
                     )
-                    : null
                 );
             }
 
@@ -82,6 +88,7 @@ public static partial class WorldSchema {
                 ? HoistOrReferenceTitledNode(
                     obj: newObj,
                     title: title,
+                    nullable: nullable,
                     defs: defs,
                     defContentByTitle: defContentByTitle,
                     nullableDefs: nullableDefs
@@ -108,20 +115,38 @@ public static partial class WorldSchema {
 
         return node.DeepClone()!;
     }
-    // Turns a titled, un-hoisted node into a $ref against defs[title] — minting that def on first sight, matching
-    // an already-minted def when the content agrees under CanonicalDefText (blind to nullability at any depth, so
-    // "Foo" and "Foo?" reaching the same title share one def rather than minting "FooNullable"), and refusing when
-    // it does not: two distinct shapes cannot share one name in a bundle whose $defs are addressed BY that name.
-    // The STORED def always drops its own top-level null admission (see nullableDefs's own remark); every site —
-    // this occurrence's own, and every later reference the title's own nullableDefs entry now carries forward —
-    // wraps in "anyOf: [$ref, null]" whenever nullable, so nothing a caller once could send stops validating.
-    private static JsonNode HoistOrReferenceTitledNode(JsonObject obj, string title, JsonObject defs, Dictionary<string, string> defContentByTitle, Dictionary<string, bool> nullableDefs) {
+    // Only schema-valued keywords recurse. enum/const/default/examples and extension annotations hold JSON
+    // instance data: a literal object's "title" or "$ref" must never become a schema declaration or pointer.
+    private static JsonNode? RewriteSchemaKeyword(string key, JsonNode? value, Func<JsonNode, JsonNode> rewrite) {
+        if (value is null) {
+            return null;
+        }
+
+        if ((key is "properties" or "patternProperties" or "$defs" or "definitions" or "dependentSchemas") && (value is JsonObject map)) {
+            var result = new JsonObject();
+
+            foreach (var (name, schema) in map) {
+                result[name] = ((schema is null) ? null : rewrite(arg: schema));
+            }
+
+            return result;
+        }
+
+        if (key is "items" or "additionalItems" or "contains" or "additionalProperties" or "unevaluatedProperties" or "unevaluatedItems" or "propertyNames" or "not" or "if" or "then" or "else" or "allOf" or "anyOf" or "oneOf" or "prefixItems" or "contentSchema") {
+            return rewrite(arg: value);
+        }
+
+        return value.DeepClone();
+    }
+    // Share equal non-null bodies, preserving descriptions/defaults and null admission at each occurrence.
+    // Nested constraints remain part of identity; a different body receives an explicit VariantN definition.
+    // nullableDefs describes the ORIGINAL common definitions and is never changed by an inline occurrence.
+    private static JsonNode HoistOrReferenceTitledNode(JsonObject obj, string title, bool nullable, JsonObject defs, Dictionary<string, string> defContentByTitle, Dictionary<string, bool> nullableDefs) {
         var description = obj["description"]?.DeepClone();
         var hasDefault = obj.TryGetPropertyValue(
             propertyName: "default",
             jsonNode: out var defaultValue
         );
-        var nullable = AllowsNull(node: obj);
         var body = ((JsonObject)obj.DeepClone()!);
 
         body.Remove(propertyName: "description");
@@ -130,23 +155,22 @@ public static partial class WorldSchema {
 
         var canonical = CanonicalDefText(obj: body);
 
-        if (defContentByTitle.TryGetValue(
-            key: title,
-            value: out var existing
-        )) {
-            if (!string.Equals(
-                a: existing,
-                b: canonical,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                throw new InvalidOperationException(message: $"schema: title '{title}' names two different shapes in the bundle — rename one of the source CLR types so they no longer share a FriendlyTypeName.");
-            }
+        // A CLR type can be exported with different nested nullability at different sites. Share only equal
+        // constraints; an explicit variant keeps both sites faithful instead of letting traversal order decide.
+        var baseTitle = title;
+        var variant = 2;
 
-            nullableDefs[title] = (nullableDefs.GetValueOrDefault(key: title) || nullable);
-        } else {
+        while (defContentByTitle.TryGetValue(key: title, value: out var candidate)
+            ? !string.Equals(a: candidate, b: canonical, comparisonType: StringComparison.Ordinal)
+            : ((title != baseTitle) && nullableDefs.ContainsKey(key: title))) {
+            title = $"{baseTitle}Variant{variant++}";
+        }
+
+        body["title"] = title;
+
+        if (!defContentByTitle.ContainsKey(key: title)) {
             defs[title] = body;
             defContentByTitle[title] = canonical;
-            nullableDefs[title] = nullable;
         }
 
         var reference = BuildReferenceSite(
@@ -202,10 +226,50 @@ public static partial class WorldSchema {
             b: "null",
             comparisonType: StringComparison.Ordinal
         ));
-    // Removes every way AllowsNull recognizes a "null" admission — a "null" member of a "type" array (collapsed
-    // back to a bare scalar when exactly one type survives), a null member of "enum", and a null-typed arm of
-    // "anyOf"/"oneOf" — leaving the shape a nullable site's non-null body actually shares with its non-nullable
-    // sibling.
+    // Evaluate only the null instance. Object/array/string/number-specific keywords cannot constrain it;
+    // type, literal equality, references, and applicators can. A nullable type array alone is insufficient:
+    // an enum or an anyOf of object-only arms can still reject null.
+    private static bool AcceptsBundleNull(JsonNode node, Func<string, bool> referenceNullability) {
+        if (node is JsonValue boolean && boolean.TryGetValue<bool>(value: out var allowed)) {
+            return allowed;
+        }
+        if (node is not JsonObject obj) {
+            return false;
+        }
+        if ((IsCommonFileRef(obj: obj, name: out var target) || IsLocalDefsRef(obj: obj, name: out target)) && !referenceNullability(arg: target)) {
+            return false;
+        }
+        if (obj["type"] is { } type && !IsNullToken(value: type) && !((type is JsonArray types) && types.Any(predicate: IsNullToken))) {
+            return false;
+        }
+        if ((obj["enum"] is JsonArray values) && !values.Any(predicate: value => value is null)) {
+            return false;
+        }
+        if (obj.TryGetPropertyValue(propertyName: "const", jsonNode: out var constant) && (constant is not null)) {
+            return false;
+        }
+        foreach (var key in new[] { "allOf", "anyOf", "oneOf" }) {
+            if (obj[key] is not JsonArray arms) {
+                continue;
+            }
+            var matches = arms.Count(predicate: arm => (arm is not null) && AcceptsBundleNull(node: arm, referenceNullability: referenceNullability));
+            if ((key == "allOf" && matches != arms.Count) || (key == "anyOf" && matches == 0) || (key == "oneOf" && matches != 1)) {
+                return false;
+            }
+        }
+        if (obj["not"] is { } negated && AcceptsBundleNull(node: negated, referenceNullability: referenceNullability)) {
+            return false;
+        }
+        if (obj["if"] is { } condition) {
+            var branch = AcceptsBundleNull(node: condition, referenceNullability: referenceNullability) ? "then" : "else";
+            if (obj[branch] is { } constraint && !AcceptsBundleNull(node: constraint, referenceNullability: referenceNullability)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    // Keep exactly the non-null instances of a schema. Null-only schemas become unsatisfiable bodies; nested
+    // property constraints are untouched. Each site's original null admission was computed before this rewrite.
     private static void StripNullInPlace(JsonObject obj) {
         if (
             (obj["type"] is JsonValue scalarType) &&
@@ -216,7 +280,8 @@ public static partial class WorldSchema {
             comparisonType: StringComparison.Ordinal
         )
         ) {
-            obj.Remove(propertyName: "type");
+            // The non-null body of a null-only type accepts nothing, never the unconstrained {} schema.
+            obj["not"] = new JsonObject();
         } else if (obj["type"] is JsonArray typeArray) {
             var kept = typeArray.Where(predicate: value => !IsNullToken(value: value)).Select(selector: value => value!.DeepClone()).ToList();
 
@@ -224,6 +289,7 @@ public static partial class WorldSchema {
 
             if (kept.Count == 0) {
                 obj.Remove(propertyName: "type");
+                obj["not"] = new JsonObject();
             } else if (kept.Count == 1) {
                 obj["type"] = kept[0];
             } else {
@@ -243,6 +309,10 @@ public static partial class WorldSchema {
             foreach (var value in kept) {
                 enumArray.Add(item: value);
             }
+            if (kept.Count == 0) {
+                obj.Remove(propertyName: "enum");
+                obj["not"] = new JsonObject();
+            }
         }
 
         foreach (var key in new[] { "anyOf", "oneOf" }) {
@@ -257,26 +327,31 @@ public static partial class WorldSchema {
             foreach (var value in kept) {
                 unionArray.Add(item: value);
             }
+            if (kept.Count == 0) {
+                obj.Remove(propertyName: key);
+                obj["not"] = new JsonObject();
+            }
+        }
+
+        // Removing a null arm from a union without an explicit type can leave a body that still accepts null
+        // (e.g. oneOf: [null, {}]). Every stored target is non-null; the reference site alone owns its admission.
+        if (AcceptsBundleNull(node: obj, referenceNullability: static _ => false)) {
+            var nullType = new JsonObject { ["type"] = "null" };
+            obj["not"] = (obj["not"] is { } negated)
+                ? new JsonObject { ["anyOf"] = new JsonArray(negated.DeepClone(), nullType) }
+                : nullType;
         }
     }
-    // A def's own "description" reads however the occurrence that happened to define it was documented, and
-    // nullability can legitimately vary occurrence to occurrence — the exporter's nullable-oblivious handling
-    // reaches the same property through different reference chains, and the split's own OWN pre-existing
-    // convention already bakes "null" into a def's top type when every occurrence it saw was nullable. Neither is
-    // part of what makes two candidate bodies "the same shape" for bundling purposes: only the STORED def (the
-    // first occurrence reached) keeps its own description and its own nullability, everywhere in its tree; this
-    // text is the comparison basis alone, blind to both.
+    // Compare schema constraints, excluding annotations. Top-level null admission already lives at each site;
+    // nested nullability and literal enum/const values must still compare exactly.
     private static string CanonicalDefText(JsonObject obj) =>
         CompactSerialize(node: CanonicalForComparison(node: obj));
     private static JsonNode CanonicalForComparison(JsonNode node) {
         if (node is JsonObject obj) {
             var working = ((JsonObject)obj.DeepClone()!);
 
-            StripNullInPlace(obj: working);
-
-            // A nullable-reference wrapper ("anyOf": [{"$ref"}, {"type":"null"}]) strips down to a single
-            // remaining "$ref" arm above — collapsed the rest of the way to a bare "$ref", equal to how a
-            // non-nullable site refers to the very same def.
+            // A single-reference union and a bare reference impose identical constraints. A two-arm nullable
+            // wrapper is deliberately retained: it is different from a non-nullable reference.
             if (
                 (working["anyOf"] is JsonArray singleArm) &&
                 (singleArm.Count == 1) &&
@@ -291,13 +366,11 @@ public static partial class WorldSchema {
             var result = new JsonObject();
 
             foreach (var (key, value) in working) {
-                if (key is "description" or "default") {
+                if (key is "description" or "default" or "title") {
                     continue;
                 }
 
-                if (value is not null) {
-                    result[key] = CanonicalForComparison(node: value);
-                }
+                result[key] = RewriteSchemaKeyword(key: key, value: value, rewrite: CanonicalForComparison);
             }
 
             return result;
@@ -357,17 +430,20 @@ public static partial class WorldSchema {
 
         return false;
     }
-    // A $ref that carries no sibling keyword needs no wrap — a bare "{"$ref": X}" already resolves cleanly (see
-    // BuildReferenceSite's own remark); only a sibling ("description", "default", ...) triggers
-    // json-schema-to-typescript's re-inline-and-rename behavior, so only that case pays the wrap's extra nesting.
-    private static JsonNode RewrapReferenceSiteSiblings(JsonObject obj, string title, Dictionary<string, bool> nullableDefs) {
-        // A bare local/cross-file $ref site never carries its own "type" (Transform stops at an already-$ref
-        // node — see its own remark), so nullability here comes from the TARGET def's own original admission
-        // (see nullableDefs), not this node's own (always-absent) shape.
+    // Wrap references with annotations for the TypeScript compiler, and every nullable target because its
+    // stored body excludes null. A bare reference is sufficient only for an unannotated, non-nullable target.
+    private static JsonNode RewrapReferenceSiteSiblings(JsonObject obj, string title, JsonObject defs, Dictionary<string, string> defContentByTitle, Dictionary<string, bool> nullableDefs) {
+        // Generated references normally carry only annotations; extension schemas may also constrain the
+        // target with sibling keywords. Both the original target and those siblings must admit null.
         var rewritten = BuildReferenceSite(
             title: title,
-            nullable: (nullableDefs.GetValueOrDefault(key: title) || AllowsNull(node: obj))
+            nullable: AcceptsBundleNull(node: obj, referenceNullability: name => nullableDefs.GetValueOrDefault(key: name))
         );
+
+        // $ref siblings are conjunctive. Preserve an existing anyOf rather than overwriting our reference arm.
+        if (obj.ContainsKey(propertyName: "anyOf")) {
+            rewritten = new JsonObject { ["allOf"] = new JsonArray(rewritten) };
+        }
 
         foreach (var (key, value) in obj) {
             if (!string.Equals(
@@ -375,7 +451,14 @@ public static partial class WorldSchema {
                 b: "$ref",
                 comparisonType: StringComparison.Ordinal
             )) {
-                rewritten[key] = value?.DeepClone();
+                var child = RewriteSchemaKeyword(key: key, value: value, rewrite: schema => HoistBundleTitles(node: schema, defs: defs, defContentByTitle: defContentByTitle, nullableDefs: nullableDefs));
+                if ((key == "allOf") && (rewritten[key] is JsonArray existing) && (child is JsonArray additional)) {
+                    foreach (var arm in additional) {
+                        existing.Add(item: arm?.DeepClone());
+                    }
+                } else {
+                    rewritten[key] = child;
+                }
             }
         }
 
@@ -387,8 +470,8 @@ public static partial class WorldSchema {
     /// section's own cross-file pointer is rewritten to match, and every OTHER titled shape a section left
     /// inlined — used at one site, or independently regenerated at each (a <c>$type</c> union arm) — is hoisted
     /// into a fresh def keyed by <see cref="StampTitle"/>'s own name (see <see cref="HoistBundleTitles"/>). Two
-    /// occurrences reaching the same title always resolve to one def; content that disagrees under a shared title
-    /// is a generator defect this method refuses by name rather than silently duplicating or merging.</summary>
+    /// occurrences with equal constraints share one def; differing nested constraints receive named
+    /// <c>VariantN</c> definitions. Each occurrence retains its original null admission and annotations.</summary>
     public static JsonObject Bundle(SplitSchema split) {
         var root = ((JsonObject)split.Root.DeepClone()!);
 
@@ -409,8 +492,21 @@ public static partial class WorldSchema {
         // any cross-def rewriting starts: a def's own reference to another can appear before that other def's
         // own turn in the loop below, and RewrapReferenceSiteSiblings needs every title's nullability resolved
         // the first time anything might ask for it, not just after its own def has been visited.
-        foreach (var (name, defNode) in commonDefs) {
-            nullableDefs[name] = AllowsNull(node: defNode!);
+        var active = new HashSet<string>(comparer: StringComparer.Ordinal);
+        bool ResolveNullability(string name) {
+            if (nullableDefs.TryGetValue(key: name, value: out var nullable)) {
+                return nullable;
+            }
+            if (!active.Add(item: name)) {
+                throw new InvalidOperationException(message: $"schema: unguarded reference cycle at '{name}'.");
+            }
+            var result = AcceptsBundleNull(node: commonDefs[name]!, referenceNullability: ResolveNullability);
+            active.Remove(item: name);
+            nullableDefs[name] = result;
+            return result;
+        }
+        foreach (var (name, _) in commonDefs) {
+            ResolveNullability(name: name);
         }
 
         foreach (var (name, defNode) in commonDefs) {

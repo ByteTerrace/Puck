@@ -25,8 +25,8 @@ import type {
 } from "../document/worldDefinition.generated";
 
 /** One `state.lattices[]` entry — grid/ring/hex/box/graph/tiling/field, whichever `$type` the
- * document authors. */
-export type WorldTopology = LatticeTopology;
+ * document authors. The intake helpers below exclude null entries. */
+export type WorldTopology = NonNullable<LatticeTopology>;
 
 /** One `state.world[]` row. */
 export type WorldStateRow = GeneratedWorldStateRow;

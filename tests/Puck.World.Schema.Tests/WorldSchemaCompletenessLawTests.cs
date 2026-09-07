@@ -16,10 +16,9 @@ public sealed class WorldSchemaCompletenessLawTests {
     // converter this WP did not touch, left fully permissive by the exporter. Named by the def each now lives
     // under (the bundle's own $defs, not an inline path — see WorldSchema.Bundle), never a raw inline path — a
     // shape reached from several sites now names ONE entry instead of one per site, the bundle's own dedup.
-    // Every gap the split's OWN converter-hidden types (DocumentVector2/3, BindableScalar's free-value arm,
-    // WorldLatticeScalar, ...) used to leave here is now a NAMED empty def a $ref points at instead — genuinely
-    // typed by this law's own IsTyped test, even though the referenced def itself still carries no constraint —
-    // so those entries are gone, not silently accepted; only a leaf with NO $ref/anyOf at all remains named here.
+    // A reference is typed here only as a schema location. Converter-hidden definitions that still supply no
+    // value vocabulary are checked separately by UnconstrainedDefinitionsStayExplicit; giving a gap a name
+    // does not resolve it.
     // Named by pointer, so a NEW untyped leaf fails this law and a FIXED one must be removed here (see
     // <see cref="TheAllowlistNamesNoAlreadyTypedLeaf"/>).
     private static readonly HashSet<string> UntypedAllowlist = new(comparer: StringComparer.Ordinal) {
@@ -83,8 +82,8 @@ public sealed class WorldSchemaCompletenessLawTests {
 
         return false;
     }
-    // A bundled $ref is always a plain document-absolute JSON pointer (Bundle() never leaves a "$defs" reference
-    // behind) — its target is visited at its OWN position in this same walk, so a $ref node itself never needs
+    // A bundled $ref points into the root's $defs — its target is visited at its OWN position in this same walk,
+    // so a $ref node itself never needs
     // recursing into. Cycle-safe by construction: a genuinely recursive shape's own self-reference is exactly such
     // a $ref, never dereferenced here. A node carrying its own "$id" opens a self-contained embedded document
     // schema (e.g. puck.creation.v1 — see WorldSchema.Bundle) the bundle leaves untouched; visited once but never
@@ -97,7 +96,7 @@ public sealed class WorldSchemaCompletenessLawTests {
 
             visit(arg1: obj, arg2: pointer);
 
-            if (obj.ContainsKey(propertyName: "$id")) {
+            if ((pointer != "#") && obj.ContainsKey(propertyName: "$id")) {
                 return;
             }
 
@@ -213,6 +212,17 @@ public sealed class WorldSchemaCompletenessLawTests {
     public static IEnumerable<object[]> GameFragmentPaths() => FragmentPaths(folder: "games");
     public static IEnumerable<object[]> ModuleFragmentPaths() => FragmentPaths(folder: "modules");
 
+    [Fact]
+    public void UnconstrainedDefinitionsStayExplicit() {
+        var gaps = Bundle["$defs"]!.AsObject()
+            .Where(predicate: entry => (entry.Value is JsonObject node) && !IsTyped(node: node))
+            .Select(selector: entry => entry.Key)
+            .OrderBy(keySelector: name => name, comparer: StringComparer.Ordinal)
+            .ToArray();
+
+        // Existing converter vocabulary gaps, not new capabilities supplied by naming their definitions.
+        Assert.Equal(expected: ["ChannelRef", "ClosedBitset256", "CommandValue", "WorldLatticeScalar", "WorldScreenResolution"], actual: gaps);
+    }
     [Fact]
     public void EveryArrayDeclaresItems() {
         var violations = new List<string>();

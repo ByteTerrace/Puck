@@ -608,8 +608,8 @@ puck schema --check         regenerate in memory and compare EVERY file (root, e
 puck schema --stdout        emit the ROOT document to stdout instead of writing
                             (skips --check)
 puck schema --bundle [path] emit the single-file equivalent with every cross-file $ref
-                            inlined (not a checked-in artifact) — to [path] if given,
-                            else stdout
+                            resolved through named $defs (not a checked-in artifact) —
+                            to [path] if given, else stdout
 puck schema -h / --help     this text
 ```
 

@@ -134,17 +134,17 @@ export type DocumentVector2 = [number, number] | string;
  * via the `definition` "WorldScreenSource".
  */
 export type WorldScreenSource =
-  | WorldScreenSourceNone
-  | WorldScreenSourceTestPattern
-  | WorldScreenSourceMachine
-  | WorldScreenSourceCamera
-  | WorldScreenSourceView
-  | WorldScreenSourceCapture
-  | WorldScreenSourceConsole
-  | WorldScreenSourceQr
-  | WorldScreenSourceSession
-  | WorldScreenSourceText
-  | WorldScreenSourceProbe;
+  | (WorldScreenSourceNone | null)
+  | (WorldScreenSourceTestPattern | null)
+  | (WorldScreenSourceMachine | null)
+  | (WorldScreenSourceCamera | null)
+  | (WorldScreenSourceView | null)
+  | (WorldScreenSourceCapture | null)
+  | (WorldScreenSourceConsole | null)
+  | (WorldScreenSourceQr | null)
+  | (WorldScreenSourceSession | null)
+  | (WorldScreenSourceText | null)
+  | (WorldScreenSourceProbe | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldCameraSensor".
@@ -174,12 +174,12 @@ export type WorldScreenMemoryDirection = "Read" | "Write";
  * via the `definition` "WorldAnchor".
  */
 export type WorldAnchor =
-  | WorldAnchorEntity
-  | WorldAnchorEntityPart
-  | WorldAnchorPlacement
-  | WorldAnchorGroup
-  | WorldAnchorSeat
-  | WorldAnchorRecentSpeaker;
+  | (WorldAnchorEntity | null)
+  | (WorldAnchorEntityPart | null)
+  | (WorldAnchorPlacement | null)
+  | (WorldAnchorGroup | null)
+  | (WorldAnchorSeat | null)
+  | (WorldAnchorRecentSpeaker | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "Int32List".
@@ -192,16 +192,16 @@ export type Int32List = number[];
  * via the `definition` "WorldCameraProgramOp".
  */
 export type WorldCameraProgramOp =
-  | WorldCameraProgramOpAnchor
-  | WorldCameraProgramOpOffset
-  | WorldCameraProgramOpLookAt
-  | WorldCameraProgramOpOrbit
-  | WorldCameraProgramOpPath
-  | WorldCameraProgramOpDynamics
-  | WorldCameraProgramOpClampPitch
-  | WorldCameraProgramOpFov
-  | WorldCameraProgramOpBlend
-  | WorldCameraProgramOpSelect;
+  | (WorldCameraProgramOpAnchor | null)
+  | (WorldCameraProgramOpOffset | null)
+  | (WorldCameraProgramOpLookAt | null)
+  | (WorldCameraProgramOpOrbit | null)
+  | (WorldCameraProgramOpPath | null)
+  | (WorldCameraProgramOpDynamics | null)
+  | (WorldCameraProgramOpClampPitch | null)
+  | (WorldCameraProgramOpFov | null)
+  | (WorldCameraProgramOpBlend | null)
+  | (WorldCameraProgramOpSelect | null);
 /**
  * The subject an Anchor/LookAt op resolves against — the closed "what a camera program can key off" vocabulary. Distinct from WorldAnchor (WHERE a whole placeable camera or speaker rides, resolved OUTSIDE the program and handed in as one reference pose): this is presentation math INSIDE the program, so it stays float and needs no live entity table — a placement's pose resolves through the same static stamped-transform math a placeable camera's own anchor and a speaker read (Puck.World.Client.WorldAnchorGeometry).
  *
@@ -209,7 +209,7 @@ export type WorldCameraProgramOp =
  * via the `definition` "WorldCameraSubject".
  */
 export type WorldCameraSubject =
-  WorldCameraSubjectReference | WorldCameraSubjectPlacement | WorldCameraSubjectWorldPoint;
+  (WorldCameraSubjectReference | null) | (WorldCameraSubjectPlacement | null) | (WorldCameraSubjectWorldPoint | null);
 /**
  * The subject an Anchor/LookAt op resolves against — the closed "what a camera program can key off" vocabulary. Distinct from WorldAnchor (WHERE a whole placeable camera or speaker rides, resolved OUTSIDE the program and handed in as one reference pose): this is presentation math INSIDE the program, so it stays float and needs no live entity table — a placement's pose resolves through the same static stamped-transform math a placeable camera's own anchor and a speaker read (Puck.World.Client.WorldAnchorGeometry).
  *
@@ -217,7 +217,7 @@ export type WorldCameraSubject =
  * via the `definition` "WorldCameraSubjectNullable".
  */
 export type WorldCameraSubjectNullable =
-  WorldCameraSubjectReference | WorldCameraSubjectPlacement | WorldCameraSubjectWorldPoint;
+  (WorldCameraSubjectReference | null) | (WorldCameraSubjectPlacement | null) | (WorldCameraSubjectWorldPoint | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "BindableScalar".
@@ -227,12 +227,12 @@ export type BindableScalar = number | string;
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldCameraSelectCaseList".
  */
-export type WorldCameraSelectCaseList = WorldCameraSelectCase[];
+export type WorldCameraSelectCaseList = (WorldCameraSelectCase | null)[];
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldCameraProgramOpList".
  */
-export type WorldCameraProgramOpList = WorldCameraProgramOp[];
+export type WorldCameraProgramOpList = (WorldCameraProgramOp | null)[];
 /**
  * An overlay element's visibility condition — the presentation twin of ActionPredicate, over OverlayFacts. Absent on an element means always visible.
  *
@@ -240,14 +240,14 @@ export type WorldCameraProgramOpList = WorldCameraProgramOp[];
  * via the `definition` "OverlayPredicateNullable".
  */
 export type OverlayPredicateNullable =
-  | OverlayPredicateNow
-  | OverlayPredicateRecently
-  | OverlayPredicateAll
-  | OverlayPredicateAny
-  | OverlayPredicateNot
-  | OverlayPredicateSpeaking
-  | OverlayPredicateNear
-  | OverlayPredicateState;
+  | (OverlayPredicateNow | null)
+  | (OverlayPredicateRecently | null)
+  | (OverlayPredicateAll | null)
+  | (OverlayPredicateAny | null)
+  | (OverlayPredicateNot | null)
+  | (OverlayPredicateSpeaking | null)
+  | (OverlayPredicateNear | null)
+  | (OverlayPredicateState | null);
 /**
  * A presentation fact an overlay element's OverlayPredicate reads. Every fact is per local seat and never enters the simulation; a world-scope element (a hud.panels row) reads a fact as true when it holds for any joined local seat.
  *
@@ -259,12 +259,12 @@ export type OverlayFact = "SeatInput" | "PointerMotion" | "WheelOpen" | "Console
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "OverlayPredicateListNonNullable".
  */
-export type OverlayPredicateListNonNullable = OverlayPredicateNullable[];
+export type OverlayPredicateListNonNullable = (OverlayPredicateNullable | null)[];
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "OverlayPredicateList".
  */
-export type OverlayPredicateList = OverlayPredicateNullable[];
+export type OverlayPredicateList = (OverlayPredicateNullable | null)[];
 /**
  * An overlay element's visibility condition — the presentation twin of ActionPredicate, over OverlayFacts. Absent on an element means always visible.
  *
@@ -272,14 +272,14 @@ export type OverlayPredicateList = OverlayPredicateNullable[];
  * via the `definition` "OverlayPredicate".
  */
 export type OverlayPredicate =
-  | OverlayPredicateNow
-  | OverlayPredicateRecently
-  | OverlayPredicateAll
-  | OverlayPredicateAny
-  | OverlayPredicateNot
-  | OverlayPredicateSpeaking
-  | OverlayPredicateNear
-  | OverlayPredicateState;
+  | (OverlayPredicateNow | null)
+  | (OverlayPredicateRecently | null)
+  | (OverlayPredicateAll | null)
+  | (OverlayPredicateAny | null)
+  | (OverlayPredicateNot | null)
+  | (OverlayPredicateSpeaking | null)
+  | (OverlayPredicateNear | null)
+  | (OverlayPredicateState | null);
 /**
  * Who a subject-bearing presentation predicate is about — a seat's avatar, a placement, an entity, or a quantifier over seats or speakers. Presentation-only: a subject resolves to a body through the seat's perceived body (so possession follows) and never enters the simulation.
  *
@@ -287,11 +287,11 @@ export type OverlayPredicate =
  * via the `definition` "OverlaySubject".
  */
 export type OverlaySubject =
-  | OverlaySubjectSeat
-  | OverlaySubjectPlacement
-  | OverlaySubjectEntity
-  | OverlaySubjectAnySeat
-  | OverlaySubjectRecentSpeaker;
+  | (OverlaySubjectSeat | null)
+  | (OverlaySubjectPlacement | null)
+  | (OverlaySubjectEntity | null)
+  | (OverlaySubjectAnySeat | null)
+  | (OverlaySubjectRecentSpeaker | null);
 /**
  * Who a subject-bearing presentation predicate is about — a seat's avatar, a placement, an entity, or a quantifier over seats or speakers. Presentation-only: a subject resolves to a body through the seat's perceived body (so possession follows) and never enters the simulation.
  *
@@ -299,11 +299,11 @@ export type OverlaySubject =
  * via the `definition` "OverlaySubjectNullable".
  */
 export type OverlaySubjectNullable =
-  | OverlaySubjectSeat
-  | OverlaySubjectPlacement
-  | OverlaySubjectEntity
-  | OverlaySubjectAnySeat
-  | OverlaySubjectRecentSpeaker;
+  | (OverlaySubjectSeat | null)
+  | (OverlaySubjectPlacement | null)
+  | (OverlaySubjectEntity | null)
+  | (OverlaySubjectAnySeat | null)
+  | (OverlaySubjectRecentSpeaker | null);
 /**
  * A fixed comparison admitted by a compiled state predicate.
  *
@@ -328,11 +328,11 @@ export type IntentSource = ("Live" | "Idle") | Shape;
  * via the `definition` "WorldDistributionRegion".
  */
 export type WorldDistributionRegion =
-  | WorldDistributionRegionDisc
-  | WorldDistributionRegionPoints
-  | WorldDistributionRegionLattice
-  | WorldDistributionRegionNoise
-  | WorldDistributionRegionScatter;
+  | (WorldDistributionRegionDisc | null)
+  | (WorldDistributionRegionPoints | null)
+  | (WorldDistributionRegionLattice | null)
+  | (WorldDistributionRegionNoise | null)
+  | (WorldDistributionRegionScatter | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldObserverDisclosureMode".
@@ -410,7 +410,10 @@ export type BodyMotionOp =
  * via the `definition` "BodyTargetSource".
  */
 export type BodyTargetSource =
-  BodyTargetSourceSensed | BodyTargetSourceDesignated | BodyTargetSourceCurveFollow | BodyTargetSourceNavigated;
+  | (BodyTargetSourceSensed | null)
+  | (BodyTargetSourceDesignated | null)
+  | (BodyTargetSourceCurveFollow | null)
+  | (BodyTargetSourceNavigated | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "BodyTargetScope".
@@ -423,15 +426,15 @@ export type BodyTargetScope = "Seats" | "Bodies";
  * via the `definition` "ActionPredicateNullable2".
  */
 export type ActionPredicateNullable2 =
-  | ActionPredicateCompareState
-  | ActionPredicateCompareValue
-  | ActionPredicateAll
-  | ActionPredicateAny
-  | ActionPredicateNot
-  | WorldPredicateNow
-  | WorldPredicateRecently
-  | WorldPredicateTimerElapsed
-  | WorldPredicateHeld;
+  | (ActionPredicateCompareState | null)
+  | (ActionPredicateCompareValue | null)
+  | (ActionPredicateAll | null)
+  | (ActionPredicateAny | null)
+  | (ActionPredicateNot | null)
+  | (WorldPredicateNow | null)
+  | (WorldPredicateRecently | null)
+  | (WorldPredicateTimerElapsed | null)
+  | (WorldPredicateHeld | null);
 /**
  * A bounded postfix numeric expression evaluated by a world rule, decision, or flock affinity. Each token either pushes a value or consumes preceding values; the compiler proves stack shape and numeric kind before simulation begins. Authored either as an infix string (ExpressionSpelling, "min(damage, hp) * 2") or as the postfix { "tokens": [...] } object; both parse to the same tokens and each writes back in its own spelling.
  *
@@ -446,122 +449,122 @@ export type ValueExpression = string | ValueExpressionTokens;
  * via the `definition` "ValueToken".
  */
 export type ValueToken =
-  | ValueTokenConstant
-  | ValueTokenState
-  | ValueTokenAdd
-  | ValueTokenSubtract
-  | ValueTokenMultiply
-  | ValueTokenDivide
-  | ValueTokenMin
-  | ValueTokenMax
-  | ValueTokenClamp
-  | ValueTokenModulo
-  | ValueTokenBitAnd
-  | ValueTokenBitOr
-  | ValueTokenBitXor
-  | ValueTokenBitNot
-  | ValueTokenShiftLeft
-  | ValueTokenShiftRight
-  | ValueTokenShiftRightLogical
-  | ValueTokenEqual
-  | ValueTokenNotEqual
-  | ValueTokenLess
-  | ValueTokenLessOrEqual
-  | ValueTokenGreater
-  | ValueTokenGreaterOrEqual
-  | ValueTokenSelect
-  | ValueTokenPopCount
-  | ValueTokenLeadingZeroCount
-  | ValueTokenTrailingZeroCount
-  | ValueTokenLowestSetBit
-  | ValueTokenClearLowestSetBit
-  | ValueTokenRotateLeft
-  | ValueTokenRotateRight
-  | ValueTokenByteSwap
-  | ValueTokenBitReverse
-  | ValueTokenReplicationMask
-  | ValueTokenRepeatBits
-  | ValueTokenNegate
-  | ValueTokenAbs
-  | ValueTokenSign
-  | ValueTokenParallelBitExtract
-  | ValueTokenParallelBitDeposit
-  | ValueTokenBitField
-  | ValueTokenBitInsert
-  | ValueTokenBoardShift
-  | ValueTokenBoardFill
-  | ValueTokenBoardImage
-  | ValueTokenPair
-  | ValueTokenPairX
-  | ValueTokenPairY
-  | ValueTokenPairSwap
-  | ValueTokenPairMax
-  | ValueTokenPairMin
-  | ValueTokenPairSum
-  | ValueTokenPairDifference
-  | ValueTokenPairTranslate
-  | ValueTokenPairScale
-  | ValueTokenMorton
-  | ValueTokenMortonX
-  | ValueTokenMortonY
-  | ValueTokenHilbert
-  | ValueTokenHilbertX
-  | ValueTokenHilbertY
-  | ValueTokenHexIndex
-  | ValueTokenHexQ
-  | ValueTokenHexR
-  | ValueTokenHexRadius
-  | ValueTokenHexEuclideanSquared
-  | ValueTokenHexDistance
-  | ValueTokenHexNeighbor
-  | ValueTokenHexRotate
-  | ValueTokenHexMirror
-  | ValueTokenHexSwap
-  | ValueTokenHexAdd
-  | ValueTokenHexSubtract
-  | ValueTokenHexMultiply
-  | ValueTokenHexScale
-  | ValueTokenHexTranslate
-  | ValueTokenLayer
-  | ValueTokenLayerOffset
-  | ValueTokenLayerStart
-  | ValueTokenLayerSize
-  | ValueTokenSquareRoot
-  | ValueTokenSine
-  | ValueTokenCosine
-  | ValueTokenSquareIndex
-  | ValueTokenSquareX
-  | ValueTokenSquareY
-  | ValueTokenSquareRadius
-  | ValueTokenSquareLength
-  | ValueTokenSquareEuclideanSquared
-  | ValueTokenSquareDistance
-  | ValueTokenSquareChebyshev
-  | ValueTokenSquareNeighbor
-  | ValueTokenSquareRotate
-  | ValueTokenSquareMirror
-  | ValueTokenSquareSwap
-  | ValueTokenSquareAdd
-  | ValueTokenSquareSubtract
-  | ValueTokenSquareMultiply
-  | ValueTokenSquareScale
-  | ValueTokenSquareTranslate
-  | ValueTokenGreatestCommonDivisor
-  | ValueTokenLeastCommonMultiple
-  | ValueTokenFloorModulo
-  | ValueTokenCycleForward
-  | ValueTokenCycleDistance
-  | ValueTokenSmallestMissing
-  | ValueTokenIsPrime
-  | ValueTokenPrime
-  | ValueTokenChoose
-  | ValueTokenFactorial
-  | ValueTokenSubsetRank
-  | ValueTokenSubsetAt
-  | ValueTokenSubsetMember
-  | ValueTokenArrangementRank
-  | ValueTokenArrangementAt
-  | ValueTokenArrangementMember;
+  | (ValueTokenConstant | null)
+  | (ValueTokenState | null)
+  | (ValueTokenAdd | null)
+  | (ValueTokenSubtract | null)
+  | (ValueTokenMultiply | null)
+  | (ValueTokenDivide | null)
+  | (ValueTokenMin | null)
+  | (ValueTokenMax | null)
+  | (ValueTokenClamp | null)
+  | (ValueTokenModulo | null)
+  | (ValueTokenBitAnd | null)
+  | (ValueTokenBitOr | null)
+  | (ValueTokenBitXor | null)
+  | (ValueTokenBitNot | null)
+  | (ValueTokenShiftLeft | null)
+  | (ValueTokenShiftRight | null)
+  | (ValueTokenShiftRightLogical | null)
+  | (ValueTokenEqual | null)
+  | (ValueTokenNotEqual | null)
+  | (ValueTokenLess | null)
+  | (ValueTokenLessOrEqual | null)
+  | (ValueTokenGreater | null)
+  | (ValueTokenGreaterOrEqual | null)
+  | (ValueTokenSelect | null)
+  | (ValueTokenPopCount | null)
+  | (ValueTokenLeadingZeroCount | null)
+  | (ValueTokenTrailingZeroCount | null)
+  | (ValueTokenLowestSetBit | null)
+  | (ValueTokenClearLowestSetBit | null)
+  | (ValueTokenRotateLeft | null)
+  | (ValueTokenRotateRight | null)
+  | (ValueTokenByteSwap | null)
+  | (ValueTokenBitReverse | null)
+  | (ValueTokenReplicationMask | null)
+  | (ValueTokenRepeatBits | null)
+  | (ValueTokenNegate | null)
+  | (ValueTokenAbs | null)
+  | (ValueTokenSign | null)
+  | (ValueTokenParallelBitExtract | null)
+  | (ValueTokenParallelBitDeposit | null)
+  | (ValueTokenBitField | null)
+  | (ValueTokenBitInsert | null)
+  | (ValueTokenBoardShift | null)
+  | (ValueTokenBoardFill | null)
+  | (ValueTokenBoardImage | null)
+  | (ValueTokenPair | null)
+  | (ValueTokenPairX | null)
+  | (ValueTokenPairY | null)
+  | (ValueTokenPairSwap | null)
+  | (ValueTokenPairMax | null)
+  | (ValueTokenPairMin | null)
+  | (ValueTokenPairSum | null)
+  | (ValueTokenPairDifference | null)
+  | (ValueTokenPairTranslate | null)
+  | (ValueTokenPairScale | null)
+  | (ValueTokenMorton | null)
+  | (ValueTokenMortonX | null)
+  | (ValueTokenMortonY | null)
+  | (ValueTokenHilbert | null)
+  | (ValueTokenHilbertX | null)
+  | (ValueTokenHilbertY | null)
+  | (ValueTokenHexIndex | null)
+  | (ValueTokenHexQ | null)
+  | (ValueTokenHexR | null)
+  | (ValueTokenHexRadius | null)
+  | (ValueTokenHexEuclideanSquared | null)
+  | (ValueTokenHexDistance | null)
+  | (ValueTokenHexNeighbor | null)
+  | (ValueTokenHexRotate | null)
+  | (ValueTokenHexMirror | null)
+  | (ValueTokenHexSwap | null)
+  | (ValueTokenHexAdd | null)
+  | (ValueTokenHexSubtract | null)
+  | (ValueTokenHexMultiply | null)
+  | (ValueTokenHexScale | null)
+  | (ValueTokenHexTranslate | null)
+  | (ValueTokenLayer | null)
+  | (ValueTokenLayerOffset | null)
+  | (ValueTokenLayerStart | null)
+  | (ValueTokenLayerSize | null)
+  | (ValueTokenSquareRoot | null)
+  | (ValueTokenSine | null)
+  | (ValueTokenCosine | null)
+  | (ValueTokenSquareIndex | null)
+  | (ValueTokenSquareX | null)
+  | (ValueTokenSquareY | null)
+  | (ValueTokenSquareRadius | null)
+  | (ValueTokenSquareLength | null)
+  | (ValueTokenSquareEuclideanSquared | null)
+  | (ValueTokenSquareDistance | null)
+  | (ValueTokenSquareChebyshev | null)
+  | (ValueTokenSquareNeighbor | null)
+  | (ValueTokenSquareRotate | null)
+  | (ValueTokenSquareMirror | null)
+  | (ValueTokenSquareSwap | null)
+  | (ValueTokenSquareAdd | null)
+  | (ValueTokenSquareSubtract | null)
+  | (ValueTokenSquareMultiply | null)
+  | (ValueTokenSquareScale | null)
+  | (ValueTokenSquareTranslate | null)
+  | (ValueTokenGreatestCommonDivisor | null)
+  | (ValueTokenLeastCommonMultiple | null)
+  | (ValueTokenFloorModulo | null)
+  | (ValueTokenCycleForward | null)
+  | (ValueTokenCycleDistance | null)
+  | (ValueTokenSmallestMissing | null)
+  | (ValueTokenIsPrime | null)
+  | (ValueTokenPrime | null)
+  | (ValueTokenChoose | null)
+  | (ValueTokenFactorial | null)
+  | (ValueTokenSubsetRank | null)
+  | (ValueTokenSubsetAt | null)
+  | (ValueTokenSubsetMember | null)
+  | (ValueTokenArrangementRank | null)
+  | (ValueTokenArrangementAt | null)
+  | (ValueTokenArrangementMember | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "CellKind".
@@ -574,20 +577,20 @@ export type CellKind = "Int" | "Fixed" | "Bool" | "Text";
  * via the `definition` "ActionPredicateNullable".
  */
 export type ActionPredicateNullable =
-  | ActionPredicateCompareState
-  | ActionPredicateCompareValue
-  | ActionPredicateAll
-  | ActionPredicateAny
-  | ActionPredicateNotNonNullable
-  | WorldPredicateNow
-  | WorldPredicateRecently
-  | WorldPredicateTimerElapsed
-  | WorldPredicateHeld;
+  | (ActionPredicateCompareState | null)
+  | (ActionPredicateCompareValue | null)
+  | (ActionPredicateAll | null)
+  | (ActionPredicateAny | null)
+  | (ActionPredicateNotNonNullable | null)
+  | (WorldPredicateNow | null)
+  | (WorldPredicateRecently | null)
+  | (WorldPredicateTimerElapsed | null)
+  | (WorldPredicateHeld | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "ActionPredicateList".
  */
-export type ActionPredicateList = ActionPredicateNullable[];
+export type ActionPredicateList = (ActionPredicateNullable | null)[];
 /**
  * A data-composable gate over named state. A rule fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; the arms declared here are the ones this library owns, and a document project appends its own derived arms through a RuleVocabulary (see ExtendJson) rather than by editing this list.
  *
@@ -595,15 +598,15 @@ export type ActionPredicateList = ActionPredicateNullable[];
  * via the `definition` "ActionPredicate".
  */
 export type ActionPredicate =
-  | ActionPredicateCompareState
-  | ActionPredicateCompareValue
-  | ActionPredicateAll
-  | ActionPredicateAnyNonNullable
-  | ActionPredicateNot
-  | WorldPredicateNow
-  | WorldPredicateRecently
-  | WorldPredicateTimerElapsed
-  | WorldPredicateHeld;
+  | (ActionPredicateCompareState | null)
+  | (ActionPredicateCompareValue | null)
+  | (ActionPredicateAll | null)
+  | (ActionPredicateAnyNonNullable | null)
+  | (ActionPredicateNot | null)
+  | (WorldPredicateNow | null)
+  | (WorldPredicateRecently | null)
+  | (WorldPredicateTimerElapsed | null)
+  | (WorldPredicateHeld | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "ActionFact".
@@ -623,7 +626,7 @@ export type ActionFact =
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "ActionPredicateListNonNullable".
  */
-export type ActionPredicateListNonNullable = ActionPredicateNullable[];
+export type ActionPredicateListNonNullable = (ActionPredicateNullable | null)[];
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "MotionMoveFrame".
@@ -656,34 +659,34 @@ export type WorldFlockSpace = "Tangent" | "Volume";
  * via the `definition` "ActionEffect".
  */
 export type ActionEffect =
-  | ActionEffectSetState
-  | ActionEffectAddState
-  | ActionEffectPushState
-  | ActionEffectTransformState
-  | ActionEffectCountdownState
-  | ActionEffectGenerate
-  | ActionEffectRemoveStateCell
-  | ActionEffectScheduleState
-  | ActionEffectTransaction
-  | WorldEffectSetVerticalVelocity
-  | WorldEffectScaleVerticalVelocity
-  | WorldEffectPlanarImpulse
-  | WorldEffectStartTimer
-  | WorldEffectDesignate
-  | WorldEffectEmitCue
-  | WorldEffectSetBodyVerticalVelocity
-  | WorldEffectScaleBodyVerticalVelocity
-  | WorldEffectApplyBodyImpulse
-  | WorldEffectApplyRigidImpulse
-  | WorldEffectDesignateBody
-  | WorldEffectPaintField
-  | WorldEffectUpsertHudPanel
-  | WorldEffectRemoveHudPanel
-  | WorldEffectUpsertPlacement
-  | WorldEffectRemovePlacement
-  | WorldEffectSave
-  | WorldEffectPose
-  | WorldEffectSetIdentityFact;
+  | (ActionEffectSetState | null)
+  | (ActionEffectAddState | null)
+  | (ActionEffectPushState | null)
+  | (ActionEffectTransformState | null)
+  | (ActionEffectCountdownState | null)
+  | (ActionEffectGenerate | null)
+  | (ActionEffectRemoveStateCell | null)
+  | (ActionEffectScheduleState | null)
+  | (ActionEffectTransaction | null)
+  | (WorldEffectSetVerticalVelocity | null)
+  | (WorldEffectScaleVerticalVelocity | null)
+  | (WorldEffectPlanarImpulse | null)
+  | (WorldEffectStartTimer | null)
+  | (WorldEffectDesignate | null)
+  | (WorldEffectEmitCue | null)
+  | (WorldEffectSetBodyVerticalVelocity | null)
+  | (WorldEffectScaleBodyVerticalVelocity | null)
+  | (WorldEffectApplyBodyImpulse | null)
+  | (WorldEffectApplyRigidImpulse | null)
+  | (WorldEffectDesignateBody | null)
+  | (WorldEffectPaintField | null)
+  | (WorldEffectUpsertHudPanel | null)
+  | (WorldEffectRemoveHudPanel | null)
+  | (WorldEffectUpsertPlacement | null)
+  | (WorldEffectRemovePlacement | null)
+  | (WorldEffectSave | null)
+  | (WorldEffectPose | null)
+  | (WorldEffectSetIdentityFact | null);
 /**
  * The participant an action effect addresses. A document-scope rule has no participant to select, so only Self is admitted there; the other members belong to a host's per-participant action programs, which share the SetState/AddState shapes with the rule compiler and therefore carry the member on the wire.
  *
@@ -698,17 +701,17 @@ export type ActionTarget = "Self" | "ProducerTarget" | "AffectingSubject";
  * via the `definition` "StateTransform".
  */
 export type StateTransform =
-  | StateTransformTransfer
-  | StateTransformSetRay
-  | StateTransformShuffle
-  | StateTransformSortZone
-  | StateTransformSortKeyed
-  | StateTransformWriteSet
-  | StateTransformBoardCombine
-  | StateTransformArrange
-  | StateTransformPush
-  | StateTransformClearEnclosed
-  | StateTransformObserve;
+  | (StateTransformTransfer | null)
+  | (StateTransformSetRay | null)
+  | (StateTransformShuffle | null)
+  | (StateTransformSortZone | null)
+  | (StateTransformSortKeyed | null)
+  | (StateTransformWriteSet | null)
+  | (StateTransformBoardCombine | null)
+  | (StateTransformArrange | null)
+  | (StateTransformPush | null)
+  | (StateTransformClearEnclosed | null)
+  | (StateTransformObserve | null);
 /**
  * Selection of a single token from a zone.
  *
@@ -768,7 +771,10 @@ export type WorldHudStyleToken = "Primary" | "Dim" | "Accent" | "Positive" | "Wa
  * via the `definition` "WorldFrameSource".
  */
 export type WorldFrameSource =
-  WorldScreenSourceCamera | WorldScreenSourceView | WorldScreenSourceProbe | WorldScreenSourceCapture;
+  | (WorldScreenSourceCamera | null)
+  | (WorldScreenSourceView | null)
+  | (WorldScreenSourceProbe | null)
+  | (WorldScreenSourceCapture | null);
 /**
  * How a Frame element maps its sampled frame's aspect ratio onto its own rect — the same uv-mapping choice a screen material or a UI image element makes.
  *
@@ -783,12 +789,15 @@ export type WorldHudFrameFit = "Cover" | "Contain" | "Stretch";
  * via the `definition` "WorldFrameSourceNonNullable".
  */
 export type WorldFrameSourceNonNullable =
-  WorldScreenSourceCamera | WorldScreenSourceView | WorldScreenSourceProbe | WorldScreenSourceCapture;
+  | (WorldScreenSourceCamera | null)
+  | (WorldScreenSourceView | null)
+  | (WorldScreenSourceProbe | null)
+  | (WorldScreenSourceCapture | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldHudElementList".
  */
-export type WorldHudElementList = WorldHudElement[];
+export type WorldHudElementList = (WorldHudElement | null)[];
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldPlacementInhabitCount".
@@ -810,7 +819,7 @@ export type WorldPortalArrival = "spawn" | "mapped";
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldPlacementFaceList".
  */
-export type WorldPlacementFaceList = WorldPlacementFace[];
+export type WorldPlacementFaceList = (WorldPlacementFace | null)[];
 /**
  * How long a filled WorldPlacementContribution slot keeps the piece a federation partner put in it.
  *
@@ -830,12 +839,12 @@ export type WorldPrincipal = string;
  * via the `definition` "WorldPlacementResponseCondition".
  */
 export type WorldPlacementResponseCondition =
-  WorldPlacementResponseConditionFieldCondition | WorldPlacementResponseConditionStateCondition;
+  (WorldPlacementResponseConditionFieldCondition | null) | (WorldPlacementResponseConditionStateCondition | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldPlacementResponseList".
  */
-export type WorldPlacementResponseList = WorldPlacementResponse[];
+export type WorldPlacementResponseList = (WorldPlacementResponse | null)[];
 /**
  * How a tabletop board binding treats an illegal move — the author's choice per table, engine-side and game-agnostic: the judge that computes Verdict is authored per world, and this field only decides what the engine itself does once that verdict refuses.
  *
@@ -859,12 +868,12 @@ export type WorldSpatialShapeKind = "Box" | "Sphere";
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldPlacementSpatialVolumeList".
  */
-export type WorldPlacementSpatialVolumeList = WorldPlacementSpatialVolume[];
+export type WorldPlacementSpatialVolumeList = (WorldPlacementSpatialVolume | null)[];
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "ActionEffectList".
  */
-export type ActionEffectList = ActionEffect[];
+export type ActionEffectList = (ActionEffect | null)[];
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "ActionTriggerMode".
@@ -874,7 +883,11 @@ export type ActionTriggerMode = "Level" | "Edge";
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldCollider".
  */
-export type WorldCollider = WorldColliderSphere | WorldColliderCapsule | WorldColliderBox | WorldColliderFromCreation;
+export type WorldCollider =
+  | (WorldColliderSphere | null)
+  | (WorldColliderCapsule | null)
+  | (WorldColliderBox | null)
+  | (WorldColliderFromCreation | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "DocumentQuaternion".
@@ -949,7 +962,7 @@ export type BindingEntryMode = "Hold" | "Toggle";
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "BindingPageEntryDefinitionList".
  */
-export type BindingPageEntryDefinitionList = BindingPageEntryDefinition[];
+export type BindingPageEntryDefinitionList = (BindingPageEntryDefinition | null)[];
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "BindingWheelSpatialSelectionMode".
@@ -1337,7 +1350,7 @@ export type CreationNoiseDocument = {
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldSpeaker".
  */
-export type WorldSpeaker = WorldSpeakerFixed | WorldSpeakerAnchored | WorldSpeakerBed;
+export type WorldSpeaker = (WorldSpeakerFixed | null) | (WorldSpeakerAnchored | null) | (WorldSpeakerBed | null);
 /**
  * The signal a WorldSpeaker's feed taps — a shared source identity, never an inline payload: the runtime drains each distinct source once per mix block and every feed tapping it shares that one pull, so "stereo = two rows sharing a source" costs one drain. The $type string is the JSON discriminator, matching WorldScreenSource's convention; a new source kind is a new derived record plus its JsonDerivedTypeAttribute line.
  *
@@ -1345,7 +1358,10 @@ export type WorldSpeaker = WorldSpeakerFixed | WorldSpeakerAnchored | WorldSpeak
  * via the `definition` "WorldSpeakerSource".
  */
 export type WorldSpeakerSource =
-  WorldSpeakerSourceNone | WorldSpeakerSourceMachine | WorldSpeakerSourceTune | WorldSpeakerSourceSynth;
+  | (WorldSpeakerSourceNone | null)
+  | (WorldSpeakerSourceMachine | null)
+  | (WorldSpeakerSourceTune | null)
+  | (WorldSpeakerSourceSynth | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldContactRequirement".
@@ -1365,12 +1381,14 @@ export type WorldGravityAreaMode = "Combine" | "Replace";
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldGravityAreaBounds".
  */
-export type WorldGravityAreaBounds = WorldGravityAreaBoundsSphereBounds | WorldGravityAreaBoundsBoxBounds;
+export type WorldGravityAreaBounds =
+  (WorldGravityAreaBoundsSphereBounds | null) | (WorldGravityAreaBoundsBoxBounds | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldGravityAreaAcceleration".
  */
-export type WorldGravityAreaAcceleration = WorldGravityAreaAccelerationDirectional | WorldGravityAreaAccelerationRadial;
+export type WorldGravityAreaAcceleration =
+  (WorldGravityAreaAccelerationDirectional | null) | (WorldGravityAreaAccelerationRadial | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldHostPresentation".
@@ -1400,7 +1418,7 @@ export type WorldSeatYawReference = "World" | "Body";
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldLookSource".
  */
-export type WorldLookSource = WorldLookSourceCatalog | WorldLookSourceCreation;
+export type WorldLookSource = (WorldLookSourceCatalog | null) | (WorldLookSourceCreation | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "ChannelReachMask".
@@ -1479,7 +1497,10 @@ export type DrawTiming = "Boot" | "TickPeriod" | "Event";
  * via the `definition` "WorldLatticeFill".
  */
 export type WorldLatticeFill =
-  WorldLatticeFillRect | WorldLatticeFillNoise | WorldLatticeFillScatter | WorldLatticeFillDraw;
+  | (WorldLatticeFillRect | null)
+  | (WorldLatticeFillNoise | null)
+  | (WorldLatticeFillScatter | null)
+  | (WorldLatticeFillDraw | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "ActionStateKind".
@@ -1506,19 +1527,19 @@ export type ActionFactNullable =
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "ActionStateEnvelope".
  */
-export type ActionStateEnvelope = ActionStateEnvelopeRange | ActionStateEnvelopeSet;
+export type ActionStateEnvelope = (ActionStateEnvelopeRange | null) | (ActionStateEnvelopeSet | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "LatticeTopology".
  */
 export type LatticeTopology =
-  | LatticeTopologyGrid
-  | LatticeTopologyRing
-  | LatticeTopologyHex
-  | LatticeTopologyBox
-  | LatticeTopologyGraph
-  | LatticeTopologyTiling
-  | WorldFieldTopology;
+  | (LatticeTopologyGrid | null)
+  | (LatticeTopologyRing | null)
+  | (LatticeTopologyHex | null)
+  | (LatticeTopologyBox | null)
+  | (LatticeTopologyGraph | null)
+  | (LatticeTopologyTiling | null)
+  | (WorldFieldTopology | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "TopologyWrap".
@@ -1542,17 +1563,17 @@ export type TilingFamily =
  * via the `definition` "WorldReaction".
  */
 export type WorldReaction =
-  | WorldReactionDiffuse
-  | WorldReactionDecay
-  | WorldReactionTransform
-  | WorldReactionEmit
-  | WorldReactionExpose
-  | WorldReactionFlow;
+  | (WorldReactionDiffuse | null)
+  | (WorldReactionDecay | null)
+  | (WorldReactionTransform | null)
+  | (WorldReactionEmit | null)
+  | (WorldReactionExpose | null)
+  | (WorldReactionFlow | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldMarkerSource".
  */
-export type WorldMarkerSource = WorldMarkerSourceSpeakers | WorldMarkerSourcePoint;
+export type WorldMarkerSource = (WorldMarkerSourceSpeakers | null) | (WorldMarkerSourcePoint | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldDecisionMode".
@@ -1607,7 +1628,7 @@ export type WorldDestinationScope = "user" | "group" | "global";
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldGroupSelector".
  */
-export type WorldGroupSelector = WorldGroupSelectorNamed | WorldGroupSelectorTagged;
+export type WorldGroupSelector = (WorldGroupSelectorNamed | null) | (WorldGroupSelectorTagged | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldAdmissionTrustMode".
@@ -1627,12 +1648,14 @@ export type WorldAdjacencyUnavailable = "Closed";
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldProbeBinding".
  */
-export type WorldProbeBinding = WorldProbeBindingAxis | WorldProbeBindingParameter | WorldProbeBindingControl;
+export type WorldProbeBinding =
+  (WorldProbeBindingAxis | null) | (WorldProbeBindingParameter | null) | (WorldProbeBindingControl | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldProbeParameterTarget".
  */
-export type WorldProbeParameterTarget = WorldProbeParameterTargetExtension | WorldProbeParameterTargetProbe;
+export type WorldProbeParameterTarget =
+  (WorldProbeParameterTargetExtension | null) | (WorldProbeParameterTargetProbe | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldNavigationKind".
@@ -1650,19 +1673,19 @@ export type WorldNavigationConnectivity = "Axis" | "FacesAndEdges" | "Full";
  * via the `definition` "PatternNode".
  */
 export type PatternNode =
-  | PatternNodeSymbol
-  | PatternNodeAnySymbol
-  | PatternNodeExcept
-  | PatternNodeNothing
-  | PatternNodeNone
-  | PatternNodeSequence
-  | PatternNodeChoice
-  | PatternNodeBoth
-  | PatternNodeComplement
-  | PatternNodeOptional
-  | PatternNodeStar
-  | PatternNodePlus
-  | PatternNodeRepeat;
+  | (PatternNodeSymbol | null)
+  | (PatternNodeAnySymbol | null)
+  | (PatternNodeExcept | null)
+  | (PatternNodeNothing | null)
+  | (PatternNodeNone | null)
+  | (PatternNodeSequence | null)
+  | (PatternNodeChoice | null)
+  | (PatternNodeBoth | null)
+  | (PatternNodeComplement | null)
+  | (PatternNodeOptional | null)
+  | (PatternNodeStar | null)
+  | (PatternNodePlus | null)
+  | (PatternNodeRepeat | null);
 /**
  * The closed pattern vocabulary over a row's cell values, matched against the whole word. Complement and intersection are first-class, so "no two adjacent kings" and "holds a 2 and a 5" are single patterns rather than rule arithmetic.
  *
@@ -1670,40 +1693,40 @@ export type PatternNode =
  * via the `definition` "PatternNodeNullable".
  */
 export type PatternNodeNullable =
-  | PatternNodeSymbol
-  | PatternNodeAnySymbol
-  | PatternNodeExcept
-  | PatternNodeNothing
-  | PatternNodeNone
-  | PatternNodeSequence
-  | PatternNodeChoice
-  | PatternNodeBoth
-  | PatternNodeComplement
-  | PatternNodeOptional
-  | PatternNodeStar
-  | PatternNodePlus
-  | PatternNodeRepeat;
+  | (PatternNodeSymbol | null)
+  | (PatternNodeAnySymbol | null)
+  | (PatternNodeExcept | null)
+  | (PatternNodeNothing | null)
+  | (PatternNodeNone | null)
+  | (PatternNodeSequence | null)
+  | (PatternNodeChoice | null)
+  | (PatternNodeBoth | null)
+  | (PatternNodeComplement | null)
+  | (PatternNodeOptional | null)
+  | (PatternNodeStar | null)
+  | (PatternNodePlus | null)
+  | (PatternNodeRepeat | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "PatternNodeList".
  */
-export type PatternNodeList = PatternNodeNullable[];
+export type PatternNodeList = (PatternNodeNullable | null)[];
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "PatternNodeListNonNullable".
  */
-export type PatternNodeListNonNullable = PatternNodeNullable[];
+export type PatternNodeListNonNullable = (PatternNodeNullable | null)[];
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldSearchShape".
  */
 export type WorldSearchShape =
-  | WorldSearchShapeRelocate
-  | WorldSearchShapeDrop
-  | WorldSearchShapeJump
-  | WorldSearchShapePaired
-  | WorldSearchShapePromote
-  | WorldSearchShapeTransferred;
+  | (WorldSearchShapeRelocate | null)
+  | (WorldSearchShapeDrop | null)
+  | (WorldSearchShapeJump | null)
+  | (WorldSearchShapePaired | null)
+  | (WorldSearchShapePromote | null)
+  | (WorldSearchShapeTransferred | null);
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "SearchMethod".
@@ -2294,7 +2317,7 @@ export interface WorldCameraControls {
   /**
    * Raw vendor-extension writes — byte-sized (selector, value) pairs on the device's vendor unit, applied in order after the named controls. The engine assigns NO semantics: the author names the selector, the device decides what it means (e.g. the BRIO's unconfirmed HDR candidate is selector 12), and a removed row is NOT restored (its default is unknowable). screen.camera reads each authored selector back. Omitted from the wire when null.
    */
-  vendor?: WorldCameraVendorControl[] | null;
+  vendor?: (WorldCameraVendorControl | null)[] | null;
 }
 /**
  * One raw vendor-extension write on the shared camera (see WorldCameraControls's Vendor member): a byte-sized selector on the device's vendor unit and the value to write. Deliberately semantics-free — the honest vocabulary for device controls no standard names.
@@ -2431,7 +2454,7 @@ export interface WorldScreenSourceSession {
   /**
    * The offscreen target's [width, height] in pixels, or null for the engine default (Puck.SdfVm.Views.WorldSessionView.DefaultWidth x DefaultHeight — today's 160x144 panel, unchanged for an unauthored facet). Each axis is validated within 1..WorldDefinitionValidator.MaxSurfaceDimension. Omitted from the wire when null.
    */
-  resolution?: WorldScreenResolution;
+  resolution?: WorldScreenResolution | null;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -3258,7 +3281,7 @@ export interface WorldCameraAnchorCandidate {
   /**
    * What the camera rides while this candidate wins.
    */
-  anchor: WorldAnchor | null;
+  anchor: WorldAnchor;
   /**
    * The condition, evaluated for the seat the view is resolved for.
    */
@@ -3421,10 +3444,10 @@ export interface WorldBodiesDefaults {
   networkPlayers?: number;
   defaultPeerSource?: IntentSource;
   seatSpawns?: (string | null)[] | null;
-  distribution?: WorldDistribution;
-  peerVariation?: WorldPopulationVariation;
-  seatVariation?: WorldPopulationVariation;
-  peerColors?: WorldSequenceNullable;
+  distribution?: WorldDistribution | null;
+  peerVariation?: WorldPopulationVariation | null;
+  seatVariation?: WorldPopulationVariation | null;
+  peerColors?: WorldSequenceNullable | null;
   capacity?: number | null;
   reconnectGraceSeconds?: number;
   capacityRow?: string | null;
@@ -5906,7 +5929,7 @@ export interface StateTransformSortZone {
   /**
    * The attribute keys, 1..MaxSortKeys distinct numeric rows keyed over the zone's token domain, in precedence order; each carries its own direction.
    */
-  by: SortKey[];
+  by: (SortKey | null)[];
 }
 /**
  * One key of a zone sort: a keyed numeric attribute row over the zone's token domain.
@@ -6155,11 +6178,11 @@ export interface ActionEffectTransaction {
   /**
    * The main transaction branch.
    */
-  effects: ActionEffect[];
+  effects: (ActionEffect | null)[];
   /**
    * The optional branch run after a main-branch refusal.
    */
-  onFailure?: ActionEffect[] | null;
+  onFailure?: (ActionEffect | null)[] | null;
 }
 /**
  * Writes the body's vertical-velocity channel (the jump launch / the surge).
@@ -6459,7 +6482,7 @@ export interface WorldHudElement {
   /**
    * A Frame element's ranked source candidates — a portrait that shows the speaking character, else the webcam when the player chose it, else the seat's own avatar. Refused beside Source: a bare Source is exactly a one-entry list with no condition. At most MaxFrameCandidatesPerElement entries, every one counted toward MaxFrameSources.
    */
-  sources?: WorldHudFrameCandidate[] | null;
+  sources?: (WorldHudFrameCandidate | null)[] | null;
   /**
    * How long a Frame element cross-fades when its winning candidate changes; 0 cuts. Finite and non-negative.
    */
@@ -6804,7 +6827,7 @@ export interface WorldPlacementResponseConditionFieldCondition {
   /**
    * The scalar compared against (literal or state-row reference) — the same WorldLatticeScalar grammar a fields.reactions Transform/Expose condition already uses.
    */
-  value: WorldLatticeScalar;
+  value: WorldLatticeScalar | null;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -7111,7 +7134,7 @@ export interface ActionFactTrigger {
   /**
    * The effects applied in order.
    */
-  effects: ActionEffect[];
+  effects: (ActionEffect | null)[];
   /**
    * The predicate that must hold, or null for always.
    */
@@ -7442,12 +7465,12 @@ export interface BindingPageDefinition {
 export interface BindingPageEntryDefinition {
   sources: (string | null)[] | null;
   command?: string | null;
-  channel?: ChannelRef;
+  channel?: ChannelRef | null;
   scale?: number | null;
   activateOn?: CommandPhase | null;
   label?: string | null;
   id?: string | null;
-  value?: CommandValue;
+  value?: CommandValue | null;
   text?: string | null;
   activator?: BindingActivatorDefinition | null;
   mode?: BindingEntryMode;
@@ -7481,12 +7504,12 @@ export interface BindingActivatorDefinition {
  */
 export interface BindingCommandDefinition {
   command?: string | null;
-  channel?: ChannelRef;
+  channel?: ChannelRef | null;
   scale?: number | null;
   holdRelease?: boolean;
   label?: string | null;
   icon?: string | null;
-  value?: CommandValue;
+  value?: CommandValue | null;
   mode?: BindingEntryMode;
   text?: string | null;
 }
@@ -7507,7 +7530,7 @@ export interface BindingWheelDefinition {
   id: string;
   group: DocumentIdentifier;
   holdPages: (string | null)[];
-  rings: BindingPageDefinition[];
+  rings: (BindingPageDefinition | null)[];
   style?: BindingWheelStyleDefinition | null;
   labelRow?: string | null;
   iconRow?: string | null;
@@ -8019,7 +8042,7 @@ export interface WorldSpeakerAnchored {
   /**
    * What the speaker rides (see WorldAnchor).
    */
-  anchor: WorldAnchor | null;
+  anchor: WorldAnchor;
   /**
    * The attachment point relative to the anchor's resolved pose, in anchor-local axes.
    */
@@ -8938,11 +8961,11 @@ export interface WorldStateSection {
   /**
    * Per-body ephemeral counters and timers, compiled into each body's bounded ordinal arrays.
    */
-  body?: ActionStateSlot[] | null;
+  body?: (ActionStateSlot | null)[] | null;
   /**
    * Per-body counters and timers synchronized through the durable identity-document seam.
    */
-  identity?: ActionStateSlot[] | null;
+  identity?: (ActionStateSlot | null)[] | null;
   /**
    * The lattice topologies the section's lattice-shaped rows lie over (see LatticeTopology; the document adds the physical WorldFieldTopology case).
    */
@@ -9028,7 +9051,7 @@ export interface WorldStateRow1 {
     /**
      * An authority-provisioned 256-bit secret for an independently keyed streamDraw sample at each cursor. Never sent in observations.
      */
-    secret?: ClosedBitset256;
+    secret?: ClosedBitset256 | null;
     /**
      * An authored seek, non-negative, default 0: a rebuild advances the generator by (skip + cursor) * cost rather than cursor * cost. Authored data, the same class as the seed ladder's own rungs — it never writes the persisted DrawCursor, which keeps counting samples from zero exactly as an unskipped site's does.
      */
@@ -9080,7 +9103,12 @@ export interface WorldStateRow1 {
   /**
    * A StateRow's declared cell domain — the closed answer to "which keys does this row's storage admit" that IsKeyed/IsSlot/CellCeiling switch over, replacing the five hand-kept discriminators (a null Board, Tokens, Zone, KeysFrom, or History facet) inference used to read the same shape off of. Orthogonal traits — a row's Advance/Dynamics/Cycle/ Draw/Visibility/Knowledge/ Phase/PhaseOf/ Evicts/Min/Max/ NonNegative — are unaffected by which case a row declares; every combination the validator already refused (a lattice row carrying advance, a phase row carrying capacity) is refused the identical way with the case substituted for the old field.
    */
-  domain?: StateDomainSlot | StateDomainKeys | StateDomainKeysOf | StateDomainCellsOf | StateDomainRing;
+  domain?:
+    | (StateDomainSlot | null)
+    | (StateDomainKeys | null)
+    | (StateDomainKeysOf | null)
+    | (StateDomainCellsOf | null)
+    | (StateDomainRing | null);
   /**
    * A CellsOf row's declared inverse: the board's cells are not authored directly but derived from a keyed Tokens row naming cells of the same topology and a Codes row keyed the same way, giving each token's code. Legitimate only on a Int row whose EffectiveDomain is CellsOf and that carries no field trait — a document project's validator enforces both.
    */
@@ -9637,11 +9665,11 @@ export interface LatticeTopologyGrid {
   /**
    * See Directions.
    */
-  directions?: TopologyDirection[] | null;
+  directions?: (TopologyDirection | null)[] | null;
   /**
    * See ElementAliases.
    */
-  elementAliases?: TopologyElementAlias[] | null;
+  elementAliases?: (TopologyElementAlias | null)[] | null;
   /**
    * The topology's name — what a row's cellsOf domain references.
    */
@@ -9708,11 +9736,11 @@ export interface LatticeTopologyRing {
   /**
    * See Directions.
    */
-  directions?: TopologyDirection[] | null;
+  directions?: (TopologyDirection | null)[] | null;
   /**
    * See ElementAliases.
    */
-  elementAliases?: TopologyElementAlias[] | null;
+  elementAliases?: (TopologyElementAlias | null)[] | null;
   /**
    * The topology's name — what a row's cellsOf domain references.
    */
@@ -9739,11 +9767,11 @@ export interface LatticeTopologyHex {
   /**
    * See Directions.
    */
-  directions?: TopologyDirection[] | null;
+  directions?: (TopologyDirection | null)[] | null;
   /**
    * See ElementAliases.
    */
-  elementAliases?: TopologyElementAlias[] | null;
+  elementAliases?: (TopologyElementAlias | null)[] | null;
   /**
    * The topology's name — what a row's cellsOf domain references.
    */
@@ -9782,11 +9810,11 @@ export interface LatticeTopologyBox {
   /**
    * See Directions.
    */
-  directions?: TopologyDirection[] | null;
+  directions?: (TopologyDirection | null)[] | null;
   /**
    * See ElementAliases.
    */
-  elementAliases?: TopologyElementAlias[] | null;
+  elementAliases?: (TopologyElementAlias | null)[] | null;
   /**
    * The topology's name — what a row's cellsOf domain references.
    */
@@ -9966,7 +9994,7 @@ export interface WorldReactionDiffuse {
   /**
    * The fraction per step, in [0, 1].
    */
-  rate: WorldLatticeScalar;
+  rate: WorldLatticeScalar | null;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -9981,7 +10009,7 @@ export interface WorldReactionDecay {
   /**
    * The fraction per step, in [0, 1].
    */
-  rate: WorldLatticeScalar;
+  rate: WorldLatticeScalar | null;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -10018,7 +10046,7 @@ export interface WorldFieldCondition {
   /**
    * The scalar compared against (literal or state-row reference).
    */
-  value: WorldLatticeScalar;
+  value: WorldLatticeScalar | null;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -10036,7 +10064,7 @@ export interface WorldFieldWrite {
   /**
    * The constant written or added; the result clamps to the field's range.
    */
-  value: WorldLatticeScalar;
+  value: WorldLatticeScalar | null;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -10055,7 +10083,7 @@ export interface WorldReactionEmit {
   /**
    * The amount per step; the cell clamps to the field's range.
    */
-  amount: WorldLatticeScalar;
+  amount: WorldLatticeScalar | null;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -10074,7 +10102,7 @@ export interface WorldReactionExpose {
   /**
    * The constant compared against.
    */
-  value: WorldLatticeScalar;
+  value: WorldLatticeScalar | null;
   /**
    * The keyed int state row written, keyed by body index.
    */
@@ -10093,7 +10121,7 @@ export interface WorldReactionFlow {
   /**
    * The fraction of a cell's per-direction share that actually moves each step, in [0, 1].
    */
-  rate: WorldLatticeScalar;
+  rate: WorldLatticeScalar | null;
   /**
    * The other lattice rows forming the terrain basis a downhill direction is measured against; empty or omitted means the field flows over its own height alone.
    */
@@ -10558,7 +10586,7 @@ export interface WorldRule {
   /**
    * The effects applied in order when the rule fires.
    */
-  effects: ActionEffect[];
+  effects: (ActionEffect | null)[];
   /**
    * The predicate that must hold, or null for always.
    */
@@ -10626,7 +10654,7 @@ export interface WorldDecision {
   /**
    * Effects fired when an enabled decision first finds no choice, loses its choice, or its enclosing gate closes while a choice is held.
    */
-  onNoChoice?: ActionEffect[] | null;
+  onNoChoice?: (ActionEffect | null)[] | null;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -10644,7 +10672,7 @@ export interface WorldDecisionOption {
   /**
    * Effects fired when entering this option; may be empty for an inspection-only choice.
    */
-  effects: ActionEffect[];
+  effects: (ActionEffect | null)[];
   /**
    * Eligibility predicate, or null for always eligible.
    */
@@ -10996,7 +11024,7 @@ export interface WorldInteraction {
   /**
    * The effects applied in order when the interaction fires — see this type's remarks.
    */
-  effects: ActionEffect[];
+  effects: (ActionEffect | null)[];
   /**
    * Whether the interaction fires every tick the co-occurrence holds For a distance interaction, at most this many right carriers per left carrier — the nearest first, ties broken by the lower body index — or null for every carrier in range. The work sheet prices the pair count at this budget. (Level) or once per crossing (Edge, the default — an interaction that transforms/spawns/despawns almost always wants Edge, for the same reason a rule that writes a row does: level-firing a spawn is a journal entry every tick the co-occurrence holds).
    */
@@ -11025,7 +11053,75 @@ export interface GeneratorRow {
   /**
    * The source itself.
    */
-  generator: StateGenerator;
+  generator: StateGeneratorVariant2;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "StateGeneratorVariant2".
+ */
+export interface StateGeneratorVariant2 {
+  /**
+   * Which draw shape this source fires.
+   */
+  source?: GeneratorSource;
+  /**
+   * Markov only: the context every emission begins from. Must name a declared context.
+   */
+  start?: CellName | null;
+  /**
+   * Markov only: the maximum tokens one emission may draw before refusing by name, 1..MaxEmissionBound. Left at DefaultBound by a numeric source.
+   */
+  bound?: number;
+  /**
+   * Markov only: the declared contexts, at least one, uniquely keyed.
+   */
+  contexts?: (GeneratorContextVariant2 | null)[] | null;
+  /**
+   * Markov, weighted numeric and symmetry orbit: how the entries are consumed (see GeneratorMode).
+   */
+  mode?: GeneratorMode;
+  /**
+   * UniformRange only: the closed range's inclusive lower bound — both bounds present or neither. Raw-encoded per the destination site's CellKind (raw FixedQ4816 bits for a fixed site) — unlike a site row's own min/max, which a fixed row authors as decimal text, since a source is not bound to one site and cannot know the kind it will write.
+   */
+  rangeMin?: number | null;
+  /**
+   * UniformRange only: the inclusive upper bound, same encoding as RangeMin.
+   */
+  rangeMax?: number | null;
+  /**
+   * WeightedNumeric only: the weighted numeric outcomes, at least one, at least one carrying a non-zero weight; under an exhausting Mode each outcome contributes Multiplicity units to the pass.
+   */
+  weighted?: (GeneratorWeightedNumeric | null)[] | null;
+  /**
+   * SymmetryOrbit only: the ring, 0..7, whose thirty nodes are the units — exactly one of Ring and Node.
+   */
+  ring?: number | null;
+  /**
+   * SymmetryOrbit only: the node, 0..239, whose orbit under Word is the units.
+   */
+  node?: number | null;
+  /**
+   * SymmetryOrbit beside Node only: the word of reflections (one to eight mirror nodes, applied first to last) the orbit is taken under, or null for the lattice's own cycle — the same generator vocabulary a StateCycle authors.
+   */
+  word?: number[] | null;
+  /**
+   * The extended-generator facet (see GeneratorExtended), or null for the ordinary Pcg32XshRr generator every other source draws through.
+   */
+  extended?: GeneratorExtended | null;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "GeneratorContextVariant2".
+ */
+export interface GeneratorContextVariant2 {
+  /**
+   * The stable context key, unique within the generator.
+   */
+  key: CellName;
+  /**
+   * The weighted alternatives out of this context, or empty for a terminal context.
+   */
+  alternatives?: (GeneratorAlternative | null)[] | null;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -11432,7 +11528,7 @@ export interface WorldProbe {
    * The kind's sockets, by name, each bound to the frame source that fills it — the live-hardware leg. The socket vocabulary itself lives behind the kind's manifest, unchecked here; the host checks a bound name against it by name at boot, the same shallow-then-deep split every kind-vocabulary field follows. Mutually exclusive with Track. Omitted from the wire when null.
    */
   inputs?: {
-    [k: string]: WorldFrameSource;
+    [k: string]: WorldFrameSource | null;
   } | null;
   /**
    * A recorded puck.probe-track.v1 document path, resolved against the world document's own directory, played back in place of every socket at once — probe.record's own output shape, the hardware-free leg every probe admits. Mutually exclusive with Inputs. Omitted from the wire when null.
