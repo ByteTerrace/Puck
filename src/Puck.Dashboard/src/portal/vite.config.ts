@@ -51,9 +51,12 @@ export default defineConfig(({ mode }) => {
       port: 61101,
       strictPort: true,
       proxy: {
+        // The dev proxy plays the platform edge: production's Front Door rewrites /official/* onto the
+        // official container, so the local `puck official serve` (rooted at /) needs the same prefix stripped.
         "/official": {
           target: officialProxyTarget,
           changeOrigin: true,
+          rewrite: (requestPath: string) => requestPath.replace(/^\/official/, ""),
         },
       },
     },

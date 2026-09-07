@@ -56,11 +56,13 @@ function mapJudgeTrace(raw: {
   rules: { name: string; mode: string; evaluations: unknown[] }[];
   writes: { row: string; key: string; old: string; new: string }[];
   refusals: { category: string; count: string; lastTick: string; rule: string; effect: string; detail: string }[];
+  hostFacts?: { rule: string; operand: string; answer: string }[];
 }): JudgeTrace {
   return {
     rules: raw.rules,
     writes: raw.writes.map((write) => ({ row: write.row, key: write.key, old: BigInt(write.old), new: BigInt(write.new) })),
     refusals: raw.refusals.map(formatRefusal),
+    hostFacts: raw.hostFacts ?? [],
   };
 }
 

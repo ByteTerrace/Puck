@@ -60,6 +60,17 @@ export function RuleTraceView({ trace }: { readonly trace: JudgeTrace | null }) 
         )}
       </div>
 
+      {trace.hostFacts.length > 0 && (
+        <div>
+          <Text fw={600} size="sm" mb={4} c="yellow">Host facts this engine cannot supply</Text>
+          <Stack gap={2}>
+            {trace.hostFacts.map((fact, index) => (
+              <Text key={index} size="xs" c="dimmed">{fact.rule}: {fact.operand} read as {fact.answer}</Text>
+            ))}
+          </Stack>
+        </div>
+      )}
+
       {trace.refusals.length > 0 && (
         <div>
           <Text fw={600} size="sm" mb={4} c="red">Refusals</Text>

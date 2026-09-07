@@ -39,6 +39,9 @@ export interface JudgeTrace {
   rules: { name: string; mode: string; evaluations: unknown[] }[];
   writes: { row: string; key: string | null; old: bigint; new: bigint }[];
   refusals: string[];
+  /** Every world-scoped operand this tick read from the hostless reader (no bodies, machines, clocks, or
+   * adjacencies exist in the browser build), with the quiescent answer it was given. */
+  hostFacts: { rule: string; operand: string; answer: string }[];
 }
 
 /** The engine handle every host implementation (inline or worker) exposes identically. */
