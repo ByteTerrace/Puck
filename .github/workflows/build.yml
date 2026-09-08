@@ -47,9 +47,6 @@ jobs:
       - name: Build the solution
         run: dotnet build Puck.slnx --configuration Release --no-restore -bl:artifacts/build.binlog
 
-      - name: Publish the browser fixture for official-content tests
-        run: dotnet publish src/Puck.World.Browser --configuration Release --no-restore
-
       - name: Test the solution
         run: >-
           dotnet test Puck.slnx --configuration Release --no-build --no-restore

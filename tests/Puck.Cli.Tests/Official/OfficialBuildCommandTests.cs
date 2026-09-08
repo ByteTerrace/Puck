@@ -10,7 +10,7 @@ namespace Puck.Cli.Tests.Official;
 /// AppBundle in the current checkout, so every test in <see cref="OfficialBuildCommandTests"/> exercises the actual
 /// verb end to end rather than a synthetic fixture.</summary>
 public sealed class OfficialBuildFixture : IDisposable {
-    // Publish the browser in this checkout before running the official-content integration tests.
+    // Build the browser in this checkout before running the official-content integration tests.
     public static string AppBundlePath {
         get {
             Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root), userMessage: "Cannot locate this checkout's Puck.slnx.");
@@ -26,7 +26,7 @@ public sealed class OfficialBuildFixture : IDisposable {
     public string StdErr { get; }
 
     public OfficialBuildFixture() {
-        Assert.True(condition: Directory.Exists(path: AppBundlePath), userMessage: $"the read-only AppBundle at {AppBundlePath} does not exist — publish it first.");
+        Assert.True(condition: Directory.Exists(path: AppBundlePath), userMessage: $"the read-only AppBundle at {AppBundlePath} does not exist — build the browser first.");
 
         OutRoot = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-official-tests-{Guid.NewGuid():n}");
         (ExitCode, StdOut, StdErr) = RunCapturingConsole(run: () => OfficialBuildCommand.Run(args: [
