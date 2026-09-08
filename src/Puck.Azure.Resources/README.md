@@ -72,11 +72,18 @@ graph TB
 
 Use the provided [📋checklist](./CHECKLIST.md) to help track your progress.
 
-1) Clone this repository into your Azure DevOps project.
-2) Create a new branch and adjust the `resources` parameter in [main.bicepparam](./main.bicepparam).
-3) Follow the [bootstrap process](#bootstrap-process) outlined below.
-4) Create a new pipeline that points to [.azure-devops/pipelines/deploy-infrastructure.yaml](./.azure-devops/pipelines/deploy-infrastructure.yaml).
-5) Run the pipeline created in the previous step.
+The current monorepo entry point is the
+[Azure GitHub Actions workflow](../../docs/ci.md#azure-application-staging).
+It pins Bicep 0.46.1 and compiles the checked-in platform modules, so a clean
+checkout does not need previously published private Template Specs. The
+`main.bicep` template owns the shared platform; `staging.bicep` owns the staging
+applications that use it. Supply `actorsImage` as an immutable registry digest
+when updating the shared platform with a new actor release.
+
+The `.azure-devops/pipelines` definitions describe the older standalone
+repository deployment. Their checkout paths and service connections are not
+the GitHub Actions deployment contract. A new platform still needs the identity
+and access setup described in the [checklist](./CHECKLIST.md) and bootstrap below.
 
 ### Bootstrap Process
 

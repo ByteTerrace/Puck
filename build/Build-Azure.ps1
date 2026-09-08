@@ -38,13 +38,17 @@ try {
     Push-Location src/Puck.Dashboard/src
     try {
         $env:VITE_PUCK_OFFICIAL_CHANNEL = $Channel
+        if ($Channel -eq 'staging') { $env:VITE_PUCK_OFFICIAL_BASE = '/official' }
         npm ci
         npm --workspace portal run check:types
         npm run build
         npm --workspace portal run test
         npm run stage
     } finally { Pop-Location }
-    Copy-Item src/Puck.Dashboard/dist-deploy "$output/dashboard" -Recurse
+    # Nginx serves uncompressed files; the existing Front Door rules require the separate Brotli tree.
+    Copy-Item src/Puck.Dashboard/dist/host "$output/dashboard" -Recurse
+    Copy-Item src/Puck.Dashboard/dist/portal "$output/dashboard/portal" -Recurse
+    Copy-Item src/Puck.Dashboard/dist-deploy "$output/dashboard-storage" -Recurse
     $files = @(Get-ChildItem $output -File -Recurse | Sort-Object FullName | ForEach-Object {
         @{ path = [IO.Path]::GetRelativePath($output, $_.FullName).Replace('\', '/'); sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
     })

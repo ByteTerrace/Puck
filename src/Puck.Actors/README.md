@@ -58,6 +58,7 @@ edge acquires the token with its identity for scope `https://api.byteterrace.com
 | Key | Purpose |
 | --- | --- |
 | `ConfigurationStore:Endpoint` | Shared App Configuration store (also supplies `PublicStorage:*`, `OnBehalfOf:*`) |
+| `ConfigurationStore:Label` | Optional label for settings and the refresh sentinel; omitted selects unlabelled production settings |
 | `DataProtection:BlobUri` / `KeyUri` | Shared key ring on `bytrcstp000` + Key Vault key (same as the Functions app) |
 | `DataProtection:ApplicationName` | **Must match the Functions app** (currently its identity's client id) |
 | `PrivateStorage:BlobEndpoint` / `TableEndpoint` | Orleans fabric storage (`bytrcstp000`) |
@@ -71,13 +72,22 @@ in-memory reminders/state and an ephemeral DataProtection key ring — `dotnet r
 
 ## Deploy
 
-```powershell
-# 1. Infra (adds bytrccap001 + bytrcidp007 + role assignments + Graph app roles + FIC):
-az deployment group create --resource-group byteterrace --template-file ..\Azure.Resources\main.bicep --parameters ..\Azure.Resources\main.bicepparam
+The [Azure CI workflow](../../docs/ci.md#azure-application-staging) builds from
+the repository root, tests the Linux image, and deploys staging by image digest.
+The Dockerfile requires the shared build files, analyzers, and sibling Maths
+project; using this project directory alone as its context cannot build it.
 
-# 2. Image:
-az acr build --registry bytrccrp000 --image web-actors:latest .
+For an operator-driven deployment from a clean, committed checkout, with
+Docker running and Azure CLI signed in, run from the repository root:
+
+```powershell
+./src/Puck.Actors/build-image.ps1
 ```
+
+This builds and pushes a commit-tagged image and updates `bytrccap001` to its
+digest. `-NoRestart` publishes the image without updating the app;
+`-ContainerApp` selects another existing app. The registry retains its ABAC
+mode and disabled ARM-audience authentication throughout.
 
 ## Networking (decided 2026-08-27: public environment + VNet integration)
 

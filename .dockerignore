@@ -4,6 +4,8 @@
 .worktrees
 .vs
 artifacts
+!artifacts/azure
+!artifacts/azure/**
 experimental
 **/bin
 **/obj

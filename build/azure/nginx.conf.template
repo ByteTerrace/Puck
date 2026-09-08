@@ -1,0 +1,18 @@
+server {
+    listen 8080;
+    root /usr/share/nginx/html;
+    add_header Cross-Origin-Opener-Policy same-origin always;
+    add_header Cross-Origin-Embedder-Policy require-corp always;
+    location /api/ {
+        proxy_ssl_server_name on;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+        proxy_set_header Host ${FUNCTION_HOST};
+        proxy_pass https://${FUNCTION_HOST};
+    }
+    location /official/ { try_files $uri =404; }
+    location /portal/ { try_files $uri =404; }
+    location /assets/ { try_files $uri =404; }
+    location = /release.json { add_header Cache-Control no-store; }
+    location / { try_files $uri /index.html; }
+}

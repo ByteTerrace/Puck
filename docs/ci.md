@@ -5,6 +5,10 @@ verification, and packaging workflows run on pull requests and pushes to
 `main`; each also has a manual entry point in the Actions tab. Publishing calls
 those workflows for the same commit and waits for all three to succeed.
 
+All external actions are pinned to full commit SHAs, as required by this
+repository's Actions policy. Keep the adjacent version comments when updating
+the pins; a version tag by itself prevents the workflow from starting.
+
 ## Build and validate
 
 `build.yml` installs the .NET SDK from `global.json`, the `wasm-tools`
@@ -92,3 +96,62 @@ Hosted validation does not prove GPU parity, licensed BIOS-dependent emulator
 stages, or end-user installation and self-update. Those remain separate release
 qualification work. The current release publishes NuGet libraries and the
 documentation site; desktop builds are downloadable CI artifacts.
+
+## Azure application staging
+
+`azure.yml` builds Functions, the dashboard, and the browser engine/content
+bundle, compiles both infrastructure templates, and builds Linux containers
+for Actors and World.Silo. The actor image must answer `/healthz` locally.
+The dashboard integration tests receive a real browser engine and official
+content tree. Every application payload is hashed in `release.json` and tied
+to the checkout commit. This workflow also runs on `codex/azure-ci` while the
+first hosted deployment is being qualified.
+
+The existing `Blobs` environment uses `bytrcidpzzz` (client ID
+`7508a16b-0f9b-4322-9bb9-481ad836c052`). Its Azure login variables are the same
+three listed above. The actual GitHub subject is
+`repo:ByteTerrace@18753984/Puck@1271519029:environment:Blobs`; this repository
+uses [immutable OIDC subjects](https://docs.github.com/en/actions/reference/security/oidc).
+Federation allows login; Azure role assignments still determine which operations
+can succeed. The identity job verifies login and reads the target resources.
+
+Run **Azure** manually with `deploy: true` and `channel: staging` to deploy
+the artifacts from that run. The staging deployment runs only from `main` or
+`codex/azure-ci`, and deployments serialize rather than cancel one another.
+`src/Puck.Azure.Resources/staging.bicep` provisions these applications inside
+the existing `byteterrace` resource group:
+
+| Application | Azure resource |
+| --- | --- |
+| Functions API | `bytrcfunctions-staging`, with its own Flex Consumption plan |
+| Provisioning actors | `bytrcactors-staging` |
+| World authority host | `bytrcsilo-staging` |
+| Dashboard and official browser content | `bytrcdashboard-staging` |
+
+Staging shares the existing network, runtime identities, registry, and backing
+Azure services. It is an application deployment environment, not a separate
+tenant or security boundary. Both Functions and Actors select only the
+`staging` App Configuration label, including their refresh sentinel and feature
+flags; an omitted `ConfigurationStore:Label` preserves the existing unlabelled
+production behavior. Staging also uses its own Orleans service ID, grain-state
+container, and DataProtection key-ring blob.
+
+CI pushes commit-tagged container images and deploys their registry digests.
+The registry keeps ABAC repository permissions and ARM-audience authentication
+disabled throughout. `build/Publish-Container.ps1` exchanges an ACR-audience
+token as described in [Microsoft's registry authentication guidance](https://learn.microsoft.com/en-us/azure/container-registry/container-registry-disable-authentication-as-arm).
+Infrastructure planning and deployment outputs are retained as run artifacts.
+The Functions action deploys the prebuilt payload without a remote rebuild.
+
+The staging dashboard serves an uncompressed copy of the dashboard and its own
+official content through Nginx. The existing production Front Door deployment
+still uses the separate Brotli `dashboard-storage` tree. Deploying staging does
+not synchronize or delete anything in the shared production website container.
+
+The deployment check requires healthy authenticated Functions dependencies,
+HTTP 401 for anonymous API access, and matching dashboard/content commit IDs.
+The World.Silo staging node initially admits no worlds: world documents and
+their private federation keys are workload configuration. A successful empty
+node deployment does not prove world checkpoint recovery, gameplay, or scaling.
+Interactive dashboard sign-in also requires its staging origin in the Entra
+application's SPA redirect URI list.

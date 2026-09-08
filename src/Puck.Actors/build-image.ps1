@@ -1,44 +1,25 @@
-<#
-    Builds and pushes the Puck.Actors image, then restarts the container app revision.
-
-    ACR quick tasks are incompatible with this registry's hardened steady state (ABAC repository
-    permissions + ARM-audience tokens disabled), so the registry is temporarily flipped to a
-    compatible state for the duration of the build and always restored afterward — including on
-    failure. The durable replacement for this script is an ACR Task resource with a managed
-    identity (ABAC-compatible) or a CI pipeline; until then, run this.
-#>
+<# Builds from the repository root, pushes a commit-tagged image, and deploys its digest. #>
 [CmdletBinding()]
 param(
-    [string] $ContextPath = $PSScriptRoot,
-    [string] $Image = 'web-actors:latest',
     [switch] $NoRestart,
     [string] $Registry = 'bytrccrp000',
-    [string] $ResourceGroup = 'byteterrace'
+    [string] $ResourceGroup = 'byteterrace',
+    [string] $ContainerApp = 'bytrccap001'
 )
-
 $ErrorActionPreference = 'Stop'
-
-Write-Host "Flipping $Registry to a build-compatible state..."
-az acr config authentication-as-arm update --registry $Registry --status enabled | Out-Null
-az acr update --name $Registry --role-assignment-mode rbac --only-show-errors | Out-Null
-
+$PSNativeCommandUseErrorActionPreference = $true
+$root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+Push-Location $root
 try {
-    az acr build --registry $Registry --image $Image $ContextPath
-
-    if ($LASTEXITCODE -ne 0) {
-        throw "az acr build failed with exit code $LASTEXITCODE."
-    }
-}
-finally {
-    Write-Host "Restoring $Registry hardened state..."
-    az acr update --name $Registry --role-assignment-mode rbac-abac --only-show-errors | Out-Null
-    az acr config authentication-as-arm update --registry $Registry --status disabled | Out-Null
-}
-
-if (-not $NoRestart) {
-    $revision = az containerapp show --name bytrccap001 --resource-group $ResourceGroup --query 'properties.latestRevisionName' --output tsv --only-show-errors
-
-    Write-Host "Restarting revision $revision..."
-    az containerapp revision restart --name bytrccap001 --resource-group $ResourceGroup --revision $revision
-}
-
+    if (git status --porcelain --untracked-files=normal) { throw 'Commit the release sources before building an image.' }
+    $commit = (git rev-parse HEAD).Trim()
+    docker build --file src/Puck.Actors/Dockerfile --tag "puck/web-actors:$commit" .
+    $digestFile = Join-Path ([IO.Path]::GetTempPath()) "puck-actors-$([Guid]::NewGuid()).txt"
+    try {
+        & ./build/Publish-Container.ps1 -Registry $Registry -Repository web-actors -Commit $commit -OutputFile $digestFile
+        if (!$NoRestart) {
+            $image = (Get-Content $digestFile -Raw).Trim()
+            az containerapp update --name $ContainerApp --resource-group $ResourceGroup --image $image --revision-suffix "git-$($commit.Substring(0,12))" --output none
+        }
+    } finally { Remove-Item -LiteralPath $digestFile -Force -ErrorAction SilentlyContinue }
+} finally { Pop-Location }
