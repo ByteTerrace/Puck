@@ -153,6 +153,8 @@ Production uses `bytrcfuncp000`, Actors in `bytrccap001`, and `bytrcfdp000` Fron
 Door over `bytrcstp001`. Image deployment uses immutable digests. Functions uses
 the official action with the prebuilt payload; an `always()` cleanup restores
 SCM restrictions after temporarily admitting the runner's IPv4 address.
+The API health check uses Front Door's existing origin authentication; it does
+not need an additional application permission or a token from CI.
 
 The website owns `$web/index.html`. `/docs` selects its documentation page;
 `docs.byteterrace.com` opens that page directly, and `puck.byteterrace.com` opens

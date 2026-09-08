@@ -13,9 +13,8 @@ for ($attempt = 0; $attempt -lt 30; $attempt++) {
         $expectedSiloImage = (Get-Content artifacts/world-silo.digest -Raw).Trim()
         if ($silo.containers[0].image -ne $expectedSiloImage -or $silo.containers[0].instanceView.currentState.state -ne 'Running') { throw 'Primary silo has not started this release image.' }
         dotnet run build/Test-WorldSilo.cs -- world.byteterrace.com 33333 artifacts/world-silo.public-key
-        $token = (az account get-access-token --resource https://api.byteterrace.com --query accessToken --output tsv).Trim()
-        if ($env:GITHUB_ACTIONS -eq 'true') { Write-Output "::add-mask::$token" }
-        $health = Invoke-RestMethod "$base/api/health-check" -Headers @{Authorization="Bearer $token"} -TimeoutSec 30
+        # Front Door authenticates to the origin; this public dependency probe needs no CI app token.
+        $health = Invoke-RestMethod "$base/api/health-check" -TimeoutSec 30
         if ($health.Status -ne 'Healthy') { throw 'Production API dependency health is not Healthy.' }
         if ($BeforeStaticPublication) {
             Write-Output "PASS: this release's Actors, primary Puck world, and API are ready for website publication."
