@@ -28,7 +28,9 @@ Native and SDF culling timing benchmarks are tagged `Category=Performance` and
 excluded from this shared-runner gate; their calibrated ceilings remain available
 locally. Deterministic SDF result-equivalence laws still run in CI. CLI process
 interop fixtures run without competing Roslyn/packaging test collections in the
-same assembly; production authentication deadlines are unchanged.
+same assembly. Test projects run one at a time so their independent thread pools
+do not oversubscribe the runner and starve socket handshakes. Tests within each
+assembly retain their configured concurrency; production deadlines are unchanged.
 Tests stop after fifteen minutes without a test event and collect a small hang
 dump. The workflow uploads the MSBuild binary log, available TRX results, and
 test diagnostics even when a later step fails.
@@ -124,7 +126,7 @@ dotnet workload install wasm-tools
 $env:CI = 'true'
 dotnet restore Puck.slnx --locked-mode
 dotnet build Puck.slnx -c Release --no-restore
-dotnet test Puck.slnx -c Release --no-build --no-restore
+dotnet test Puck.slnx -c Release --no-build --no-restore -m:1 --filter Category!=Performance
 ```
 
 The browser project owns its runtime identifier. Use its

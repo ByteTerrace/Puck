@@ -48,7 +48,7 @@ jobs:
 
       - name: Test the solution
         run: >-
-          dotnet test Puck.slnx --configuration Release --no-build --no-restore
+          dotnet test Puck.slnx --configuration Release --no-build --no-restore -m:1
           --logger trx --results-directory artifacts/test-results
           --filter Category!=Performance
           --blame-hang-timeout 15m --blame-hang-dump-type mini
