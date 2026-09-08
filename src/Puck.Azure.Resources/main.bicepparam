@@ -424,7 +424,7 @@ param resources = {
   userAssignedIdentityKubernetesKubelet: {
     name: '${prefix}idp005'
   }
-  // bytrcidpzzz: the GitHub OIDC-federated identity the Docs workflow (docs.yml) publishes with.
+  // bytrcidpzzz: the shared CI identity, federated to GitHub's Blobs environment.
   userAssignedIdentityPublishing: {
     name: '${prefix}idpzzz'
   }
@@ -514,4 +514,3 @@ param resources = {
     }
   }
 }
-

@@ -1,13 +1,10 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.400 AS build
 WORKDIR /source
-
-COPY Puck.Actors.csproj packages.lock.json* ./
-RUN dotnet restore ./Puck.Actors.csproj
-
+# Build from the repository root: shared targets, analyzers, and Puck.Maths are required.
 COPY . .
-# The build context may include host bin/obj (az acr build does not honor .dockerignore when it
-# packs the context); discard them so publish restores fresh against the warm package cache.
-RUN rm -rf bin obj && dotnet publish ./Puck.Actors.csproj --configuration Release --output /app
+ENV CI=true
+RUN dotnet restore src/Puck.Actors/Puck.Actors.csproj --locked-mode \
+    && dotnet publish src/Puck.Actors/Puck.Actors.csproj --configuration Release --no-restore --output /app
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app

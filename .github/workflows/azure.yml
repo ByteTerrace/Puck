@@ -1,0 +1,138 @@
+name: Azure
+
+on:
+  push:
+    branches: [main, codex/azure-ci]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy the validated application artifacts
+        type: boolean
+        default: false
+      channel:
+        description: Official content channel
+        type: choice
+        options: [staging, stable]
+        default: staging
+
+permissions:
+  contents: read
+
+env:
+  CI: true
+  DOTNET_NOLOGO: true
+
+jobs:
+  identity:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    environment: Blobs
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Verify the federated principal and deployment resources
+        run: |
+          az account show --query '{subscription:id,tenant:tenantId,identity:user.name}'
+          az group show --name byteterrace --query '{name:name,location:location}'
+          az acr show --name bytrccrp000 --query '{registry:loginServer,mode:roleAssignmentMode,publicNetworkAccess:publicNetworkAccess}'
+          az account get-access-token --resource https://containerregistry.azure.net --query expiresOn --output tsv
+
+  infrastructure:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Bicep
+        run: az bicep install --version v0.46.1
+      - name: Compile infrastructure from checked-in modules
+        run: |
+          mkdir -p artifacts
+          az bicep build --file src/Puck.Azure.Resources/main.bicep --outfile artifacts/infrastructure.json
+          az bicep build-params --file src/Puck.Azure.Resources/main.bicepparam --outfile artifacts/parameters.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: azure-infrastructure
+          path: |
+            artifacts/infrastructure.json
+            artifacts/parameters.json
+          if-no-files-found: error
+
+  applications:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install WebAssembly tools
+        run: dotnet workload install wasm-tools
+      - name: Install pinned DXC
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'dxc.zip'
+          $destination = Join-Path $env:RUNNER_TEMP 'dxc'
+          Invoke-WebRequest 'https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.9.2607/dxc_2026_07_29.zip' -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne 'a1dfb116ba3eeae6a1582291b53a8e7bf65ad760676bd3194685c8f7367cd241') { throw 'DXC checksum mismatch.' }
+          Expand-Archive $archive $destination
+          Join-Path $destination 'bin/x64' >> $env:GITHUB_PATH
+      - name: Build and verify deployment bundle
+        shell: pwsh
+        env:
+          RELEASE_CHANNEL: ${{ inputs.channel || 'staging' }}
+        run: ./build/Build-Azure.ps1 -Channel $env:RELEASE_CHANNEL
+      - uses: actions/upload-artifact@v4
+        with:
+          name: azure-applications
+          path: artifacts/azure
+          if-no-files-found: error
+          include-hidden-files: true
+
+  containers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: Puck.Actors
+            image: web-actors
+          - project: Puck.World.Silo
+            image: world-silo
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Linux container from the repository root
+        env:
+          PROJECT: ${{ matrix.project }}
+          IMAGE: ${{ matrix.image }}
+        run: docker build --file "src/$PROJECT/Dockerfile" --tag "puck/$IMAGE:$GITHUB_SHA" .
+      - name: Smoke-test actor startup
+        if: matrix.image == 'web-actors'
+        run: |
+          docker run -d --name actors -p 8080:8080 "puck/web-actors:$GITHUB_SHA"
+          trap 'docker logs actors; docker rm -f actors' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:8080/healthz; then exit 0; fi
+            sleep 2
+          done
+          exit 1
+      - name: Save the tested image
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: docker save "puck/$IMAGE:$GITHUB_SHA" | gzip > image.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: azure-${{ matrix.image }}
+          path: image.tar.gz
+          compression-level: 0
+          if-no-files-found: error

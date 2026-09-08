@@ -1,0 +1,17 @@
+.git
+.agents
+.codex
+.worktrees
+.vs
+artifacts
+experimental
+**/bin
+**/obj
+**/publish
+**/node_modules
+**/dist
+**/dist-deploy
+**/TestResults
+**/local.settings.json
+**/.env.local
+**/.env.*.local

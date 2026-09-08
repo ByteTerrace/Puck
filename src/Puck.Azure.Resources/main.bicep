@@ -13,7 +13,7 @@ import {
 
 import {
   subnetType
-} from 'ts/bvm:ptn_network_basic-topology:0.0.1'
+} from './avm-temp/ptn/network/basic-topology/main.bicep'
 
 import {
   groupType
@@ -378,6 +378,8 @@ func domainNameToResourceName(name string) string => replace(name, '.', '-')
 // Parameters
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 param deployOwnerRoleAssignments bool = true
+@description('Immutable actor image reference. Supply the digest produced by CI for application releases.')
+param actorsImage string = ''
 param enableCustomerManagedKey bool = true
 param enableTelemetry bool = false
 param enableZoneRedundancy bool = false
@@ -671,7 +673,7 @@ resource frontDoor_bootstrap 'Microsoft.Cdn/profiles@2025-06-01' = {
   }
 }
 
-module basicNetworkTopology 'ts/bvm:ptn_network_basic-topology:0.0.1' = {
+module basicNetworkTopology './avm-temp/ptn/network/basic-topology/main.bicep' = {
   params: {
     devOpsInfrastructureServicePrincipalId: devOpsInfrastructure_servicePrincipal.id
     enableTelemetry: enableTelemetry
@@ -1633,7 +1635,7 @@ module monitorPrivateLinkScope 'br/public:avm/res/insights/private-link-scope:0.
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // DevOps Resources
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-module devOpsAgents 'ts/bvm:ptn_dev-ops_cicd-agents-and-runners:0.0.1' = {
+module devOpsAgents './avm-temp/ptn/dev-ops/cicd-agents-and-runners/main.bicep' = {
   dependsOn: [basicNetworkTopology]
   params: {
     devCenter: {
@@ -2435,7 +2437,7 @@ module postgreSql 'br/public:avm/res/db-for-postgre-sql/flexible-server:0.15.2' 
     version: resources.postgresFlexibleServer!.version
   }
 }
-module publicFlexApi 'ts/bvm:ptn_platform_public-flex-api:0.0.3' = {
+module publicFlexApi './avm-temp/ptn/platform/public-flex-api/main.bicep' = {
   params: {
     customerManagedKey: defaultCustomerManagedKeySettings
     enableTelemetry: enableTelemetry
@@ -2740,11 +2742,8 @@ module userAssignedIdentityKubernetesKubelet 'br/public:avm/res/managed-identity
     tags: resources.userAssignedIdentityKubernetesKubelet.?tags
   }
 }
-// The GitHub OIDC-federated identity docs.yml (the Docs workflow) logs in as via azure/login,
-// publishing DocFX output and the marketing site to $web — see the federatedIdentityCredentials
-// subject below and the docs.yml workflow header for the environment name and OIDC contract this
-// mirrors. Modelled as a real resource (not a hand-provisioned principal id) because these
-// bytrc* resources are Puck's own and this template is their single source of truth.
+// Shared CI identity. The Blobs environment uses GitHub's immutable repository subject;
+// preserve the existing credential name so redeployment updates rather than duplicates it.
 module userAssignedIdentityPublishing 'br/public:avm/res/managed-identity/user-assigned-identity:0.5.0' = {
   params: {
     enableTelemetry: enableTelemetry
@@ -2752,8 +2751,8 @@ module userAssignedIdentityPublishing 'br/public:avm/res/managed-identity/user-a
       {
         audiences: ['api://AzureADTokenExchange']
         issuer: 'https://token.actions.githubusercontent.com'
-        name: 'GitHubActionsDocsPublishing'
-        subject: 'repo:ByteTerrace/Puck:environment:Blobs'
+        name: '77854d2e-f1a3-4c91-bd8b-b05a5e2b9608'
+        subject: 'repo:ByteTerrace@18753984/Puck@1271519029:environment:Blobs'
       }
     ]
     location: location
@@ -2894,7 +2893,7 @@ module actors_containerApplication 'br/public:avm/res/app/container-app:0.22.1' 
             value: 'https://${resources.api.storage.private.name}.table.${environment().suffixes.storage}'
           }
         ]
-        image: '${containerRegistry!.outputs.loginServer}/web-actors:latest'
+        image: empty(actorsImage) ? '${containerRegistry!.outputs.loginServer}/web-actors:latest' : actorsImage
         name: 'main'
         probes: [
           {
@@ -2939,7 +2938,7 @@ module actors_containerApplication 'br/public:avm/res/app/container-app:0.22.1' 
     ingressTargetPort: 8080
     ingressTransport: 'auto'
     // On a public environment, only the VNet's own egress (the NAT gateway prefix the Functions
-    // subnet routes through) may reach the silo; layered with X-Internal-Api-Key and the
+    // subnet routes through) may reach the silo; layered with Entra Actors.Invoke and the
     // DataProtection-bound escrow. An internal environment needs no ingress filter.
     ipSecurityRestrictions: (containerEnvironmentIsInternal
       ? []
@@ -3153,4 +3152,3 @@ output publishingIdentityClientId string = userAssignedIdentityPublishing.output
 output publishingIdentityPrincipalId string = userAssignedIdentityPublishing.outputs.principalId
 output redisCacheEndpoint string = redisCache.outputs.endpoint
 output staticSiteEndpoint string = '${publicFlexApi.outputs.publicStorage[0].primaryBlobEndpoint}${storage.staticSiteContainerName}/index.html'
-
