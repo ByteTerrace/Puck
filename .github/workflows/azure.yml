@@ -23,9 +23,6 @@ jobs:
     uses: ./.github/workflows/build.yml
   verify:
     uses: ./.github/workflows/verify.yml
-    permissions:
-      contents: read
-      checks: write
   infrastructure:
     if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/azure-ci')
     runs-on: ubuntu-24.04

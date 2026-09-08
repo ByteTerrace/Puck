@@ -38,9 +38,6 @@ env:
 jobs:
   gate:
     if: ${{ github.event_name != 'schedule' }}
-    permissions:
-      contents: read
-      checks: write
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -81,20 +78,9 @@ jobs:
           path: artifacts/gb-post
           if-no-files-found: error
 
-      - name: Test results
-        if: always() && github.event_name != 'pull_request'
-        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
-        with:
-          name: Humble GamingBrick ${{ github.event.inputs.lane || 'gate' }}
-          path: artifacts/gb-post/results.junit.xml
-          reporter: java-junit
-          fail-on-error: false
 
   advanced:
     if: ${{ github.event_name != 'schedule' }}
-    permissions:
-      contents: read
-      checks: write
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -135,14 +121,6 @@ jobs:
           path: artifacts/agb-post
           if-no-files-found: error
 
-      - name: Test results
-        if: always() && github.event_name != 'pull_request'
-        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
-        with:
-          name: Advanced GamingBrick
-          path: artifacts/agb-post/results.junit.xml
-          reporter: java-junit
-          fail-on-error: false
 
   frontier:
     if: ${{ github.event_name == 'schedule' }}

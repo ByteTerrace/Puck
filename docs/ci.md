@@ -25,8 +25,8 @@ test diagnostics even when a later step fails.
 `verify.yml` owns the emulator batteries, browser AppBundle and Node harness,
 and generated schema/name-registry checks. Its nightly frontier measures
 known failing or inconclusive emulator cases separately from release gates.
-Test-report uploads remain available on fork pull requests; posting GitHub
-check annotations is limited to other events because fork tokens are read-only.
+Test reports are retained as artifacts and job summaries on every event, including
+fork pull requests. Verification needs only a read-only repository token.
 
 Repository tools and verification projects share `build/RepositoryPaths.cs`.
 It finds the checkout by walking from the executable directory, then the working
