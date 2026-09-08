@@ -5,7 +5,7 @@ import {
 
 import {
   dnsZoneMapType
-} from '../private-dns-zones/main.bicep'
+} from 'ts/bvm:ptn_network_private-dns-zones:0.0.1'
 
 @export()
 type subnetType = {
@@ -105,13 +105,13 @@ module networkSecurityGroups_mod 'br/public:avm/res/network/network-security-gro
     }
   }
 ]
-module privateEndpointDnsZones_mod '../private-dns-zones/main.bicep' = {
+module privateEndpointDnsZones_mod 'ts/bvm:ptn_network_private-dns-zones:0.0.1' = {
   params: {
     lockKind: lockKind
     virtualNetworkResourceIds: [virtualNetwork_mod.outputs.resourceId]
   }
 }
-module publicDnsZones_mod '../public-dns-zones/main.bicep' = {
+module publicDnsZones_mod 'ts/bvm:ptn_network_public-dns-zones:0.0.1' = {
   params: {
     lockKind: lockKind
     zones: toObject(publicDnsZones, zone => zone, zone => {})

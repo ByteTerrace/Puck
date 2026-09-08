@@ -106,6 +106,10 @@ The dashboard integration tests receive a real browser engine and official
 content tree. Every application payload is hashed in `release.json` and tied
 to the checkout commit. This workflow also runs on `codex/azure-ci` while the
 first hosted deployment is being qualified.
+The shared platform build authenticates before restoring its pinned `ts/bvm`
+Template Specs through `src/Puck.Azure.Resources/bicepconfig.json`. Pull requests
+compile the standalone staging template without credentials; the private platform
+restore runs only on trusted pushes and manual runs.
 
 The existing `Blobs` environment uses `bytrcidpzzz` (client ID
 `7508a16b-0f9b-4322-9bb9-481ad836c052`). Its Azure login variables are the same

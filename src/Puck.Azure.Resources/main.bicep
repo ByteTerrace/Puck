@@ -13,7 +13,7 @@ import {
 
 import {
   subnetType
-} from './avm-temp/ptn/network/basic-topology/main.bicep'
+} from 'ts/bvm:ptn_network_basic-topology:0.0.1'
 
 import {
   groupType
@@ -673,7 +673,7 @@ resource frontDoor_bootstrap 'Microsoft.Cdn/profiles@2025-06-01' = {
   }
 }
 
-module basicNetworkTopology './avm-temp/ptn/network/basic-topology/main.bicep' = {
+module basicNetworkTopology 'ts/bvm:ptn_network_basic-topology:0.0.1' = {
   params: {
     devOpsInfrastructureServicePrincipalId: devOpsInfrastructure_servicePrincipal.id
     enableTelemetry: enableTelemetry
@@ -1635,7 +1635,7 @@ module monitorPrivateLinkScope 'br/public:avm/res/insights/private-link-scope:0.
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // DevOps Resources
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-module devOpsAgents './avm-temp/ptn/dev-ops/cicd-agents-and-runners/main.bicep' = {
+module devOpsAgents 'ts/bvm:ptn_dev-ops_cicd-agents-and-runners:0.0.1' = {
   dependsOn: [basicNetworkTopology]
   params: {
     devCenter: {
@@ -2437,7 +2437,7 @@ module postgreSql 'br/public:avm/res/db-for-postgre-sql/flexible-server:0.15.2' 
     version: resources.postgresFlexibleServer!.version
   }
 }
-module publicFlexApi './avm-temp/ptn/platform/public-flex-api/main.bicep' = {
+module publicFlexApi 'ts/bvm:ptn_platform_public-flex-api:0.0.3' = {
   params: {
     customerManagedKey: defaultCustomerManagedKeySettings
     enableTelemetry: enableTelemetry

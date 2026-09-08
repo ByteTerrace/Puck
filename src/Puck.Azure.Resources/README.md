@@ -74,8 +74,10 @@ Use the provided [📋checklist](./CHECKLIST.md) to help track your progress.
 
 The current monorepo entry point is the
 [Azure GitHub Actions workflow](../../docs/ci.md#azure-application-staging).
-It pins Bicep 0.46.1 and compiles the checked-in platform modules, so a clean
-checkout does not need previously published private Template Specs. The
+It pins Bicep 0.46.1 and authenticates with the CI managed identity before
+restoring the published, versioned `ts/bvm` Template Specs. The `bvm` alias in
+`bicepconfig.json` selects their subscription and resource group; the local
+`avm-temp` sources do not replace those published deployment dependencies. The
 `main.bicep` template owns the shared platform; `staging.bicep` owns the staging
 applications that use it. Supply `actorsImage` as an immutable registry digest
 when updating the shared platform with a new actor release.
