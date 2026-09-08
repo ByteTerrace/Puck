@@ -42,14 +42,19 @@ Tests stop after fifteen minutes without a test event and collect a small hang
 dump. The producer uploads the MSBuild binary log; the test consumer uploads
 available TRX results and diagnostics even when a later step fails.
 
-**Verify runtime behavior** (`verify.yml`) runs the producer's emulator binaries
+**Verify runtime behavior** (`verify.yml`) runs the producer's HGB (Humble GamingBrick)
+and AGB (Advanced GamingBrick) binaries
 on Linux, its exact deployable AppBundle under Node, and its candidate CLI for
 generated schema/name-registry checks. The browser job fails if its input bundle
 is missing. Its nightly frontier measures
-known failing or inconclusive emulator cases separately from release gates.
+known failing or inconclusive HGB cases separately from release gates.
 The nightly frontier builds its own battery for that scheduled run. Test reports
 are retained as artifacts and job summaries on every event, including
 fork pull requests. Verification needs only a read-only repository token.
+HGB and AGB payload directories and report artifacts retain their `hgb` and `agb`
+names. Linux world verification invokes each compiled assembly's portable xUnit
+runner directly, retains XML results, and refuses a filter that executes no tests.
+It does not require a Linux apphost or recompile the Windows-produced assemblies.
 
 The Azure graph builds its two Linux container images independently of the Windows
 producer. Container verification loads the saved image archives; deployment loads
@@ -58,6 +63,11 @@ the producer's Functions and browser payloads, builds the dashboard and API docs
 then seals the deployment bundle. No deployment job compiles Puck or rebuilds an
 image. Artifact consumers download immutable artifacts from their own workflow
 run, and missing artifacts fail rather than starting a fallback build.
+The dashboard's schema generator and schema-driven tests share the installed
+candidate CLI; neither requires a second publish into `src/Puck.Cli/publish`.
+The `compiler-analyzers` artifact supplies DocFX's Roslyn dependency to both
+application assembly and documentation generation. A standalone documentation
+run invokes the artifact producer first; a release reuses its existing producer.
 Infrastructure compilation likewise runs once. Deployment verifies the compiled
 template's source identity and binds the current deployment principal and
 existing Actors digest into its parameter document before the no-delete plan;

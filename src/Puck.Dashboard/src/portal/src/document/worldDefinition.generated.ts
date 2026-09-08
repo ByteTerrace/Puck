@@ -11251,23 +11251,23 @@ export interface WorldGroupSelectorTagged {
  */
 export interface WorldAdmissionEntry {
   /**
-   * The trusted key's own id domain — a lowercase-hex SHA-256 fingerprint (64 characters). For Vouches this must be PublicKey's own fingerprint (a root is self-certifying). For SignsDirectly it names the domain namespace this individual is pinned under, which need not equal their own key's hash. For FederatedAuthority it is not a key id at all: it names the authenticated source-authority namespace, or AnyAuthority for any authority that completes the federation handshake.
+   * The trusted key's own id domain — a lowercase-hex SHA-256 fingerprint (64 characters). For Vouches this must be PublicKey's own fingerprint (a root is self-certifying). For SignsDirectly it names the domain namespace this individual is pinned under, which need not equal their own key's hash. For FederatedAuthority it is not a key id at all: it names the authenticated source-authority namespace, or AnyAuthority for any authority that completes the federation handshake. For OAuth it is the exact HTTPS issuer.
    */
   domain: string;
   /**
-   * The platform user id this entry pins, required for SignsDirectly and refused for Vouches (a root vouches for every subject its two-hop chain resolves, never one named here).
+   * The platform user id this entry pins, required for SignsDirectly and refused for Vouches (a root vouches for every subject its two-hop chain resolves, never one named here). OAuth requires an exact subject within its issuer, never a wildcard.
    */
   subject: string | null;
   /**
-   * Whether this entry signs directly or vouches for a chain.
+   * The trusted identity proof this row accepts.
    */
   mode: WorldAdmissionTrustMode;
   /**
-   * Exactly ecdsa-p256-sha256, the only signing algorithm enabled by the admission door's mandatory attestation-v1-base profile. Sealing algorithms and optional signing extensions are refused by document validation.
+   * Exactly ecdsa-p256-sha256, the only signing algorithm enabled by the admission door's mandatory attestation-v1-base profile. Sealing algorithms and optional signing extensions are refused by document validation. OAuth and federated-authority rows require an empty string.
    */
   algorithm: string;
   /**
-   * The pinned key's actual SubjectPublicKeyInfo bytes, base64-encoded — carried alongside the id because offline verification needs the real bytes, never a fetch (docs/vision.md, "Signed attestation": consulting the issuer at verification time is a ruled-out design).
+   * The pinned key's actual SubjectPublicKeyInfo bytes, base64-encoded — carried alongside the id because offline verification needs the real bytes, never a fetch (docs/vision.md, "Signed attestation": consulting the issuer at verification time is a ruled-out design). Empty for OAuth and federated-authority rows.
    */
   publicKey: string;
   /**

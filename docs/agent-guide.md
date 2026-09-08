@@ -157,7 +157,7 @@ pending one.
 
 ```powershell
 dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --fetch-corpora
-dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --lane gate
+dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --lane gate --artifacts artifacts/hgb-post
 dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --fetch-corpora
 dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --bios <GBA_bios.rom>
 ```
@@ -166,9 +166,9 @@ The Humble battery's reference corpora are declared in its `corpora.json`
 (pinned archive, version, SHA-256); `--fetch-corpora` fills the local cache
 once and the stages resolve it without configuration. `--lane gate` measures
 every row recorded as passing and must stay green; `--lane frontier` measures
-the recorded fails and inconclusives; a plain run measures both. Every run
-writes `summary.json`, `results.junit.xml`, and a candidate ledger under
-`artifacts/gb-post`; `--accept` promotes the candidate under the refusal rules
+the recorded fails and inconclusives; a plain run measures both. The recipe above
+matches CI's `artifacts/hgb-post` directory for `summary.json`, `results.junit.xml`,
+and the candidate ledger; `--accept` promotes the candidate under the refusal rules
 in the project README. Iterate with `--filter`; never chain runs to record.
 The Advanced battery works the same way: its corpora are pinned in its own
 `corpora.json`, the BIOS and commercial cartridges are command-line flags, and

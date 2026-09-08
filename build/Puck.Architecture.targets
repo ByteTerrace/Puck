@@ -78,8 +78,7 @@
         fires on a fully up-to-date incremental build, so an edit to a csproj cannot slip past by not
         triggering a recompile of the project that would have caught it.
 
-        The reference set is filtered to ReferenceSourceTarget == 'ProjectReference'. That is deliberately a
-        THE FILTER USED TO SIT HERE AND IT WAS A HOLE. An earlier version passed only items whose
+        An earlier version passed only items whose
         ReferenceSourceTarget was 'ProjectReference', and its comment claimed a non-project Puck reference
         "would surface as a missing declaration rather than pass unseen." That was measured FALSE by the
         unit-1 review: a raw <Reference> with a HintPath into another project's bin/ builds green, zero

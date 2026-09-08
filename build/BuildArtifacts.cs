@@ -4,11 +4,12 @@
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
+using System.Xml.Linq;
 using static Puck.AutomationProcess;
 
 try {
     var root = Puck.RepositoryPaths.FindRoot() ?? throw new DirectoryNotFoundException("Run within the Puck checkout.");
-    var commit = await RunAsync("git", ["rev-parse", "HEAD"], capture: true);
+    var commit = args is ["capture" or "restore"] ? await RunAsync("git", ["rev-parse", "HEAD"], capture: true) : "";
     const string Archive = "artifacts/compiled-windows.zip";
     if (args is ["capture"]) {
         if (!OperatingSystem.IsWindows()) { throw new InvalidOperationException("The solution artifact is produced on Windows."); }
@@ -19,7 +20,7 @@ try {
         var source = new JsonObject { ["commit"] = commit, ["configuration"] = "Release", ["platform"] = "windows", ["architecture"] = RuntimeInformation.ProcessArchitecture.ToString() };
         Write("artifacts/runtime/source.json", source);
         CopyDirectory("src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle", "artifacts/runtime/browser");
-        CopyDirectory("src/Puck.HumbleGamingBrick.Post/bin/Release/net10.0", "artifacts/batteries/gb");
+        CopyDirectory("src/Puck.HumbleGamingBrick.Post/bin/Release/net10.0", "artifacts/batteries/hgb");
         CopyDirectory("src/Puck.AdvancedGamingBrick.Post/bin/Release/net10.0", "artifacts/batteries/agb");
         foreach (var project in new[] { "Puck.World.Azure.Tests", "Puck.World.Schema.Tests", "Puck.World.Tests" }) {
             CopyDirectory($"tests/{project}/bin/Release/net10.0", $"artifacts/world-tests/{project}");
@@ -57,8 +58,25 @@ try {
             entry.ExtractToFile(destination);
         }
         Console.WriteLine($"Restored compiled Release outputs for {commit}; no compilation was performed.");
+    } else if (args is ["test-world"]) {
+        const string Results = "artifacts/world-test-results";
+        Directory.CreateDirectory(Results);
+        foreach (var (project, testClass) in new[] {
+            ("Puck.World.Azure.Tests", "EntraWorldAuthenticatorTests"),
+            ("Puck.World.Schema.Tests", "WorldSiloDefinitionLawTests"),
+            ("Puck.World.Tests", "WorldSiloLifecycleLawTests"),
+        }) {
+            var report = Path.Combine(Results, project + ".xml");
+            if (File.Exists(report)) { throw new IOException($"Use a fresh test report: {report}"); }
+            // xUnit v3's in-process runner is portable; VSTest otherwise looks for the producer OS's apphost.
+            await RunAsync("dotnet", [$"artifacts/world-tests/{project}/{project}.dll", "-class", project + "." + testClass, "-xml", report]);
+            var result = XDocument.Load(report).Root?.Element("assembly") ?? throw new InvalidDataException($"Missing test result for {project}.");
+            if ((int?)result.Attribute("total") is not { } total || (int?)result.Attribute("skipped") is not { } skipped || total <= skipped) {
+                throw new InvalidDataException($"No tests executed for {project}.{testClass}.");
+            }
+        }
     } else {
-        Console.WriteLine("dotnet run -c Release --file build/BuildArtifacts.cs -- <capture|restore>");
+        Console.WriteLine("dotnet run -c Release --file build/BuildArtifacts.cs -- <capture|restore|test-world>");
         return args is ["--help" or "-h"] ? 0 : 2;
     }
     return 0;

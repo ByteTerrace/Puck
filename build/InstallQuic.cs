@@ -15,7 +15,7 @@ if (!Convert.ToHexStringLower(SHA256.HashData(bytes)).Equals(Checksum, StringCom
 var archive = Path.Combine(Environment.GetEnvironmentVariable("RUNNER_TEMP") ?? Path.GetTempPath(), $"puck-packages-{Guid.NewGuid():N}.deb");
 try {
     await File.WriteAllBytesAsync(archive, bytes);
-    await RunAsync("sudo", ["dpkg", "-i", archive]);
-    await RunAsync("sudo", ["apt-get", "update"]);
-    await RunAsync("sudo", ["apt-get", "install", "-y", "--no-install-recommends", "libmsquic"]);
+    await RunAsync("sudo", ["-n", "dpkg", "-i", archive]);
+    await RunAsync("sudo", ["-n", "apt-get", "update"]);
+    await RunAsync("sudo", ["-n", "apt-get", "install", "-y", "--no-install-recommends", "libmsquic"]);
 } finally { File.Delete(archive); }
