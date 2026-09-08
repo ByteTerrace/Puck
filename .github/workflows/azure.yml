@@ -52,6 +52,7 @@ jobs:
           az group show --name byteterrace --query '{name:name,location:location}'
           az acr show --name bytrccrp000 --query '{registry:loginServer,mode:roleAssignmentMode,publicNetworkAccess:publicNetworkAccess}'
           az account get-access-token --resource https://containerregistry.azure.net --query expiresOn --output tsv
+          az appconfig kv list --name bytrcappcsp000 --key Version --auth-mode login --query '[].key' --output json
 
   infrastructure:
     runs-on: ubuntu-24.04

@@ -167,5 +167,5 @@ node deployment does not prove world checkpoint recovery, gameplay, or scaling.
 CI adds the staging origin to the Entra application's SPA redirect URI list,
 preserving its existing callbacks. The CI identity must remain an owner of that
 registration for its `Application.ReadWrite.OwnedBy` permission to apply.
-Preserve that staging callback when separately redeploying the shared platform's
-application-registration configuration.
+`main.bicepparam` retains that callback when the shared platform is redeployed;
+set `BICEPPARAM_STAGING_DASHBOARD_ORIGIN` if the container environment's domain changes.

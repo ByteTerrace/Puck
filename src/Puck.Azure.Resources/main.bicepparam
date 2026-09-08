@@ -12,6 +12,8 @@ import {
 var apexDomainName = readEnvironmentVariable('BICEPPARAM_APEX_DOMAIN_NAME', 'byteterrace.com')
 var partitionCount = int(readEnvironmentVariable('BICEPPARAM_PARTITION_COUNT', '1'))
 var prefix = readEnvironmentVariable('BICEPPARAM_PREFIX', 'bytrc')
+// Keep the callback that staging CI registers when the shared platform is redeployed.
+var stagingDashboardOrigin = readEnvironmentVariable('BICEPPARAM_STAGING_DASHBOARD_ORIGIN', 'https://bytrcdashboard-staging.purplerock-ff1b5f1a.southcentralus.azurecontainerapps.io')
 
 param deployOwnerRoleAssignments = true
 param enableCustomerManagedKey = false
@@ -150,6 +152,7 @@ param resources = {
     ]
     spa: {
       redirectUris: [
+        stagingDashboardOrigin
         'https://bytrc.com'
         'https://${apexDomainName}'
         'https://portal.${apexDomainName}'
