@@ -117,10 +117,19 @@ jobs:
         if: steps.current.outputs.deploy == 'True'
         shell: pwsh
         run: ./build/Deploy-AzureProduction.ps1 -ArtifactsDirectory artifacts/source -Commit $env:GITHUB_SHA
+      - name: Admit the runner to the signing-key vault
+        id: vault
+        if: steps.current.outputs.deploy == 'True'
+        shell: pwsh
+        run: ./build/Set-AzureKeyVaultDeploymentAccess.ps1
       - name: Deploy the primary Puck world
         if: steps.current.outputs.deploy == 'True'
         shell: pwsh
         run: ./build/Deploy-WorldSilo.ps1
+      - name: Restore signing-key vault restrictions
+        if: always() && steps.vault.outcome != 'skipped'
+        shell: pwsh
+        run: ./build/Set-AzureKeyVaultDeploymentAccess.ps1 -Restore
       - name: Admit the runner to the Functions deployment endpoint
         id: scm
         if: steps.current.outputs.deploy == 'True'

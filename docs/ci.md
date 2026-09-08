@@ -73,7 +73,11 @@ Bumping that file on `main` starts `publish.yml`; a manual run on `main` can
 retry a failed release. Other branches cannot enter the publish gate. If a
 GitHub Release already exists for `v<Version>`, the run does nothing.
 
-After build, verification, and packaging succeed, NuGet Trusted Publishing
+After build, verification, packaging, and documentation succeed, the publisher
+reserves `v<Version>` at that exact commit before uploading any packages. A
+partial publish must be retried from that commit; a different commit needs a new
+version. This prevents `--skip-duplicate` from mixing packages from different
+commits into one release. NuGet Trusted Publishing
 exchanges the job's OIDC token for a short-lived key. It pushes the exact
 `nuget-packages` artifact from that run, skips already published versions on
 retry, and creates the GitHub Release. No package API key is stored here.
@@ -108,6 +112,9 @@ and Linux images for Actors and World.Silo. Dashboard tests use the real engine.
 Actors must answer `/healthz`; the silo must activate the primary Puck world,
 checkpoint it, accept a QUIC connection with the expected key, and repeat those
 checks after container replacement using the same store.
+Both official manifests check clean source provenance before world preparation
+builds desktop dependencies, whose pinned DXC compilation can regenerate tracked
+shader binaries. Those generated files do not change the authored source commit.
 
 A push to `main` deploys after all build and verification jobs succeed. A manual
 run exposes one `deploy` switch; setting it to false performs build and validation
@@ -173,7 +180,9 @@ The silo identity `bytrcidp008` can read only `world-silo` in ACR and has a cust
 `Puck World Store` role on its own blob container: container read/create plus
 blob read/write, with no delete or role-management grant. CI retains its signing
 key in Key Vault and injects it as a secret volume; the runtime needs no vault
-permissions. Secret parameter files are removed and excluded from artifacts.
+permissions. CI temporarily admits its single runner IPv4 address to the vault
+firewall; an `always()` step removes only the rule that run added. Secret
+parameter files are removed and excluded from artifacts.
 The image installs `libmsquic`, which .NET requires for Linux QUIC support.
 
 ACR uses `AbacRepositoryPermissions`. CI publishes through Repository Contributor;

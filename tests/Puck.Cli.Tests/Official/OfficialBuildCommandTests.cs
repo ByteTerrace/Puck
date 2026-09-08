@@ -11,7 +11,13 @@ namespace Puck.Cli.Tests.Official;
 /// verb end to end rather than a synthetic fixture.</summary>
 public sealed class OfficialBuildFixture : IDisposable {
     // Publish the browser in this checkout before running the official-content integration tests.
-    public static string AppBundlePath => RepositoryPaths.Resolve(relativePath: "src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle");
+    public static string AppBundlePath {
+        get {
+            Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root), userMessage: "Cannot locate this checkout's Puck.slnx.");
+
+            return Path.Combine(path1: root!, path2: "src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle");
+        }
+    }
     public const string Channel = "dev";
 
     public string OutRoot { get; }

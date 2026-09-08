@@ -8,7 +8,16 @@ $owner = $outputs.worldSiloOwner.value
 $endpoint = $outputs.worldSiloStorageEndpoint.value.TrimEnd('/')
 $vault = $outputs.deploymentKeyVaultName.value
 $secretName = 'PuckWorldFederationKey'
-$secretNames = @(az keyvault secret list --vault-name $vault --query '[].name' --output json | ConvertFrom-Json)
+# Key Vault firewall updates can take time to reach the data endpoint.
+for ($attempt = 0; ; $attempt++) {
+    try {
+        $secretNames = @(az keyvault secret list --vault-name $vault --query '[].name' --output json | ConvertFrom-Json)
+        break
+    } catch {
+        if ($attempt -ge 11) { throw }
+        Start-Sleep -Seconds 5
+    }
+}
 $temporary = Join-Path ([IO.Path]::GetTempPath()) ('puck-silo-' + [Guid]::NewGuid())
 New-Item $temporary -ItemType Directory | Out-Null
 try {

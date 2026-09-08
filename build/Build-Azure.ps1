@@ -33,9 +33,11 @@ try {
     dotnet publish src/Puck.Cli -c Release --no-restore -o src/Puck.Cli/publish
     dotnet src/Puck.Cli/publish/Puck.Cli.dll official build --out "$output/official" --channel $Channel --engine src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle
     dotnet src/Puck.Cli/publish/Puck.Cli.dll official verify --base "$output/official" --channel $Channel --expect-commit $commit
-    dotnet run build/Prepare-WorldSilo.cs -c Release -- src/Puck.World/Assets/worlds "$output/silo-worlds"
     # The studio integration tests use the documented local dev tree and the real engine.
     dotnet src/Puck.Cli/publish/Puck.Cli.dll official build --out artifacts/official --channel dev --engine src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle
+    # Desktop dependencies can regenerate tracked shader bytecode. Check clean source provenance
+    # for both manifests before that build; hosted world definitions still use the same checkout.
+    dotnet run build/Prepare-WorldSilo.cs -c Release -- src/Puck.World/Assets/worlds "$output/silo-worlds"
 
     Push-Location src/Puck.Dashboard/src
     try {

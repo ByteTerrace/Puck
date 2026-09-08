@@ -3,7 +3,7 @@ name: Release & publish
 # The version in build/Packaging.targets is the single source of truth. Bump
 # <Version> there and merge to main; this workflow reads it, and if no GitHub
 # Release exists for it yet, validates (build.yml + verify.yml), packs (pack.yml), pushes to
-# NuGet.org, then generates the tag + release. Unchanged version => the release
+# NuGet.org after reserving its source tag, then generates the release. Unchanged version => the release
 # already exists => the run is a no-op. A failed run is safe to retry because
 # duplicate NuGet packages are skipped and the release is the completion marker.
 #
@@ -84,9 +84,6 @@ jobs:
   verify:
     needs: gate
     if: needs.gate.outputs.release == 'true'
-    permissions:
-      contents: read
-      checks: write
     uses: ./.github/workflows/verify.yml
 
   publish:
@@ -98,13 +95,15 @@ jobs:
     # policy ('NuGet'); add protection rules there to gate publishes on
     # approval.
     permissions:
-      contents: read
+      contents: write # reserve the source tag before the first NuGet upload
       id-token: write
     environment:
       name: NuGet
       url: https://www.nuget.org/profiles/ByteTerrace
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
@@ -114,6 +113,19 @@ jobs:
         with:
           name: nuget-packages
           path: packages
+
+      - name: Pin the package version to this validated commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          tag="v$VERSION"
+          if git show-ref --verify --quiet "refs/tags/$tag"; then
+            test "$(git rev-parse "$tag^{commit}")" = "$GITHUB_SHA"
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              --raw-field "ref=refs/tags/$tag" --raw-field "sha=$GITHUB_SHA"
+          fi
 
       - name: NuGet login (Trusted Publishing)
         id: nuget-login
@@ -148,6 +160,7 @@ jobs:
           prerelease=()
           case "$VERSION" in *-*) prerelease=(--prerelease) ;; esac
           gh release create "$tag" \
+            --verify-tag \
             --target "$GITHUB_SHA" \
             --title "$tag" \
             --generate-notes \
