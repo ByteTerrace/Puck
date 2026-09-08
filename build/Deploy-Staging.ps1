@@ -58,5 +58,13 @@ $parameters = @{
 az deployment group what-if --resource-group $ResourceGroup --template-file src/Puck.Azure.Resources/staging.bicep --parameters artifacts/staging-parameters.json --no-pretty-print > artifacts/staging-plan.json
 az deployment group create --name "puck-staging-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT" --resource-group $ResourceGroup --template-file src/Puck.Azure.Resources/staging.bicep --parameters artifacts/staging-parameters.json --query properties.outputs --output json > artifacts/staging-outputs.json
 $outputs = Get-Content artifacts/staging-outputs.json -Raw | ConvertFrom-Json
+# CI owns this registration. Preserve every existing callback while adding staging.
+$applicationUrl = 'https://graph.microsoft.com/v1.0/applications/aa086681-3252-4166-9f53-eb0e3173ca30'
+$application = az rest --method get --url "$applicationUrl`?`$select=spa" --output json | ConvertFrom-Json
+$redirects = @($application.spa.redirectUris)
+if ($outputs.dashboardEndpoint.value -notin $redirects) {
+    @{ spa = @{ redirectUris = @($redirects) + $outputs.dashboardEndpoint.value } } | ConvertTo-Json -Depth 4 | Set-Content artifacts/staging-redirect.json -Encoding utf8NoBOM
+    az rest --method patch --url $applicationUrl --body '@artifacts/staging-redirect.json' --output none
+}
 if ($env:GITHUB_OUTPUT) { "function-app-name=$($outputs.functionAppName.value)" >> $env:GITHUB_OUTPUT }
 Write-Output "Staging infrastructure deployed for $Commit"

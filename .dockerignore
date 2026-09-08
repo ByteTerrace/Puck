@@ -16,4 +16,5 @@ experimental
 **/TestResults
 **/local.settings.json
 **/.env.local
+**/.env
 **/.env.*.local

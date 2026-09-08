@@ -164,5 +164,8 @@ HTTP 401 for anonymous API access, and matching dashboard/content commit IDs.
 The World.Silo staging node initially admits no worlds: world documents and
 their private federation keys are workload configuration. A successful empty
 node deployment does not prove world checkpoint recovery, gameplay, or scaling.
-Interactive dashboard sign-in also requires its staging origin in the Entra
-application's SPA redirect URI list.
+CI adds the staging origin to the Entra application's SPA redirect URI list,
+preserving its existing callbacks. The CI identity must remain an owner of that
+registration for its `Application.ReadWrite.OwnedBy` permission to apply.
+Preserve that staging callback when separately redeploying the shared platform's
+application-registration configuration.
