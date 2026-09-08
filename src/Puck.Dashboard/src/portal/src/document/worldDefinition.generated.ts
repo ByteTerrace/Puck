@@ -1634,7 +1634,7 @@ export type WorldGroupSelector = (WorldGroupSelectorNamed | null) | (WorldGroupS
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldAdmissionTrustMode".
  */
-export type WorldAdmissionTrustMode = "SignsDirectly" | "Vouches" | "FederatedAuthority";
+export type WorldAdmissionTrustMode = "SignsDirectly" | "Vouches" | "FederatedAuthority" | "OAuth";
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldDisclosureTier".

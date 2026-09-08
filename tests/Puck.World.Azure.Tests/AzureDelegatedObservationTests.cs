@@ -9,6 +9,43 @@ using Xunit;
 namespace Puck.World.Azure.Tests;
 
 public sealed class AzureDelegatedObservationTests {
+    [Theory]
+    [InlineData("Ready")]
+    [InlineData("Migrating")]
+    [InlineData("Onboarding")]
+    public async Task OnboardingUsesExistingApiWithAnExchangedUserToken(string state) {
+        using var exchange = new ExchangeHandler { ExpectedScope = $"api://{Application}/.default" };
+        using var http = new HttpClient(exchange);
+        using var platform = new OnboardingHandler(state);
+        using var service = new AzureDelegatedServices(Tenant, Application, OnboardingSettings, new AssertionCredential(), new HttpClientTransport(http), platform);
+        Assert.Equal(state, await service.EnsureOnboardedAsync("validated-user-assertion", DateTimeOffset.UtcNow.AddMinutes(1), Token));
+        Assert.Equal(1, platform.Calls);
+        Assert.Equal(1, exchange.Exchanges);
+    }
+
+    [Fact]
+    public async Task OnboardingRefusedConsentAndExpiredAssertionsNeverReachPlatform() {
+        using var exchange = new ExchangeHandler { ExpectedScope = $"api://{Application}/.default", Deny = true };
+        using var http = new HttpClient(exchange);
+        using var platform = new OnboardingHandler("Ready");
+        using var service = new AzureDelegatedServices(Tenant, Application, OnboardingSettings, new AssertionCredential(), new HttpClientTransport(http), platform);
+        await Assert.ThrowsAsync<AuthenticationFailedException>(async () => await service.EnsureOnboardedAsync("validated-user-assertion", DateTimeOffset.UtcNow.AddMinutes(1), Token));
+        await Assert.ThrowsAsync<AuthenticationFailedException>(async () => await service.EnsureOnboardedAsync("validated-user-assertion", DateTimeOffset.UtcNow.AddSeconds(-1), Token));
+        Assert.Equal(1, exchange.Exchanges);
+        Assert.Equal(0, platform.Calls);
+    }
+
+    private static JsonElement OnboardingSettings => JsonElement.Parse("""{"managedIdentityClientId":"dddddddd-dddd-dddd-dddd-dddddddddddd","observations":[],"onboardingUrl":"https://api.example.test/api/self-onboard"}""");
+    private sealed class OnboardingHandler(string state) : HttpMessageHandler {
+        internal int Calls;
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal("https://api.example.test/api/self-onboard", request.RequestUri!.AbsoluteUri);
+            Assert.Equal("Bearer delegated-arm-token", request.Headers.Authorization!.ToString());
+            Calls++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent($"{{\"State\":\"{state}\"}}") });
+        }
+    }
     private const string Tenant = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
     private const string Application = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
     private const string Subject = "cccccccc-cccc-cccc-cccc-cccccccccccc";
@@ -26,7 +63,7 @@ public sealed class AzureDelegatedObservationTests {
         using var handler = new ExchangeHandler();
         using var http = new HttpClient(handler);
         var assertion = new AssertionCredential();
-        using var service = new AzureDelegatedObservations(Tenant, Application, Settings, assertion, new HttpClientTransport(http));
+        using var service = new AzureDelegatedServices(Tenant, Application, Settings, assertion, new HttpClientTransport(http));
         Assert.Equal(0, assertion.Calls);
         var result = await service.ReadAsync("inventory", Subject, "validated-user-assertion", DateTimeOffset.UtcNow.AddMinutes(1), Token);
         Assert.Equal("sample", Assert.Single(result).Fields["name"]);
@@ -40,7 +77,7 @@ public sealed class AzureDelegatedObservationTests {
         using var handler = new ExchangeHandler();
         using var http = new HttpClient(handler);
         var assertion = new AssertionCredential();
-        using var service = new AzureDelegatedObservations(Tenant, Application, Settings, assertion, new HttpClientTransport(http));
+        using var service = new AzureDelegatedServices(Tenant, Application, Settings, assertion, new HttpClientTransport(http));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(async () => await service.ReadAsync("inventory", "mallory", "user", DateTimeOffset.UtcNow.AddMinutes(1), Token));
         await Assert.ThrowsAsync<AuthenticationFailedException>(async () => await service.ReadAsync("inventory", Subject, "user", DateTimeOffset.UtcNow.AddSeconds(-1), Token));
         Assert.Equal(0, assertion.Calls);
@@ -52,7 +89,7 @@ public sealed class AzureDelegatedObservationTests {
         using var handler = new ExchangeHandler { Deny = true };
         using var http = new HttpClient(handler);
         var assertion = new AssertionCredential();
-        using var service = new AzureDelegatedObservations(Tenant, Application, Settings, assertion, new HttpClientTransport(http));
+        using var service = new AzureDelegatedServices(Tenant, Application, Settings, assertion, new HttpClientTransport(http));
         await Assert.ThrowsAsync<AuthenticationFailedException>(async () => await service.ReadAsync("inventory", Subject, "validated-user-assertion", DateTimeOffset.UtcNow.AddMinutes(1), Token));
         Assert.Equal(1, assertion.Calls);
         Assert.Equal(0, handler.Reads);
@@ -70,6 +107,7 @@ public sealed class AzureDelegatedObservationTests {
     }
 
     private sealed class ExchangeHandler : HttpMessageHandler {
+        internal string ExpectedScope = "https://management.azure.com//.default";
         internal bool Deny;
         internal int Exchanges;
         internal int Reads;
@@ -83,7 +121,7 @@ public sealed class AzureDelegatedObservationTests {
                 Assert.Equal("on_behalf_of", form["requested_token_use"]);
                 Assert.Equal("validated-user-assertion", form["assertion"]);
                 Assert.Equal("federated-client-assertion", form["client_assertion"]);
-                Assert.Contains("management", form["scope"]);
+                Assert.Contains(ExpectedScope, form["scope"]);
                 Exchanges++;
                 return Deny ? Response(HttpStatusCode.BadRequest, """{"error":"invalid_grant","error_description":"Consent required","error_codes":[65001]}""") :
                     Response(HttpStatusCode.OK, """{"access_token":"delegated-arm-token","expires_in":3600,"token_type":"Bearer"}""");

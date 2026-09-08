@@ -95,7 +95,7 @@ public sealed class RemoteMcpProxyTests {
         internal string? Subject;
         public override bool IsReady => true;
         public override bool SupportsAttachments => false;
-        public override ValueTask<IControlSession> AttachAsync(string subject, CancellationToken cancellationToken) => throw new InvalidOperationException("No attachments.");
+        public override ValueTask<IControlSession> AttachAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) => throw new InvalidOperationException("No attachments.");
         public override IReadOnlyList<Tool> ServiceTools => [new() { Name = "assertion_probe", InputSchema = JsonElement.Parse("""{"type":"object","additionalProperties":false}""") }];
         public override ValueTask<CallToolResult> CallServiceAsync(RemoteMcpCaller caller, CallToolRequestParams request, CancellationToken cancellationToken) {
             Assertion = caller.UserAssertion;

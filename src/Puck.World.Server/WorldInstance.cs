@@ -48,6 +48,7 @@ public sealed class WorldInstance : IDisposable {
         Server = server;
         OwnedMachines = ownedMachines;
         Link = link;
+        ListenEndpoint = server.Definition.Host.Listen;
         Federation = federation;
         Origin = documentOrigin;
         m_ownedAdjacencies = ownedAdjacencies;
@@ -64,6 +65,9 @@ public sealed class WorldInstance : IDisposable {
     /// <summary>This row's per-activation socket door, or <see langword="null"/> for a row nothing outside its own
     /// process reaches directly (a desktop's non-boot local instance).</summary>
     public WorldPeerHost? Door { get; set; }
+    /// <summary>The listener configuration for this activation; defaults to the server document. A hosting
+    /// composition may supply its current endpoint independently of an older recovered checkpoint.</summary>
+    public string? ListenEndpoint { get; init; }
     /// <summary>This instance's own exact engine-tick elapsed clock, accumulated additively one step width at a
     /// time rather than re-derived as <c>(tick + 1) * stepWidth</c> — the identical
     /// discontinuity <c>Puck.Launcher.FixedStepPump</c>'s own <c>m_elapsedTicks</c> field exists to avoid: a product

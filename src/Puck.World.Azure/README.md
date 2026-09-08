@@ -229,7 +229,7 @@ replay suppression, and journal namespace rules before reopening live bindings.
 
 ## Delegated observations
 
-`AzureDelegatedObservations` binds the existing inventory and metrics readers to
+`AzureDelegatedServices` binds the existing inventory and metrics readers to
 an authenticated Entra caller. The trusted ingress validates the tenant, API
 audience, `oid`, scope and expiration before supplying a request-confined user
 assertion. Azure Identity performs OBO with the configured managed identity's
@@ -258,7 +258,7 @@ The optional [MCP host composition](../Puck.Mcp/README.md#host-extension) instal
 }
 ```
 
-Observation subjects need both the MCP Operator grant and this separate read
+Observation subjects need both MCP gateway access and this separate read
 grant. Provider settings retain the existing scope and scalar-field validation.
 Reads are limited to 64 KiB per response page, eight inventory pages, 128 items,
 4096 characters per field and 65536 disclosed characters overall. An incomplete
@@ -268,6 +268,14 @@ consent remain required; the unified Bicep already declares Azure Service
 Management `user_impersonation` and adds the World identity's federated credential.
 These request-scoped reads do not introduce durable jobs or cloud writes.
 
+The same `AzureDelegatedServices` adapter accepts optional
+`onboardingUrl: "https://<existing-api-host>/api/self-onboard"`, with an empty
+`observations` array when only onboarding is installed. `puck_onboard` and
+attachment admission call this Function endpoint using an OBO API token.
+The Function owns account provisioning, partition routing and protected user
+escrow. Responses are bounded to 4 KiB and must name `Ready`, `Migrating` or
+`Onboarding`; redirects and failed consent are refused. MCP retains no assertion
+after the request; the existing Function owns its accepted escrow and expiration.
 ## Verification and scope
 
 ```text

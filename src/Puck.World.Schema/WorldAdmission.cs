@@ -3,10 +3,8 @@ using Puck.Abstractions.Documents;
 
 namespace Puck.World.Protocol;
 
-/// <summary>Whether an admission entry pins one individual's own signing key, or a domain root that vouches for a
-/// two-hop chain beneath it — <c>Puck.Attestation.AttestationTrustMode</c>'s own two members, mirrored here as an authored
-/// document token so this project need not reference a leaf project's internal enum shape directly from JSON: a
-/// document field is a closed, versioned vocabulary of its own, never a re-export.</summary>
+/// <summary>The proof an admission entry accepts: a pinned signing key, a vouched chain, an authenticated federation
+/// authority, or a host-validated OAuth identity. Each mode retains the World's own grants and disclosure policy.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldAdmissionTrustMode>))]
 public enum WorldAdmissionTrustMode : byte {
     /// <summary>The pinned key signs the connecting peer's claim directly — no chain travels with it. Pins one
@@ -27,6 +25,10 @@ public enum WorldAdmissionTrustMode : byte {
     /// authority; which authority is speaking is the only verified fact, so it is the only one trust is authored
     /// against.</summary>
     FederatedAuthority,
+
+    /// <summary>A trusted host has validated an OAuth issuer and subject. Domain is the exact HTTPS issuer;
+    /// Subject is exact. No signing key is stored in the world document. Grants still belong to this world.</summary>
+    OAuth,
 }
 /// <summary>How much of an authority's document a peer is authorized to receive. Decided once, at the admission
 /// door, and carried on <see cref="WorldAdmissionVerdict.Tier"/>; every remote egress reads it and nothing else
@@ -108,9 +110,9 @@ public sealed record WorldAdmissionVerdict {
     );
 }
 /// <summary>One row of the <c>admission</c> section — durable configuration naming one identity or issuer this world
-/// admits over its QUIC socket, and what a peer verified under it is minted (see <see cref="Grants"/>). Never a live
-/// grant row itself: <see cref="WorldAdmissionDoor"/> is the only consumer, and only at the pre-population Hello
-/// handshake, off the tick thread — this section carries no <see cref="WorldSection"/> axis and nothing mutates it
+/// admits through a trusted transport, and what a peer verified under it is minted (see <see cref="Grants"/>). Never a live
+/// grant row itself: <see cref="WorldAdmissionDoor"/> matches verified identities before population admission.
+/// This section carries no <see cref="WorldSection"/> axis and nothing mutates it
 /// live, exactly like <see cref="WorldReference"/>/<see cref="WorldPortalsSection"/>. Absent (the default) admits no
 /// remote peer at all — deny by default, the same posture an empty <c>Puck.Attestation.TrustList</c> already carries.</summary>
 /// <param name="Domain">The trusted key's own id domain — a lowercase-hex SHA-256 fingerprint (64 characters). For
@@ -119,17 +121,17 @@ public sealed record WorldAdmissionVerdict {
 /// individual is pinned under, which need not equal their own key's hash. For
 /// <see cref="WorldAdmissionTrustMode.FederatedAuthority"/> it is not a key id at all: it names the authenticated
 /// source-authority namespace, or <see cref="WorldAdmissionEntry.AnyAuthority"/> for any authority that completes the
-/// federation handshake.</param>
+/// federation handshake. For <see cref="WorldAdmissionTrustMode.OAuth"/> it is the exact HTTPS issuer.</param>
 /// <param name="Subject">The platform user id this entry pins, required for <see cref="WorldAdmissionTrustMode.SignsDirectly"/>
 /// and refused for <see cref="WorldAdmissionTrustMode.Vouches"/> (a root vouches for every subject its two-hop chain
-/// resolves, never one named here).</param>
-/// <param name="Mode">Whether this entry signs directly or vouches for a chain.</param>
+/// resolves, never one named here). OAuth requires an exact subject within its issuer, never a wildcard.</param>
+/// <param name="Mode">The trusted identity proof this row accepts.</param>
 /// <param name="Algorithm">Exactly <c>ecdsa-p256-sha256</c>, the only signing algorithm enabled by the
 /// admission door's mandatory <c>attestation-v1-base</c> profile. Sealing algorithms and optional signing
-/// extensions are refused by document validation.</param>
+/// extensions are refused by document validation. OAuth and federated-authority rows require an empty string.</param>
 /// <param name="PublicKey">The pinned key's actual <c>SubjectPublicKeyInfo</c> bytes, base64-encoded — carried
 /// alongside the id because offline verification needs the real bytes, never a fetch (docs/vision.md, "Signed
-/// attestation": consulting the issuer at verification time is a ruled-out design).</param>
+/// attestation": consulting the issuer at verification time is a ruled-out design). Empty for OAuth and federated-authority rows.</param>
 /// <param name="Grants">What a peer verified under this entry is minted, INSTEAD OF the blanket
 /// <c>Control</c>/<c>all</c> every admitted peer used to receive unconditionally. Empty (never null) is a legitimate
 /// authored choice: a verified-but-granted-nothing identity, admitted onto the connection table and able to hold a

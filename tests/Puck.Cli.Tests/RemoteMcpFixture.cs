@@ -24,7 +24,6 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
     internal readonly Channel<string> Entered = Channel.CreateUnbounded<string>();
     internal readonly ManualClock Clock = new();
     private readonly RSA m_key = RSA.Create(2048);
-    private readonly LocalControlServer m_host;
     internal WebApplication App { get; private set; } = null!;
     internal RemoteMcpOptions Options { get; }
     internal int Active;
@@ -36,8 +35,7 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
     private string? m_certificatePath;
 
     internal RemoteMcpFixture() {
-        m_host = new(() => { Interlocked.Increment(ref Opened); Interlocked.Increment(ref Active); return new ProbeSession(this); });
-        Options = new() { AttachmentPath = m_host.AttachmentPath, PublicUrl = Audience, ListenUrl = "http://127.0.0.1:0", Issuer = Issuer, Audience = Audience, Scope = "puck.operator", AllowedSubjects = ["alice", "bob"], TenantId = Tenant, IdleTimeoutSeconds = 10 };
+        Options = new() { Target = "row", PublicUrl = Audience, ListenUrl = "http://127.0.0.1:0", Issuer = Issuer, Audience = Audience, Scope = "user_impersonation", AllowedSubjects = ["alice", "bob"], TenantId = Tenant, IdleTimeoutSeconds = 10 };
     }
     internal async Task StartAsync(CancellationToken token, bool tls = false, bool entra = false, Action<WebApplicationBuilder>? configure = null, bool proxy = false, bool embedded = false) {
         var options = Options;
@@ -50,10 +48,11 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
             await File.WriteAllBytesAsync(m_certificatePath, m_certificate.Export(X509ContentType.Pfx), token);
             options = options with { ListenUrl = "https://127.0.0.1:0", CertificatePath = m_certificatePath };
         }
-        if (entra) { options = options with { SubjectClaim = "oid", AuthorizationScope = "api://test-api/puck.operator" }; }
+        if (entra) { options = options with { SubjectClaim = "oid", AuthorizationScope = "api://test-api/user_impersonation" }; }
         if (proxy) { options = options with { TrustedProxy = new() { Issuer = Issuer, Audience = Audience, SubjectClaim = "sub", Subject = "front-door", TenantId = Tenant } }; }
         void Configure(WebApplicationBuilder builder) {
             builder.Logging.ClearProviders();
+            builder.Services.AddSingleton<RemoteMcpHost>(new ProbeHost(this));
             configure?.Invoke(builder);
             builder.Services.AddSingleton<TimeProvider>(Clock);
             builder.Services.Configure<JwtBearerOptions>(RemoteMcpServer.AuthenticationScheme, jwt => jwt.BackchannelHttpHandler = new IssuerHandler(this));
@@ -83,9 +82,9 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
 
     internal string Token(string subject = "alice", string? failure = null, int lifetimeSeconds = 300, string? audience = null) {
         using var wrongKey = failure == "signature" ? RSA.Create(2048) : null;
-        var claims = new Dictionary<string, object> { ["sub"] = subject, ["scope"] = "puck.operator", ["tid"] = Tenant };
-        if (failure == "entra") { claims.Remove("scope"); claims["scp"] = "other puck.operator"; claims["oid"] = subject; claims["sub"] = "pairwise-client-subject"; }
-        if (failure is "scope" or "app-only") { claims.Remove("scope"); claims["roles"] = new[] { "puck.operator" }; }
+        var claims = new Dictionary<string, object> { ["sub"] = subject, ["scope"] = "user_impersonation", ["tid"] = Tenant };
+        if (failure == "entra") { claims.Remove("scope"); claims["scp"] = "other user_impersonation"; claims["oid"] = subject; claims["sub"] = "pairwise-client-subject"; }
+        if (failure is "scope" or "app-only") { claims.Remove("scope"); claims["roles"] = new[] { "user_impersonation" }; }
         if (failure == "tenant") { claims["tid"] = "ddc729ed-3bb7-4e22-8b1b-f47d23a9d6ad"; }
         if (failure == "duplicate-subject") { claims["sub"] = new[] { "alice", "bob" }; }
         return new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor {
@@ -100,7 +99,7 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
     }
     public async ValueTask DisposeAsync() {
         await StopGatewayAsync(CancellationToken.None);
-        m_host.Dispose(); m_key.Dispose();
+        m_key.Dispose();
         m_certificate?.Dispose();
         if (m_certificatePath is not null) { File.Delete(m_certificatePath); }
     }
@@ -134,6 +133,14 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
             return new(request.Id, "completed", request.Command == "read" ? m_value : request.Command!);
         }
         public void Dispose() { if (Interlocked.Exchange(ref m_disposed, 1) == 0) { Interlocked.Decrement(ref owner.Active); } }
+    }
+    private sealed class ProbeHost(RemoteMcpFixture owner) : RemoteMcpHost {
+        public override bool IsReady => true;
+        public override ValueTask<IControlSession> AttachAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) {
+            Interlocked.Increment(ref owner.Opened);
+            Interlocked.Increment(ref owner.Active);
+            return ValueTask.FromResult<IControlSession>(new ProbeSession(owner));
+        }
     }
     internal sealed class ManualClock : TimeProvider {
         private long m_offset;

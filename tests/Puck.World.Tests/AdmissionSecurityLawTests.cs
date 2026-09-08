@@ -24,10 +24,8 @@ namespace Puck.World.Tests;
 /// concurrent-handshake CEILING, is proven by code review + the deadline law below exercising the same accounting
 /// fields — a dedicated ceiling law was judged not worth 64 additional live sockets per run). These drive the REAL
 /// wire door (<see cref="WorldPeerHost"/>, a genuine <see cref="PeerTestClient"/>, a genuine signed attestation claim) rather
-/// than poking server-internal state directly — <c>WorldServer.TryAdmitPeerConnection</c> is <c>internal</c>
-/// and deliberately has no test-only public seam (CLAUDE.md's IVT ruling: widen the member or don't reach it, and
-/// this member should NOT be public — it is a security-relevant door, not a utility), so the only faithful way to
-/// seed a "connected, verified peer" is to actually connect and verify one.
+/// than seeding socket state directly. TryAdmitPeerConnection is also used by the trusted OAuth host adapter;
+/// the socket laws still exercise the complete cryptographic Hello door. OAuth admission has separate laws.
 /// </summary>
 public sealed class AdmissionSecurityLawTests {
     /// <summary>A TCP peer with no Observe grant must not inherit the trusted in-process query surface merely by

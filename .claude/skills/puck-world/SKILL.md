@@ -84,15 +84,19 @@ artifact cleanup. Host deadlines remain enforced even when an injected session i
 host results are `unknown`. MCP results carry the same schema-backed metadata as JSON text and structured
 content; invalid tool arguments return tool errors. The adapter bounds UTF-8 input and pending replies and
 closes both stdio streams on shutdown; malformed input or stalled output exits with failure.
-Cancellation/EOF close ingress without stopping World or its recordings. Remote Operator uses
-`puck mcp --http <configuration.json>` with HTTPS, OIDC/JWT validation and explicit subject grants.
-Both transports select MCP 2026-07-28; remote HTTP is stateless with caller-bound application attachment
-handles (`puck_attach`/`puck_detach`). Four attachments and four active HTTP requests are admitted; idle
-expiry and cancellation release bindings. Entra uses exact tenant issuer, API audience, oid/tid and delegated
-scp; authorizationScope can advertise the fully qualified scope separately. Live grant removal closes attachments
-and active service requests. Optional owned-host `services` settings install delegated Azure observation reads;
-their assertions remain request-confined and their field/subject grants are separate. Participant tools and
-delegated cloud writes remain uninstalled. Run `tests/Puck.Hosting.Tests`, `tests/Puck.Networking.Tests`, `tests/Puck.Cli.Tests` and the real-host smoke described in
+Cancellation/EOF close ingress without stopping World or its recordings. Remote MCP is an in-process silo
+extension, never a gateway to a local Console capability. Reuse the existing `user_impersonation` scope.
+The host matches validated issuer/subject to explicit OAuth admission and stamps a generation-bound Peer.
+Replica disclosure authorizes text reads; ordinary World grants authorize state-cell writes. The remote
+command allowlist must remain fail-closed for local admin verbs. Current target/owner binding is fixed;
+distributed placement and portable handles are not implemented. Both transports select MCP 2026-07-28.
+Remote HTTP uses caller-bound application handles, four attachments and four concurrent HTTP requests.
+Revocation closes attachments and active requests. Optional Azure services reuse Function self-onboarding
+and observation providers through request-confined OBO with federated managed identity client assertions;
+never substitute host credentials. Deployment uses automatic Caddy TLS behind the existing load balancer,
+persistent certificate state outside World mounts, and Azure expiry/readiness alerts. Durable delegated
+cloud writes and richer participant tools remain uninstalled.
+Run `tests/Puck.Hosting.Tests`, `tests/Puck.Networking.Tests`, `tests/Puck.Cli.Tests` and the real-host smoke described in
 [`Puck.Mcp`](../../../src/Puck.Mcp/README.md) when changing this attachment seam.
 
 `src/Puck.Audio` is a sibling engine-services project: the deterministic fixed-point mixer/voice-synth core

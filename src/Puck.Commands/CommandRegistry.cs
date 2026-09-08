@@ -364,6 +364,11 @@ public sealed class CommandRegistry {
         ArgumentNullException.ThrowIfNull(line);
         ArgumentNullException.ThrowIfNull(session);
 
+        if (session.Authorize is { } authorize &&
+            (!m_byNameAlt.TryGetValue(LeadingVerb(line), out var definition) || !authorize(definition.Metadata))) {
+            return CommandResult.Error("This session is not authorized for that command.");
+        }
+
         return SubmitStamped(
             line: line,
             session: session

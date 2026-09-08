@@ -151,7 +151,7 @@ public sealed class RemoteMcpTests {
     public void UnsafeDeploymentConfigurationFailsBeforeListening() {
         if (!SupportedPlatform()) { return; }
         // No server starts: validation precedes every builder/customization callback.
-        var options = new RemoteMcpOptions { AttachmentPath = "unused", PublicUrl = RemoteMcpFixture.Audience, ListenUrl = "http://127.0.0.1:8080", Issuer = RemoteMcpFixture.Issuer, Audience = "api", Scope = "puck.operator", AllowedSubjects = ["alice"] };
+        var options = new RemoteMcpOptions { Target = "row", PublicUrl = RemoteMcpFixture.Audience, ListenUrl = "http://127.0.0.1:8080", Issuer = RemoteMcpFixture.Issuer, Audience = "api", Scope = "user_impersonation", AllowedSubjects = ["alice"] };
         Assert.Throws<ArgumentException>(() => RemoteMcpServer.Build(options with { ListenUrl = "http://0.0.0.0:8080" }));
         Assert.Throws<ArgumentException>(() => RemoteMcpServer.Build(options with { PublicUrl = "http://mcp.example.test/mcp" }));
         Assert.Throws<ArgumentException>(() => RemoteMcpServer.Build(options with { Issuer = "http://issuer.example.test" }));

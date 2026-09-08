@@ -2,41 +2,33 @@
 
 Initially reviewed after technical rebuttal on 2026-09-07 against checkout base
 `621127f0b67a`; the engine prerequisites were reviewed again at `5f63f7a533c4`.
-Local and remote OAuth-protected Operator MCP, optional host composition and OBO observation reads are implemented; the remaining milestones
-below are future work. Source links are repository-relative.
+Local Operator MCP and delegated remote MCP are separate authority surfaces.
+Remote ingress accepts the validated issuer/subject, admits that identity through
+the World's existing peer lifecycle, and carries its generation through commands.
+No HTTP mode publishes a local Console capability. Source links are relative.
 
-The adapter is now `Puck.Mcp`, an optional extension over `Puck.Hosting` with no
-World dependency. CLI composes the existing silo with `AddPuckMcp`; standalone
-silo and World retain no MCP reference. Named control targets keep independent
-Console sessions and revoke them at row retirement. Windows and Linux x64 local
-capabilities, live grant reload/revocation, readiness, operation logs and Meter/
-ActivitySource instrumentation support the same hosting seam. The unified Bicep
-reuses the existing silo, TLS load balancer, Key Vault and Entra registration.
+`Puck.Mcp` remains an optional extension over `Puck.Hosting`, without a World
+dependency. CLI installs it in the existing silo. The Function App owns onboarding:
+`puck_onboard` and attachment admission call its existing `/api/self-onboard`
+through OBO. Inventory/metrics reads also exchange the current user's assertion
+with a federated managed identity client assertion. Failed delegation never falls
+back to workload credentials.
 
-The Function App supplies the identity and infrastructure reference, not the MCP
-hosting location. MCP remains an optional ASP.NET Core extension. Its SDK pipeline
-can share an existing host without owning another listener or replacing that
-host's authentication defaults. Configured proxy authentication independently
-checks the origin identity and forwarded caller; OBO uses the validated caller
-ticket. Azure managed-certificate ingress and distributed world-owner routing
-still need deployment integration; the current VM/PFX deployment has not been
-silently replaced. See the [hosting and OAuth contract](../../src/Puck.Mcp/README.md).
+Unified deployment uses the existing single-worker load balancer and stock Caddy
+for automatic HTTPS issuance and renewal on 443. Certificate state survives
+releases outside the World container. Azure availability checks monitor readiness
+and impending certificate expiry through the existing hosting action group.
+One explicit participant list generates gateway access and World OAuth admission.
+Replica disclosure permits text reads; writes require ordinary World row grants
+and mutation masks. See the [hosting contract](../../src/Puck.Mcp/README.md).
 
-The CLI's optional Azure service adapter exposes configured inventory/metrics
-reads through OBO, using the existing observation providers and federated managed
-identity pattern. These request-scoped reads have no persisted assertion or host
-credential fallback. Delegated mutation jobs and Participant tools remain later
-slices; their recovery and authority gates below still apply.
-
-**Release target: secure local and remote access, with explicit Operator and
-Participant profiles.** First-party and external clients are both release
-requirements; the current single-issuer grant profile does not complete external
-onboarding. A trusted co-developer gets the same console control plane as the
-human at the terminal. An embodied participant gets the scoped bridge. Remote
-cloud service delegation retains its own authorization and recovery boundaries.
-Body grants do not authorize host files, composed images, or Azure resources;
-that fact must not become a reason to restrict an explicitly trusted operator.
-
+Remaining release evidence is live deployment: DNS/ACME, real Entra consent,
+first-party and external sign-in, Function onboarding and ARM OBO. Local tests
+cannot certify those external systems. Distributed placement and portable handles
+remain future work: the current release supports one authoritative worker and a
+fixed World target. Arbitrary discovery of each user's private Worlds, durable
+delegated cloud jobs and richer participant tools remain later slices under the
+authority and recovery gates below.
 ## Local Operator implementation, 2026-09-08
 
 Implemented from corrected prerequisite base `b1066e2973e0`: neutral
@@ -588,48 +580,14 @@ do not promise H.264 as standards-conforming WebM. Do not fabricate provenance.
 
 ## 8. Remote hosting and Azure delegation
 
-Remote Operator now uses the official ASP.NET Core SDK 2.2.0 and .NET 10 JWT bearer
-authentication in the existing optional adapter. Its executable configuration and
-deployment contract live in the [MCP README](../../src/Puck.Mcp/README.md#remote-http-and-oauth).
-Both local and remote servers select MCP 2026-07-28 explicitly, following its
-[authorization requirements](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization).
-The gateway implements protected-resource discovery, TLS, Host/Origin validation,
-bounded HTTP admission and signature/issuer/audience/lifetime/delegated-scope
-checks on every request. Explicit subjects receive full Operator authority.
-Entra uses oid/tid and separates requested authorization scopes from signed scp
-values. Authentication never trusts protocol clientInfo. The CLI now requires
-the ASP.NET Core runtime; base World still carries no MCP packages.
-
-Stateless HTTP requests use explicit caller-bound application attachments to
-preserve Console ordering and waits. Cancellation, active token expiry, unknown
-outcomes and gateway shutdown release them; idle expiry bounds abandoned handles.
-The gateway never reconnects or replays commands implicitly. Attachments are local
-to their gateway instance. Tenant deployment values remain configurable; local
-cryptographic tests do not establish live Entra registration/consent or deployment.
-
-The final focused run passed 37 MCP tests, including HTTP saturation and recovery.
-The World Release build passed without warnings or errors, and CLI publish,
-locked restore, documentation links and the length ledger passed. The declared
-architecture report passed for 88 projects; resolved checks also ran in the
-affected builds. The HTTP dependencies advance IdentityModel to 8.19.2 in CLI's
-lock graph; the earlier local-only package observations above predate this step.
-A real Direct3D offscreen World accepted a dynamics edit through HTTPS with signed
-Entra-shaped JWTs and returned a fully decoded 640×480 RGBA PNG. Human Console
-status answered during the attachment's wait; cancelling its pending capture and
-creating a fresh attachment allowed another capture. This used a controlled OIDC
-issuer, not live tenant consent. That run did not verify deployment or downstream OBO.
-The broader CLI run passed 114 of 121 tests. Its seven failures are the schema
-drift check and six official-tree checks blocked by that drift: four generated
-World schemas still describe the concurrently renamed identity types. Those
-other-session source and generated files were left to their owner.
-
-The subsequent integration adds optional `Puck.Mcp` host composition, live grant
-revocation, readiness and diagnostics, Linux x64 capabilities, unified Bicep wiring,
-and request-bound delegated inventory and metrics observations. The OBO tests use
-the real Azure Identity and ARM pipelines with a controlled token endpoint;
-they establish assertion exchange and no host-identity fallback, not live consent.
-Participant admission and durable delegated mutations remain future work:
-
+Remote MCP uses official ASP.NET Core SDK 2.2.0 and .NET 10 JWT bearer authentication.
+Both transports select MCP 2026-07-28. The executable configuration, trust boundaries,
+limits and verification recipes live in the [MCP README](../../src/Puck.Mcp/README.md#remote-http-and-oauth).
+The deployed Entra API retains its existing `user_impersonation` scope. Gateway
+access, World admission/disclosure, World grants and downstream consent remain
+separate decisions, evaluated against the authenticated caller. Remote text does
+not confer full Console authority. Richer participant tools and durable delegated
+cloud mutations remain future work.
 Keep the remaining integration on the existing platform. The unified
 [Bicep entry point](../../src/Puck.Azure.Resources/main.bicep) already owns Entra
 application registration, delegated scopes, federated credentials, ingress,

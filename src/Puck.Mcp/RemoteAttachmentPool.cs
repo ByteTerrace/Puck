@@ -32,7 +32,8 @@ internal sealed class RemoteAttachmentPool : IAsyncDisposable {
     private int m_opening;
     private bool m_disposed;
 
-    internal async Task<string?> AttachAsync(string owner, CancellationToken token) {
+    internal async Task<string?> AttachAsync(RemoteMcpCaller caller, CancellationToken token) {
+        var owner = caller.Subject;
         lock (m_gate) {
             ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
             if ((m_attachments.Count + m_opening) >= 4) { return null; }
@@ -44,7 +45,7 @@ internal sealed class RemoteAttachmentPool : IAsyncDisposable {
         try {
             using var stop = CancellationTokenSource.CreateLinkedTokenSource(token1: token, token2: m_stop.Token);
 
-            client = await m_host.AttachAsync(owner, stop.Token).ConfigureAwait(continueOnCapturedContext: false);
+            client = await m_host.AttachAsync(caller, stop.Token).ConfigureAwait(continueOnCapturedContext: false);
             lock (m_gate) {
                 ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
                 stop.Token.ThrowIfCancellationRequested();

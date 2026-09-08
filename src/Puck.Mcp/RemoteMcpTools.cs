@@ -41,11 +41,11 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
         if (parameters.Name == "puck_attach") {
             if (parameters.Arguments is { Count: > 0 }) { return AttachmentResult(error: true, id: null, output: "Attach takes no arguments."); }
             try {
-                var id = await attachments.AttachAsync(owner: owner, token: token).ConfigureAwait(continueOnCapturedContext: false);
+                var id = await attachments.AttachAsync(caller: caller, token: token).ConfigureAwait(continueOnCapturedContext: false);
 
-                return AttachmentResult(error: (id is null), id: id, output: ((id is null) ? "All four attachment slots are occupied." : "Explicit Operator attachment created. Keep this handle private and call serially."));
+                return AttachmentResult(error: (id is null), id: id, output: ((id is null) ? "All four attachment slots are occupied." : "Delegated World attachment created. Keep this handle private and call serially."));
             } catch (Exception error) when ((error is IOException or InvalidDataException or UnauthorizedAccessException or System.Net.Sockets.SocketException or InvalidOperationException or JsonException)) {
-                return AttachmentResult(error: true, id: null, output: "World attachment unavailable. Ask the host operator to check local control.");
+                return AttachmentResult(error: true, id: null, output: "World attachment unavailable. Check account onboarding, World admission and target readiness.");
             }
         }
         var arguments = ((parameters.Arguments is { } supplied) ? new Dictionary<string, JsonElement>(supplied, StringComparer.Ordinal) : []);
@@ -70,7 +70,7 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
     }
     private static Tool AttachmentTool(bool detach) => new() {
         Name = (detach ? "puck_detach" : "puck_attach"),
-        Description = (detach ? "Close your Operator attachment and cancel its pending ingress. Already dispatched effects cannot be undone." : "Create an isolated Operator attachment to this gateway's World. Returns a caller-bound attachmentId required for exec and capture. At most four attachments; idle expiry applies. Never automatically reattach and replay uncertain commands."),
+        Description = (detach ? "Close your delegated attachment and cancel its pending ingress. Already dispatched effects cannot be undone." : "Create an isolated delegated attachment to this gateway's World. Returns a caller-bound attachmentId required for exec and capture. At most four attachments; idle expiry applies. Never automatically reattach and replay uncertain commands."),
         InputSchema = (detach ? DetachInput : AttachInput),
         OutputSchema = AttachmentOutput,
         Annotations = new() { DestructiveHint = detach, IdempotentHint = false, OpenWorldHint = false, ReadOnlyHint = false },

@@ -1,14 +1,14 @@
 {
-  "attachmentPath": "C:\\replace\\with\\printed-control-file.json",
+  "target": "row",
   "publicUrl": "https://mcp.example.com/mcp",
   "listenUrl": "http://127.0.0.1:8080",
   "issuer": "https://login.microsoftonline.com/<tenant-id>/v2.0",
   "audience": "<api-application-client-id>",
-  "scope": "puck.operator",
-  "authorizationScope": "api://<api-application-client-id>/puck.operator",
+  "scope": "user_impersonation",
+  "authorizationScope": "api://<api-application-client-id>/user_impersonation",
   "subjectClaim": "oid",
   "tenantId": "<tenant-id>",
-  "allowedSubjects": ["<operator-object-id>"],
+  "allowedSubjects": ["<participant-object-id>"],
   "allowedOrigins": [],
   "idleTimeoutSeconds": 300
 }

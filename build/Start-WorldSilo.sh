@@ -56,10 +56,14 @@ printf '%s' '__FEDERATION_KEY__' | base64 -d >/etc/puck/federation.pk8
 chgrp 1654 /etc/puck/silo.json /etc/puck/federation.pk8
 chmod 640 /etc/puck/silo.json /etc/puck/federation.pk8
 if [ '__MCP_ENABLED__' = 1 ]; then
+    rm -f /etc/puck/mcp.pfx
     printf '%s' '__MCP_DOCUMENT__' | base64 -d >/etc/puck/mcp.json
-    printf '%s' '__MCP_CERTIFICATE__' | base64 -d >/etc/puck/mcp.pfx
-    chgrp 1654 /etc/puck/mcp.json /etc/puck/mcp.pfx
-    chmod 640 /etc/puck/mcp.json /etc/puck/mcp.pfx
+    printf '%s' '__MCP_TLS_DOCUMENT__' | base64 -d >/etc/puck/tls.json
+    chgrp 1654 /etc/puck/mcp.json
+    chmod 640 /etc/puck/mcp.json
+    chgrp 1655 /etc/puck/tls.json
+    chmod 640 /etc/puck/tls.json
+    install -d -m 700 -o 1655 -g 1655 /var/lib/puck-tls
 fi
 cat >/etc/puck/firewall.sh <<'FIREWALL'
 #!/bin/bash
@@ -90,8 +94,34 @@ WantedBy=multi-user.target
 UNIT
 systemctl daemon-reload
 systemctl enable --now puck-world.service
+if [ '__MCP_ENABLED__' = 1 ]; then
+    cat >/etc/systemd/system/puck-tls.service <<'TLSUNIT'
+[Unit]
+Description=Puck automatic HTTPS
+Requires=docker.service
+After=docker.service network-online.target puck-world.service
+[Service]
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+ExecStartPre=-/usr/bin/docker rm puck-tls
+ExecStart=/usr/bin/docker run --name puck-tls --network host --user 1655:1655 --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --cap-drop ALL --security-opt no-new-privileges --pids-limit 128 --memory 128m --log-driver local --log-opt max-size=10m --log-opt max-file=3 --env XDG_DATA_HOME=/data --env XDG_CONFIG_HOME=/data --mount type=bind,source=/etc/puck/tls.json,target=/tls.json,readonly --mount type=bind,source=/var/lib/puck-tls,target=/data --entrypoint /usr/bin/caddy __IMAGE__ run --config /tls.json
+ExecStop=/usr/bin/docker stop --time 20 puck-tls
+[Install]
+WantedBy=multi-user.target
+TLSUNIT
+    systemctl daemon-reload
+    systemctl enable puck-tls.service
+    systemctl restart puck-tls.service
+else
+    systemctl disable --now puck-tls.service 2>/dev/null || true
+fi
 for attempt in $(seq 1 180); do
     if curl --fail --silent http://127.0.0.1:__HEALTH_PORT__/healthz; then
+        if [ '__MCP_ENABLED__' = 1 ] && ! curl --fail --silent --max-time 10 --connect-to '__MCP_HOST__:443:127.0.0.1:8443' 'https://__MCP_HOST__/.well-known/oauth-protected-resource/mcp' >/dev/null; then
+            sleep 2
+            continue
+        fi
         printf '%s\n' '__IMAGE__' >/etc/puck/release
         # Keep the running image and one previous release. Remove only unused world-silo images.
         python3 - <<'CLEANUP'

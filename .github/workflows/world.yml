@@ -3,7 +3,7 @@ name: Puck world
 on:
   push:
     branches: [main, codex/azure-ci]
-    paths: ['src/**', 'build/**', '.github/workflows/world.yml', 'Directory.*', 'global.json', 'nuget.config', '.dockerignore']
+    paths: ['src/**', 'build/**', 'tests/Puck.World.Azure.Tests/**', 'tests/Puck.World.Schema.Tests/**', 'tests/Puck.World.Tests/**', '.github/workflows/world.yml', '.github/actions/setup-puck/**', 'Directory.*', 'global.json', 'nuget.config', '.dockerignore']
   workflow_dispatch:
 
 permissions:
@@ -30,6 +30,11 @@ jobs:
         run: docker build -f src/Puck.World.Silo/Dockerfile -t "puck/world-silo:$GITHUB_SHA" .
       - name: Install QUIC for verification
         run: bash build/Install-Quic.sh
+      - name: Verify world authentication and recovery laws
+        run: |
+          dotnet test tests/Puck.World.Azure.Tests -c Release -p:RestoreLockedMode=true --filter FullyQualifiedName~EntraWorldAuthenticatorTests
+          dotnet test tests/Puck.World.Schema.Tests -c Release -p:RestoreLockedMode=true --filter FullyQualifiedName~WorldSiloDefinitionLawTests
+          dotnet test tests/Puck.World.Tests -c Release -p:RestoreLockedMode=true --filter FullyQualifiedName~WorldSiloLifecycleLawTests
       - name: Verify primary world checkpoint and restart
         shell: bash
         run: dotnet run -c Release --file build/Azure.cs -- test-world-container --image "puck/world-silo:$GITHUB_SHA"

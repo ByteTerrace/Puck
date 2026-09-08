@@ -318,3 +318,5 @@ dotnet test tests/Puck.Hosting.Tests/Puck.Hosting.Tests.csproj -c Release
 dotnet test tests/Puck.Networking.Tests/Puck.Networking.Tests.csproj -c Release
 dotnet test tests/Puck.Cli.Tests/Puck.Cli.Tests.csproj -c Release
 ```
+
+The in-process control contract carries a validated `ControlIdentity` (issuer and subject). The host must authorize it and select the acting principal; `ConsoleControlSession` supports a live command guard on the ordinary pump. Local capability sessions retain their Console authority. See [remote admission](../Puck.Mcp/README.md#remote-http-and-oauth).

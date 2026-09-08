@@ -13,6 +13,53 @@ public sealed class WorldSiloLifecycleLawTests {
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
+    public async Task ReplacementActivationUsesPublishedNetworkBindingAfterCheckpointRecovery(bool listen) {
+        using var directory = new TempWorldDirectory();
+        using var output = new BufferedConsoleOutput();
+        using var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
+        var keyFile = Path.Combine(path1: directory.RootPath, path2: "world.key");
+
+        File.WriteAllBytes(keyFile, key.ExportPkcs8PrivateKey());
+        var identity = new WorldAuthorityIdentity(Owner: Guid.NewGuid(), World: SafeName.Parse(candidate: "row"));
+        var store = PuckStorageTestComposition.BuildStore();
+        var backend = new WorldAuthorityBlobStore(store: store, target: new DirectoryObjectStorageTarget(directory.RootPath));
+        var definition = Fixtures.BuildDocument();
+
+        definition = definition with { HostRaw = Fixtures.StandardHost with { Authority = "old.example:33333", Listen = null, Presentation = WorldHostPresentation.None } };
+        Assert.True(condition: (await backend.PublishDefinitionAsync(identity, definition, TestContext.Current.CancellationToken)).Ok);
+        var original = Host(directory.RootPath, store, output, [new(identity.Owner, identity.World, new(KeyFile: keyFile))]);
+        using var originalInstances = original.Instances;
+
+        await PumpAsync(original, original.ActivateAsync(identity, TestContext.Current.CancellationToken));
+        await PumpAsync(original, original.DrainAsync(ct: TestContext.Current.CancellationToken));
+        string? endpoint = null;
+
+        if (listen) {
+            using var reservation = new System.Net.Sockets.Socket(addressFamily: System.Net.Sockets.AddressFamily.InterNetwork, protocolType: System.Net.Sockets.ProtocolType.Udp, socketType: System.Net.Sockets.SocketType.Dgram);
+
+            reservation.Bind(localEP: new System.Net.IPEndPoint(address: System.Net.IPAddress.Loopback, port: 0));
+            endpoint = reservation.LocalEndPoint!.ToString();
+        }
+        var published = definition with { HostRaw = definition.Host with { Authority = "play.puck.byteterrace.com:7825", Listen = endpoint } };
+
+        Assert.True(condition: (await backend.PublishDefinitionAsync(identity, published, TestContext.Current.CancellationToken)).Ok);
+        var replacement = Host(directory.RootPath, store, output, [new(identity.Owner, identity.World, new(KeyFile: keyFile))]);
+        using var replacementInstances = replacement.Instances;
+
+        await PumpAsync(replacement, replacement.ActivateAsync(identity, TestContext.Current.CancellationToken));
+        Assert.True(condition: replacement.Instances.TryGet(identity.World.Value, out var row));
+        Assert.Equal(definition.Host.Authority, row!.Server.Definition.Host.Authority);
+        Assert.Equal(published.Host.Authority, row.Federation.Subject);
+        Assert.Equal(endpoint, row.Door!.ListenEndpoint);
+        await PumpAsync(replacement, replacement.ReloadAsync(identity, TestContext.Current.CancellationToken), step: true);
+        Assert.Equal(published.Host.Authority, row.Server.Definition.Host.Authority);
+        Assert.Equal(endpoint, row.Server.Definition.Host.Listen);
+        Assert.NotNull(value: await backend.LoadLatestAsync(identity, TestContext.Current.CancellationToken));
+        await PumpAsync(replacement, replacement.DrainAsync(ct: TestContext.Current.CancellationToken));
+    }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
     public async Task PublishedReloadUsesExistingRebuildAndCommitsOnlyAfterCheckpoint(bool failCheckpoint) {
         using var directory = new TempWorldDirectory();
         using var output = new BufferedConsoleOutput();
@@ -26,7 +73,7 @@ public sealed class WorldSiloLifecycleLawTests {
         var backend = new WorldAuthorityBlobStore(store: store, target: target);
         var definition = Fixtures.BuildDocument();
 
-        definition = definition with { HostRaw = Fixtures.StandardHost with { Authority = "localhost:33333", Presentation = WorldHostPresentation.None } };
+        definition = definition with { HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", Presentation = WorldHostPresentation.None } };
         Assert.True(condition: (await backend.PublishDefinitionAsync(identity, definition, TestContext.Current.CancellationToken)).Ok);
         var host = Host(directory.RootPath, store, output, [new(identity.Owner, identity.World, new(KeyFile: keyFile))]);
         using var instances = host.Instances;
@@ -73,7 +120,7 @@ public sealed class WorldSiloLifecycleLawTests {
         Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(bytes: saved.Encoded.Span, checkpoint: out var decoded, reason: out var reason), userMessage: reason);
         Assert.Equal("Published update", WorldDefinitionSerialization.Deserialize(utf8Json: decoded!.Server.DefinitionJson).Metadata!.Title);
 
-        var refused = changed with { HostRaw = changed.Host with { Authority = "another-host:33333" } };
+        var refused = changed with { HostRaw = changed.Host with { Authority = "another-host:7825" } };
 
         Assert.True(condition: (await backend.PublishDefinitionAsync(identity, refused, TestContext.Current.CancellationToken)).Ok);
         await Assert.ThrowsAsync<InvalidOperationException>(testCode: () => PumpAsync(host, host.ReloadAsync(identity, TestContext.Current.CancellationToken), step: true));
@@ -142,7 +189,7 @@ public sealed class WorldSiloLifecycleLawTests {
         var backend = new WorldAuthorityBlobStore(store: store, target: target);
         var definition = Fixtures.BuildDocument();
 
-        definition = definition with { HostRaw = Fixtures.StandardHost with { Authority = "localhost:33333", Presentation = WorldHostPresentation.None } };
+        definition = definition with { HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", Presentation = WorldHostPresentation.None } };
         var published = await backend.PublishDefinitionAsync(identity, definition, TestContext.Current.CancellationToken);
 
         Assert.True(condition: published.Ok, userMessage: published.Detail);

@@ -79,6 +79,9 @@ public static class WorldSiloApplication {
         builder.Services.AddSingleton<ICommandModule, WorldWaitCommandModule>();
         builder.Services.AddSingleton<ICommandModule, WorldTimingCommandModule>();
         builder.Services.AddSingleton<ICommandModule, WorldNetworkCommandModule>();
+        builder.Services.AddSingleton<Puck.World.Protocol.IServerLink, SiloServerLink>();
+        builder.Services.AddSingleton<Puck.World.Protocol.WorldDeferredVerbEchoes>();
+        builder.Services.AddSingleton<ICommandModule, WorldStateCommandModule>();
         // A bare router/registry: the silo embodies no local seats and drives no physical input, so the bindings and
         // principal resolver below bind nothing and claim no principal — HeadlessTickHostedService still requires exactly
         // one IFixedStepSimulation paired with exactly one InputRouter, so this is the minimal pair that satisfies it

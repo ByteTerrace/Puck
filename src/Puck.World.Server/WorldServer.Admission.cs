@@ -83,7 +83,7 @@ public sealed partial class WorldServer {
     /// body, through the same <see cref="WorldServerEvent.PeerDisconnected"/> ordered-domain path a census shrink
     /// uses. <c>Server.WorldPeerHost</c> calls this from the tick thread on socket teardown (graceful or dead).</summary>
     /// <param name="peer">The peer entry <see cref="TryAdmitPeerConnection"/> returned at admission.</param>
-    internal void DisconnectPeerConnection(WorldPeerEventEntry peer) {
+    public void DisconnectPeerConnection(WorldPeerEventEntry peer) {
         ApplyLifecycleEvents(
             admitted: [],
             disconnected: [peer],
@@ -111,9 +111,9 @@ public sealed partial class WorldServer {
     }
     /// <summary>Admits one remote-human peer connection through the population door and dispatches the
     /// <see cref="WorldServerEvent.PeerAdmitted"/> event through the same ordered domain every other lifecycle event
-    /// drains through — <c>Server.WorldPeerHost</c>'s Hello door is the one caller, and it calls this only from the
+    /// drains through. Trusted QUIC and OAuth host adapters call this only from the
     /// tick thread (the population/grant tables carry no lock), only after <see cref="Protocol.WorldAdmissionDoor"/>
-    /// has already verified the connecting peer's identity off the tick thread. Refused by name on whichever
+    /// has already matched the identity verified by the transport. Refused by name on whichever
     /// capacity bound <see cref="WorldPopulation.TryAdmitRemotePeer"/> names.</summary>
     /// <param name="verdict">What <see cref="Protocol.WorldAdmissionDoor"/> decided this identity is authorized —
     /// the only shape this method accepts, so no ingress can hand it grant rows of its own. Empty templates mint
@@ -131,7 +131,7 @@ public sealed partial class WorldServer {
     /// <param name="admitted">The admitted peer entry on success.</param>
     /// <param name="refusal">The named refusal on failure.</param>
     /// <returns><see langword="true"/> on success.</returns>
-    internal bool TryAdmitPeerConnection(WorldAdmissionVerdict? verdict, IReadOnlyList<WorldAdmissionEntry>? expectedAdmissionEntries, out WorldPeerEventEntry admitted, out string refusal) {
+    public bool TryAdmitPeerConnection(WorldAdmissionVerdict? verdict, IReadOnlyList<WorldAdmissionEntry>? expectedAdmissionEntries, out WorldPeerEventEntry admitted, out string refusal) {
         if (!ReferenceEquals(
             objA: m_definition.Admission,
             objB: expectedAdmissionEntries

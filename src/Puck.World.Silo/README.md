@@ -14,7 +14,7 @@ directory, and clustering. The generated schema is
 
 Optional host services are supplied by an outer composition through
 `WorldSiloApplication.RunAsync`. The silo exposes fixed-row Console sessions as
-`IControlSessionHost`; it has no MCP project or package dependency. The CLI can
+`IControlSessionHost`; it has no MCP project or package dependency. The host admits the validated issuer/subject through explicit OAuth admission and stamps the resulting Peer generation on commands. Replica disclosure authorizes text reads; writes require ordinary row grants. Remote sessions cannot use local administrative verbs. The CLI can
 install [Puck.Mcp](../Puck.Mcp/README.md#host-extension) with
 `puck mcp --silo <path> --http <remote.json>`. Row retirement closes all of its
 attached Console sessions, including queued commands and waits.

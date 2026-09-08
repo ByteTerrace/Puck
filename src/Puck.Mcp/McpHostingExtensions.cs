@@ -51,7 +51,7 @@ public static class McpHostingExtensions {
     }
     private sealed class HostedControlHost(IControlSessionHost host, string target) : RemoteMcpHost {
         public override bool IsReady => host.IsReady(target);
-        public override ValueTask<IControlSession> AttachAsync(string subject, CancellationToken cancellationToken) => host.AttachAsync(target, cancellationToken);
+        public override ValueTask<IControlSession> AttachAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) => host.AttachAsync(target, new(caller.Issuer, caller.Subject), cancellationToken);
     }
     private sealed class NestedLifetime : IHostLifetime {
         public Task WaitForStartAsync(CancellationToken cancellationToken) => Task.CompletedTask;

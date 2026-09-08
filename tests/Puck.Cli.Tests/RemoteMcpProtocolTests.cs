@@ -18,7 +18,7 @@ public sealed class RemoteMcpProtocolTests {
         Assert.False((await client.CallToolAsync("puck_attach", cancellationToken: Token)).IsError);
         using var response = await http.GetAsync("/.well-known/oauth-protected-resource/mcp", Token);
         using var metadata = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Token));
-        Assert.Equal("api://test-api/puck.operator", metadata.RootElement.GetProperty("scopes_supported")[0].GetString());
+        Assert.Equal("api://test-api/user_impersonation", metadata.RootElement.GetProperty("scopes_supported")[0].GetString());
     }
 
     [Fact]

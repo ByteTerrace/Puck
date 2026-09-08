@@ -492,6 +492,36 @@ internal static class AzureAutomation {
         if (lifecycle is not null) { result["lifecycle"] = lifecycle.DeepClone(); }
         return result;
     }
+    private static JsonNode McpTlsConfiguration(string hostname) {
+        // Stock Caddy terminates only the known host, renews over the LB's existing 443 -> 8443 rule,
+        // and keeps its account/certificate state outside the application and release documents.
+        if (Uri.CheckHostName(hostname) != UriHostNameType.Dns || hostname.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not ('.' or '-'))) {
+            throw new InvalidDataException("MCP requires a public DNS hostname.");
+        }
+        return JsonNode.Parse($$$$"""
+            {
+              "admin":{"disabled":true},
+              "apps":{
+                "http":{"https_port":8443,"servers":{"mcp":{
+                  "listen":[":8443"],"protocols":["h1","h2"],
+                  "automatic_https":{"disable_redirects":true},
+                  "read_header_timeout":"10s","idle_timeout":"120s",
+                  "max_header_bytes":16384,
+                  "routes":[{"match":[{"host":["{{{{hostname}}}}"]}],"handle":[{
+                    "handler":"reverse_proxy","flush_interval":-1,
+                    "headers":{"request":{"delete":["ClientAuthorization"]}},
+                    "upstreams":[{"dial":"127.0.0.1:8082"}]
+                  }]}]
+                }}},
+                "tls":{"automation":{"policies":[{"subjects":["{{{{hostname}}}}"],"issuers":[{
+                  "module":"acme","ca":"https://acme-v02.api.letsencrypt.org/directory",
+                  "challenges":{"http":{"disabled":true},"tls-alpn":{"alternate_port":8443}}
+                }]}]}}
+              }
+            }
+            """)!;
+    }
+
     private static async Task DeployWorldAsync() {
         var outputs = Outputs();
         var configuration = Value(key: "worldSiloConfiguration", outputs: outputs);
@@ -531,7 +561,15 @@ internal static class AzureAutomation {
                     var world = Read(path: file);
                     var name = Path.GetFileName(path: file).Replace(comparisonType: StringComparison.Ordinal, newValue: "", oldValue: ".world.json");
 
-                    if (name == Text(value: configuration["worldName"])) { world["host"]!["authority"] = $"{host}:{port}"; world["host"]!["listen"] = $"0.0.0.0:{port}"; }
+                    if (name == Text(value: configuration["worldName"])) {
+                        world["host"]!["authority"] = $"{host}:{port}";
+                        world["host"]!["listen"] = $"0.0.0.0:{port}";
+                        if (outputs["worldMcpConfiguration"]?["value"]?["admission"] is JsonArray delegated) {
+                            var admission = world["admission"] as JsonArray ?? new JsonArray();
+                            if (world["admission"] is null) { world["admission"] = admission; }
+                            foreach (var participant in delegated) { admission.Add(participant!.DeepClone()); }
+                        }
+                    }
                     var path = Path.Combine(path1: temporary, path2: Path.GetFileName(path: file));
 
                     Write(path: path, value: world);
@@ -566,24 +604,11 @@ internal static class AzureAutomation {
             var script = File.ReadAllText(path: "build/Start-WorldSilo.sh");
             var mcpDeployment = outputs["worldMcpConfiguration"]?["value"];
             var mcpOptions = mcpDeployment?["options"];
-            var mcpCertificate = "";
-
-            if (mcpOptions is not null) {
-                mcpCertificate = await AzAsync("keyvault", "secret", "show", "--vault-name", vault,
-                    "--name", Text(value: mcpDeployment!["certificateSecretName"]), "--query", "value", "-o", "tsv");
-                Mask(value: mcpCertificate);
-                using var certificate = System.Security.Cryptography.X509Certificates.X509CertificateLoader.LoadPkcs12(
-                    Convert.FromBase64String(s: mcpCertificate), null,
-                    System.Security.Cryptography.X509Certificates.X509KeyStorageFlags.EphemeralKeySet);
-
-                if (!certificate.HasPrivateKey || !certificate.MatchesHostname(host) || (certificate.NotAfter.ToUniversalTime() <= DateTime.UtcNow)) {
-                    throw new InvalidDataException(message: "The MCP certificate needs a private key, the silo DNS name, and an unexpired validity period.");
-                }
-            }
             var replacements = new Dictionary<string, string> {
                 ["__MCP_ENABLED__"] = ((mcpOptions is null) ? "0" : "1"),
                 ["__MCP_DOCUMENT__"] = ((mcpOptions is null) ? "" : Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: mcpOptions.ToJsonString()))),
-                ["__MCP_CERTIFICATE__"] = mcpCertificate,
+                ["__MCP_TLS_DOCUMENT__"] = mcpOptions is null ? "" : Convert.ToBase64String(Encoding.UTF8.GetBytes(McpTlsConfiguration(host).ToJsonString())),
+                ["__MCP_HOST__"] = host,
                 ["__MCP_ENTRYPOINT__"] = ((mcpOptions is null) ? "" : "--entrypoint dotnet"),
                 ["__MCP_ARGUMENTS__"] = ((mcpOptions is null) ? "--silo /configuration/silo.json" : "/puck-cli/Puck.Cli.dll mcp --silo /configuration/silo.json --http /configuration/mcp.json"),
                 ["__SILO_DOCUMENT__"] = Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: silo.ToJsonString())),
@@ -839,6 +864,7 @@ internal static class AzureAutomation {
 
         if (Directory.Exists(path: fixture)) { throw new IOException(message: "Use a fresh silo smoke-test directory."); }
         const string Owner = "c3cba5cd-41c9-477e-a9de-15e1f4a4d1ec";
+        const string Port = "7825";
 
         Directory.CreateDirectory(path: Path.Combine(path1: fixture, path2: "worlds"));
         using (var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256)) {
@@ -851,7 +877,7 @@ internal static class AzureAutomation {
             var name = Path.GetFileName(path: source).Replace(comparisonType: StringComparison.Ordinal, newValue: "", oldValue: ".world.json");
             var world = Read(path: source);
 
-            if (name == "puck") { world["host"]!["authority"] = "localhost:33333"; world["host"]!["listen"] = "0.0.0.0:33333"; }
+            if (name == "puck") { world["host"]!["authority"] = $"localhost:{Port}"; world["host"]!["listen"] = $"0.0.0.0:{Port}"; }
             Write(path: Path.Combine(path1: fixture, path2: $"store/{Owner}/private/puck/hosted/{name}/definition.json"), value: world);
         }
         var silo = SiloDocument(owner: Owner, world: "puck", keyFile: "/fixture/federation.pk8", store: new JsonObject { ["type"] = "directory", ["settings"] = new JsonObject { ["path"] = "/fixture/store" } });
@@ -875,7 +901,7 @@ internal static class AzureAutomation {
             await DockerAsync("run", "-d", "--name", "silo-smoke", "--user", "1654:1654", "--read-only",
                 "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
                 "--pids-limit", "512", "--log-driver", "local", "--log-opt", "max-size=10m", "--log-opt", "max-file=3",
-                "--mount", $"type=bind,source={fixture},target=/fixture", "-p", "127.0.0.1:33333:33333/udp", "-p", "127.0.0.1:8081:8081",
+                "--mount", $"type=bind,source={fixture},target=/fixture", "-p", $"127.0.0.1:{Port}:{Port}/udp", "-p", "127.0.0.1:8081:8081",
                 image, "--silo", "/fixture/silo.json");
             try {
                 var checkpoint = "";
@@ -899,7 +925,7 @@ internal static class AzureAutomation {
                 using var liveness = await Http.GetAsync(requestUri: "http://127.0.0.1:8081/livez");
 
                 liveness.EnsureSuccessStatusCode();
-                await PuckAsync("world", "probe", "127.0.0.1", "33333", Path.Combine(path1: fixture, path2: "public-key"));
+                await PuckAsync("world", "probe", "127.0.0.1", Port, Path.Combine(path1: fixture, path2: "public-key"));
                 previous = checkpoint;
                 Console.WriteLine(value: $"PASS: Puck boot {boot} activated, checkpointed, and accepted an authenticated QUIC connection.");
             } finally {

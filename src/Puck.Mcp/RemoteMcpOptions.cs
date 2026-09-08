@@ -2,23 +2,19 @@ using System.Net;
 
 namespace Puck.Mcp;
 
-/// <summary>Explicit deployment and delegated-Operator policy for the remote MCP resource server.</summary>
+/// <summary>Explicit deployment and delegated-access policy for the remote MCP resource server.</summary>
 public sealed record RemoteMcpOptions {
     /// <summary>Preserves optional deployment defaults during source-generated JSON construction.</summary>
-    /// <param name="attachmentPath">A local capability path, or empty for an in-process target.</param>
     /// <param name="subjectClaim">The signed subject claim, defaulting to sub.</param>
     /// <param name="allowedOrigins">Additional browser origins; omitted means none.</param>
     /// <param name="idleTimeoutSeconds">Idle attachment lifetime, defaulting to five minutes.</param>
     [System.Text.Json.Serialization.JsonConstructor]
-    public RemoteMcpOptions(string attachmentPath = "", string subjectClaim = "sub", string[]? allowedOrigins = null, int idleTimeoutSeconds = 300) {
-        AttachmentPath = attachmentPath;
+    public RemoteMcpOptions(string subjectClaim = "sub", string[]? allowedOrigins = null, int idleTimeoutSeconds = 300) {
         SubjectClaim = subjectClaim;
         AllowedOrigins = allowedOrigins ?? [];
         IdleTimeoutSeconds = idleTimeoutSeconds;
     }
-    /// <summary>The running World's local capability file, accessible only to the gateway's OS user.</summary>
-    public string AttachmentPath { get; init; } = "";
-    /// <summary>The exact Console target in an in-process host; mutually exclusive with attachmentPath.</summary>
+    /// <summary>The exact World target in an in-process delegated host.</summary>
     public string? Target { get; init; }
     /// <summary>Optional service settings interpreted by the trusted host composition. Changes require restart.</summary>
     public System.Text.Json.JsonElement? Services { get; init; }
@@ -36,7 +32,7 @@ public sealed record RemoteMcpOptions {
     public required string Scope { get; init; }
     /// <summary>The OAuth scope clients request; defaults to scope. Entra commonly needs api://application-id/scope here while scp contains only the short scope.</summary>
     public string? AuthorizationScope { get; init; }
-    /// <summary>Subjects explicitly granted full Console and framebuffer authority for this World.</summary>
+    /// <summary>Subjects permitted through the HTTP gateway. World admission and service grants authorize operations separately.</summary>
     public required string[] AllowedSubjects { get; init; }
     /// <summary>The subject claim: sub for standard OIDC, or oid with a required tenantId for Entra.</summary>
     public string SubjectClaim { get; init; } = "sub";
@@ -66,8 +62,7 @@ public sealed record RemoteMcpOptions {
             listen.AbsolutePath != "/" || !string.IsNullOrEmpty(listen.UserInfo) || !string.IsNullOrEmpty(listen.Query) || !string.IsNullOrEmpty(listen.Fragment) ||
             (listen.Scheme == "http" && !IPAddress.IsLoopback(address)))) { throw new ArgumentException("listenUrl must use an IP literal; plaintext HTTP is restricted to loopback behind a TLS proxy."); }
         if (requireListener && new Uri(ListenUrl!).Scheme == "https" && string.IsNullOrWhiteSpace(CertificatePath)) { throw new ArgumentException("A direct HTTPS listener requires certificatePath."); }
-        if (string.IsNullOrWhiteSpace(Audience) || (!string.IsNullOrWhiteSpace(AttachmentPath) && !string.IsNullOrWhiteSpace(Target)) ||
-            (string.IsNullOrWhiteSpace(AttachmentPath) && string.IsNullOrWhiteSpace(Target) && Services is null)) { throw new ArgumentException("audience and one attachment source or an explicit service composition are required."); }
+        if (string.IsNullOrWhiteSpace(Audience) || (string.IsNullOrWhiteSpace(Target) && Services is null)) { throw new ArgumentException("audience and an in-process target or explicit service composition are required."); }
         if (string.IsNullOrEmpty(Scope) || Scope.Any(c => c is < '!' or > '~' or '"' or '\\')) { throw new ArgumentException("scope must be one OAuth scope token."); }
         if (AuthorizationScope is { } requested && (requested.Length == 0 || requested.Any(c => c is < '!' or > '~' or '"' or '\\'))) { throw new ArgumentException("authorizationScope must be one OAuth scope token."); }
         if (SubjectClaim is not ("sub" or "oid") || (SubjectClaim == "oid" && !Guid.TryParse(TenantId, out _))) { throw new ArgumentException("subjectClaim must be sub, or oid with an explicit tenantId UUID."); }

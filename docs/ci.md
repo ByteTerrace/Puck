@@ -358,11 +358,19 @@ within a bound. Services must pass readiness checks before website publication;
 publishing finishes with a Front Door purge and live checks.
 
 The primary Puck world uses a Flexible VM scale set, `bytrcvmssp000`, at
-`puck.puck.byteterrace.com:33333`. A static public IP and UDP load balancer preserve
+`play.puck.byteterrace.com:7825` (PUCK on a telephone keypad). A static public IP and UDP load balancer preserve
 the endpoint during worker replacement. The first release permits exactly one
 regular worker, with manual application upgrades, automatic guest patching, and
 automatic replacement after sustained simulation failure. It does not
 claim distributed placement, continuous availability, or Spot recovery.
+
+`play` is the default entry alias. Reserve `w-<id>` for permanent world addresses
+and `h-<id>` for hosting services under `puck.byteterrace.com`; friendly world
+names are aliases. World moves and restores retain identity, while independent
+clones receive new identities. Keep region, owner, and subscription tier in
+metadata and resource tags so placement and ownership changes do not rename a
+world. Connection information still carries the federation address and expected
+server identity: DNS alone does not select a world on a shared host.
 
 World workers use the pinned Azure Linux 3.0 Marketplace image selected in
 `main.bicepparam`. The silo container retains its Ubuntu-based .NET runtime;
@@ -379,8 +387,11 @@ the worker; changing only the scale-set model does not establish that its
 existing VM runs the new OS.
 
 The `Puck world` workflow builds and tests the silo independently of website and
-Entra application reconciliation, then deploys it with the same `zzz` identity
-and production concurrency group. `build/Azure.cs -- deploy-world-platform` creates the
+Entra application reconciliation. Before publishing, it runs the Entra admission,
+silo schema, and lifecycle recovery laws with locked dependencies, then boots the
+candidate container twice to verify checkpoint recovery and QUIC. It deploys with
+the same `zzz` identity and production concurrency group.
+`build/Azure.cs -- deploy-world-platform` creates the
 runtime identity and its scoped grants. Its `deploy-world` command publishes composed
 world definitions, deploys the VMSS model and applies it to existing workers.
 The VM extension pulls the immutable image before declaring the release ready.
@@ -404,11 +415,18 @@ outside simulation. Its drain freezes all rows at one pump boundary, closes
 ingress, waits for outstanding persistence, and writes final checkpoints. The
 local HTTP retirement operation and normal host shutdown use that same drain.
 A failed save fails deployment. VM events are never acknowledged early on behalf
-of other processes. After checkpoint recovery, changed published content passes
+of other processes. An Azure-requested reboot, including `az vm restart`, first
+emits a Scheduled Event with a [15-minute notice window](https://learn.microsoft.com/en-us/azure/virtual-machines/linux/scheduled-events#event-scheduling).
+The world drains when notified, so it remains unavailable while Azure waits to
+reboot the VM. Allow that window before evaluating reboot recovery.
+
+After checkpoint recovery, changed published content passes
 through the existing world hot-reload submission. The release marker advances
 only after the rebuilt world is checkpointed. An unchanged marker preserves the
 recovered state; a failed checkpoint can be retried without applying the rebuild
-twice. Changing the world's listening identity requires worker replacement.
+twice. Changing the world's listening identity requires a fresh worker activation;
+the deployment's container restart establishes the published binding before
+reconciling an older checkpoint. A live reload cannot change that binding.
 If a restart finds the rebuilt definition already in its checkpoint, it commits
 the missing marker while retaining the recovered simulation state.
 

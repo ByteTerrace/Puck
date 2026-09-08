@@ -392,11 +392,16 @@ param forcePrivateNetworking bool = true
 @secure()
 param gitHubApplicationPrivateKey string?
 param location string = resourceGroup().location
-@description('Optional remote World MCP deployment using the existing application registration and silo. Certificate secret contains a passwordless base64 PFX for the silo DNS name.')
+@description('Optional delegated World MCP deployment using the existing application registration and silo. The host automatically obtains and renews its TLS certificate over port 443.')
 param worldMcp {
-  allowedSubjects: string[]
-  certificateSecretName: string
+  // Explicit replica readers of the configured row. Empty grants permit no World writes.
+  @maxLength(64)
+  participants: {
+    subject: string
+    grants: object[]
+  }[]
   observations: object[]?
+  testLocations: string[]?
 }?
 param tags tagsType = {}
 param website {
@@ -520,14 +525,6 @@ var actorsInvokeAppRole = {
   value: 'Actors.Invoke'
 }
 var oauth2PermissionScopeMap = {
-  'puck.operator': {
-    adminConsentDescription: 'Operate the explicitly granted Puck World through MCP on behalf of the signed-in user.'
-    adminConsentDisplayName: 'Operate Puck World'
-    id: guid(tenant().tenantId, applicationRegistrationUniqueName, 'scope', 'puck.operator')
-    isEnabled: true
-    type: 'Admin'
-    value: 'puck.operator'
-  }
   user_impersonation: {
     adminConsentDescription: 'Allow the application to access ${resources.applicationRegistration.name} on behalf of the signed-in user.'
     adminConsentDisplayName: 'Access ${resources.applicationRegistration.name}'
@@ -1728,7 +1725,7 @@ resource applicationRegistration 'Microsoft.Graph/applications@v1.0' = {
   api: {
     acceptMappedClaims: false
     knownClientApplications: []
-    oauth2PermissionScopes: [oauth2PermissionScopeMap.user_impersonation, oauth2PermissionScopeMap['puck.operator']]
+    oauth2PermissionScopes: [oauth2PermissionScopeMap.user_impersonation]
     preAuthorizedApplications: [
       for application in resources.applicationRegistration.preAuthorizedApplications: {
         appId: application.appId
@@ -3130,31 +3127,81 @@ module worldSilo 'ts/bvm:ptn_platform_world-silo:0.0.5' = {
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Outputs
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Check the public certificate independently of the VM and send failures to the existing hosting responders.
+resource worldMcpAvailability 'Microsoft.Insights/webtests@2022-06-15' = if (worldMcp != null) {
+  name: '${resources.worldSilo.name}-mcp'
+  location: location
+  kind: 'standard'
+  tags: union(tags, { 'hidden-link:${resourceId('Microsoft.Insights/components', resources.containerEnvironment.applicationInsights.name)}': 'Resource' })
+  properties: {
+    Name: '${resources.worldSilo.name}-mcp'
+    SyntheticMonitorId: '${resources.worldSilo.name}-mcp'
+    Kind: 'standard'
+    Enabled: true
+    Frequency: 900
+    Timeout: 30
+    RetryEnabled: true
+    Locations: map(worldMcp!.?testLocations ?? ['us-va-ash-azr', 'us-ca-sjc-azr'], id => { Id: id })
+    Request: {
+      RequestUrl: 'https://${resources.worldSilo.dns.recordName}.${resources.worldSilo.dns.zoneName}/healthz'
+      HttpVerb: 'GET'
+      FollowRedirects: false
+      ParseDependentRequests: false
+    }
+    ValidationRules: { ExpectedHttpStatusCode: 200, SSLCheck: true, SSLCertRemainingLifetimeCheck: 7 }
+  }
+}
+resource worldMcpAvailabilityAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (worldMcp != null) {
+  name: '${resources.worldSilo.name}-mcp'
+  location: 'global'
+  tags: tags
+  properties: {
+    description: 'World MCP is unavailable or its automatically renewed TLS certificate has fewer than seven days remaining.'
+    enabled: true
+    severity: resources.worldSilo.monitoring.severity
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT15M'
+    scopes: [worldMcpAvailability!.id, applicationInsightsContainers.outputs.resourceId]
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.WebtestLocationAvailabilityCriteria'
+      webTestId: worldMcpAvailability!.id
+      componentId: applicationInsightsContainers.outputs.resourceId
+      failedLocationCount: 1
+    }
+    actions: map(worldSilo.outputs.deploymentConfiguration.monitoring.actionGroupResourceIds, actionGroupId => { actionGroupId: actionGroupId })
+  }
+}
 output worldSiloIdentityResourceId string = worldSiloIdentity.outputs.resourceId
 output worldSiloClientId string = worldSiloIdentity.outputs.clientId
 output worldSiloOwner string = worldSiloIdentity.outputs.principalId
 output worldSiloStorageEndpoint string = worldSilo.outputs.storageEndpoint
 output worldSiloConfiguration worldSiloConfigType = worldSilo.outputs.deploymentConfiguration
 output worldMcpConfiguration object = worldMcp == null ? {} : {
-  certificateSecretName: worldMcp!.certificateSecretName
+  admission: map(worldMcp!.participants, participant => {
+    domain: '${environment().authentication.loginEndpoint}${tenant().tenantId}/v2.0'
+    subject: participant.subject
+    mode: 'OAuth'
+    algorithm: ''
+    publicKey: ''
+    disclosure: 'Replica'
+    grants: participant.grants
+  })
   options: {
     target: resources.worldSilo.worldName
     publicUrl: 'https://${resources.worldSilo.dns.recordName}.${resources.worldSilo.dns.zoneName}/mcp'
-    listenUrl: 'https://0.0.0.0:8443'
+    listenUrl: 'http://127.0.0.1:8082'
     issuer: '${environment().authentication.loginEndpoint}${tenant().tenantId}/v2.0'
     audience: applicationRegistration.appId
-    scope: 'puck.operator'
-    authorizationScope: '${resources.applicationRegistration.identifierUri}/puck.operator'
+    scope: 'user_impersonation'
+    authorizationScope: '${resources.applicationRegistration.identifierUri}/user_impersonation'
     subjectClaim: 'oid'
     tenantId: tenant().tenantId
-    allowedSubjects: worldMcp!.allowedSubjects
-    certificatePath: '/configuration/mcp.pfx'
-    ...(empty(worldMcp!.?observations ?? []) ? {} : {
-      services: {
-        managedIdentityClientId: worldSiloIdentity.outputs.clientId
-        observations: worldMcp!.observations!
-      }
-    })
+    allowedSubjects: map(worldMcp!.participants, participant => participant.subject)
+    services: {
+      managedIdentityClientId: worldSiloIdentity.outputs.clientId
+      onboardingUrl: 'https://${first(first(filter(resources.frontDoor.routes, route => route.originGroupName == 'api'))!.customDomains)}/api/self-onboard'
+      observations: worldMcp!.?observations ?? []
+    }
   }
 }
 output deploymentLocation string = location

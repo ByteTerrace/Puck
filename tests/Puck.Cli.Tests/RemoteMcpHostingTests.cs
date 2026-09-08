@@ -15,11 +15,10 @@ public sealed class RemoteMcpHostingTests {
     public async Task MinimalTargetConfigurationPreservesDeploymentDefaults() {
         var path = Path.GetTempFileName();
         try {
-            const string json = """{"target":"row","publicUrl":"https://mcp.example.test/mcp","listenUrl":"http://127.0.0.1:8080","issuer":"https://issuer.example.test","audience":"api","scope":"puck.operator","allowedSubjects":[]}""";
+            const string json = """{"target":"row","publicUrl":"https://mcp.example.test/mcp","listenUrl":"http://127.0.0.1:8080","issuer":"https://issuer.example.test","audience":"api","scope":"user_impersonation","allowedSubjects":[]}""";
             await File.WriteAllTextAsync(path, json, Token);
             var options = await RemoteMcpServer.ReadOptionsAsync(path, Token);
             Assert.Equal("row", options.Target);
-            Assert.Equal("", options.AttachmentPath);
             Assert.Equal("sub", options.SubjectClaim);
             Assert.Empty(options.AllowedOrigins);
             Assert.Equal(300, options.IdleTimeoutSeconds);
@@ -55,7 +54,7 @@ public sealed class RemoteMcpHostingTests {
         internal readonly TaskCompletionSource<RemoteMcpCaller> Entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal readonly TaskCompletionSource Cancelled = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public override bool IsReady => true;
-        public override ValueTask<IControlSession> AttachAsync(string subject, CancellationToken cancellationToken) => throw new InvalidOperationException("Service calls do not open Console sessions.");
+        public override ValueTask<IControlSession> AttachAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) => throw new InvalidOperationException("Service calls do not open Console sessions.");
         public override IReadOnlyList<Tool> ServiceTools => [new() { Name = "test_service", InputSchema = JsonElement.Parse("""{"type":"object"}""") }];
         public override async ValueTask<CallToolResult> CallServiceAsync(RemoteMcpCaller caller, CallToolRequestParams request, CancellationToken cancellationToken) {
             Entered.TrySetResult(caller);
@@ -146,7 +145,7 @@ public sealed class RemoteMcpHostingTests {
         internal readonly TaskCompletionSource Entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal readonly TaskCompletionSource<ControlResponse> Late = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public override bool IsReady => Ready;
-        public override ValueTask<IControlSession> AttachAsync(string subject, CancellationToken cancellationToken) {
+        public override ValueTask<IControlSession> AttachAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) {
             Opened++;
             return ValueTask.FromResult<IControlSession>(new Session(this));
         }

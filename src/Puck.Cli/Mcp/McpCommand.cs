@@ -6,8 +6,8 @@ namespace Puck.Cli.Mcp;
 
 internal static class McpCommand {
     internal static async Task<int> RunAsync(string[] args) {
-        if (args is not ["--profile", "operator", "--attach", _] && args is not ["--http", _] && args is not ["--silo", _, "--http", _]) {
-            Console.Error.WriteLine("Usage: puck mcp --profile operator --attach <attachment file> | puck mcp --http <configuration.json> | puck mcp --silo <silo.json> --http <configuration.json>");
+        if (args is not ["--profile", "operator", "--attach", _] && args is not ["--silo", _, "--http", _]) {
+            Console.Error.WriteLine("Usage: puck mcp --profile operator --attach <attachment file> | puck mcp --silo <silo.json> --http <configuration.json>");
             return 2;
         }
         using var stop = new CancellationTokenSource();
@@ -20,8 +20,7 @@ internal static class McpCommand {
                     builder => builder.AddPuckMcp(options, remote, options.Services is null ? null :
                         sp => new AzureMcpHost(sp.GetRequiredService<IControlSessionHost>(), options)), stop.Token).ConfigureAwait(false);
             }
-            if (args is ["--http", var configuration]) { await RemoteMcpServer.RunAsync(configuration, stop.Token).ConfigureAwait(false); }
-            else { await OperatorMcpServer.RunAsync(args[3], Console.OpenStandardInput(), Console.OpenStandardOutput(), stop.Token).ConfigureAwait(false); }
+            await OperatorMcpServer.RunAsync(args[3], Console.OpenStandardInput(), Console.OpenStandardOutput(), stop.Token).ConfigureAwait(false);
             return 0;
         } catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or NotSupportedException or System.Net.Sockets.SocketException or System.Text.Json.JsonException or OperationCanceledException or ArgumentException or InvalidOperationException) {
             Console.Error.WriteLine($"puck mcp: {error.Message}");

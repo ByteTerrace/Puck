@@ -21,8 +21,8 @@ For an owned World silo, the CLI composes both:
 puck mcp --silo silo.json --http remote.json
 ```
 
-Set `target` to the silo's exact World row and omit `attachmentPath`.
-Each attachment gets a dedicated Console session with a fixed row binding.
+Set `target` to the silo's exact World row. Remote configuration has no local capability path.
+Each attachment gets a dedicated text session with a fixed row binding and an admitted peer identity.
 Retirement closes it; admitting the same row again never revives an old handle.
 The headless silo explicitly refuses framebuffer capture. Standalone
 `Puck.World.Silo` has no MCP assembly or package dependency; its public
@@ -75,53 +75,57 @@ future work; other local profiles are usage errors.
 
 ## Remote HTTP and OAuth
 
-Start local control as above. Copy [remote.example.json](remote.example.json),
-replace its deployment placeholders, and run:
+Copy [remote.example.json](remote.example.json), supply your deployment values,
+and use the silo composition above. Point an OAuth-capable MCP client at
+`publicUrl`. Protected-resource discovery is published at
+`/.well-known/oauth-protected-resource/mcp`. Clients use authorization code with
+PKCE and a registered client ID; the configured authorization server owns login,
+consent and tokens. JWT signatures, exact issuer, audience, expiry, delegated
+scope, subject and tenant are checked on every request. App-only role tokens and
+opaque access tokens are refused.
 
-```text
-puck mcp --http remote.json
-```
+For Entra, use the tenant-specific v2 issuer, API application ID as `audience`,
+`subjectClaim: "oid"`, and the tenant UUID as `tenantId`. The delegated scope is
+`user_impersonation`; `authorizationScope` is its full `api://<application-id>/user_impersonation`
+spelling. First-party and external public clients use the same registration,
+redirect URI, PKCE and consent contract. Other standards-based OIDC issuers use
+`sub` and `scope`. Puck does not register clients or issue refresh tokens.
 
-Point an OAuth-capable MCP client at the configured `publicUrl`. The gateway
-publishes protected-resource discovery at
-`/.well-known/oauth-protected-resource/mcp` and challenges unauthenticated requests
-with its canonical metadata URL. Login, PKCE and token issuance belong to the
-client and the configured authorization server. Puck validates signed JWT access
-tokens using HTTPS OIDC discovery and rotating issuer keys. Opaque-token
-introspection is not implemented.
+`allowedSubjects` permits gateway access. It grants no Console, filesystem or
+process authority. The World must separately author an `OAuth` admission row
+whose `domain` is the exact issuer, whose `subject` matches, and whose `algorithm`
+and `publicKey` are empty. The silo requires explicit `Replica` disclosure for
+its text surface: these commands can read the full authored state. This reuses
+the existing disclosure contract; peers cannot hold `Observe/all`.
 
-Use the existing Entra tenant's exact v2 issuer, API application/client ID as
-`audience`, `subjectClaim: "oid"`, and its tenant UUID as `tenantId`. Register or
-reuse an API exposing the delegated `puck.operator` scope and issuing v2 access
-tokens. Set `scope` to the short signed `scp` value, and `authorizationScope` to
-the full requested scope, such as `api://<api-client-id>/puck.operator`. Configure
-the MCP client's pre-registered application ID, redirect URI and delegated API
-permission/consent in Entra. Use authorization code with PKCE; the gateway does
-not register clients or issue refresh tokens. For a different OIDC issuer, use
-`sub` and its signed `scope` claim; `authorizationScope` defaults to `scope`.
-See Microsoft's [API claim validation](https://learn.microsoft.com/en-us/entra/identity-platform/claims-validation)
-and [authorization code flow](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow).
+The remote command surface is `world.wait`, `world.peers`, `world.admission`,
+`world.links`, `world.state`, `world.state.cell.set` and `world.state.cell.remove`.
+A live command guard refuses other verbs, including newly registered local admin
+commands. Every accepted command retains its generation-bound Peer principal.
+State writes additionally require the ordinary `Mutate/section:state` grant with
+budget and mutation-kind mask, plus `Edit/state:<row>`. Empty admission grants
+permit no writes. World reset preserves existing revocations; retirement closes
+sessions and removes their identity. No bearer token enters command text,
+simulation state or recordings. The immutable target binds the session to the
+configured owner/World; neither a command nor `silo.use` can select another row.
+This release deliberately supports one authoritative worker; it does not offer
+distributed attachment routing or arbitrary user-owned World discovery.
 
-`allowedSubjects` is an explicit grant of **full World Console and framebuffer
-authority**, including commands with host filesystem or process effects. Signing
-in alone does not grant it. Every request checks signature, exact issuer,
-audience, lifetime, delegated scope, subject and configured tenant. App-only
-role tokens are refused. Access tokens never enter Console commands or World
-state. An explicitly installed service adapter receives the current validated
-assertion solely for downstream OAuth exchange. Existing host Console commands
-retain their normal credentials and authority.
+The CLI's optional Azure adapter reuses [delegated services](../Puck.World.Azure/README.md#delegated-observations).
+`puck_onboard` calls the existing Function `/api/self-onboard` with an exchanged
+OBO token. It reuses account provisioning, partition selection and protected user
+escrow. Attachment also checks onboarding; `Onboarding` requires an explicit retry,
+while `Ready` and `Migrating` proceed to World admission. No second account store
+or provisioning workflow exists in MCP.
 
-The owned-silo CLI composition can install `puck_service_observe` through optional
-`services` settings. It reuses [Azure delegated observations](../Puck.World.Azure/README.md#delegated-observations)
-for inventory and metrics reads, with per-observation subject grants and field
-allowlists. Entra exchanges the user's API assertion plus the configured managed
-identity's federated client assertion for an ARM token. Failed consent or expiry
-returns an error; it never substitutes host authority. Service calls are bounded
-by the current request, token expiry and live grant revocation. Assertions and
-downstream tokens are not persisted. These reads do not create durable cloud jobs
-or cloud writes; mutation services still require their scoped operation and
-recovery composition.
-
+`puck_service_observe` uses the current caller's assertion and the managed
+identity's federated client assertion to obtain an ARM token. Per-observation
+subject grants and field allowlists still apply. Failed consent never falls back
+to host credentials. MCP retains no user/downstream tokens after the request;
+the existing platform onboarding service owns its protected escrow lifetime.
+World simulation grants authorize World changes; they are not Azure permissions.
+Host filesystem, process, deployment and cloud-job commands are unavailable
+remotely. Durable delegated cloud mutation services remain outside this surface.
 For a proxy that authenticates origin requests, configure `trustedProxy` with its
 exact `issuer`, `audience`, `subjectClaim`, `subject`, and optional `tenantId`.
 Entra uses the proxy managed identity's `oid` and requires `tenantId`. The proxy
@@ -149,7 +153,7 @@ optional password comes from `certificatePasswordEnvironmentVariable`. Relative
 file paths resolve beside the configuration file. Public plaintext listeners,
 unknown Hosts and unapproved browser Origins are refused. Add browser clients'
 exact HTTPS origins to `allowedOrigins` when required. Forwarded headers cannot
-change public identity. Grants and the local capability path reload every second.
+change public identity. Gateway access reloads every second.
 Removing a subject closes its existing attachments. An unreadable, invalid, or
 incompatible replacement revokes all grants until corrected. Endpoint, issuer,
 scope, certificate and target changes require restart. Changing the capability
@@ -209,7 +213,7 @@ uncertain dispatched outcome. Explicit cancellation follows the selected SDK
 protocol's rules; the adapter sends no extra late result. Restart and inspect
 state before deciding whether to retry. Nothing is automatically replayed.
 EOF and adapter crashes release the attachment while World and its recordings
-retain their own lifetimes. Explicit `quit` and reload keep their normal meaning.
+retain their own lifetimes. Local Operator `quit` and reload retain their normal meaning; the remote guard refuses them.
 
 ## SDK and verification
 
@@ -252,12 +256,6 @@ producer and unified overlay, answered human console status during an agent wait
 and captured again after adapter restart. Existing render
 writer boundary tests remain in Commands, Abstractions and Shaders. A physical
 device-loss event or live Entra deployment is not claimed by this run.
-
-The remote offscreen smoke exercised the same edit and decoded a 640×480 RGBA PNG
-over HTTPS using signed Entra-shaped JWTs and controlled OIDC discovery. Human
-input answered during an attachment wait; cancellation and a fresh attachment
-allowed another capture. This verifies the complete gateway-to-renderer path,
-while leaving live tenant registration, consent and deployment to their own check.
 
 Run `dotnet test tests/Puck.Cli.Tests -c Release` for SDK interop and the
 [Hosting verification](../Puck.Hosting/README.md#-verification) for engine attachment contracts.

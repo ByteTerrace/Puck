@@ -51,8 +51,9 @@ public sealed partial class WorldSiloHost {
                     if (cancellationToken.IsCancellationRequested) { completion.TrySetCanceled(cancellationToken: cancellationToken); return; }
                     try {
                         if (IsDraining || !Instances.TryGet(identity.World.Value, out var row) || (row is null)) { throw new InvalidOperationException(message: "World is inactive or retiring."); }
-                        if ((row.Server.Definition.Host.Authority != definition.Host.Authority) || (row.Server.Definition.Host.Listen != definition.Host.Listen)) {
-                            throw new InvalidOperationException(message: "Changing a world's network identity requires worker replacement.");
+                        // Compare the activation's binding: a recovered checkpoint may advertise the prior deployment.
+                        if ((row.Federation.Subject != definition.Host.Authority) || (row.ListenEndpoint != definition.Host.Listen)) {
+                            throw new InvalidOperationException(message: "Changing a world's network binding requires a fresh activation.");
                         }
                         // A crash can leave the rebuilt checkpoint durable before its release marker.
                         // Its authored definition already matches: retain recovered simulation state.

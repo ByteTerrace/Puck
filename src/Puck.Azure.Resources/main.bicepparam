@@ -12,6 +12,8 @@ import {
 var apexDomainName = readEnvironmentVariable('BICEPPARAM_APEX_DOMAIN_NAME', 'byteterrace.com')
 var partitionCount = int(readEnvironmentVariable('BICEPPARAM_PARTITION_COUNT', '1'))
 var prefix = readEnvironmentVariable('BICEPPARAM_PREFIX', 'bytrc')
+// PUCK on a telephone keypad; shared by the listener and its network rule.
+var worldQuicPort = 7825
 
 param enableCustomerManagedKey = false
 param enableZoneRedundancy = false
@@ -459,7 +461,7 @@ param resources = {
         privateEndpointNetworkPolicies: 'Disabled'
         privateLinkServiceNetworkPolicies: 'Enabled'
         securityRules: [
-          { name: 'WorldQuic', properties: { priority: 100, direction: 'Inbound', access: 'Allow', protocol: 'Udp', sourcePortRange: '*', destinationPortRange: '33333', sourceAddressPrefix: '*', destinationAddressPrefix: '*' } }
+          { name: 'WorldQuic', properties: { priority: 100, direction: 'Inbound', access: 'Allow', protocol: 'Udp', sourcePortRange: '*', destinationPortRange: string(worldQuicPort), sourceAddressPrefix: '*', destinationAddressPrefix: '*' } }
           { name: 'WorldHealth', properties: { priority: 110, direction: 'Inbound', access: 'Allow', protocol: 'Tcp', sourcePortRange: '*', destinationPortRange: '8081', sourceAddressPrefix: 'AzureLoadBalancer', destinationAddressPrefix: '*' } }
           { name: 'DenyOtherInbound', properties: { priority: 200, direction: 'Inbound', access: 'Deny', protocol: '*', sourcePortRange: '*', destinationPortRange: '*', sourceAddressPrefix: '*', destinationAddressPrefix: '*' } }
         ]
@@ -591,11 +593,11 @@ param resources = {
       publicIpName: '${prefix}pip000'
       loadBalancerName: '${prefix}lbp000'
     }
-    dns: { recordName: 'puck', ttl: 60, zoneName: 'puck.${apexDomainName}' }
+    dns: { recordName: 'play', ttl: 60, zoneName: 'puck.${apexDomainName}' }
     federationKeySecretName: 'PuckWorldFederationKey'
     releaseStateSecretName: 'PuckWorldReleaseState'
     name: '${prefix}vmssp000'
-    port: 33333
+    port: worldQuicPort
     repositoryName: 'world-silo'
     roleDefinitionName: 'Puck World Store'
     tags: { PetName: 'Puck World' }

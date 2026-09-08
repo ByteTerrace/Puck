@@ -728,3 +728,5 @@ Their deadlines are failure bounds, with cancellation shared by the producers.
 
 See the [generated API reference](https://byteterrace.com/reference/) for full
 member docs.
+
+A host may supply `authorize` when creating a text session. The registry checks the canonical command metadata on the pump before parsing or dispatch, using current policy rather than enqueue-time policy. This guard bounds the session's verb surface; mutation handlers must still enforce the stamped principal's domain grants.

@@ -4,6 +4,28 @@ namespace Puck.Commands.Tests;
 
 public sealed class TextCommandSessionTests {
     [Fact]
+    public void RestrictedSessionsAuthorizeAtDispatchAndPreserveEachCaller() {
+        var seen = new List<CommandContext>();
+        var source = new TextCommandSource(new CommandRegistry([new SessionModule(seen)]));
+        var permitted = true;
+        using var alice = source.CreateSession(CommandPrincipal.Peer(8, 1), authorize: command => permitted && command.Name == "probe");
+        using var bob = source.CreateSession(CommandPrincipal.Peer(9, 2), authorize: command => command.Name == "probe");
+        alice.Enqueue("probe");
+        bob.Enqueue("probe");
+        alice.Enqueue("simulate");
+        alice.Enqueue("\"simulate\"");
+        source.Collect();
+        Assert.Equal([CommandPrincipal.Peer(8, 1), CommandPrincipal.Peer(9, 2)], seen.Select(value => value.Principal));
+        alice.Enqueue("probe");
+        permitted = false;
+        source.Collect();
+        Assert.Equal(2, seen.Count);
+        using var local = source.CreateSession(CommandPrincipal.Console);
+        local.Enqueue("simulate");
+        source.Collect();
+        Assert.Equal(CommandPrincipal.Console, seen[^1].Principal);
+    }
+    [Fact]
     public void SeatSessionsPermanentlyStampTheirOwnPrincipalAndSlot() {
         var seen = new List<CommandContext>();
         var registry = new CommandRegistry(modules: [new SessionModule(seen: seen)]);

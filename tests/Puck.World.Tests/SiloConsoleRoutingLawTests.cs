@@ -7,6 +7,23 @@ namespace Puck.World.Tests;
 
 public sealed class SiloConsoleRoutingLawTests {
     [Fact]
+    public async Task RetirementCancelsHostOperationsAndClosesAdmissionExactlyOnce() {
+        using var output = new BufferedConsoleOutput();
+        var source = new TextCommandSource(new CommandRegistry([]));
+        var routing = new SiloConsoleRouting(() => source, new SiloConsoleTagging(output));
+        using var row = routing.Register("row");
+        var closed = 0;
+        using var control = routing.CreateControlSession("row", CommandPrincipal.Peer(8, 1), _ => false, () => closed++);
+        var invoked = false;
+        var pending = routing.InvokeAsync("row", () => invoked = true, TestContext.Current.CancellationToken);
+        routing.Unregister("row");
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pending);
+        control.Dispose();
+        source.Collect();
+        Assert.False(invoked);
+        Assert.Equal(1, closed);
+    }
+    [Fact]
     public async Task HostControlSessionsRetireWithTheirFixedRow() {
         using var output = new BufferedConsoleOutput();
         var source = new TextCommandSource(new CommandRegistry(modules: []));

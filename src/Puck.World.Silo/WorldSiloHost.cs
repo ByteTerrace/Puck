@@ -806,6 +806,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         ) {
             AwaitingMirrors = (checkpoint is not null),
             Door = door,
+            ListenEndpoint = definition.Host.Listen,
             Tape = tape,
         };
         var slice = checkpoint?.HostRow;

@@ -13,7 +13,14 @@ namespace Puck.Cli.Mcp;
 internal sealed class AzureMcpHost : RemoteMcpHost, IDisposable {
     private readonly IControlSessionHost m_host;
     private readonly string m_target;
-    private readonly AzureDelegatedObservations m_services;
+    private readonly AzureDelegatedServices m_services;
+    private static readonly Tool OnboardTool = new() {
+        Name = "puck_onboard",
+        Description = "Ensure your existing Puck account is provisioned, depositing fresh delegated user escrow through the platform onboarding API. Returns Ready, Migrating, or Onboarding. Retry explicitly while Onboarding; no duplicate user provisioning is performed here.",
+        InputSchema = JsonElement.Parse("""{"type":"object","additionalProperties":false}"""),
+        OutputSchema = JsonElement.Parse("""{"type":"object","properties":{"state":{"enum":["Ready","Migrating","Onboarding"]}},"required":["state"],"additionalProperties":false}"""),
+        Annotations = new() { ReadOnlyHint = false, DestructiveHint = false, IdempotentHint = true, OpenWorldHint = true },
+    };
     private static readonly Tool ObserveTool = new() {
         Name = "puck_service_observe",
         Description = "Read a host-configured Azure inventory or metrics observation on behalf of the signed-in caller. Requires a separate per-observation grant and downstream consent. Only approved fields are returned. No World mutation or cloud write occurs.",
@@ -32,9 +39,29 @@ internal sealed class AzureMcpHost : RemoteMcpHost, IDisposable {
     }
     public override bool IsReady => m_host.IsReady(m_target);
     public void Dispose() => m_services.Dispose();
-    public override ValueTask<IControlSession> AttachAsync(string subject, CancellationToken cancellationToken) => m_host.AttachAsync(m_target, cancellationToken);
-    public override IReadOnlyList<Tool> ServiceTools => [ObserveTool];
+    public override async ValueTask<IControlSession> AttachAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) {
+        if (m_services.SupportsOnboarding) {
+            try {
+                var state = await m_services.EnsureOnboardedAsync(caller.UserAssertion, caller.ExpiresAt, cancellationToken).ConfigureAwait(false);
+                if (state == "Onboarding") { throw new UnauthorizedAccessException("Account provisioning is still running. Use puck_onboard to check it."); }
+            } catch (Exception error) when (error is AuthenticationFailedException or HttpRequestException or JsonException or InvalidDataException) {
+                throw new UnauthorizedAccessException("Platform onboarding failed; sign in and verify consent before attaching.");
+            }
+        }
+        return await m_host.AttachAsync(m_target, new(caller.Issuer, caller.Subject), cancellationToken).ConfigureAwait(false);
+    }
+    public override IReadOnlyList<Tool> ServiceTools => [.. m_services.SupportsOnboarding ? new[] { OnboardTool } : [], .. m_services.Names.Count > 0 ? new[] { ObserveTool } : []];
     public override async ValueTask<CallToolResult> CallServiceAsync(RemoteMcpCaller caller, CallToolRequestParams request, CancellationToken cancellationToken) {
+        if (request.Name == OnboardTool.Name && m_services.SupportsOnboarding) {
+            if (request.Arguments is { Count: > 0 }) { return Failure("Onboarding takes no arguments; identity comes from your validated access token."); }
+            try {
+                var state = await m_services.EnsureOnboardedAsync(caller.UserAssertion, caller.ExpiresAt, cancellationToken).ConfigureAwait(false);
+                var content = JsonSerializer.SerializeToElement(new AzureMcpOnboardingResult(state), AzureMcpJson.Default.AzureMcpOnboardingResult);
+                return new() { StructuredContent = content, Content = [new TextContentBlock { Text = content.GetRawText() }] };
+            } catch (Exception error) when (error is AuthenticationFailedException or HttpRequestException or IOException or JsonException or InvalidOperationException) {
+                return Failure("Platform onboarding failed. Sign in again and verify downstream consent; host credentials are never substituted.");
+            }
+        }
         if (request.Name != ObserveTool.Name || request.Arguments is not { Count: 1 } arguments ||
             !arguments.TryGetValue("observation", out var name) || name.ValueKind != JsonValueKind.String || name.GetString() is not { Length: > 0 and <= 128 } observation) {
             return Failure("One configured observation name is required.");
@@ -56,6 +83,8 @@ internal sealed class AzureMcpHost : RemoteMcpHost, IDisposable {
 }
 
 internal sealed record AzureMcpObservationResult(string Observation, IReadOnlyList<WorldExtensionObservationItem> Items);
+internal sealed record AzureMcpOnboardingResult(string State);
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(AzureMcpObservationResult))]
+[JsonSerializable(typeof(AzureMcpOnboardingResult))]
 internal sealed partial class AzureMcpJson : JsonSerializerContext;

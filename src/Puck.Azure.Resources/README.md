@@ -129,23 +129,34 @@ repeatable identity-team setup contract.
 
 ## Remote MCP
 
-`main.bicepparam` accepts `BICEPPARAM_WORLD_MCP` as a JSON object containing
-`allowedSubjects` (Entra user object IDs), `certificateSecretName` (a passwordless
-base64 PFX secret for the silo DNS name), and optional `observations` using the
-[delegated observation format](../Puck.World.Azure/README.md#delegated-observations).
-Null disables the listener. The unified root exposes `puck.operator` on the
-existing Entra application and supplies the World identity's federated credential.
-Its existing ARM delegated permission supports observation OBO after consent.
+`main.bicepparam` accepts `BICEPPARAM_WORLD_MCP` as a JSON object with
+`participants: [{ "subject": "<Entra user oid>", "grants": [] }]`, optional
+`observations` in the [delegated format](../Puck.World.Azure/README.md#delegated-observations),
+and optional `testLocations` for Azure availability probes. Null disables MCP.
+Each participant explicitly receives Replica disclosure for the configured World;
+the same list generates gateway access and authored OAuth admission. Empty grants
+permit no World writes. Additional grants use the ordinary admission schema.
+The root exposes delegated `user_impersonation` on the existing Entra application and
+supplies the World managed identity's federated credential. The existing Function
+onboarding endpoint and ARM delegation still require user consent.
 
-The existing silo load balancer maps public TLS 443 to unprivileged 8443. The
-bootstrap mounts protected configuration and certificate files, and selects the
-CLI's `puck mcp --silo ... --http ...` composition from the same image. Standalone
-silo assemblies retain no MCP dependency. The world-only release path preserves
-the deployed unified root's MCP outputs; deploy the root before enabling or
-changing its OAuth policy. Certificate renewal takes effect through the ordinary
-drain-and-restart release. No template deploys or grants tenant consent merely
-because it has been compiled.
+The existing load balancer maps public TCP 443 to Caddy 2.11.4 on 8443. Caddy uses
+ACME TLS-ALPN-01 to issue, renew and hot-swap the certificate, forwarding only to
+the loopback MCP listener. No DNS plugin, stored Azure credential, PFX secret,
+port 80 listener or renewal restart is needed. Certificate/account state persists
+in `/var/lib/puck-tls` across releases, under a separate container UID, outside
+the World container's mounts. Keep that directory across ordinary upgrades.
+DNS must resolve to this load balancer and CAA policy must permit Let's Encrypt.
+The release probe validates the public hostname and certificate before succeeding.
+Azure availability tests check HTTPS readiness and seven days of certificate
+lifetime every fifteen minutes, alerting the existing World hosting action group.
 
+This avoids an additional paid gateway and network hop for the current single
+worker. It does not turn the worker into a highly available cluster: the release
+lane still refuses multiple authoritative workers. The CLI hosts MCP as a silo
+extension in the same published image; base silo assemblies have no MCP dependency.
+Deploy unified infrastructure before changing MCP deployment policy. Compilation
+and local tests do not issue certificates, deploy resources or grant live consent.
 Deployment choices belong in `main.bicepparam`. Typed configuration objects carry
 names, tags, DNS settings, ports and capacity into modules. Deployment scripts use
 the same configuration through Bicep outputs. Module sources retain protocol and

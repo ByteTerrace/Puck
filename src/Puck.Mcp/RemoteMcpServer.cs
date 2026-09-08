@@ -20,20 +20,7 @@ namespace Puck.Mcp;
 public static partial class RemoteMcpServer {
     /// <summary>The independently validated caller bearer scheme used by MCP.</summary>
     public const string AuthenticationScheme = "PuckMcpBearer";
-    /// <summary>Reads bounded, strict deployment configuration and serves until cancellation.</summary>
-    /// <param name="configurationPath">A JSON file containing RemoteMcpOptions; relative paths are resolved beside it.</param>
-    /// <param name="cancellationToken">Stops the gateway and all its attachments, leaving World running.</param>
-    public static async Task RunAsync(string configurationPath, CancellationToken cancellationToken = default) {
-        var options = await ReadOptionsAsync(cancellationToken: cancellationToken, configurationPath: configurationPath).ConfigureAwait(continueOnCapturedContext: false);
-
-        if (options.Target is not null || options.Services is not null) { throw new ArgumentException(message: "A named target requires an in-process host composition."); }
-        await using var app = Build(options);
-        using var stop = CancellationTokenSource.CreateLinkedTokenSource(token1: cancellationToken, token2: app.Lifetime.ApplicationStopping);
-        var monitor = WatchConfigurationAsync(app, configurationPath, options, stop.Token);
-
-        try { await app.RunAsync(token: cancellationToken).ConfigureAwait(continueOnCapturedContext: false); } finally { await stop.CancelAsync().ConfigureAwait(continueOnCapturedContext: false); await monitor.ConfigureAwait(continueOnCapturedContext: false); }
-    }
-    /// <summary>Builds the HTTP resource server with strict OAuth validation and explicit Operator grants.</summary>
+    /// <summary>Builds the HTTP resource server with strict OAuth validation and explicit delegated access.</summary>
     /// <param name="options">Validated deployment settings. The gateway owns its in-memory attachments.</param>
     /// <param name="configureBuilder">Optional trusted composition customization before the application is built.</param>
     /// <returns>The application; its owner starts and asynchronously disposes it.</returns>
@@ -81,7 +68,7 @@ public static partial class RemoteMcpServer {
         services.AddSingleton(implementationInstance: options);
         services.AddSingleton(implementationInstance: access);
         services.AddSingleton<RemoteMcpDiagnostics>();
-        services.TryAddSingleton<RemoteMcpHost, LocalRemoteMcpHost>();
+        services.TryAddSingleton<RemoteMcpHost, UnconfiguredRemoteMcpHost>();
         services.TryAddSingleton(instance: TimeProvider.System);
         services.AddRouting();
         services.AddSingleton<RemoteAttachmentPool>();
@@ -139,10 +126,10 @@ public static partial class RemoteMcpServer {
                 var tools = new RemoteMcpTools(context.RequestServices.GetRequiredService<RemoteAttachmentPool>(), caller.Subject,
                     options.IdleTimeoutSeconds, context.RequestServices.GetRequiredService<RemoteMcpDiagnostics>(), remoteHost, caller);
 
-                server.ServerInfo = new() { Name = remoteHost.SupportsAttachments ? "puck-remote-operator" : "puck-services", Version = "1.0.0" };
+                server.ServerInfo = new() { Name = remoteHost.SupportsAttachments ? "puck-remote" : "puck-services", Version = "1.0.0" };
                 server.ProtocolVersion = "2026-07-28";
                 server.ServerInstructions = remoteHost.SupportsAttachments
-                    ? "Explicitly authorized remote Operator: full Console and composed-frame authority for this World. Call puck_attach first, keep attachmentId private, and call serially per attachment. Attachments preserve world.wait across HTTP requests; idle expiry, token expiry, disconnect and cancellation can invalidate them. Unknown outcomes must never be automatically replayed. Attach explicitly and inspect state before retrying. This gateway owns live attachments; route a handle back to this same gateway. OAuth identity is checked on every request. Additional service tools appear only when explicitly installed and separately granted; they use the current authenticated request. Participant tools are not installed."
+                    ? "Delegated World access: the configured World admits your validated issuer and subject and grants its own capabilities. Call puck_attach first, keep attachmentId private, and call serially per attachment. The host restricts commands to its explicitly authorized surface; local administrative commands are unavailable. Attachments preserve world.wait across HTTP requests. Idle expiry, revocation, disconnect and cancellation can invalidate them. Never automatically replay unknown outcomes. Route each attachment to the same host. OAuth is checked on every request. Headless hosts have no framebuffer. Additional services use the current authenticated caller and their own explicit grants."
                     : "Request-scoped Puck services. Each tool runs under this request's authenticated caller and explicit grants. No Console attachments or durable background operations are available.";
                 server.Handlers.ListToolsHandler = (_, _) => ValueTask.FromResult(result: RemoteMcpTools.List(remoteHost));
                 server.Handlers.CallToolHandler = (request, token) => tools.CallAsync(parameters: request.Params, token: token);

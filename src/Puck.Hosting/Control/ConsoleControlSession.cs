@@ -5,7 +5,7 @@ using Puck.Commands;
 
 namespace Puck.Hosting;
 
-/// <summary>One trusted local Operator's ordered Console ingress, with completed-frame capture.</summary>
+/// <summary>Ordered text ingress with a host-selected principal and command guard; capture is supplied separately by the trusted host.</summary>
 public sealed class ConsoleControlSession : IControlSession {
     private readonly Lock m_gate = new();
     private readonly CancellationTokenSource m_lifetime = new();
@@ -23,9 +23,11 @@ public sealed class ConsoleControlSession : IControlSession {
     /// <param name="capture">Arms the outermost render target or throws when unavailable.</param>
     /// <param name="slot">The host's immutable Console routing slot.</param>
     /// <param name="scope">Optional host scope entered by the ordinary command pump.</param>
-    public ConsoleControlSession(TextCommandSource source, Func<string, FrameCaptureRequest> capture, int slot = 0, Func<IDisposable>? scope = null) {
+    /// <param name="principal">The fixed acting principal; null uses the Console principal.</param>
+    /// <param name="authorize">Optional command-metadata predicate forwarded to the dedicated text session.</param>
+    public ConsoleControlSession(TextCommandSource source, Func<string, FrameCaptureRequest> capture, int slot = 0, Func<IDisposable>? scope = null, CommandPrincipal? principal = null, Func<CommandMetadata, bool>? authorize = null) {
         m_capture = capture;
-        m_session = source.CreateSession(CommandPrincipal.Console, slot: slot, scope: scope, onResult: (_, result) => Volatile.Read(location: ref m_result)?.TrySetResult(result: result));
+        m_session = source.CreateSession(principal ?? CommandPrincipal.Console, slot: slot, scope: scope, authorize: authorize, onResult: (_, result) => Volatile.Read(location: ref m_result)?.TrySetResult(result: result));
     }
 
     /// <inheritdoc/>
