@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Maths;
@@ -28,14 +27,10 @@ internal static partial class ExpectationsLedger {
     [JsonSerializable(typeof(EntryDto[]))]
     private sealed partial class EntryDtoJsonContext : JsonSerializerContext;
 
-    /// <summary>Resolves <c>Expectations.json</c>'s path beside this source file, independent of the process's
-    /// working directory or build-output layout.</summary>
-    /// <param name="sourceFile">Supplied by the compiler; never pass explicitly.</param>
-    public static string ResolvePath([CallerFilePath] string sourceFile = "") =>
-        Path.Combine(
-        path1: (Path.GetDirectoryName(path: sourceFile) ?? "."),
-        path2: "Expectations.json"
-    );
+    /// <summary>Resolves the committed <c>Expectations.json</c> in the running checkout, independently of compiler
+    /// source-path mapping.</summary>
+    public static string ResolvePath() =>
+        RepositoryPaths.Resolve(relativePath: "src/Puck.HumbleGamingBrick.Post/Expectations.json");
     /// <summary>Loads the ledger, keyed by (suite, path, model).</summary>
     /// <param name="path">The ledger file's path.</param>
     /// <returns>The loaded entries, or an empty ledger when the file does not exist yet.</returns>

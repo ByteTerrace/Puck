@@ -107,7 +107,7 @@ rules and generates the layering block from each project's own declaration.
 |---|---|---|
 | The world | `Puck.World.Schema` · `Puck.World.Protocol` · `Puck.World.Server` · `Puck.World.Addons` · `Puck.World` | what a world *is* (document model, validator, composition), what it *says* (wire and tape vocabulary), what it *does* (the authoritative fold), its guest runtime, and the composition root that runs the game |
 | Optional AI extensions | `Puck.World.AgentBridge` · `Puck.World.AgentHarness` | an opt-in autonomous-participant bridge and Microsoft Agent Framework adapter; the base world executable and runtime never reference them |
-| Documents and authoring | `Puck.World.Forge` | the authoring document families a world embeds (creations, audio, synth patches) and the ROM forge behind the emulator cartridges |
+| Documents and authoring | `Puck.World.Authoring` · `Puck.GamingBricks.Forge` · `Puck.HumbleGamingBrick.Forge` · `Puck.AdvancedGamingBrick.Forge` | the authoring document families a world embeds (creations, audio, synth patches) and the ROM forges behind the emulator cartridges |
 | Numerics and physics | `Puck.Maths` · `Puck.Physics` | deterministic fixed-point arithmetic, exact fields, reproducible randomness; gravity, contact, and rigid-body kernels on it |
 | Rendering | `Puck.SdfVm` · `Puck.Shaders` · `Puck.Vulkan(.Presentation)` · `Puck.DirectX(.Presentation)` · `Puck.Overlays` · `Puck.Text` | the SDF virtual machine and world renderer, shader loading, the two backends and their presentation wrappers, overlays, and the MSDF/OpenType text pipeline |
 | Substrate | `Puck.Abstractions` · `Puck.Hosting` · `Puck.Launcher` · `Puck.Commands` · `Puck.Input` · `Puck.Platform` · `Puck.Networking` · `Puck.Attestation` · `Puck.Storage` · `Puck.Assets` · `Puck.Recording` | contracts, hosting and clocks, the host loop, commands and input, the OS layer, the dialect-agnostic wire, signed attestations, cloud storage, asset bytes and codecs, capture and muxing |
@@ -122,11 +122,12 @@ never built, run, or revived in place — see
 ## 📦 Packages
 
 Blessed libraries pack as `ByteTerrace.Puck.*` and ship in lockstep at one shared
-prerelease version (`build/Packaging.targets`): `Abstractions`, `AdvancedGamingBrick`, `Audio`,
-`Assets`, `Attestation`, `Commands`, `DirectX`, `GamingBricks`, `Hosting`,
-`HumbleGamingBrick`, `Maths`, `Physics`, `Recording`, `Scripting`, `Shaders`,
-`SignedDistance`, `Text`, `Vulkan`. Assemblies and namespaces stay `Puck.*`; each
-package carries its README and the license files.
+prerelease version (`build/Packaging.targets`). Each library opts in with
+`IsPackable` in its project file; `build/Pack.ps1` discovers those opt-ins and
+checks that every internal package dependency is present in the output.
+Assemblies and namespaces stay `Puck.*`; each package carries its README and
+the license files. See [CI and releases](docs/ci.md) for validation, artifacts,
+and the publishing setup.
 
 ## 🧪 Verification
 

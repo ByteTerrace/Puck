@@ -74,7 +74,7 @@ puck official serve --tree <dir> [--port 61102]
 ```
 
 Writes, serves, and verifies a `puck.official.v1` tree: the shipped browser-wasm
-engine (a `dotnet publish src/Puck.World.Browser -c Release -r browser-wasm`
+engine (a `dotnet publish src/Puck.World.Browser -c Release`
 AppBundle), the world schema bundle (the same `WorldSchema.Export`/`Bundle` path
 `puck schema --bundle` uses), every world document under the worlds directory,
 the one fully-composed root world (`puck.world.json`, resolved through its whole

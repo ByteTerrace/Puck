@@ -4,7 +4,7 @@ name: Docs
 # $web container of the bytrcstp001 storage account, behind Front Door. Auth is
 # the bytrcidpzzz user-assigned managed identity via GitHub OIDC federation
 # (no stored secret) — see the federated-credential + repo-variable notes in
-# the PR/handoff. Runs when a GitHub Release is published.
+# docs/ci.md. Called by publish.yml after a release, or run manually.
 #
 # Layout written to $web:
 #   /index.html         home page (brotli — Front Door forces Content-Encoding: br here)
@@ -17,6 +17,7 @@ name: Docs
 on:
   release:
     types: [published]
+  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -45,6 +46,7 @@ jobs:
       - name: Build API reference (DocFX)
         run: |
           dotnet tool restore
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           dotnet docfx docs/api/docfx.json
 
       - name: Assemble deploy tree
@@ -82,11 +84,13 @@ jobs:
           az storage blob sync --account-name $env:ACCOUNT --auth-mode login `
             --container '$web' --source deploy/reference --destination reference `
             --only-show-errors
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           # 2) Shared theme + fonts — overwrite, never delete.
           az storage blob upload-batch --account-name $env:ACCOUNT --auth-mode login `
             --destination '$web/_theme' --source deploy/_theme --overwrite `
             --only-show-errors
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           # 3) Home page — brotli bytes with explicit headers. Overwrites the SPA
           #    index.html only; leaves any other $web root content untouched.
@@ -94,6 +98,7 @@ jobs:
             --container '$web' --name index.html --file deploy/index.html --overwrite `
             --content-type 'text/html' --content-encoding 'br' `
             --only-show-errors
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           # 4) Favicon at the site root — plain, overwrite only.
           az storage blob upload --account-name $env:ACCOUNT --auth-mode login `

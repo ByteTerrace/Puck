@@ -41,7 +41,7 @@ if (diagnostics.TryRun(
 )) {
     return diagnosticExitCode;
 }
-var corpora = CorpusManifest.Load(path: CorpusManifest.BesideSource(), cacheRoot: CommandLineArguments.Value(args: args, name: "--corpus-cache"));
+var corpora = CorpusManifest.Load(path: CorpusManifest.InRepository(projectName: "Puck.AdvancedGamingBrick.Post"), cacheRoot: CommandLineArguments.Value(args: args, name: "--corpus-cache"));
 
 if (args.Contains(
     comparer: StringComparer.OrdinalIgnoreCase,

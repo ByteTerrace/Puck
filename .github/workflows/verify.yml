@@ -14,6 +14,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
@@ -26,7 +27,6 @@ on:
 
 permissions:
   contents: read
-  checks: write
 
 concurrency:
   group: ${{ github.event_name == 'pull_request' && format('verify-pr-{0}', github.ref) || format('verify-run-{0}', github.run_id) }}
@@ -41,6 +41,9 @@ env:
 jobs:
   gate:
     if: ${{ github.event_name != 'schedule' }}
+    permissions:
+      contents: read
+      checks: write
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -82,7 +85,7 @@ jobs:
           if-no-files-found: error
 
       - name: Test results
-        if: always()
+        if: always() && github.event_name != 'pull_request'
         uses: dorny/test-reporter@v1
         with:
           name: Humble GamingBrick ${{ github.event.inputs.lane || 'gate' }}
@@ -92,6 +95,9 @@ jobs:
 
   advanced:
     if: ${{ github.event_name != 'schedule' }}
+    permissions:
+      contents: read
+      checks: write
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -133,7 +139,7 @@ jobs:
           if-no-files-found: error
 
       - name: Test results
-        if: always()
+        if: always() && github.event_name != 'pull_request'
         uses: dorny/test-reporter@v1
         with:
           name: Advanced GamingBrick
@@ -208,7 +214,9 @@ jobs:
         run: dotnet test tests/Puck.World.Browser.Tests --configuration Release
 
       - name: Publish the browser-wasm AppBundle
-        run: dotnet publish src/Puck.World.Browser --configuration Release -r browser-wasm
+        # The project owns its RID. A command-line -r propagates it to every
+        # library and invalidates their ordinary locked restore graphs.
+        run: dotnet publish src/Puck.World.Browser --configuration Release --no-restore
 
       - name: Run the Node harness against the AppBundle
         working-directory: src/Puck.Dashboard/src/portal

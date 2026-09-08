@@ -19,6 +19,10 @@ by a person, which four-hundred-character string literals buried among generic c
 Committed artifacts (all deterministic, stable ordering, update-on-change): `frontier.json`, `coverage-manifest.json`,
 `bench-baselines.json`, `RESULTS.md`.
 
+`TestPaths` resolves these files in the running checkout through the shared
+repository locator. CI source-path mapping does not change where declarations
+are read or generated artifacts are written; see [CI and releases](../../docs/ci.md).
+
 Every artifact write is **execution-gated**: the ledger persists an artifact only when the check that owns it actually
 ran this session. The manifest belongs to the ratchet gate, the frontier to the runs that consumed domains, each
 `RESULTS.md` tier block to that tier, the bench block to the bench, and the coverage block to the ratchet. A filtered or

@@ -169,7 +169,7 @@ nothing to do with the change under test.
 ```powershell
 dotnet build src/Puck.World.Browser -c Release
 dotnet test tests/Puck.World.Browser.Tests -c Release
-dotnet publish src/Puck.World.Browser -c Release -r browser-wasm
+dotnet publish src/Puck.World.Browser -c Release
 ```
 
 `tests/Puck.World.Browser.Tests` links `Engine/*.cs` as source and runs under
@@ -180,7 +180,7 @@ Node is not on `PATH` on the reference system
 (`FNM_DIR="$APPDATA/fnm" fnm exec --using=26.5.1 -- node ...`):
 
 ```powershell
-dotnet publish src/Puck.World.Browser -c Release -r browser-wasm
+dotnet publish src/Puck.World.Browser -c Release
 cd src/Puck.Dashboard/src/portal
 $env:FNM_DIR = "$env:APPDATA/fnm"; fnm exec --using=26.5.1 -- node --test tests/engine-wasm.test.cjs
 ```

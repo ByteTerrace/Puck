@@ -1,0 +1,75 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.run_id }}
+  cancel-in-progress: false
+
+env:
+  CI: true
+  DOTNET_NOLOGO: true
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install the wasm-tools workload
+        run: dotnet workload install wasm-tools
+
+      - name: Install pinned DXC
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'dxc.zip'
+          $destination = Join-Path $env:RUNNER_TEMP 'dxc'
+          Invoke-WebRequest 'https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.9.2607/dxc_2026_07_29.zip' -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne 'a1dfb116ba3eeae6a1582291b53a8e7bf65ad760676bd3194685c8f7367cd241') {
+            throw 'DXC archive checksum mismatch.'
+          }
+          Expand-Archive -LiteralPath $archive -DestinationPath $destination
+          Join-Path $destination 'bin/x64' >> $env:GITHUB_PATH
+
+      - name: Restore locked dependencies
+        run: dotnet restore Puck.slnx --locked-mode
+
+      - name: Build the solution
+        run: dotnet build Puck.slnx --configuration Release --no-restore -bl:artifacts/build.binlog
+
+      - name: Test the solution
+        run: >-
+          dotnet test Puck.slnx --configuration Release --no-build --no-restore
+          --logger trx --results-directory artifacts/test-results
+          --blame-hang-timeout 15m --blame-hang-dump-type mini
+
+      - name: Publish the Windows world artifact
+        run: dotnet publish src/Puck.World --configuration Release --no-build --no-restore --output artifacts/world
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: world-windows-framework-dependent
+          path: artifacts/world
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-diagnostics
+          path: |
+            artifacts/build.binlog
+            artifacts/test-results
+          if-no-files-found: warn

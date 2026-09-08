@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -29,20 +28,17 @@ internal enum Tier {
     /// <summary>Timing facts with breach-tolerant failure semantics; opt in with <c>bench.runsettings</c>.</summary>
     Bench,
 }
-/// <summary>Locates the committed test artifacts relative to this source file, so a test run writes the ledger,
+/// <summary>Locates the committed test artifacts in the running checkout, so a test run writes the ledger,
 /// frontier, manifest, and baselines back into the project directory rather than the build output.</summary>
 internal static class TestPaths {
     /// <summary>Gets the absolute path of the test project directory (the directory holding this source file).</summary>
-    public static string ProjectDirectory { get; } = ResolveProjectDirectory();
+    public static string ProjectDirectory { get; } = RepositoryPaths.Resolve(relativePath: "tests/Puck.Maths.Tests");
 
     /// <summary>Resolves the absolute path of a committed artifact by file name.</summary>
     /// <param name="fileName">The artifact file name, for example <c>frontier.json</c>.</param>
     /// <returns>The absolute path within the project directory.</returns>
     public static string Artifact(string fileName) =>
         Path.Combine(path1: ProjectDirectory, path2: fileName);
-
-    private static string ResolveProjectDirectory([CallerFilePath] string callerFilePath = "") =>
-        (Path.GetDirectoryName(path: callerFilePath) ?? Directory.GetCurrentDirectory());
 }
 /// <summary>Deterministic JSON persistence for the committed artifacts: stable member and array ordering, LF line
 /// endings, and update-on-change writes so an unchanged artifact never churns the working tree.</summary>

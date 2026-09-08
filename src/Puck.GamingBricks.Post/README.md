@@ -26,6 +26,14 @@ signatures, parameters, return values, and exceptions.
 | `CorpusManifest` | Resolves explicit corpus paths or the pinned cache; `Load(path, cacheRoot)` sets the cache used for both fetch and resolution. Both runners expose `--corpus-cache`. |
 | `CoreEmbeddingProbe` | Checks synchronous core input, video, audio, state replay and lookahead without host infrastructure. |
 
+Both runners locate their committed manifests with
+`CorpusManifest.InRepository(projectName)`; the Humble battery resolves its
+expectations ledger in the same checkout. The shared runtime locator walks to
+`Puck.slnx` from the executable directory, then the working directory, so CI's
+deterministic compiler source paths do not affect corpus selection or ledger
+updates. A runner launched outside the checkout must use a working directory
+inside it.
+
 ## Not shared
 
 Each battery's `PostContext` (artifacts directory, corpus roots, BIOS image

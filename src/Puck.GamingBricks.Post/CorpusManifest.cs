@@ -57,15 +57,13 @@ public sealed partial class CorpusManifest {
         path3: "corpora"
     );
 
-    /// <summary>Resolves the <c>corpora.json</c> beside the calling source file, independent of the process's working
-    /// directory or build-output layout.</summary>
-    /// <param name="sourceFile">Supplied by the compiler; never pass explicitly.</param>
+    /// <summary>Resolves a battery's committed <c>corpora.json</c> in the running checkout, independently of
+    /// compiler source-path mapping.</summary>
+    /// <param name="projectName">The battery's directory name under <c>src</c>.</param>
     /// <returns>The manifest's path.</returns>
-    public static string BesideSource([System.Runtime.CompilerServices.CallerFilePath] string sourceFile = "") =>
-        Path.Combine(
-        path1: (Path.GetDirectoryName(path: sourceFile) ?? "."),
-        path2: "corpora.json"
-    );
+    /// <exception cref="DirectoryNotFoundException">No checkout is found above the executable or working directory.</exception>
+    public static string InRepository(string projectName) =>
+        RepositoryPaths.Resolve(relativePath: Path.Combine(path1: "src", path2: projectName, path3: "corpora.json"));
     /// <summary>Loads a manifest.</summary>
     /// <param name="path">The manifest file's path.</param>
     /// <param name="cacheRoot">Cache directory; null uses the OS local application-data directory.</param>

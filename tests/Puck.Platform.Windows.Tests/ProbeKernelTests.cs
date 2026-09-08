@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Presentation;
 using Puck.Platform.Probes;
@@ -608,11 +607,8 @@ public sealed class ProbeKernelTests {
 
         return block;
     }
-    private static string KernelPath(string name, [CallerFilePath] string callerFilePath = "") {
-        var repositoryRoot = Path.GetFullPath(path: Path.Combine(path1: Path.GetDirectoryName(path: callerFilePath)!, path2: "..", path3: ".."));
-
-        return Path.Combine(repositoryRoot, "src", "Puck.Shaders", "Assets", "Probes", $"{name}.hlsl");
-    }
+    private static string KernelPath(string name) =>
+        RepositoryPaths.Resolve(relativePath: $"src/Puck.Shaders/Assets/Probes/{name}.hlsl");
     private static int Luminance(byte[] pixels, int x, int y) {
         var offset = (((y * FrameWidth) + x) * 4);
 

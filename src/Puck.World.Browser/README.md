@@ -26,8 +26,12 @@ main.mjs      The one entry point the studio and the Node harness both import:
 
 ```
 dotnet build src/Puck.World.Browser -c Release
-dotnet publish src/Puck.World.Browser -c Release -r browser-wasm
+dotnet publish src/Puck.World.Browser -c Release
 ```
+
+The project already declares `browser-wasm`. Do not add a command-line `-r`:
+that global property reaches every referenced library and changes its NuGet
+lock graph, breaking the next ordinary desktop restore.
 
 Both commands fail on this machine unless the `C_INCLUDE_PATH` environment
 variable naming a Cosmocc toolchain's include directory is unset first — that
@@ -39,7 +43,7 @@ above.
 
 ## AppBundle — real layout, recorded from an actual publish
 
-`dotnet publish -r browser-wasm` writes `bin/Release/net10.0/browser-wasm/AppBundle/`:
+The publish command writes `bin/Release/net10.0/browser-wasm/AppBundle/`:
 
 ```
 AppBundle/

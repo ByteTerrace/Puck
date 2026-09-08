@@ -49,7 +49,7 @@ var parallelism = int.Parse(
         name: "--parallelism"
     ) ?? "0")
 );
-var corpora = CorpusManifest.Load(path: CorpusManifest.BesideSource(), cacheRoot: CommandLineArguments.Value(args: args, name: "--corpus-cache"));
+var corpora = CorpusManifest.Load(path: CorpusManifest.InRepository(projectName: "Puck.HumbleGamingBrick.Post"), cacheRoot: CommandLineArguments.Value(args: args, name: "--corpus-cache"));
 
 // --fetch-corpora fills the local cache from the manifest's pinned archives and exits; a build agent runs it once per
 // cache key, a developer once per version bump.
