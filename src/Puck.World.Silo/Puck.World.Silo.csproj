@@ -2,6 +2,7 @@
     <PropertyGroup>
         <IsAotCompatible>false</IsAotCompatible>
         <OutputType>Exe</OutputType>
+        <ServerGarbageCollection>true</ServerGarbageCollection>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Composition roots</PuckLayer>
     </PropertyGroup>
@@ -16,6 +17,7 @@
         <ProjectReference Include="..\Puck.Launcher\Puck.Launcher.csproj" />
         <ProjectReference Include="..\Puck.Storage\Puck.Storage.csproj" />
         <ProjectReference Include="..\Puck.World.Addons\Puck.World.Addons.csproj" />
+        <ProjectReference Include="..\Puck.World.Azure\Puck.World.Azure.csproj" />
         <ProjectReference Include="..\Puck.World.Client\Puck.World.Client.csproj" />
         <ProjectReference Include="..\Puck.World.Console\Puck.World.Console.csproj" />
         <ProjectReference Include="..\Puck.Actors\Puck.Actors.csproj" />

@@ -71,13 +71,22 @@ in-memory reminders/state and an ephemeral DataProtection key ring — `dotnet r
 
 ## Deploy
 
-```powershell
-# 1. Infra (adds bytrccap001 + bytrcidp007 + role assignments + Graph app roles + FIC):
-az deployment group create --resource-group byteterrace --template-file ..\Azure.Resources\main.bicep --parameters ..\Azure.Resources\main.bicepparam
+The [Azure CI workflow](../../docs/ci.md#azure-production-deployment) builds from
+the repository root, tests the Linux image, and deploys production by image digest.
+The Dockerfile requires the shared build files, analyzers, and sibling Maths
+project; using this project directory alone as its context cannot build it.
 
-# 2. Image:
-az acr build --registry bytrccrp000 --image web-actors:latest .
+For an operator-driven deployment from a clean, committed checkout, with
+Docker running and Azure CLI signed in, run from the repository root:
+
+```powershell
+dotnet run -c Release --file build/Azure.cs -- build-actors
 ```
+
+This builds and pushes a commit-tagged image and updates `bytrccap001` to its
+digest. `-NoRestart` publishes the image without updating the app;
+`-ContainerApp` selects another existing app. The registry retains its ABAC
+mode and disabled ARM-audience authentication throughout.
 
 ## Networking (decided 2026-08-27: public environment + VNet integration)
 
@@ -104,6 +113,7 @@ immutable network change: delete + redeploy `bytrccaep000` (CanNotDelete locks o
   replica until it is (see `scaleSettings` in `main.bicep`).
 - `DataProtection:ApplicationName` should become a deliberate shared name for both hosts (small
   migration of existing protected payloads; coordinate with Web.API).
-- After deploy, set App Config `Onboarding:ActorsBaseUrl` to `https://bytrccap001.<env-default-domain>`
-  (the `actorsEndpoint` deployment output) to flip the edge over.
+
+The Azure deployment imports `Onboarding:ActorsBaseUrl` from the current
+`actorsEndpoint` infrastructure output before updating the Actors image.
 

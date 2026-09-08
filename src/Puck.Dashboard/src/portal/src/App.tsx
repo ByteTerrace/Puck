@@ -25,7 +25,7 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { RiDatabase2Fill, RiHistoryLine, RiHome9Fill } from "@remixicon/react";
+import { RiBookOpenLine, RiDatabase2Fill, RiHistoryLine, RiHome9Fill } from "@remixicon/react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { HostContextValue } from "../../shared/interfaces";
@@ -34,6 +34,9 @@ import { createGraphClient } from "./clients/graphClientApi";
 import GraphClientProvider from "./clients/GraphClientProvider";
 import logoUrl from "/assets/logo.png";
 
+import { sectionFromLocation, sectionPath, type Section } from "./siteRoutes";
+
+const Documentation = lazy(() => import("./components/Documentation"));
 const AuditView = lazy(() => import("./components/AuditView"));
 const DataExplorer = lazy(() => import("./components/DataExplorer"));
 const WorldStudio = lazy(() => import("./components/world/WorldStudio"));
@@ -95,28 +98,6 @@ const colorSchemeManager = localStorageColorSchemeManager({
   key: "byteterrace.mantine.theme.colorScheme",
 });
 
-type Section = "audit" | "data" | "studio" | "home";
-
-// Sections are real routes so refreshes, deep links, and back/forward behave
-// the way a site is expected to. The Puck section lives at /puck on every host, except a
-// "puck.*" host, where the bare root already IS the Puck section — puckPath() picks the one
-// in-app navigation should write, and sectionFromLocation's unmatched-path fallback already
-// resolves both to "studio" without needing a path check of its own.
-const isPuckHost = (): boolean => location.hostname.startsWith("puck.");
-const puckPath = (): string => (isPuckHost() ? "/" : "/puck");
-
-const sectionFromLocation = (): Section => {
-  if (location.pathname.startsWith("/audit")) {
-    return "audit";
-  }
-
-  if (location.pathname.startsWith("/data")) {
-    return "data";
-  }
-
-  return "studio";
-};
-
 function OnboardingIndicator() {
   const onboarding = useSelector(
     (state: { onboarding?: OnboardingState }) => state.onboarding,
@@ -160,17 +141,17 @@ function App({ context }: { context?: HostContextValue }) {
     [tokenCredential]
   );
   const [opened, { toggle, close }] = useDisclosure();
-  const [activeSection, setActiveSection] = useState<Section>(sectionFromLocation);
+  const [activeSection, setActiveSection] = useState<Section>(() => sectionFromLocation(location));
   const userObjectId = context?.activeAccount?.localAccountId;
 
   useEffect(() => {
     const syncToLocation = () => {
-      const next = sectionFromLocation();
+      const next = sectionFromLocation(location);
       if (next === activeSection) return;
       const destination = location.pathname + location.search + location.hash;
       const continueNavigation = () => { history.replaceState(null,"",destination); setActiveSection(next); close(); };
       if (!window.dispatchEvent(new CustomEvent("puck-before-navigate",{cancelable:true,detail:{continueNavigation}}))) {
-        history.pushState(null,"",activeSection === "audit" ? "/audit" : activeSection === "data" ? "/data" : puckPath());
+        history.pushState(null,"",sectionPath(activeSection, location.hostname));
         return;
       }
       continueNavigation();
@@ -188,7 +169,7 @@ function App({ context }: { context?: HostContextValue }) {
   const navigateTo = (section: Section) => {
     const continueNavigation = () => {
       close();
-      history.pushState(null,"",section === "audit" ? "/audit" : section === "data" ? "/data" : puckPath());
+      history.pushState(null,"",sectionPath(section, location.hostname));
       setActiveSection(section);
     };
     if (section !== activeSection && !window.dispatchEvent(new CustomEvent("puck-before-navigate", {cancelable:true,detail:{continueNavigation}}))) return;
@@ -229,7 +210,7 @@ function App({ context }: { context?: HostContextValue }) {
                   >
                     <Flex align="center" gap="sm" justify="center">
                       <img alt="Home" src={logoUrl} width={48} />
-                      <Box visibleFrom="sm" fw={700} style={{ letterSpacing: 1 }}>PUCK STUDIO</Box>
+                      <Box visibleFrom="sm" fw={700} style={{ letterSpacing: 1 }}>{activeSection === "studio" ? "PUCK STUDIO" : "BYTETERRACE"}</Box>
                     </Flex>
                   </Anchor>
                 </Flex>
@@ -257,8 +238,8 @@ function App({ context }: { context?: HostContextValue }) {
           <AppShell.Navbar>
             <Box ml={12} mt={12}>
               <NavLink
-                active={"studio" === activeSection || "home" === activeSection}
-                href={puckPath()}
+                active={"studio" === activeSection}
+                href={sectionPath("studio", location.hostname)}
                 label="World Studio"
                 leftSection={<RiHome9Fill />}
                 onClick={(event) => {
@@ -286,10 +267,24 @@ function App({ context }: { context?: HostContextValue }) {
                   navigateTo("audit");
                 }}
               />
+            <NavLink
+              active={"docs" === activeSection}
+              href={sectionPath("docs", location.hostname)}
+              label="Documentation"
+              leftSection={<RiBookOpenLine />}
+              onClick={(event) => {
+                event.preventDefault();
+                navigateTo("docs");
+              }}
+            />
             </Box>
           </AppShell.Navbar>
           <AppShell.Main id="main-content" tabIndex={-1}>
-            {"data" === activeSection ? (
+            {"docs" === activeSection ? (
+              <Suspense fallback="loading documentation…">
+                <Documentation />
+              </Suspense>
+            ) : "data" === activeSection ? (
               context?.isSignedIn && userObjectId ? (
                 <Suspense fallback="loading…">
                   <DataExplorer

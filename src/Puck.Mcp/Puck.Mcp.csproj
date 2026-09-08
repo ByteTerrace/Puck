@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Optional extensions</PuckLayer>
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="[10.*,11.0)" />
+        <PackageReference Include="ModelContextProtocol.AspNetCore" Version="[2.*,3.0)" />
+        <PackageReference Include="ModelContextProtocol.Core" Version="[2.*,3.0)" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+    </ItemGroup>
+</Project>

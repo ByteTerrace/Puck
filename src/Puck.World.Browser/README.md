@@ -282,7 +282,10 @@ island (`puck.world.json` + `standard.basis.json` + all 16 imports,
 `~2.4 MB` of source JSON, composing to a `~428 KB` standalone document);
 `tests/Puck.World.Browser.Tests/EngineTimingTests.cs` times the identical
 calls natively (JIT, no wasm interpreter) for comparison. Medians of three
-runs each, this machine:
+runs each, this machine. The native test is tagged `Category=Performance`; shared
+CI runners exclude its machine-dependent ceiling while retaining the browser's
+functional tests. Run it locally with
+`dotnet test tests/Puck.World.Browser.Tests -c Release --filter Category=Performance`.
 
 | Call | wasm interpreter (Node) | native (JIT), cold | native (JIT), warm |
 |---|---:|---:|---:|

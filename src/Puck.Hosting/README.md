@@ -9,7 +9,9 @@ capture work become simulation state.
 Puck.Hosting targets .NET 10; `dotnet pack` produces `ByteTerrace.Puck.Hosting`.
 It depends on `Puck.Abstractions` for presentation, machine, capture, and GPU
 contracts, and on [`Puck.Commands`](../Puck.Commands/README.md) for fixed-step
-input snapshots.
+input snapshots and console sessions, and on
+[`Puck.Networking`](../Puck.Networking/README.md) for bounded framing and local
+capability authentication.
 The [project map](../../docs/project-map.md) shows where it sits in the wider
 repository; the [generated API reference](../../docs/api) owns complete member
 signatures, parameters, return values, and exceptions.
@@ -234,11 +236,85 @@ The machine-neutral queued-host substrate (`QueuedMachineWorker`,
 lives in [`Puck.GamingBricks`](../Puck.GamingBricks/README.md), which depends
 on this project for `EngineTicks`.
 
+## Local console attachment
+
+`LocalControlServer` attaches a trusted operator to a running host's existing
+console and capture seams. The host supplies its `TextCommandSource` and a short
+capture-arming delegate; `ConsoleControlSession` orders both through the ordinary
+command pump. `LocalControlClient` owns one ordered attachment. There is no MCP,
+World, GPU-backend or cloud dependency here; the optional
+[Puck.Mcp](../Puck.Mcp/README.md) extension supplies stdio and authenticated HTTP tools.
+
+The opt-in endpoint binds only IPv4 loopback, admits at most four connections
+including handshakes, and uses Networking's user-only Windows/Linux x64
+[local endpoint capability](../Puck.Networking/README.md#local-endpoint-capabilities).
+Creating an instance starts the listener; the host owns its disposal.
+An in-process extension can use `IControlSessionHost` instead. Targets remain fixed for each session; the host closes their ingress at retirement. This interface introduces no MCP dependency into the host.
+
+### Wire and lifetime
+
+Private messages use Networking's `WireFrame` grammar:
+`[u32 following-length][u8 kind][UTF-8 JSON]`. The length counts the kind plus
+payload; kinds are 0 for capability authentication, 1 for requests and 2 for
+responses. Operation JSON is source-generated. Unknown or duplicate members,
+missing required fields, invalid nulls and depth beyond eight are refused.
+The client also validates response identity, status, output and image placement;
+an authenticated peer cannot silently change those result semantics.
+Request IDs increase strictly from one within a connection. Duplicate/out-of-order
+IDs close it. There is no retry cache or automatic replay after disconnect.
+Client-side admission refusals carry ID zero and do not advance that sequence.
+
+| Boundary | Limit |
+|---|---|
+| Connections, including authentication | 4 |
+| Authentication | 5 seconds |
+| Admitted work | 1 operation per connection |
+| Request JSON payload | 16 KiB |
+| Console line | 8192 UTF-16 code units, also subject to encoded frame limit |
+| Console output | 65536 UTF-16 code units |
+| Completed PNG | 16 MiB |
+| Response JSON payload | 24 MiB |
+| Request deadline | 1–120000 milliseconds; client default 30000 |
+
+Call serially. An additional frame while an operation waits closes and cancels
+that ingress. One bounded read observes disconnect during the wait. Oversized
+frames, partial EOF, invalid authentication and expired deadlines close the
+connection. Blank/comment-only lines and literal multiline batches are refused
+before the unbounded text source.
+
+Console errors preserve `IsError`, `Output` and `ClearTranscript`. Empty output is
+conservatively `submitted`; even `completed` is a console handler result, not a
+new authoritative mutation receipt. Cancellation disposes only this text session:
+queued work is refused, but already-dispatched commands may have effects.
+The server enforces deadlines even when a supplied session ignores cancellation,
+disposes the session once, and observes late task failures. An invalid host result
+or unexpected operation failure reports `unknown`, with no automatic retry.
+Direct `ConsoleControlSession` callers also get one-operation admission and
+deadlines; disposing it cancels an accepted capture wait promptly.
+
+Captures arm through `TextCommandSession.InvokeAsync`, then await the exact
+`FrameCaptureRequest.Completion` off the pump. Cancellation after arming leaves
+the capture alive, with a cleanup continuation owning its unique, user-only temporary directory
+until completion. Successful reads and failed captures also clean that path.
+A process crash can leave a temporary artifact; crash recovery is not promised.
+Headless hosts retain exec but refuse capture. Existing synchronous console
+handlers and GPU readback retain their pump cost.
+
+Disposal closes connections and removes discovery. It does not stop World,
+cancel recordings or issue an implicit gameplay action. See the verification section below.
+
 ## ✅ Verification
 
 The focused Hosting tests cover capture cadence and fault containment,
-capability-revocation cascades, and time-correlation validation:
+capability-revocation cascades, time-correlation validation, and local control:
+Console identity, independent input, capture completion and cleanup, cancellation,
+user-only discovery, mutual authentication, duplicate IDs and bounded admission.
+Windows attachment tests skip on other operating systems. Shared framing tests
+live in `tests/Puck.Networking.Tests`; official MCP client interop lives in
+`tests/Puck.Cli.Tests`. Run each in Release:
 
 ```powershell
-dotnet test tests/Puck.Hosting.Tests/Puck.Hosting.Tests.csproj
+dotnet test tests/Puck.Hosting.Tests/Puck.Hosting.Tests.csproj -c Release
+dotnet test tests/Puck.Networking.Tests/Puck.Networking.Tests.csproj -c Release
+dotnet test tests/Puck.Cli.Tests/Puck.Cli.Tests.csproj -c Release
 ```

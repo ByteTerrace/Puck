@@ -1,5 +1,12 @@
 # Puck.Networking — the dialect-agnostic wire substrate
 
+`PeerEndpoint` parses and formats numeric endpoints and DNS names with explicit ports,
+including bracketed IPv6 addresses.
+Persistent request lanes carry `EndPoint`, preserving `DnsEndPoint` until the
+transport dials; reconnects can therefore resolve a replacement destination.
+Listener binding still uses `IPEndPoint`. DNS routing does not change the peer
+identity authenticated by the transport or the application protocol.
+
 This project holds the transport-neutral framing every socket shares and, in
 `Puck.Networking.Peers`, the symmetric peer substrate built on it. It carries
 no document or protocol vocabulary of its own: a decoder here is written
@@ -21,6 +28,34 @@ The package depends on `ByteTerrace.Puck.Maths` and
 consumer surface: a public member with no caller inside this repository —
 `PeerIdentity.Save`/`Load`, `HandshakeWireFormat.WriteHelloIdentityAsync` —
 is kept, documented, and covered by a law, not treated as dead.
+
+## Local endpoint capabilities
+
+Linux opens the descriptor without following a final symbolic link, then checks the opened inode: current effective UID, regular file, one link and no group/other access. New files use mode 0600. The x86-64 ABI is explicit; other Linux architectures are refused.
+
+The transport supports **Windows and Linux x64**. `LocalEndpointCapability` supplies discovery and mutual authentication for an
+IPv4 loopback listener. Its caller chooses an ephemeral port and a random
+attachment path in the current user's temporary directory. On Windows, a protected DACL grants only that user's SID access. The
+host keeps the file open, permitting reads but preventing writes and replacement.
+`LocalUserAccess` applies the platform's owner-only access policy here and to Hosting's
+private capture directories. Windows clients inspect the opened file's owner and DACL;
+Linux clients validate the opened inode as described above. The descriptor
+carries a revision, random host incarnation, port and 256-bit secret. Only its
+path is printed or passed on the command line.
+
+Both peers prove possession of the secret using HMAC-SHA256 over the revision,
+host incarnation, role and two fresh 256-bit challenges. The secret never crosses
+the connection. Distinct client/server roles prevent reflection; fresh challenges
+prevent replay. A reused port cannot authenticate without the descriptor secret.
+Callers must connect and bind only to `127.0.0.1`. Hosting's local control
+endpoint enforces both choices.
+It trusts the OS user, including that user's other processes and elevation
+levels. It is not a process sandbox or a remote service.
+
+The handshake uses `WireFrame` kind **0**, a 4096-byte JSON payload ceiling,
+source-generated JSON with depth eight and unknown-member refusal, and a
+five-second deadline. Host command and capture vocabulary stays in
+[Puck.Hosting](../Puck.Hosting/README.md#local-console-attachment).
 
 ## What it carries
 

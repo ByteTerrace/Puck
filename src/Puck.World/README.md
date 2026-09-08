@@ -1,5 +1,10 @@
 # Puck.World — the world game host
 
+For AI pairing, `world.control start|stop|status` manages an authenticated
+Operator attachment without restarting World. CLI serves console exec and
+completed PNG tools over local stdio or OAuth-protected remote HTTP; see
+[setup and trust](../Puck.Mcp/README.md).
+
 `Puck.World` is the live game: a document-driven, network-shaped local
 multiplayer world of up to 4096 simulated bodies (four local seats plus
 autonomous stand-ins), rendered through the SDF engine and scripted end to end
