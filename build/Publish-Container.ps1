@@ -11,8 +11,7 @@ $PSNativeCommandUseErrorActionPreference = $true
 Set-StrictMode -Version Latest
 $server = (az acr show --name $Registry --query loginServer --output tsv).Trim()
 $tenant = (az account show --query tenantId --output tsv).Trim()
-# This registry rejects ARM-audience tokens. Exchange an ACR-audience Entra token;
-# never change the registry's ABAC mode or authentication policy to make a build work.
+# Publishing uses an ACR-audience token; repository authorization stays under ABAC.
 $accessToken = (az account get-access-token --resource https://containerregistry.azure.net --query accessToken --output tsv).Trim()
 if ($env:GITHUB_ACTIONS -eq 'true') { Write-Output "::add-mask::$accessToken" }
 $response = Invoke-RestMethod -Method Post -Uri "https://$server/oauth2/exchange" -Body @{

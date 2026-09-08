@@ -160,19 +160,22 @@ public sealed class WorldStorageNeighbourResolver : IWorldNeighbourResolver {
             }
         }
 
-        if (!WorldJsonPayload.TryParse(
+        // Parse with the world's state-binding context, as a file-backed neighbour does. Raw JSON parsing
+        // cannot resolve creation expressions such as state.strideCadence in the shipped Puck world.
+        if (!WorldDefinitionFileSource.TryParseComposed(
+            definition: out var parsed,
             json: json,
-            info: WorldJsonContext.Default.WorldDefinition,
-            value: out var parsed,
-            error: out var parseError
+            neighbours: null,
+            reason: out var parseError,
+            sourceName: address.Key,
+            validateAdjacencyClaims: false
         )) {
             return WorldNeighbourResolution.Unavailable(reason: $"'{address.Key}' does not parse as {WorldDefinition.SchemaVersion} — {parseError}");
         }
 
-        // The neighbour's document is reduced to its seam facts here and never handed to the validator: a cloud copy
-        // is fetched to prove a border, not to read a world.
+        // Do not recursively validate adjacency claims: reduce this independently parsed neighbour to seam facts.
         return ((WorldCounterpartAttestation.TryCompose(
-            definition: WorldDefinitionMigrations.Apply(definition: parsed),
+            definition: parsed!,
             document: document,
             attestation: out var attestation,
             reason: out var attestReason

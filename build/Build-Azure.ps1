@@ -9,6 +9,7 @@ Set-StrictMode -Version Latest
 $root = Split-Path $PSScriptRoot -Parent
 Push-Location $root
 try {
+    & ./build/Test-AzureDeployment.ps1
     $output = [IO.Path]::GetFullPath($OutputDirectory)
     if (Test-Path $output) { throw "Use a fresh output directory: $output" }
     New-Item -ItemType Directory -Path $output -Force | Out-Null
@@ -32,6 +33,7 @@ try {
     dotnet publish src/Puck.Cli -c Release --no-restore -o src/Puck.Cli/publish
     dotnet src/Puck.Cli/publish/Puck.Cli.dll official build --out "$output/official" --channel $Channel --engine src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle
     dotnet src/Puck.Cli/publish/Puck.Cli.dll official verify --base "$output/official" --channel $Channel --expect-commit $commit
+    dotnet run build/Prepare-WorldSilo.cs -c Release -- src/Puck.World/Assets/worlds "$output/silo-worlds"
     # The studio integration tests use the documented local dev tree and the real engine.
     dotnet src/Puck.Cli/publish/Puck.Cli.dll official build --out artifacts/official --channel dev --engine src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle
 
@@ -47,7 +49,8 @@ try {
     } finally { Pop-Location }
     # Publish the existing Storage/Front Door layout, including its Brotli host files.
     Copy-Item src/Puck.Dashboard/dist-deploy "$output/dashboard-storage" -Recurse
-    $files = @(Get-ChildItem $output -File -Recurse | Sort-Object FullName | ForEach-Object {
+    & ./build/Build-Docs.ps1 -OutputDirectory "$output/dashboard-storage"
+    $files = @(Get-ChildItem $output -File -Recurse -Force | Sort-Object FullName | ForEach-Object {
         @{ path = [IO.Path]::GetRelativePath($output, $_.FullName).Replace('\', '/'); sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
     })
     @{ commit = $commit; channel = $Channel; files = $files } | ConvertTo-Json -Depth 5 | Set-Content "$output/release.json" -Encoding utf8NoBOM

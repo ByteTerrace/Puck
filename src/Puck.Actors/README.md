@@ -113,6 +113,7 @@ immutable network change: delete + redeploy `bytrccaep000` (CanNotDelete locks o
   replica until it is (see `scaleSettings` in `main.bicep`).
 - `DataProtection:ApplicationName` should become a deliberate shared name for both hosts (small
   migration of existing protected payloads; coordinate with Web.API).
-- After deploy, set App Config `Onboarding:ActorsBaseUrl` to `https://bytrccap001.<env-default-domain>`
-  (the `actorsEndpoint` deployment output) to flip the edge over.
+
+The Azure deployment imports `Onboarding:ActorsBaseUrl` from the current
+`actorsEndpoint` infrastructure output before updating the Actors image.
 

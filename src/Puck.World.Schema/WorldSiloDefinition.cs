@@ -15,7 +15,7 @@ public enum WorldSiloStoreKind {
 /// <summary>Which clustering provider a silo document's <see cref="WorldSiloClustering"/> selects.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldSiloClusteringKind>))]
 public enum WorldSiloClusteringKind {
-    /// <summary>Single-process membership — every local run and the canary; no table is named or touched.</summary>
+    /// <summary>Single-process membership, including a single production silo; no table is named or touched.</summary>
     Localhost,
 
     /// <summary>Azure Storage Table clustering.</summary>

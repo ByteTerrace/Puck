@@ -11,9 +11,6 @@ name: Verify
 # regenerating the checked-in schema or the name registry fails the build here rather than only in a manual verb run.
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_call:
   schedule:
     - cron: "17 3 * * *"

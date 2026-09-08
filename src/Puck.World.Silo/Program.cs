@@ -107,4 +107,4 @@ try {
     // A quit that lands before Orleans' own startup lifecycle finishes cancels that lifecycle — an ordinary
     // shutdown race, not a fault; every terminal command already ran on the tick thread before this unwound.
 }
-return 0;
+return Environment.ExitCode;

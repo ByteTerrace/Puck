@@ -90,7 +90,7 @@ jobs:
     uses: ./.github/workflows/verify.yml
 
   publish:
-    needs: [gate, pack, build, verify]
+    needs: [gate, pack, build, verify, docs]
     if: needs.gate.outputs.release == 'true'
     runs-on: ubuntu-latest
     # id-token: write lets NuGet/login exchange the run's OIDC token for a
@@ -155,8 +155,6 @@ jobs:
           echo "Created release $tag"
 
   docs:
-    needs: release
-    permissions:
-      contents: read
-      id-token: write
+    needs: gate
+    if: needs.gate.outputs.release == 'true'
     uses: ./.github/workflows/docs.yml

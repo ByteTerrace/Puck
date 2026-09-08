@@ -151,6 +151,7 @@ param resources = {
     spa: {
       redirectUris: [
         'https://puck.${apexDomainName}'
+        'https://docs.${apexDomainName}'
         'https://bytrc.com'
         'https://${apexDomainName}'
         'https://portal.${apexDomainName}'
@@ -227,8 +228,8 @@ param resources = {
         'default-src': ['\'none\'']
         'font-src': ['\'self\'']
         'form-action': ['\'self\'']
-        'frame-ancestors': ['\'none\'']
-        'frame-src': ['https://login.microsoftonline.com']
+        'frame-ancestors': ['\'self\'']
+        'frame-src': ['\'self\'', 'https://login.microsoftonline.com']
         'img-src': ['\'self\'', 'data:']
         'manifest-src': ['\'self\'']
         'media-src': ['\'none\'']
@@ -251,6 +252,7 @@ param resources = {
           'api.${apexDomainName}'
           'portal.${apexDomainName}'
           'puck.${apexDomainName}'
+          'docs.${apexDomainName}'
           'www.${apexDomainName}'
           'bytrc.com'
         ]
@@ -267,6 +269,7 @@ param resources = {
           'blob.${apexDomainName}'
           'portal.${apexDomainName}'
           'puck.${apexDomainName}'
+          'docs.${apexDomainName}'
           'www.${apexDomainName}'
           'bytrc.com'
         ]
@@ -290,6 +293,7 @@ param resources = {
           'blob.${apexDomainName}'
           'portal.${apexDomainName}'
           'puck.${apexDomainName}'
+          'docs.${apexDomainName}'
           'www.${apexDomainName}'
           'bytrc.com'
         ]
@@ -297,7 +301,6 @@ param resources = {
         originGroupName: 'blob-public'
         originPath: '/'
         patternsToMatch: [
-          '/favicon.ico'
           '/official/*'
           '/public/*'
         ]
@@ -308,6 +311,8 @@ param resources = {
         customDomains: [
           apexDomainName
           'portal.${apexDomainName}'
+          'puck.${apexDomainName}'
+          'docs.${apexDomainName}'
           'www.${apexDomainName}'
           'bytrc.com'
         ]
@@ -330,6 +335,7 @@ param resources = {
           apexDomainName
           'portal.${apexDomainName}'
           'puck.${apexDomainName}'
+          'docs.${apexDomainName}'
           'www.${apexDomainName}'
           'bytrc.com'
         ]

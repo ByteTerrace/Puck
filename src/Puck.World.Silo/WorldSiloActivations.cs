@@ -6,9 +6,13 @@ namespace Puck.World.Silo;
 /// <c>StartAsync</c> — activation completes only once the tick thread drains the activation mailbox, and that
 /// thread is spawned by the headless tick host's own <c>StartAsync</c>; awaiting activation from this service's own
 /// <c>StartAsync</c> would deadlock the host waiting on a pump that has not started yet.</summary>
-internal sealed class WorldSiloActivations(WorldSiloDefinition definition, IGrainFactory grainFactory) : BackgroundService {
+internal sealed class WorldSiloActivations(WorldSiloDefinition definition, IGrainFactory grainFactory, IHostApplicationLifetime lifetime) : BackgroundService {
     /// <inheritdoc/>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
+        // The tick host and Orleans membership must both be ready before requesting a grain placement.
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = lifetime.ApplicationStarted.Register(() => started.TrySetResult());
+        await started.Task.WaitAsync(stoppingToken);
         foreach (var world in definition.Worlds) {
             if (!world.Pinned) {
                 continue;
@@ -20,8 +24,10 @@ internal sealed class WorldSiloActivations(WorldSiloDefinition definition, IGrai
             );
             var activated = await grain.ActivateAsync();
 
-            if (!activated) {
-                Console.Error.WriteLine(value: $"[silo.activate: pinned row 'owner/{world.Owner:D}/{world.World}' did not activate]");
+            // Establish a durable baseline before reporting startup success: journals require a checkpoint.
+            if (!activated || !await grain.CheckpointNowAsync()) {
+                Environment.ExitCode = 1;
+                throw new InvalidOperationException($"Pinned row 'owner/{world.Owner:D}/{world.World}' did not activate and checkpoint.");
             }
         }
     }

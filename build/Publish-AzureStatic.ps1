@@ -8,7 +8,7 @@ $PSNativeCommandUseErrorActionPreference = $true
 Set-StrictMode -Version Latest
 $release = Get-Content "$BundleDirectory/release.json" -Raw | ConvertFrom-Json
 if ($release.channel -ne 'stable') { throw 'Production requires the stable content channel.' }
-$outputs = az deployment group show --name puck-production-platform --resource-group $ResourceGroup --query properties.outputs --output json | ConvertFrom-Json
+$outputs = Get-Content artifacts/production-outputs.json -Raw | ConvertFrom-Json
 $container = $outputs.officialContentContainerName.value
 if ($container -notmatch '^[a-f0-9-]{36}$') { throw 'Missing official-content container in production deployment outputs.' }
 $endpoint = [Uri]$outputs.staticSiteEndpoint.value
@@ -27,7 +27,7 @@ function Send-Blob([string] $Container, [string] $Name, [string] $File, [string]
         'x-ms-meta-sha256' = (Get-FileHash $File -Algorithm SHA256).Hash.ToLowerInvariant()
     }
     if ($Encoding) { $headers['x-ms-blob-content-encoding'] = $Encoding }
-    Invoke-WebRequest "https://$($endpoint.Host)/$path" -Method Put -Headers $headers -InFile $File -ContentType $ContentType -TimeoutSec 300 | Out-Null
+    Invoke-WebRequest "https://$($endpoint.Host)/$path" -Method Put -Headers $headers -InFile $File -ContentType $ContentType -TimeoutSec 300 -MaximumRetryCount 3 -RetryIntervalSec 5 | Out-Null
 }
 $manifest = Get-Content "$BundleDirectory/official/stable/manifest.json" -Raw | ConvertFrom-Json
 $types = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal)
@@ -40,9 +40,10 @@ foreach ($entry in $types.GetEnumerator()) {
     Send-Blob $container "public/puck/official/$($entry.Key)" "$BundleDirectory/official/$($entry.Key)" $entry.Value 'public,max-age=31536000,immutable'
 }
 Write-Output "Published $($types.Count) content-addressed official objects."
+Send-Blob $container 'public/puck/official/stable/manifest.json' "$BundleDirectory/official/stable/manifest.json" 'application/json' 'no-cache'
 $mediaTypes = @{'.html'='text/html';'.js'='application/javascript';'.mjs'='application/javascript';'.css'='text/css';'.json'='application/json';'.map'='application/json';'.svg'='image/svg+xml';'.png'='image/png';'.ico'='image/x-icon';'.woff2'='font/woff2';'.wasm'='application/wasm';'.txt'='text/plain'}
 $siteRoot = [IO.Path]::GetFullPath("$BundleDirectory/dashboard-storage")
-# Keep old hashed assets and unrelated docs; publish the mutable entry point last.
+# Keep old hashed assets for open clients; publish the website entry point after its dependencies.
 $files = Get-ChildItem $siteRoot -File -Recurse | Sort-Object @{Expression={ if ($_.FullName -eq (Join-Path $siteRoot 'index.html')) { 1 } else { 0 } }}, FullName
 foreach ($file in $files) {
     $name = [IO.Path]::GetRelativePath($siteRoot, $file.FullName).Replace('\','/')
@@ -52,6 +53,5 @@ foreach ($file in $files) {
     Send-Blob '$web' $name $file.FullName $type 'no-cache' $encoding
 }
 Send-Blob '$web' 'release.json' "$BundleDirectory/release.json" 'application/json' 'no-store'
-Send-Blob $container 'public/puck/official/stable/manifest.json' "$BundleDirectory/official/stable/manifest.json" 'application/json' 'no-cache'
 az afd endpoint purge --resource-group $ResourceGroup --profile-name bytrcfdp000 --endpoint-name default --content-paths '/*' --output none
 Write-Output "Published production dashboard and stable manifest for $($release.commit) to $account."

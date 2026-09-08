@@ -29,9 +29,11 @@ directory, and clustering. The generated schema is
   step toward the checkpoint cadence.
 - `WorldSiloActivations : BackgroundService` — activates every `pinned` row
   from `ExecuteAsync` (never `StartAsync`, which would deadlock waiting on a
-  tick thread the headless host has not spawned yet).
+  tick thread the headless host has not spawned yet). It waits for application startup, then requires each pinned world to activate and checkpoint; a refusal stops the host with a failing exit code.
 - `IWorldGrain`/`WorldGrain` — the grain interface (`IGrainWithGuidCompoundKey`:
   owner oid + world id extension) and its thin adapter over `WorldSiloHost`.
+  Activation allows three minutes for composition and checkpoint recovery;
+  synchronous composition runs outside Orleans' cooperative scheduler.
 - `WorldGrainStatus` — the Orleans-serializable read-back payload
   `IWorldGrain.StatusAsync` and `silo.grains` both answer with.
 - `WorldNoAddonHost : IWorldAddonHost` — the inert host every row's replay
@@ -103,9 +105,22 @@ loads it here or the desktop boots it. The silo
 mounts no machine or addon host regardless (the checkpoint arm gate already
 refuses a row that pumps one), so a validated key never actually runs here.
 
-## Not built here
+## Production deployment
 
-The [Azure workflow](../../docs/ci.md#azure-production-deployment) builds this project's Linux container from the repository root. The production infrastructure does not yet define a World.Silo resource or its workload inputs; building the image does not deploy a hosted world.
+The [Azure workflow](../../docs/ci.md#azure-production-deployment) deploys the primary
+Puck world as a pinned row in a single Azure Container Instance. QUIC requires
+UDP ingress and Linux `libmsquic`; Container Apps does not expose UDP. The silo
+uses its own managed identity, private blob container, and persistent federation
+key. The container test boots Puck, verifies its QUIC key and checkpoint, replaces
+the container, and verifies recovery against the same store. The deployment
+contract above owns resource names, grants, and operator setup.
+
+Hosted neighbour definitions must already be composed and use canonical world
+file names. `build/Prepare-WorldSilo.cs` prepares Puck and its references with the
+engine composer. Checkpoint recovery preserves the running world's state and
+embedded definition; CI does not erase checkpoints to apply authored changes.
+
+## Not built here
 
 Storage Table clustering. Console verbs whose module takes a
 process-wide `IServerLink`/similar singleton rather than resolving it

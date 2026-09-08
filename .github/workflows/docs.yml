@@ -1,107 +1,28 @@
 name: Docs
 
-# Builds the DocFX API reference and deploys the documentation site to the
-# $web container of the bytrcstp001 storage account, behind Front Door. Auth is
-# the bytrcidpzzz user-assigned managed identity via GitHub OIDC federation
-# (no stored secret) — see the federated-credential + repo-variable notes in
-# docs/ci.md. Called by publish.yml after a release, or run manually.
-#
-# Layout written to $web:
-#   /index.html         home page (brotli — Front Door forces Content-Encoding: br here)
-#   /_theme/**          shared theme.css + self-hosted fonts
-#   /reference/**       DocFX output
-#
-# SAFETY: exactly one step deletes remote blobs (the reference sync), and it is
-# scoped to the reference/ prefix. Nothing here touches the rest of $web.
-
 on:
-  release:
-    types: [published]
+  pull_request:
+    paths: ['docs/**', 'src/**', 'build/Build-Docs.ps1', '.github/workflows/docs.yml']
   workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
-  id-token: write # required for the OIDC token azure/login exchanges
-
-concurrency:
-  group: docs-${{ github.ref }}
-  cancel-in-progress: false
 
 jobs:
-  publish-docs:
-    runs-on: windows-latest
-    environment:
-      name: Puck
-      url: https://byteterrace.com/
-    env:
-      ACCOUNT: bytrcstp001
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
-
-      - name: Build API reference (DocFX)
-        run: |
-          dotnet tool restore
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          dotnet docfx docs/api/docfx.json
-
-      - name: Assemble deploy tree
+      - name: Build website documentation
         shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          New-Item -ItemType Directory -Force -Path deploy/reference | Out-Null
-          Copy-Item docs/api/_site/*    deploy/reference/  -Recurse -Force
-          Copy-Item docs/site/_theme    deploy/_theme      -Recurse -Force
-          Copy-Item docs/site/favicon.ico deploy/favicon.ico -Force
-
-          # Home page is brotli-compressed in place: Front Door's portal rule set
-          # force-sets Content-Encoding: br on /index.html, so the stored bytes
-          # must actually be brotli or the browser cannot decode them.
-          $raw = [IO.File]::ReadAllBytes("docs/site/index.html")
-          $out = [IO.File]::Create("deploy/index.html")
-          $br  = [IO.Compression.BrotliStream]::new($out, [IO.Compression.CompressionLevel]::SmallestSize)
-          $br.Write($raw, 0, $raw.Length)
-          $br.Dispose(); $out.Dispose()
-          Write-Host "index.html: $($raw.Length) -> $((Get-Item deploy/index.html).Length) bytes (brotli)"
-
-      - uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        run: ./build/Build-Docs.ps1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Deploy to $web
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-
-          # 1) API reference — sync WITH delete, scoped to the reference/ prefix
-          #    only. This is the single delete-capable operation in the workflow.
-          az storage blob sync --account-name $env:ACCOUNT --auth-mode login `
-            --container '$web' --source deploy/reference --destination reference `
-            --only-show-errors
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          # 2) Shared theme + fonts — overwrite, never delete.
-          az storage blob upload-batch --account-name $env:ACCOUNT --auth-mode login `
-            --destination '$web/_theme' --source deploy/_theme --overwrite `
-            --only-show-errors
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          # 3) Home page — brotli bytes with explicit headers. Overwrites the SPA
-          #    index.html only; leaves any other $web root content untouched.
-          az storage blob upload --account-name $env:ACCOUNT --auth-mode login `
-            --container '$web' --name index.html --file deploy/index.html --overwrite `
-            --content-type 'text/html' --content-encoding 'br' `
-            --only-show-errors
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          # 4) Favicon at the site root — plain, overwrite only.
-          az storage blob upload --account-name $env:ACCOUNT --auth-mode login `
-            --container '$web' --name favicon.ico --file deploy/favicon.ico --overwrite `
-            --content-type 'image/x-icon' `
-            --only-show-errors
+          name: documentation
+          path: artifacts/docs
+          if-no-files-found: error

@@ -5,6 +5,12 @@ previews it against the real engine — `Puck.World.Browser` running in-browser
 (WebAssembly), never a JavaScript reimplementation of engine semantics. The
 authenticated storage and audit pages are separate from the studio.
 
+The website also contains a Documentation page at `/docs`.
+`docs.byteterrace.com` opens it directly; `puck.byteterrace.com` opens World Studio.
+The page embeds the documentation overview and links to the generated API reference.
+Azure CI builds both into the same website release; see the
+[deployment contract](../../docs/ci.md#azure-production-deployment).
+
 ## Run and check
 
 From `src/Puck.Dashboard/src`, run `npm ci` to install the workspace

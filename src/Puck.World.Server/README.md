@@ -1633,6 +1633,11 @@ resolves a basis chain — and resolves its own `references[]` through
 (`WorldStorageNamespace.Hosted`), the same resolver the owned-worlds catalog
 uses with its default namespace.
 
+Stored neighbours use the same composed-document parser and state-binding context
+as local files. This resolves creation expressions such as `state.strideCadence`
+before producing seam attestations. Adjacency claims are not recursively validated
+while resolving a neighbour.
+
 ## Deterministic replay (`WorldReplayTape.cs`, `WorldReplayTape.Drive.cs`, `WorldReplaySnapshot.cs`)
 
 The `replay.*` verb surface (`WorldReplayCommandModule`) lives in

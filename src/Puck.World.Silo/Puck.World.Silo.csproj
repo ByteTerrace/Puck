@@ -2,6 +2,7 @@
     <PropertyGroup>
         <IsAotCompatible>false</IsAotCompatible>
         <OutputType>Exe</OutputType>
+        <ServerGarbageCollection>true</ServerGarbageCollection>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Composition roots</PuckLayer>
     </PropertyGroup>

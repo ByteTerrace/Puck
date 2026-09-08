@@ -1,9 +1,10 @@
 # CI and releases
 
-GitHub Actions validates changes before they can be published. The build,
-verification, and packaging workflows run on pull requests and pushes to
-`main`; each also has a manual entry point in the Actions tab. Publishing calls
-those workflows for the same commit and waits for all three to succeed.
+GitHub Actions validates each pull request and push to `main` through `azure.yml`.
+It calls the reusable build and verification workflows and waits for their gates
+before deployment. Packaging runs separately on the same changes; a versioned
+NuGet release calls build, verification, packaging, and documentation for its own
+commit before publishing.
 
 All external actions are pinned to full commit SHAs, as required by this
 repository's Actions policy. Keep the adjacent version comments when updating
@@ -73,12 +74,10 @@ exchanges the job's OIDC token for a short-lived key. It pushes the exact
 `nuget-packages` artifact from that run, skips already published versions on
 retry, and creates the GitHub Release. No package API key is stored here.
 
-`publish.yml` then calls `docs.yml` directly. Releases created with
-`GITHUB_TOKEN` do not start another release-triggered workflow, so this explicit
-call is necessary ([GitHub's event rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)).
-If docs deployment fails after release creation, rerun the failed job or run
-Docs manually against the release tag; rerunning the release workflow from
-scratch sees the existing release and skips publishing.
+`docs.yml` builds and validates documentation without Azure credentials. The
+Azure application bundle includes that documentation, so the website, docs,
+Functions, containers, and official content are built from one commit. Running
+Docs manually builds an artifact; it does not overwrite the website.
 
 Repository and service setup is still required:
 
@@ -95,73 +94,82 @@ Repository and service setup is still required:
 Hosted validation does not prove GPU parity, licensed BIOS-dependent emulator
 stages, or end-user installation and self-update. Those remain separate release
 qualification work. The current release publishes NuGet libraries and the
-documentation site; desktop builds are downloadable CI artifacts.
+documentation artifact; Azure deploys the website. Desktop builds are downloadable CI artifacts.
 
 ## Azure production deployment
 
-`azure.yml` builds the prebuilt Functions payload, the dashboard's existing
-Storage/Front Door layout, and the stable official browser engine/content tree.
-It tests the dashboard against the real engine and builds Linux images for
-Actors and World.Silo. The actor image must answer `/healthz` before upload.
-Every application payload is hashed in `release.json` and tied to its source
-commit. Builds also run on `codex/azure-ci` while hosted deployment is qualified.
+`azure.yml` builds the Functions payload, the existing Storage/Front Door website
+layout with its documentation page, the stable official browser engine/content,
+and Linux images for Actors and World.Silo. Dashboard tests use the real engine.
+Actors must answer `/healthz`; the silo must activate the primary Puck world,
+checkpoint it, accept a QUIC connection with the expected key, and repeat those
+checks after container replacement using the same store.
 
-The platform build authenticates before restoring the pinned `ts/bvm` Template
-Specs through `src/Puck.Azure.Resources/bicepconfig.json`. Private restore runs
-on trusted pushes and manual runs; pull requests still build the applications
-and containers without Azure credentials.
+A push to `main` deploys after all build and verification jobs succeed. A manual
+run exposes one `deploy` switch; setting it to false performs build and validation
+only. `codex/azure-ci` also builds and supports manual deployment while this path
+is qualified. Pull requests have no Azure credentials. Trusted infrastructure
+builds authenticate before restoring the pinned `ts/bvm` Template Specs through
+`src/Puck.Azure.Resources/bicepconfig.json`.
 
-The existing `Puck` GitHub environment uses `bytrcidpzzz`, client ID
-`7508a16b-0f9b-4322-9bb9-481ad836c052`, with the three Azure variables listed above.
-Its federated subject is
+The `Puck` GitHub environment supplies `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and
+`AZURE_SUBSCRIPTION_ID` for the single CI identity, `bytrcidpzzz` (client ID
+`7508a16b-0f9b-4322-9bb9-481ad836c052`). Its federated subject is
 `repo:ByteTerrace@18753984/Puck@1271519029:environment:Puck`.
-The environment name identifies the federation boundary; deployment targets the
-existing production resources. No separate staging environment is part of this
-workflow.
+The workflow targets production; it creates no staging environment.
 
-Production uses `bytrcfuncp000`, Actors in `bytrccap001`, and the existing
-`bytrcfdp000` Front Door profile over `bytrcstp001`. Dashboard files follow the
-Brotli contract in `src/Puck.Dashboard/scripts/stageDeploy.mjs`; official files
-carry the manifest's media types and content hashes. Publishing must upload
-objects before switching the stable manifest, and preserve unrelated website
-and tenant blobs.
+One concurrency lock covers platform reconciliation and application deployment.
+Once admitted, a run checks that its commit is still the branch tip. It consumes
+only artifacts from its own run, verifies the exact commit, every path and hash,
+and the complete file inventory, including hidden Functions payload files. An
+older run cannot substitute its payload into a newer infrastructure deployment.
+The platform reconciliation preserves the current Actors image and declared
+subnets, records a what-if plan, rejects resource deletion, and applies
+`main.bicep`. It does not grant CI Owner; that is operator-managed setup.
 
-World.Silo has a built container artifact but no production resource or workload
-configuration in `main.bicep`. A container build alone does not deploy a hosted
-world or establish checkpoint recovery.
-Production infrastructure reconciliation is a manual Azure run with
-`infrastructure: true`. It restores the published Bicep modules, retains the
-current actor image and declared production subnets, records the deployment
-plan, and applies `main.bicep` as `puck-production-platform`. It does not assign
-Owner to CI. Deployment outputs retain the official-content container name.
+Production uses `bytrcfuncp000`, Actors in `bytrccap001`, and `bytrcfdp000` Front
+Door over `bytrcstp001`. Image deployment uses immutable digests. Functions uses
+the official action with the prebuilt payload; an `always()` cleanup restores
+SCM restrictions after temporarily admitting the runner's IPv4 address.
 
-Set `deploy: true` on a manual Azure run to publish the application artifacts.
-Set `infrastructure: true` in the same run when the platform also needs to be
-reconciled; application deployment waits for it to succeed. Otherwise, deployment
-requires an existing successful `puck-production-platform` deployment.
-The optional `artifact_run_id` reuses a previous run's payloads. The source must
-be this repository's Azure workflow on `main` or `codex/azure-ci`, with successful
-application and container jobs. The publisher verifies the bundle's stable
-channel, source commit, file paths, and checksums before changing Azure resources.
+The website owns `$web/index.html`. `/docs` selects its documentation page;
+`docs.byteterrace.com` opens that page directly, and `puck.byteterrace.com` opens
+World Studio. DocFX and the documentation overview occupy `/reference/`, with
+shared styles under `/_theme/`. They ship inside the application bundle, never
+from a competing Docs publisher. The dashboard staging script supplies Brotli
+host files. Official objects retain their manifest media types and immutable
+hash paths; the publisher uploads objects before the stable manifest, website
+dependencies before its entry point, and the release marker last. Existing
+hashed assets remain available to open clients. Transient upload failures retry
+within a bound; publishing finishes with a Front Door purge and live checks.
 
-The production job pushes image digests, updates Actors and App Configuration,
-deploys the prebuilt Functions payload, and publishes the dashboard and official
-content. Functions deployment temporarily admits the runner's IPv4 address to
-the SCM endpoint; an `always()` step restores the saved restrictions. Application
-ingress retains its Front Door restrictions. The job retains the prior Actor
-revision, image digests, source run, and SCM snapshot as deployment diagnostics.
-It then checks Actor readiness and the dashboard, engine media types, and API
-dependency health through Front Door. These checks do not prove an interactive
-browser session or hosted World.Silo recovery.
+The primary Puck world runs in `bytrcsilop000` (Azure Container Instances) at
+`world.byteterrace.com:33333`. World uses QUIC/UDP; Container Apps ingress only
+supports HTTP/TCP. `Prepare-WorldSilo.cs` uses the engine composer to package Puck
+and its referenced neighbours, translating file references into hosted-world
+names. Only Puck is pinned. Its checkpoints and journals use Azure Blob Storage;
+Orleans membership is local to this single process. A replacement container
+recovers persisted state. Recovery retains the checkpoint's world definition;
+changing an already running world's authored state requires a world migration,
+not deleting checkpoints during deployment.
 
-Registry access uses `AbacRepositoryPermissions`. The intended deployment policy
-gives the single CI identity resource-group administration and the ABAC-enabled
-Repository Contributor role for publishing and maintenance. Runtime grants in
-Bicep remain conditional: Actors reads only `web-actors`; the marketplace
-identity reads only its marketplace image. Bicep grants neither runtime identity
-Catalog Lister. Existing grants must be reconciled separately because incremental
-deployment does not remove them. Registry login uses an ACR-audience token, and
-ARM-audience authentication remains disabled.
+The silo identity `bytrcidp008` can read only `world-silo` in ACR and has a custom
+`Puck World Store` role on its own blob container: container read/create plus
+blob read/write, with no delete or role-management grant. CI retains its signing
+key in Key Vault and injects it as a secret volume; the runtime needs no vault
+permissions. Secret parameter files are removed and excluded from artifacts.
+The image installs `libmsquic`, which .NET requires for Linux QUIC support.
 
-External JavaScript actions are pinned to release commits whose action manifests
-use Node.js 24. Keep runtime upgrades explicit when refreshing those pins.
+ACR uses `AbacRepositoryPermissions`. CI publishes through Repository Contributor;
+Actors reads only `web-actors`, the marketplace only its image, and the silo only
+`world-silo`. Runtime identities receive no Catalog Lister. Existing broad grants
+need explicit reconciliation because incremental Bicep deployments do not remove
+them. CI uses an ACR-audience token. ARM-audience authentication is enabled because
+Container Apps managed-identity pulls require it; repository authorization remains
+ABAC-controlled.
+
+Deployment retains the source commit, image digests, previous Actors revision,
+infrastructure plan and outputs, and SCM restoration snapshot. Live checks cover
+container versions, the primary world QUIC endpoint, website/docs routes, official
+manifest and engine media types, and API dependency health. These checks do not
+replace interactive browser or GPU qualification.
