@@ -80,6 +80,88 @@ jobs:
 
           if-no-files-found: error
 
+  deploy-production:
+    if: >-
+      always() && github.event_name == 'workflow_dispatch' && inputs.deploy &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/azure-ci') &&
+      needs.identity.result == 'success' && needs.infrastructure.result == 'success' &&
+      (needs.deploy-platform.result == 'success' || needs.deploy-platform.result == 'skipped') &&
+      (inputs.artifact_run_id != '' || (needs.applications.result == 'success' && needs.containers.result == 'success'))
+    needs: [identity, infrastructure, deploy-platform, applications, containers]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: Puck
+    concurrency:
+      group: azure-production-deployment
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Resolve a trusted, validated artifact source
+        id: source
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_RUN_ID: ${{ inputs.artifact_run_id || github.run_id }}
+        run: ./build/Resolve-AzureArtifacts.ps1 -RunId $env:ARTIFACT_RUN_ID
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.source.outputs.run-id }}
+          pattern: azure-*
+          path: artifacts/source
+      - uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Verify registry administration through ABAC
+        shell: pwsh
+        run: ./build/Test-AzureRegistryAccess.ps1
+      - name: Publish containers and apply application configuration
+        id: release
+        shell: pwsh
+        env:
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
+          SOURCE_RUN_ID: ${{ steps.source.outputs.run-id }}
+        run: ./build/Deploy-AzureProduction.ps1 -ArtifactsDirectory artifacts/source -Commit $env:SOURCE_COMMIT -ArtifactRunId $env:SOURCE_RUN_ID
+      - name: Admit the runner to the Functions deployment endpoint
+        id: scm
+        shell: pwsh
+        run: ./build/Set-AzureFunctionsDeploymentAccess.ps1
+      - name: Deploy the prebuilt Functions payload
+        uses: Azure/functions-action@c5060b3b8bb1ebbcb531abd00c822ecbaa8ea656 # v1.5.7
+        with:
+          app-name: ${{ steps.release.outputs.function-app-name }}
+          package: artifacts/azure/functions
+          sku: flexconsumption
+          remote-build: false
+      - name: Restore Functions deployment endpoint restrictions
+        if: always() && steps.scm.outcome != 'skipped'
+        shell: pwsh
+        run: ./build/Set-AzureFunctionsDeploymentAccess.ps1 -Restore
+      - name: Publish the dashboard and stable official content
+        shell: pwsh
+        run: ./build/Publish-AzureStatic.ps1
+      - name: Verify production through Front Door
+        shell: pwsh
+        env:
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
+        run: ./build/Test-AzureProduction.ps1 -Commit $env:SOURCE_COMMIT
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always() && steps.release.outcome != 'skipped'
+        with:
+          name: azure-production-release
+          path: |
+            artifacts/release-source.json
+            artifacts/*.digest
+            artifacts/previous-actor-release.json
+            artifacts/functions-scm-*.json
+          if-no-files-found: error
+
   deploy-platform:
     if: github.event_name == 'workflow_dispatch' && inputs.infrastructure && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/azure-ci')
     needs: [identity, infrastructure]

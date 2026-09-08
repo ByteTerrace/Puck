@@ -135,7 +135,33 @@ current actor image and declared production subnets, records the deployment
 plan, and applies `main.bicep` as `puck-production-platform`. It does not assign
 Owner to CI. Deployment outputs retain the official-content container name.
 
-Registry access uses `AbacRepositoryPermissions`. The single CI identity is the resource-group deployment administrator and has the ABAC-enabled Repository Contributor role for publishing and maintenance. Runtime grants remain conditional: Actors reads only `web-actors`; the marketplace identity reads only its marketplace image. Runtime identities have no Catalog Lister grants. Registry login uses an ACR-audience token, and ARM-audience authentication remains disabled.
+Set `deploy: true` on a manual Azure run to publish the application artifacts.
+Set `infrastructure: true` in the same run when the platform also needs to be
+reconciled; application deployment waits for it to succeed. Otherwise, deployment
+requires an existing successful `puck-production-platform` deployment.
+The optional `artifact_run_id` reuses a previous run's payloads. The source must
+be this repository's Azure workflow on `main` or `codex/azure-ci`, with successful
+application and container jobs. The publisher verifies the bundle's stable
+channel, source commit, file paths, and checksums before changing Azure resources.
+
+The production job pushes image digests, updates Actors and App Configuration,
+deploys the prebuilt Functions payload, and publishes the dashboard and official
+content. Functions deployment temporarily admits the runner's IPv4 address to
+the SCM endpoint; an `always()` step restores the saved restrictions. Application
+ingress retains its Front Door restrictions. The job retains the prior Actor
+revision, image digests, source run, and SCM snapshot as deployment diagnostics.
+It then checks Actor readiness and the dashboard, engine media types, and API
+dependency health through Front Door. These checks do not prove an interactive
+browser session or hosted World.Silo recovery.
+
+Registry access uses `AbacRepositoryPermissions`. The intended deployment policy
+gives the single CI identity resource-group administration and the ABAC-enabled
+Repository Contributor role for publishing and maintenance. Runtime grants in
+Bicep remain conditional: Actors reads only `web-actors`; the marketplace
+identity reads only its marketplace image. Bicep grants neither runtime identity
+Catalog Lister. Existing grants must be reconciled separately because incremental
+deployment does not remove them. Registry login uses an ACR-audience token, and
+ARM-audience authentication remains disabled.
 
 External JavaScript actions are pinned to release commits whose action manifests
 use Node.js 24. Keep runtime upgrades explicit when refreshing those pins.
