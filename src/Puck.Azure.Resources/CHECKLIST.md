@@ -13,9 +13,9 @@
 # Official Content Publishing (`puck official`) and the Docs Workflow
 `bytrcidpzzz` (`userAssignedIdentityPublishing` in main.bicep) is a template-managed resource with
 a federated identity credential for
-`repo:ByteTerrace@18753984/Puck@1271519029:environment:Blobs`. This matches the
+`repo:ByteTerrace@18753984/Puck@1271519029:environment:Puck`. This matches the
 repository's immutable OIDC subject and the existing credential. For a new environment:
-- [ ] set the repo variable `AZURE_CLIENT_ID` (in the `Blobs` GitHub environment) to the template
+- [ ] set the repo variable `AZURE_CLIENT_ID` (in the `Puck` GitHub environment) to the template
       output `publishingIdentityClientId`.
 - [ ] set the repo variables `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID` for the same
       environment. Nothing else needs setting by hand — `docs.yml`'s `azure/login` step exchanges

@@ -30,7 +30,7 @@ jobs:
   identity:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
-    environment: Blobs
+    environment: Puck
     permissions:
       contents: read
       id-token: write
@@ -52,7 +52,7 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    environment: Blobs
+    environment: Puck
     permissions:
       contents: read
       id-token: write
@@ -85,7 +85,7 @@ jobs:
     needs: [identity, infrastructure]
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    environment: Blobs
+    environment: Puck
     concurrency:
       group: azure-production-deployment
       cancel-in-progress: false

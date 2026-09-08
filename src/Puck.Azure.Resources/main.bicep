@@ -20,6 +20,7 @@ import {
   roleAssignmentType
 } from './accessManagement.bicep'
 import {
+  containerRepositoryCondition
   frontDoorPublicContentReadCondition
   officialContentPublisherCondition
 } from './abacConditions.bicep'
@@ -2009,28 +2010,20 @@ module containerRegistry 'br/public:avm/res/container-registry/registry:0.12.1' 
     roleAssignments: [
       ...[
         {
-          principalId: ownerPrincipal.objectId
-          principalType: ownerPrincipal.principalType
-          roleDefinitionIdOrName: 'Container Registry Repository Writer'
+          principalId: userAssignedIdentityPublishing.outputs.principalId
+          principalType: 'ServicePrincipal'
+          roleDefinitionIdOrName: 'Container Registry Repository Contributor'
         }
         {
           principalId: vsMarketplace_userAssignedIdentity.outputs.principalId
           principalType: 'ServicePrincipal'
-          roleDefinitionIdOrName: 'Container Registry Repository Catalog Lister'
-        }
-        {
-          principalId: vsMarketplace_userAssignedIdentity.outputs.principalId
-          principalType: 'ServicePrincipal'
+          condition: containerRepositoryCondition(['mcr/vsmarketplace/vscode-private-marketplace'], false)
           roleDefinitionIdOrName: 'Container Registry Repository Reader'
         }
         {
           principalId: actors_userAssignedIdentity.outputs.principalId
           principalType: 'ServicePrincipal'
-          roleDefinitionIdOrName: 'Container Registry Repository Catalog Lister'
-        }
-        {
-          principalId: actors_userAssignedIdentity.outputs.principalId
-          principalType: 'ServicePrincipal'
+          condition: containerRepositoryCondition(['web-actors'], false)
           roleDefinitionIdOrName: 'Container Registry Repository Reader'
         }
       ]
@@ -2039,11 +2032,7 @@ module containerRegistry 'br/public:avm/res/container-registry/registry:0.12.1' 
             {
               principalId: userAssignedIdentityKubernetesKubelet!.outputs.principalId
               principalType: 'ServicePrincipal'
-              roleDefinitionIdOrName: 'Container Registry Repository Catalog Lister'
-            }
-            {
-              principalId: userAssignedIdentityKubernetesKubelet!.outputs.principalId
-              principalType: 'ServicePrincipal'
+              condition: containerRepositoryCondition(['web-actors', 'world-silo'], false)
               roleDefinitionIdOrName: 'Container Registry Repository Reader'
             }
           ]
@@ -2743,7 +2732,7 @@ module userAssignedIdentityKubernetesKubelet 'br/public:avm/res/managed-identity
     tags: resources.userAssignedIdentityKubernetesKubelet.?tags
   }
 }
-// Shared CI identity. The Blobs environment uses GitHub's immutable repository subject;
+// Shared CI identity. The Puck environment uses GitHub's immutable repository subject;
 // preserve the existing credential name so redeployment updates rather than duplicates it.
 module userAssignedIdentityPublishing 'br/public:avm/res/managed-identity/user-assigned-identity:0.5.0' = {
   params: {
@@ -2753,7 +2742,7 @@ module userAssignedIdentityPublishing 'br/public:avm/res/managed-identity/user-a
         audiences: ['api://AzureADTokenExchange']
         issuer: 'https://token.actions.githubusercontent.com'
         name: '77854d2e-f1a3-4c91-bd8b-b05a5e2b9608'
-        subject: 'repo:ByteTerrace@18753984/Puck@1271519029:environment:Blobs'
+        subject: 'repo:ByteTerrace@18753984/Puck@1271519029:environment:Puck'
       }
     ]
     location: location

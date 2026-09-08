@@ -32,7 +32,7 @@ jobs:
   publish-docs:
     runs-on: windows-latest
     environment:
-      name: Blobs
+      name: Puck
       url: https://byteterrace.com/
     env:
       ACCOUNT: bytrcstp001

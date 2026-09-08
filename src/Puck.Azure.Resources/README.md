@@ -7,7 +7,7 @@ This repository contains a comprehensive **Infrastructure-as-Code (IaC)** founda
 
 ## ✨ Key Features
 
-- *Zero Trust:* Implements a strict RBAC only approach using managed identities + OIDC for passwordless authentication between all services.
+- *Zero Trust:* Uses one CI deployment identity and scoped runtime permissions, including repository ABAC, with managed identities and OIDC.
 - *Virtual Networking:* All non-public resources are isolated from the internet and accessed exclusively via private endpoints.
 - *Global Scale & Protection:* Uses Azure Front Door with Web Application Firewall (WAF) as the single global entry point.
 - *Dynamic DNS:* Automatically maintains both public and private DNS zones.

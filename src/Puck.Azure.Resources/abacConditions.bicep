@@ -106,6 +106,16 @@ func frontDoorPublicContentReadCondition() string => join(
   ],
   ' AND '
 )
+// Repository roles are registry-wide unless every granted data action is conditioned.
+// Catalog listing is a separate, unconditionable role and is not needed to pull a known image.
+@export()
+func containerRepositoryCondition(repositories string[], writable bool) string => clause(
+  map(
+    concat(['content/read', 'metadata/read'], writable ? ['content/write', 'metadata/write'] : []),
+    action => 'ActionMatches{\'Microsoft.ContainerRegistry/registries/repositories/${action}\'}'
+  ),
+  map(repositories, repository => '@Request[Microsoft.ContainerRegistry/registries/repositories:name] StringEqualsIgnoreCase \'${repository}\'')
+)
 // The CI publishing identity (puck official upload) writes only to the platform's own container
 // (named by the Front Door identity's principal id), under one fixed prefix. Unlike
 // byteTerraceApiHostStorageUserCondition (any non-private path) this grants no delete-only
@@ -128,4 +138,3 @@ func officialContentPublisherCondition() string => join(
   ],
   ' AND '
 )
-

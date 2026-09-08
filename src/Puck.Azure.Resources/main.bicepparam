@@ -425,7 +425,7 @@ param resources = {
   userAssignedIdentityKubernetesKubelet: {
     name: '${prefix}idp005'
   }
-  // bytrcidpzzz: the shared CI identity, federated to GitHub's Blobs environment.
+  // bytrcidpzzz: the shared CI identity, federated to GitHub's Puck environment.
   userAssignedIdentityPublishing: {
     name: '${prefix}idpzzz'
   }

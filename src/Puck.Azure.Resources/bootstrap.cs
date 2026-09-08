@@ -101,24 +101,6 @@ if (0 < parseResult.Errors.Count)
 
 using var cancellationTokenSource = new CancellationTokenSource();
 
-var allowedRoleDefinitionNames = new[] {
-    "App Configuration Data Owner",
-    "App Configuration Data Reader",
-    "Container Registry Repository Catalog Lister",
-    "Container Registry Repository Reader",
-    "Container Registry Repository Writer",
-    "Key Vault Administrator",
-    "Key Vault Crypto Service Encryption User",
-    "Key Vault Secrets User",
-    "Managed Identity Operator",
-    "Monitoring Metrics Publisher",
-    "Network Contributor",
-    "Reader",
-    "Storage Blob Data Owner",
-    "Storage Blob Data Reader",
-    "Storage Queue Data Contributor",
-    "Storage Table Data Contributor",
-};
 var applicationName = parseResult.GetRequiredValue(option: applicationNameOption);
 var cancellationToken = cancellationTokenSource.Token;
 var customRoleDefinitions = new[] {
@@ -409,26 +391,9 @@ var roleDefinitionsByName = await resourceManagerClient
         elementSelector: roleDefinition => roleDefinition,
         keySelector: roleDefinition => roleDefinition.Data.RoleName
     );
-var userAccessAdministratorAllowedPrincipalIds = groupNameSuffixMap
-    .Values
-    .Select(selector: groupData => groupData.Id)
-    .Concat(second: [
-        devOpsInfrastructureServicePrincipal.Id!,
-        managedIdentity.Data.PrincipalId!.Value.ToString()!,
-    ])
-    .ToArray();
-var userAccessAdministratorAllowedRoleDefinitionIds = allowedRoleDefinitionNames
-    .Concat(second: customRoleDefinitions.Select(selector: roleDefinition => roleDefinition.RoleName))
-    .OrderBy(keySelector: roleDefinitionName => roleDefinitionName)
-    .Select(selector: roleDefinitionName => roleDefinitionsByName[key: roleDefinitionName].Id.Name)
-    .ToArray();
-
+// The single CI identity administers this resource group. Runtime identities receive separate, scoped grants.
 foreach (var roleDefinitionName in new[] { "Owner", })
 {
-    var isConstrainedRole = roleDefinitionName.Equals(
-        comparisonType: StringComparison.InvariantCultureIgnoreCase,
-        value: "Owner"
-    );
     var roleDefinition = roleDefinitionsByName[key: roleDefinitionName];
 
     await resourceManagerClient
@@ -440,28 +405,8 @@ foreach (var roleDefinitionName in new[] { "Owner", })
                 roleDefinitionId: roleDefinition.Id
             )
             {
-                Condition = (isConstrainedRole ? $$"""
-                (
-                    (!(ActionMatches{'Microsoft.Authorization/roleAssignments/write'}))
-                    OR 
-                    (
-                        @Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {{{string.Join(", ", userAccessAdministratorAllowedRoleDefinitionIds)}}}
-                        AND
-                        @Request[Microsoft.Authorization/roleAssignments:PrincipalId] ForAnyOfAnyValues:GuidEquals {{{string.Join(", ", userAccessAdministratorAllowedPrincipalIds)}}}
-                    )
-                )
-                AND
-                (
-                    (!(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'}))
-                    OR 
-                    (
-                        @Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {{{string.Join(", ", userAccessAdministratorAllowedRoleDefinitionIds)}}}
-                        AND
-                        @Resource[Microsoft.Authorization/roleAssignments:PrincipalId] ForAnyOfAnyValues:GuidEquals {{{string.Join(", ", userAccessAdministratorAllowedPrincipalIds)}}}
-                    )
-                )
-                """ : null),
-                ConditionVersion = (isConstrainedRole ? "2.0" : null),
+                Condition = null,
+                ConditionVersion = null,
                 PrincipalType = RoleManagementPrincipalType.ServicePrincipal,
             },
             roleAssignmentName: AzureResourceManagerFunctions.Guid(values: [

@@ -86,7 +86,7 @@ Repository and service setup is still required:
   must agree on this repository, `publish.yml`, and the environment name.
   Configure environment protection and allowed branches to match the release
   policy.
-- The `Blobs` environment needs `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and
+- The `Puck` environment needs `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and
   `AZURE_SUBSCRIPTION_ID` variables. The identity needs a federated credential
   for that environment and blob data permissions for `bytrcstp001`.
 - Branch protection should require the build, package, and verification jobs.
@@ -111,10 +111,10 @@ Specs through `src/Puck.Azure.Resources/bicepconfig.json`. Private restore runs
 on trusted pushes and manual runs; pull requests still build the applications
 and containers without Azure credentials.
 
-The existing `Blobs` GitHub environment uses `bytrcidpzzz`, client ID
+The existing `Puck` GitHub environment uses `bytrcidpzzz`, client ID
 `7508a16b-0f9b-4322-9bb9-481ad836c052`, with the three Azure variables listed above.
 Its federated subject is
-`repo:ByteTerrace@18753984/Puck@1271519029:environment:Blobs`.
+`repo:ByteTerrace@18753984/Puck@1271519029:environment:Puck`.
 The environment name identifies the federation boundary; deployment targets the
 existing production resources. No separate staging environment is part of this
 workflow.
@@ -129,3 +129,10 @@ and tenant blobs.
 World.Silo has a built container artifact but no production resource or workload
 configuration in `main.bicep`. A container build alone does not deploy a hosted
 world or establish checkpoint recovery.
+Production infrastructure reconciliation is a manual Azure run with
+`infrastructure: true`. It restores the published Bicep modules, retains the
+current actor image and declared production subnets, records the deployment
+plan, and applies `main.bicep` as `puck-production-platform`. It does not assign
+Owner to CI. Deployment outputs retain the official-content container name.
+
+Registry access uses `AbacRepositoryPermissions`. The single CI identity is the resource-group deployment administrator and has the ABAC-enabled Repository Contributor role for publishing and maintenance. Runtime grants remain conditional: Actors reads only `web-actors`; the marketplace identity reads only its marketplace image. Runtime identities have no Catalog Lister grants. Registry login uses an ACR-audience token, and ARM-audience authentication remains disabled.
