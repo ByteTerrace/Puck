@@ -22,13 +22,14 @@
 #:package Azure.ResourceManager.ManagedServiceIdentities@1.4.0
 #:package Azure.ResourceManager.Resources@1.9.0
 #:package Microsoft.Graph@5.103.0
+#:package Microsoft.Kiota.Abstractions@1.22.0
 #:package Microsoft.TeamFoundationServer.Client@20.256.2
 #:package Microsoft.VisualStudio.Services.Client@20.256.2
 #:package Microsoft.VisualStudio.Services.ServiceEndpoints.WebApi@20.256.2
 #:package System.CommandLine@2.0.5
 #:package System.Configuration.ConfigurationManager@10.0.5
 #:package System.Drawing.Common@10.0.5
-#:package System.Security.Cryptography.Xml@10.0.5
+#:package System.Security.Cryptography.Xml@10.0.11
 
 using Azure;
 using Azure.Core;
@@ -725,7 +726,7 @@ foreach (var specification in templateSpecifications)
         );
 }
 
-static class AzureDevOpsFunctions
+internal static class AzureDevOpsFunctions
 {
     public static async Task<Operation> WaitForOperationAsync(
         OperationsHttpClient operationsClient,
@@ -751,7 +752,7 @@ static class AzureDevOpsFunctions
         return operation;
     }
 }
-static class AzureResourceManagerFunctions
+internal static class AzureResourceManagerFunctions
 {
     private static ReadOnlySpan<byte> ArmNamespaceBytes => [
         0x11, 0xFB, 0x06, 0xFB, 0x71, 0x2D, 0x4D, 0xDD,
@@ -790,7 +791,7 @@ static class AzureResourceManagerFunctions
         Guid(value: string.Join(separator: '-', values: values));
 }
 
-class EntraGroupData
+internal class EntraGroupData
 {
     public string Description { get; set; } = string.Empty;
     public string Id { get; set; } = string.Empty;

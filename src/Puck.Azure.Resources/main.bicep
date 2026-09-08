@@ -2760,13 +2760,14 @@ module userAssignedIdentityPublishing 'br/public:avm/res/managed-identity/user-a
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Internal container environments get a random default domain; VNet consumers (the Functions
 // edge) can only resolve it through a private DNS zone bearing that exact name.
+// staticIp is populated for the internal VNet environments guarded by this condition.
 module actors_containerEnvironmentDefaultDomainDnsZone 'br/public:avm/res/network/private-dns-zone:0.8.0' = if (containerEnvironmentIsInternal) {
   params: {
     a: [
       {
         aRecords: [
           {
-            ipv4Address: containerEnvironment.outputs.staticIp
+            ipv4Address: containerEnvironment.outputs.staticIp!
           }
         ]
         name: '*'
@@ -2775,7 +2776,7 @@ module actors_containerEnvironmentDefaultDomainDnsZone 'br/public:avm/res/networ
       {
         aRecords: [
           {
-            ipv4Address: containerEnvironment.outputs.staticIp
+            ipv4Address: containerEnvironment.outputs.staticIp!
           }
         ]
         name: '@'
