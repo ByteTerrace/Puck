@@ -1,7 +1,7 @@
 {
   "dependencies": {},
   "devDependencies": {
-    "@azure/identity": "^4.13.0",
+    "@azure/identity": "^4.13.2",
     "@azure/msal-browser": "^4.27.0",
     "@reduxjs/toolkit": "^2.11.2",
     "@types/react": "^19.2.7"
