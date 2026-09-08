@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Puck.World.Server;
+using Puck.World.Azure;
 
 namespace Puck.World.Silo;
 
@@ -55,6 +56,9 @@ internal sealed class WorldSiloLifecycleService(WorldSiloHost silo, IHostApplica
                 await context.Response.WriteAsync(((reason.Length == 0) ? "ready" : reason), context.RequestAborted);
             } else if ((context.Request.Method == "GET") && (context.Request.Path == "/livez")) {
                 context.Response.StatusCode = (silo.Live ? 200 : 503);
+            } else if ((context.Request.Method == "GET") && (context.Request.Path == "/livez/azure")) {
+                context.Response.ContentType = "application/json";
+                await context.Response.WriteAsync(AzureApplicationHealth.Response(silo.Live), context.RequestAborted);
             } else { context.Response.StatusCode = 404; }
         } catch (Exception ex) {
             if (!context.Response.HasStarted) { context.Response.StatusCode = 503; }

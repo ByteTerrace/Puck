@@ -55,6 +55,9 @@ their published definitions, and checkpointed. It also checks ongoing simulation
 progress, checkpoint age, journal failures and backlog, and pending release saves.
 `GET /livez` checks simulation progress independently of storage health, so a
 storage outage does not trigger VM replacement. Both refuse during retirement.
+`GET /livez/azure` reports the same liveness as Azure's v2 Application Health
+JSON contract, returning HTTP 200 with `Healthy` or `Unhealthy`. The generic
+`/livez` retains its HTTP 200/503 contract.
 Loopback-only `POST /reload` reconciles published content through the existing
 reload submission, saves a checkpoint, and records the accepted content hash.
 Unchanged releases preserve recovered state; failed saves can retry without

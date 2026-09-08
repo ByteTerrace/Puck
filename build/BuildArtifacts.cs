@@ -12,8 +12,9 @@ try {
     const string Archive = "artifacts/compiled-windows.zip";
     if (args is ["capture"]) {
         if (!OperatingSystem.IsWindows()) { throw new InvalidOperationException("The solution artifact is produced on Windows."); }
-        if ((await RunAsync("git", ["status", "--porcelain", "--untracked-files=no"], capture: true)).Length != 0) {
-            throw new InvalidDataException("Tracked source changed while producing release artifacts.");
+        var changes = await RunAsync("git", ["status", "--porcelain", "--untracked-files=no"], capture: true);
+        if (changes.Length != 0) {
+            throw new InvalidDataException($"Tracked source changed while producing release artifacts:\n{changes}");
         }
         var source = new JsonObject { ["commit"] = commit, ["configuration"] = "Release", ["platform"] = "windows", ["architecture"] = RuntimeInformation.ProcessArchitecture.ToString() };
         Write("artifacts/runtime/source.json", source);

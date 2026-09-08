@@ -500,7 +500,13 @@ the missing marker while retaining the recovered simulation state.
 `/healthz` withdraws load-balancer readiness when simulation progress, checkpoint
 freshness, or journal persistence fails. `/livez` observes simulation progress
 independently, so a storage outage does not cause the scale set to replace a
-worker holding unsaved state. The world platform defines its own action group
+worker holding unsaved state. Azure's v2 Application Health extension probes
+`/livez/azure`, which serves the same liveness as an `ApplicationHealthState`
+JSON body with HTTP 200. Status-only responses become `Unknown` under this
+contract and can trigger repeated automatic replacement. The container gate
+checks this response, and release verification requires Azure's instance view
+to report `HealthState/healthy` before accepting the rollout.
+The world platform defines its own action group
 through the current AVM module and always includes it in the readiness alert.
 Its name, email receivers, and pet-name tags are authored in
 `resources.worldSiloActionGroup` in `main.bicepparam`; additional existing action

@@ -909,6 +909,13 @@ internal static class AzureAutomation {
         var message = string.Join(separator: "\n", values: result["value"]!.AsArray().Select(selector: value => Text(value: value!["message"])));
 
         if (!message.Contains(comparisonType: StringComparison.Ordinal, value: (image + " true")) || !message.Contains(comparisonType: StringComparison.Ordinal, value: (("\n" + image) + "\n"))) { throw new InvalidDataException(message: "The running world container does not match the requested release digest."); }
+        await RetryAsync(async () => {
+            var view = await AzJsonAsync("vm", "get-instance-view", "-g", group, "-n", Text(workers[0]!["name"]), "-o", "json");
+            var state = Text(view["instanceView"]?["vmHealth"]?["status"]?["code"]);
+            if (!state.Equals("HealthState/healthy", StringComparison.OrdinalIgnoreCase)) {
+                throw new InvalidDataException($"Azure reports world application health '{state}'; the release requires Healthy.");
+            }
+        }, attempts: 12, seconds: 5);
         if (outputs?["worldMcpConfiguration"]?["value"]?["options"] is { } mcp) {
             await RetryAsync(async () => {
                 using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -1098,6 +1105,12 @@ internal static class AzureAutomation {
                 using var liveness = await Http.GetAsync(requestUri: "http://127.0.0.1:8081/livez");
 
                 liveness.EnsureSuccessStatusCode();
+                using var azureHealth = await Http.GetAsync("http://127.0.0.1:8081/livez/azure");
+                azureHealth.EnsureSuccessStatusCode();
+                var richHealth = JsonNode.Parse(await azureHealth.Content.ReadAsStringAsync());
+                if (azureHealth.Content.Headers.ContentType?.MediaType != "application/json" || Text(richHealth?["ApplicationHealthState"]) != "Healthy") {
+                    throw new InvalidDataException("The world container does not satisfy Azure's rich application health contract.");
+                }
                 await PuckAsync("world", "probe", "127.0.0.1", Port, Path.Combine(path1: fixture, path2: "public-key"));
                 previous = checkpoint;
                 Console.WriteLine(value: $"PASS: Puck boot {boot} activated, checkpointed, and accepted an authenticated QUIC connection.");

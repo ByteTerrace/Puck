@@ -101,7 +101,7 @@ module workers 'br/public:avm/res/compute/virtual-machine-scale-set:0.11.1' = {
     managedIdentities: { userAssignedResourceIds: [identityResourceId] }
     bootDiagnosticEnabled: true
     nicConfigurations: [{ name: configuration.compute.vmNamePrefix, ipConfigurations: [{ name: 'primary', properties: { primary: true, subnet: { id: subnet.id }, loadBalancerBackendAddressPools: [{ id: poolId }] } }] }]
-    extensionHealthConfig: { enabled: true, protocol: 'http', port: configuration.lifecycle.healthPort, requestPath: '/livez' }
+    extensionHealthConfig: { enabled: true, protocol: 'http', port: configuration.lifecycle.healthPort, requestPath: '/livez/azure' }
     extensionCustomScriptConfig: { forceUpdateTag: take(last(split(release, ':')), 40), protectedSettings: { commandToExecute: bootstrapCommand } }
     scheduledEventsProfile: { terminateNotificationProfile: { enable: true, notBeforeTimeout: 'PT5M' } }
   }

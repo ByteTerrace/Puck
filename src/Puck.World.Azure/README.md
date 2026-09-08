@@ -44,6 +44,12 @@ retirement failures. No metadata access occurs unless this observer is selected.
 The [silo lifecycle](../Puck.World.Silo/README.md#hosted-test-world) owns drain behavior;
 [deployment](../../docs/ci.md) owns VMSS policy and Spot qualification.
 
+`AzureApplicationHealth` formats the v2 Application Health extension's rich
+health JSON. The silo serves it at `/livez/azure` with HTTP 200 for both
+`Healthy` and `Unhealthy`; missing JSON or a non-success response means `Unknown`
+to Azure. This uses simulation liveness, independently of storage readiness.
+See the [Azure health extension contract](https://learn.microsoft.com/en-us/azure/virtual-machines/extensions/health-extension).
+
 `azure.api-users` wraps the world's federation authenticator at the connection
 boundary. Its deployment-owned settings are `tenantId`, `audience` (the API
 application ID), `groupId`, and `scope`. A user needs a signed, unexpired delegated
