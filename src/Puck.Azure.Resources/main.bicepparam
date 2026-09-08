@@ -13,7 +13,7 @@ var apexDomainName = readEnvironmentVariable('BICEPPARAM_APEX_DOMAIN_NAME', 'byt
 var partitionCount = int(readEnvironmentVariable('BICEPPARAM_PARTITION_COUNT', '1'))
 var prefix = readEnvironmentVariable('BICEPPARAM_PREFIX', 'bytrc')
 
-param deployOwnerRoleAssignments = true
+param deployOwnerRoleAssignments = bool(readEnvironmentVariable('BICEPPARAM_DEPLOY_OWNER_ROLE_ASSIGNMENTS', 'true'))
 param enableCustomerManagedKey = false
 param enableZoneRedundancy = false
 param ephemeral = false
@@ -433,6 +433,16 @@ param resources = {
     addressPrefixes: ['10.64.0.0/20']
     name: '${prefix}vnetp000'
     subnets: {
+      // Existing reserved subnet; retain it when reconciling the production VNet.
+      reserved007: {
+        addressPrefixes: ['10.64.2.128/26']
+        defaultOutboundAccess: false
+        delegation: 'Microsoft.App/environments'
+        name: '${prefix}snetp007'
+        natGatewayResourceId: '${prefix}ngp000'
+        privateEndpointNetworkPolicies: 'Disabled'
+        privateLinkServiceNetworkPolicies: 'Enabled'
+      }
       containerEnvironment: {
         addressPrefixes: ['10.64.1.128/26']
         defaultOutboundAccess: false

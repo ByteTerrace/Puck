@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string] $Registry,
-    [Parameter(Mandatory)] [ValidateSet('web-actors', 'world-silo', 'dashboard')] [string] $Repository,
+    [Parameter(Mandatory)] [ValidateSet('web-actors', 'world-silo')] [string] $Repository,
     [Parameter(Mandatory)] [ValidatePattern('^[a-f0-9]{40}$')] [string] $Commit,
     [string] $Archive,
     [string] $OutputFile

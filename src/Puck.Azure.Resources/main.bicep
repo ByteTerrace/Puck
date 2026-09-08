@@ -312,6 +312,7 @@ type virtualNetworkConfigType = {
     kubernetesMachinePool: subnetType
     kubernetesServiceApi: subnetType
     privateEndpoints: subnetType
+    *: subnetType
   }
   tags: tagsType?
 }
