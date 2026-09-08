@@ -46,10 +46,11 @@ public sealed class Win32ProbeKernelBenchCleanupTests {
     // the attachment after the throw, proves the release ran.
     [Fact]
     public void OpenRingResources_PartialFailure_ReleasesTheOpenedTextureAndView() {
-        using var bench = KernelBench.TryCreate();
+        // The production device below needs VIDEO_SUPPORT as well as ordinary D3D11 rendering.
+        using var bench = KernelBench.TryCreate(requireVideoSupport: true);
 
         if (bench is null) {
-            Assert.Skip(reason: "no DXGI hardware adapter is available on this machine.");
+            Assert.Skip(reason: "no D3D11 adapter with video support is available on this machine.");
 
             return;
         }

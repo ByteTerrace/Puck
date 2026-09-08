@@ -44,7 +44,7 @@ internal sealed unsafe class KernelBench : IDisposable {
     // Packed the same way Win32D3D11.FindAdapterByLuid matches it: (HighPart << 32) | LowPart.
     public long AdapterLuid { get; }
 
-    public static KernelBench? TryCreate() {
+    public static KernelBench? TryCreate(bool requireVideoSupport = false) {
         var adapter = FindHardwareAdapter();
 
         if (adapter is null) {
@@ -65,7 +65,8 @@ internal sealed unsafe class KernelBench : IDisposable {
 
                 var result = PInvoke.D3D11CreateDevice(
                     DriverType: D3D_DRIVER_TYPE.D3D_DRIVER_TYPE_UNKNOWN,
-                    Flags: D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                    Flags: D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_BGRA_SUPPORT |
+                        (requireVideoSupport ? D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_VIDEO_SUPPORT : 0),
                     SDKVersion: PInvoke.D3D11_SDK_VERSION,
                     Software: noSoftwareModule,
                     pAdapter: ((IDXGIAdapter*)adapter),

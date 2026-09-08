@@ -20,7 +20,8 @@ The download requires .NET 10 and suitable graphics hardware to run. A build
 artifact is not a signed installer or a verified GPU rendering session.
 The solution build produces the browser AppBundle for the CLI integration tests,
 which resolve it inside the current checkout. GPU tests skip when D3D11 reports an unsupported
-device. The native timing benchmark is tagged `Category=Performance` and excluded
+device, including the video capability needed by the shared-texture cleanup test.
+The native timing benchmark is tagged `Category=Performance` and excluded
 from this shared-runner gate; its three-second ceiling remains available locally.
 Tests stop after fifteen minutes without a test event and collect a small hang
 dump. The workflow uploads the MSBuild binary log, available TRX results, and
