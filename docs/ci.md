@@ -142,6 +142,17 @@ disabled throughout. `build/Publish-Container.ps1` exchanges an ACR-audience
 token as described in [Microsoft's registry authentication guidance](https://learn.microsoft.com/en-us/azure/container-registry/container-registry-disable-authentication-as-arm).
 Infrastructure planning and deployment outputs are retained as run artifacts.
 The Functions action deploys the prebuilt payload without a remote rebuild.
+To retry deployment after fixing only its workflow or infrastructure, supply
+`artifact_run_id`: CI checks that run's application and container jobs passed
+and deploys those exact artifacts. The deployment record retains both their
+source run and commit; it never relabels old binaries as the current commit.
+
+**Azure staging rollback** accepts a successful deployment run ID. It resolves
+that deployment's original application artifact and recorded container digests,
+restores their configuration, and repeats the deployment checks without rebuilding.
+Keep both runs' artifacts and the registry digests for the required rollback
+window. Rollback restores application code and configuration; it does not undo
+tenant data writes or roll back the shared platform infrastructure.
 
 The staging dashboard serves an uncompressed copy of the dashboard and its own
 official content through Nginx. The existing production Front Door deployment

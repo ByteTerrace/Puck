@@ -1,0 +1,93 @@
+name: Azure staging rollback
+
+on:
+  push:
+    branches: [codex/azure-ci]
+    paths: [.github/workflows/azure-rollback.yml]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful Azure staging deployment run whose exact artifacts should be restored
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    if: github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/azure-ci')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: Blobs
+    concurrency:
+      group: azure-staging-deployment
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Validate the source deployment
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.run_id }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          if ($env:SOURCE_RUN -notmatch '^[0-9]+$') { throw 'Expected a numeric workflow run ID.' }
+          $run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:SOURCE_RUN" | ConvertFrom-Json
+          if ($run.path -ne '.github/workflows/azure.yml' -or $run.conclusion -ne 'success' -or $run.event -ne 'workflow_dispatch' -or $run.head_branch -notin @('main','codex/azure-ci')) {
+            throw 'Rollback requires a successful Azure deployment run from an allowed branch.'
+          }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.run_id }}
+          name: azure-deployment
+          path: artifacts/download/azure-deployment
+      - name: Validate retained artifact provenance
+        id: source
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $source = Get-Content artifacts/download/azure-deployment/release-source.json -Raw | ConvertFrom-Json
+          if ($source.runId -notmatch '^[0-9]+$' -or $source.commit -notmatch '^[a-f0-9]{40}$') { throw 'Invalid artifact provenance.' }
+          $run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$($source.runId)" | ConvertFrom-Json
+          if ($run.path -ne '.github/workflows/azure.yml' -or $run.head_sha -ne $source.commit -or $run.head_branch -notin @('main','codex/azure-ci')) { throw 'Artifact source does not match the deployment record.' }
+          "commit=$($source.commit)" >> $env:GITHUB_OUTPUT
+          "run-id=$($source.runId)" >> $env:GITHUB_OUTPUT
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.source.outputs.run-id }}
+          name: azure-applications
+          path: artifacts/download/azure-applications
+      - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - run: az bicep install --version v0.46.1
+      - name: Restore retained image digests and configuration
+        id: stage
+        shell: pwsh
+        env:
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
+          SOURCE_RUN: ${{ steps.source.outputs.run-id }}
+        run: ./build/Deploy-Staging.ps1 -ArtifactsDirectory artifacts/download -Commit $env:SOURCE_COMMIT -ArtifactRunId $env:SOURCE_RUN -ReuseImages
+      - uses: Azure/functions-action@c5060b3b8bb1ebbcb531abd00c822ecbaa8ea656 # v1
+        with:
+          app-name: ${{ steps.stage.outputs.function-app-name }}
+          package: artifacts/azure/functions
+          remote-build: false
+      - name: Verify the restored release
+        shell: pwsh
+        env:
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
+        run: ./build/Test-AzureStaging.ps1 -Commit $env:SOURCE_COMMIT

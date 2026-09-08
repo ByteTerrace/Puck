@@ -10,6 +10,10 @@ on:
         description: Deploy the validated application artifacts
         type: boolean
         default: false
+      artifact_run_id:
+        description: Optional earlier Azure run with successful application and container builds; reuse its artifacts
+        type: string
+        default: ''
       channel:
         description: Official content channel
         type: choice
@@ -67,7 +71,11 @@ jobs:
           if-no-files-found: error
 
   deploy-staging:
-    if: github.event_name == 'workflow_dispatch' && inputs.deploy && inputs.channel == 'staging' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/azure-ci')
+    if: >-
+      always() && !cancelled() && github.event_name == 'workflow_dispatch' && inputs.deploy && inputs.channel == 'staging' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/azure-ci') &&
+      needs.identity.result == 'success' && needs.infrastructure.result == 'success' &&
+      (inputs.artifact_run_id != '' || (needs.applications.result == 'success' && needs.containers.result == 'success'))
     needs: [identity, infrastructure, applications, containers]
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -76,12 +84,33 @@ jobs:
       group: azure-staging-deployment
       cancel-in-progress: false
     permissions:
+      actions: read
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Validate the artifact source
+        id: source
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.artifact_run_id || github.run_id }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          if ($env:SOURCE_RUN -notmatch '^[0-9]+$') { throw 'Expected a numeric workflow run ID.' }
+          $run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:SOURCE_RUN" | ConvertFrom-Json
+          if ($run.path -ne '.github/workflows/azure.yml' -or $run.head_branch -notin @('main','codex/azure-ci')) { throw 'Unexpected artifact source workflow or branch.' }
+          $jobs = (gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:SOURCE_RUN/jobs?per_page=100" | ConvertFrom-Json).jobs
+          foreach ($name in @('applications','containers (Puck.Actors, web-actors)','containers (Puck.World.Silo, world-silo)')) {
+            $job = @($jobs | Where-Object name -eq $name)
+            if ($job.Count -ne 1 -or $job[0].conclusion -ne 'success') { throw "Source build did not pass: $name" }
+          }
+          "commit=$($run.head_sha)" >> $env:GITHUB_OUTPUT
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.artifact_run_id || github.run_id }}
           pattern: azure-*
           path: artifacts/download
       - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
@@ -94,7 +123,10 @@ jobs:
       - name: Publish images and deploy staging infrastructure
         id: stage
         shell: pwsh
-        run: ./build/Deploy-Staging.ps1 -ArtifactsDirectory artifacts/download -Commit $env:GITHUB_SHA
+        env:
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
+          SOURCE_RUN: ${{ inputs.artifact_run_id || github.run_id }}
+        run: ./build/Deploy-Staging.ps1 -ArtifactsDirectory artifacts/download -Commit $env:SOURCE_COMMIT -ArtifactRunId $env:SOURCE_RUN
       - name: Deploy the prebuilt Functions payload
         uses: Azure/functions-action@c5060b3b8bb1ebbcb531abd00c822ecbaa8ea656 # v1
         with:
@@ -103,7 +135,9 @@ jobs:
           remote-build: false
       - name: Verify deployed applications and authentication
         shell: pwsh
-        run: ./build/Test-AzureStaging.ps1 -Commit $env:GITHUB_SHA
+        env:
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
+        run: ./build/Test-AzureStaging.ps1 -Commit $env:SOURCE_COMMIT
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
@@ -111,10 +145,12 @@ jobs:
           path: |
             artifacts/staging-plan.json
             artifacts/staging-outputs.json
+            artifacts/release-source.json
             artifacts/*.digest
           if-no-files-found: warn
 
   applications:
+    if: inputs.artifact_run_id == ''
     runs-on: windows-2025
     timeout-minutes: 60
     steps:
@@ -149,6 +185,7 @@ jobs:
           include-hidden-files: true
 
   containers:
+    if: inputs.artifact_run_id == ''
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:

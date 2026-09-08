@@ -53,7 +53,7 @@ var actorEnvironment = [
   { name: 'Orleans__GrainStateContainerName', value: 'orleans-state-staging' }
   { name: 'DataProtection__ApplicationName', value: functionIdentity.properties.clientId }
   { name: 'DataProtection__BlobUri', value: '${privateStorage.properties.primaryEndpoints.blob}data-protection/staging-keys.xml' }
-  { name: 'DataProtection__KeyUri', value: 'https://${prefix}kvp000${environment().suffixes.keyvaultDns}/keys/DataProtection' }
+  { name: 'DataProtection__KeyUri', value: 'https://${prefix}kvp000${az.environment().suffixes.keyvaultDns}/keys/DataProtection' }
   { name: 'OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID', value: actorIdentity.properties.clientId }
   { name: 'Authorization__JwtBearer__TokenValidationParameters__ValidAudiences__0', value: 'https://api.byteterrace.com' }
 ]
@@ -137,7 +137,7 @@ resource functions 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'ConfigurationStore__Endpoint', value: 'https://${prefix}appcsp000.azconfig.io' }
         { name: 'ConfigurationStore__Label', value: 'staging' }
         { name: 'DataProtection__BlobUri', value: '${privateStorage.properties.primaryEndpoints.blob}data-protection/staging-keys.xml' }
-        { name: 'DataProtection__KeyUri', value: 'https://${prefix}kvp000${environment().suffixes.keyvaultDns}/keys/DataProtection' }
+        { name: 'DataProtection__KeyUri', value: 'https://${prefix}kvp000${az.environment().suffixes.keyvaultDns}/keys/DataProtection' }
         { name: 'RedisCache__Configuration', value: '${prefix}amrp000.${location}.redis.azure.net:10000' }
         { name: 'OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID', value: assertionIdentity.properties.clientId }
       ]
@@ -156,7 +156,7 @@ resource authentication 'Microsoft.Web/sites/config@2024-04-01' = {
         enabled: true
         registration: {
           clientId: 'e6a7ab9f-19af-4eb0-b23f-a5bde0f90eb7'
-          openIdIssuer: '${environment().authentication.loginEndpoint}${tenant().tenantId}/v2.0'
+          openIdIssuer: '${az.environment().authentication.loginEndpoint}${tenant().tenantId}/v2.0'
         }
         validation: {
           allowedAudiences: ['https://api.byteterrace.com', 'e6a7ab9f-19af-4eb0-b23f-a5bde0f90eb7']

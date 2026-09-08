@@ -2,6 +2,8 @@
 param(
     [Parameter(Mandatory)] [string] $ArtifactsDirectory,
     [Parameter(Mandatory)] [ValidatePattern('^[a-f0-9]{40}$')] [string] $Commit,
+    [Parameter(Mandatory)] [ValidatePattern('^[0-9]+$')] [string] $ArtifactRunId,
+    [switch] $ReuseImages,
     [string] $ResourceGroup = 'byteterrace',
     [string] $Registry = 'bytrccrp000'
 )
@@ -21,11 +23,21 @@ foreach ($file in $release.files) {
 }
 New-Item artifacts/azure -ItemType Directory -Force | Out-Null
 Copy-Item "$bundle/*" artifacts/azure -Recurse -Force
-foreach ($repository in @('web-actors', 'world-silo')) {
-    & ./build/Publish-Container.ps1 -Registry $Registry -Repository $repository -Commit $Commit -Archive "$ArtifactsDirectory/azure-$repository/image.tar.gz" -OutputFile "artifacts/$repository.digest"
+@{ commit = $Commit; runId = $ArtifactRunId } | ConvertTo-Json | Set-Content artifacts/release-source.json -Encoding utf8NoBOM
+if ($ReuseImages) {
+    $server = (az acr show --name $Registry --query loginServer --output tsv).Trim()
+    foreach ($repository in @('web-actors', 'world-silo', 'dashboard')) {
+        $digest = (Get-Content "$ArtifactsDirectory/azure-deployment/$repository.digest" -Raw).Trim()
+        if ($digest -notmatch ('^' + [regex]::Escape("$server/$repository") + '@sha256:[a-f0-9]{64}$')) { throw "Invalid retained $repository image digest." }
+        $digest | Set-Content "artifacts/$repository.digest" -Encoding utf8NoBOM
+    }
+} else {
+    foreach ($repository in @('web-actors', 'world-silo')) {
+        & ./build/Publish-Container.ps1 -Registry $Registry -Repository $repository -Commit $Commit -Archive "$ArtifactsDirectory/azure-$repository/image.tar.gz" -OutputFile "artifacts/$repository.digest"
+    }
+    docker build --file build/azure/Dashboard.Dockerfile --tag "puck/dashboard:$Commit" .
+    & ./build/Publish-Container.ps1 -Registry $Registry -Repository dashboard -Commit $Commit -OutputFile artifacts/dashboard.digest
 }
-docker build --file build/azure/Dashboard.Dockerfile --tag "puck/dashboard:$Commit" .
-& ./build/Publish-Container.ps1 -Registry $Registry -Repository dashboard -Commit $Commit -OutputFile artifacts/dashboard.digest
 
 $domain = (az containerapp env show --name bytrccaep000 --resource-group $ResourceGroup --query properties.defaultDomain --output tsv).Trim()
 $configuration = Get-Content artifacts/azure/configuration.json -Raw | ConvertFrom-Json
@@ -40,11 +52,11 @@ $parameters = @{
     actorsImage = @{ value = (Get-Content artifacts/web-actors.digest -Raw).Trim() }
     siloImage = @{ value = (Get-Content artifacts/world-silo.digest -Raw).Trim() }
     dashboardImage = @{ value = (Get-Content artifacts/dashboard.digest -Raw).Trim() }
-    revision = @{ value = "git-$($Commit.Substring(0,12))" }
+    revision = @{ value = "git-$($Commit.Substring(0,12))-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT" }
 }
 @{ '$schema' = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'; contentVersion = '1.0.0.0'; parameters = $parameters } | ConvertTo-Json -Depth 5 | Set-Content artifacts/staging-parameters.json -Encoding utf8NoBOM
 az deployment group what-if --resource-group $ResourceGroup --template-file src/Puck.Azure.Resources/staging.bicep --parameters artifacts/staging-parameters.json --no-pretty-print > artifacts/staging-plan.json
-az deployment group create --name "puck-staging-$($Commit.Substring(0,12))" --resource-group $ResourceGroup --template-file src/Puck.Azure.Resources/staging.bicep --parameters artifacts/staging-parameters.json --query properties.outputs --output json > artifacts/staging-outputs.json
+az deployment group create --name "puck-staging-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT" --resource-group $ResourceGroup --template-file src/Puck.Azure.Resources/staging.bicep --parameters artifacts/staging-parameters.json --query properties.outputs --output json > artifacts/staging-outputs.json
 $outputs = Get-Content artifacts/staging-outputs.json -Raw | ConvertFrom-Json
 if ($env:GITHUB_OUTPUT) { "function-app-name=$($outputs.functionAppName.value)" >> $env:GITHUB_OUTPUT }
 Write-Output "Staging infrastructure deployed for $Commit"
