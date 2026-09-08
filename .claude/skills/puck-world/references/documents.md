@@ -2510,7 +2510,7 @@ zone, and neutral-grace duration.
 - `WorldDynamicGeometryCeilings.MaxContributedDynamicInstances = 16000`,
   the document-global CPU/instance-grid admission ceiling. The recorded
   GPU-bound measurement is 0 but does not govern admission.
-- `WorldPlacementPolicy`: `MaxShapesPerStamp = 48`,
+- `WorldPlacementPolicy`: `MaxShapesPerStamp = 128`,
   `MaxStampRegistrations = WorldBodiesLimits.DetailedRenderBand` (128),
   `TimelineSecondsPerFrame = 8f/60f`, and the reserved derived-face screen
   band.

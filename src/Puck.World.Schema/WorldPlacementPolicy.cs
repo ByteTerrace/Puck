@@ -28,10 +28,10 @@ public static class WorldPlacementPolicy {
     /// <see cref="MaxAnimatedStampShapes"/>, which sizes <c>Client.WorldStampPool</c>'s per-slot
     /// stackalloc spans and (via <c>Client.WorldStampPool.SlotsPerPlacement</c>) the
     /// field-initializer-time dynamic-transform array. The validator's rejection line names this ceiling word-exactly.</summary>
-    public const int MaxShapesPerStamp = 48;
+    public const int MaxShapesPerStamp = 128;
     /// <summary>The document-wide ceiling on convex colliders materialized from SOLID placements by the analytic
     /// provider. Protects boot-time allocation and the per-body O(colliders) solver walk. <c>32768</c> admits one
-    /// 48-shape stamp across hundreds of materialized pattern copies while refusing unbounded authored lattices
+    /// full-budget stamp across hundreds of materialized pattern copies while refusing unbounded authored lattices
     /// before materialization.</summary>
     public const int MaxSolidPlacementColliders = 32_768;
     /// <summary>The stamp-pool registration count — one slot per body in the detailed render band

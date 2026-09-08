@@ -32,13 +32,13 @@ public sealed partial class SdfProgramBuilder {
 
     /// <summary>The instance ceiling — the most instances one program may declare. The world renderer's per-tile
     /// mask is a derived ceil(instanceCount/32) uints (<see cref="SdfProgram.InstanceMaskWordCount"/>), so this caps
-    /// it at 512 words per tile (16384/32). Everything downstream derives from the live program's instance count — the
+    /// it at 1024 words per tile (32768/32). Everything downstream derives from the live program's instance count — the
     /// mask width, the host-pushed indexing, and the mask-buffer sizing all use
     /// <see cref="SdfProgram.InstanceMaskWordCountFor"/> — so a program declaring fewer instances than this cap packs
     /// byte-identically regardless of the cap's value; only the shader's <c>min(count, SDF_MAX_INSTANCES)</c> clamp
     /// constant tracks it. The ceiling's static cost is the per-tile mask buffer. KEEP IN SYNC with SDF_MAX_INSTANCES in
     /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
-    public const int MaxInstances = 16384;
+    public const int MaxInstances = 32768;
     /// <summary>The maximum voxel count per brick axis: the <see cref="SampledRegion"/> shape packs each dim in 10 bits
     /// (see <see cref="SdfShapeType.SampledRegion"/>'s Data1.y layout), so 1023 is the hard ceiling. KEEP IN SYNC with the
     /// 0x3FFu unpack mask in sdfSampledRegion (Assets/Shaders/Sdf/sdf-vm.hlsli).</summary>

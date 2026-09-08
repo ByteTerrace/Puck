@@ -998,7 +998,9 @@ for the full contract.
 
 `WorldPeerHost` binds the networking library's QUIC peer listener from `host.listen`
 (a document field the composition root also lets `--listen` reflect for one
-run). `WorldPeerNetwork` owns a shared, lazily created `Puck.Networking.Peers.Peer`.
+run). Each `WorldInstance.ListenEndpoint` captures its activation's binding;
+the silo supplies the published endpoint when a recovered checkpoint still
+contains an old address. `WorldPeerNetwork` owns a shared, lazily created `Puck.Networking.Peers.Peer`.
 The desktop persists its key under the state directory's `Network/peer.pk8`, or
 uses the explicitly supplied federation key; a silo activation uses its configured
 key. Local-only worlds initialize neither QUIC nor a certificate. There is no TCP

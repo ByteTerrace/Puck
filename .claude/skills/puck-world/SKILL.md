@@ -5,6 +5,25 @@ description: Guides work on Puck.World across its document and Protocol model, a
 
 # Puck.World: the game of many games
 
+Creation shapes support `type: "Prism"`: an XY profile extruded along Z.
+`scale` gives bottom half-width, half-height and extrusion half-depth; optional
+`taper` gives top/bottom width in [0, 1] (default 0.5). Zero makes a triangle,
+one a rectangle. It uses the existing Trapezoid/Extrude VM path in both static
+and animated emission and the deterministic contact field. Optional `profile`
+selects RoundedRectangle (cornerRadius fraction), Polygon (3–32 sides), or
+Ellipse; null uses Trapezoid. Polygon/Ellipse are renderable but refused by the
+deterministic field; RoundedRectangle is supported there. Other types refuse
+`taper` and `profile`. The stamp budget is 128 shapes, including expanded glyphs; the matched
+CPU/HLSL instance ceiling is 32768. Verify profile admission and surfaces with
+`AuthoredShapeAdmissionLawTests` / `SdfTrapezoidProfileLawTests`, and capacity with
+`WorldRenderEnvelopeLawTests` plus a real rendered world.
+
+Creation-driver transitions: `blendInSeconds`/`blendOutSeconds` are optional,
+finite non-negative exponential time constants (null = 0.15 s; zero = immediate
+on a positive render delta). They control gate weights independently of phase
+cadence and the shared movement-speed filter. `CreationAnimationLawTests` checks
+asymmetric response, frame-rate independence, zero time, and invalid values.
+
 Creation contact tuning: `CreationPlantDocument.SwingWeight` (`plant.swingWeight`,
 nullable float in [0, 1]) controls target influence outside the plant window while
 its driver is active. Zero releases to the authored swing; omission keeps target
@@ -159,6 +178,9 @@ owns provider-neutral configuration; the Azure README owns Azure provider keys.
 
 ## Production silo verification
 
+Endpoint naming and world/host alias conventions are owned by
+[CI and releases](../../../docs/ci.md); deployment values belong in `main.bicepparam`.
+
 Azure CI packages `Assets/worlds/puck.world.json` and its referenced neighbours
 with `puck world prepare`; hosted references use canonical world file
 names. The storage-neighbour resolver parses and migrates the composed document
@@ -166,6 +188,9 @@ with state-expression binding, then reduces it to seam facts; it does not valida
 the neighbour's unrelated local settings or recursively prove its adjacencies.
 Hosted activation awaits root and neighbour storage reads before validating the
 loaded world. Failed drain saves can be retried; closed ingress stays frozen.
+An activation's federation subject and `WorldInstance.ListenEndpoint` come from
+the published definition, independently of checkpoint network fields. Reload
+checks that activation binding; moving an endpoint requires a fresh activation.
 `build/Azure.cs test-world-container` boots the primary Puck row, verifies a durable
 checkpoint and the expected QUIC key, then replaces the container against the
 same store and repeats the checks. Linux requires `libmsquic` and UDP ingress.

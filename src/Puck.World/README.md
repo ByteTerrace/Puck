@@ -103,7 +103,7 @@ runner-owned authority pair.
 generated authentication configuration from the deployed [Puck world release](../../build/Azure.cs):
 
 ```text
-dotnet run --project src/Puck.World -c Release -- --connect puck.puck.byteterrace.com:33333 --authentication-config-file /path/to/world-authentication.json
+dotnet run --project src/Puck.World -c Release -- --connect play.puck.byteterrace.com:7825 --authentication-config-file /path/to/world-authentication.json
 ```
 
 The installed authentication extension acquires the API token and checks the

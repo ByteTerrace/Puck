@@ -22,7 +22,7 @@ public static class SdfBenchWorkloads {
     // The default INSTANCES sweep ladder.
     private static readonly int[] DefaultInstancesSweep = [64, 256, 1024, 4096, 16384];
     // The DYNAMIC MATRIX ladder: N=0 is the per-cell baseline control, the rest is the requested N sweep. Tops out
-    // at SdfProgramBuilder.MaxInstances (16384) — unlike Storm's motion rungs (capped at
+    // below SdfProgramBuilder.MaxInstances — unlike Storm's motion rungs (capped at
     // MaxStormInstances=4096), DynamicMatrix measures to the full instance cap, moving or static.
     private static readonly int[] DynamicMatrixLadder = [0, 256, 1024, 4096, 16384];
     // The STORM ladder (the motion/churn family). Tops out at SdfBenchScene.MaxStormInstances (the dynamic-transform

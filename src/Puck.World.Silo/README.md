@@ -56,7 +56,11 @@ Loopback-only `POST /reload` reconciles published content through the existing
 reload submission, saves a checkpoint, and records the accepted content hash.
 Unchanged releases preserve recovered state; failed saves can retry without
 applying the same accepted rebuild twice. Readiness stays closed while a release
-is uncommitted. Changing the world's network identity requires worker replacement.
+is uncommitted. Changing the world's network binding requires a fresh activation.
+Activation takes its signing subject and listener from the published definition,
+even when the recovered checkpoint contains the previous endpoint. Reconciliation
+then updates the saved definition through ordinary reload. A live reload still
+refuses a binding different from the one established by that activation.
 `silo.status` reports readiness, retirement,
 and selected provider keys without exposing settings. The drain settles accepted
 reload submissions before freezing every row

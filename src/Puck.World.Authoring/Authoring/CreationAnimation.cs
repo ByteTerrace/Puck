@@ -25,16 +25,23 @@ namespace Puck.World.Authoring;
 /// and radians per radian-per-second for <see cref="SignalTurnRate"/>. Magnitude at most
 /// <see cref="MaxCadence"/>.</param>
 /// <param name="When">The gate: every token must hold for the driver's weight to ease toward 1 (it eases
-/// toward 0 otherwise, over <see cref="WeightSeconds"/>, so a limb returns to rest instead of freezing mid-stride).
+/// toward 0 otherwise, using the authored blend times or <see cref="WeightSeconds"/> by default, so a limb returns
+/// to rest instead of freezing mid-stride).
 /// Authored as one token or an array of them — a bare string reads as a one-token gate and canonicalizes to the
 /// array form. A token is a <c>Puck.Physics.Motion.BodyFacts</c> member name, <see cref="WhenAlways"/>,
 /// <see cref="TokenMoving"/>, or <see cref="TokenStill"/>; null is ungated. At most <see cref="MaxGateTokens"/>.
 /// A token no consumer can resolve gates the driver permanently off.</param>
+/// <param name="BlendInSeconds">Gate activation's exponential time constant in seconds; null uses
+/// <see cref="WeightSeconds"/>. Finite and non-negative; zero applies immediately on the next positive frame delta.</param>
+/// <param name="BlendOutSeconds">Gate release's exponential time constant in seconds, on the same terms as
+/// <paramref name="BlendInSeconds"/>. Independent release timing lets a mechanism settle after a quick body response.</param>
 public sealed record CreationDriverDocument(
     string Name,
     string Signal,
     DocumentScalar Cadence,
-    [property: JsonConverter(typeof(DriverGateJsonConverter)), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? When = null
+    [property: JsonConverter(typeof(DriverGateJsonConverter)), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? When = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? BlendInSeconds = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? BlendOutSeconds = null
 ) {
     /// <summary>The largest signal-to-phase gain magnitude.</summary>
     public const float MaxCadence = 256f;

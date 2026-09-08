@@ -28,4 +28,8 @@ public enum SdfSolidPrimitive {
     Plane,
     /// <summary>A sharp circular cone with a flat base, centered along local Y.</summary>
     Cone,
+    /// <summary>A bounded profile in local XY extruded along Z. The default trapezoid has unit bottom
+    /// half-width, half-height and depth, with an authored top-to-bottom width ratio (default one half).
+    /// <see cref="SdfPrismProfile"/> selects rounded rectangles, polygons or ellipses instead.</summary>
+    Prism,
 }

@@ -1001,7 +1001,8 @@ export type CreationDocument = {
     | ({
         id: number;
         name?: unknown;
-        type: "Sphere" | "Box" | "Torus" | "Cylinder" | "Capsule" | "Ellipsoid" | "RoundCone" | "Plane" | "Cone";
+        type:
+          "Sphere" | "Box" | "Torus" | "Cylinder" | "Capsule" | "Ellipsoid" | "RoundCone" | "Plane" | "Cone" | "Prism";
         position: unknown;
         rotation: unknown;
         scale: unknown;
@@ -1203,6 +1204,12 @@ export type CreationDocument = {
         joint?: {
           [k: string]: unknown;
         };
+        taper?: number | null;
+        profile?: {
+          kind: "Trapezoid" | "RoundedRectangle" | "Polygon" | "Ellipse";
+          cornerRadius?: number;
+          sides?: number;
+        } | null;
       } | null)[]
     | null;
   frames?:
@@ -1269,6 +1276,8 @@ export type CreationDocument = {
         signal: string;
         cadence: unknown;
         when?: (string | null)[] | null;
+        blendInSeconds?: number | null;
+        blendOutSeconds?: number | null;
       } | null)[]
     | null;
   effectors?:
@@ -7852,11 +7861,11 @@ export interface WorldStorageDefaults {
    */
   endpoint?: string | null;
   /**
-   * An explicit user-id override (an Entra oid Guid string for a dev box or agent), or null to decline identity (local-only). Fed to the identity resolver's explicit-override source.
+   * An explicit user-id override (a UUID string for a dev box or agent), or null to decline identity (local-only). Fed to the identity resolver's explicit-override source.
    */
   userId?: string | null;
   /**
-   * The direct-to-account connection container listing uses when Endpoint resolves to an edge-shaped target — the platform edge cannot serve List at all (see AzureBlobObjectStorageTarget.DirectEndpoint's remarks), so an edge-shaped target with this null refuses discovery by name instead of a request the edge cannot answer. Validated as an absolute URI when present; a connection-string override (CLI-only — see the validator) is for the dev/emulator shape. Ignored when Endpoint is raw-shaped (a raw target lists directly, like it reads and writes).
+   * The direct-to-account connection container listing uses when Endpoint resolves to an edge-shaped target — the platform edge cannot serve List at all (see the storage extension documentation), so an edge-shaped target with this null refuses discovery by name instead of a request the edge cannot answer. Validated as an absolute URI when present; a connection-string override (CLI-only — see the validator) is for the dev/emulator shape. Ignored when Endpoint is raw-shaped (a raw target lists directly, like it reads and writes).
    */
   discoveryEndpoint?: string | null;
 }
@@ -11138,7 +11147,7 @@ export interface WorldReference {
    */
   document?: string | null;
   /**
-   * The remote world's owning platform user id (an Entra oid) — worlds ARE users, so naming the owner names the world's account. Required together with World; refused alone.
+   * The remote world's owning platform user id (a UUID) — worlds ARE users, so naming the owner names the world's account. Required together with World; refused alone.
    */
   owner?: string | null;
   /**
@@ -11430,7 +11439,7 @@ export interface WorldMetadataAuthor {
    */
   name: string;
   /**
-   * The author's Entra object id, when the author chooses to attach one — see WorldEntraObjectId. Authored, not authenticated: nothing here proves the name behind the id.
+   * The author's object id, when the author chooses to attach one — see WorldObjectId. Authored, not authenticated: nothing here proves the name behind the id.
    */
   oid?: string | null;
 }

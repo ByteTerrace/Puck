@@ -48,6 +48,11 @@ public sealed record PaletteEntryDocument(string Color, float? Emissive, float? 
 /// <see cref="CreationEffectorDocument"/> chain and declares no <paramref name="Swings"/> (null = the pivot of the
 /// first swing, or the shape's own position when it has neither). Author-frame, like every other point here. Read only
 /// by the effector solve, so it changes no pose on its own.</param>
+/// <param name="Taper">Only for Prism: top width divided by bottom width, finite in [0, 1].
+/// Null uses 0.5; zero makes a triangular profile and one a rectangular profile. Scale holds bottom half-width,
+/// half-height and extrusion half-depth. Rotate the prism to reverse its taper.</param>
+/// <param name="Profile">Optional Prism cross-section controls. Null uses a trapezoid; other profiles expose
+/// rounded rectangles, polygons, and ellipses with flat extruded caps.</param>
 public sealed record ShapeDocument(
     int Id,
     DocumentIdentifier? Name,
@@ -67,7 +72,9 @@ public sealed record ShapeDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ShapeSwingDocument>? Swings = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ShapeSlideDocument>? Slides = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Parent = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Joint = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Joint = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Taper = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfPrismProfile? Profile = null
 ) {
     /// <summary>The largest bend rate, in radians per unit of local Y, moderated below <see cref="MaxTwist"/>'s
     /// ceiling: the bend operator's Lipschitz factor is worse than twist's (see

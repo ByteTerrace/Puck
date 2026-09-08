@@ -37,6 +37,27 @@ half — the reach a whole creation implies, shapes and text runs together.
 | Ellipsoid | radii (1,1,1) | radius per axis |
 | RoundCone | lower r = 1, upper r = 0.5, height 1 | scaled per axis |
 | Torus | major 1, minor 0.4 | scaled per axis |
+| Prism | XY profile extruded along Z | profile X/Y half-extents, extrusion half-depth |
+
+A `Prism` shape's optional `taper` is its top width divided by its bottom width:
+0 gives a triangle, 1 a rectangle, and omission uses 0.5. Rotate the shape to
+reverse or redirect the taper. This makes tapered armor plates and roof sections
+without assembling them from overlapping boxes. `dilate` adds a rounded edge;
+its radius expands the authored profile rather than cutting a flat chamfer.
+An optional `profile` selects `RoundedRectangle` (`cornerRadius` is a fraction
+of the smaller half-extent), `Polygon` (`sides`, 3–32), or `Ellipse`. Omission
+uses `Trapezoid`. Extrusion caps stay flat; corner rounding shapes the outline,
+while `dilate` rounds the depth edges too. Polygon and ellipse profiles scale
+their canonical outline in X/Y. These are existing VM instructions, not meshes
+or additional shader opcodes.
+
+Animated and static stamps use the same profile. The deterministic field
+supports trapezoids and rounded rectangles; polygon and ellipse profiles are
+refused for field contact until that interpreter supports them. The analytic
+contact provider retains conservative primitive bounds. Character looks do not
+replace the body's authored collision kit.
+World stamps admit up to 128 shapes, including expanded text glyphs. This is
+headroom for authored detail, not a requirement to fill every slot.
 
 ## Animation: drivers, waveforms, joints
 
@@ -48,6 +69,13 @@ read off the body the creation is stamped on, times a cadence, gated by a
 conjunction of condition tokens. Each driver yields a phase φ and an eased weight
 w ∈ [0, 1]; w eases toward 1 while every `when` token holds and toward 0
 otherwise, over 0.15 s, and a driver at rest (w = 0) stops advancing.
+
+`blendInSeconds` and `blendOutSeconds` override that exponential time constant
+independently for each driver. Both accept finite, non-negative seconds; zero
+snaps on the next positive frame delta. These are time constants, not clip
+durations: about 95% of a transition completes after three time constants.
+For example, a quick body pose and a slower wing assembly can read the same
+`Airborne` gate through separate drivers. This changes presentation only.
 
 ```json
 { "name": "stride", "signal": "planarTravel", "cadence": 8.0, "when": ["Grounded", "moving"] }
