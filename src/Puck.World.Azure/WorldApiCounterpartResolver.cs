@@ -4,7 +4,9 @@ using Azure.Core;
 using Puck.Attestation;
 using Puck.World.Protocol;
 
-namespace Puck.World.Server;
+using Puck.World.Server;
+
+namespace Puck.World.Azure;
 
 /// <summary>
 /// The cross-owner <see cref="IWorldNeighbourResolver"/> for an owner-named <see cref="WorldReference"/> — the API
@@ -32,14 +34,7 @@ public sealed class WorldApiCounterpartResolver : IWorldNeighbourResolver {
     public static readonly TimeSpan MaximumClaimAge = TimeSpan.FromHours(value: 1);
 
     private const string OwnerKeyPrefix = "owner/";
-    /// <summary>The platform API's exposed-scope request — read from the app registration's client id
-    /// (<c>e6a7ab9f-19af-4eb0-b23f-a5bde0f90eb7</c>, <c>src/Puck.Azure.Functions/configuration.json</c>'s own audience);
-    /// this repository carries no independent record of the App ID URI, so this is asserted from that client id per
-    /// the standard <c>api://{clientId}/{scope}</c> exposed-API convention, not independently verified against a
-    /// live app registration.</summary>
-    private const string PlatformApiScope = "api://e6a7ab9f-19af-4eb0-b23f-a5bde0f90eb7/user_impersonation";
 
-    private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(seconds: 15);
     private static readonly IAttestationCodec Codec = new CborAttestationCodec();
 
     private readonly IReadOnlyList<WorldAdmissionEntry>? m_admissionEntries;
@@ -112,17 +107,17 @@ public sealed class WorldApiCounterpartResolver : IWorldNeighbourResolver {
             return WorldNeighbourResolution.Unavailable(reason: $"'{document}' is not an owner-named neighbour key");
         }
 
-        using var timeout = new CancellationTokenSource(delay: OperationTimeout);
+        using var timeout = new CancellationTokenSource(delay: CounterpartApiPolicy.OperationTimeout);
 
         AccessToken token;
 
         try {
             token = m_credential.GetToken(
                 cancellationToken: timeout.Token,
-                requestContext: new TokenRequestContext(scopes: [PlatformApiScope])
+                requestContext: new TokenRequestContext(scopes: [CounterpartApiPolicy.Scope])
             );
         } catch (OperationCanceledException) {
-            return WorldNeighbourResolution.Unavailable(reason: $"timed out after {OperationTimeout.TotalSeconds:0}s acquiring the platform API token");
+            return WorldNeighbourResolution.Unavailable(reason: $"timed out after {CounterpartApiPolicy.OperationTimeout.TotalSeconds:0}s acquiring the platform API token");
         } catch (Exception exception) {
             return WorldNeighbourResolution.Unavailable(reason: $"platform API token acquisition failed — {exception.Message.ReplaceLineEndings(replacementText: " ")}");
         }
@@ -142,7 +137,7 @@ public sealed class WorldApiCounterpartResolver : IWorldNeighbourResolver {
                 request: request
             );
         } catch (OperationCanceledException) {
-            return WorldNeighbourResolution.Unavailable(reason: $"timed out after {OperationTimeout.TotalSeconds:0}s reading the counterpart claim for '{document}'");
+            return WorldNeighbourResolution.Unavailable(reason: $"timed out after {CounterpartApiPolicy.OperationTimeout.TotalSeconds:0}s reading the counterpart claim for '{document}'");
         } catch (Exception exception) {
             return WorldNeighbourResolution.Unavailable(reason: $"transport error reading the counterpart claim for '{document}' — {exception.Message.ReplaceLineEndings(replacementText: " ")}");
         }

@@ -99,6 +99,23 @@ omitting the key disables federation by name while leaving ordinary admitted
 peer listening available. `puck canary` creates a run-scoped key for every
 runner-owned authority pair.
 
+**Hosted Puck.** Sign in with a ByteTerrace API Users account and use the
+`world-authentication.json` artifact from the deployed Puck world release:
+
+```text
+dotnet run --project src/Puck.World -c Release -- --connect puck.puck.byteterrace.com:33333 --authentication-config-file /path/to/world-authentication.json
+```
+
+The installed authentication extension acquires the API token and checks the
+server's pinned key before sending it. Do not combine this client configuration
+with a federation private key. The primary world admits sixteen network players
+and gives disconnected seats sixty seconds of reconnect grace. Connections in
+one process share a session namespace; starting a new process creates a fresh
+traveller namespace. Cross-process body recovery is a separate travel concern.
+The [Azure authentication provider](../Puck.World.Azure/README.md#silo-hosting)
+owns token validation and group membership policy; those concepts stay outside
+the engine.
+
 **Headless.** `--headless` (or the document's `host.presentation: none`) boots
 with no window, no GPU device, no swapchain, and no audio device — the
 authoritative server, console, and tape only:

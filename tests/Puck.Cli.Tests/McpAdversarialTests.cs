@@ -77,7 +77,9 @@ public sealed class McpAdversarialTests {
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(Token);
         var run = OperatorMcpServer.RunAsync(host.AttachmentPath, input, output, stop.Token);
         try {
-            await output.Entered.Task.WaitAsync(TimeSpan.FromSeconds(3), Token);
+            // Saturation may close the queue before the first queued write reaches stdout.
+            // Only the single-reply case must enter the blocked writer to prove its deadline.
+            if (!flood) { await output.Entered.Task.WaitAsync(TimeSpan.FromSeconds(3), Token); }
             var error = await Record.ExceptionAsync(() => run.WaitAsync(TimeSpan.FromSeconds(flood ? 3 : 8), Token));
             Assert.IsType<IOException>(error);
             Assert.True(input.Closed);

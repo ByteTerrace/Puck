@@ -1,6 +1,5 @@
 #!/usr/bin/env dotnet
 #:property PublishAot=false
-
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
@@ -214,6 +213,7 @@ internal static class AzureAutomation {
         var source = Read(path: "artifacts/world-platform-source.json")["parameters"]!;
         var values = new JsonObject {
             ["configuration"] = source["resources"]!["value"]!["worldSilo"]!.DeepClone(),
+            ["actionGroup"] = source["resources"]!["value"]!["worldSiloActionGroup"]!.DeepClone(),
             ["publishingPrincipalId"] = Environment.GetEnvironmentVariable(variable: "BICEPPARAM_OWNER_OBJECT_ID"),
             ["storageAccountName"] = (Text(value: source["partitioning"]!["value"]!["prefix"]) + "stp001"),
             ["registryName"] = source["resources"]!["value"]!["containerRegistry"]!["name"]!.DeepClone(),
@@ -227,8 +227,8 @@ internal static class AzureAutomation {
         // A world-only release preserves the unified root's deployed OAuth policy and identity registration.
         var mcp = await AzJsonAsync("deployment", "group", "list", "-g", group, "--query",
             "[?name=='puck-production-platform'].properties.outputs.worldMcpConfiguration | [0] || `{}`", "-o", "json");
-        if (mcp["value"] is not null) { outputs["worldMcpConfiguration"] = mcp.DeepClone(); }
-        else if (source["worldMcp"]?["value"] is not null) { throw new InvalidOperationException("Deploy unified infrastructure before enabling World MCP in an application release."); }
+
+        if (mcp["value"] is not null) { outputs["worldMcpConfiguration"] = mcp.DeepClone(); } else if (source["worldMcp"]?["value"] is not null) { throw new InvalidOperationException(message: "Deploy unified infrastructure before enabling World MCP in an application release."); }
         Write(path: "artifacts/production-outputs.json", value: outputs);
     }
     private static void WriteParameters(string path, JsonObject values) {
@@ -527,16 +527,16 @@ internal static class AzureAutomation {
             var token = await TokenAsync(resource: "https://storage.azure.com/");
 
             async Task PublishWorldsAsync() {
-            foreach (var file in Directory.EnumerateFiles(path: "artifacts/azure/silo-worlds")) {
-                var world = Read(path: file);
-                var name = Path.GetFileName(path: file).Replace(comparisonType: StringComparison.Ordinal, newValue: "", oldValue: ".world.json");
+                foreach (var file in Directory.EnumerateFiles(path: "artifacts/azure/silo-worlds")) {
+                    var world = Read(path: file);
+                    var name = Path.GetFileName(path: file).Replace(comparisonType: StringComparison.Ordinal, newValue: "", oldValue: ".world.json");
 
-                if (name == Text(value: configuration["worldName"])) { world["host"]!["authority"] = $"{host}:{port}"; world["host"]!["listen"] = $"0.0.0.0:{port}"; }
-                var path = Path.Combine(path1: temporary, path2: Path.GetFileName(path: file));
+                    if (name == Text(value: configuration["worldName"])) { world["host"]!["authority"] = $"{host}:{port}"; world["host"]!["listen"] = $"0.0.0.0:{port}"; }
+                    var path = Path.Combine(path1: temporary, path2: Path.GetFileName(path: file));
 
-                Write(path: path, value: world);
-                await SendBlobAsync(endpoint: endpoint, container: owner, name: $"private/puck/hosted/{name}/definition.json", file: path, token: token, contentType: "application/json");
-            }
+                    Write(path: path, value: world);
+                    await SendBlobAsync(endpoint: endpoint, container: owner, name: $"private/puck/hosted/{name}/definition.json", file: path, token: token, contentType: "application/json");
+                }
             }
             var lifecycle = new JsonObject {
                 ["healthPort"] = configuration["lifecycle"]!["healthPort"]!.DeepClone(),
@@ -556,9 +556,10 @@ internal static class AzureAutomation {
             var silo = SiloDocument(owner: owner, world: Text(value: configuration["worldName"]), keyFile: "/configuration/federation.pk8",
                 store: new JsonObject { ["type"] = "azure.blob", ["settings"] = new JsonObject { ["accountUrl"] = endpoint } }, lifecycle: lifecycle);
             var authentication = configuration["authentication"]!.DeepClone();
+
             silo["worlds"]![0]!["federation"]!["authentication"] = authentication.DeepClone();
-            authentication["settings"]!["remoteKeyHash"] = Convert.ToHexStringLower(SHA256.HashData(key.ExportSubjectPublicKeyInfo()));
-            Write("artifacts/world-authentication.json", authentication);
+            authentication["settings"]!["remoteKeyHash"] = Convert.ToHexStringLower(inArray: SHA256.HashData(source: key.ExportSubjectPublicKeyInfo()));
+            Write(path: "artifacts/world-authentication.json", value: authentication);
             var image = File.ReadAllText(path: "artifacts/world-silo.digest").Trim();
 
             if (!Regex.IsMatch(input: image, pattern: "\\A[a-z0-9.-]+/[a-z0-9/_-]+@sha256:[a-f0-9]{64}\\z")) { throw new InvalidDataException(message: "World image must be an immutable registry digest."); }
@@ -566,23 +567,25 @@ internal static class AzureAutomation {
             var mcpDeployment = outputs["worldMcpConfiguration"]?["value"];
             var mcpOptions = mcpDeployment?["options"];
             var mcpCertificate = "";
+
             if (mcpOptions is not null) {
                 mcpCertificate = await AzAsync("keyvault", "secret", "show", "--vault-name", vault,
-                    "--name", Text(mcpDeployment!["certificateSecretName"]), "--query", "value", "-o", "tsv");
-                Mask(mcpCertificate);
+                    "--name", Text(value: mcpDeployment!["certificateSecretName"]), "--query", "value", "-o", "tsv");
+                Mask(value: mcpCertificate);
                 using var certificate = System.Security.Cryptography.X509Certificates.X509CertificateLoader.LoadPkcs12(
-                    Convert.FromBase64String(mcpCertificate), null,
+                    Convert.FromBase64String(s: mcpCertificate), null,
                     System.Security.Cryptography.X509Certificates.X509KeyStorageFlags.EphemeralKeySet);
-                if (!certificate.HasPrivateKey || !certificate.MatchesHostname(host) || certificate.NotAfter.ToUniversalTime() <= DateTime.UtcNow) {
-                    throw new InvalidDataException("The MCP certificate needs a private key, the silo DNS name, and an unexpired validity period.");
+
+                if (!certificate.HasPrivateKey || !certificate.MatchesHostname(host) || (certificate.NotAfter.ToUniversalTime() <= DateTime.UtcNow)) {
+                    throw new InvalidDataException(message: "The MCP certificate needs a private key, the silo DNS name, and an unexpired validity period.");
                 }
             }
             var replacements = new Dictionary<string, string> {
-                ["__MCP_ENABLED__"] = mcpOptions is null ? "0" : "1",
-                ["__MCP_DOCUMENT__"] = mcpOptions is null ? "" : Convert.ToBase64String(Encoding.UTF8.GetBytes(mcpOptions.ToJsonString())),
+                ["__MCP_ENABLED__"] = ((mcpOptions is null) ? "0" : "1"),
+                ["__MCP_DOCUMENT__"] = ((mcpOptions is null) ? "" : Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: mcpOptions.ToJsonString()))),
                 ["__MCP_CERTIFICATE__"] = mcpCertificate,
-                ["__MCP_ENTRYPOINT__"] = mcpOptions is null ? "" : "--entrypoint dotnet",
-                ["__MCP_ARGUMENTS__"] = mcpOptions is null ? "--silo /configuration/silo.json" : "/puck-cli/Puck.Cli.dll mcp --silo /configuration/silo.json --http /configuration/mcp.json",
+                ["__MCP_ENTRYPOINT__"] = ((mcpOptions is null) ? "" : "--entrypoint dotnet"),
+                ["__MCP_ARGUMENTS__"] = ((mcpOptions is null) ? "--silo /configuration/silo.json" : "/puck-cli/Puck.Cli.dll mcp --silo /configuration/silo.json --http /configuration/mcp.json"),
                 ["__SILO_DOCUMENT__"] = Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: silo.ToJsonString())),
                 ["__FEDERATION_KEY__"] = encodedKey,
                 ["__CLIENT_ID__"] = Text(value: Value(key: "worldSiloClientId", outputs: outputs)),
@@ -616,60 +619,75 @@ internal static class AzureAutomation {
                 ["tags"] = Value(key: "deploymentTags", outputs: outputs).DeepClone(),
                 ["identityResourceId"] = Value(key: "worldSiloIdentityResourceId", outputs: outputs).DeepClone(),
                 ["bootstrapCommand"] = command,
-                ["mcpEnabled"] = mcpOptions is not null,
+                ["mcpEnabled"] = (mcpOptions is not null),
                 ["release"] = image,
                 ["sshPublicKey"] = ssh,
             };
             var parameterPath = Path.Combine(path1: temporary, path2: "parameters.json");
 
             WriteParameters(path: parameterPath, values: parameters);
-            var stateSecret = Text(configuration["releaseStateSecretName"]);
+            using var releaseBuffer = new MemoryStream();
+
+            using (var gzip = new System.IO.Compression.GZipStream(releaseBuffer, System.IO.Compression.CompressionLevel.SmallestSize, leaveOpen: true)) {
+                var saved = new JsonObject { ["parameters"] = parameters.DeepClone(), ["publicKey"] = Convert.ToBase64String(inArray: key.ExportSubjectPublicKeyInfo()) };
+
+                await gzip.WriteAsync(Encoding.UTF8.GetBytes(s: saved.ToJsonString()));
+            }
+            var state = Convert.ToBase64String(inArray: releaseBuffer.ToArray());
+
+            if (Encoding.UTF8.GetByteCount(s: state) > 25000) { throw new InvalidDataException(message: "Compressed release state exceeds the vault secret limit."); }
+            var statePath = Path.Combine(path1: temporary, path2: "release-state.txt");
+
+            File.WriteAllText(contents: state, path: statePath);
+            var stateSecret = Text(value: configuration["releaseStateSecretName"]);
             JsonNode? previousRelease = null;
-            if (secrets!.AsArray().Any(value => Text(value) == stateSecret)) {
+
+            if (secrets!.AsArray().Any(predicate: value => (Text(value: value) == stateSecret))) {
                 var encodedState = await AzAsync("keyvault", "secret", "show", "--vault-name", vault, "--name", stateSecret, "--query", "value", "-o", "tsv");
-                Mask(encodedState);
-                using var compressed = new MemoryStream(Convert.FromBase64String(encodedState));
-                using var gzip = new System.IO.Compression.GZipStream(compressed, System.IO.Compression.CompressionMode.Decompress);
+
+                Mask(value: encodedState);
+                using var compressed = new MemoryStream(buffer: Convert.FromBase64String(s: encodedState));
+                using var gzip = new System.IO.Compression.GZipStream(mode: System.IO.Compression.CompressionMode.Decompress, stream: compressed);
+
                 previousRelease = await JsonNode.ParseAsync(gzip);
             }
-            if (workers.Length != 0 && previousRelease is null) { throw new InvalidOperationException("The existing worker needs its known-good release state adopted into the configured vault secret before transactional deployment."); }
+            if ((workers.Length != 0) && (previousRelease is null)) { throw new InvalidOperationException(message: "The existing worker needs its known-good release state adopted into the configured vault secret before transactional deployment."); }
             var snapshot = new JsonArray();
+
             if (workers.Length != 0) {
-                await WorldGuestAsync(group, Text(workers[0]!["name"]), $"curl --fail --silent --show-error --max-time {configuration["lifecycle"]!["shutdownSeconds"]} -X POST http://127.0.0.1:{configuration["lifecycle"]!["healthPort"]}/drain\nsystemctl stop puck-world.service");
+                await WorldGuestAsync(group, Text(value: workers[0]!["name"]), $"curl --fail --silent --show-error --max-time {configuration["lifecycle"]!["shutdownSeconds"]} -X POST http://127.0.0.1:{configuration["lifecycle"]!["healthPort"]}/drain\nsystemctl stop puck-world.service");
             }
-            try { snapshot = await SnapshotWorldStoreAsync(endpoint, owner, token); }
-            catch {
-                if (workers.Length != 0) { await WorldGuestAsync(group, Text(workers[0]!["name"]), "systemctl start puck-world.service"); }
+            try { snapshot = await SnapshotWorldStoreAsync(endpoint: endpoint, owner: owner, token: token); } catch {
+                if (workers.Length != 0) { await WorldGuestAsync(group, Text(value: workers[0]!["name"]), "systemctl start puck-world.service"); }
                 throw;
             }
-            Write("artifacts/world-rollback.json", new JsonObject { ["endpoint"] = endpoint, ["owner"] = owner, ["blobs"] = snapshot.DeepClone() });
+            Write(path: "artifacts/world-rollback.json", value: new JsonObject { ["endpoint"] = endpoint, ["owner"] = owner, ["blobs"] = snapshot.DeepClone() });
             try {
                 await PublishWorldsAsync();
-                await ApplyWorldComputeAsync(group, Text(configuration["name"]), parameterPath);
+                await ApplyWorldComputeAsync(group, Text(value: configuration["name"]), parameterPath);
                 await RetryAsync(action: async () => { await PuckAsync("world", "probe", host, port, "artifacts/world-silo.public-key"); }, attempts: 6, seconds: 5);
                 await TestWorldReleaseAsync();
-                using var encoded = new MemoryStream();
-                using (var gzip = new System.IO.Compression.GZipStream(encoded, System.IO.Compression.CompressionLevel.SmallestSize, leaveOpen: true)) {
-                    var saved = new JsonObject { ["parameters"] = parameters.DeepClone(), ["publicKey"] = Convert.ToBase64String(key.ExportSubjectPublicKeyInfo()) };
-                    await gzip.WriteAsync(Encoding.UTF8.GetBytes(saved.ToJsonString()));
-                }
-                var state = Convert.ToBase64String(encoded.ToArray());
-                if (Encoding.UTF8.GetByteCount(state) > 25000) { throw new InvalidDataException("Compressed release state exceeds the vault secret limit."); }
-                var statePath = Path.Combine(temporary, "release-state.txt");
-                File.WriteAllText(statePath, state);
                 await AzAsync("keyvault", "secret", "set", "--vault-name", vault, "--name", stateSecret, "--file", statePath, "-o", "none");
-            } catch (Exception failure) when (previousRelease is not null) {
-                Console.Error.WriteLine($"World deployment failed; restoring its previous image, configuration, and pre-release persistence versions: {failure.Message}");
-                foreach (var worker in await WorkersAsync(group, Text(configuration["name"]))) {
-                    await WorldGuestAsync(group, Text(worker!["name"]), "systemctl stop puck-world.service\nif docker inspect puck-world >/dev/null 2>&1; then docker rm -f puck-world; fi");
+            } catch (Exception failure) {
+                Console.Error.WriteLine(value: $"World deployment failed; restoring pre-release persistence and the last verified worker, when present: {failure.Message}");
+                foreach (var worker in await WorkersAsync(group: group, scaleSet: Text(value: configuration["name"]))) {
+                    await WorldGuestAsync(group, Text(value: worker!["name"]), "if systemctl cat puck-world.service >/dev/null 2>&1; then systemctl stop puck-world.service; fi\nif docker inspect puck-world >/dev/null 2>&1; then docker rm -f puck-world; fi");
                 }
-                await RestoreWorldStoreAsync(endpoint, owner, await TokenAsync("https://storage.azure.com/"), snapshot, temporary);
-                WriteParameters(parameterPath, previousRelease["parameters"]!.AsObject());
-                await ApplyWorldComputeAsync(group, Text(configuration["name"]), parameterPath);
-                var previousKey = Path.Combine(temporary, "previous.public-key");
-                File.WriteAllBytes(previousKey, Convert.FromBase64String(Text(previousRelease["publicKey"])));
-                await RetryAsync(async () => { await PuckAsync("world", "probe", host, port, previousKey); }, attempts: 12, seconds: 5);
-                throw new InvalidOperationException("World release failed; the previous release and its persistence versions were restored.", failure);
+                await RestoreWorldStoreAsync(endpoint, owner, await TokenAsync(resource: "https://storage.azure.com/"), snapshot, temporary);
+                if (previousRelease is null) {
+                    await AzAsync("vmss", "scale", "-g", group, "--name", Text(value: configuration["name"]), "--new-capacity", "0", "-o", "none");
+                    throw new InvalidOperationException(innerException: failure, message: "The first world release failed; pre-release persistence was restored and the scale set is empty for a clean retry.");
+                }
+                WriteParameters(path: parameterPath, values: previousRelease["parameters"]!.AsObject());
+                await ApplyWorldComputeAsync(group, Text(value: configuration["name"]), parameterPath);
+                var previousKey = Path.Combine(path1: temporary, path2: "previous.public-key");
+
+                File.WriteAllBytes(previousKey, Convert.FromBase64String(s: Text(value: previousRelease["publicKey"])));
+                var previousConfiguration = previousRelease["parameters"]!["configuration"]!;
+                var previousHost = $"{previousConfiguration["dns"]!["recordName"]}.{previousConfiguration["dns"]!["zoneName"]}";
+
+                await RetryAsync(async () => { await PuckAsync("world", "probe", previousHost, Text(value: previousConfiguration["port"]), previousKey); }, attempts: 12, seconds: 5);
+                throw new InvalidOperationException(innerException: failure, message: "World release failed; the previous release and its persistence versions were restored.");
             }
         } finally {
             // This freshly generated path is never derived from arguments or deployment documents.
@@ -677,64 +695,77 @@ internal static class AzureAutomation {
         }
     }
     private static async Task ApplyWorldComputeAsync(string group, string scaleSet, string parameters) {
-        await AzAsync("deployment", "group", "create", "-g", group, "--name", scaleSet + "-application", "--template-file", "src/Puck.Azure.Resources/worldSiloCompute.bicep", "--parameters", "@" + parameters, "-o", "none");
+        await AzAsync("deployment", "group", "create", "-g", group, "--name", (scaleSet + "-application"), "--template-file", "src/Puck.Azure.Resources/worldSiloCompute.bicep", "--parameters", ("@" + parameters), "-o", "none");
         await AzAsync("vmss", "update-instances", "-g", group, "--name", scaleSet, "--instance-ids", "*", "-o", "none");
     }
     private static async Task WorldGuestAsync(string group, string worker, string script) {
-        var marker = "puck-operation-" + Guid.NewGuid().ToString("N");
-        var path = Path.Combine(Path.GetTempPath(), marker + ".sh");
+        var marker = ("puck-operation-" + Guid.NewGuid().ToString(format: "N"));
+        var path = Path.Combine(path1: Path.GetTempPath(), path2: (marker + ".sh"));
+
         try {
-            File.WriteAllText(path, "set -eu\n" + script + "\nprintf '%s\\n' '" + marker + "'\n");
-            var result = await AzJsonAsync("vm", "run-command", "invoke", "-g", group, "-n", worker, "--command-id", "RunShellScript", "--scripts", "@" + path, "-o", "json");
-            if (!result["value"]!.AsArray().Any(row => Text(row?["message"]).Contains(marker, StringComparison.Ordinal))) {
-                throw new InvalidOperationException("World guest operation did not confirm completion.");
+            File.WriteAllText(contents: (((("set -eu\n" + script) + "\nprintf '%s\\n' '") + marker) + "'\n"), path: path);
+            var result = await AzJsonAsync("vm", "run-command", "invoke", "-g", group, "-n", worker, "--command-id", "RunShellScript", "--scripts", ("@" + path), "-o", "json");
+
+            if (!result["value"]!.AsArray().Any(predicate: row => Text(value: row?["message"]).Contains(comparisonType: StringComparison.Ordinal, value: marker))) {
+                throw new InvalidOperationException(message: "World guest operation did not confirm completion.");
             }
-        } finally { File.Delete(path); }
+        } finally { File.Delete(path: path); }
     }
     private static bool MutableWorldBlob(string name) =>
-        (name.StartsWith("puck/hosted/", StringComparison.Ordinal) || name.StartsWith("private/puck/hosted/", StringComparison.Ordinal)) &&
-        !name.EndsWith(".pckp", StringComparison.Ordinal);
+        ((name.StartsWith(comparisonType: StringComparison.Ordinal, value: "puck/hosted/") || name.StartsWith(comparisonType: StringComparison.Ordinal, value: "private/puck/hosted/")) &&
+        !name.EndsWith(comparisonType: StringComparison.Ordinal, value: ".pckp"));
     private static async Task<string[]> WorldBlobNamesAsync(string endpoint, string owner) {
-        var blobs = await AzJsonAsync("storage", "blob", "list", "--account-name", new Uri(endpoint).Host.Split('.')[0],
+        var blobs = await AzJsonAsync("storage", "blob", "list", "--account-name", new Uri(uriString: endpoint).Host.Split('.')[0],
             "--container-name", owner, "--auth-mode", "login", "--num-results", "*", "--query", "[].name", "-o", "json");
-        return blobs.AsArray().Select(Text).Where(MutableWorldBlob).ToArray();
+
+        return blobs.AsArray().Select(selector: Text).Where(predicate: MutableWorldBlob).ToArray();
     }
     private static HttpRequestMessage WorldBlobRequest(HttpMethod method, string endpoint, string owner, string name, string token, string? version = null) {
-        var uri = endpoint + "/" + Uri.EscapeDataString(owner) + "/" + string.Join('/', name.Split('/').Select(Uri.EscapeDataString));
-        if (version is not null) { uri += "?versionid=" + Uri.EscapeDataString(version); }
-        var request = new HttpRequestMessage(method, uri);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        request.Headers.Add("x-ms-version", "2025-11-05");
+        var uri = ((((endpoint + "/") + Uri.EscapeDataString(stringToEscape: owner)) + "/") + string.Join(separator: '/', values: name.Split('/').Select(selector: Uri.EscapeDataString)));
+
+        if (version is not null) { uri += ("?versionid=" + Uri.EscapeDataString(stringToEscape: version)); }
+        var request = new HttpRequestMessage(method: method, requestUri: uri);
+
+        request.Headers.Authorization = new AuthenticationHeaderValue(parameter: token, scheme: "Bearer");
+        request.Headers.Add(name: "x-ms-version", value: "2025-11-05");
+        request.Headers.Add(name: "x-ms-date", value: DateTime.UtcNow.ToString(format: "R", provider: System.Globalization.CultureInfo.InvariantCulture));
         return request;
     }
     private static async Task<JsonArray> SnapshotWorldStoreAsync(string endpoint, string owner, string token) {
         var snapshot = new JsonArray();
-        foreach (var name in await WorldBlobNamesAsync(endpoint, owner)) {
+
+        foreach (var name in await WorldBlobNamesAsync(endpoint: endpoint, owner: owner)) {
             using var request = WorldBlobRequest(HttpMethod.Head, endpoint, owner, name, token);
-            using var response = await Http.SendAsync(request);
+            using var response = await Http.SendAsync(request: request);
+
             response.EnsureSuccessStatusCode();
-            if (!response.Headers.TryGetValues("x-ms-version-id", out var versions)) { throw new InvalidDataException("World rollback requires Blob versioning before deployment."); }
-            snapshot.Add((JsonNode)new JsonObject { ["name"] = name, ["version"] = versions.Single() });
+            if (!response.Headers.TryGetValues(name: "x-ms-version-id", values: out var versions)) { throw new InvalidDataException(message: "World rollback requires Blob versioning before deployment."); }
+            snapshot.Add(item: ((JsonNode)new JsonObject { ["name"] = name, ["version"] = versions.Single() }));
         }
         return snapshot;
     }
     private static async Task RestoreWorldStoreAsync(string endpoint, string owner, string token, JsonArray snapshot, string temporary) {
-        var names = snapshot.Select(row => Text(row!["name"])).ToHashSet(StringComparer.Ordinal);
-        foreach (var name in await WorldBlobNamesAsync(endpoint, owner)) {
-            if (names.Contains(name)) { continue; }
+        var names = snapshot.Select(selector: row => Text(value: row!["name"])).ToHashSet(comparer: StringComparer.Ordinal);
+
+        foreach (var name in await WorldBlobNamesAsync(endpoint: endpoint, owner: owner)) {
+            if (names.Contains(item: name)) { continue; }
             using var request = WorldBlobRequest(HttpMethod.Delete, endpoint, owner, name, token);
-            using var response = await Http.SendAsync(request);
+            using var response = await Http.SendAsync(request: request);
+
             response.EnsureSuccessStatusCode();
         }
         foreach (var row in snapshot) {
-            var name = Text(row!["name"]);
-            if (!MutableWorldBlob(name)) { throw new InvalidDataException("Rollback manifest contains a blob outside hosted-world mutable state."); }
-            using var request = WorldBlobRequest(HttpMethod.Get, endpoint, owner, name, token, Text(row["version"]));
-            using var response = await Http.SendAsync(request);
+            var name = Text(value: row!["name"]);
+
+            if (!MutableWorldBlob(name: name)) { throw new InvalidDataException(message: "Rollback manifest contains a blob outside hosted-world mutable state."); }
+            using var request = WorldBlobRequest(HttpMethod.Get, endpoint, owner, name, token, Text(value: row["version"]));
+            using var response = await Http.SendAsync(request: request);
+
             response.EnsureSuccessStatusCode();
-            var file = Path.Combine(temporary, "restore-blob");
+            var file = Path.Combine(path1: temporary, path2: "restore-blob");
+
             await File.WriteAllBytesAsync(file, await response.Content.ReadAsByteArrayAsync());
-            await SendBlobAsync(endpoint, owner, name, file, token, response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream");
+            await SendBlobAsync(endpoint, owner, name, file, token, (response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream"));
         }
     }
     private static async Task<JsonNode?[]> WorkersAsync(string group, string scaleSet) {
@@ -753,6 +784,7 @@ internal static class AzureAutomation {
         if (outputs is not null) {
             var expected = Value(key: "worldSiloConfiguration", outputs: outputs)["compute"]!["imageReference"]!;
             var actual = workers[0]!["storageProfile"]!["imageReference"]!;
+
             foreach (var field in new[] { "publisher", "offer", "sku", "version" }) {
                 if (!Text(value: expected[field]).Equals(Text(value: actual[field]), StringComparison.OrdinalIgnoreCase)) {
                     throw new InvalidDataException(message: $"World worker OS image {field} differs from the declared release. Drain and replace the worker before completing the host image change.");
@@ -825,22 +857,48 @@ internal static class AzureAutomation {
         var silo = SiloDocument(owner: Owner, world: "puck", keyFile: "/fixture/federation.pk8", store: new JsonObject { ["type"] = "directory", ["settings"] = new JsonObject { ["path"] = "/fixture/store" } });
 
         silo["stateDir"] = "/fixture/state";
+        silo["lifecycle"] = new JsonObject {
+            ["healthPort"] = 8081,
+            ["shutdownSeconds"] = 120,
+            ["progressTimeoutSeconds"] = 30,
+            ["checkpointTimeoutSeconds"] = 180,
+            ["journalTimeoutSeconds"] = 30,
+            ["journalBacklogLimit"] = 1024,
+        };
         Write(path: Path.Combine(path1: fixture, path2: "silo.json"), value: silo);
+        await DockerAsync("run", "--rm", "--user", "0", "--entrypoint", "chown",
+            "--mount", $"type=bind,source={fixture},target=/fixture", image, "-R", "1654:1654", "/fixture");
         var pointer = $"/fixture/store/{Owner}/puck/hosted/puck/checkpoints/latest";
         var previous = "";
 
         for (var boot = 1; (boot <= 2); boot++) {
-            await DockerAsync("run", "-d", "--name", "silo-smoke", "--mount", $"type=bind,source={fixture},target=/fixture", "-p", "33333:33333/udp", image, "--silo", "/fixture/silo.json");
+            await DockerAsync("run", "-d", "--name", "silo-smoke", "--user", "1654:1654", "--read-only",
+                "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+                "--pids-limit", "512", "--log-driver", "local", "--log-opt", "max-size=10m", "--log-opt", "max-file=3",
+                "--mount", $"type=bind,source={fixture},target=/fixture", "-p", "127.0.0.1:33333:33333/udp", "-p", "127.0.0.1:8081:8081",
+                image, "--silo", "/fixture/silo.json");
             try {
                 var checkpoint = "";
 
                 for (var attempt = 0; (attempt < 90); attempt++) {
                     if (await DockerAsync("inspect", "silo-smoke", "--format", "{{.State.Running}}") != "true") { throw new InvalidOperationException(message: "Silo exited before checkpointing the primary world."); }
                     checkpoint = await DockerAsync("exec", "silo-smoke", "sh", "-c", "if [ -f \"$1\" ]; then sha256sum \"$1\"; fi", "probe", pointer);
-                    if ((checkpoint.Length != 0) && (checkpoint != previous)) { break; }
+                    if ((checkpoint.Length != 0) && (checkpoint != previous)) {
+                        try {
+                            using var health = await Http.GetAsync(requestUri: "http://127.0.0.1:8081/healthz");
+
+                            if (health.IsSuccessStatusCode) { break; }
+                        } catch (HttpRequestException) { }
+                    }
                     await Task.Delay(delay: TimeSpan.FromSeconds(seconds: 2));
                 }
                 if ((checkpoint.Length == 0) || (checkpoint == previous)) { throw new InvalidOperationException(message: $"Silo boot {boot} did not activate and checkpoint Puck."); }
+                using var readiness = await Http.GetAsync(requestUri: "http://127.0.0.1:8081/healthz");
+
+                readiness.EnsureSuccessStatusCode();
+                using var liveness = await Http.GetAsync(requestUri: "http://127.0.0.1:8081/livez");
+
+                liveness.EnsureSuccessStatusCode();
                 await PuckAsync("world", "probe", "127.0.0.1", "33333", Path.Combine(path1: fixture, path2: "public-key"));
                 previous = checkpoint;
                 Console.WriteLine(value: $"PASS: Puck boot {boot} activated, checkpointed, and accepted an authenticated QUIC connection.");

@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -38,7 +39,7 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
         m_host = new(() => { Interlocked.Increment(ref Opened); Interlocked.Increment(ref Active); return new ProbeSession(this); });
         Options = new() { AttachmentPath = m_host.AttachmentPath, PublicUrl = Audience, ListenUrl = "http://127.0.0.1:0", Issuer = Issuer, Audience = Audience, Scope = "puck.operator", AllowedSubjects = ["alice", "bob"], TenantId = Tenant, IdleTimeoutSeconds = 10 };
     }
-    internal async Task StartAsync(CancellationToken token, bool tls = false, bool entra = false, Action<WebApplicationBuilder>? configure = null) {
+    internal async Task StartAsync(CancellationToken token, bool tls = false, bool entra = false, Action<WebApplicationBuilder>? configure = null, bool proxy = false, bool embedded = false) {
         var options = Options;
         if (tls) {
             var request = new CertificateRequest("CN=127.0.0.1", m_key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
@@ -50,12 +51,22 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
             options = options with { ListenUrl = "https://127.0.0.1:0", CertificatePath = m_certificatePath };
         }
         if (entra) { options = options with { SubjectClaim = "oid", AuthorizationScope = "api://test-api/puck.operator" }; }
-        App = RemoteMcpServer.Build(options, builder => {
+        if (proxy) { options = options with { TrustedProxy = new() { Issuer = Issuer, Audience = Audience, SubjectClaim = "sub", Subject = "front-door", TenantId = Tenant } }; }
+        void Configure(WebApplicationBuilder builder) {
             builder.Logging.ClearProviders();
             configure?.Invoke(builder);
             builder.Services.AddSingleton<TimeProvider>(Clock);
-            builder.Services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, jwt => jwt.BackchannelHttpHandler = new IssuerHandler(this));
-        });
+            builder.Services.Configure<JwtBearerOptions>(RemoteMcpServer.AuthenticationScheme, jwt => jwt.BackchannelHttpHandler = new IssuerHandler(this));
+            if (proxy) { builder.Services.Configure<JwtBearerOptions>(RemoteMcpServer.ProxyAuthenticationScheme, jwt => jwt.BackchannelHttpHandler = new IssuerHandler(this)); }
+        }
+        if (embedded) {
+            var builder = WebApplication.CreateSlimBuilder();
+            builder.WebHost.UseUrls("http://127.0.0.1:0");
+            Configure(builder);
+            RemoteMcpServer.AddServices(builder.Services, options with { ListenUrl = null });
+            App = builder.Build();
+            App.Run(RemoteMcpServer.CreateRequestDelegate(App.Services));
+        } else { App = RemoteMcpServer.Build(options, Configure); }
         await App.StartAsync(token);
     }
     internal HttpClient Http(string? token = null) {
@@ -70,7 +81,7 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
         new HttpClientTransport(new() { Endpoint = new(http.BaseAddress!, "/mcp"), TransportMode = HttpTransportMode.StreamableHttp }, http),
         new() { ProtocolVersion = revision }, cancellationToken: token);
 
-    internal string Token(string subject = "alice", string? failure = null, int lifetimeSeconds = 300) {
+    internal string Token(string subject = "alice", string? failure = null, int lifetimeSeconds = 300, string? audience = null) {
         using var wrongKey = failure == "signature" ? RSA.Create(2048) : null;
         var claims = new Dictionary<string, object> { ["sub"] = subject, ["scope"] = "puck.operator", ["tid"] = Tenant };
         if (failure == "entra") { claims.Remove("scope"); claims["scp"] = "other puck.operator"; claims["oid"] = subject; claims["sub"] = "pairwise-client-subject"; }
@@ -79,7 +90,7 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
         if (failure == "duplicate-subject") { claims["sub"] = new[] { "alice", "bob" }; }
         return new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor {
             Issuer = failure == "issuer" ? "https://wrong.example.test" : Issuer,
-            Audience = failure == "audience" ? "https://management.azure.com/" : Audience,
+            Audience = audience ?? (failure == "audience" ? "https://management.azure.com/" : Audience),
             IssuedAt = DateTime.UtcNow.AddMinutes(-2),
             NotBefore = failure == "future" ? DateTime.UtcNow.AddMinutes(1) : DateTime.UtcNow.AddMinutes(-2),
             Expires = failure == "expired" ? DateTime.UtcNow.AddMinutes(-1) : DateTime.UtcNow.AddSeconds(lifetimeSeconds),

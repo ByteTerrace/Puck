@@ -41,6 +41,7 @@ public sealed class EngineTimingTests(ITestOutputHelper output) {
     }
 
     [Fact]
+    [Trait("Category", "Performance")]
     public void Native_Parse_ComposeTree_and_Compile_over_the_shipped_island_finish_in_well_under_a_second_each() {
         var documents = WorldsDirectoryDocuments();
         var rows = new List<(string Label, TimeSpan Elapsed)>();

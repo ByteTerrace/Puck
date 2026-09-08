@@ -33,7 +33,7 @@ public sealed partial class WorldInstanceHost {
             }
             WorldDefinition? definition = null;
             if (record.DestinationEndpoint is { } endpoint) {
-                if (!System.Net.IPEndPoint.TryParse(endpoint, out _) || record.DestinationDefinitionJson is null) {
+                if (!Puck.Networking.PeerEndpoint.TryParse(endpoint, out _) || record.DestinationDefinitionJson is null) {
                     Refuse("remote destination needs a valid endpoint and definition");
                 }
                 try { definition = WorldDefinitionSerialization.Deserialize(record.DestinationDefinitionJson!); }

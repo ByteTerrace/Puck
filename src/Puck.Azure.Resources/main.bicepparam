@@ -572,7 +572,7 @@ param resources = {
       automaticRepairs: true
       repairGracePeriod: 'PT30M'
       patchMode: 'AutomaticByPlatform'
-      patchAssessmentMode: 'AutomaticByPlatform'
+      patchAssessmentMode: 'ImageDefault'
       imageReference: { publisher: 'MicrosoftCBLMariner', offer: 'azure-linux-3', sku: 'azure-linux-3-gen2', version: '3.20260809.01' }
       osDiskSizeGB: 64
       osDiskStorageType: 'StandardSSD_LRS'
@@ -604,5 +604,11 @@ param resources = {
       tags: { PetName: 'Puck World' }
     }
     worldName: 'puck'
+  }
+  worldSiloActionGroup: {
+    name: '${prefix}agp000'
+    shortName: 'Puck hosting'
+    emailReceivers: [{ name: 'Puck operator', emailAddress: 'kittoes@byteterrace.com', useCommonAlertSchema: true }]
+    tags: { PetName: 'Puck Hosting Alerts' }
   }
 }

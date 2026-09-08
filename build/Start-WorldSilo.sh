@@ -102,12 +102,18 @@ for container in subprocess.check_output(['docker', 'ps', '-aq'], text=True).spl
     protected.add(json.loads(subprocess.check_output(['docker', 'inspect', container], text=True))[0]['Image'])
 unused = 0
 for identity in dict.fromkeys(images):
-    full = json.loads(subprocess.check_output(['docker', 'image', 'inspect', identity], text=True))[0]['Id']
+    details = json.loads(subprocess.check_output(['docker', 'image', 'inspect', identity], text=True))[0]
+    full = details['Id']
     if full in protected:
         continue
     unused += 1
     if unused > 1:
-        subprocess.run(['docker', 'image', 'rm', identity], check=True)
+        references = [value for value in (details.get('RepoTags') or []) + (details.get('RepoDigests') or [])
+                      if value.startswith('__REGISTRY__/world-silo:') or value.startswith('__REGISTRY__/world-silo@')]
+        for reference in references:
+            # Removing the last tag can also remove its digest reference.
+            if subprocess.run(['docker', 'image', 'inspect', reference], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+                subprocess.run(['docker', 'image', 'rm', reference], check=True)
 CLEANUP
         exit 0
     fi

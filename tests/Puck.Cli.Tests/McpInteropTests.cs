@@ -11,9 +11,7 @@ namespace Puck.Cli.Tests;
 
 public sealed class McpInteropTests {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
-    private static string Cli => CliPaths.TryGetRepositoryRoot(out var root)
-        ? Path.Combine(root, "src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll")
-        : throw new DirectoryNotFoundException("Cannot locate this checkout's Puck.slnx.");
+    private static string Cli => typeof(CliPaths).Assembly.Location;
 
     [Fact]
     public async Task OfficialClientDiscoversExecutesAndReceivesImageFromRealCli() {

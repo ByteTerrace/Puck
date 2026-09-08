@@ -8,6 +8,13 @@ import { containerRepositoryCondition } from '../../../../abacConditions.bicep'
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 type tagsType = { *: string }
 @export()
+type worldSiloActionGroupConfigType = {
+  name: string
+  shortName: string
+  emailReceivers: { name: string, emailAddress: string, useCommonAlertSchema: bool }[]
+  tags: tagsType?
+}
+@export()
 type worldSiloConfigType = {
   authentication: { type: string, settings: { *: string } }
   container: {
@@ -63,6 +70,8 @@ type worldSiloConfigType = {
 // Parameters
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 param configuration worldSiloConfigType
+param actionGroup worldSiloActionGroupConfigType
+param tags tagsType = {}
 param owner string
 param publishingPrincipalId string
 param registryName string
@@ -75,6 +84,14 @@ var pullRoleDefinitionId = az.roleDefinitions('Container Registry Repository Rea
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Resources
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+module hostingActionGroup 'br/public:avm/res/insights/action-group:0.8.0' = {
+  params: {
+    name: actionGroup.name
+    groupShortName: actionGroup.shortName
+    emailReceivers: actionGroup.emailReceivers
+    tags: union(tags, actionGroup.?tags ?? {})
+  }
+}
 resource storage 'Microsoft.Storage/storageAccounts@2025-01-01' existing = {
   name: storageAccountName
 }
@@ -139,3 +156,8 @@ resource pull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 // Outputs
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 output storageEndpoint string = storage.properties.primaryEndpoints.blob
+output deploymentConfiguration worldSiloConfigType = union(configuration, {
+  monitoring: union(configuration.monitoring, {
+    actionGroupResourceIds: union([hostingActionGroup.outputs.resourceId], configuration.monitoring.actionGroupResourceIds)
+  })
+})

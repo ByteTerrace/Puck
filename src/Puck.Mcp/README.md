@@ -29,6 +29,22 @@ The headless silo explicitly refuses framebuffer capture. Standalone
 `WorldSiloApplication.RunAsync` permits an outer distribution to add host services.
 Neither the desktop World nor the silo installs MCP implicitly.
 
+An existing ASP.NET Core host can call `RemoteMcpServer.AddServices(services, options)`
+and build `RemoteMcpServer.CreateRequestDelegate(app.Services)` once. Dispatch the
+original `/mcp`, `/.well-known/oauth-protected-resource/mcp`, and `/healthz` contexts
+to that delegate before the host's other endpoint authorization. Preserve the full
+request path and scoped `RequestServices`. This composition omits `listenUrl` and
+certificate settings: the outer host owns TLS and its listener. MCP keeps its own
+authentication schemes, CORS policy and admission limiter, preserving the host's
+authentication defaults. The body limit, request deadline, shutdown cancellation
+and grant checks still apply. Configure the outer server's header, connection and
+header-timeout limits too. Plaintext connections must come from loopback.
+
+A service composition may override `RemoteMcpHost.SupportsAttachments` to return
+false. Then Console tools are neither advertised nor callable. Its explicit
+`services` settings replace the attachment source; the installed adapter still
+owns each service's authorization and disclosure limits.
+
 ## Local stdio
 
 Build World and CLI in Release, start World normally, then enter:
@@ -106,6 +122,25 @@ downstream tokens are not persisted. These reads do not create durable cloud job
 or cloud writes; mutation services still require their scoped operation and
 recovery composition.
 
+For a proxy that authenticates origin requests, configure `trustedProxy` with its
+exact `issuer`, `audience`, `subjectClaim`, `subject`, and optional `tenantId`.
+Entra uses the proxy managed identity's `oid` and requires `tenantId`. The proxy
+must overwrite `ClientAuthorization` with the incoming caller Authorization
+header and put its own API access token in Authorization. It must remove any
+client-supplied `ClientAuthorization` when no caller Authorization was supplied.
+MCP validates the origin token and configured proxy identity before accepting the
+forwarded token, then independently validates the caller. An absent forwarded
+token never falls back to the origin identity. Without `trustedProxy`, MCP ignores
+`ClientAuthorization`. Delegation obtains the saved token from the caller's
+validated authentication ticket, never from a raw header.
+
+Discovery remains anonymous to callers through the authenticated proxy. Direct
+requests to that origin, including discovery and readiness, require the proxy
+identity. Configure the origin health probe accordingly. The Function App's
+Front Door/OBO design is the identity reference; MCP stays an optional ASP.NET
+Core host extension. Its live Console attachments require deliberate owner
+routing and lifetime management, so the Function worker is not its hosting target.
+
 `publicUrl` must be HTTPS and end in `/mcp`. A loopback HTTP `listenUrl` is for a
 TLS reverse proxy on the same machine. Preserve the public Host header, disable
 response buffering, and allow at least the 125-second request deadline. Direct
@@ -144,7 +179,8 @@ closes its attachment, leaving any already-applied effects uncertain. An idle
 handle can be resumed by the same subject with a fresh valid token before its
 idle deadline. Restart, explicit detach or unknown host outcomes invalidate it.
 Never automatically reattach and replay a mutation. HTTP bodies are limited to
-64 KiB, headers to 16 KiB, connections to 64, with a ten-second header deadline.
+64 KiB, including chunked requests in an embedded host. The standalone listener
+also limits headers to 16 KiB and connections to 64, with a ten-second header deadline.
 
 ## Tools and results
 

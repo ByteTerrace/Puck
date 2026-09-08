@@ -1,7 +1,7 @@
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Imports
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-import { worldSiloConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.4'
+import { worldSiloConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.5'
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Parameters
@@ -97,6 +97,7 @@ module workers 'br/public:avm/res/compute/virtual-machine-scale-set:0.11.1' = {
     enableAutomaticOSUpgrade: false
     patchMode: configuration.compute.patchMode
     patchAssessmentMode: configuration.compute.patchAssessmentMode
+    bypassPlatformSafetyChecksOnUserSchedule: false
     managedIdentities: { userAssignedResourceIds: [identityResourceId] }
     bootDiagnosticEnabled: true
     nicConfigurations: [{ name: configuration.compute.vmNamePrefix, ipConfigurations: [{ name: 'primary', properties: { primary: true, subnet: { id: subnet.id }, loadBalancerBackendAddressPools: [{ id: poolId }] } }] }]

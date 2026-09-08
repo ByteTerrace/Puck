@@ -145,8 +145,8 @@ deliberately does not duplicate.
 
 ## Host provider boundary
 
-Cloud-specific implementations belong in extensions. The silo selects persistence
-and retirement observers through `WorldExtensionRegistry`, using opaque provider
+Cloud-specific implementations belong in extensions. The silo selects persistence,
+connection authentication, and retirement observers through `WorldExtensionRegistry`, using opaque provider
 settings. `WorldSiloHost` consumes a supplied `ObjectStorageTarget`; its lifecycle
 service consumes `IWorldHostRetirementObserver`. Metadata polling, event types and
 credential handling stay in `Puck.World.Azure`, referenced only by composition.
@@ -165,8 +165,20 @@ loaded world. Failed drain saves can be retried; closed ingress stays frozen.
 `build/Azure.cs test-world-container` boots the primary Puck row, verifies a durable
 checkpoint and the expected QUIC key, then replaces the container against the
 same store and repeats the checks. Linux requires `libmsquic` and UDP ingress.
-Pinned activation waits for host startup and establishes its initial checkpoint;
-failure stops the host. `docs/ci.md` owns Azure resource and deployment policy.
+Pinned activation waits for host startup, establishes its initial checkpoint,
+and reconciles changed published content through `WorldSiloHost.ReloadAsync` and
+the ordinary rebuild submission. A release marker advances only after its
+checkpoint; retrying failed persistence must not rebuild twice. Drain waits for
+accepted reloads before freezing the pump. `/healthz` includes persistence health;
+`/livez` checks simulation progress independently. `WorldSiloLifecycleLawTests`
+owns reload and drain failure controls. `WorldSiloDefinitionLawTests` checks
+serialized health defaults. Failure during startup stops the host.
+`--authentication-config-file` selects an installed client provider and server
+key pin; no token belongs in world content or checkpoints. Azure's provider
+validates ByteTerrace API membership, while generic protocol code sees only the
+verified session namespace. Run the real client against the deployed endpoint
+for admission, authoritative interaction, and reconnect evidence; a QUIC key
+probe alone does not prove these. `docs/ci.md` owns Azure deployment policy.
 ## Cross-cutting contracts (every task)
 
 **Preserve determinism.** Use no wall clock, RNG, or float in simulation state;

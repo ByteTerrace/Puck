@@ -13,16 +13,27 @@ capabilities, live grant reload/revocation, readiness, operation logs and Meter/
 ActivitySource instrumentation support the same hosting seam. The unified Bicep
 reuses the existing silo, TLS load balancer, Key Vault and Entra registration.
 
+The Function App supplies the identity and infrastructure reference, not the MCP
+hosting location. MCP remains an optional ASP.NET Core extension. Its SDK pipeline
+can share an existing host without owning another listener or replacing that
+host's authentication defaults. Configured proxy authentication independently
+checks the origin identity and forwarded caller; OBO uses the validated caller
+ticket. Azure managed-certificate ingress and distributed world-owner routing
+still need deployment integration; the current VM/PFX deployment has not been
+silently replaced. See the [hosting and OAuth contract](../../src/Puck.Mcp/README.md).
+
 The CLI's optional Azure service adapter exposes configured inventory/metrics
 reads through OBO, using the existing observation providers and federated managed
 identity pattern. These request-scoped reads have no persisted assertion or host
 credential fallback. Delegated mutation jobs and Participant tools remain later
 slices; their recovery and authority gates below still apply.
 
-**Decision: deliver live local pairing first, with explicit Operator and Participant
-profiles.** A trusted co-developer gets the same console control plane as the
+**Release target: secure local and remote access, with explicit Operator and
+Participant profiles.** First-party and external clients are both release
+requirements; the current single-issuer grant profile does not complete external
+onboarding. A trusted co-developer gets the same console control plane as the
 human at the terminal. An embodied participant gets the scoped bridge. Remote
-cloud service delegation has additional boundaries and remains a separate slice.
+cloud service delegation retains its own authorization and recovery boundaries.
 Body grants do not authorize host files, composed images, or Azure resources;
 that fact must not become a reason to restrict an explicitly trusted operator.
 
@@ -35,13 +46,13 @@ over [Networking capabilities and framing](../../src/Puck.Networking/README.md#l
 `world.control start|stop|status`, `puck_exec`, and `puck_capture_frame`.
 The launch recipe and exact limits now live in those project READMEs.
 
-The initial transport is Windows authenticated loopback, the alternative this
+The initial transport was Windows authenticated loopback, the alternative this
 plan allowed: user-only held-open discovery, mutual challenge-response, four
 connections, one admitted operation each, bounded framing, deadlines and no
 implicit retries. It does not implement pipes or a separate elevation boundary;
 it trusts the OS user. The attachment argument is a capability **file path**,
-not a pipe name. Unix control support remains separate work; the remote gateway
-below runs beside the Windows World and accepts clients from other platforms.
+not a pipe name. Local control now supports Windows and Linux x64; the remote
+gateway accepts clients from other platforms.
 
 Official Core 2.2.0 builds under AOT/trim analysis. Resolved architecture builds
 pass. CLI adds Core 2.2.0 and AI.Abstractions 10.8.3; existing package versions do

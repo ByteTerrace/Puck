@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Puck.Commands;
+using Puck.Hosting;
 using Puck.World.Server;
 
 namespace Puck.World.Silo;
@@ -26,7 +27,18 @@ public sealed class SiloConsoleRouting {
 
         public void Dispose() => WorldNarrationScope.Current = m_previous;
     }
-    private sealed record RowRoute(int Slot, TextCommandSession Session);
+    private sealed record RowRoute(int Slot, TextCommandSession Session) {
+        internal readonly Lock Gate = new();
+        internal readonly HashSet<RowControlSession> Controls = [];
+        internal bool Retired;
+    }
+    private sealed class RowControlSession(RowRoute route, ConsoleControlSession session) : IControlSession {
+        public Task<ControlResponse> ExecuteAsync(ControlRequest request, CancellationToken cancellationToken) => session.ExecuteAsync(request, cancellationToken);
+        public void Dispose() {
+            lock (route.Gate) { route.Controls.Remove(this); }
+            session.Dispose();
+        }
+    }
 
     private readonly ConcurrentDictionary<int, string> m_bySlot = new();
     private readonly ConcurrentDictionary<string, RowRoute> m_byWorldId = new(comparer: StringComparer.Ordinal);
@@ -137,6 +149,20 @@ public sealed class SiloConsoleRouting {
             return false;
         }
     }
+    /// <summary>Creates independent Console ingress for a currently admitted row. Retirement closes every attached session.</summary>
+    /// <param name="worldId">The exact configured row, never the mutable stdin default.</param>
+    /// <returns>An independently ordered session owned by the caller.</returns>
+    /// <exception cref="InvalidOperationException">The row is unavailable or already retired.</exception>
+    public IControlSession CreateControlSession(string worldId) {
+        if (!m_byWorldId.TryGetValue(worldId, out var route)) { throw new InvalidOperationException("The configured World row is not admitted."); }
+        lock (route.Gate) {
+            if (route.Retired) { throw new InvalidOperationException("The configured World row has retired."); }
+            var session = new RowControlSession(route, new ConsoleControlSession(m_source(),
+                _ => throw new NotSupportedException("The headless silo has no framebuffer."), route.Slot, () => new RowNarrationScope(worldId)));
+            route.Controls.Add(session);
+            return session;
+        }
+    }
     /// <summary>Retires a row's console session — called from the same tick-thread mailbox action that removes the
     /// row itself. Closes ingress and refuses work still queued, including operations held behind a wait.</summary>
     /// <param name="worldId">The row's registry name.</param>
@@ -145,6 +171,9 @@ public sealed class SiloConsoleRouting {
             key: worldId,
             value: out var route
         )) {
+            RowControlSession[] controls;
+            lock (route.Gate) { route.Retired = true; controls = [.. route.Controls]; route.Controls.Clear(); }
+            foreach (var control in controls) { control.Dispose(); }
             route.Session.Dispose();
             m_bySlot.TryRemove(
                 key: route.Slot,

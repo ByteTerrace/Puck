@@ -84,6 +84,9 @@ var federationKeyFileOption = new Option<string?>(name: "--federation-key-file")
     DefaultValueFactory = static _ => null,
     Description = "A deployment-secret file holding this authority's own PKCS8 ECDSA P-256 private key (raw DER bytes) — the SignsDirectly signing identity peers pin against this world's host.authority (or its \"boot\" instance identity when host.authority is absent). Absent disables federation while leaving ordinary admitted-peer listening available.",
 };
+var authenticationConfigFileOption = new Option<string?>(name: "--authentication-config-file") {
+    Description = "Deployment-owned connection authentication extension (type and settings). Requires --connect; credentials are acquired by the installed provider and never read from the world document.",
+};
 // AddSelfUpdate is always registered (channel/cacheRoot/checkInterval/keepVersions come from the world document's
 // update section — see WorldUpdateDefaults — and the trust anchor is the build-pinned constant below). This
 // narrows to the two facets a document must never author — the release-source directory and the trust anchor —
@@ -101,6 +104,7 @@ var launchCommand = new RootCommand(description: "Puck World") {
     backendOption,
     connectOption,
     federationKeyFileOption,
+    authenticationConfigFileOption,
     captureDirOption,
     exitAfterSecondsOption,
     headlessOption,
@@ -201,6 +205,22 @@ if (!WorldDefinitionLoader.TryResolve(
 // peer's own admission entries pin against; verification reads the CURRENT document's admission rows fresh on
 // every attempt, so a live world.reload/edit is honored the same way the interactive door already is.
 Puck.Networking.IAuthenticator authenticator = new Puck.World.Protocol.WorldAttestedAuthenticator();
+string? connectionSubject = null;
+if (parseResult.GetValue(authenticationConfigFileOption) is { } authenticationPath) {
+    try {
+        if (connectTarget is null || parseResult.GetValue(federationKeyFileOption) is not null) {
+            throw new ArgumentException("Connection authentication requires --connect and cannot be combined with --federation-key-file.");
+        }
+        var connection = WorldConnectionAuthentication.Load(authenticationPath);
+        authenticator = connection.Authenticator;
+        connectionSubject = connection.Subject;
+        // A user's local authority is an instance namespace, not a published listening endpoint.
+        worldSource = worldSource with { Definition = worldSource.Definition with { HostRaw = worldSource.Definition.Host with { Authority = null, Listen = null } } };
+    } catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Text.Json.JsonException or Azure.Identity.AuthenticationFailedException) {
+        Console.Error.WriteLine($"[world.authentication: configuration refused: {error.Message}]");
+        return 1;
+    }
+}
 if (parseResult.GetValue(option: federationKeyFileOption) is { } federationKeyFile) {
     // The exact fallback WorldServer.AuthorityIdentity itself applies for the boot instance (host.authority absent
     // means "colocated with the resolver", per its own doc comment) — reusing it here means authoring a signing key
@@ -324,6 +344,9 @@ services.AddSingleton(implementationInstance: seatBindings);
 // root, overlays, audio device, screens/machines, gamepads, and editor register only when presentation is
 // composed. See WorldBootComposition for the full split and WorldPostBuildWiring for the shared every-shape wiring.
 services.AddWorldAuthoritativeCore();
+if (connectionSubject is not null) {
+    services.AddSingleton(sp => ActivatorUtilities.CreateInstance<Puck.World.Server.WorldServer>(sp, connectionSubject));
+}
 services.AddSingleton(new WorldServiceExtensionOptions(extensionsConfiguration));
 if (hostSettings.Headless) {
     // No window, GPU device, swapchain, allocator, backend presenter, or audio device — the headless twin of the

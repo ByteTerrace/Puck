@@ -1239,9 +1239,9 @@ public static partial class WorldDefinitionValidator {
 
                 if (
                     (author.Oid is { } oid) &&
-                    !WorldEntraObjectId.IsValid(value: oid)
+                    !WorldObjectId.IsValid(value: oid)
                 ) {
-                    errors.Add(item: $"{path}.oid '{oid}' is not a well-formed Entra object id.");
+                    errors.Add(item: $"{path}.oid '{oid}' is not a well-formed object id.");
                 }
             }
         }

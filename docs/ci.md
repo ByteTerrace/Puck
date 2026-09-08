@@ -360,7 +360,8 @@ publishing finishes with a Front Door purge and live checks.
 The primary Puck world uses a Flexible VM scale set, `bytrcvmssp000`, at
 `puck.puck.byteterrace.com:33333`. A static public IP and UDP load balancer preserve
 the endpoint during worker replacement. The first release permits exactly one
-regular worker, with manual upgrades and automatic repair disabled. It does not
+regular worker, with manual application upgrades, automatic guest patching, and
+automatic replacement after sustained simulation failure. It does not
 claim distributed placement, continuous availability, or Spot recovery.
 
 World workers use the pinned Azure Linux 3.0 Marketplace image selected in
@@ -383,7 +384,18 @@ and production concurrency group. `build/Azure.cs -- deploy-world-platform` crea
 runtime identity and its scoped grants. Its `deploy-world` command publishes composed
 world definitions, deploys the VMSS model and applies it to existing workers.
 The VM extension pulls the immutable image before declaring the release ready.
-The existing process must finish its drain before configuration is replaced.
+The existing process must finish its drain before published content or configuration
+is replaced. Deployment records the current versions of hosted definitions,
+checkpoint pointers, journals, and release markers in `world-rollback.json`.
+After verification, the protected `PuckWorldReleaseState` vault secret retains
+the successful image and compute parameters. A failed subsequent release stops
+the candidate, restores the recorded blob versions and previous parameters,
+and checks the previous public QUIC endpoint. Immutable checkpoint objects remain
+addressed by their content hashes. Blob versioning must be enabled before release.
+An existing worker without a recorded successful release requires operator
+adoption or a drained replacement before this transaction can run.
+A failed first deployment restores pre-release persistence and returns the
+scale set to zero, allowing a clean retry.
 
 `puck world prepare` packages Puck and its referenced neighbours. Only Puck is
 pinned; Orleans membership is explicitly local. Checkpoints and journals live in
@@ -392,8 +404,31 @@ outside simulation. Its drain freezes all rows at one pump boundary, closes
 ingress, waits for outstanding persistence, and writes final checkpoints. The
 local HTTP retirement operation and normal host shutdown use that same drain.
 A failed save fails deployment. VM events are never acknowledged early on behalf
-of other processes. Recovery retains the checkpoint's world definition; authored
-state changes require a migration rather than deleting checkpoints.
+of other processes. After checkpoint recovery, changed published content passes
+through the existing world hot-reload submission. The release marker advances
+only after the rebuilt world is checkpointed. An unchanged marker preserves the
+recovered state; a failed checkpoint can be retried without applying the rebuild
+twice. Changing the world's listening identity requires worker replacement.
+If a restart finds the rebuilt definition already in its checkpoint, it commits
+the missing marker while retaining the recovered simulation state.
+
+`/healthz` withdraws load-balancer readiness when simulation progress, checkpoint
+freshness, or journal persistence fails. `/livez` observes simulation progress
+independently, so a storage outage does not cause the scale set to replace a
+worker holding unsaved state. The world platform defines its own action group
+through the current AVM module and always includes it in the readiness alert.
+Its name, email receivers, and pet-name tags are authored in
+`resources.worldSiloActionGroup` in `main.bicepparam`; additional existing action
+groups can be supplied through `monitoring.actionGroupResourceIds`.
+The nonroot container has a read-only root filesystem, writable state mount,
+bounded temporary filesystem, no Linux capabilities, and rotating local logs.
+Image cleanup retains the running release and one previous unused release.
+
+Testers use the existing ByteTerrace API identity and `user_impersonation` scope.
+Membership in ByteTerrace API Users admits a Puck user; the deployed world allows
+up to sixteen network players. The public `world-authentication.json` release
+artifact selects the client authentication extension and pins the server key.
+See [Puck's connection instructions](../src/Puck.World/README.md#run-it).
 
 Before enabling Spot or adding workers, implement and exercise exclusive world
 ownership, eligible placement, replacement capacity, and loss of the entire

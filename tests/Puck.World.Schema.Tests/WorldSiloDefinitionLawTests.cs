@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Json;
 using Xunit;
 
 namespace Puck.World.Schema.Tests;
@@ -6,6 +7,41 @@ namespace Puck.World.Schema.Tests;
 /// <summary>Proves <see cref="WorldSiloDefinitionValidator"/>'s checks and <see cref="WorldSiloDefinitionSerialization"/>'s
 /// round-trip over <c>puck.silo.def.v1</c>.</summary>
 public sealed class WorldSiloDefinitionLawTests : IDisposable {
+    [Fact]
+    public void OmittedHealthSettingsUseTheDocumentedDefaults() {
+        var definition = MakeValid();
+        var document = System.Text.Json.Nodes.JsonNode.Parse(WorldSiloDefinitionSerialization.Serialize(definition: definition))!;
+
+        document["lifecycle"] = System.Text.Json.Nodes.JsonNode.Parse("""{"shutdownSeconds":120,"healthPort":8081}""");
+        var path = Path.Combine(path1: m_directory, path2: "lifecycle-defaults.json");
+
+        File.WriteAllText(path, document.ToJsonString());
+        Assert.True(condition: WorldSiloDefinitionSerialization.TryLoadFile(definition: out var loaded, path: path, reason: out var reason), userMessage: reason);
+        Assert.Equal(new WorldSiloLifecycle(120, 8081), loaded!.Lifecycle);
+    }
+    [InlineData("Localhost", true)]
+    [InlineData("localhost", false)]
+    [InlineData("unknown", false)]
+    [Theory]
+    public void InstalledClusteringVocabularyIsCaseSensitive(string kind, bool accepted) {
+        var definition = MakeValid() with { Clustering = new(kind) };
+
+        Assert.Equal(accepted, WorldSiloDefinitionValidator.TryValidate(definition, out var reason, ["Localhost"]));
+        if (!accepted) { Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "clustering.kind"); }
+    }
+    [InlineData("{\"path\":\"root\"}", true)]
+    [InlineData("{\"path\":\"root\",\"path\":\"other\"}", false)]
+    [InlineData("{\"path\":\"root\",\"extra\":1}", false)]
+    [InlineData("{\"other\":\"root\"}", false)]
+    [InlineData("{}", false)]
+    [InlineData("[]", false)]
+    [Theory]
+    public void ProviderSettingsRejectExtraMissingAndDuplicateProperties(string json, bool accepted) {
+        var settings = JsonElement.Parse(json);
+
+        if (accepted) { Assert.Equal("root", WorldExtensionSettings.OnlySetting(settings, "path").GetString()); } else { Assert.Throws<ArgumentException>(() => WorldExtensionSettings.OnlySetting(settings, "path")); }
+    }
+
     private readonly string m_directory;
 
     public WorldSiloDefinitionLawTests() {
@@ -57,9 +93,9 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
                 ),
             ],
             Doors: new WorldSiloDoors(Budget: 5),
-            Store: new WorldSiloStore(Kind: WorldSiloStoreKind.Directory, DirectoryPath: m_directory),
+            Store: new WorldSiloExtension(Type: "directory", Settings: JsonSerializer.SerializeToElement(new Dictionary<string, string> { ["path"] = m_directory })),
             StateDir: m_directory,
-            Clustering: new WorldSiloClustering(Kind: WorldSiloClusteringKind.Localhost)
+            Clustering: new WorldSiloClustering(Kind: "Localhost")
         );
     }
 
@@ -81,7 +117,7 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
         Assert.NotNull(@object: loaded);
         Assert.Equal(expected: definition.Worlds.Count, actual: loaded!.Worlds.Count);
         Assert.Equal(expected: definition.Doors.Budget, actual: loaded.Doors.Budget);
-        Assert.Equal(expected: definition.Store.Kind, actual: loaded.Store.Kind);
+        Assert.Equal(expected: definition.Store.Type, actual: loaded.Store.Type);
         Assert.Equal(expected: definition.Clustering.Kind, actual: loaded.Clustering.Kind);
     }
     [Fact]
@@ -147,17 +183,31 @@ public sealed class WorldSiloDefinitionLawTests : IDisposable {
         Assert.Contains(actualString: reason, expectedSubstring: "schema");
     }
     [Fact]
-    public void StoreKindDirectoryWithAccountUrl_Refuses() {
-        var mismatched = MakeValid() with { Store = new WorldSiloStore(AccountUrl: "https://example.blob.core.windows.net", DirectoryPath: m_directory, Kind: WorldSiloStoreKind.Directory) };
+    public void StoreWithNonObjectSettings_Refuses() {
+        var mismatched = MakeValid() with { Store = new WorldSiloExtension("directory", JsonSerializer.SerializeToElement("not an object")) };
 
         Assert.False(condition: WorldSiloDefinitionValidator.TryValidate(definition: mismatched, reason: out var reason));
-        Assert.Contains(actualString: reason, expectedSubstring: "store.accountUrl is set");
+        Assert.Contains(actualString: reason, expectedSubstring: "store requires");
     }
     [Fact]
-    public void ClusteringKindTableWithNoTableName_Refuses() {
-        var mismatched = MakeValid() with { Clustering = new WorldSiloClustering(Kind: WorldSiloClusteringKind.Table) };
+    public void ClusteringWithNoKind_Refuses() {
+        var mismatched = MakeValid() with { Clustering = new WorldSiloClustering(Kind: "") };
 
         Assert.False(condition: WorldSiloDefinitionValidator.TryValidate(definition: mismatched, reason: out var reason));
-        Assert.Contains(actualString: reason, expectedSubstring: "clustering.tableName is missing");
+        Assert.Contains(actualString: reason, expectedSubstring: "clustering.kind is required");
+    }
+    [Fact]
+    public void ProviderSettingsRoundTripWithoutSchemaInterpretation() {
+        var source = MakeValid() with {
+            Store = new WorldSiloExtension("test.store", JsonDocument.Parse("""{"region":"test","options":{"count":3}}""").RootElement.Clone()),
+            Lifecycle = new WorldSiloLifecycle(30, 8081, new WorldSiloExtension("test.retirement", JsonDocument.Parse("{}").RootElement.Clone())),
+        };
+        var path = Path.Combine(path1: m_directory, path2: "extensions.json");
+
+        File.WriteAllBytes(path, WorldSiloDefinitionSerialization.Serialize(definition: source));
+        Assert.True(condition: WorldSiloDefinitionSerialization.TryLoadFile(definition: out var loaded, path: path, reason: out var reason), userMessage: reason);
+        Assert.Equal("test.store", loaded!.Store.Type);
+        Assert.Equal(3, loaded.Store.Settings.GetProperty("options").GetProperty("count").GetInt32());
+        Assert.Equal("test.retirement", loaded.Lifecycle!.Observer!.Type);
     }
 }

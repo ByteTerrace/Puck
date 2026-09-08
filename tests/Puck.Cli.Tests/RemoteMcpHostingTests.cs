@@ -12,6 +12,23 @@ public sealed class RemoteMcpHostingTests {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     [Fact]
+    public async Task MinimalTargetConfigurationPreservesDeploymentDefaults() {
+        var path = Path.GetTempFileName();
+        try {
+            const string json = """{"target":"row","publicUrl":"https://mcp.example.test/mcp","listenUrl":"http://127.0.0.1:8080","issuer":"https://issuer.example.test","audience":"api","scope":"puck.operator","allowedSubjects":[]}""";
+            await File.WriteAllTextAsync(path, json, Token);
+            var options = await RemoteMcpServer.ReadOptionsAsync(path, Token);
+            Assert.Equal("row", options.Target);
+            Assert.Equal("", options.AttachmentPath);
+            Assert.Equal("sub", options.SubjectClaim);
+            Assert.Empty(options.AllowedOrigins);
+            Assert.Equal(300, options.IdleTimeoutSeconds);
+            await File.WriteAllTextAsync(path, json.Replace("\"target\":\"row\"", "\"target\":\"row\",\"idleTimeoutSeconds\":0"), Token);
+            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => RemoteMcpServer.ReadOptionsAsync(path, Token));
+        } finally { File.Delete(path); }
+    }
+
+    [Fact]
     public async Task ServiceToolsReceiveOnlyTheValidatedCurrentCallerAndCancelOnGrantRemoval() {
         await using var fixture = new RemoteMcpFixture();
         var host = new ServiceHost();

@@ -6,6 +6,24 @@ using Xunit;
 namespace Puck.World.Tests;
 
 public sealed class SiloConsoleRoutingLawTests {
+    [Fact]
+    public async Task HostControlSessionsRetireWithTheirFixedRow() {
+        using var output = new BufferedConsoleOutput();
+        var source = new TextCommandSource(new CommandRegistry(modules: []));
+        var routing = new SiloConsoleRouting(() => source, new SiloConsoleTagging(output));
+        using var row = routing.Register("row");
+        using var attached = routing.CreateControlSession("row");
+        var pending = attached.ExecuteAsync(new(1, "exec", "help", 1000), TestContext.Current.CancellationToken);
+        routing.Unregister("row");
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pending);
+        using var replacement = routing.Register("row");
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => attached.ExecuteAsync(new(2, "exec", "help", 1000), TestContext.Current.CancellationToken));
+        using var fresh = routing.CreateControlSession("row");
+        var current = fresh.ExecuteAsync(new(1, "exec", "help", 1000), TestContext.Current.CancellationToken);
+        source.Collect();
+        Assert.NotEqual("unknown", (await current).Status);
+        routing.Unregister("row");
+    }
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

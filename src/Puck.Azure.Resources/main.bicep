@@ -14,7 +14,7 @@ import {
 import {
   subnetType
 } from 'ts/bvm:ptn_network_basic-topology:0.0.3'
-import { worldSiloConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.4'
+import { worldSiloConfigType, worldSiloActionGroupConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.5'
 
 import {
   groupType
@@ -371,6 +371,7 @@ type resourceType = {
   virtualNetwork: virtualNetworkConfigType
   vsMarketplace: vsMarketplaceConfigType
   worldSilo: worldSiloConfigType
+  worldSiloActionGroup: worldSiloActionGroupConfigType
 }
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -988,6 +989,24 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.20.0' = {
         name: 'api'
         rules: [
           {
+            // Only the edge may supply the forwarded caller token. Clear a client-supplied
+            // value even when Authorization is absent; the next rule copies the caller's header.
+            actions: [
+              {
+                name: 'ModifyRequestHeader'
+                parameters: {
+                  headerAction: 'Delete'
+                  headerName: 'ClientAuthorization'
+                  typeName: 'DeliveryRuleHeaderActionParameters'
+                }
+              }
+            ]
+            conditions: []
+            matchProcessingBehavior: 'Continue'
+            name: 'ClearClientAuthorization'
+            order: 0
+          }
+          {
             actions: [
               {
                 name: 'ModifyRequestHeader'
@@ -1014,7 +1033,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.20.0' = {
             ]
             matchProcessingBehavior: 'Stop'
             name: 'SetClientAuthorization'
-            order: 0
+            order: 1
           }
         ]
       }
@@ -3096,10 +3115,12 @@ module worldSiloIdentity 'br/public:avm/res/managed-identity/user-assigned-ident
     tags: union(tags, resources.worldSilo.userAssignedIdentity.?tags ?? {})
   }
 }
-module worldSilo 'ts/bvm:ptn_platform_world-silo:0.0.4' = {
+module worldSilo 'ts/bvm:ptn_platform_world-silo:0.0.5' = {
   dependsOn: [publicFlexApi, containerRegistry]
   params: {
     configuration: resources.worldSilo
+    actionGroup: resources.worldSiloActionGroup
+    tags: tags
     owner: worldSiloIdentity.outputs.principalId
     storageAccountName: publicStorageAccounts[0].name
     registryName: resources.containerRegistry!.name
@@ -3113,7 +3134,7 @@ output worldSiloIdentityResourceId string = worldSiloIdentity.outputs.resourceId
 output worldSiloClientId string = worldSiloIdentity.outputs.clientId
 output worldSiloOwner string = worldSiloIdentity.outputs.principalId
 output worldSiloStorageEndpoint string = worldSilo.outputs.storageEndpoint
-output worldSiloConfiguration worldSiloConfigType = resources.worldSilo
+output worldSiloConfiguration worldSiloConfigType = worldSilo.outputs.deploymentConfiguration
 output worldMcpConfiguration object = worldMcp == null ? {} : {
   certificateSecretName: worldMcp!.certificateSecretName
   options: {

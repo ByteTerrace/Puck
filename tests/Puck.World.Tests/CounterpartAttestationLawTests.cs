@@ -8,8 +8,8 @@ using Azure.Core;
 using Xunit;
 
 using Puck.Attestation;
+using Puck.World.Azure;
 using Puck.World.Protocol;
-using Puck.World.Server;
 
 namespace Puck.World.Tests;
 
