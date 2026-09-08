@@ -381,8 +381,8 @@ var delegatedGroups = string.Join(separator: ", ", values: groupNameSuffixMap.Va
 var roleIdSet = string.Join(separator: ", ", values: delegatedRoleIds);
 var ownerCondition = string.Join(separator: " AND ", values: new[] { ("write", "Request"), ("delete", "Resource") }
     .Select(selector: operation =>
-        ((((string)$"((!(ActionMatches{{{{'Microsoft.Authorization/roleAssignments/{operation.Item1}'}}}})) OR (@{operation.Item2}[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {{{{{roleIdSet}}}}} AND (") +
-        $"@{operation.Item2}[Microsoft.Authorization/roleAssignments:PrincipalType] StringEqualsIgnoreCase 'ServicePrincipal' OR ") +
+        ($"((!(ActionMatches{{'Microsoft.Authorization/roleAssignments/{operation.Item1}'}})) OR (@{operation.Item2}[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {{{roleIdSet}}} AND (" +
+        $"@{operation.Item2}[Microsoft.Authorization/roleAssignments:PrincipalType] StringEqualsIgnoreCase 'ServicePrincipal' OR " +
         $"@{operation.Item2}[Microsoft.Authorization/roleAssignments:PrincipalId] ForAnyOfAnyValues:GuidEquals {{{delegatedGroups}}})))")));
 var existingCiAssignments = await resourceManagerClient.GetRoleAssignments(scope: resourceGroup.Id)
     .GetAllAsync(cancellationToken: cancellationToken)
