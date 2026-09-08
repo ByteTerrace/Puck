@@ -7,6 +7,11 @@ gamepad, console text, authored interface controls, and replayed input can
 therefore reach the same handler without teaching that handler where the action
 came from.
 
+`CommandRegistry.BuildHelpText` and `TextCommandSource.DescribeCommands` can
+filter help by registered command metadata. A remote host can disclose its
+admitted vocabulary from the same registry used for dispatch; filtering help
+does not itself authorize execution.
+
 Each simulation step receives one `CommandSnapshot`: an ordered collection of
 commands grouped by logical player slot. Given the same ordered captured input,
 `InputRouter` produces the same snapshot. The host is still responsible for

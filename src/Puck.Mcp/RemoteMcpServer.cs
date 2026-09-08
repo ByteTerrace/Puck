@@ -73,6 +73,8 @@ public static partial class RemoteMcpServer {
         services.AddRouting();
         services.AddSingleton<RemoteAttachmentPool>();
         services.AddKeyedSingleton("PuckMcp", (_, _) => new ConcurrencyLimiter(new() { PermitLimit = 4, QueueLimit = 0 }));
+        services.AddSingleton(PartitionedRateLimiter.Create<string, string>(subject =>
+            RateLimitPartition.GetConcurrencyLimiter(subject, _ => new() { PermitLimit = 2, QueueLimit = 0 })));
         services.AddCors(setupAction: cors => cors.AddPolicy("PuckMcp", policy => policy.WithOrigins([.. origins]).WithMethods("GET", "POST", "OPTIONS").AllowAnyHeader().WithExposedHeaders("WWW-Authenticate", "MCP-Protocol-Version")));
         services.AddAuthentication().AddJwtBearer(authenticationScheme: AuthenticationScheme, configureOptions: jwt => {
             jwt.Authority = options.Issuer;
@@ -131,8 +133,18 @@ public static partial class RemoteMcpServer {
                 server.ServerInstructions = remoteHost.SupportsAttachments
                     ? "Delegated World access: the configured World admits your validated issuer and subject and grants its own capabilities. Call puck_attach first, keep attachmentId private, and call serially per attachment. The host restricts commands to its explicitly authorized surface; local administrative commands are unavailable. Attachments preserve world.wait across HTTP requests. Idle expiry, revocation, disconnect and cancellation can invalidate them. Never automatically replay unknown outcomes. Route each attachment to the same host. OAuth is checked on every request. Headless hosts have no framebuffer. Additional services use the current authenticated caller and their own explicit grants."
                     : "Request-scoped Puck services. Each tool runs under this request's authenticated caller and explicit grants. No Console attachments or durable background operations are available.";
-                server.Handlers.ListToolsHandler = (_, _) => ValueTask.FromResult(result: RemoteMcpTools.List(remoteHost));
-                server.Handlers.CallToolHandler = (request, token) => tools.CallAsync(parameters: request.Params, token: token);
+                server.Handlers.ListToolsHandler = (_, token) => tools.ListAsync(token);
+                server.Handlers.CallToolHandler = async (request, token) => {
+                    try { return await tools.CallAsync(request.Params, token).ConfigureAwait(false); }
+                    catch (RemoteMcpAuthorizationException challenge) {
+                        // Latest-protocol SDK transport defers headers until the first result. These services send no progress before authorization.
+                        if (context.Response.HasStarted) { context.Abort(); throw; }
+                        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                        var claims = challenge.EncodedClaims is { } value ? $", error=\"insufficient_claims\", claims=\"{value}\"" : ", error=\"invalid_token\"";
+                        context.Response.Headers.WWWAuthenticate = $"Bearer resource_metadata=\"{new Uri(new Uri(options.PublicUrl), "/.well-known/oauth-protected-resource/mcp")}\", scope=\"{options.AuthorizationScope ?? options.Scope}\"{claims}";
+                        return new() { IsError = true, Content = [new ModelContextProtocol.Protocol.TextContentBlock { Text = "User authorization is required. Follow the HTTP bearer challenge; no host credentials were substituted." }] };
+                    }
+                };
                 server.Filters.Message.IncomingFilters.Add(item: next => (message, token) => {
                     OperatorMcpJson.ValidateParameters(message: message.JsonRpcMessage);
                     return next(message, token);
@@ -187,6 +199,16 @@ public static partial class RemoteMcpServer {
         app.UseCors("PuckMcp");
         app.UseAuthentication();
         app.UseAuthorization();
+        app.Use(async (context, next) => {
+            using var lease = SingleClaim(context.User, options.SubjectClaim) is { } subject && access.Allows(subject)
+                ? context.RequestServices.GetRequiredService<PartitionedRateLimiter<string>>().AttemptAcquire(subject) : null;
+            if (lease is { IsAcquired: false }) {
+                context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+                context.Response.Headers.RetryAfter = "1";
+                return;
+            }
+            await next(context).ConfigureAwait(false);
+        });
         app.Use(middleware: async (context, next) => {
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token: context.RequestAborted);
             var maximum = TimeSpan.FromSeconds(seconds: 125);

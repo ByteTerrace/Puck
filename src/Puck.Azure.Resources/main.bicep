@@ -1,4 +1,5 @@
 extension 'br:mcr.microsoft.com/bicep/extensions/microsoftgraph/v1.0:1.0.0'
+import { worldMcpType } from './worldMcp.bicep'
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Imports
@@ -393,16 +394,7 @@ param forcePrivateNetworking bool = true
 param gitHubApplicationPrivateKey string?
 param location string = resourceGroup().location
 @description('Optional delegated World MCP deployment using the existing application registration and silo. The host automatically obtains and renews its TLS certificate over port 443.')
-param worldMcp {
-  // Explicit replica readers of the configured row. Empty grants permit no World writes.
-  @maxLength(64)
-  participants: {
-    subject: string
-    grants: object[]
-  }[]
-  observations: object[]?
-  testLocations: string[]?
-}?
+param worldMcp worldMcpType?
 param tags tagsType = {}
 param website {
   hostNames: string[]
@@ -1802,13 +1794,6 @@ resource applicationRegistration 'Microsoft.Graph/applications@v1.0' = {
     name: '${applicationRegistrationUniqueName}/${actors_userAssignedIdentity.outputs.clientId}'
     subject: actors_userAssignedIdentity.outputs.principalId
   }
-  resource applicationRegistration_federatedIdentityCredential_world 'federatedIdentityCredentials@v1.0' = if (worldMcp != null) {
-    audiences: ['api://AzureADTokenExchange']
-    description: 'The existing World silo identity authenticates delegated OAuth exchanges for the MCP API.'
-    issuer: '${environment().authentication.loginEndpoint}${tenant().tenantId}/v2.0'
-    name: '${applicationRegistrationUniqueName}/${worldSiloIdentity.outputs.clientId}'
-    subject: worldSiloIdentity.outputs.principalId
-  }
 }
 resource applicationRegistration_servicePrincipal 'Microsoft.Graph/servicePrincipals@v1.0' = {
   appId: applicationRegistration.appId
@@ -3127,48 +3112,20 @@ module worldSilo 'ts/bvm:ptn_platform_world-silo:0.0.5' = {
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Outputs
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-// Check the public certificate independently of the VM and send failures to the existing hosting responders.
-resource worldMcpAvailability 'Microsoft.Insights/webtests@2022-06-15' = if (worldMcp != null) {
-  name: '${resources.worldSilo.name}-mcp'
-  location: location
-  kind: 'standard'
-  tags: union(tags, { 'hidden-link:${resourceId('Microsoft.Insights/components', resources.containerEnvironment.applicationInsights.name)}': 'Resource' })
-  properties: {
-    Name: '${resources.worldSilo.name}-mcp'
-    SyntheticMonitorId: '${resources.worldSilo.name}-mcp'
-    Kind: 'standard'
-    Enabled: true
-    Frequency: 900
-    Timeout: 30
-    RetryEnabled: true
-    Locations: map(worldMcp!.?testLocations ?? ['us-va-ash-azr', 'us-ca-sjc-azr'], id => { Id: id })
-    Request: {
-      RequestUrl: 'https://${resources.worldSilo.dns.recordName}.${resources.worldSilo.dns.zoneName}/healthz'
-      HttpVerb: 'GET'
-      FollowRedirects: false
-      ParseDependentRequests: false
-    }
-    ValidationRules: { ExpectedHttpStatusCode: 200, SSLCheck: true, SSLCertRemainingLifetimeCheck: 7 }
-  }
-}
-resource worldMcpAvailabilityAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = if (worldMcp != null) {
-  name: '${resources.worldSilo.name}-mcp'
-  location: 'global'
-  tags: tags
-  properties: {
-    description: 'World MCP is unavailable or its automatically renewed TLS certificate has fewer than seven days remaining.'
-    enabled: true
-    severity: resources.worldSilo.monitoring.severity
-    evaluationFrequency: 'PT5M'
-    windowSize: 'PT15M'
-    scopes: [worldMcpAvailability!.id, applicationInsightsContainers.outputs.resourceId]
-    criteria: {
-      'odata.type': 'Microsoft.Azure.Monitor.WebtestLocationAvailabilityCriteria'
-      webTestId: worldMcpAvailability!.id
-      componentId: applicationInsightsContainers.outputs.resourceId
-      failedLocationCount: 1
-    }
-    actions: map(worldSilo.outputs.deploymentConfiguration.monitoring.actionGroupResourceIds, actionGroupId => { actionGroupId: actionGroupId })
+module mcp './worldMcp.bicep' = if (worldMcp != null) {
+  name: 'world-mcp'
+  params: {
+    settings: worldMcp!
+    configuration: worldSilo.outputs.deploymentConfiguration
+    applicationUniqueName: applicationRegistrationUniqueName
+    applicationId: applicationRegistration.appId
+    authorizationScope: '${resources.applicationRegistration.identifierUri}/user_impersonation'
+    identityClientId: worldSiloIdentity.outputs.clientId
+    identityPrincipalId: worldSiloIdentity.outputs.principalId
+    onboardingUrl: 'https://${first(first(filter(resources.frontDoor.routes, route => route.originGroupName == 'api'))!.customDomains)}/api/self-onboard'
+    applicationInsightsName: resources.containerEnvironment.applicationInsights.name
+    location: location
+    tags: tags
   }
 }
 output worldSiloIdentityResourceId string = worldSiloIdentity.outputs.resourceId
@@ -3176,34 +3133,7 @@ output worldSiloClientId string = worldSiloIdentity.outputs.clientId
 output worldSiloOwner string = worldSiloIdentity.outputs.principalId
 output worldSiloStorageEndpoint string = worldSilo.outputs.storageEndpoint
 output worldSiloConfiguration worldSiloConfigType = worldSilo.outputs.deploymentConfiguration
-output worldMcpConfiguration object = worldMcp == null ? {} : {
-  admission: map(worldMcp!.participants, participant => {
-    domain: '${environment().authentication.loginEndpoint}${tenant().tenantId}/v2.0'
-    subject: participant.subject
-    mode: 'OAuth'
-    algorithm: ''
-    publicKey: ''
-    disclosure: 'Replica'
-    grants: participant.grants
-  })
-  options: {
-    target: resources.worldSilo.worldName
-    publicUrl: 'https://${resources.worldSilo.dns.recordName}.${resources.worldSilo.dns.zoneName}/mcp'
-    listenUrl: 'http://127.0.0.1:8082'
-    issuer: '${environment().authentication.loginEndpoint}${tenant().tenantId}/v2.0'
-    audience: applicationRegistration.appId
-    scope: 'user_impersonation'
-    authorizationScope: '${resources.applicationRegistration.identifierUri}/user_impersonation'
-    subjectClaim: 'oid'
-    tenantId: tenant().tenantId
-    allowedSubjects: map(worldMcp!.participants, participant => participant.subject)
-    services: {
-      managedIdentityClientId: worldSiloIdentity.outputs.clientId
-      onboardingUrl: 'https://${first(first(filter(resources.frontDoor.routes, route => route.originGroupName == 'api'))!.customDomains)}/api/self-onboard'
-      observations: worldMcp!.?observations ?? []
-    }
-  }
-}
+output worldMcpConfiguration object = worldMcp == null ? {} : mcp!.outputs.worldMcpConfiguration
 output deploymentLocation string = location
 output deploymentLockKind string = lockKind
 output deploymentTags tagsType = tags

@@ -10,7 +10,7 @@ public static partial class RemoteMcpServer {
     private static void UseAdmission(IApplicationBuilder app, CancellationToken stopping) => app.Use(async (context, next) => {
         using var lease = context.Request.Path == "/healthz" ? null
             : context.RequestServices.GetRequiredKeyedService<ConcurrencyLimiter>("PuckMcp").AttemptAcquire();
-        if (lease is { IsAcquired: false }) { context.Response.StatusCode = StatusCodes.Status429TooManyRequests; return; }
+        if (lease is { IsAcquired: false }) { context.Response.StatusCode = StatusCodes.Status429TooManyRequests; context.Response.Headers.RetryAfter = "1"; return; }
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, stopping);
         deadline.CancelAfter(TimeSpan.FromSeconds(125));
         var original = context.RequestAborted;

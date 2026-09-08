@@ -109,7 +109,10 @@ The host matches validated issuer/subject to explicit OAuth admission and stamps
 Replica disclosure authorizes text reads; ordinary World grants authorize state-cell writes. The remote
 command allowlist must remain fail-closed for local admin verbs. Current target/owner binding is fixed;
 distributed placement and portable handles are not implemented. Both transports select MCP 2026-07-28.
-Remote HTTP uses caller-bound application handles, four attachments and four concurrent HTTP requests.
+Remote HTTP uses caller-bound application handles, four attachments and four concurrent HTTP requests,
+with two of each per subject and no waiting queue. Discovery uses admitted registry help, hides headless
+capture and discloses only granted observation names. Downstream user-interaction challenges return
+bounded claims in an HTTP 401 bearer challenge; clients obtain fresh authorization before retrying.
 Revocation closes attachments and active requests. Optional Azure services reuse Function self-onboarding
 and observation providers through request-confined OBO with federated managed identity client assertions;
 never substitute host credentials. Deployment uses automatic Caddy TLS behind the existing load balancer,

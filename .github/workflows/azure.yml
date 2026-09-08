@@ -28,6 +28,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: Puck
+    env:
+      BICEPPARAM_WORLD_MCP: ${{ vars.WORLD_MCP || 'null' }}
     permissions:
       contents: read
       id-token: write
@@ -71,6 +73,8 @@ jobs:
     environment:
       name: Puck
       url: https://puck.byteterrace.com
+    env:
+      BICEPPARAM_WORLD_MCP: ${{ vars.WORLD_MCP || 'null' }}
     concurrency:
       group: azure-production-deployment
       cancel-in-progress: false

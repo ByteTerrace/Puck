@@ -155,8 +155,26 @@ This avoids an additional paid gateway and network hop for the current single
 worker. It does not turn the worker into a highly available cluster: the release
 lane still refuses multiple authoritative workers. The CLI hosts MCP as a silo
 extension in the same published image; base silo assemblies have no MCP dependency.
-Deploy unified infrastructure before changing MCP deployment policy. Compilation
-and local tests do not issue certificates, deploy resources or grant live consent.
+For an existing World platform, apply MCP policy through the shared
+[worldMcp.bicep](./worldMcp.bicep) module without redeploying unrelated resources:
+
+```powershell
+# Set BICEPPARAM_WORLD_MCP to the participant/observation JSON above.
+dotnet run -c Release --file build/Azure.cs -- deploy-world-mcp --plan-only
+dotnet run -c Release --file build/Azure.cs -- deploy-world-mcp
+```
+
+The command resolves the existing API and World identity from deployed outputs,
+checks the enabled delegated scope, retains the what-if plan and refuses deletion.
+It installs the same identity trust and monitoring used by `main.bicep`, then
+merges the resulting MCP policy into deployment outputs. Publish the candidate
+image and run the ordinary `deploy-world` release lane to apply runtime policy,
+with its drain, persistence snapshot, verification and rollback. Later World
+platform deployments preserve the newest successful MCP policy. An ABAC-enabled
+ACR quick build needs `--source-acr-auth-id '[caller]'` to use the signed-in Entra
+identity; do not enable registry passwords.
+
+Compilation and local tests do not issue certificates, deploy resources or grant live consent.
 Deployment choices belong in `main.bicepparam`. Typed configuration objects carry
 names, tags, DNS settings, ports and capacity into modules. Deployment scripts use
 the same configuration through Bicep outputs. Module sources retain protocol and

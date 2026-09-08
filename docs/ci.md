@@ -302,6 +302,15 @@ The `Puck` GitHub environment supplies `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and
 `repo:ByteTerrace@18753984/Puck@1271519029:environment:Puck`.
 The workflow targets production; it creates no staging environment.
 
+The `Puck` environment's optional `WORLD_MCP` variable supplies the JSON policy
+document described by [remote MCP deployment](../src/Puck.Azure.Resources/README.md#remote-mcp).
+Both infrastructure compilation and production reconciliation receive that same
+policy. An absent variable disables MCP; it is configuration, not a secret.
+After deployment, a signed-in operator can run `build/Azure.cs -- test-world-mcp`
+to verify public TLS, discovery, user authentication, Function onboarding, granted
+ARM observations and World reads. This check uses the operator's Azure CLI token;
+CI workload identity cannot substitute for delegated user authorization.
+
 The identity team runs `src/Puck.Azure.Resources/bootstrap.cs` outside CI to
 create zzz, configure its GitHub and Azure DevOps federation, grant Graph access,
 and author its constrained resource-group Owner assignment. Bootstrap delegates

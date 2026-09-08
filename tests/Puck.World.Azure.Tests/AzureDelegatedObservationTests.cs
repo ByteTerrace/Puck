@@ -9,6 +9,33 @@ using Xunit;
 namespace Puck.World.Azure.Tests;
 
 public sealed class AzureDelegatedObservationTests {
+    private const string Claims = """{"access_token":{"acrs":{"essential":true,"value":"c1"}}}""";
+
+    [Theory]
+    [InlineData("exchange")]
+    [InlineData("onboarding")]
+    [InlineData("arm")]
+    public async Task ChallengesPreserveClaimsAndNeverCompleteProtectedWork(string source) {
+        using var exchange = new ExchangeHandler { Challenge = source == "exchange", ArmChallenge = source == "arm",
+            ExpectedScope = source == "arm" ? "https://management.azure.com//.default" : $"api://{Application}/.default" };
+        using var http = new HttpClient(exchange);
+        using var platform = new OnboardingHandler("Ready") { Challenge = source == "onboarding" };
+        using var service = new AzureDelegatedServices(Tenant, Application, source == "arm" ? Settings : OnboardingSettings, new AssertionCredential(), new HttpClientTransport(http), platform);
+        var error = await Assert.ThrowsAsync<AzureDelegatedAuthenticationException>(async () => {
+            if (source == "arm") { await service.ReadAsync("inventory", Subject, "validated-user-assertion", DateTimeOffset.UtcNow.AddMinutes(1), Token); }
+            else { await service.EnsureOnboardedAsync("validated-user-assertion", DateTimeOffset.UtcNow.AddMinutes(1), Token); }
+        });
+        Assert.Equal(Claims, error.Claims);
+        Assert.DoesNotContain("validated-user-assertion", error.ToString());
+        if (source == "exchange") { Assert.Equal(0, platform.Calls + exchange.Reads); }
+    }
+
+    [Fact]
+    public void ObservationDiscoveryDisclosesOnlyGrantedNames() {
+        using var service = new AzureDelegatedServices(Tenant, Application, Settings, new AssertionCredential());
+        Assert.Equal(["inventory"], service.NamesFor(Subject));
+        Assert.Empty(service.NamesFor("another-subject"));
+    }
     [Theory]
     [InlineData("Ready")]
     [InlineData("Migrating")]
@@ -29,7 +56,7 @@ public sealed class AzureDelegatedObservationTests {
         using var http = new HttpClient(exchange);
         using var platform = new OnboardingHandler("Ready");
         using var service = new AzureDelegatedServices(Tenant, Application, OnboardingSettings, new AssertionCredential(), new HttpClientTransport(http), platform);
-        await Assert.ThrowsAsync<AuthenticationFailedException>(async () => await service.EnsureOnboardedAsync("validated-user-assertion", DateTimeOffset.UtcNow.AddMinutes(1), Token));
+        await Assert.ThrowsAsync<AzureDelegatedAuthenticationException>(async () => await service.EnsureOnboardedAsync("validated-user-assertion", DateTimeOffset.UtcNow.AddMinutes(1), Token));
         await Assert.ThrowsAsync<AuthenticationFailedException>(async () => await service.EnsureOnboardedAsync("validated-user-assertion", DateTimeOffset.UtcNow.AddSeconds(-1), Token));
         Assert.Equal(1, exchange.Exchanges);
         Assert.Equal(0, platform.Calls);
@@ -38,11 +65,13 @@ public sealed class AzureDelegatedObservationTests {
     private static JsonElement OnboardingSettings => JsonElement.Parse("""{"managedIdentityClientId":"dddddddd-dddd-dddd-dddd-dddddddddddd","observations":[],"onboardingUrl":"https://api.example.test/api/self-onboard"}""");
     private sealed class OnboardingHandler(string state) : HttpMessageHandler {
         internal int Calls;
+        internal bool Challenge;
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
             Assert.Equal(HttpMethod.Post, request.Method);
             Assert.Equal("https://api.example.test/api/self-onboard", request.RequestUri!.AbsoluteUri);
             Assert.Equal("Bearer delegated-arm-token", request.Headers.Authorization!.ToString());
             Calls++;
+            if (Challenge) { return Task.FromResult(ChallengeResponse()); }
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent($"{{\"State\":\"{state}\"}}") });
         }
     }
@@ -90,7 +119,7 @@ public sealed class AzureDelegatedObservationTests {
         using var http = new HttpClient(handler);
         var assertion = new AssertionCredential();
         using var service = new AzureDelegatedServices(Tenant, Application, Settings, assertion, new HttpClientTransport(http));
-        await Assert.ThrowsAsync<AuthenticationFailedException>(async () => await service.ReadAsync("inventory", Subject, "validated-user-assertion", DateTimeOffset.UtcNow.AddMinutes(1), Token));
+        await Assert.ThrowsAsync<AzureDelegatedAuthenticationException>(async () => await service.ReadAsync("inventory", Subject, "validated-user-assertion", DateTimeOffset.UtcNow.AddMinutes(1), Token));
         Assert.Equal(1, assertion.Calls);
         Assert.Equal(0, handler.Reads);
     }
@@ -107,6 +136,8 @@ public sealed class AzureDelegatedObservationTests {
     }
 
     private sealed class ExchangeHandler : HttpMessageHandler {
+        internal bool Challenge;
+        internal bool ArmChallenge;
         internal string ExpectedScope = "https://management.azure.com//.default";
         internal bool Deny;
         internal int Exchanges;
@@ -123,14 +154,23 @@ public sealed class AzureDelegatedObservationTests {
                 Assert.Equal("federated-client-assertion", form["client_assertion"]);
                 Assert.Contains(ExpectedScope, form["scope"]);
                 Exchanges++;
+                if (Challenge) {
+                    return Response(HttpStatusCode.BadRequest, JsonSerializer.Serialize(new { error = "invalid_grant", error_description = "MFA required", error_codes = new[] { 50076 }, claims = Claims }));
+                }
                 return Deny ? Response(HttpStatusCode.BadRequest, """{"error":"invalid_grant","error_description":"Consent required","error_codes":[65001]}""") :
                     Response(HttpStatusCode.OK, """{"access_token":"delegated-arm-token","expires_in":3600,"token_type":"Bearer"}""");
             }
             Assert.Equal("management.azure.com", request.RequestUri.Host);
             Assert.Equal("Bearer delegated-arm-token", request.Headers.Authorization?.ToString());
             Reads++;
+            if (ArmChallenge) { return ChallengeResponse(); }
             return Response(HttpStatusCode.OK, """{"value":[{"id":"/subscriptions/eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee/resourceGroups/approved/providers/Microsoft.Storage/storageAccounts/sample","name":"sample","type":"Microsoft.Storage/storageAccounts"}]}""");
         }
         private static HttpResponseMessage Response(HttpStatusCode status, string body) => new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+    }
+    private static HttpResponseMessage ChallengeResponse() {
+        var response = new HttpResponseMessage(HttpStatusCode.Unauthorized) { Content = new StringContent("") };
+        response.Headers.TryAddWithoutValidation("WWW-Authenticate", $"Bearer error=\"insufficient_claims\", claims=\"{Convert.ToBase64String(Encoding.UTF8.GetBytes(Claims))}\"");
+        return response;
     }
 }

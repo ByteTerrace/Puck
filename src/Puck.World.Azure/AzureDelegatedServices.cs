@@ -24,6 +24,10 @@ public sealed class AzureDelegatedServices : IDisposable {
     private int m_disposed;
     /// <summary>Names installed by the trusted deployment; providers and credentials are never returned.</summary>
     public IReadOnlyCollection<string> Names => m_observations.Keys;
+    /// <summary>Returns only observation names explicitly granted to this subject.</summary>
+    /// <param name="subject">Validated subject in this service's tenant.</param>
+    /// <returns>Ordinally ordered observation names, never their resource settings.</returns>
+    public string[] NamesFor(string subject) => m_observations.Values.Where(row => row.Subjects.Contains(subject, StringComparer.Ordinal)).Select(row => row.Name).Order(StringComparer.Ordinal).ToArray();
 
     /// <summary>Validates a deployment without network I/O. The ingress must validate tenant-specific v2 tokens for this application before calling ReadAsync.</summary>
     /// <param name="tenantId">Exact Entra tenant accepted by the ingress.</param>
@@ -47,7 +51,8 @@ public sealed class AzureDelegatedServices : IDisposable {
         }
         m_assertionCredential = assertionCredential ?? new ManagedIdentityCredential(ManagedIdentityId.FromUserAssignedClientId(Guid.Parse(configuration.ManagedIdentityClientId).ToString("D")));
         m_ownsCredential = assertionCredential is null;
-        m_transport = transport;
+        m_http = new HttpClient(onboardingHandler ?? new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false, PooledConnectionLifetime = TimeSpan.FromMinutes(5) }) { Timeout = Timeout.InfiniteTimeSpan };
+        m_transport = new ChallengeTransport(transport ?? new HttpClientTransport(m_http));
         try {
             m_observations = configuration.Observations.Select(Bound).ToFrozenDictionary(row => row.Name, StringComparer.Ordinal);
             foreach (var row in m_observations.Values) {
@@ -57,10 +62,10 @@ public sealed class AzureDelegatedServices : IDisposable {
                 using var source = Create(row, m_assertionCredential);
             }
         } catch {
+            m_http.Dispose();
             if (m_ownsCredential) { (m_assertionCredential as IDisposable)?.Dispose(); }
             throw;
         }
-        m_http = new HttpClient(onboardingHandler ?? new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false, PooledConnectionLifetime = TimeSpan.FromMinutes(5) }) { Timeout = Timeout.InfiniteTimeSpan };
     }
 
     /// <summary>Exchanges this validated user's API assertion and reads only an approved observation. No token or assertion is persisted.</summary>
@@ -93,6 +98,8 @@ public sealed class AzureDelegatedServices : IDisposable {
                 }
             }
             return items;
+        } catch (AuthenticationFailedException error) when (AzureDelegatedAuthenticationException.From(error) is { } challenge) {
+            throw challenge;
         } finally { (credential as IDisposable)?.Dispose(); }
     }
 
@@ -125,7 +132,8 @@ public sealed class AzureDelegatedServices : IDisposable {
             using var request = new HttpRequestMessage(HttpMethod.Post, m_onboarding);
             request.Headers.Authorization = new("Bearer", access.Token);
             using var response = await m_http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token).ConfigureAwait(false);
-            if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden) { throw new AuthenticationFailedException("Platform onboarding requires renewed user consent or sign-in."); }
+            AzureDelegatedAuthenticationException.ThrowIfChallenge((int)response.StatusCode, response.Headers.WwwAuthenticate.ToString());
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden) { throw new UnauthorizedAccessException("Platform onboarding access was refused."); }
             response.EnsureSuccessStatusCode();
             await response.Content.LoadIntoBufferAsync(4096, deadline.Token).ConfigureAwait(false);
             using var json = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(deadline.Token).ConfigureAwait(false));
@@ -134,6 +142,8 @@ public sealed class AzureDelegatedServices : IDisposable {
                 value.ValueKind != JsonValueKind.String) { throw new InvalidDataException("Missing platform onboarding state."); }
             var state = value.GetString();
             return state is "Ready" or "Migrating" or "Onboarding" ? state : throw new InvalidDataException("Unknown platform onboarding state.");
+        } catch (AuthenticationFailedException error) when (AzureDelegatedAuthenticationException.From(error) is { } challenge) {
+            throw challenge;
         } finally { (credential as IDisposable)?.Dispose(); }
     }
 
@@ -144,6 +154,16 @@ public sealed class AzureDelegatedServices : IDisposable {
         return new(m_tenant, m_application,
             async token => (await m_assertionCredential.GetTokenAsync(new(["api://AzureADTokenExchange"]), token).ConfigureAwait(false)).Token,
             userAssertion, options);
+    }
+
+    // Surface downstream challenges before the SDK's bearer policy can silently retry a user operation.
+    // Token endpoint 400 responses remain with MSAL, which classifies interaction-required errors.
+    private sealed class ChallengeTransport(HttpPipelineTransport inner) : HttpPipelineTransport {
+        public override Request CreateRequest() => inner.CreateRequest();
+        public override void Process(HttpMessage message) { inner.Process(message); Check(message); }
+        public override async ValueTask ProcessAsync(HttpMessage message) { await inner.ProcessAsync(message).ConfigureAwait(false); Check(message); }
+        private static void Check(HttpMessage message) => AzureDelegatedAuthenticationException.ThrowIfChallenge(message.Response.Status,
+            message.Response.Headers.TryGetValue("WWW-Authenticate", out var header) ? header : null);
     }
 
     private static AzureDelegatedObservation Bound(AzureDelegatedObservation row) {

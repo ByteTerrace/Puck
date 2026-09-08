@@ -29,6 +29,7 @@ internal static class AzureAutomation {
                   deploy-infrastructure [--resource-group byteterrace]
                   deploy-applications --artifacts-directory DIR --commit SHA
                   deploy-world-platform [--resource-group byteterrace]
+                  deploy-world-mcp [--resource-group byteterrace] [--plan-only]
                   deploy-world [--resource-group GROUP]
                   publish-static [--bundle-directory artifacts/azure]
                   publish-template-specs
@@ -38,6 +39,7 @@ internal static class AzureAutomation {
                   test-production --commit SHA [--before-static-publication]
                   test-world-container --image IMAGE
                   test-world-release [--resource-group GROUP --scale-set NAME --image DIGEST]
+                  test-world-mcp
                   build-actors [--no-restart] [--registry NAME] [--resource-group GROUP] [--container-app NAME]
                   stage-world-image --commit SHA
                   current
@@ -47,6 +49,7 @@ internal static class AzureAutomation {
         var allowed = new HashSet<string>(collection: args[0] switch {
             "build" => ["output-directory"],
             "deploy-infrastructure" or "deploy-world-platform" or "deploy-world" => ["resource-group"],
+            "deploy-world-mcp" => ["resource-group", "plan-only"],
             "deploy-applications" => ["artifacts-directory", "commit", "resource-group"],
             "publish-static" => ["bundle-directory", "resource-group"],
             "publish-container" => ["registry", "repository", "commit", "archive", "output-file"],
@@ -57,7 +60,7 @@ internal static class AzureAutomation {
             "test-world-release" => ["resource-group", "scale-set", "image"],
             "build-actors" => ["no-restart", "registry", "resource-group", "container-app"],
             "stage-world-image" => ["commit"],
-            "publish-template-specs" or "current" => [],
+            "publish-template-specs" or "current" or "test-world-mcp" => [],
             _ => throw new ArgumentException(message: $"Unknown command: {args[0]}"),
         }, comparer: StringComparer.Ordinal);
 
@@ -65,7 +68,7 @@ internal static class AzureAutomation {
             var key = args[index];
 
             if (!key.StartsWith(comparisonType: StringComparison.Ordinal, value: "--") || !allowed.Contains(item: key[2..])) { throw new ArgumentException(message: $"Unknown option: {key}"); }
-            var flag = (key is "--restore" or "--before-static-publication" or "--no-restart");
+            var flag = (key is "--restore" or "--before-static-publication" or "--no-restart" or "--plan-only");
             var value = (flag ? "true" : ((++index < args.Length) ? args[index] : throw new ArgumentException(message: $"Missing value for {key}")));
 
             if (!Options.TryAdd(key: key[2..], value: value)) { throw new ArgumentException(message: $"Duplicate option: {key}"); }
@@ -78,6 +81,7 @@ internal static class AzureAutomation {
             case "deploy-infrastructure": await DeployInfrastructureAsync(); break;
             case "deploy-applications": await DeployApplicationsAsync(); break;
             case "deploy-world-platform": await DeployWorldPlatformAsync(); break;
+            case "deploy-world-mcp": await DeployWorldMcpAsync(); break;
             case "deploy-world": await DeployWorldAsync(); break;
             case "publish-static": await PublishStaticAsync(); break;
             case "publish-template-specs": await PublishTemplateSpecsAsync(); break;
@@ -87,6 +91,7 @@ internal static class AzureAutomation {
             case "test-production": await TestProductionAsync(); break;
             case "test-world-container": await TestWorldContainerAsync(); break;
             case "test-world-release": await TestWorldReleaseAsync(); break;
+            case "test-world-mcp": await TestWorldMcpAsync(); break;
             case "build-actors": await BuildActorsAsync(); break;
             case "stage-world-image": await StageWorldImageAsync(); break;
             case "current": await CurrentAsync(); break;
@@ -224,11 +229,46 @@ internal static class AzureAutomation {
 
         WriteParameters(path: "artifacts/world-platform-parameters.json", values: values);
         var outputs = await AzJsonAsync("deployment", "group", "create", "-g", group, "-n", "puck-world-platform", "--template-file", "src/Puck.Azure.Resources/worldSiloPlatform.bicep", "--parameters", "@artifacts/world-platform-parameters.json", "--query", "properties.outputs", "-o", "json");
-        // A world-only release preserves the unified root's deployed OAuth policy and identity registration.
+        // A world-only release preserves the newest successfully deployed MCP policy from either composition.
         var mcp = await AzJsonAsync("deployment", "group", "list", "-g", group, "--query",
-            "[?name=='puck-production-platform'].properties.outputs.worldMcpConfiguration | [0] || `{}`", "-o", "json");
+            "[?(name=='puck-production-platform' || name=='puck-world-mcp') && properties.provisioningState=='Succeeded'] | sort_by(@, &properties.timestamp) | [-1].properties.outputs.worldMcpConfiguration || `{}`", "-o", "json");
 
-        if (mcp["value"] is not null) { outputs["worldMcpConfiguration"] = mcp.DeepClone(); } else if (source["worldMcp"]?["value"] is not null) { throw new InvalidOperationException(message: "Deploy unified infrastructure before enabling World MCP in an application release."); }
+        if (mcp["value"] is not null) { outputs["worldMcpConfiguration"] = mcp.DeepClone(); } else if (source["worldMcp"]?["value"] is not null) { throw new InvalidOperationException(message: "Deploy unified infrastructure or deploy-world-mcp before enabling MCP in an application release."); }
+        Write(path: "artifacts/production-outputs.json", value: outputs);
+    }
+    private static async Task DeployWorldMcpAsync() {
+        var group = Option(key: "resource-group", fallback: "byteterrace");
+        await AzAsync("bicep", "build-params", "--file", "src/Puck.Azure.Resources/main.bicepparam", "--outfile", "artifacts/world-mcp-source.json");
+        var source = Read(path: "artifacts/world-mcp-source.json")["parameters"]!;
+        var settings = source["worldMcp"]?["value"] ?? throw new InvalidOperationException(message: "Set BICEPPARAM_WORLD_MCP to the explicit participant policy.");
+        var outputs = await AzJsonAsync("deployment", "group", "show", "-g", group, "-n", "puck-world-platform", "--query", "properties.outputs", "-o", "json");
+        var configuration = Value(outputs: outputs, key: "worldSiloConfiguration");
+        var applicationId = Text(value: configuration["authentication"]!["settings"]!["audience"]);
+        var application = await AzJsonAsync("ad", "app", "show", "--id", applicationId, "--query", "{uniqueName:uniqueName,api:api,identifierUris:identifierUris}", "-o", "json");
+        if (!application["api"]!["oauth2PermissionScopes"]!.AsArray().Any(scope => Text(value: scope!["value"]) == "user_impersonation" && scope["isEnabled"]!.GetValue<bool>())) {
+            throw new InvalidOperationException(message: "The existing API must expose enabled user_impersonation before MCP deployment.");
+        }
+        var resources = source["resources"]!["value"]!;
+        var identifier = Text(value: resources["applicationRegistration"]!["identifierUri"]);
+        if (!application["identifierUris"]!.AsArray().Any(uri => Text(value: uri) == identifier)) { throw new InvalidOperationException(message: "The configured API identifier does not match the deployed registration."); }
+        var route = resources["frontDoor"]!["routes"]!.AsArray().First(row => Text(value: row!["originGroupName"]) == "api")!;
+        WriteParameters(path: "artifacts/world-mcp-parameters.json", values: new JsonObject {
+            ["settings"] = settings.DeepClone(), ["configuration"] = configuration.DeepClone(),
+            ["applicationUniqueName"] = Text(value: application["uniqueName"]), ["applicationId"] = applicationId,
+            ["authorizationScope"] = identifier + "/user_impersonation",
+            ["identityClientId"] = Value(outputs, "worldSiloClientId").DeepClone(), ["identityPrincipalId"] = Value(outputs, "worldSiloOwner").DeepClone(),
+            ["onboardingUrl"] = "https://" + Text(value: route["customDomains"]![0]) + "/api/self-onboard",
+            ["applicationInsightsName"] = resources["containerEnvironment"]!["applicationInsights"]!["name"]!.DeepClone(),
+            ["location"] = Value(outputs, "deploymentLocation").DeepClone(), ["tags"] = Value(outputs, "deploymentTags").DeepClone(),
+        });
+        var plan = await AzJsonAsync("deployment", "group", "what-if", "-g", group, "--template-file", "src/Puck.Azure.Resources/worldMcp.bicep", "--parameters", "@artifacts/world-mcp-parameters.json", "--no-pretty-print");
+        Write(path: "artifacts/world-mcp-plan.json", value: plan);
+        if (((string?)plan["status"]) != "Succeeded" || plan["changes"]!.AsArray().Any(change => ((string?)change!["changeType"]) == "Delete")) {
+            throw new InvalidOperationException(message: "MCP deployment planning failed or proposes deletion; inspect world-mcp-plan.json.");
+        }
+        if (Option(key: "plan-only") == "true") { return; }
+        var deployed = await AzJsonAsync("deployment", "group", "create", "-g", group, "-n", "puck-world-mcp", "--template-file", "src/Puck.Azure.Resources/worldMcp.bicep", "--parameters", "@artifacts/world-mcp-parameters.json", "--query", "properties.outputs", "-o", "json");
+        outputs["worldMcpConfiguration"] = deployed["worldMcpConfiguration"]!.DeepClone();
         Write(path: "artifacts/production-outputs.json", value: outputs);
     }
     private static void WriteParameters(string path, JsonObject values) {
@@ -820,6 +860,89 @@ internal static class AzureAutomation {
         var message = string.Join(separator: "\n", values: result["value"]!.AsArray().Select(selector: value => Text(value: value!["message"])));
 
         if (!message.Contains(comparisonType: StringComparison.Ordinal, value: (image + " true")) || !message.Contains(comparisonType: StringComparison.Ordinal, value: (("\n" + image) + "\n"))) { throw new InvalidDataException(message: "The running world container does not match the requested release digest."); }
+        if (outputs?["worldMcpConfiguration"]?["value"]?["options"] is { } mcp) {
+            await RetryAsync(async () => {
+                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                using var response = await Http.GetAsync(new Uri(new Uri(Text(mcp["publicUrl"])), "/healthz"), deadline.Token);
+                response.EnsureSuccessStatusCode();
+            }, attempts: 6, seconds: 5);
+        }
+    }
+    private static async Task TestWorldMcpAsync() {
+        const string Protocol = "2026-07-28";
+        var options = Value(outputs: Outputs(), key: "worldMcpConfiguration")["options"]!;
+        var address = new Uri(Text(options["publicUrl"]));
+        using var handler = new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false };
+        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(125) };
+        using (var health = await client.GetAsync(new Uri(address, "/healthz"))) { health.EnsureSuccessStatusCode(); }
+        var metadata = JsonNode.Parse(await client.GetStringAsync(new Uri(address, "/.well-known/oauth-protected-resource/mcp")))!;
+        if (Text(metadata["resource"]) != address.AbsoluteUri || !metadata["scopes_supported"]!.AsArray().Any(scope => Text(scope) == Text(options["authorizationScope"]))) {
+            throw new InvalidDataException("Protected-resource discovery differs from deployment policy.");
+        }
+        var assertion = await TokenAsync("api://" + Text(options["audience"]));
+        var sequence = 0;
+        async Task<JsonNode> RequestAsync(string method, string? tool = null, JsonObject? arguments = null, bool authenticated = true) {
+            var parameters = new JsonObject {
+                ["_meta"] = new JsonObject {
+                    ["io.modelcontextprotocol/protocolVersion"] = Protocol,
+                    ["io.modelcontextprotocol/clientInfo"] = new JsonObject { ["name"] = "puck-production-verification", ["version"] = "1" },
+                    ["io.modelcontextprotocol/clientCapabilities"] = new JsonObject(),
+                },
+            };
+            if (tool is not null) { parameters["name"] = tool; parameters["arguments"] = arguments ?? new JsonObject(); }
+            using var request = new HttpRequestMessage(HttpMethod.Post, address);
+            if (authenticated) { request.Headers.Authorization = new("Bearer", assertion); }
+            request.Headers.Accept.ParseAdd("application/json, text/event-stream");
+            request.Headers.Add("MCP-Protocol-Version", Protocol);
+            request.Headers.Add("Mcp-Method", method);
+            if (tool is not null) { request.Headers.Add("Mcp-Name", tool); }
+            request.Content = new StringContent(new JsonObject { ["jsonrpc"] = "2.0", ["id"] = ++sequence, ["method"] = method, ["params"] = parameters }.ToJsonString(), Encoding.UTF8, "application/json");
+            using var response = await client.SendAsync(request);
+            if (!authenticated) {
+                if (response.StatusCode != HttpStatusCode.Unauthorized || !response.Headers.WwwAuthenticate.Any()) { throw new InvalidDataException("Anonymous MCP access was not challenged."); }
+                return new JsonObject();
+            }
+            if (response.StatusCode == HttpStatusCode.Unauthorized) { throw new InvalidOperationException("Live delegated authorization needs fresh sign-in, consent or claims satisfaction; credentials were not printed or substituted."); }
+            response.EnsureSuccessStatusCode();
+            var body = await response.Content.ReadAsStringAsync();
+            if (body.Length > 1024 * 1024) { throw new InvalidDataException("MCP verification response exceeded its budget."); }
+            var reply = response.Content.Headers.ContentType?.MediaType == "text/event-stream"
+                ? body.Split('\n').Where(line => line.StartsWith("data:", StringComparison.Ordinal)).Select(line => JsonNode.Parse(line[5..])).Last(node => node?["id"]?.GetValue<int>() == sequence)!
+                : JsonNode.Parse(body)!;
+            if (reply["error"] is not null || reply["result"] is null) { throw new InvalidDataException("Live MCP returned a protocol error."); }
+            var result = reply["result"]!;
+            if (result["isError"]?.GetValue<bool>() == true) {
+                throw new InvalidDataException($"Live MCP {tool} was refused: {result["content"]?[0]?["text"]}");
+            }
+            return result;
+        }
+        await RequestAsync("tools/list", authenticated: false);
+        var tools = (await RequestAsync("tools/list"))["tools"]!.AsArray();
+        if (tools.Any(tool => Text(tool!["name"]) == "puck_capture_frame")) { throw new InvalidDataException("The headless silo advertised capture."); }
+        if (!tools.Any(tool => Text(tool!["name"]) == "puck_exec" && Text(tool["description"]).Contains("world.state", StringComparison.Ordinal))) { throw new InvalidDataException("Admitted command discovery is absent."); }
+        Console.WriteLine("Public TLS, readiness, discovery, authentication and headless capability checks passed.");
+        var onboard = await RequestAsync("tools/call", "puck_onboard");
+        var state = Text(onboard["structuredContent"]?["state"]);
+        if (state is not ("Ready" or "Migrating")) { throw new InvalidOperationException("Account onboarding is still running; retry this verification explicitly."); }
+        Console.WriteLine("Function onboarding through user OBO passed.");
+        if (tools.SingleOrDefault(tool => Text(tool!["name"]) == "puck_service_observe") is { } observe) {
+            foreach (var name in observe["inputSchema"]!["properties"]!["observation"]!["enum"]!.AsArray()) {
+                await RequestAsync("tools/call", "puck_service_observe", new() { ["observation"] = Text(name) });
+            }
+            Console.WriteLine("Granted ARM observations through user OBO passed.");
+        }
+        var attached = await RequestAsync("tools/call", "puck_attach");
+        var attachment = Text(attached["structuredContent"]?["attachmentId"]);
+        try {
+            var samples = new double[30];
+            for (var index = 0; index < samples.Length + 3; index++) {
+                var started = System.Diagnostics.Stopwatch.GetTimestamp();
+                await RequestAsync("tools/call", "puck_exec", new() { ["attachmentId"] = attachment, ["command"] = "world.state" });
+                if (index >= 3) { samples[index - 3] = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds; }
+            }
+            Array.Sort(samples);
+            Console.WriteLine($"Delegated World reads passed: 30 samples after 3 warmups; p50={samples[14]:F1} ms, p95={samples[28]:F1} ms. This measures this caller and network, not a service SLO.");
+        } finally { await RequestAsync("tools/call", "puck_detach", new() { ["attachmentId"] = attachment }); }
     }
     private static async Task TestProductionAsync() {
         var commit = Commit();

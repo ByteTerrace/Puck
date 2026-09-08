@@ -135,6 +135,7 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
         public void Dispose() { if (Interlocked.Exchange(ref m_disposed, 1) == 0) { Interlocked.Decrement(ref owner.Active); } }
     }
     private sealed class ProbeHost(RemoteMcpFixture owner) : RemoteMcpHost {
+        public override ValueTask<ControlCapabilities> DescribeControlAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) => ValueTask.FromResult(new ControlCapabilities("read; set <value>; wait", true));
         public override bool IsReady => true;
         public override ValueTask<IControlSession> AttachAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) {
             Interlocked.Increment(ref owner.Opened);

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
 using Azure.Identity;
 using ModelContextProtocol.Protocol;
 using Puck.Hosting;
@@ -38,19 +39,32 @@ internal sealed class AzureMcpHost : RemoteMcpHost, IDisposable {
         m_services = new(options.TenantId, options.Audience, options.Services!.Value);
     }
     public override bool IsReady => m_host.IsReady(m_target);
+    public override ValueTask<ControlCapabilities> DescribeControlAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) => m_host.DescribeAsync(m_target, new(caller.Issuer, caller.Subject), cancellationToken);
     public void Dispose() => m_services.Dispose();
     public override async ValueTask<IControlSession> AttachAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) {
         if (m_services.SupportsOnboarding) {
             try {
                 var state = await m_services.EnsureOnboardedAsync(caller.UserAssertion, caller.ExpiresAt, cancellationToken).ConfigureAwait(false);
                 if (state == "Onboarding") { throw new UnauthorizedAccessException("Account provisioning is still running. Use puck_onboard to check it."); }
-            } catch (Exception error) when (error is AuthenticationFailedException or HttpRequestException or JsonException or InvalidDataException) {
+            } catch (AzureDelegatedAuthenticationException challenge) { throw new RemoteMcpAuthorizationException(challenge.Claims); }
+            catch (Exception error) when (error is AuthenticationFailedException or HttpRequestException or JsonException or InvalidDataException) {
                 throw new UnauthorizedAccessException("Platform onboarding failed; sign in and verify consent before attaching.");
             }
         }
         return await m_host.AttachAsync(m_target, new(caller.Issuer, caller.Subject), cancellationToken).ConfigureAwait(false);
     }
     public override IReadOnlyList<Tool> ServiceTools => [.. m_services.SupportsOnboarding ? new[] { OnboardTool } : [], .. m_services.Names.Count > 0 ? new[] { ObserveTool } : []];
+    public override IReadOnlyList<Tool> GetServiceTools(RemoteMcpCaller caller) {
+        var tools = new List<Tool>();
+        if (m_services.SupportsOnboarding) { tools.Add(OnboardTool); }
+        var names = m_services.NamesFor(caller.Subject);
+        if (names.Length > 0) {
+            var input = JsonNode.Parse(ObserveTool.InputSchema.GetRawText())!.AsObject();
+            input["properties"]!["observation"]!["enum"] = new JsonArray(names.Select(name => (JsonNode?)JsonValue.Create(name)).ToArray());
+            tools.Add(new() { Name = ObserveTool.Name, Description = ObserveTool.Description, InputSchema = JsonElement.Parse(input.ToJsonString()), OutputSchema = ObserveTool.OutputSchema, Annotations = ObserveTool.Annotations });
+        }
+        return tools;
+    }
     public override async ValueTask<CallToolResult> CallServiceAsync(RemoteMcpCaller caller, CallToolRequestParams request, CancellationToken cancellationToken) {
         if (request.Name == OnboardTool.Name && m_services.SupportsOnboarding) {
             if (request.Arguments is { Count: > 0 }) { return Failure("Onboarding takes no arguments; identity comes from your validated access token."); }
@@ -58,7 +72,8 @@ internal sealed class AzureMcpHost : RemoteMcpHost, IDisposable {
                 var state = await m_services.EnsureOnboardedAsync(caller.UserAssertion, caller.ExpiresAt, cancellationToken).ConfigureAwait(false);
                 var content = JsonSerializer.SerializeToElement(new AzureMcpOnboardingResult(state), AzureMcpJson.Default.AzureMcpOnboardingResult);
                 return new() { StructuredContent = content, Content = [new TextContentBlock { Text = content.GetRawText() }] };
-            } catch (Exception error) when (error is AuthenticationFailedException or HttpRequestException or IOException or JsonException or InvalidOperationException) {
+            } catch (AzureDelegatedAuthenticationException challenge) { throw new RemoteMcpAuthorizationException(challenge.Claims); }
+            catch (Exception error) when (error is AuthenticationFailedException or HttpRequestException or IOException or JsonException or InvalidOperationException or UnauthorizedAccessException) {
                 return Failure("Platform onboarding failed. Sign in again and verify downstream consent; host credentials are never substituted.");
             }
         }
@@ -71,7 +86,8 @@ internal sealed class AzureMcpHost : RemoteMcpHost, IDisposable {
             var items = await m_services.ReadAsync(observation, caller.Subject, caller.UserAssertion, caller.ExpiresAt, cancellationToken).ConfigureAwait(false);
             var content = JsonSerializer.SerializeToElement(new AzureMcpObservationResult(observation, items), AzureMcpJson.Default.AzureMcpObservationResult);
             return new() { StructuredContent = content, Content = [new TextContentBlock { Text = content.GetRawText() }] };
-        } catch (AuthenticationFailedException) {
+        } catch (AzureDelegatedAuthenticationException challenge) { throw new RemoteMcpAuthorizationException(challenge.Claims); }
+        catch (AuthenticationFailedException) {
             return Failure("Delegated authentication failed. Sign in again and verify downstream consent; host credentials are never substituted.");
         } catch (UnauthorizedAccessException) {
             return Failure("This caller has no grant for that observation.");

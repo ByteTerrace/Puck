@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Puck.Mcp;
@@ -116,7 +117,11 @@ public sealed class RemoteMcpTests {
         await using var fixture = new RemoteMcpFixture(); await fixture.StartAsync(Token);
         using var http = fixture.Http(fixture.Token());
         await using var client = await fixture.ClientAsync(http, "2026-07-28", Token);
-        for (var i = 0; i < 4; i++) { await Attach(client); }
+        for (var i = 0; i < 2; i++) { await Attach(client); }
+        Assert.True((await client.CallToolAsync("puck_attach", cancellationToken: Token)).IsError);
+        using var bobHttp = fixture.Http(fixture.Token("bob"));
+        await using var bob = await fixture.ClientAsync(bobHttp, "2026-07-28", Token);
+        for (var i = 0; i < 2; i++) { await Attach(bob); }
         Assert.True((await client.CallToolAsync("puck_attach", cancellationToken: Token)).IsError);
         Assert.Equal(4, fixture.Opened);
         await fixture.StopGatewayAsync(Token);
@@ -130,9 +135,12 @@ public sealed class RemoteMcpTests {
         using var http = fixture.Http(fixture.Token());
         await using var client = await fixture.ClientAsync(http, "2026-07-28", Token);
         var ids = new List<string>();
-        for (var i = 0; i < 4; i++) { ids.Add(await Attach(client)); }
+        for (var i = 0; i < 2; i++) { ids.Add(await Attach(client)); }
+        using var bobHttp = fixture.Http(fixture.Token("bob"));
+        await using var bob = await fixture.ClientAsync(bobHttp, "2026-07-28", Token);
+        var bobIds = new[] { await Attach(bob), await Attach(bob) };
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Token);
-        var pending = ids.Select(id => Exec(client, id, "wait", cancel.Token)).ToArray();
+        var pending = ids.Select(id => Exec(client, id, "wait", cancel.Token)).Concat(bobIds.Select(id => Exec(bob, id, "wait", cancel.Token))).ToArray();
         try {
             for (var i = 0; i < 4; i++) { await fixture.Entered.Reader.ReadAsync(Token).AsTask().WaitAsync(TimeSpan.FromSeconds(5), Token); }
             using var refused = await http.GetAsync("/.well-known/oauth-protected-resource/mcp", Token);
@@ -143,6 +151,7 @@ public sealed class RemoteMcpTests {
             foreach (var request in pending) { await Record.ExceptionAsync(() => request); }
         }
         await Eventually(() => Volatile.Read(ref fixture.Active) == 0);
+        await Eventually(() => fixture.App.Services.GetRequiredKeyedService<System.Threading.RateLimiting.ConcurrencyLimiter>("PuckMcp").GetStatistics()!.CurrentAvailablePermits == 4);
         using var recovered = await http.GetAsync("/.well-known/oauth-protected-resource/mcp", Token);
         Assert.Equal(HttpStatusCode.OK, recovered.StatusCode);
     }

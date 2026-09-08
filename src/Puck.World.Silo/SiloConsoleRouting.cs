@@ -72,6 +72,10 @@ public sealed class SiloConsoleRouting {
     /// <summary>Gets the world id <c>silo.use</c> last selected for untagged lines, or <see langword="null"/> when
     /// none has been selected.</summary>
     public string? DefaultWorldId => Volatile.Read(location: ref m_defaultWorldId);
+    /// <summary>Reads the registered command vocabulary under the host's disclosure policy.</summary>
+    /// <param name="include">Metadata filter evaluated on the command pump.</param>
+    /// <returns>Names and descriptions of selected commands.</returns>
+    public string DescribeCommands(Func<CommandMetadata, bool> include) => m_source().DescribeCommands(include);
 
     /// <summary>Registers a freshly admitted row's own tagged console session, tagging every result it produces
     /// with <c>[&lt;worldId&gt;] </c> ahead of the shared output writer's own <c>Console.Out</c>/<c>Console.Error</c>

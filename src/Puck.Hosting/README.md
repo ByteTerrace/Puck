@@ -249,7 +249,10 @@ The opt-in endpoint binds only IPv4 loopback, admits at most four connections
 including handshakes, and uses Networking's user-only Windows/Linux x64
 [local endpoint capability](../Puck.Networking/README.md#local-endpoint-capabilities).
 Creating an instance starts the listener; the host owns its disposal.
-An in-process extension can use `IControlSessionHost` instead. Targets remain fixed for each session; the host closes their ingress at retirement. This interface introduces no MCP dependency into the host.
+An in-process extension can use `IControlSessionHost` instead. `DescribeAsync`
+returns the identity's admitted command help and renderer availability without
+opening a session. Targets remain fixed for each session; the host closes their
+ingress at retirement. This interface introduces no MCP dependency into the host.
 
 ### Wire and lifetime
 

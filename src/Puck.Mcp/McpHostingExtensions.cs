@@ -50,6 +50,7 @@ public static class McpHostingExtensions {
         public override void Dispose() { base.Dispose(); (host as IDisposable)?.Dispose(); }
     }
     private sealed class HostedControlHost(IControlSessionHost host, string target) : RemoteMcpHost {
+        public override ValueTask<ControlCapabilities> DescribeControlAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) => host.DescribeAsync(target, new(caller.Issuer, caller.Subject), cancellationToken);
         public override bool IsReady => host.IsReady(target);
         public override ValueTask<IControlSession> AttachAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) => host.AttachAsync(target, new(caller.Issuer, caller.Subject), cancellationToken);
     }

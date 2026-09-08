@@ -12,11 +12,23 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
     private static readonly JsonElement ExecInput = AttachmentSchema(source: OperatorMcpServer.ExecTool());
     private static readonly JsonElement CaptureInput = AttachmentSchema(source: OperatorMcpServer.CaptureTool());
 
-    internal static ListToolsResult List(RemoteMcpHost host) => new() { Tools = host.SupportsAttachments
-        ? [AttachmentTool(detach: false), AttachmentTool(detach: true), WithAttachment(OperatorMcpServer.ExecTool(), ExecInput), WithAttachment(OperatorMcpServer.CaptureTool(), CaptureInput), .. host.ServiceTools]
-        : [.. host.ServiceTools] };
+    internal async ValueTask<ListToolsResult> ListAsync(CancellationToken token) {
+        var tools = new List<Tool>();
+        if (host.SupportsAttachments) {
+            tools.Add(AttachmentTool(false)); tools.Add(AttachmentTool(true));
+            var capabilities = await host.DescribeControlAsync(caller, token).ConfigureAwait(false);
+            if (capabilities.CommandHelp.Length > 0) {
+                var exec = WithAttachment(OperatorMcpServer.ExecTool(), ExecInput);
+                exec.Description = "Execute one delegated command using your attachmentId. Live World grants still authorize each operation; discovery grants no permission. No automatic replay of uncertain results. Available command syntax:\n" + capabilities.CommandHelp;
+                tools.Add(exec);
+            }
+            if (capabilities.SupportsCapture) { tools.Add(WithAttachment(OperatorMcpServer.CaptureTool(), CaptureInput)); }
+        }
+        tools.AddRange(host.GetServiceTools(caller));
+        return new() { Tools = tools };
+    }
     internal async ValueTask<CallToolResult> CallAsync(CallToolRequestParams? parameters, CancellationToken token) {
-        var service = parameters is not null && host.ServiceTools.Any(tool => tool.Name == parameters.Name);
+        var service = parameters is not null && host.GetServiceTools(caller).Any(tool => tool.Name == parameters.Name);
         var start = System.Diagnostics.Stopwatch.GetTimestamp();
         var tool = (service || (parameters?.Name is "puck_attach" or "puck_detach" or "puck_exec" or "puck_capture_frame") ? parameters!.Name : "unknown");
         using var activity = diagnostics.Start(tool: tool);
@@ -38,12 +50,15 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
     private async ValueTask<CallToolResult> DispatchAsync(CallToolRequestParams? parameters, CancellationToken token) {
         if (!host.SupportsAttachments) { throw new McpProtocolException(errorCode: McpErrorCode.InvalidParams, message: "Unknown tool."); }
         if (parameters?.Name is not ("puck_attach" or "puck_detach" or "puck_exec" or "puck_capture_frame")) { throw new McpProtocolException(errorCode: McpErrorCode.InvalidParams, message: "Unknown tool."); }
+        if (parameters.Name == "puck_capture_frame" && !(await host.DescribeControlAsync(caller, token).ConfigureAwait(false)).SupportsCapture) {
+            throw new McpProtocolException("Unknown tool.", McpErrorCode.InvalidParams);
+        }
         if (parameters.Name == "puck_attach") {
             if (parameters.Arguments is { Count: > 0 }) { return AttachmentResult(error: true, id: null, output: "Attach takes no arguments."); }
             try {
                 var id = await attachments.AttachAsync(caller: caller, token: token).ConfigureAwait(continueOnCapturedContext: false);
 
-                return AttachmentResult(error: (id is null), id: id, output: ((id is null) ? "All four attachment slots are occupied." : "Delegated World attachment created. Keep this handle private and call serially."));
+                return AttachmentResult(error: (id is null), id: id, output: ((id is null) ? "Attachment capacity reached: at most two per caller and four per host. Close an unused attachment before retrying." : "Delegated World attachment created. Keep this handle private and call serially."));
             } catch (Exception error) when ((error is IOException or InvalidDataException or UnauthorizedAccessException or System.Net.Sockets.SocketException or InvalidOperationException or JsonException)) {
                 return AttachmentResult(error: true, id: null, output: "World attachment unavailable. Check account onboarding, World admission and target readiness.");
             }
@@ -70,7 +85,7 @@ internal sealed class RemoteMcpTools(RemoteAttachmentPool attachments, string ow
     }
     private static Tool AttachmentTool(bool detach) => new() {
         Name = (detach ? "puck_detach" : "puck_attach"),
-        Description = (detach ? "Close your delegated attachment and cancel its pending ingress. Already dispatched effects cannot be undone." : "Create an isolated delegated attachment to this gateway's World. Returns a caller-bound attachmentId required for exec and capture. At most four attachments; idle expiry applies. Never automatically reattach and replay uncertain commands."),
+        Description = (detach ? "Close your delegated attachment and cancel its pending ingress. Already dispatched effects cannot be undone." : "Create an isolated delegated attachment to this gateway's World. Returns a caller-bound attachmentId for advertised control tools. At most two attachments per caller and four per host; idle expiry applies. Never automatically reattach and replay uncertain commands."),
         InputSchema = (detach ? DetachInput : AttachInput),
         OutputSchema = AttachmentOutput,
         Annotations = new() { DestructiveHint = detach, IdempotentHint = false, OpenWorldHint = false, ReadOnlyHint = false },

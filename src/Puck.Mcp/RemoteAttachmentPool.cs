@@ -30,6 +30,7 @@ internal sealed class RemoteAttachmentPool : IAsyncDisposable {
     private Task? m_sweep;
     private TaskCompletionSource? m_openingsDrained;
     private int m_opening;
+    private readonly Dictionary<string, int> m_openingByOwner = new(StringComparer.Ordinal);
     private bool m_disposed;
 
     internal async Task<string?> AttachAsync(RemoteMcpCaller caller, CancellationToken token) {
@@ -37,6 +38,9 @@ internal sealed class RemoteAttachmentPool : IAsyncDisposable {
         lock (m_gate) {
             ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
             if ((m_attachments.Count + m_opening) >= 4) { return null; }
+            var opening = m_openingByOwner.GetValueOrDefault(owner);
+            if (opening + m_attachments.Values.Count(attachment => attachment.Owner == owner) >= 2) { return null; }
+            m_openingByOwner[owner] = opening + 1;
             m_opening++;
             m_sweep ??= SweepAsync();
         }
@@ -58,7 +62,10 @@ internal sealed class RemoteAttachmentPool : IAsyncDisposable {
             }
         } finally {
             client?.Dispose();
-            lock (m_gate) { if (--m_opening == 0) { m_openingsDrained?.TrySetResult(); } }
+            lock (m_gate) {
+                if (--m_openingByOwner[owner] == 0) { m_openingByOwner.Remove(owner); }
+                if (--m_opening == 0) { m_openingsDrained?.TrySetResult(); }
+            }
         }
     }
     internal bool Detach(string owner, string id) {

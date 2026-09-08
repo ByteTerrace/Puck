@@ -18,6 +18,9 @@ Optional host services are supplied by an outer composition through
 install [Puck.Mcp](../Puck.Mcp/README.md#host-extension) with
 `puck mcp --silo <path> --http <remote.json>`. Row retirement closes all of its
 attached Console sessions, including queued commands and waits.
+Discovery runs on the ordinary command pump and filters registered help through
+the same remote command guard. It requires Replica admission and advertises no
+framebuffer on this headless host.
 
 ## Hosted test world
 

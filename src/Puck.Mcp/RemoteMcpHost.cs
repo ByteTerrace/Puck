@@ -10,6 +10,11 @@ public abstract class RemoteMcpHost {
     public virtual bool SupportsAttachments => true;
     /// <summary>Whether the host is accepting new attachments; health checks never consume a session slot.</summary>
     public abstract bool IsReady { get; }
+    /// <summary>Describes control capabilities for this caller without opening a session. Defaults to no disclosed controls.</summary>
+    /// <param name="caller">The validated caller.</param>
+    /// <param name="cancellationToken">Cancels discovery.</param>
+    /// <returns>The host's current disclosure; dispatch still enforces live grants.</returns>
+    public virtual ValueTask<ControlCapabilities> DescribeControlAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) => ValueTask.FromResult(new ControlCapabilities(""));
     /// <summary>Creates a session for an already authorized subject without replaying prior work.</summary>
     /// <param name="caller">The validated caller. The host must preserve issuer and subject when creating ingress; assertions remain request-confined.</param>
     /// <param name="cancellationToken">Cancels attachment creation.</param>
@@ -17,6 +22,10 @@ public abstract class RemoteMcpHost {
     public abstract ValueTask<IControlSession> AttachAsync(RemoteMcpCaller caller, CancellationToken cancellationToken);
     /// <summary>Additional explicitly installed service tools. The host must enforce caller-specific grants at dispatch.</summary>
     public virtual IReadOnlyList<Tool> ServiceTools => [];
+    /// <summary>Filters service discovery for the caller. Dispatch must enforce the same grants independently.</summary>
+    /// <param name="caller">Validated caller requesting discovery.</param>
+    /// <returns>Only service tools and argument choices disclosed to this caller.</returns>
+    public virtual IReadOnlyList<Tool> GetServiceTools(RemoteMcpCaller caller) => ServiceTools;
     /// <summary>Runs an installed service operation under this request's authenticated identity and deadline.</summary>
     /// <param name="caller">Validated identity and request-confined delegation assertion.</param>
     /// <param name="request">A call to a name advertised in ServiceTools.</param>

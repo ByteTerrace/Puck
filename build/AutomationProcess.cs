@@ -45,12 +45,13 @@ internal static class AutomationProcess {
         if (capture && !string.IsNullOrWhiteSpace(value: error)) { Console.Error.WriteLine(value: error); }
         return text.Trim();
     }
-    internal static Task<string> PuckAsync(params string[] arguments) {
-        var local = Path.Combine(path1: RepositoryPaths.FindRoot()!, path2: ".tmp/puck-ci", path3: (OperatingSystem.IsWindows() ? "puck.exe" : "puck"));
-
-        return (File.Exists(path: local)
-            ? RunAsync(executable: local, arguments: arguments)
-            : RunAsync(executable: "dotnet", arguments: new[] { "tool", "run", "puck", "--" }.Concat(second: arguments)));
+    internal static async Task<string> PuckAsync(params string[] arguments) {
+        var root = RepositoryPaths.FindRoot()!;
+        var local = Path.Combine(path1: root, path2: ".tmp/puck-ci", path3: (OperatingSystem.IsWindows() ? "puck.exe" : "puck"));
+        if (!File.Exists(local)) {
+            await RunAsync("dotnet", ["run", "-c", "Release", "--file", Path.Combine(root, "build/Toolchain.cs"), "--", "setup"]);
+        }
+        return await RunAsync(executable: local, arguments: arguments);
     }
     internal static JsonNode Read(string path) {
         return (JsonNode.Parse(json: File.ReadAllText(path: path)) ?? throw new InvalidDataException(message: $"Empty JSON: {path}"));

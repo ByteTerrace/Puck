@@ -24,7 +24,8 @@ puck mcp --silo silo.json --http remote.json
 Set `target` to the silo's exact World row. Remote configuration has no local capability path.
 Each attachment gets a dedicated text session with a fixed row binding and an admitted peer identity.
 Retirement closes it; admitting the same row again never revives an old handle.
-The headless silo explicitly refuses framebuffer capture. Standalone
+Discovery describes the admitted command surface from the host's actual registry.
+The headless silo omits framebuffer capture from discovery and refuses direct calls. Standalone
 `Puck.World.Silo` has no MCP assembly or package dependency; its public
 `WorldSiloApplication.RunAsync` permits an outer distribution to add host services.
 Neither the desktop World nor the silo installs MCP implicitly.
@@ -121,7 +122,12 @@ or provisioning workflow exists in MCP.
 `puck_service_observe` uses the current caller's assertion and the managed
 identity's federated client assertion to obtain an ARM token. Per-observation
 subject grants and field allowlists still apply. Failed consent never falls back
-to host credentials. MCP retains no user/downstream tokens after the request;
+to host credentials. Discovery includes only the caller's granted observation
+names, as an input-schema enum. A downstream sign-in, consent or claims challenge
+returns HTTP 401 with `WWW-Authenticate`, the MCP resource metadata URI and its
+qualified `user_impersonation` scope. Validated claims are bounded and encoded;
+downstream authority and scope headers are never forwarded. The client must obtain
+fresh user authorization before retrying. MCP retains no user/downstream tokens after the request;
 the existing platform onboarding service owns its protected escrow lifetime.
 World simulation grants authorize World changes; they are not Azure permissions.
 Host filesystem, process, deployment and cloud-job commands are unavailable
@@ -174,7 +180,9 @@ session IDs, GET event streams or resumable responses. Route an attachment back
 to the same gateway instance; handles are neither distributed nor portable.
 
 The gateway admits four concurrent HTTP requests and four live/opening
-attachments; excess work fails immediately. In local capability mode these also
+attachments, with at most two of each per authenticated subject. Excess HTTP work
+returns 429 with `Retry-After: 1`; excess attachments return a tool refusal.
+There is no waiting queue. In local capability mode these also
 consume the host's four control slots alongside local clients. Each attachment admits one operation. Idle attachments
 expire after `idleTimeoutSeconds` (default 300, range 10–3600). Every HTTP request
 has a 125-second ceiling shortened to its token expiry; exec/capture retain their
@@ -246,7 +254,8 @@ Both servers explicitly select this revision. Remote tests use real Kestrel,
 signed JWTs, OIDC discovery/JWKS, direct TLS, tenant/subject isolation, scope and
 audience refusal, token expiry, cancellation, idle expiry, capacity and shutdown.
 Raw HTTP tests check required metadata, header mismatches and absent session
-endpoints. This is not a claim that every IDE client or the live Entra tenant
+endpoints, claims challenges and recovery, caller fairness, and headless discovery.
+This is not a claim that every IDE client or the live Entra tenant
 has been tested. The protocol contract is the
 [current specification](https://modelcontextprotocol.io/specification/2026-07-28).
 

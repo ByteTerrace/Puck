@@ -22,6 +22,10 @@ public sealed class TextCommandSource : ITextCommandSink {
     // session therefore cannot move that session's oldest line behind a concurrently appended later line.
     private readonly ConcurrentQueue<TextCommandSession> m_pending = new();
     private readonly CommandRegistry m_registry;
+    /// <summary>Describes registered commands selected by a trusted host policy, without exposing handlers.</summary>
+    /// <param name="include">The disclosure filter, evaluated on the command pump.</param>
+    /// <returns>Registered names and descriptions in ordinal order.</returns>
+    public string DescribeCommands(Func<CommandMetadata, bool> include) => m_registry.BuildHelpText(include);
 
     // See HoldGate's remarks: volatile because a host may arm the gate from a thread other than the one that drains.
     private volatile Func<bool>? m_holdGate;

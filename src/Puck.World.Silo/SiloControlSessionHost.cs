@@ -8,6 +8,19 @@ namespace Puck.World.Silo;
 /// <summary>Admits a host-validated OAuth identity into an explicitly authorized World row. Every command retains that peer generation.</summary>
 internal sealed class SiloControlSessionHost(WorldSiloHost silo, SiloConsoleRouting routing) : IControlSessionHost {
     /// <inheritdoc/>
+    public ValueTask<ControlCapabilities> DescribeAsync(string target, ControlIdentity identity, CancellationToken cancellationToken) {
+        if (!IsReady(target)) { return ValueTask.FromResult(new ControlCapabilities("")); }
+        return routing.InvokeAsync(target, () => {
+            if (!silo.Instances.TryGet(target, out var instance) || instance is null || silo.IsDraining ||
+                !WorldAdmissionDoor.TryMatchOAuthEntry(instance.Server.Definition.Admission, identity.Issuer, identity.Subject, out var verdict) ||
+                verdict.Tier != WorldDisclosureTier.Replica) { return new ControlCapabilities(""); }
+            return new ControlCapabilities(routing.DescribeCommands(command => IsRemoteCommand(command.Name)));
+        }, cancellationToken);
+    }
+
+    private static bool IsRemoteCommand(string name) => name is "world.wait" or "world.peers" or "world.admission" or "world.links" or
+        "world.state" or "world.state.cell.set" or "world.state.cell.remove";
+    /// <inheritdoc/>
     public bool IsReady(string target) => silo.Live && routing.TryGetSession(target, out _);
     /// <inheritdoc/>
     public ValueTask<IControlSession> AttachAsync(string target, ControlIdentity identity, CancellationToken cancellationToken) {
@@ -32,8 +45,7 @@ internal sealed class SiloControlSessionHost(WorldSiloHost silo, SiloConsoleRout
 
     private static bool Allows(CommandMetadata command, WorldServer server, WorldPeerEventEntry peer, ControlIdentity identity) {
         // This is an explicit remote surface. New local/admin verbs never become remotely callable by registration.
-        if (command.Name is not ("world.wait" or "world.peers" or "world.admission" or "world.links" or
-            "world.state" or "world.state.cell.set" or "world.state.cell.remove")) { return false; }
+        if (!IsRemoteCommand(command.Name)) { return false; }
         return server.Population.IsAdmittedPeer(peer.BodyIndex) && server.Population.PeerPrincipal(peer.BodyIndex) == peer.Identity &&
             WorldAdmissionDoor.TryMatchOAuthEntry(server.Definition.Admission, identity.Issuer, identity.Subject, out var current) &&
             current.Tier == WorldDisclosureTier.Replica;

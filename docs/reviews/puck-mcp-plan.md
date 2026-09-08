@@ -29,6 +29,15 @@ remain future work: the current release supports one authoritative worker and a
 fixed World target. Arbitrary discovery of each user's private Worlds, durable
 delegated cloud jobs and richer participant tools remain later slices under the
 authority and recovery gates below.
+
+The readiness corrections preserve downstream claims challenges as HTTP 401,
+derive admitted command help from the registry, hide headless capture, disclose
+granted observation names and bound each caller to two requests and attachments
+within the host's four-slot limits. Local validation passed 46 remote MCP tests,
+93 Azure adapter tests, 35 Hosting tests and 455 command tests; an additional
+filtered-help regression also passed. These results establish local contracts.
+Production deployment and user-flow validation remain pending until the Azure
+workflow and signed-in operator checks succeed.
 ## Local Operator implementation, 2026-09-08
 
 Implemented from corrected prerequisite base `b1066e2973e0`: neutral

@@ -237,6 +237,14 @@ federated client assertion. The ARM token is used only for the downstream read;
 neither assertion is forwarded to ARM or persisted. There is no fallback to host
 authority when consent or authentication fails.
 
+Token exchange, onboarding and ARM responses preserve user-interaction challenges
+as `AzureDelegatedAuthenticationException`. Its optional JSON claims request is
+limited to 4096 UTF-8 bytes; raw authentication headers, downstream authority and
+scope overrides never leave this adapter. The HTTP transport detects challenges
+before the Azure SDK can silently retry them. The ingress translates the exception
+into its own authentication challenge and lets the caller obtain fresh authorization.
+An ordinary permission-denied response remains a refusal.
+
 The optional [MCP host composition](../Puck.Mcp/README.md#host-extension) installs
 `puck_service_observe` when its remote configuration contains, for example:
 
@@ -259,7 +267,8 @@ The optional [MCP host composition](../Puck.Mcp/README.md#host-extension) instal
 ```
 
 Observation subjects need both MCP gateway access and this separate read
-grant. Provider settings retain the existing scope and scalar-field validation.
+grant. `NamesFor` discloses only a subject's granted names for tool discovery;
+provider settings remain private and retain the existing scope and scalar-field validation.
 Reads are limited to 64 KiB per response page, eight inventory pages, 128 items,
 4096 characters per field and 65536 disclosed characters overall. An incomplete
 or oversized read fails rather than returning a partial snapshot. The adapter
