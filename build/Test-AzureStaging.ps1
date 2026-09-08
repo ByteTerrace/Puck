@@ -21,6 +21,11 @@ for ($attempt = 0; $attempt -lt 30; $attempt++) {
         if ($deployed.commit -ne $Commit) { throw 'Dashboard release commit mismatch.' }
         $manifest = Invoke-RestMethod "$portal/official/staging/manifest.json" -TimeoutSec 30
         if ($manifest.build.commit -ne $Commit) { throw 'Official engine/content commit mismatch.' }
+        foreach ($file in $manifest.engine.files) {
+            $response = Invoke-WebRequest "$portal/official/$($file.path)" -Method Head -TimeoutSec 30
+            $contentType = [string]($response.Headers['Content-Type'] | Select-Object -First 1)
+            if ($contentType.Split(';')[0] -ne $file.contentType) { throw "Engine media type mismatch for $($file.name): $contentType" }
+        }
         $unauthorized = Invoke-WebRequest "$api/health-check" -SkipHttpErrorCheck -TimeoutSec 30
         if ($unauthorized.StatusCode -ne 401) { throw 'Unauthenticated API access was not rejected with HTTP 401.' }
         Write-Output "PASS: authenticated Functions dependencies, rejected anonymous API access, dashboard and official content for $Commit"

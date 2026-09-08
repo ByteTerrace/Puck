@@ -3,6 +3,7 @@ server {
     root /usr/share/nginx/html;
     add_header Cross-Origin-Opener-Policy same-origin always;
     add_header Cross-Origin-Embedder-Policy require-corp always;
+    include /etc/nginx/official-types.conf;
     location /api/ {
         proxy_ssl_server_name on;
         proxy_ssl_verify on;

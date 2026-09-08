@@ -35,6 +35,7 @@ if ($ReuseImages) {
     foreach ($repository in @('web-actors', 'world-silo')) {
         & ./build/Publish-Container.ps1 -Registry $Registry -Repository $repository -Commit $Commit -Archive "$ArtifactsDirectory/azure-$repository/image.tar.gz" -OutputFile "artifacts/$repository.digest"
     }
+    & ./build/New-AzureStaticConfiguration.ps1
     docker build --file build/azure/Dashboard.Dockerfile --tag "puck/dashboard:$Commit" .
     & ./build/Publish-Container.ps1 -Registry $Registry -Repository dashboard -Commit $Commit -OutputFile artifacts/dashboard.digest
 }

@@ -158,6 +158,9 @@ The staging dashboard serves an uncompressed copy of the dashboard and its own
 official content through Nginx. The existing production Front Door deployment
 still uses the separate Brotli `dashboard-storage` tree. Deploying staging does
 not synchronize or delete anything in the shared production website container.
+Its Nginx configuration derives each hashed object's media type from the official
+manifest: extensionless JavaScript and WebAssembly objects must not inherit a
+generic download type. Deployment checks verify every engine object's response type.
 
 The deployment check requires healthy authenticated Functions dependencies,
 HTTP 401 for anonymous API access, and matching dashboard/content commit IDs.
