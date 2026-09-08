@@ -1,9 +1,12 @@
-name: Docs
+name: Build API documentation
+run-name: API documentation — ${{ github.ref_name }}
 
 on:
-  pull_request:
-    paths: ['docs/**', 'src/**', 'build/**', '.config/**', '.github/actions/setup-puck/**', '.github/workflows/docs.yml']
   workflow_call:
+    inputs:
+      prebuilt:
+        type: boolean
+        default: false
   workflow_dispatch:
 
 permissions:
@@ -11,6 +14,7 @@ permissions:
 
 jobs:
   build:
+    name: Generate and validate the documentation site
     runs-on: windows-2025
     timeout-minutes: 30
     steps:
@@ -19,6 +23,8 @@ jobs:
         with:
           global-json-file: global.json
       - uses: ./.github/actions/setup-puck
+        with:
+          artifact: ${{ inputs.prebuilt && 'nuget-packages' || '' }}
       - name: Build website documentation
         shell: bash
         run: puck docs build

@@ -4,7 +4,7 @@ using System.Net.Http.Headers;
 
 try {
     if (args is ["--help" or "-h"]) {
-        Console.WriteLine(value: "Apply a completed Format workflow artifact using FORMAT_RUN_ID, GITHUB_REPOSITORY and GH_TOKEN. Run only from the trusted default branch.");
+        Console.WriteLine(value: "Apply a completed Check source formatting artifact using FORMAT_RUN_ID, GITHUB_REPOSITORY and GH_TOKEN. Run only from the trusted default branch.");
         return 0;
     }
     using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(value: 2), BaseAddress = new Uri(uriString: (Required(name: "GITHUB_API_URL").TrimEnd(trimChar: '/') + "/")) };

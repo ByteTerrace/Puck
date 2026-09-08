@@ -1,13 +1,19 @@
-name: Azure
+name: Release Azure
+run-name: Azure ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && !inputs.deploy)) && 'validation' || 'release' }} — ${{ github.ref_name }}
 
 on:
   push:
     branches: [main, codex/azure-ci]
   pull_request:
+  workflow_call:
+    inputs:
+      deploy:
+        type: boolean
+        default: true
   workflow_dispatch:
     inputs:
       deploy:
-        description: Deploy this commit and its infrastructure to production
+        description: Deploy the verified artifacts and infrastructure to Azure (false validates only)
         type: boolean
         default: true
 
@@ -19,11 +25,29 @@ env:
   DOTNET_NOLOGO: true
 
 jobs:
+  artifacts:
+    name: Build .NET artifacts
+    uses: ./.github/workflows/artifacts.yml
   build:
+    name: Test .NET artifacts
+    needs: artifacts
     uses: ./.github/workflows/build.yml
+    with:
+      prebuilt: true
   verify:
+    name: Verify runtime artifacts
+    needs: artifacts
     uses: ./.github/workflows/verify.yml
+    with:
+      prebuilt: true
+  pack:
+    name: Verify package installation
+    needs: artifacts
+    uses: ./.github/workflows/pack.yml
+    with:
+      prebuilt: true
   infrastructure:
+    name: Validate Azure infrastructure
     if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/azure-ci')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -38,10 +62,6 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
-      - uses: ./.github/actions/setup-puck
-      - name: Test deployment scripts
-        shell: bash
-        run: dotnet test tests/Puck.Cli.Tests -c Release --filter FullyQualifiedName~BundleCommandTests
       - uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
@@ -50,24 +70,20 @@ jobs:
       - name: Install pinned Bicep
         run: az bicep install --version v0.46.1
       - name: Restore pinned bvm Template Specs and compile infrastructure
-        run: |
-          mkdir -p artifacts
-          az bicep build --file src/Puck.Azure.Resources/main.bicep --outfile artifacts/infrastructure.json
-          az bicep build-params --file src/Puck.Azure.Resources/main.bicepparam --outfile artifacts/parameters.json
+        run: dotnet run -c Release --file build/Azure.cs -- build-infrastructure
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: azure-infrastructure
-          path: |
-            artifacts/infrastructure.json
-            artifacts/parameters.json
+          path: artifacts/infrastructure
           if-no-files-found: error
 
   deploy:
+    name: Deploy and verify Azure production
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && inputs.deploy &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/azure-ci'))
-    needs: [build, verify, infrastructure, applications, containers]
+    needs: [build, verify, pack, infrastructure, applications, containers]
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     environment:
@@ -91,6 +107,8 @@ jobs:
         run: dotnet run -c Release --file build/Azure.cs -- current
       - uses: ./.github/actions/setup-puck
         if: steps.current.outputs.deploy == 'true'
+        with:
+          artifact: nuget-packages
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         if: steps.current.outputs.deploy == 'true'
         with:
@@ -112,10 +130,10 @@ jobs:
       - name: Reconcile the production platform
         if: steps.current.outputs.deploy == 'true'
         shell: bash
-        run: dotnet run -c Release --file build/Azure.cs -- deploy-infrastructure
+        run: dotnet run -c Release --file build/Azure.cs -- deploy-infrastructure --infrastructure-artifacts artifacts/source/azure-infrastructure
       - name: Install QUIC for production verification
         if: steps.current.outputs.deploy == 'true'
-        run: bash build/Install-Quic.sh
+        run: dotnet run -c Release --file build/InstallQuic.cs
       - name: Publish containers and apply application configuration
         id: release
         if: steps.current.outputs.deploy == 'true'
@@ -176,6 +194,8 @@ jobs:
           if-no-files-found: error
 
   applications:
+    name: Assemble the application bundle
+    needs: artifacts
     runs-on: windows-2025
     timeout-minutes: 60
     steps:
@@ -186,15 +206,17 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
-      - name: Install WebAssembly tools
-        run: dotnet workload install wasm-tools
       - uses: ./.github/actions/setup-puck
         with:
-          candidate: true
+          artifact: nuget-packages
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: runtime-payloads
+          path: artifacts/runtime
 
       - name: Build and verify deployment bundle
         shell: bash
-        run: dotnet run -c Release --file build/Azure.cs -- build
+        run: dotnet run -c Release --file build/Azure.cs -- build --runtime-artifacts artifacts/runtime
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: azure-applications
@@ -202,7 +224,8 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
 
-  containers:
+  container-images:
+    name: Build container (${{ matrix.image }})
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
@@ -220,6 +243,33 @@ jobs:
           PROJECT: ${{ matrix.project }}
           IMAGE: ${{ matrix.image }}
         run: docker build --file "src/$PROJECT/Dockerfile" --tag "puck/$IMAGE:$GITHUB_SHA" .
+      - name: Save the built image
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: docker save "puck/$IMAGE:$GITHUB_SHA" | gzip > image.tar.gz
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: azure-${{ matrix.image }}
+          path: image.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+
+  containers:
+    name: Verify container (${{ matrix.image }})
+    needs: [artifacts, container-images]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [web-actors, world-silo]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: azure-${{ matrix.image }}
+      - name: Load this run's image
+        run: docker load --input image.tar.gz
       - name: Smoke-test actor startup
         if: matrix.image == 'web-actors'
         run: |
@@ -236,20 +286,12 @@ jobs:
           global-json-file: global.json
       - name: Install QUIC for silo verification
         if: matrix.image == 'world-silo'
-        run: bash build/Install-Quic.sh
+        run: dotnet run -c Release --file build/InstallQuic.cs
       - uses: ./.github/actions/setup-puck
         if: matrix.image == 'world-silo'
+        with:
+          artifact: nuget-packages
       - name: Verify primary Puck activation, QUIC, and checkpoint recovery
         if: matrix.image == 'world-silo'
         shell: bash
         run: dotnet run -c Release --file build/Azure.cs -- test-world-container --image "puck/world-silo:$GITHUB_SHA"
-      - name: Save the tested image
-        env:
-          IMAGE: ${{ matrix.image }}
-        run: docker save "puck/$IMAGE:$GITHUB_SHA" | gzip > image.tar.gz
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: azure-${{ matrix.image }}
-          path: image.tar.gz
-          compression-level: 0
-          if-no-files-found: error

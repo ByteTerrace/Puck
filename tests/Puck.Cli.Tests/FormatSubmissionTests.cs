@@ -9,7 +9,7 @@ namespace Puck.Cli.Tests;
 
 public sealed class FormatSubmissionTests {
     [Fact]
-    public async Task AFormattingCommitUsesAnExpectedHeadAndDispatchesAllChecks() {
+    public async Task AFormattingCommitUsesAnExpectedHeadAndDispatchesTheSharedVerificationGraphOnce() {
         using var handler = new GitHubHandler(scenario: "apply");
         using var client = new HttpClient(handler: handler) { BaseAddress = new Uri(uriString: "https://api.invalid/") };
 
@@ -20,7 +20,8 @@ public sealed class FormatSubmissionTests {
         Assert.Equal(expected: GitHubHandler.Head, actual: ((string?)input["expectedHeadOid"]));
         Assert.Equal(expected: "feature", actual: ((string?)input["branch"]!["refName"]));
         Assert.Single(collection: input["fileChanges"]!["additions"]!.AsArray());
-        Assert.Equal(expected: 4, actual: handler.Dispatches.Count);
+        Assert.Equal(expected: 2, actual: handler.Dispatches.Count);
+        Assert.Single(handler.Dispatches, item => item.Path.Contains("format.yml", StringComparison.Ordinal));
         Assert.Equal(expected: "false", actual: ((string?)handler.Dispatches.Single(predicate: item => item.Path.Contains(comparisonType: StringComparison.Ordinal, value: "azure.yml")).Body["inputs"]!["deploy"]));
     }
     [InlineData("stale")]
@@ -67,7 +68,7 @@ public sealed class FormatSubmissionTests {
 
         await new FormatSubmission(client: client).RunAsync(repository: "owner/Puck", runId: 12, graphUrl: "https://api.invalid/graphql");
         Assert.Empty(collection: handler.Commits);
-        Assert.Equal(expected: 4, actual: handler.Dispatches.Count);
+        Assert.Equal(expected: 2, actual: handler.Dispatches.Count);
     }
 
     private sealed class GitHubHandler : HttpMessageHandler {

@@ -1,51 +1,26 @@
-name: Pack
-
-# Packs every opted-in project and validates the internal dependency closure.
-# publish.yml selects its batch from this validated artifact without rebuilding it.
+name: Verify package installation
+run-name: Package installation — ${{ github.ref_name }}
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
   workflow_call:
+    inputs:
+      prebuilt:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
-concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('pack-pr-{0}', github.ref) || format('pack-run-{0}', github.run_id) }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
-  pack:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          global-json-file: global.json
-
-      - uses: ./.github/actions/setup-puck
-
-      - name: Test release selection and dependency validation
-        run: dotnet test tests/Puck.Cli.Tests -c Release --filter "FullyQualifiedName~NuGetCommandTests|FullyQualifiedName~BundleCommandTests"
-
-      - name: Pack blessed projects
-        run: puck nuget pack
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: nuget-packages
-          path: |
-            artifacts/packages/*.nupkg
-            artifacts/packages/*.snupkg
-          if-no-files-found: error
-
+  artifacts:
+    name: Build .NET artifacts
+    if: ${{ !inputs.prebuilt }}
+    uses: ./.github/workflows/artifacts.yml
   install:
-    needs: pack
+    name: Install and exercise CLI (${{ matrix.os }})
+    needs: artifacts
+    if: ${{ !cancelled() && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
     strategy:
       fail-fast: false
       matrix:

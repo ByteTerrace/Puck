@@ -49,6 +49,9 @@ internal static class AutomationProcess {
         var root = RepositoryPaths.FindRoot()!;
         var local = Path.Combine(path1: root, path2: ".tmp/puck-ci", path3: (OperatingSystem.IsWindows() ? "puck.exe" : "puck"));
         if (!File.Exists(local)) {
+            if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true") {
+                throw new FileNotFoundException("Install this run's CLI artifact before invoking deployment automation; CI consumers cannot bootstrap another build.");
+            }
             await RunAsync("dotnet", ["run", "-c", "Release", "--file", Path.Combine(root, "build/Toolchain.cs"), "--", "setup"]);
         }
         return await RunAsync(executable: local, arguments: arguments);

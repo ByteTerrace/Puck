@@ -25,8 +25,9 @@ internal static class AzureAutomation {
         if (args is [] or ["-h" or "--help"]) {
             Console.WriteLine(value: """
                 dotnet run -c Release --file build/Azure.cs -- <command> [options]
-                  build [--output-directory artifacts/azure]
-                  deploy-infrastructure [--resource-group byteterrace]
+                  build [--output-directory artifacts/azure] [--runtime-artifacts DIR]
+                  build-infrastructure [--output-directory artifacts/infrastructure]
+                  deploy-infrastructure [--resource-group byteterrace] [--infrastructure-artifacts DIR]
                   deploy-applications --artifacts-directory DIR --commit SHA
                   deploy-world-platform [--resource-group byteterrace]
                   deploy-world-mcp [--resource-group byteterrace] [--plan-only]
@@ -47,8 +48,10 @@ internal static class AzureAutomation {
             return ((args.Length == 0) ? 2 : 0);
         }
         var allowed = new HashSet<string>(collection: args[0] switch {
-            "build" => ["output-directory"],
-            "deploy-infrastructure" or "deploy-world-platform" or "deploy-world" => ["resource-group"],
+            "build" => ["output-directory", "runtime-artifacts"],
+            "build-infrastructure" => ["output-directory"],
+            "deploy-infrastructure" => ["resource-group", "infrastructure-artifacts"],
+            "deploy-world-platform" or "deploy-world" => ["resource-group"],
             "deploy-world-mcp" => ["resource-group", "plan-only"],
             "deploy-applications" => ["artifacts-directory", "commit", "resource-group"],
             "publish-static" => ["bundle-directory", "resource-group"],
@@ -78,6 +81,7 @@ internal static class AzureAutomation {
         if (Path.GetFullPath(path: Environment.CurrentDirectory) != root) { throw new ArgumentException(message: "Run Azure automation from the repository root."); }
         switch (args[0]) {
             case "build": await BuildAsync(); break;
+            case "build-infrastructure": await BuildInfrastructureAsync(); break;
             case "deploy-infrastructure": await DeployInfrastructureAsync(); break;
             case "deploy-applications": await DeployApplicationsAsync(); break;
             case "deploy-world-platform": await DeployWorldPlatformAsync(); break;
@@ -147,8 +151,14 @@ internal static class AzureAutomation {
         var commit = await RunAsync(executable: "git", arguments: ["rev-parse", "HEAD"], capture: true);
 
         Environment.SetEnvironmentVariable(value: "true", variable: "CI");
-        await RunAsync(executable: "dotnet", arguments: ["restore", "src/Puck.Azure.Functions", "--locked-mode"]);
-        await RunAsync(executable: "dotnet", arguments: ["publish", "src/Puck.Azure.Functions", "-c", "Release", "--no-restore", "-o", Path.Combine(path1: output, path2: "functions")]);
+        var runtimeArtifacts = Option("runtime-artifacts");
+        if (runtimeArtifacts.Length == 0) {
+            await RunAsync(executable: "dotnet", arguments: ["restore", "src/Puck.Azure.Functions", "--locked-mode"]);
+            await RunAsync(executable: "dotnet", arguments: ["publish", "src/Puck.Azure.Functions", "-c", "Release", "--no-restore", "-o", Path.Combine(path1: output, path2: "functions")]);
+        } else {
+            if (Text(Read(Path.Combine(runtimeArtifacts, "source.json"))["commit"]) != commit) { throw new InvalidDataException("Runtime artifacts belong to another commit."); }
+            CopyDirectory(Path.Combine(runtimeArtifacts, "functions"), Path.Combine(output, "functions"));
+        }
         foreach (var file in new[] { "host.json", "worker.config.json", "functions.metadata", "Puck.Azure.Functions.dll" }) {
             if (!File.Exists(path: Path.Combine(path1: output, path2: "functions", path3: file))) { throw new IOException(message: $"Functions publish omitted {file}"); }
         }
@@ -157,8 +167,12 @@ internal static class AzureAutomation {
 
         sentinel["value"] = commit;
         Write(path: Path.Combine(path1: output, path2: "configuration.json"), value: configuration);
-        await RunAsync(executable: "dotnet", arguments: ["restore", "src/Puck.World.Browser", "--locked-mode"]);
-        await RunAsync(executable: "dotnet", arguments: ["publish", "src/Puck.World.Browser", "-c", "Release", "--no-restore"]);
+        if (runtimeArtifacts.Length == 0) {
+            await RunAsync(executable: "dotnet", arguments: ["restore", "src/Puck.World.Browser", "--locked-mode"]);
+            await RunAsync(executable: "dotnet", arguments: ["publish", "src/Puck.World.Browser", "-c", "Release", "--no-restore"]);
+        } else {
+            CopyDirectory(Path.Combine(runtimeArtifacts, "browser"), "src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle");
+        }
         await PuckAsync("official", "build", "--out", Path.Combine(path1: output, path2: "official"), "--channel", "stable", "--engine", "src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle");
         await PuckAsync("official", "verify", "--base", Path.Combine(path1: output, path2: "official"), "--channel", "stable", "--expect-commit", commit);
         await PuckAsync("official", "build", "--out", "artifacts/official", "--channel", "dev", "--engine", "src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle");
@@ -173,6 +187,15 @@ internal static class AzureAutomation {
         CopyDirectory(source: "src/Puck.Dashboard/dist-deploy", destination: Path.Combine(path1: output, path2: "dashboard-storage"));
         await PuckAsync("docs", "build", Path.Combine(path1: output, path2: "dashboard-storage"));
         await PuckAsync("bundle", "create", output, commit);
+    }
+    private static async Task BuildInfrastructureAsync() {
+        var output = Path.GetFullPath(Option("output-directory", "artifacts/infrastructure"));
+        if (Directory.Exists(output)) { throw new IOException($"Use a fresh output directory: {output}"); }
+        Directory.CreateDirectory(output);
+        await AzAsync("bicep", "build", "--file", "src/Puck.Azure.Resources/main.bicep", "--outfile", Path.Combine(output, "infrastructure.json"));
+        await AzAsync("bicep", "build", "--file", "src/Puck.Azure.Resources/worldSiloCompute.bicep", "--outfile", Path.Combine(output, "world-silo-compute.json"));
+        await AzAsync("bicep", "build-params", "--file", "src/Puck.Azure.Resources/main.bicepparam", "--outfile", Path.Combine(output, "parameters.json"));
+        Write(Path.Combine(output, "source.json"), new JsonObject { ["commit"] = await RunAsync("git", ["rev-parse", "HEAD"], capture: true) });
     }
     private static async Task SetOwnerAsync(string group) {
         Environment.SetEnvironmentVariable(variable: "BICEPPARAM_OWNER_OBJECT_ID", value: await AzAsync("identity", "show", "--name", "bytrcidpzzz", "-g", group, "--query", "principalId", "-o", "tsv"));
@@ -194,9 +217,19 @@ internal static class AzureAutomation {
             }
         }
         Directory.CreateDirectory(path: "artifacts");
-        await AzAsync("bicep", "build", "--file", "src/Puck.Azure.Resources/main.bicep", "--outfile", "artifacts/production-infrastructure.json");
-        await AzAsync("bicep", "build-params", "--file", "src/Puck.Azure.Resources/main.bicepparam", "--outfile", "artifacts/production-parameters.json");
+        var infrastructure = Option("infrastructure-artifacts");
+        if (infrastructure.Length == 0) {
+            if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true") { throw new InvalidOperationException("CI deployment requires its compiled infrastructure artifact."); }
+            await AzAsync("bicep", "build", "--file", "src/Puck.Azure.Resources/main.bicep", "--outfile", "artifacts/production-infrastructure.json");
+            await AzAsync("bicep", "build-params", "--file", "src/Puck.Azure.Resources/main.bicepparam", "--outfile", "artifacts/production-parameters.json");
+        } else {
+            if (Text(Read(Path.Combine(infrastructure, "source.json"))["commit"]) != await RunAsync("git", ["rev-parse", "HEAD"], capture: true)) { throw new InvalidDataException("Infrastructure artifacts belong to another commit."); }
+            File.Copy(Path.Combine(infrastructure, "infrastructure.json"), "artifacts/production-infrastructure.json", overwrite: true);
+            File.Copy(Path.Combine(infrastructure, "parameters.json"), "artifacts/production-parameters.json", overwrite: true);
+            File.Copy(Path.Combine(infrastructure, "world-silo-compute.json"), "artifacts/production-world-compute.json", overwrite: true);
+        }
         var parameters = Read(path: "artifacts/production-parameters.json");
+        parameters["parameters"]!["owner"]!["value"] = new JsonObject { ["objectId"] = owner, ["principalType"] = "ServicePrincipal" };
         var name = Text(value: parameters["parameters"]!["resources"]!["value"]!["actors"]!["name"]);
         var image = await AzAsync("containerapp", "show", "--name", name, "-g", group, "--query", "properties.template.containers[0].image", "-o", "tsv");
 
@@ -760,7 +793,9 @@ internal static class AzureAutomation {
         }
     }
     private static async Task ApplyWorldComputeAsync(string group, string scaleSet, string parameters) {
-        await AzAsync("deployment", "group", "create", "-g", group, "--name", (scaleSet + "-application"), "--template-file", "src/Puck.Azure.Resources/worldSiloCompute.bicep", "--parameters", ("@" + parameters), "-o", "none");
+        const string CompiledCompute = "artifacts/production-world-compute.json";
+        if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true" && !File.Exists(CompiledCompute)) { throw new FileNotFoundException("CI world deployment requires its compiled compute template."); }
+        await AzAsync("deployment", "group", "create", "-g", group, "--name", (scaleSet + "-application"), "--template-file", File.Exists(CompiledCompute) ? CompiledCompute : "src/Puck.Azure.Resources/worldSiloCompute.bicep", "--parameters", ("@" + parameters), "-o", "none");
         await AzAsync("vmss", "update-instances", "-g", group, "--name", scaleSet, "--instance-ids", "*", "-o", "none");
     }
     private static async Task WorldGuestAsync(string group, string worker, string script) {

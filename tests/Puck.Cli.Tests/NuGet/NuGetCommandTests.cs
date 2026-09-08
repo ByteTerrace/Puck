@@ -7,6 +7,11 @@ namespace Puck.Cli.Tests.NuGet;
 
 public sealed class NuGetCommandTests {
     [Fact]
+    public async Task PackRejectsDuplicateOrUnknownBuildOptionsBeforeProducingArtifacts() {
+        Assert.Equal(1, await RunAsync(["pack", "--no-build", "--no-build"]));
+        Assert.Equal(1, await RunAsync(["pack", "--unknown"]));
+    }
+    [Fact]
     public void CatalogFindsNestedOptInsAndIgnoresBuildOutputs() {
         var root = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-package-catalog-{Guid.NewGuid():N}");
 

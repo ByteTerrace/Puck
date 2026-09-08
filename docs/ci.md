@@ -1,10 +1,12 @@
 # CI and releases
 
 GitHub Actions validates each pull request and push to `main` through `azure.yml`.
-It calls the reusable build and verification workflows and waits for their gates
-before deployment. Packaging runs separately on the same changes; a versioned
-NuGet release calls build, verification, packaging, and documentation for its own
-commit before publishing.
+The **Release Azure** workflow produces each target's artifacts once, then passes
+them to verification and deployment jobs. A versioned **Release NuGet packages**
+run uses the same artifact producer before selecting and publishing its batch.
+Pushes have one production deployment path; the separate World workflow has
+been retired. Use Release Azure's manual dispatch for an explicit rollout or
+validation-only run.
 
 All external actions are pinned to full commit SHAs, as required by this
 repository's Actions policy. Keep the adjacent version comments when updating
@@ -12,17 +14,22 @@ the pins; a version tag by itself prevents the workflow from starting.
 
 ## Build and validate
 
-`build.yml` installs the .NET SDK from `global.json`, the `wasm-tools`
+**Build release artifacts** (`artifacts.yml`) installs the .NET SDK from `global.json`, the `wasm-tools`
 workload, and a versioned, checksum-checked DXC archive on Windows. It restores
-the solution in locked mode, builds Release with warnings as errors, runs the
-solution's tests, and publishes `Puck.World` as a framework-dependent artifact.
+the solution in locked mode and compiles Release with warnings as errors. It
+packages those assemblies with `puck nuget pack --no-build`, publishes the
+Functions and WebAssembly payloads without rebuilding managed assemblies, and
+publishes `Puck.World` as a framework-dependent artifact. WebAssembly native
+compilation and trimming remain part of its one publish operation.
 The download requires .NET 10 and suitable graphics hardware to run. A build
 artifact is not a signed installer or a verified GPU rendering session.
 SDK roll-forward is disabled: selecting a newer SDK on a hosted runner changes
 implicit linker dependencies and invalidates the locked restore. Upgrade the SDK
 and its dependency locks together.
-The solution build produces the browser AppBundle for the CLI integration tests,
-which resolve it inside the current checkout. GPU tests skip when D3D11 reports an unsupported
+**Test compiled solution** (`build.yml`) restores the compiled output archive into
+a fresh Windows checkout, verifies its commit and platform, restores dependency
+metadata, and runs tests with `--no-build`. CLI integration tests resolve the
+producer's browser AppBundle inside that checkout. GPU tests skip when D3D11 reports an unsupported
 device, including the video capability needed by the shared-texture cleanup test.
 Native and SDF culling timing benchmarks are tagged `Category=Performance` and
 excluded from this shared-runner gate; their calibrated ceilings remain available
@@ -32,14 +39,44 @@ same assembly. Test projects run one at a time so their independent thread pools
 do not oversubscribe the runner and starve socket handshakes. Tests within each
 assembly retain their configured concurrency; production deadlines are unchanged.
 Tests stop after fifteen minutes without a test event and collect a small hang
-dump. The workflow uploads the MSBuild binary log, available TRX results, and
-test diagnostics even when a later step fails.
+dump. The producer uploads the MSBuild binary log; the test consumer uploads
+available TRX results and diagnostics even when a later step fails.
 
-`verify.yml` owns the emulator batteries, browser AppBundle and Node harness,
-and generated schema/name-registry checks. Its nightly frontier measures
+**Verify runtime behavior** (`verify.yml`) runs the producer's emulator binaries
+on Linux, its exact deployable AppBundle under Node, and its candidate CLI for
+generated schema/name-registry checks. The browser job fails if its input bundle
+is missing. Its nightly frontier measures
 known failing or inconclusive emulator cases separately from release gates.
-Test reports are retained as artifacts and job summaries on every event, including
+The nightly frontier builds its own battery for that scheduled run. Test reports
+are retained as artifacts and job summaries on every event, including
 fork pull requests. Verification needs only a read-only repository token.
+
+The Azure graph builds its two Linux container images independently of the Windows
+producer. Container verification loads the saved image archives; deployment loads
+those same archives after every required check passes. Application assembly copies
+the producer's Functions and browser payloads, builds the dashboard and API docs,
+then seals the deployment bundle. No deployment job compiles Puck or rebuilds an
+image. Artifact consumers download immutable artifacts from their own workflow
+run, and missing artifacts fail rather than starting a fallback build.
+Infrastructure compilation likewise runs once. Deployment verifies the compiled
+template's source identity and binds the current deployment principal and
+existing Actors digest into its parameter document before the no-delete plan;
+it does not compile Bicep again.
+
+```mermaid
+flowchart LR
+    source[Source commit] --> managed[Compile and publish .NET artifacts]
+    source --> images[Build Linux images]
+    managed --> tests[Solution tests]
+    managed --> runtime[Runtime and package verification]
+    managed --> bundle[Assemble application bundle]
+    managed --> containers[Verify saved images]
+    images --> containers
+    tests --> deploy[Deploy verified artifacts]
+    runtime --> deploy
+    bundle --> deploy
+    containers --> deploy
+```
 
 ## Automatic PR formatting
 
@@ -66,13 +103,14 @@ by the CLI tests. It checks the producing workflow and successful build job,
 limits artifact size and file count, and accepts only ordinary C# files already
 changed by that PR. The write token never reaches the PR's build or formatter.
 
-After committing, the submitter explicitly dispatches formatting, Azure's
-build/verification workflow with deployment disabled, packaging, and docs for
-the updated branch. This avoids relying on unattended checks from a
+After committing, the submitter explicitly dispatches formatting and Release
+Azure with deployment disabled for the updated branch. Azure's shared graph
+includes packaging and docs. This avoids duplicate artifact production and
+relying on unattended checks from a
 `GITHUB_TOKEN` push. A retry after a successful commit resumes these dispatches
 without creating another commit.
 
-The **Formatting** check fails on the original commit while a fix is needed and
+The **Check source formatting** workflow's **Formatting** check fails on the original commit while a fix is needed and
 passes on the formatted commit. Add this check to the repository's required
 status checks after the workflow lands on the default branch. Workflow YAML
 cannot make a check mandatory in a GitHub ruleset. Both formatting workflows
@@ -106,7 +144,7 @@ It finds the checkout by walking from the executable directory, then the working
 directory, to `Puck.slnx`. Runtime data lookup therefore works with CI's mapped
 compiler source paths; it never treats a PDB path such as `/_/` as a disk path.
 
-`pack.yml` runs the same command a contributor can use locally:
+The producer runs the same package validation a contributor can use locally:
 
 ```sh
 puck nuget pack artifacts/packages
@@ -116,7 +154,9 @@ Run from the repository root and use an empty output directory. The CLI discover
 explicit source-project `IsPackable` opt-ins, reads IDs and versions through
 MSBuild, restores locked dependencies, and packs every opted-in library and the CLI tool. It
 then opens the actual packages to check their identities, symbol packages,
-README, licenses, icon, and internal dependency closure. Missing release
+README, licenses, icon, and internal dependency closure. CI adds `--no-build` to
+reuse the already compiled solution and its locked restore; this mode fails if
+required outputs are absent. Missing release
 dependencies fail before the artifact can reach NuGet.org.
 
 For the full local build, install DXC on `PATH` and the workload first:
@@ -143,10 +183,15 @@ payload contains its runtime dependencies; installing it does not require
 publishing every Puck library in the same batch.
 
 The official CLI version CI consumes lives in `.config/dotnet-tools.json`.
-The `setup-puck` action installs that exact package into an isolated tool
+The default `setup-puck` action installs that exact package into an isolated tool
 directory using the repository's `nuget.config`, then adds it to the job's PATH.
 A failed official restore fails the job. CI never silently replaces a missing
-or broken published package with a local build.
+or broken published package with a local build. Release workflows explicitly
+select `artifact: nuget-packages` instead: every consumer installs the candidate
+that the run's producer has already built. `Toolchain.cs -- install-candidate`
+uses an exclusive local feed and private package cache so a published package
+with the same version cannot replace those bytes. Azure automation refuses to
+bootstrap a missing CLI on a GitHub runner.
 
 Before the first official release, `.config/puck-bootstrap.json` explicitly
 enables source bootstrap and the tool manifest has no Puck entry. In that state,
@@ -154,7 +199,7 @@ enables source bootstrap and the tool manifest has no Puck entry. In that state,
 installs the local package. No Puck command is required to manufacture the first
 CLI. A missing pin with bootstrap disabled is an error.
 
-`pack.yml` installs the exact candidate package on clean Windows and Linux
+**Verify package installation** (`pack.yml`) installs the exact candidate package on clean Windows and Linux
 runners and exercises command dispatch, native-backed search, declarations,
 and a Roslyn workspace query. Publishing waits for both installation gates.
 After a batch containing the CLI is uploaded, `publish.yml` verifies NuGet.org
@@ -167,13 +212,13 @@ dotnet run -c Release --file build/Toolchain.cs -- pin 0.1.0-alpha
 ```
 
 The command verifies installation before editing the manifest or bootstrap
-policy. It does not upload packages or commit files. Subsequent releases use the
-previously adopted CLI to orchestrate their package release; the new CLI adopts
-the shared version without forcing an immediate change to CI's tooling pin.
+policy. It does not upload packages or commit files. Explicit artifact consumers
+use their run's candidate CLI; standalone setup uses the adopted official pin.
+The candidate adopts the shared version without changing that pin.
 
 Source-dependent operations use the candidate CLI explicitly. Schema and name
-registry checks already build the checkout's CLI, the Azure application job
-requests `candidate: true`, and the silo Docker build publishes its own composer.
+registry checks and Azure application assembly consume the producer's candidate
+package, and the silo Docker build publishes its Linux composer.
 An older CLI's embedded world model must not validate a new checkout's schema.
 
 For local use after a pin is committed, run `dotnet tool restore --configfile
@@ -406,11 +451,13 @@ as its container digest. A distribution change requires draining and replacing
 the worker; changing only the scale-set model does not establish that its
 existing VM runs the new OS.
 
-The `Puck world` workflow builds and tests the silo independently of website and
-Entra application reconciliation. Before publishing, it runs the Entra admission,
-silo schema, and lifecycle recovery laws with locked dependencies, then boots the
-candidate container twice to verify checkpoint recovery and QUIC. It deploys with
-the same `zzz` identity and production concurrency group.
+Release Azure owns the silo release alongside website and Entra reconciliation.
+Runtime verification runs the compiled Entra admission, silo schema, and lifecycle
+recovery laws on Linux. Container verification boots the saved candidate image
+twice to verify checkpoint recovery and QUIC. Deployment uses the existing `zzz`
+identity and production concurrency group. The runner's QUIC installer is a
+checksum-verified C# app for Ubuntu 24.04; the VM's pre-container host bootstrap
+remains separate because it must run before Docker and the runtime are ready.
 `build/Azure.cs -- deploy-world-platform` creates the
 runtime identity and its scoped grants. Its `deploy-world` command publishes composed
 world definitions, deploys the VMSS model and applies it to existing workers.

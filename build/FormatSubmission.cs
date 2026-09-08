@@ -19,7 +19,7 @@ internal sealed class FormatSubmission {
         var workflow = await GetAsync(path: $"{prefix}/actions/workflows/format.yml");
 
         if ((((long?)run["workflow_id"]) != ((long?)workflow["id"])) || (((string?)run["event"]) is not ("pull_request" or "workflow_dispatch"))) {
-            throw new InvalidDataException(message: "The artifact must come from the repository's Format workflow.");
+            throw new InvalidDataException(message: "The artifact must come from the repository's Check source formatting workflow.");
         }
         var jobs = await GetAsync(path: $"{prefix}/actions/runs/{runId}/attempts/{((int)run["run_attempt"]!)}/jobs?per_page=100");
 
@@ -166,9 +166,7 @@ internal sealed class FormatSubmission {
         // each workflow's own read-only permissions and validate the new head without cloud deployment.
         await PostAsync(path: $"{prefix}/actions/workflows/format.yml/dispatches", value: new JsonObject { ["ref"] = branch, ["inputs"] = new JsonObject { ["base"] = baseSha } });
         await PostAsync(path: $"{prefix}/actions/workflows/azure.yml/dispatches", value: new JsonObject { ["ref"] = branch, ["inputs"] = new JsonObject { ["deploy"] = "false" } });
-        await PostAsync(path: $"{prefix}/actions/workflows/pack.yml/dispatches", value: new JsonObject { ["ref"] = branch });
-        await PostAsync(path: $"{prefix}/actions/workflows/docs.yml/dispatches", value: new JsonObject { ["ref"] = branch });
-        Report(message: "Dispatched formatting, build/verification, packaging and documentation checks for the updated branch.");
+        Report(message: "Dispatched formatting and the shared Azure validation graph, including packages and documentation, for the updated branch.");
     }
     private async Task<JsonNode> GetAsync(string path) {
         using var response = await m_client.GetAsync(requestUri: path);

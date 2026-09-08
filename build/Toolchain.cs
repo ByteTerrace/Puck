@@ -24,13 +24,24 @@ internal static class Toolchain {
         var manifest = Read(path: manifestPath);
         var tools = manifest["tools"]!.AsObject();
 
+        if (args is ["install-candidate", var candidateFeed]) {
+            var candidatePackage = Directory.GetFiles(candidateFeed, "ByteTerrace.Puck.Cli.*.nupkg").Single();
+            var version = Path.GetFileName(candidatePackage)["ByteTerrace.Puck.Cli.".Length..^".nupkg".Length];
+            var directory = Path.Combine(root, ".tmp/puck-ci");
+            if (Directory.Exists(directory)) { throw new IOException($"Use a fresh tool directory: {directory}"); }
+            await RunAsync("dotnet", ["tool", "install", Package, "--version", version, "--tool-path", directory, "--configfile", CandidateConfig(root, candidateFeed), "--no-http-cache"]);
+            await VerifyVersionAsync(Path.Combine(directory, OperatingSystem.IsWindows() ? "puck.exe" : "puck"), version);
+            ExportPath(directory);
+            return 0;
+        }
+
         if (args is ["smoke", var feed]) {
             var smokePackage = Directory.GetFiles(path: feed, searchPattern: "ByteTerrace.Puck.Cli.*.nupkg").Single();
             var smokeVersion = Path.GetFileName(path: smokePackage)[("ByteTerrace.Puck.Cli.".Length)..^".nupkg".Length];
             var directory = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-package-smoke-{Guid.NewGuid():N}");
 
             try {
-                await RunAsync(executable: "dotnet", arguments: ["tool", "install", Package, "--version", smokeVersion, "--tool-path", directory, "--source", Path.GetFullPath(path: feed), "--configfile", config, "--no-http-cache"]);
+                await RunAsync(executable: "dotnet", arguments: ["tool", "install", Package, "--version", smokeVersion, "--tool-path", directory, "--configfile", CandidateConfig(root, feed), "--no-http-cache"]);
                 var executable = Path.Combine(path1: directory, path2: (OperatingSystem.IsWindows() ? "puck.exe" : "puck"));
 
                 await VerifyVersionAsync(executable: executable, expected: smokeVersion);
@@ -81,7 +92,7 @@ internal static class Toolchain {
             return 0;
         }
         if (args is not ["setup" or "candidate"] and not ["setup" or "candidate", _]) {
-            Console.WriteLine(value: "dotnet run -c Release --file build/Toolchain.cs -- <setup [tool-directory]|candidate [tool-directory]|version|pin VERSION|smoke PACKAGE_DIRECTORY>");
+            Console.WriteLine(value: "dotnet run -c Release --file build/Toolchain.cs -- <setup [tool-directory]|candidate [tool-directory]|install-candidate PACKAGE_DIRECTORY|version|pin VERSION|smoke PACKAGE_DIRECTORY>");
             return ((args is ["--help" or "-h"]) ? 0 : 2);
         }
         var candidate = (args[0] == "candidate");
@@ -109,12 +120,23 @@ internal static class Toolchain {
         var package = Directory.GetFiles(path: packages, searchPattern: "*.nupkg").Single();
         var packedVersion = Path.GetFileName(path: package)[("ByteTerrace.Puck.Cli.".Length)..^".nupkg".Length];
         // Isolate candidate packages from the official tool manifest and NuGet's local-tool cache.
-        await RunAsync(executable: "dotnet", arguments: ["tool", "install", Package, "--version", packedVersion, "--tool-path", toolDirectory, "--source", packages, "--configfile", config, "--no-http-cache"]);
+        await RunAsync(executable: "dotnet", arguments: ["tool", "install", Package, "--version", packedVersion, "--tool-path", toolDirectory, "--configfile", CandidateConfig(root, packages), "--no-http-cache"]);
         await VerifyVersionAsync(executable: Path.Combine(path1: toolDirectory, path2: (OperatingSystem.IsWindows() ? "puck.exe" : "puck")), expected: packedVersion);
         ExportPath(directory: toolDirectory);
         return 0;
     }
 
+    private static string CandidateConfig(string root, string feed) {
+        // An exclusive feed and private cache prevent a same-version official package replacing the artifact.
+        var directory = Path.Combine(root, ".tmp", "puck-package-source-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "nuget.config");
+        new XDocument(new XElement("configuration",
+            new XElement("packageSources", new XElement("clear"), new XElement("add", new XAttribute("key", "candidate"), new XAttribute("value", Path.GetFullPath(feed)))),
+            new XElement("config", new XElement("add", new XAttribute("key", "globalPackagesFolder"), new XAttribute("value", Path.Combine(directory, "packages"))))))
+            .Save(path);
+        return path;
+    }
     private static void ExportPath(string directory) {
         Console.WriteLine(value: $"Puck CLI installed at {directory}");
         if (Environment.GetEnvironmentVariable(variable: "GITHUB_PATH") is { Length: > 0 } path) {

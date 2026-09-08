@@ -1,5 +1,5 @@
-name: Release & publish
-run-name: NuGet ${{ inputs.packages }} (${{ inputs.publish && 'publish' || 'validate only' }})
+name: Release NuGet packages
+run-name: NuGet ${{ inputs.publish && 'publication' || 'validation' }} — ${{ inputs.packages }} — ${{ github.ref_name }}
 
 # A version bump alone does not publish. Choose the batch explicitly; see docs/ci.md.
 # Keep this filename and the NuGet environment aligned with Trusted Publishing.
@@ -7,12 +7,12 @@ on:
   workflow_dispatch:
     inputs:
       packages:
-        description: 'all, or comma-separated full package IDs (ByteTerrace.Puck.Maths,ByteTerrace.Puck.Abstractions)'
+        description: 'Package selection: all, or full IDs separated by commas (for example ByteTerrace.Puck.Maths)'
         type: string
         required: true
         default: all
       publish:
-        description: Publish to NuGet.org after validation (false only prepares artifacts)
+        description: Publish the verified packages to NuGet.org (false validates and prepares artifacts only)
         type: boolean
         required: true
         default: false
@@ -27,6 +27,7 @@ concurrency:
 
 jobs:
   gate:
+    name: Validate release source and version
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -62,23 +63,41 @@ jobs:
             fi
           fi
 
-  pack:
+  artifacts:
+    name: Build .NET artifacts
     needs: gate
+    uses: ./.github/workflows/artifacts.yml
+
+  pack:
+    name: Verify package installation
+    needs: artifacts
     uses: ./.github/workflows/pack.yml
+    with:
+      prebuilt: true
 
   build:
-    needs: gate
+    name: Test .NET artifacts
+    needs: artifacts
     uses: ./.github/workflows/build.yml
+    with:
+      prebuilt: true
 
   verify:
-    needs: gate
+    name: Verify runtime artifacts
+    needs: artifacts
     uses: ./.github/workflows/verify.yml
+    with:
+      prebuilt: true
 
   docs:
-    needs: gate
+    name: Build API documentation
+    needs: artifacts
     uses: ./.github/workflows/docs.yml
+    with:
+      prebuilt: true
 
   prepare:
+    name: Prepare the selected package batch
     needs: [gate, pack]
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -97,6 +116,8 @@ jobs:
           global-json-file: global.json
 
       - uses: ./.github/actions/setup-puck
+        with:
+          artifact: nuget-packages
 
       - name: Select and validate the release batch
         env:
@@ -111,6 +132,7 @@ jobs:
           if-no-files-found: error
 
   publish:
+    name: Publish the verified package batch
     needs: [gate, prepare, build, verify, docs]
     if: inputs.publish
     runs-on: ubuntu-latest
@@ -137,6 +159,8 @@ jobs:
           path: release
 
       - uses: ./.github/actions/setup-puck
+        with:
+          artifact: nuget-packages
 
       - name: Verify the prepared artifacts
         env:

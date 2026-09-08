@@ -27,7 +27,7 @@ internal static class NuGetCommand {
             Console.WriteLine(value: """
                 puck nuget <command> [arguments]
                   version                           Read shared version; set GITHUB_OUTPUT when present
-                  pack [output-directory]           Pack and validate every opted-in project
+                  pack [output-directory] [--no-build] Pack and validate every opted-in project
                   prepare <input> <output> <ids>     Select all or comma-separated full package IDs
                   verify <directory>                Verify manifest, source, and artifact checksums
                   push <directory>                  Verify and upload using NUGET_API_KEY
@@ -47,8 +47,14 @@ internal static class NuGetCommand {
                     File.AppendAllText(contents: $"version={version}\n", path: githubOutput);
                 }
                 break;
-            case "pack" when (count is 1 or 2):
-                await PackAsync(root, Path.GetFullPath(path: ((count == 2) ? arguments[1] : "artifacts/packages")));
+            case "pack" when (count is >= 1 and <= 3):
+                var packArguments = arguments.Skip(1).ToArray();
+                var noBuild = packArguments.Contains("--no-build", StringComparer.Ordinal);
+                var directories = packArguments.Where(argument => argument != "--no-build").ToArray();
+                if (directories.Length > 1 || packArguments.Count(argument => argument == "--no-build") > 1 || directories.Any(argument => argument.StartsWith('-'))) {
+                    throw new ArgumentException("Expected pack [output-directory] [--no-build].");
+                }
+                await PackAsync(root, Path.GetFullPath(directories.SingleOrDefault() ?? "artifacts/packages"), noBuild);
                 break;
             case "prepare" when (count == 4):
                 using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(seconds: 60) }) {
@@ -123,7 +129,7 @@ internal static class NuGetCommand {
             throw new InvalidDataException(message: "Expected a full lowercase Git commit SHA.");
         }
     }
-    private static async Task PackAsync(string root, string output) {
+    private static async Task PackAsync(string root, string output, bool noBuild) {
         RequireEmpty(output: output);
         var version = ReadVersion(root: root);
         var projects = Packaging.PackableProjects.Discover(root: root).Select(selector: project => project.File).ToArray();
@@ -141,8 +147,10 @@ internal static class NuGetCommand {
                 throw new InvalidDataException(message: $"{id} overrides the shared version {version}.");
             }
             if (!expected.Add(item: id)) { throw new InvalidDataException(message: $"Duplicate package ID: {id}."); }
-            await CliProcess.RunCheckedAsync(root, "dotnet", ["restore", project, "--locked-mode"]);
-            await CliProcess.RunCheckedAsync(root, "dotnet", ["pack", project, "--configuration", "Release", "--no-restore", "--output", output]);
+            if (!noBuild) { await CliProcess.RunCheckedAsync(root, "dotnet", ["restore", project, "--locked-mode"]); }
+            List<string> pack = ["pack", project, "--configuration", "Release", "--no-restore", "--output", output];
+            if (noBuild) { pack.Add("--no-build"); }
+            await CliProcess.RunCheckedAsync(root, "dotnet", pack);
         }
         var catalog = ReadPackages(input: output, version: version);
 

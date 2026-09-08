@@ -232,7 +232,10 @@ initial bootstrap policy lives in `.config/puck-bootstrap.json`. Use
 `build/Toolchain.cs -- pin <version>` after publication to verify installation and
 prepare adoption. Never replace a failed official restore with a source build.
 Source-dependent schema, registry, and world composition commands must use the
-candidate CLI. PR formatting also uses the candidate CLI so it checks the rules
+candidate CLI. Release workflows build that candidate once in `artifacts.yml`;
+consumers install its immutable package artifact and must not bootstrap or
+recompile it. Runtime payloads and container images likewise pass from producers
+to verification and deployment without rebuilding. PR formatting also uses the candidate CLI so it checks the rules
 under review. See [CI tooling](docs/ci.md#the-cli-used-by-ci).
 
 PR formatting is automated by CI, which appends a bot commit on repository

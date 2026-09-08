@@ -1,11 +1,12 @@
-name: Format
+name: Check source formatting
+run-name: Formatting check — ${{ github.head_ref || github.ref_name }}
 
 on:
   pull_request:
   workflow_dispatch:
     inputs:
       base:
-        description: PR base commit to compare against
+        description: Full base commit SHA used to select the changed source files
         required: true
         type: string
 
@@ -38,14 +39,16 @@ jobs:
           global-json-file: global.json
       - name: Install WebAssembly tools
         run: dotnet workload install wasm-tools
-      - uses: ./.github/actions/setup-puck
-        with:
-          # The formatter's rules are part of the source under review.
-          candidate: true
+      - name: Install pinned DXC
+        run: dotnet run -c Release --file build/InstallDxc.cs
       - name: Restore and build semantic context
         run: |
           dotnet restore Puck.slnx --locked-mode
           dotnet build Puck.slnx -c Release --no-restore
+      - name: Install the already-compiled candidate formatter
+        run: |
+          dotnet pack src/Puck.Cli -c Release --no-build --no-restore -o artifacts/formatter-cli
+          dotnet run -c Release --file build/Toolchain.cs -- install-candidate artifacts/formatter-cli
       - name: Test formatter safety
         run: dotnet test tests/Puck.Cli.Tests -c Release --no-build --no-restore --filter FullyQualifiedName~Format
       - name: Format the PR's changed C# files and verify convergence
