@@ -97,82 +97,35 @@ stages, or end-user installation and self-update. Those remain separate release
 qualification work. The current release publishes NuGet libraries and the
 documentation site; desktop builds are downloadable CI artifacts.
 
-## Azure application staging
+## Azure production deployment
 
-`azure.yml` builds Functions, the dashboard, and the browser engine/content
-bundle, compiles both infrastructure templates, and builds Linux containers
-for Actors and World.Silo. The actor image must answer `/healthz` locally.
-The dashboard integration tests receive a real browser engine and official
-content tree. Every application payload is hashed in `release.json` and tied
-to the checkout commit. This workflow also runs on `codex/azure-ci` while the
-first hosted deployment is being qualified.
-The shared platform build authenticates before restoring its pinned `ts/bvm`
-Template Specs through `src/Puck.Azure.Resources/bicepconfig.json`. Pull requests
-compile the standalone staging template without credentials; the private platform
-restore runs only on trusted pushes and manual runs.
+`azure.yml` builds the prebuilt Functions payload, the dashboard's existing
+Storage/Front Door layout, and the stable official browser engine/content tree.
+It tests the dashboard against the real engine and builds Linux images for
+Actors and World.Silo. The actor image must answer `/healthz` before upload.
+Every application payload is hashed in `release.json` and tied to its source
+commit. Builds also run on `codex/azure-ci` while hosted deployment is qualified.
 
-The existing `Blobs` environment uses `bytrcidpzzz` (client ID
-`7508a16b-0f9b-4322-9bb9-481ad836c052`). Its Azure login variables are the same
-three listed above. The actual GitHub subject is
-`repo:ByteTerrace@18753984/Puck@1271519029:environment:Blobs`; this repository
-uses [immutable OIDC subjects](https://docs.github.com/en/actions/reference/security/oidc).
-Federation allows login; Azure role assignments still determine which operations
-can succeed. The identity job verifies login and reads the target resources.
+The platform build authenticates before restoring the pinned `ts/bvm` Template
+Specs through `src/Puck.Azure.Resources/bicepconfig.json`. Private restore runs
+on trusted pushes and manual runs; pull requests still build the applications
+and containers without Azure credentials.
 
-Run **Azure** manually with `deploy: true` and `channel: staging` to deploy
-the artifacts from that run. The staging deployment runs only from `main` or
-`codex/azure-ci`, and deployments serialize rather than cancel one another.
-`src/Puck.Azure.Resources/staging.bicep` provisions these applications inside
-the existing `byteterrace` resource group:
+The existing `Blobs` GitHub environment uses `bytrcidpzzz`, client ID
+`7508a16b-0f9b-4322-9bb9-481ad836c052`, with the three Azure variables listed above.
+Its federated subject is
+`repo:ByteTerrace@18753984/Puck@1271519029:environment:Blobs`.
+The environment name identifies the federation boundary; deployment targets the
+existing production resources. No separate staging environment is part of this
+workflow.
 
-| Application | Azure resource |
-| --- | --- |
-| Functions API | `bytrcfunctions-staging`, with its own Flex Consumption plan |
-| Provisioning actors | `bytrcactors-staging` |
-| World authority host | `bytrcsilo-staging` |
-| Dashboard and official browser content | `bytrcdashboard-staging` |
+Production uses `bytrcfuncp000`, Actors in `bytrccap001`, and the existing
+`bytrcfdp000` Front Door profile over `bytrcstp001`. Dashboard files follow the
+Brotli contract in `src/Puck.Dashboard/scripts/stageDeploy.mjs`; official files
+carry the manifest's media types and content hashes. Publishing must upload
+objects before switching the stable manifest, and preserve unrelated website
+and tenant blobs.
 
-Staging shares the existing network, runtime identities, registry, and backing
-Azure services. It is an application deployment environment, not a separate
-tenant or security boundary. Both Functions and Actors select only the
-`staging` App Configuration label, including their refresh sentinel and feature
-flags; an omitted `ConfigurationStore:Label` preserves the existing unlabelled
-production behavior. Staging also uses its own Orleans service ID, grain-state
-container, and DataProtection key-ring blob.
-
-CI pushes commit-tagged container images and deploys their registry digests.
-The registry keeps ABAC repository permissions and ARM-audience authentication
-disabled throughout. `build/Publish-Container.ps1` exchanges an ACR-audience
-token as described in [Microsoft's registry authentication guidance](https://learn.microsoft.com/en-us/azure/container-registry/container-registry-disable-authentication-as-arm).
-Infrastructure planning and deployment outputs are retained as run artifacts.
-The Functions action deploys the prebuilt payload without a remote rebuild.
-To retry deployment after fixing only its workflow or infrastructure, supply
-`artifact_run_id`: CI checks that run's application and container jobs passed
-and deploys those exact artifacts. The deployment record retains both their
-source run and commit; it never relabels old binaries as the current commit.
-
-**Azure staging rollback** accepts a successful deployment run ID. It resolves
-that deployment's original application artifact and recorded container digests,
-restores their configuration, and repeats the deployment checks without rebuilding.
-Keep both runs' artifacts and the registry digests for the required rollback
-window. Rollback restores application code and configuration; it does not undo
-tenant data writes or roll back the shared platform infrastructure.
-
-The staging dashboard serves an uncompressed copy of the dashboard and its own
-official content through Nginx. The existing production Front Door deployment
-still uses the separate Brotli `dashboard-storage` tree. Deploying staging does
-not synchronize or delete anything in the shared production website container.
-Its Nginx configuration derives each hashed object's media type from the official
-manifest: extensionless JavaScript and WebAssembly objects must not inherit a
-generic download type. Deployment checks verify every engine object's response type.
-
-The deployment check requires healthy authenticated Functions dependencies,
-HTTP 401 for anonymous API access, and matching dashboard/content commit IDs.
-The World.Silo staging node initially admits no worlds: world documents and
-their private federation keys are workload configuration. A successful empty
-node deployment does not prove world checkpoint recovery, gameplay, or scaling.
-CI adds the staging origin to the Entra application's SPA redirect URI list,
-preserving its existing callbacks. The CI identity must remain an owner of that
-registration for its `Application.ReadWrite.OwnedBy` permission to apply.
-`main.bicepparam` retains that callback when the shared platform is redeployed;
-set `BICEPPARAM_STAGING_DASHBOARD_ORIGIN` if the container environment's domain changes.
+World.Silo has a built container artifact but no production resource or workload
+configuration in `main.bicep`. A container build alone does not deploy a hosted
+world or establish checkpoint recovery.

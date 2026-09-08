@@ -89,7 +89,6 @@ public static class Extensions
         if (isConfigured) {
             var refreshInterval = TimeSpan.FromSeconds(value: (configurationSection.GetValue<int?>(key: RefreshIntervalSecondsKey) ?? 180));
             var sentinel = configurationSection.GetValue<string>(key: SentinelKey);
-            var label = configurationSection.GetValue<string>(key: "Label") ?? LabelFilter.Null;
 
             services
                 .AddAzureClients(configureClients: clientFactoryBuilder => {
@@ -109,7 +108,6 @@ public static class Extensions
                             refreshOptions
                                 .Register(
                                     key: (sentinel ?? "Version"),
-                                    label: label,
                                     refreshAll: true
                                 )
                                 .SetRefreshInterval(refreshInterval: refreshInterval);
@@ -119,14 +117,14 @@ public static class Extensions
                         })
                         .Select(
                             keyFilter: KeyFilter.Any,
-                            labelFilter: label,
+                            labelFilter: LabelFilter.Null,
                             tagFilters: default
                         )
                         .UseFeatureFlags(configure: featureFlagOptions => {
                             featureFlagOptions
                                 .Select(
                                     featureFlagFilter: KeyFilter.Any,
-                                    labelFilter: label,
+                                    labelFilter: LabelFilter.Null,
                                     tagFilters: default
                                 )
                                 .SetRefreshInterval(refreshInterval: refreshInterval);

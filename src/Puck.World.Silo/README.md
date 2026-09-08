@@ -105,12 +105,7 @@ refuses a row that pumps one), so a validated key never actually runs here.
 
 ## Not built here
 
-The [Azure staging workflow](../../docs/ci.md#azure-application-staging) builds
-this project's Linux container from the repository root and deploys an empty
-authority node. Its mounted `/configuration/silo.json` selects Azure Blob
-storage; no world documents or private federation keys are baked into the
-image. Populate those workload inputs before treating a running node as a
-hosted game or claiming checkpoint recovery. Staging runs one replica.
+The [Azure workflow](../../docs/ci.md#azure-production-deployment) builds this project's Linux container from the repository root. The production infrastructure does not yet define a World.Silo resource or its workload inputs; building the image does not deploy a hosted world.
 
 Storage Table clustering. Console verbs whose module takes a
 process-wide `IServerLink`/similar singleton rather than resolving it

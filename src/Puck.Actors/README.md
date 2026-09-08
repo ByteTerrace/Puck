@@ -58,7 +58,6 @@ edge acquires the token with its identity for scope `https://api.byteterrace.com
 | Key | Purpose |
 | --- | --- |
 | `ConfigurationStore:Endpoint` | Shared App Configuration store (also supplies `PublicStorage:*`, `OnBehalfOf:*`) |
-| `ConfigurationStore:Label` | Optional label for settings and the refresh sentinel; omitted selects unlabelled production settings |
 | `DataProtection:BlobUri` / `KeyUri` | Shared key ring on `bytrcstp000` + Key Vault key (same as the Functions app) |
 | `DataProtection:ApplicationName` | **Must match the Functions app** (currently its identity's client id) |
 | `PrivateStorage:BlobEndpoint` / `TableEndpoint` | Orleans fabric storage (`bytrcstp000`) |
@@ -72,8 +71,8 @@ in-memory reminders/state and an ephemeral DataProtection key ring — `dotnet r
 
 ## Deploy
 
-The [Azure CI workflow](../../docs/ci.md#azure-application-staging) builds from
-the repository root, tests the Linux image, and deploys staging by image digest.
+The [Azure CI workflow](../../docs/ci.md#azure-production-deployment) builds from
+the repository root, tests the Linux image, and deploys production by image digest.
 The Dockerfile requires the shared build files, analyzers, and sibling Maths
 project; using this project directory alone as its context cannot build it.
 
