@@ -54,4 +54,8 @@ try {
         @{ path = [IO.Path]::GetRelativePath($output, $_.FullName).Replace('\', '/'); sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
     })
     @{ commit = $commit; channel = $Channel; files = $files } | ConvertTo-Json -Depth 5 | Set-Content "$output/release.json" -Encoding utf8NoBOM
-} finally { Pop-Location }
+} finally {
+    # A source-mutating build must identify its changes instead of bypassing the clean-tree gate.
+    git status --short
+    Pop-Location
+}

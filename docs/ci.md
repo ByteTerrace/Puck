@@ -18,6 +18,10 @@ the solution in locked mode, builds Release with warnings as errors, runs the
 solution's tests, and publishes `Puck.World` as a framework-dependent artifact.
 The download requires .NET 10 and suitable graphics hardware to run. A build
 artifact is not a signed installer or a verified GPU rendering session.
+The browser AppBundle is published before the CLI integration tests, which resolve
+it inside the current checkout. GPU tests skip when D3D11 reports an unsupported
+device. The native timing benchmark is tagged `Category=Performance` and excluded
+from this shared-runner gate; its three-second ceiling remains available locally.
 Tests stop after fifteen minutes without a test event and collect a small hang
 dump. The workflow uploads the MSBuild binary log, available TRX results, and
 test diagnostics even when a later step fails.
@@ -117,6 +121,17 @@ The `Puck` GitHub environment supplies `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and
 `7508a16b-0f9b-4322-9bb9-481ad836c052`). Its federated subject is
 `repo:ByteTerrace@18753984/Puck@1271519029:environment:Puck`.
 The workflow targets production; it creates no staging environment.
+
+CI administrator setup is separate from deployment. The operator script
+`build/Sync-AzureDeploymentDelegation.ps1` removes the condition from the existing
+resource-group Owner assignment. Microsoft Graph also requires
+`Application.Read.All` and `AppRoleAssignment.ReadWrite.All` to reconcile the
+declared application permission assignments; Azure Owner does not provide those
+tenant-wide permissions. `build/Sync-AzureDeploymentGraphAccess.ps1` adds them to
+zzz, retaining its existing `Application.ReadWrite.OwnedBy` and `GroupMember.Read.All`.
+Neither setup script runs inside CI. The infrastructure script checks the Graph
+grants before changing resources. See Microsoft's
+[app-role assignment permission requirements](https://learn.microsoft.com/en-us/graph/api/serviceprincipal-post-approleassignedto?view=graph-rest-1.0).
 
 One concurrency lock covers platform reconciliation and application deployment.
 Once admitted, a run checks that its commit is still the branch tip. It consumes

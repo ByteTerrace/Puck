@@ -63,7 +63,7 @@ internal sealed unsafe class KernelBench : IDisposable {
                 var devicePointer = &device;
                 var contextPointer = &context;
 
-                ThrowIfFailed(hr: PInvoke.D3D11CreateDevice(
+                var result = PInvoke.D3D11CreateDevice(
                     DriverType: D3D_DRIVER_TYPE.D3D_DRIVER_TYPE_UNKNOWN,
                     Flags: D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_BGRA_SUPPORT,
                     SDKVersion: PInvoke.D3D11_SDK_VERSION,
@@ -73,7 +73,20 @@ internal sealed unsafe class KernelBench : IDisposable {
                     pFeatureLevels: levels,
                     ppDevice: devicePointer,
                     ppImmediateContext: contextPointer
-                ), operation: "D3D11CreateDevice");
+                );
+
+                // Some virtual adapters enumerate as hardware but cannot create a D3D11 device.
+                const int DxgiErrorUnsupported = unchecked((int)0x887A0004);
+
+                if (result.Value == DxgiErrorUnsupported) {
+                    Release(value: context);
+                    Release(value: device);
+                    Release(value: adapter);
+
+                    return null;
+                }
+
+                ThrowIfFailed(hr: result, operation: "D3D11CreateDevice");
             }
 
             var device1Iid = ID3D11Device1.IID_Guid;

@@ -158,6 +158,8 @@ var managedIdentityApplicationRoleMap = new Dictionary<string, IList<string>>()
 {
     [GraphServiceAppId] = [
         "Application.ReadWrite.OwnedBy",
+        "Application.Read.All",
+        "AppRoleAssignment.ReadWrite.All",
         "GroupMember.Read.All",
     ],
 };

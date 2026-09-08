@@ -7,13 +7,11 @@ using Xunit;
 namespace Puck.Cli.Tests.Official;
 
 /// <summary>Builds a real puck.official.v1 tree once, from this checkout's own worlds and the read-only browser-wasm
-/// AppBundle beside the main tree, so every test in <see cref="OfficialBuildCommandTests"/> exercises the actual
+/// AppBundle in the current checkout, so every test in <see cref="OfficialBuildCommandTests"/> exercises the actual
 /// verb end to end rather than a synthetic fixture.</summary>
 public sealed class OfficialBuildFixture : IDisposable {
-    // The published AppBundle a fresh `dotnet publish src/Puck.World.Browser` writes — present read-only beside the
-    // main tree for exactly this purpose; touching only this project's own build/publish output stays inside a
-    // worktree-isolated session's boundary.
-    public const string AppBundlePath = @"D:\Source\ByteTerrace\Puck\src\Puck.World.Browser\bin\Release\net10.0\browser-wasm\AppBundle";
+    // Publish the browser in this checkout before running the official-content integration tests.
+    public static string AppBundlePath => RepositoryPaths.Resolve(relativePath: "src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle");
     public const string Channel = "dev";
 
     public string OutRoot { get; }
