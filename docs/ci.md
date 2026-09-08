@@ -136,3 +136,6 @@ plan, and applies `main.bicep` as `puck-production-platform`. It does not assign
 Owner to CI. Deployment outputs retain the official-content container name.
 
 Registry access uses `AbacRepositoryPermissions`. The single CI identity is the resource-group deployment administrator and has the ABAC-enabled Repository Contributor role for publishing and maintenance. Runtime grants remain conditional: Actors reads only `web-actors`; the marketplace identity reads only its marketplace image. Runtime identities have no Catalog Lister grants. Registry login uses an ACR-audience token, and ARM-audience authentication remains disabled.
+
+External JavaScript actions are pinned to release commits whose action manifests
+use Node.js 24. Keep runtime upgrades explicit when refreshing those pins.
