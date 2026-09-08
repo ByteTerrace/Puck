@@ -9,26 +9,31 @@ namespace Puck.World.Silo;
 internal sealed class WorldSiloActivations(WorldSiloDefinition definition, IGrainFactory grainFactory, IHostApplicationLifetime lifetime) : BackgroundService {
     /// <inheritdoc/>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
-        // The tick host and Orleans membership must both be ready before requesting a grain placement.
-        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var registration = lifetime.ApplicationStarted.Register(() => started.TrySetResult());
-        await started.Task.WaitAsync(stoppingToken);
-        foreach (var world in definition.Worlds) {
-            if (!world.Pinned) {
-                continue;
-            }
+        try {
+            // The tick host and Orleans membership must both be ready before requesting a grain placement.
+            var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var registration = lifetime.ApplicationStarted.Register(() => started.TrySetResult());
+            await started.Task.WaitAsync(stoppingToken);
+            foreach (var world in definition.Worlds) {
+                if (!world.Pinned) {
+                    continue;
+                }
 
-            var grain = grainFactory.GetGrain<IWorldGrain>(
-                primaryKey: world.Owner,
-                keyExtension: world.World.Value
-            );
-            var activated = await grain.ActivateAsync();
+                var grain = grainFactory.GetGrain<IWorldGrain>(
+                    primaryKey: world.Owner,
+                    keyExtension: world.World.Value
+                );
+                var activated = await grain.ActivateAsync();
 
-            // Establish a durable baseline before reporting startup success: journals require a checkpoint.
-            if (!activated || !await grain.CheckpointNowAsync()) {
-                Environment.ExitCode = 1;
-                throw new InvalidOperationException($"Pinned row 'owner/{world.Owner:D}/{world.World}' did not activate and checkpoint.");
+                // Establish a durable baseline before reporting startup success: journals require a checkpoint.
+                if (!activated || !await grain.CheckpointNowAsync()) {
+                    Environment.ExitCode = 1;
+                    throw new InvalidOperationException($"Pinned row 'owner/{world.Owner:D}/{world.World}' did not activate and checkpoint.");
+                }
             }
+        } catch (Exception) when (!stoppingToken.IsCancellationRequested) {
+            Environment.ExitCode = 1;
+            throw;
         }
     }
 }

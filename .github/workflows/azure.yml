@@ -138,6 +138,10 @@ jobs:
         if: always() && steps.scm.outcome != 'skipped'
         shell: pwsh
         run: ./build/Set-AzureFunctionsDeploymentAccess.ps1 -Restore
+      - name: Require ready services before publishing the website
+        if: steps.current.outputs.deploy == 'True'
+        shell: pwsh
+        run: ./build/Test-AzureProduction.ps1 -Commit $env:GITHUB_SHA -BeforeStaticPublication
       - name: Publish the website and stable official content
         if: steps.current.outputs.deploy == 'True'
         shell: pwsh

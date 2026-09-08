@@ -40,7 +40,7 @@ resource runtimeBlobAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' 
   properties: {
     principalId: owner
     principalType: 'ServicePrincipal'
-    roleDefinitionId: worldStoreRole.id
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', worldStoreRole.name)
   }
 }
 resource publishingBlobAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {

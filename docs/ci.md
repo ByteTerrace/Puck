@@ -141,7 +141,8 @@ host files. Official objects retain their manifest media types and immutable
 hash paths; the publisher uploads objects before the stable manifest, website
 dependencies before its entry point, and the release marker last. Existing
 hashed assets remain available to open clients. Transient upload failures retry
-within a bound; publishing finishes with a Front Door purge and live checks.
+within a bound. Services must pass readiness checks before website publication;
+publishing finishes with a Front Door purge and live checks.
 
 The primary Puck world runs in `bytrcsilop000` (Azure Container Instances) at
 `world.byteterrace.com:33333`. World uses QUIC/UDP; Container Apps ingress only

@@ -1355,7 +1355,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.19.2' = {
               {
                 name: 'UrlFileExtension'
                 parameters: {
-                  matchValues: ['^(css|gif|html|ico|jpeg|jpg|js|json|jxl|map|md|mjs|pdf|png|svg|ttf|txt|wasm|webp|woff|woff2|xml)$']
+                  matchValues: ['^(css|gif|html|ico|jpeg|jpg|js|json|jxl|map|md|mjs|pdf|png|svg|ttf|txt|wasm|webp|woff|woff2|xml|yaml|yml)$']
                   negateCondition: false
                   operator: 'RegEx'
                   transforms: ['Lowercase']
@@ -1401,7 +1401,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.19.2' = {
               {
                 name: 'UrlFileExtension'
                 parameters: {
-                  matchValues: ['^(css|gif|html|ico|jpeg|jpg|js|json|jxl|map|md|mjs|pdf|png|svg|ttf|txt|wasm|webp|woff|woff2|xml)$']
+                  matchValues: ['^(css|gif|html|ico|jpeg|jpg|js|json|jxl|map|md|mjs|pdf|png|svg|ttf|txt|wasm|webp|woff|woff2|xml|yaml|yml)$']
                   negateCondition: true
                   operator: 'RegEx'
                   transforms: ['Lowercase']

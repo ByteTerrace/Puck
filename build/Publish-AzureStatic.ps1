@@ -41,7 +41,7 @@ foreach ($entry in $types.GetEnumerator()) {
 }
 Write-Output "Published $($types.Count) content-addressed official objects."
 Send-Blob $container 'public/puck/official/stable/manifest.json' "$BundleDirectory/official/stable/manifest.json" 'application/json' 'no-cache'
-$mediaTypes = @{'.html'='text/html';'.js'='application/javascript';'.mjs'='application/javascript';'.css'='text/css';'.json'='application/json';'.map'='application/json';'.svg'='image/svg+xml';'.png'='image/png';'.ico'='image/x-icon';'.woff2'='font/woff2';'.wasm'='application/wasm';'.txt'='text/plain'}
+$mediaTypes = @{'.html'='text/html';'.js'='application/javascript';'.mjs'='application/javascript';'.css'='text/css';'.json'='application/json';'.map'='application/json';'.svg'='image/svg+xml';'.png'='image/png';'.ico'='image/x-icon';'.woff'='font/woff';'.woff2'='font/woff2';'.ttf'='font/ttf';'.jpg'='image/jpeg';'.jpeg'='image/jpeg';'.webp'='image/webp';'.gif'='image/gif';'.pdf'='application/pdf';'.xml'='application/xml';'.yml'='application/yaml';'.yaml'='application/yaml';'.wasm'='application/wasm';'.txt'='text/plain'}
 $siteRoot = [IO.Path]::GetFullPath("$BundleDirectory/dashboard-storage")
 # Keep old hashed assets for open clients; publish the website entry point after its dependencies.
 $files = Get-ChildItem $siteRoot -File -Recurse | Sort-Object @{Expression={ if ($_.FullName -eq (Join-Path $siteRoot 'index.html')) { 1 } else { 0 } }}, FullName

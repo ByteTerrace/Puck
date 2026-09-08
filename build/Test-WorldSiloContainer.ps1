@@ -29,7 +29,7 @@ foreach ($source in Get-ChildItem "$fixture/worlds" -File) {
     worlds=@(@{owner=$owner;world='puck';pinned=$true;federation=@{keyFile='/fixture/federation.pk8'}})
     doors=@{budget=1};store=@{kind='Directory';directoryPath='/fixture/store'};stateDir='/fixture/state';clustering=@{kind='Localhost'}
 } | ConvertTo-Json -Depth 8 | Set-Content "$fixture/silo.json" -Encoding utf8NoBOM
-$pointer = "$fixture/store/$owner/puck/hosted/puck/checkpoints/latest"
+$pointer = "/fixture/store/$owner/puck/hosted/puck/checkpoints/latest"
 $previousCheckpoint = ''
 for ($boot = 1; $boot -le 2; $boot++) {
     docker run -d --name silo-smoke --mount "type=bind,source=$fixture,target=/fixture" -p 33333:33333/udp $Image --silo /fixture/silo.json | Out-Null
@@ -37,10 +37,9 @@ for ($boot = 1; $boot -le 2; $boot++) {
         $ready = $false
         for ($attempt = 0; $attempt -lt 90; $attempt++) {
             if ((docker inspect silo-smoke --format '{{.State.Running}}') -ne 'true') { throw 'Silo exited before checkpointing the primary world.' }
-            if (Test-Path $pointer) {
-                $checkpoint = (Get-FileHash $pointer -Algorithm SHA256).Hash
-                if ($checkpoint -ne $previousCheckpoint) { $ready = $true; break }
-            }
+            # The store correctly creates private directories. Read through the container, which owns them.
+            $checkpoint = [string](docker exec silo-smoke sh -c 'if [ -f "$1" ]; then sha256sum "$1"; fi' probe $pointer)
+            if ($checkpoint -and $checkpoint -ne $previousCheckpoint) { $ready = $true; break }
             Start-Sleep -Seconds 2
         }
         if (!$ready) { throw "Silo boot $boot did not activate and checkpoint Puck." }
